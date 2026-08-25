@@ -879,28 +879,28 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         className="fixed inset-0 z-[80] bg-black/75"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
-        <div className="my-4 w-full max-w-7xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
-            <div className="flex items-center gap-2">
+      <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4 max-sm:p-0 max-md:overscroll-contain">
+        <div className="my-4 w-full max-w-7xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8 max-sm:my-0 max-sm:min-h-dvh max-sm:rounded-none">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 max-md:flex-nowrap max-md:overflow-x-auto">
+            <div className="flex items-center gap-2 max-md:shrink-0">
               {onBack ? (
                 <button
                   type="button"
                   onClick={onBack}
                   title="Back to item card"
-                  className="flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" /> Back
                 </button>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 max-md:shrink-0">
               <button
                 type="button"
                 disabled={!canManage || !dirty || busy !== null}
                 onClick={() => void save()}
                 title={canManage ? "Save matrix + variant edits" : "Admin scope required"}
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
@@ -913,7 +913,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Open this item on the ShopCarbon website"
                     : "Link this product to Shopify to view it online"
                 }
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
               >
                 {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
               </button>
@@ -926,7 +926,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     ? "Archive this product on Shopify — hides the whole matrix from the storefront"
                     : "Link this product to Shopify first"
                 }
-                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-amber-500/55 bg-amber-950/30 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-amber-200 hover:bg-amber-900/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
               >
                 {busy === "archiveShopify"
                   ? "Archiving…"
@@ -940,7 +940,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   disabled={!canManage || busy !== null}
                   onClick={() => void linkShopify()}
                   title="This product already exists on Shopify — match it by SKU and link it (no duplicate)."
-                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
                 >
                   {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
                 </button>
@@ -956,7 +956,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       ? "Validate, then create/update this product on Shopify"
                       : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/25 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/40 disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
               >
                 {busy === "publish" ? "Publishing…" : "✔ Check & Publish"}
               </button>
@@ -964,7 +964,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 type="button"
                 disabled={!canManage || busy !== null || !data}
                 onClick={() => void archiveAll()}
-                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50"
+                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2"
                 title={
                   canManage
                     ? data?.matrix.archived
@@ -983,7 +983,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 type="button"
                 aria-label="Close"
                 onClick={onClose}
-                className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)]"
+                className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:shrink-0 max-md:items-center max-md:justify-center"
               >
                 <XIcon className="h-4 w-4" />
               </button>
@@ -1284,15 +1284,15 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                             return (
                               <div
                                 key={f}
-                                className="grid grid-cols-[110px_1fr_1fr_46px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.82rem] last:border-b-0"
+                                className="grid grid-cols-[110px_1fr_1fr_46px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-2 text-[0.82rem] last:border-b-0 max-sm:grid-cols-[1fr_46px]"
                               >
-                                <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+                                <span className="font-mono uppercase tracking-wide text-[var(--wms-muted)] max-sm:order-1">
                                   {label}
                                 </span>
-                                <span className="truncate text-[var(--wms-muted)]" title={fmt(cur)}>
+                                <span className="truncate text-[var(--wms-muted)] max-sm:order-3 max-sm:col-span-2 max-sm:whitespace-normal max-sm:break-words" title={fmt(cur)}>
                                   {fmt(cur) || "—"}
                                 </span>
-                                <span className="text-[var(--wms-fg)]" title={fmt(prop)}>
+                                <span className="text-[var(--wms-fg)] max-sm:order-4 max-sm:col-span-2 max-sm:break-words" title={fmt(prop)}>
                                   {fmt(prop).slice(0, 160)}
                                   {fmt(prop).length > 160 ? "…" : ""}
                                 </span>
@@ -1302,15 +1302,15 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                                     setSeoAccept((s) => ({ ...s, [f]: !s[f] }))
                                   }
                                   title={seoAccept[f] ? "Will be saved" : "Keep current"}
-                                  className={`h-5 w-9 rounded-full transition ${
+                                  className={`h-5 w-9 rounded-full transition max-sm:order-2 max-sm:h-6 max-sm:w-11 max-sm:justify-self-end ${
                                     seoAccept[f]
                                       ? "bg-[var(--wms-accent)]"
                                       : "bg-[var(--wms-border)]"
                                   } relative`}
                                 >
                                   <span
-                                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                                      seoAccept[f] ? "left-[18px]" : "left-0.5"
+                                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all max-sm:h-5 max-sm:w-5 ${
+                                      seoAccept[f] ? "left-[18px] max-sm:left-[22px]" : "left-0.5"
                                     }`}
                                   />
                                 </button>
@@ -1413,7 +1413,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                     Group Items
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-sm:hidden">
                     <div className="min-w-[760px]">
                       <div className="grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
                         <span />
@@ -1484,6 +1484,94 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                         </div>
                       ))}
                     </div>
+                  </div>
+                  {/* Mobile (<sm) stacked variant cards — same rows/state as the
+                      760px grid above, which stays untouched behind max-sm:hidden. */}
+                  <div className="sm:hidden">
+                    {rows.map((r) => (
+                      <div
+                        key={r.key}
+                        className={`border-b border-[var(--wms-border)]/40 px-3 py-3 font-mono last:border-b-0 ${
+                          r.markedDelete ? "opacity-40" : ""
+                        } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-[0.78rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                            {(r.color.trim() || "—") + " · " + (r.size.trim() || "—")}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={!canManage}
+                              onClick={() => deleteRow(r.key)}
+                              title={
+                                r.isNew
+                                  ? "Remove this new row"
+                                  : r.markedDelete
+                                    ? "Undo delete"
+                                    : r.hasStock
+                                      ? "Archive row (has live stock — history kept)"
+                                      : "Delete (archive) row"
+                              }
+                              className={`flex h-11 w-11 items-center justify-center rounded border text-[var(--wms-muted)] disabled:opacity-40 ${
+                                r.markedDelete
+                                  ? "border-[var(--wms-border)] hover:bg-[var(--wms-surface)]"
+                                  : "border-red-500/40 hover:bg-red-950/40 hover:text-red-200"
+                              }`}
+                            >
+                              {r.markedDelete ? (
+                                <RotateCcw className="h-4 w-4" />
+                              ) : (
+                                <XIcon className="h-4 w-4" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!canManage || r.isNew || r.markedDelete || !r.id || printingId !== null}
+                              onClick={() => r.id && void printRow(r.id)}
+                              title={
+                                r.isNew
+                                  ? "Save the row first, then you can print its tag"
+                                  : "Print one RFID tag for this variant to 192.168.1.3 (status: unknown)"
+                              }
+                              className="flex h-11 w-11 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] disabled:opacity-40"
+                            >
+                              {printingId === r.id ? (
+                                <span className="text-[0.74rem]">…</span>
+                              ) : (
+                                <Printer className="h-4 w-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[0.85rem]">
+                          <label className="block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Color</span>
+                            <Cell value={r.color} onChange={(x) => patchRow(r.key, { color: x })} editable={canManage} />
+                          </label>
+                          <label className="block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Size</span>
+                            <Cell value={r.size} onChange={(x) => patchRow(r.key, { size: x })} editable={canManage} />
+                          </label>
+                          <label className="block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Price</span>
+                            <Cell value={r.retail_price} onChange={(x) => patchRow(r.key, { retail_price: x })} editable={canManage} numeric />
+                          </label>
+                          <label className="block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Cost</span>
+                            <Cell value={r.default_cost} onChange={(x) => patchRow(r.key, { default_cost: x })} editable={canManage} money />
+                          </label>
+                          <label className="col-span-2 block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">UPC</span>
+                            <Cell value={r.upc} onChange={(x) => patchRow(r.key, { upc: x })} editable={canManage} />
+                          </label>
+                          <label className="col-span-2 block">
+                            <span className="mb-0.5 block text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Custom SKU</span>
+                            <Cell value={r.sku} onChange={(x) => patchRow(r.key, { sku: x })} editable={canManage} placeholder={r.isNew ? "SKU…" : undefined} />
+                          </label>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 )}
@@ -1564,7 +1652,7 @@ function Cell({
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onBlur={money ? () => onChange(money2(value)) : undefined}
-      className="w-full min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+      className="w-full min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-1.5 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none max-md:text-base"
     />
   );
 }
@@ -1624,12 +1712,12 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </span>
         <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
-      <div className="flex gap-3 p-3">
+      <div className="flex gap-3 p-3 max-sm:flex-col">
         {/* FROZEN main picture — stays put while the thumbnails scroll. */}
         <button
           type="button"
           onClick={() => setZoomIdx(0)}
-          className="block w-56 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
+          className="block w-56 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)] max-sm:mx-auto max-sm:w-40"
           title={`${title} — click to open slider`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1637,7 +1725,7 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </button>
         {/* The rest — 2 rows, hidden in the container, scroll/slide to see all. */}
         {rest.length > 0 ? (
-          <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className="min-w-0 flex-1 overflow-x-auto max-sm:w-full">
             <div className="grid w-max auto-cols-max grid-flow-col grid-rows-2 gap-2">
               {rest.map((u, idx) => {
                 const i = idx + 1;

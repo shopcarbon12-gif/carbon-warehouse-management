@@ -47,27 +47,27 @@ export function SyncPanel() {
       <div className="flex flex-wrap gap-2 font-mono text-xs">
         <button
           type="button"
-          className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
+          className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 max-md:min-h-11"
           onClick={() => void enqueue("lightspeed_pull")}
         >
           Enqueue Lightspeed catalog pull
         </button>
         <button
           type="button"
-          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
+          className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] max-md:min-h-11"
           onClick={() => void enqueue("reconcile")}
         >
           Enqueue reconcile (stub)
         </button>
       </div>
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[720px] text-left text-sm">
+        <table className="w-full min-w-[720px] max-md:min-w-[560px] text-left text-sm">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
               <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Attempts</th>
-              <th className="px-4 py-3">Idempotency</th>
+              <th className="px-4 py-3 max-md:hidden">Idempotency</th>
               <th className="px-4 py-3">Error</th>
             </tr>
           </thead>
@@ -87,7 +87,7 @@ export function SyncPanel() {
                   <td className="px-4 py-2 font-mono text-xs">{j.job_type}</td>
                   <td className="px-4 py-2 font-mono text-xs">{j.status}</td>
                   <td className="px-4 py-2 font-mono text-xs tabular-nums">{j.attempts}</td>
-                  <td className="max-w-[200px] truncate px-4 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <td className="max-w-[200px] truncate px-4 py-2 font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:hidden">
                     {j.idempotency_key}
                   </td>
                   <td className="max-w-xs truncate px-4 py-2 font-mono text-xs text-red-400/90">

@@ -105,12 +105,12 @@ function MobileUsersTab() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-        <table className="w-full min-w-[680px] border-collapse text-left">
+        <table className="w-full min-w-[680px] border-collapse text-left max-md:min-w-[560px]">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
-              <th className="px-3 py-3">Name</th>
+              <th className="px-3 py-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Name</th>
               <th className="px-3 py-3">Email</th>
-              <th className="px-3 py-3">WMS role</th>
+              <th className="px-3 py-3 max-md:hidden">WMS role</th>
               <th className="px-3 py-3">Mobile role</th>
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
@@ -125,13 +125,13 @@ function MobileUsersTab() {
             ) : (
               users.map((u) => (
                 <tr key={u.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-2.5 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">
                     {[u.first_name, u.last_name].filter(Boolean).join(" ") || (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-xs">{u.email}</td>
-                  <td className="px-3 py-2.5 text-[var(--wms-muted)]">{u.role_name ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-[var(--wms-muted)] max-md:hidden">{u.role_name ?? "—"}</td>
                   <td className="px-3 py-2.5">
                     {u.mobile_role_name ? (
                       <span className="rounded border border-teal-500/40 bg-teal-950/30 px-2 py-0.5 font-mono text-[0.65rem] text-teal-200">
@@ -147,7 +147,7 @@ function MobileUsersTab() {
                     <button
                       type="button"
                       onClick={() => setEditing(u)}
-                      className="font-medium text-[var(--wms-accent)] hover:underline"
+                      className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Set mobile role
                     </button>
@@ -211,7 +211,7 @@ function MobileRoleAssignModal({
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <button type="button" aria-label="Close" className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+      <div className="relative w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
         <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Mobile role</h3>
         <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">{user.email}</p>
         <label className="mt-4 block font-mono text-xs text-[var(--wms-muted)]">
@@ -219,7 +219,7 @@ function MobileRoleAssignModal({
           <select
             value={roleId ?? ""}
             onChange={(e) => setRoleId(e.target.value ? Number(e.target.value) : null)}
-            className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
+            className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] max-md:text-base"
           >
             <option value="">— No role (full access) —</option>
             {roles.map((r) => (

@@ -510,8 +510,8 @@ export function ScanEpcWorkspace() {
             const meta = readerById.get(rid);
             const dbm = readerPower.get(rid) ?? 33;
             return (
-              <div key={rid} className="flex items-center gap-3">
-                <span className="w-44 shrink-0 truncate font-mono text-xs text-[var(--wms-fg)]">
+              <div key={rid} className="flex items-center gap-3 max-md:flex-wrap">
+                <span className="w-44 shrink-0 truncate font-mono text-xs text-[var(--wms-fg)] max-md:w-auto max-md:min-w-0 max-md:flex-1">
                   {meta?.name ?? rid.slice(0, 8)}
                   {meta?.ip ? (
                     <span className="text-[var(--wms-muted)]"> · {meta.ip}</span>
@@ -524,7 +524,7 @@ export function ScanEpcWorkspace() {
                   step={0.5}
                   value={dbm}
                   onChange={(e) => onPowerChange(rid, Number(e.target.value))}
-                  className="h-2 flex-1 cursor-pointer accent-teal-500"
+                  className="h-2 flex-1 cursor-pointer accent-teal-500 max-md:order-last max-md:basis-full max-md:min-w-0 max-md:h-3"
                 />
                 <span className="w-16 shrink-0 text-right font-mono text-xs text-teal-300">
                   {dbm.toFixed(1)} dBm
@@ -537,7 +537,7 @@ export function ScanEpcWorkspace() {
 
       {/* Table — one row per unique EPC, with source reader */}
       <DataTableContainer maxHeight="min(70vh, 640px)">
-        <table className="w-full min-w-[1200px] border-collapse text-sm">
+        <table className="w-full min-w-[1200px] border-collapse text-sm max-md:min-w-0">
           <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
               {[
@@ -557,7 +557,11 @@ export function ScanEpcWorkspace() {
               ].map((c) => (
                 <th
                   key={c}
-                  className="whitespace-nowrap px-3 py-2 text-left"
+                  className={`whitespace-nowrap px-3 py-2 text-left${
+                    ["Reader IP", "Antenna", "Reads", "First seen", "System ID", "Description"].includes(c)
+                      ? " max-md:hidden"
+                      : ""
+                  }`}
                 >
                   {c}
                 </th>
@@ -583,45 +587,45 @@ export function ScanEpcWorkspace() {
                   .join(" · ");
                 return (
                   <tr key={row.epc} className="border-t border-[var(--wms-border)]">
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-teal-400/90">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-teal-400/90 max-md:text-[13px]">
                       {row.epc}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px] font-semibold text-[var(--wms-fg)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px] font-semibold text-[var(--wms-fg)] max-md:text-[13px]">
                       {readerLabel(row)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                       {readerIp(row)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                       {antennaLabel(row)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:text-[13px]">
                       {row.rssi != null ? `${row.rssi} dBm` : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                       {row.count}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                       {fmtTime(row.firstSeen)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:text-[13px]">
                       {fmtTime(row.lastSeen)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-[13px]">
                       {row.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                       {row.ls_system_id ?? (
                         <span className="text-[var(--wms-muted)]">—</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:hidden">
                       {desc || <span className="text-[var(--wms-muted)]">—</span>}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:text-[13px]">
                       {row.status ?? <span className="text-[var(--wms-muted)]">—</span>}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                    <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-[13px]">
                       {row.location_code ? (
                         <>
                           {row.location_code}

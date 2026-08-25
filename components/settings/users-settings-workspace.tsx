@@ -154,8 +154,8 @@ export function UsersSettingsWorkspace() {
       const t = e.target as HTMLElement;
       if (!t.closest?.("[data-bulk-dropdown]")) setBulkOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
   }, [bulkOpen]);
 
   const wmsTabBtnCls = (active: boolean) =>
@@ -166,7 +166,7 @@ export function UsersSettingsWorkspace() {
     }`;
 
   const topTabBtnCls = (active: boolean) =>
-    `rounded-md px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-widest ${
+    `rounded-md px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-widest max-md:shrink-0 ${
       active
         ? "border border-[var(--wms-accent)]/55 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)]"
         : "border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
@@ -175,7 +175,7 @@ export function UsersSettingsWorkspace() {
   return (
     <div className="space-y-4">
       {/* Top-level scope picker: WMS / POS / REWARDS */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Access scope">
+      <div className="flex flex-wrap gap-2 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-1" role="tablist" aria-label="Access scope">
         <button
           type="button"
           role="tab"
@@ -301,9 +301,9 @@ export function UsersSettingsWorkspace() {
             </p>
           ) : null}
 
-          <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-            <table className="w-full min-w-[720px] border-collapse text-left">
-              <thead>
+          <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 max-md:max-h-[70dvh] max-md:overflow-y-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left max-md:min-w-[560px]">
+              <thead className="max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)]">
                 <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
                   <th className="w-10 px-2 py-3">
                     <input
@@ -311,13 +311,13 @@ export function UsersSettingsWorkspace() {
                       aria-label="Select all users"
                       checked={Boolean(users?.length) && selectedIds.size === (users?.length ?? 0)}
                       onChange={() => toggleSelectAll()}
-                      className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+                      className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] max-md:h-5 max-md:w-5"
                     />
                   </th>
                   <th className="px-3 py-3">Name</th>
                   <th className="px-3 py-3">Email</th>
                   <th className="px-3 py-3">Role</th>
-                  <th className="px-3 py-3">Locations</th>
+                  <th className="px-3 py-3 max-md:hidden">Locations</th>
                   <th className="px-3 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -337,7 +337,7 @@ export function UsersSettingsWorkspace() {
                           aria-label={`Select ${u.email}`}
                           checked={selectedIds.has(u.id)}
                           onChange={() => toggleSelect(u.id)}
-                          className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+                          className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] max-md:h-5 max-md:w-5"
                         />
                       </td>
                       <td className="px-3 py-2.5 text-[var(--wms-fg)]">
@@ -347,7 +347,7 @@ export function UsersSettingsWorkspace() {
                       </td>
                       <td className="px-3 py-2.5 font-mono text-xs text-[var(--wms-fg)]">{u.email}</td>
                       <td className="px-3 py-2.5 text-[var(--wms-muted)]">{u.role_name ?? "—"}</td>
-                      <td className="max-w-[280px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                      <td className="max-w-[280px] px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:hidden">
                         {u.locations.length
                           ? u.locations.map((l) => `${l.code} · ${l.name}`).join(", ")
                           : "—"}
@@ -356,7 +356,7 @@ export function UsersSettingsWorkspace() {
                         <button
                           type="button"
                           onClick={() => setEditUser(u)}
-                          className="font-medium text-[var(--wms-accent)] hover:underline"
+                          className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                         >
                           Edit
                         </button>
@@ -364,7 +364,7 @@ export function UsersSettingsWorkspace() {
                         <button
                           type="button"
                           onClick={() => void removeUser(u, muUsers)}
-                          className="font-medium text-red-600 hover:underline dark:text-red-400/90"
+                          className="font-medium text-red-600 hover:underline dark:text-red-400/90 max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                         >
                           Remove
                         </button>
@@ -597,7 +597,7 @@ function UserFormModal({
               className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)] disabled:opacity-60"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <label className="block text-[var(--wms-muted)]">
               First name
               <input
@@ -653,7 +653,7 @@ function UserFormModal({
                     type="checkbox"
                     checked={locIds.has(l.id)}
                     onChange={() => toggleLoc(l.id)}
-                    className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+                    className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] max-md:h-5 max-md:w-5"
                   />
                   {l.code} · {l.name}
                 </label>

@@ -85,7 +85,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
             ) : (
               rows.map((r) => (
                 <tr key={r.id}>
-                  <td className="whitespace-nowrap px-3 py-2 text-[var(--wms-muted)]">
+                  <td className="whitespace-nowrap px-3 py-2 text-[var(--wms-muted)] max-md:whitespace-normal">
                     {new Date(r.updated_at).toLocaleString()}
                   </td>
                   <td className="px-3 py-2">
@@ -112,7 +112,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
         </table>
       </div>
       {total > 0 ? (
-        <div className="flex items-center justify-between border-t border-[var(--wms-border)] px-4 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        <div className="flex items-center justify-between border-t border-[var(--wms-border)] px-4 py-2 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-xs">
           <span>
             Page {page} / {pages}
           </span>
@@ -121,7 +121,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
+              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)] max-md:min-h-11 max-md:px-3"
             >
               Prev
             </button>
@@ -129,7 +129,7 @@ export const SyncHistoryLog = memo(function SyncHistoryLog() {
               type="button"
               disabled={page >= pages}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
+              className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)] max-md:min-h-11 max-md:px-3"
             >
               Next
             </button>

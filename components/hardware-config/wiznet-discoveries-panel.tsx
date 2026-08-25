@@ -67,16 +67,16 @@ export function WiznetDiscoveriesPanel() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[760px] border-collapse text-left text-xs max-md:min-w-[560px]">
             <thead>
               <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                <th className="px-3 py-2 text-[0.6rem]">MAC</th>
-                <th className="px-3 py-2 text-[0.6rem]">Current IP</th>
-                <th className="px-3 py-2 text-[0.6rem]">Port</th>
-                <th className="px-3 py-2 text-[0.6rem]">DHCP</th>
-                <th className="px-3 py-2 text-[0.6rem]">Agent</th>
-                <th className="px-3 py-2 text-[0.6rem]">Last seen</th>
-                <th className="px-3 py-2 text-[0.6rem]">First seen</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:text-xs max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">MAC</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Current IP</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:hidden">Port</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">DHCP</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Agent</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Last seen</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:hidden">First seen</th>
               </tr>
             </thead>
             <tbody>
@@ -85,11 +85,11 @@ export function WiznetDiscoveriesPanel() {
                   key={d.id}
                   className="border-b border-[var(--wms-border)]/60 last:border-b-0"
                 >
-                  <td className="px-3 py-2 font-mono text-[var(--wms-fg)]">
+                  <td className="px-3 py-2 font-mono text-[var(--wms-fg)] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">
                     {d.mac_address.toUpperCase()}
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--wms-fg)]">{d.current_ip}</td>
-                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">{d.port}</td>
+                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)] max-md:hidden">{d.port}</td>
                   <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
                     {d.dhcp_enabled === null ? "?" : d.dhcp_enabled ? "yes" : "no"}
                   </td>
@@ -97,7 +97,7 @@ export function WiznetDiscoveriesPanel() {
                   <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
                     {fmtAge(d.age_seconds)}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
+                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)] max-md:hidden">
                     {new Date(d.first_seen_at).toLocaleString()}
                   </td>
                 </tr>

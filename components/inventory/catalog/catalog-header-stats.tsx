@@ -17,7 +17,7 @@ export function CatalogHeaderStats() {
   const value = data?.live_epc_count;
   return (
     <div className="shrink-0 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/60 px-4 py-2 shadow-sm">
-      <div className="font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="font-mono text-[0.55rem] max-md:text-xs uppercase tracking-wide text-[var(--wms-muted)]">
         Live EPCs in catalog
       </div>
       <div className="mt-0.5 font-mono text-2xl tabular-nums text-emerald-300">

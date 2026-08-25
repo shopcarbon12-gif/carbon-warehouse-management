@@ -83,21 +83,21 @@ function AssetMovementsTable({
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 5);
-  const cols: { label: string; align?: "right" }[] = [
+  const cols: { label: string; align?: "right"; mobileCls?: string }[] = [
     { label: "When" },
     { label: "EPC" },
     { label: "From" },
     { label: "To" },
-    { label: "User", align: "right" },
+    { label: "User", align: "right", mobileCls: "max-md:hidden" },
   ];
   return (
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[720px] border-collapse text-left text-sm"
+        className="w-full min-w-[720px] max-md:min-w-[480px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -105,7 +105,7 @@ function AssetMovementsTable({
                 <th
                   key={c.label}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""} ${c.mobileCls ?? ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -138,7 +138,7 @@ function AssetMovementsTable({
                   {row.from_location ?? "—"}
                 </td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.to_location}>{row.to_location}</td>
-                <td className={`${cellTruncate} px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
+                <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
                   {row.user_id ?? "—"}
                 </td>
               </tr>

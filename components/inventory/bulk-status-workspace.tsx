@@ -470,7 +470,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         <label className="flex flex-col gap-1 font-mono text-xs text-[var(--wms-muted)]">
           Target status
           <select
-            className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+            className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_10%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           >
@@ -490,7 +490,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
               ? "Check at least one EPC in the table below."
               : `Will set ${checked.size} EPC(s) to ${targetOption?.label ?? target}.`
           }
-          className="self-end rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          className="self-end rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11 max-md:w-full"
         >
           {busy
             ? "Working…"
@@ -506,6 +506,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
           checked={override}
           onChange={(e) => setOverride(e.target.checked)}
           disabled={!isSuperAdmin}
+          className="max-md:h-5 max-md:w-5"
         />
         Allow risky transitions (Super Admin only)
       </label>
@@ -515,7 +516,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
           type="button"
           onClick={() => onScanToggle()}
           disabled={!scanning && selectedReaders.size === 0}
-          className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`inline-flex min-h-[3rem] min-w-[10rem] items-center justify-center gap-2 rounded-xl border px-5 py-3 font-mono text-sm font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 max-md:w-full ${
             scanning
               ? "border-amber-500/60 bg-amber-950/40 text-amber-100"
               : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
@@ -534,12 +535,12 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
           disabled={rows.size === 0}
           onClick={clearAll}
           title="Wipe the table — drops every scanned row."
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
+          className="inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] px-4 py-2.5 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40 max-md:min-h-11 max-md:w-full max-md:justify-center"
         >
           <ScanLine className="h-4 w-4" />
           Clear staged
         </button>
-        <span className="ml-auto font-mono text-[10px] text-[var(--wms-muted)]">
+        <span className="ml-auto font-mono text-[10px] text-[var(--wms-muted)] max-md:w-full max-md:text-right max-md:text-xs">
           <strong className="text-[var(--wms-fg)]">{rows.size}</strong> scanned ·{" "}
           <strong className="text-[var(--wms-fg)]">{checked.size}</strong> checked
         </span>
@@ -556,7 +557,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
       <DataTableContainer maxHeight="min(70vh, 640px)">
         <table
           ref={tableRef}
-          className="w-full min-w-[1000px] border-collapse text-sm"
+          className="w-full min-w-[1000px] max-md:min-w-[560px] border-collapse text-sm"
           style={{ tableLayout: pickTableLayout(colWidths) }}
         >
           <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
@@ -565,18 +566,21 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                 { label: "", sel: true },
                 { label: "EPC" },
                 { label: "SKU" },
-                { label: "System ID" },
+                { label: "System ID", hideMobile: true },
                 { label: "Description" },
-                { label: "RSSI" },
+                { label: "RSSI", hideMobile: true },
                 { label: "Current status" },
-                { label: "Loc · Bin" },
+                { label: "Loc · Bin", hideMobile: true },
               ].map((c, i) => {
                 const w = colWidths[i];
                 return (
                   <th
                     key={c.label || `col-${i}`}
                     style={w !== null ? { width: w, minWidth: w } : undefined}
-                    className="relative overflow-hidden whitespace-nowrap px-3 py-2 text-left"
+                    className={
+                      "relative overflow-hidden whitespace-nowrap px-3 py-2 text-left" +
+                      (c.hideMobile ? " max-md:hidden" : "")
+                    }
                   >
                     {c.sel ? (
                       <input
@@ -585,6 +589,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                         onChange={toggleAll}
                         disabled={rows.size === 0}
                         aria-label="Select all"
+                        className="max-md:h-5 max-md:w-5"
                       />
                     ) : (
                       <span>{c.label}</span>
@@ -627,33 +632,36 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => toggleOne(row.epc)}
+                      className="max-md:h-5 max-md:w-5"
                     />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-teal-400/90">
-                    {row.epc}
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-teal-400/90 max-md:text-xs">
+                    <span className="max-md:inline-block max-md:max-w-[110px] max-md:truncate max-md:align-bottom">
+                      {row.epc}
+                    </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-xs">
                     {row.sku ?? (
                       <span className="text-[var(--wms-muted)]">
                         {isUnknown ? "(unknown — see Defective EPCs)" : "—"}
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                     {row.ls_system_id ?? (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:text-xs">
                     {desc || <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                     {row.rssi != null ? `${row.rssi} dBm` : "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:text-xs">
                     {row.status ? (
                       <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white ${
+                        className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white max-md:text-[10px] ${
                           row.status === "in-stock"
                             ? "bg-emerald-600"
                             : row.status === "tag_killed"
@@ -667,7 +675,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                     {row.location_code ? (
                       <>
                         {row.location_code}
@@ -682,7 +690,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
                       type="button"
                       onClick={() => trashRow(row.epc)}
                       title="Un-stage this row (removes it from the list; does not change the chip)"
-                      className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15"
+                      className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15 max-md:min-h-11 max-md:min-w-11 max-md:justify-center"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>

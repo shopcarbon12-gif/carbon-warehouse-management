@@ -120,7 +120,7 @@ export default async function AddCustomerPage() {
   }
 
   return (
-    <main className="p-6 lg:p-8 max-w-3xl">
+    <main className="p-6 lg:p-8 max-w-3xl max-md:p-4">
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserPlus className="h-3.5 w-3.5" />
@@ -153,11 +153,11 @@ export default async function AddCustomerPage() {
 
         <Section title="Details">
           <Field label="Date of birth" name="birthday" type="date" />
-          <label className="flex flex-col gap-1">
+          <label className="flex flex-col gap-1 max-md:min-w-0">
             <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
               Where are you adding them?
             </span>
-            <select name="pos_location_id" defaultValue="" className="border border-border bg-card px-3 py-2 text-sm">
+            <select name="pos_location_id" defaultValue="" className="border border-border bg-card px-3 py-2 text-sm max-md:w-full max-md:min-w-0 max-md:max-w-full max-md:text-base">
               <option value="">Not at a store</option>
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>{l.label}</option>
@@ -179,7 +179,7 @@ export default async function AddCustomerPage() {
           <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
             Notes (optional)
           </span>
-          <textarea name="notes" rows={3} className="border border-border bg-card px-3 py-2 text-sm" />
+          <textarea name="notes" rows={3} className="border border-border bg-card px-3 py-2 text-sm max-md:text-base" />
         </label>
 
         <div className="flex justify-end gap-2 pt-1">
@@ -224,7 +224,7 @@ function Field({
         type={type}
         name={name}
         required={required}
-        className="border border-border bg-card px-3 py-2 text-sm"
+        className="border border-border bg-card px-3 py-2 text-sm max-md:text-base"
       />
     </label>
   );

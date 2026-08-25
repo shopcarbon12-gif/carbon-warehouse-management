@@ -407,7 +407,7 @@ function CdmAgentsSection({
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 max-md:py-2"
         >
           <Plus className="h-3 w-3" />
           Add agent
@@ -420,16 +420,16 @@ function CdmAgentsSection({
         </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-          <table className="w-full min-w-[820px] border-collapse text-left text-xs">
+          <table className="w-full min-w-[820px] border-collapse text-left text-xs max-md:min-w-[560px]">
             <thead>
               <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-                <th className="px-3 py-2 text-[0.6rem]">Name</th>
-                <th className="px-3 py-2 text-[0.6rem]">Location</th>
-                <th className="px-3 py-2 text-[0.6rem]">Status</th>
-                <th className="px-3 py-2 text-[0.6rem]">Version</th>
-                <th className="px-3 py-2 text-[0.6rem]">Last heartbeat</th>
-                <th className="px-3 py-2 text-[0.6rem]">Devices</th>
-                <th className="px-3 py-2 text-right text-[0.6rem]">Actions</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:text-xs max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Name</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Location</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Status</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:hidden">Version</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:text-xs">Last heartbeat</th>
+                <th className="px-3 py-2 text-[0.6rem] max-md:hidden">Devices</th>
+                <th className="px-3 py-2 text-right text-[0.6rem] max-md:text-xs">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -438,20 +438,20 @@ function CdmAgentsSection({
                   key={a.id}
                   className="border-b border-[var(--wms-border)]/60 last:border-b-0"
                 >
-                  <td className="px-3 py-2 font-mono text-[var(--wms-fg)]">{a.name}</td>
+                  <td className="px-3 py-2 font-mono text-[var(--wms-fg)] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">{a.name}</td>
                   <td className="px-3 py-2 text-[var(--wms-muted)]">
                     {a.location_code} - {a.location_name}
                   </td>
                   <td className="px-3 py-2">
                     <StatusPill status={a.status} />
                   </td>
-                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
+                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)] max-md:hidden">
                     {a.agent_version ?? "-"}
                   </td>
                   <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
                     {a.last_heartbeat_at ? new Date(a.last_heartbeat_at).toLocaleString() : "never"}
                   </td>
-                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)]">
+                  <td className="px-3 py-2 font-mono text-[var(--wms-muted)] max-md:hidden">
                     {a.device_count}
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -460,7 +460,7 @@ function CdmAgentsSection({
                       type="button"
                       onClick={() => onRotateToken(a.id, a.name)}
                       title="Rotate API token"
-                      className="mr-2 inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                      className="mr-2 inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:min-h-9 max-md:px-2.5 max-md:text-[0.7rem]"
                     >
                       <KeyRound className="h-3 w-3" /> Rotate
                     </button>
@@ -468,7 +468,7 @@ function CdmAgentsSection({
                       type="button"
                       onClick={() => onDelete(a.id, a.name)}
                       title="Delete agent"
-                      className="inline-flex items-center gap-1 rounded border border-red-400/30 px-2 py-1 font-mono text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10"
+                      className="inline-flex items-center gap-1 rounded border border-red-400/30 px-2 py-1 font-mono text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10 max-md:min-h-9 max-md:px-2.5 max-md:text-[0.7rem]"
                     >
                       <Trash2 className="h-3 w-3" /> Remove
                     </button>
@@ -507,7 +507,7 @@ function StatusPill({
   return (
     <span
       title={title}
-      className={`inline-block rounded border px-1.5 py-0.5 font-mono text-[0.6rem] uppercase ${map[status]}`}
+      className={`inline-block rounded border px-1.5 py-0.5 font-mono text-[0.6rem] uppercase max-md:text-xs ${map[status]}`}
     >
       {status}
     </span>
@@ -545,30 +545,30 @@ function HardwareTreeSection(props: TreeProps) {
       <h2 className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)]">
         <Cpu className="h-3.5 w-3.5" /> Hardware hierarchy
       </h2>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 max-md:flex-wrap max-md:gap-1.5">
         <button
           type="button"
           onClick={onPauseAllReaders}
           title="Stop every reader EXCEPT POS — radios go cold + Live Scan disarmed (POS .34 left running)"
-          className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
+          className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
         >
-          <Square className="h-2.5 w-2.5" /> Stop all
+          <Square className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Stop all
         </button>
         <button
           type="button"
           onClick={onResumeAllReaders}
           title="Start every stopped reader EXCEPT POS (POS .34 stays on its own schedule)"
-          className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
+          className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
         >
-          <Play className="h-2.5 w-2.5" /> Start all
+          <Play className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Start all
         </button>
         <button
           type="button"
           onClick={onHardResetAll}
           title="Stop everything, restart all agents + readers, reset live-scan counter"
-          className="inline-flex items-center gap-0.5 rounded border border-red-400/50 bg-red-500/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20"
+          className="inline-flex items-center gap-0.5 rounded border border-red-400/50 bg-red-500/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
         >
-          <RefreshCw className="h-2.5 w-2.5" /> Hard reset
+          <RefreshCw className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Hard reset
         </button>
       </div>
     </div>
@@ -588,11 +588,67 @@ function HardwareTreeSection(props: TreeProps) {
     <section>
       {heading}
 
+      {/* Mobile-only badge legend. The badges below carry their operational
+          guidance in hover-only `title` tooltips, which phones can never
+          reach — this tap-to-expand <details> surfaces the same text. Hidden
+          at md+ so desktop stays untouched. */}
+      <details className="mb-2 rounded-md border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/40 px-3 py-1 font-mono text-[var(--wms-muted)] md:hidden">
+        <summary className="flex min-h-10 cursor-pointer select-none items-center text-[0.7rem] uppercase tracking-wide">
+          What the badges mean
+        </summary>
+        <dl className="mb-2 mt-1 space-y-1.5 text-[0.7rem] leading-snug">
+          <div>
+            <dt className="text-[var(--wms-fg)]">online / offline</dt>
+            <dd>Bridge state. Offline = the WIZnet bridge has not been seen on the LAN — check the network cable / PoE switch port.</dd>
+          </div>
+          <div>
+            <dt className="text-amber-300">reachable</dt>
+            <dd>Bridge is on the LAN, but the chip is not producing valid tag reads. Check chassis power and firmware.</dd>
+          </div>
+          <div>
+            <dt className="text-yellow-400">degraded</dt>
+            <dd>The agent&apos;s last config pull from WMS failed. Not a reader-health signal.</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--wms-fg)]">running / stopped / recovering</dt>
+            <dd>Live reader process reported by the agent. Stopped = no process (outside hours, no cashier, or paused). Recovering = the agent is actively self-healing this reader.</dd>
+          </div>
+          <div>
+            <dt className="text-fuchsia-200">needs service</dt>
+            <dd>Supervisor exhausted every software recovery (6+ failed cycles in 10 min). Physical action: swap the antenna cable, or PoE-cycle the chassis.</dd>
+          </div>
+          <div>
+            <dt className="text-red-300">stuck</dt>
+            <dd>On the network but producing zero reads — chassis firmware likely wedged. Try Reset; if no recovery, power-cycle the reader.</dd>
+          </div>
+          <div>
+            <dt className="text-amber-300">slow</dt>
+            <dd>Reading well below the location median. Check antenna orientation, cable, or swap the antenna with a known-good sibling reader.</dd>
+          </div>
+          <div>
+            <dt className="text-emerald-300">scanning</dt>
+            <dd>A workflow page (Bulk Status / Bulk Import / Transfer Out / etc.) is scanning this reader right now.</dd>
+          </div>
+          <div>
+            <dt className="text-blue-300">sched</dt>
+            <dd>A pause schedule is configured. Tap Sched on the reader to edit it.</dd>
+          </div>
+          <div>
+            <dt className="text-amber-300">try N dBm</dt>
+            <dd>Supervisor auto-sweep found the antenna reads at N dBm while the configured power produces no reads. Tap it to open the editor and apply the suggested power.</dd>
+          </div>
+          <div>
+            <dt className="text-[var(--wms-fg)]">Live Scan tiles</dt>
+            <dd>Tap a tile to exclude / include that reader in the headline count.</dd>
+          </div>
+        </dl>
+      </details>
+
       <div className="space-y-4">
         {tree.locations.map((loc) => (
           <div
             key={loc.id}
-            className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4"
+            className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-4 max-md:p-2"
           >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="font-mono text-sm text-[var(--wms-fg)]">
@@ -601,7 +657,7 @@ function HardwareTreeSection(props: TreeProps) {
               <button
                 type="button"
                 onClick={() => onAddZone(loc.id)}
-                className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
               >
                 <Plus className="h-3 w-3" /> Add zone
               </button>
@@ -618,11 +674,11 @@ function HardwareTreeSection(props: TreeProps) {
                 ))}
 
                 {loc.unzonedReaders.length > 0 ? (
-                  <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-3">
+                  <div className="rounded border border-yellow-500/30 bg-yellow-500/5 p-3 max-md:p-2">
                     <p className="mb-2 font-mono text-[0.65rem] uppercase tracking-wide text-yellow-400/80">
                       Unzoned readers (assign a zone)
                     </p>
-                    <div className="ml-3 space-y-2">
+                    <div className="ml-3 space-y-2 max-md:ml-1.5">
                       {loc.unzonedReaders.map((r) => (
                         <ReaderCard key={r.id} reader={r} {...props} />
                       ))}
@@ -645,7 +701,7 @@ function ZoneBlock({
   ...rest
 }: { zone: HardwareConfigTree["locations"][number]["zones"][number] } & TreeProps) {
   return (
-    <div className="rounded border border-[var(--wms-border)]/60 p-3">
+    <div className="rounded border border-[var(--wms-border)]/60 p-3 max-md:p-2">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <span className="font-mono text-sm font-semibold text-[var(--wms-fg)]">
@@ -661,25 +717,25 @@ function ZoneBlock({
           <button
             type="button"
             onClick={() => onAddReader(zone.id)}
-            className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/15 px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/25"
+            className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/15 px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/25 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
           >
             <Plus className="h-3 w-3" /> Reader
           </button>
           <button
             type="button"
             onClick={() => onDeleteZone(zone.id, zone.name)}
-            className="inline-flex items-center gap-1 rounded border border-red-400/30 px-2 py-1 font-mono text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10"
+            className="inline-flex items-center gap-1 rounded border border-red-400/30 px-2 py-1 font-mono text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
           >
             <Trash2 className="h-3 w-3" /> Zone
           </button>
         </div>
       </div>
       {zone.readers.length === 0 ? (
-        <p className="ml-3 font-mono text-[0.7rem] text-[var(--wms-muted)]">
+        <p className="ml-3 font-mono text-[0.7rem] text-[var(--wms-muted)] max-md:ml-1.5">
           No readers in this zone yet.
         </p>
       ) : (
-        <div className="ml-3 space-y-2">
+        <div className="ml-3 space-y-2 max-md:ml-1.5">
           {zone.readers.map((r) => (
             <ReaderCard key={r.id} reader={r} onDeleteZone={onDeleteZone} onAddReader={onAddReader} {...rest} />
           ))}
@@ -731,7 +787,7 @@ function ReaderHealthBadge({ health }: { health: HardwareReaderRow["health"] }) 
   return (
     <span
       title={cfg.tip}
-      className={`rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide ${cfg.cls}`}
+      className={`rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide max-md:text-[0.7rem] ${cfg.cls}`}
     >
       {cfg.label}
     </span>
@@ -775,78 +831,78 @@ function ReaderCard({
         {reader.recovery_state ? (
           <span
             title="Agent is actively self-healing this reader"
-            className="rounded border border-amber-400/50 bg-amber-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-amber-300"
+            className="rounded border border-amber-400/50 bg-amber-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-amber-300 max-md:text-[0.7rem]"
           >
             recovering
           </span>
         ) : reader.reader_running === true ? (
           <span
             title="Agent has a live reader process — started/running"
-            className="rounded border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-emerald-300"
+            className="rounded border border-emerald-400/50 bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-emerald-300 max-md:text-[0.7rem]"
           >
             running
           </span>
         ) : reader.reader_running === false ? (
           <span
             title="No reader process — stopped (outside hours / no cashier / paused)"
-            className="rounded border border-zinc-400/40 bg-zinc-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-zinc-300"
+            className="rounded border border-zinc-400/40 bg-zinc-500/20 px-1.5 py-0.5 font-mono text-[0.55rem] font-semibold uppercase tracking-wide text-zinc-300 max-md:text-[0.7rem]"
           >
             stopped
           </span>
         ) : null}
         <ReaderHealthBadge health={reader.health} />
         {reader.network_address ? (
-          <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+          <span className="rounded bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-xs">
             {reader.network_address}
           </span>
         ) : null}
         {reader.cdm_agent_name ? (
-          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+          <span className="font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-xs">
             agent: {reader.cdm_agent_name}
           </span>
         ) : (
-          <span className="font-mono text-[0.6rem] text-yellow-400/70">unmanaged</span>
+          <span className="font-mono text-[0.6rem] text-yellow-400/70 max-md:text-xs">unmanaged</span>
         )}
         <StatusPill status={reader.bridge_state} />
         {reader.actively_scanning ? (
           <span
             title="A workflow page (Bulk Status / Bulk Import / Transfer Out / etc.) is scanning this reader right now"
-            className="rounded border border-emerald-400/50 bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300"
+            className="rounded border border-emerald-400/50 bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 max-md:text-[0.7rem]"
           >
             scanning
           </span>
         ) : isManualPaused ? (
-          <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
+          <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 max-md:text-[0.7rem]">
             stopped
           </span>
         ) : null}
         {hasSchedule ? (
           <span
             title="Schedule configured"
-            className="rounded border border-blue-400/40 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-blue-300"
+            className="rounded border border-blue-400/40 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-blue-300 max-md:text-[0.7rem]"
           >
             sched
           </span>
         ) : null}
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1 max-md:ml-0 max-md:w-full max-md:flex-wrap max-md:justify-end max-md:gap-1.5">
           {isManualPaused ? (
             <button
               type="button"
               onClick={() => onResumeReader(reader.id)}
               title="Start scanning"
-              className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15"
+              className="inline-flex items-center gap-0.5 rounded border border-emerald-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-emerald-300 hover:bg-emerald-400/15 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
             >
-              <Play className="h-2.5 w-2.5" /> Start
+              <Play className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Start
             </button>
           ) : (
             <button
               type="button"
               onClick={() => onPauseReader(reader.id)}
               title="Stop this reader — radio goes cold, agent issues forced abort"
-              className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15"
+              className="inline-flex items-center gap-0.5 rounded border border-amber-400/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-400/15 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
             >
-              <Square className="h-2.5 w-2.5" /> Stop
+              <Square className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Stop
             </button>
           )}
           <button
@@ -855,7 +911,7 @@ function ReaderCard({
               onSetMonsoonDriver(reader.id, driver === "console" ? "stream" : "console")
             }
             title={`Driver: ${driver}. Click to switch to ${driver === "console" ? "stream" : "console"}.`}
-            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide ${
+            className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem] ${
               driver === "console"
                 ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-400/20"
                 : "border-zinc-400/50 bg-zinc-500/10 text-zinc-300 hover:bg-zinc-400/20"
@@ -871,46 +927,46 @@ function ReaderCard({
               "process with fresh state. Use when the reader is stuck or has " +
               "drifted slow. Any in-flight scan-session on this reader will end."
             }
-            className="inline-flex items-center gap-0.5 rounded border border-red-400/40 bg-red-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20"
+            className="inline-flex items-center gap-0.5 rounded border border-red-400/40 bg-red-500/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-red-300 hover:bg-red-400/20 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
           >
-            <RefreshCw className="h-2.5 w-2.5" /> Reset
+            <RefreshCw className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Reset
           </button>
           <button
             type="button"
             onClick={() => onOpenSchedule(reader)}
             title="Schedule auto-pause windows"
-            className="inline-flex items-center gap-0.5 rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="inline-flex items-center gap-0.5 rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
           >
-            <Clock className="h-2.5 w-2.5" /> Sched
+            <Clock className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Sched
           </button>
           <button
             type="button"
             onClick={() => onAddAntenna(reader)}
             title="Add antenna"
-            className="inline-flex items-center gap-0.5 rounded border border-[var(--wms-accent)]/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/15"
+            className="inline-flex items-center gap-0.5 rounded border border-[var(--wms-accent)]/50 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/15 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
           >
-            <Plus className="h-2.5 w-2.5" /> Ant
+            <Plus className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" /> Ant
           </button>
           <button
             type="button"
             onClick={() => onEditReader(reader)}
             title="Edit reader"
-            className="rounded border border-[var(--wms-border)] p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="rounded border border-[var(--wms-border)] p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
           >
-            <Pencil className="h-2.5 w-2.5" />
+            <Pencil className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" />
           </button>
           <button
             type="button"
             onClick={() => onDeleteReader(reader.id, reader.name)}
             title="Delete reader"
-            className="rounded border border-red-400/30 p-1 text-red-400/80 hover:bg-red-400/10"
+            className="rounded border border-red-400/30 p-1 text-red-400/80 hover:bg-red-400/10 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
           >
-            <Trash2 className="h-2.5 w-2.5" />
+            <Trash2 className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" />
           </button>
         </div>
       </div>
       {reader.antennas.length > 0 ? (
-        <div className="ml-5 mt-2 space-y-1">
+        <div className="ml-5 mt-2 space-y-1 max-md:ml-2">
           {reader.antennas.map((a) => (
             <AntennaLine
               key={a.id}
@@ -922,7 +978,7 @@ function ReaderCard({
           ))}
         </div>
       ) : (
-        <p className="ml-5 mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        <p className="ml-5 mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:ml-2 max-md:text-xs">
           No antennas
         </p>
       )}
@@ -950,7 +1006,7 @@ function AntennaLine({
   const power = cfg.transmit_power_dbm ?? null;
   const isOff = cfg.enabled === false;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[0.65rem]">
+    <div className="flex flex-wrap items-center gap-2 text-[0.65rem] max-md:text-xs">
       <AntennaIcon className="h-3 w-3 text-[var(--wms-muted)]" />
       <span className="font-mono text-[var(--wms-fg)]">
         #{num} {antenna.name}
@@ -970,34 +1026,34 @@ function AntennaLine({
             `and apply the suggested power. Banner disappears once the antenna self-heals at ` +
             `configured.`
           }
-          className="rounded border border-amber-400/60 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-500/25"
+          className="rounded border border-amber-400/60 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 hover:bg-amber-500/25 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
         >
           try {antenna.suggested_power_dbm} dBm
         </button>
       ) : null}
       {isOff ? (
-        <span className="rounded border border-zinc-500/40 bg-zinc-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase text-zinc-400">
+        <span className="rounded border border-zinc-500/40 bg-zinc-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase text-zinc-400 max-md:text-[0.7rem]">
           disabled
         </span>
       ) : null}
       <StatusPill status={antenna.status_online ? "online" : "offline"} />
       <AntennaTestButton antennaId={antenna.id} antennaName={antenna.name} />
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1 max-md:gap-1.5">
         <button
           type="button"
           onClick={() => onEditAntenna(reader, antenna)}
           title="Edit antenna (incl. power)"
-          className="rounded border border-[var(--wms-border)] p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          className="rounded border border-[var(--wms-border)] p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
         >
-          <Pencil className="h-2.5 w-2.5" />
+          <Pencil className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" />
         </button>
         <button
           type="button"
           onClick={() => onDeleteAntenna(antenna.id, antenna.name)}
           title="Delete antenna"
-          className="rounded border border-red-400/30 p-1 text-red-400/80 hover:bg-red-400/10"
+          className="rounded border border-red-400/30 p-1 text-red-400/80 hover:bg-red-400/10 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
         >
-          <Trash2 className="h-2.5 w-2.5" />
+          <Trash2 className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" />
         </button>
       </div>
     </div>
@@ -1023,9 +1079,9 @@ function AntennaTestButton({
     <Link
       href={`/antenna_test?antennaId=${encodeURIComponent(antennaId)}`}
       title={`Open the Antenna Test page with ${antennaName} pre-selected.`}
-      className="inline-flex items-center gap-1 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wider text-red-300 hover:bg-red-400/20"
+      className="inline-flex items-center gap-1 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wider text-red-300 hover:bg-red-400/20 max-md:px-2.5 max-md:py-2 max-md:text-[0.7rem]"
     >
-      <Zap className="h-2.5 w-2.5" />
+      <Zap className="h-2.5 w-2.5 max-md:h-3.5 max-md:w-3.5" />
       Test
     </Link>
   );

@@ -156,7 +156,7 @@ export function StatusLabelsWorkspace() {
     }
   };
 
-  const th = "px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[var(--wms-muted)]";
+  const th = "px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs";
 
   if (isLoading) {
     return <p className="font-mono text-sm text-[var(--wms-muted)]">Loading status brain…</p>;
@@ -172,17 +172,17 @@ export function StatusLabelsWorkspace() {
         Clean 10 — flags are fixed in the database seed. Edit display text and legacy system ID only.
       </p>
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[960px] border-collapse text-left text-sm">
-          <thead>
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)] max-md:max-h-[70dvh] max-md:overflow-y-auto">
+        <table className="w-full min-w-[960px] border-collapse text-left text-sm max-md:min-w-[560px]">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)]">
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]">
-              <th className={`${th} pl-3`}>Status</th>
-              <th className={th} title="Integration id">
+              <th className={`${th} pl-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]`}>Status</th>
+              <th className={`${th} max-md:hidden`} title="Integration id">
                 Sys ID
               </th>
               <th className={th}>Web sellable</th>
               <th className={th}>Scanner</th>
-              <th className={th}>UI visible</th>
+              <th className={`${th} max-md:hidden`}>UI visible</th>
               <th className={`${th} w-[7.25rem] text-center`}>Icons</th>
               <th className={`${th} pr-3 text-right`}>Actions</th>
             </tr>
@@ -192,26 +192,26 @@ export function StatusLabelsWorkspace() {
               const tip = STATUS_LABEL_NAME_TOOLTIPS[row.name] ?? "";
               return (
                 <tr key={row.id} className="text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]/50">
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-2 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">
                     <span className="font-medium" title={tip || undefined}>
                       {row.name}
                     </span>
                   </td>
-                  <td className="px-2 py-2 font-mono text-xs tabular-nums text-[var(--wms-muted)]">
+                  <td className="px-2 py-2 font-mono text-xs tabular-nums text-[var(--wms-muted)] max-md:hidden">
                     {row.legacy_id ?? "—"}
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-xs">{yn(row.is_sellable)}</td>
                   <td className="px-2 py-2 text-center font-mono text-xs">
                     {row.is_visible_to_scanner ? "Yes" : "Ignore"}
                   </td>
-                  <td className="px-2 py-2 text-center font-mono text-xs">{yn(row.is_visible_in_ui)}</td>
+                  <td className="px-2 py-2 text-center font-mono text-xs max-md:hidden">{yn(row.is_visible_in_ui)}</td>
                   <td className="align-middle px-2 py-2 text-center">
                     <StatusRuleIcons row={row} />
                   </td>
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-9 max-md:px-2.5"
                       onClick={() => setEditRow(row)}
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />

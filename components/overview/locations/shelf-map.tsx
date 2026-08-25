@@ -149,7 +149,7 @@ export function ShelfMap({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="sticky top-0 z-20 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
+      <div className="sticky top-0 z-20 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 max-md:top-12">
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
             <span className="font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
@@ -159,7 +159,7 @@ export function ShelfMap({
               value={aisle}
               onChange={(e) => setAisle(e.target.value)}
               disabled={aisleOptions.length === 0}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:text-base"
             >
               {aisleOptions.map((a) => (
                 <option key={a} value={a}>{a}</option>
@@ -174,7 +174,7 @@ export function ShelfMap({
               value={section}
               onChange={(e) => setSection(e.target.value)}
               disabled={sectionOptions.length === 0}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:text-base"
             >
               {sectionOptions.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -219,10 +219,10 @@ export function ShelfMap({
           keeps cells readable; sm+ removes the min-width and behaves
           like a normal full-width grid. */}
       {aisle && section ? (
-        <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:overflow-visible sm:px-0">
+        <div className="-mx-3 overflow-x-auto px-3 sm:mx-0 sm:overflow-visible sm:px-0 max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-px-3">
           <div className="grid min-w-[680px] grid-cols-[44px_minmax(0,1fr)] gap-2 sm:min-w-0 sm:grid-cols-[64px_minmax(0,1fr)] sm:gap-3">
           {/* row labels column */}
-          <div className="grid grid-rows-5 gap-2 pt-1 sm:gap-3">
+          <div className="grid grid-rows-5 gap-2 pt-1 sm:gap-3 max-sm:snap-start">
             {["05", "04", "03", "02", "01"].map((shelf, i) => (
               <div
                 key={shelf}
@@ -360,7 +360,7 @@ function CellView({
 }) {
   if (!bin) {
     return (
-      <div className="flex min-h-[210px] flex-col items-stretch overflow-hidden rounded-lg border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface)]/40">
+      <div className="flex min-h-[210px] flex-col items-stretch overflow-hidden rounded-lg border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface)]/40 max-sm:snap-start">
         <div className="flex items-center justify-between border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono">
           <span className="flex items-center gap-2 text-sm text-[var(--wms-muted)]">
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--wms-muted)]/40" />
@@ -372,7 +372,7 @@ function CellView({
           <button
             type="button"
             onClick={onAddBin}
-            className="inline-flex items-center gap-1 font-mono text-xs text-[var(--wms-accent)] hover:underline"
+            className="inline-flex items-center gap-1 font-mono text-xs text-[var(--wms-accent)] hover:underline max-md:min-h-11 max-md:px-3"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2} /> Add {code}
           </button>
@@ -384,7 +384,7 @@ function CellView({
   const isInactive = bin.status === "inactive";
   return (
     <div
-      className={`flex min-h-[210px] flex-col overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] ${
+      className={`flex min-h-[210px] flex-col overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] max-sm:snap-start ${
         isInactive ? "opacity-60" : ""
       }`}
     >
@@ -395,7 +395,7 @@ function CellView({
             onClick={onToggleStatus}
             title="Toggle active/inactive"
             aria-label="Toggle active/inactive"
-            className={`inline-block h-2.5 w-2.5 rounded-full ${
+            className={`inline-block h-2.5 w-2.5 rounded-full max-md:relative max-md:after:absolute max-md:after:-inset-4 max-md:after:content-[''] ${
               isInactive ? "bg-[var(--wms-warn)]" : "bg-[var(--wms-ok)]"
             }`}
           />
@@ -405,7 +405,7 @@ function CellView({
           <button
             type="button"
             onClick={onEditBin}
-            className="rounded p-1.5 text-[var(--wms-muted)] hover:bg-[var(--wms-border)] hover:text-[var(--wms-fg)]"
+            className="rounded p-1.5 text-[var(--wms-muted)] hover:bg-[var(--wms-border)] hover:text-[var(--wms-fg)] max-md:-my-2 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
             title="Edit bin"
             aria-label="Edit bin"
           >
@@ -433,11 +433,11 @@ function CellView({
                 <span className="text-[var(--wms-muted)]"> · qty </span>
                 <span className="font-semibold text-[var(--wms-fg)]">{line.qty}</span>
               </span>
-              <span className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100">
                 <button
                   type="button"
                   onClick={() => onMove(line)}
-                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60"
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 max-md:min-h-11 max-md:px-3 max-md:text-xs"
                   title={`Move ${line.sku_prefix} · ${line.color ?? ""} to another bin`}
                 >
                   Move
@@ -446,7 +446,7 @@ function CellView({
                   <button
                     type="button"
                     onClick={() => onRemove(line)}
-                    className="rounded border border-red-500/50 bg-red-500/15 px-1.5 py-0.5 text-red-300 hover:bg-red-500/25"
+                    className="rounded border border-red-500/50 bg-red-500/15 px-1.5 py-0.5 text-red-300 hover:bg-red-500/25 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                     title="Remove this line from the bin"
                     aria-label="Remove"
                   >
@@ -462,7 +462,7 @@ function CellView({
         <button
           type="button"
           onClick={onAddItem}
-          className="mx-2 mb-2 inline-flex items-center justify-center gap-1 rounded border border-dashed border-[var(--wms-border)] py-1 text-[11px] text-[var(--wms-muted)] hover:border-[var(--wms-accent)]/60 hover:text-[var(--wms-accent)]"
+          className="mx-2 mb-2 inline-flex items-center justify-center gap-1 rounded border border-dashed border-[var(--wms-border)] py-1 text-[11px] text-[var(--wms-muted)] hover:border-[var(--wms-accent)]/60 hover:text-[var(--wms-accent)] max-md:min-h-11 max-md:text-xs"
         >
           <PackagePlus className="h-3 w-3" strokeWidth={2} />
           Add item
@@ -487,7 +487,7 @@ function UnmappedPanel({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+        className="flex w-full items-center justify-between px-3 py-2 font-mono text-xs uppercase tracking-wider text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:min-h-11"
       >
         <span>{open ? "▾" : "▸"} Unmapped bins ({bins.length})</span>
         <span className="text-[0.65rem] normal-case">
@@ -508,7 +508,7 @@ function UnmappedPanel({
                 <button
                   type="button"
                   onClick={() => onEdit(b)}
-                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[0.65rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60"
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[0.65rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 max-md:min-h-11 max-md:px-3 max-md:text-xs"
                 >
                   Edit
                 </button>
@@ -549,6 +549,14 @@ function MoveDialog({
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Autofocus only on hover-capable (desktop) devices — on phones the
+  // software keyboard would pop over the target-bin list the operator
+  // needs to read before typing.
+  useEffect(() => {
+    if (window.matchMedia("(hover: hover)").matches) inputRef.current?.focus();
+  }, []);
 
   const candidates = useMemo(() => {
     const norm = q.trim().toUpperCase();
@@ -609,13 +617,13 @@ function MoveDialog({
         <label className="flex items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 focus-within:border-[var(--wms-accent)]/60">
           <Search className="h-4 w-4 shrink-0 text-[var(--wms-muted)]" strokeWidth={2} />
           <input
+            ref={inputRef}
             type="text"
-            autoFocus
             autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Type to filter target bins (e.g. 1A03)"
-            className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
+            className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70 max-md:text-base"
           />
         </label>
 
@@ -635,7 +643,7 @@ function MoveDialog({
                   <button
                     type="button"
                     onClick={() => setTarget(b)}
-                    className={`w-full px-3 py-2 text-left font-mono text-xs hover:bg-[var(--wms-surface-elevated)] ${
+                    className={`w-full px-3 py-2 text-left font-mono text-xs hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11 max-md:text-sm ${
                       target?.id === b.id
                         ? "bg-[color-mix(in_srgb,var(--wms-accent)_15%,var(--wms-surface-elevated))]"
                         : ""
@@ -652,12 +660,12 @@ function MoveDialog({
 
         {err ? <p className="font-mono text-xs text-red-400">{err}</p> : null}
       </div>
-      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:min-h-11 max-md:px-4"
         >
           Cancel
         </button>
@@ -665,7 +673,7 @@ function MoveDialog({
           type="button"
           onClick={submit}
           disabled={busy || !target}
-          className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50"
+          className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {busy ? "Moving…" : `Move to ${target?.code ?? "…"}`}
         </button>
@@ -723,12 +731,12 @@ function RemoveDialog({
         </p>
         {err ? <p className="mt-2 text-xs text-red-400">{err}</p> : null}
       </div>
-      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:min-h-11 max-md:px-4"
         >
           Cancel
         </button>
@@ -736,7 +744,7 @@ function RemoveDialog({
           type="button"
           onClick={submit}
           disabled={busy}
-          className="rounded-md border border-red-500/50 bg-red-500 px-3 py-2 font-mono text-xs font-semibold text-white disabled:opacity-50"
+          className="rounded-md border border-red-500/50 bg-red-500 px-3 py-2 font-mono text-xs font-semibold text-white disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {busy ? "Removing…" : "Confirm"}
         </button>
@@ -774,6 +782,9 @@ function AddItemDialog({
   }, [query]);
 
   useEffect(() => {
+    // Desktop-only autofocus: phones must not get the keyboard popped over
+    // the dialog before the operator has read it.
+    if (!window.matchMedia("(hover: hover)").matches) return;
     setTimeout(() => inputRef.current?.focus(), 30);
   }, []);
 
@@ -891,7 +902,7 @@ function AddItemDialog({
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder="e.g. BLACK WASHED, MILO, C111710…"
-                className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 pl-7 pr-3 text-[var(--wms-fg)] outline-none focus:border-[var(--wms-accent)]"
+                className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 pl-7 pr-3 text-[var(--wms-fg)] outline-none focus:border-[var(--wms-accent)] max-md:min-h-11 max-md:text-base"
               />
             </div>
             {debounced && !isLoading && matches.length === 0 ? (
@@ -906,7 +917,7 @@ function AddItemDialog({
                     key={`${m.sku_prefix}-${m.color ?? ""}-${i}`}
                     onClick={() => setPicked(m)}
                     onMouseEnter={() => setActiveIdx(i)}
-                    className={`cursor-pointer px-3 py-1.5 ${
+                    className={`cursor-pointer px-3 py-1.5 max-md:py-3 max-md:text-sm ${
                       i === activeIdx
                         ? "bg-[color-mix(in_srgb,var(--wms-accent)_22%,var(--wms-surface-elevated))]"
                         : ""
@@ -932,12 +943,12 @@ function AddItemDialog({
 
         {err ? <p className="text-red-400">{err}</p> : null}
       </div>
-      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+      <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={onClose}
           disabled={busy}
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:min-h-11 max-md:px-4"
         >
           Cancel
         </button>
@@ -945,7 +956,7 @@ function AddItemDialog({
           type="button"
           onClick={() => void submit()}
           disabled={busy || !picked}
-          className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50"
+          className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
           {busy ? "Assigning…" : "Assign"}
         </button>
@@ -985,20 +996,20 @@ function Modal({
         className="fixed inset-0 z-[60] bg-black/70"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+        <div className="flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0">
           <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
             <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{title}</h3>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+              className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
             >
               <X className="h-4 w-4" strokeWidth={2} />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto max-md:overscroll-contain">{children}</div>
         </div>
       </div>
     </>

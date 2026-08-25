@@ -333,7 +333,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   }, [items, matrixId, colorOpts]);
 
   const field =
-    "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)]";
+    "rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)] max-md:py-2 max-md:text-base";
   // One colour → hero is auto-assigned as its main pic; many colours → one image
   // per colour (each pick locks that colour out of the other images).
   const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
@@ -375,24 +375,24 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
             key={m.key}
             onDragOver={(e) => { if (dragKey) e.preventDefault(); }}
             onDrop={() => { dropOn(m.key); setDragKey(null); }}
-            className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${dragKey === m.key || (dragKey && sel.has(dragKey) && sel.has(m.key)) ? "opacity-50" : ""} ${sel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${dragKey && dragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+            className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 max-sm:flex-wrap ${dragKey === m.key || (dragKey && sel.has(dragKey) && sel.has(m.key)) ? "opacity-50" : ""} ${sel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${dragKey && dragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
           >
             <input
               type="checkbox"
               checked={sel.has(m.key)}
               onChange={() => toggleSel(m.key)}
               title="Select for multi-drag (drag any selected row to move them all)"
-              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
             />
             <div className="relative shrink-0">
-              <img src={m.url} alt={m.alt} className="h-40 w-32 cursor-pointer rounded border border-[var(--wms-border)] object-cover" onClick={() => setZoom(m.url)} />
+              <img src={m.url} alt={m.alt} className="h-40 w-32 cursor-pointer rounded border border-[var(--wms-border)] object-cover max-sm:h-32 max-sm:w-24" onClick={() => setZoom(m.url)} />
               {idx === 0 ? <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.62rem] font-bold text-[var(--wms-accent-fg)]">HERO</span> : null}
               {m.kind === "new" ? <span className="absolute bottom-0 right-0 rounded-tl bg-black/60 px-1 text-[0.62rem] text-white">NEW</span> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-1">
-              <textarea className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)]" rows={2} placeholder="alt text" value={m.alt} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x))); }} />
+              <textarea className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:text-base" rows={2} placeholder="alt text" value={m.alt} onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, alt: v } : x))); }} />
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
+                <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50 max-md:py-2 max-md:px-3">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
                 {singleColor ? (
                   idx === 0 ? (
                     <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">★ main pic for {singleColor.color} (auto)</span>
@@ -408,13 +408,13 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 flex-col gap-1">
-              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
-              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)]">⬇</button>
-              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)]">✕</button>
+            <div className="flex shrink-0 flex-col gap-1 max-sm:w-full max-sm:flex-row max-sm:flex-wrap">
+              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⠿</div>
+              <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↑</button>
+              <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↓</button>
+              <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">★</button>
+              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⬇</button>
+              <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">✕</button>
             </div>
           </div>
         ))}

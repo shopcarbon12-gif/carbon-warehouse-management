@@ -243,7 +243,7 @@ export function CycleCountManualItemsModal({
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="Filter by SKU, UPC, name, color, size…"
-              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
+              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] max-md:text-base"
             />
             <span className="font-mono text-xs text-[var(--wms-muted)]">
               {data
@@ -286,17 +286,17 @@ export function CycleCountManualItemsModal({
             ) : (
               <table
                 ref={tableRef}
-                className="w-full min-w-[1000px] border-collapse font-mono text-xs"
+                className="w-full min-w-[1000px] border-collapse font-mono text-xs max-md:min-w-0"
                 style={{ tableLayout: pickTableLayout(colWidths) }}
               >
-                <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+                <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs">
                   <tr>
                     {[
                       { label: "SKU" },
-                      { label: "UPC" },
+                      { label: "UPC", hideMobile: true },
                       { label: "Description" },
-                      { label: "Color" },
-                      { label: "Size" },
+                      { label: "Color", hideMobile: true },
+                      { label: "Size", hideMobile: true },
                       { label: "Expected qty", align: "center" },
                       { label: "Count qty", align: "center" },
                       { label: "State" },
@@ -306,7 +306,7 @@ export function CycleCountManualItemsModal({
                         <th
                           key={c.label}
                           style={w !== null ? { width: w, minWidth: w } : undefined}
-                          className={`relative overflow-hidden px-3 py-2 ${c.align === "center" ? "text-center" : "text-left"}`}
+                          className={`relative overflow-hidden px-3 py-2 ${c.align === "center" ? "text-center" : "text-left"}${c.hideMobile ? " max-md:hidden" : ""}`}
                         >
                           <span>{c.label}</span>
                           <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -327,16 +327,16 @@ export function CycleCountManualItemsModal({
                         } hover:bg-[var(--wms-surface-elevated)]/40`}
                       >
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`}>{r.sku}</td>
-                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)] max-md:hidden`}>
                           {r.upc ?? "—"}
                         </td>
                         <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-fg)]`} title={r.name}>
                           {r.name}
                         </td>
-                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)] max-md:hidden`}>
                           {r.color?.trim() || "—"}
                         </td>
-                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
+                        <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)] max-md:hidden`}>
                           {r.size?.trim() || "—"}
                         </td>
                         <td className="px-3 py-2 text-center tabular-nums text-[var(--wms-fg)]">
@@ -350,7 +350,7 @@ export function CycleCountManualItemsModal({
                             disabled={busy || closed || committed}
                             value={r.count_qty == null ? "" : String(r.count_qty)}
                             onChange={(e) => setCell(r.custom_sku_id, e.target.value)}
-                            className="w-16 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-center tabular-nums text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="w-16 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-center tabular-nums text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-50 max-md:py-2 max-md:text-base"
                             aria-label={`Count qty for ${r.sku}`}
                           />
                         </td>

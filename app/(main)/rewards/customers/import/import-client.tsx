@@ -17,6 +17,17 @@ export type LocationOption = { id: number; label: string };
 const PREVIEW_LIMIT = 100;
 const BATCH_SIZE = 500; // rows per commit request / transaction
 const MAX_ISSUES = 200;
+// Preview columns CSS-hidden below md (th + td in lockstep) so the identity
+// columns' mapping is checkable on a phone without a 1600px pan. Desktop
+// renders every CUSTOMER_PREVIEW_COLUMNS entry exactly as before.
+const MOBILE_HIDDEN_PREVIEW_FIELDS = new Set<keyof ParsedRow>([
+  "address_line1",
+  "address_line2",
+  "city",
+  "state",
+  "zip",
+  "country",
+]);
 
 const EMPTY_SUMMARY: ImportSummary = {
   total: 0,
@@ -148,14 +159,14 @@ export default function ImportClient({ locations }: { locations: LocationOption[
             </button>
           </div>
 
-          <label className="flex flex-col gap-1 sm:min-w-64">
+          <label className="flex flex-col gap-1 sm:min-w-64 max-md:min-w-0">
             <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">
               Where are these customers being added from?
             </span>
             <select
               value={locationId}
               onChange={(e) => setLocationId(e.target.value)}
-              className="border border-border bg-card px-3 py-2 text-sm"
+              className="border border-border bg-card px-3 py-2 text-sm max-md:w-full max-md:min-w-0 max-md:max-w-full max-md:text-base"
             >
               <option value="">Not at a store (vendor list / signup sheet)</option>
               {locations.map((l) => (
@@ -175,13 +186,16 @@ export default function ImportClient({ locations }: { locations: LocationOption[
       {/* Preview file */}
       <div className="border border-border bg-card p-5">
         <h2 className="text-base font-bold mb-3">Preview file:</h2>
-        <div className="overflow-x-auto border border-border">
+        <div className="overflow-x-auto border border-border max-md:max-h-[65dvh] max-md:overflow-y-auto max-md:overscroll-contain">
           {hasRows ? (
             <table className="w-full text-xs whitespace-nowrap">
-              <thead className="bg-muted uppercase tracking-wider font-bold">
+              <thead className="bg-muted uppercase tracking-wider font-bold max-md:sticky max-md:top-0 max-md:z-10">
                 <tr>
                   {CUSTOMER_PREVIEW_COLUMNS.map((c) => (
-                    <th key={c.header} className="text-left px-3 py-2 border-b border-border">
+                    <th
+                      key={c.header}
+                      className={`text-left px-3 py-2 border-b border-border${MOBILE_HIDDEN_PREVIEW_FIELDS.has(c.field) ? " max-md:hidden" : ""}`}
+                    >
                       {c.header}
                     </th>
                   ))}
@@ -193,7 +207,10 @@ export default function ImportClient({ locations }: { locations: LocationOption[
                     {CUSTOMER_PREVIEW_COLUMNS.map((c) => {
                       const v = r[c.field];
                       return (
-                        <td key={c.header} className="px-3 py-2">
+                        <td
+                          key={c.header}
+                          className={`px-3 py-2${MOBILE_HIDDEN_PREVIEW_FIELDS.has(c.field) ? " max-md:hidden" : ""}`}
+                        >
                           {v ? String(v) : <span className="text-muted-foreground">—</span>}
                         </td>
                       );

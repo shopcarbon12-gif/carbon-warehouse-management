@@ -103,13 +103,13 @@ export function ManualItemsModal({
   // Close picker on click-outside
   useEffect(() => {
     if (!pickerOpen) return;
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: PointerEvent) => {
       const el = searchBoxRef.current;
       if (!el || !(e.target instanceof Node) || el.contains(e.target)) return;
       setPickerOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
   }, [pickerOpen]);
 
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.matrix_id));
@@ -209,8 +209,8 @@ export function ManualItemsModal({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+        <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
             <div className="flex items-center gap-3">
               <Boxes className="h-5 w-5" style={{ color: "oklch(82.8% 0.111 230.318)" }} />
@@ -226,7 +226,7 @@ export function ManualItemsModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -245,7 +245,7 @@ export function ManualItemsModal({
                 }}
                 onFocus={() => setPickerOpen(true)}
                 placeholder="Search to add: name, SKU, UPC, system ID…"
-                className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
+                className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] max-md:text-base"
               />
               {pickerOpen && debounced ? (
                 <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] shadow-xl">
@@ -274,7 +274,7 @@ export function ManualItemsModal({
                                 </span>
                                 <span className="truncate text-[var(--wms-fg)]">{h.name}</span>
                               </div>
-                              <div className="mt-0.5 text-[0.65rem] text-[var(--wms-muted)]">
+                              <div className="mt-0.5 text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs">
                                 {h.vendor ? `${h.vendor} · ` : ""}
                                 {h.sku_count} SKU{h.sku_count === 1 ? "" : "s"}
                                 {h.matrix_ls_system_id ? ` · sys ${h.matrix_ls_system_id}` : ""}
@@ -304,7 +304,7 @@ export function ManualItemsModal({
                   if (el) el.indeterminate = !allChecked && someChecked;
                 }}
                 onChange={toggleAll}
-                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
               />
               Select all
             </label>
@@ -315,7 +315,7 @@ export function ManualItemsModal({
               <button
                 type="button"
                 onClick={() => void mutate()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11"
                 title="Refresh"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -325,7 +325,7 @@ export function ManualItemsModal({
                 type="button"
                 disabled={selected.size === 0 || busy}
                 onClick={() => void removeSelected()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-red-300 hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-red-400/40 bg-red-400/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-red-300 hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
                 title="Un-mark as manual (back to RFID/EPC tracking)"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -335,7 +335,7 @@ export function ManualItemsModal({
           </div>
 
           {/* Table */}
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto max-md:overscroll-contain">
             {error ? (
               <div className="px-5 py-8 text-center font-mono text-sm text-red-400">
                 Failed to load manual items.
@@ -349,9 +349,56 @@ export function ManualItemsModal({
                 No manual items yet — search above to add a UPC.
               </div>
             ) : (
+              <>
+              {/* Mobile card list (<md) — same rows/selection as the table below. */}
+              <ul className="divide-y divide-[var(--wms-border)]/40 font-mono md:hidden">
+                {rows.map((r) => {
+                  const checked = selected.has(r.matrix_id);
+                  return (
+                    <li
+                      key={r.matrix_id}
+                      className={`flex items-start gap-3 px-4 py-3 ${
+                        checked ? "bg-[color-mix(in_srgb,var(--wms-accent)_6%,transparent)]" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleOne(r.matrix_id)}
+                        className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                        aria-label={`Select ${r.matrix_upc ?? r.name}`}
+                      />
+                      <div className="min-w-0 flex-1 text-xs">
+                        <div className="font-semibold text-teal-400/90">{r.matrix_upc ?? "—"}</div>
+                        <div className="mt-0.5 break-words text-[var(--wms-fg)]">{r.name}</div>
+                        <div className="mt-1 text-[var(--wms-muted)]">
+                          {r.brand ? `${r.brand} · ` : ""}
+                          {r.sku_count} SKU{r.sku_count === 1 ? "" : "s"}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[var(--wms-muted)]">
+                          <span>
+                            Qty <span className="tabular-nums text-[var(--wms-fg)]">{r.qty}</span>
+                          </span>
+                          <span>
+                            Price{" "}
+                            <span className="tabular-nums text-[var(--wms-fg)]">
+                              {r.retail_price
+                                ? new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(r.retail_price))
+                                : "—"}
+                            </span>
+                          </span>
+                          <span>
+                            Bin <span className="text-[var(--wms-fg)]">{r.bin_location ?? "—"}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
               <table
                 ref={tableRef}
-                className="w-full min-w-[900px] border-collapse font-mono text-xs"
+                className="w-full min-w-[900px] border-collapse font-mono text-xs max-md:hidden"
                 style={{ tableLayout: pickTableLayout(colWidths) }}
               >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
@@ -429,6 +476,7 @@ export function ManualItemsModal({
                   })}
                 </tbody>
               </table>
+              </>
             )}
           </div>
 

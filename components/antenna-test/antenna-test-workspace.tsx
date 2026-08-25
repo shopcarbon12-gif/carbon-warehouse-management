@@ -1280,6 +1280,16 @@ export function AntennaTestWorkspace() {
               )}
             </span>
           )}
+          {(isLive || picked) && (
+            <p className="w-full font-mono text-[10px] leading-relaxed text-[var(--wms-muted)] md:hidden">
+              {isLive
+                ? "Pause freezes the table only — the radio keeps cycling; reads received while paused are dropped. "
+                : ""}
+              {picked
+                ? "💾 saves the current radio knobs as this antenna's default for normal scans (Transfer Out, Dashboard)."
+                : ""}
+            </p>
+          )}
         </div>
 
         {/* Stats strip — visible whenever there's anything to report. */}
@@ -1320,6 +1330,7 @@ export function AntennaTestWorkspace() {
               No calibration points yet — distance shows the heuristic bucket.
             </p>
           ) : (
+            <div className="max-md:overflow-x-auto">
             <table className="mt-3 w-full text-sm">
               <thead className="text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
                 <tr>
@@ -1341,7 +1352,7 @@ export function AntennaTestWorkspace() {
                       <td className="px-2 py-1 text-right font-mono text-[11px]">
                         {(p.firstReadPowerArg / 10).toFixed(1)} dBm
                       </td>
-                      <td className="px-2 py-1 font-mono text-[11px]">
+                      <td className="px-2 py-1 font-mono text-[11px] max-md:break-all">
                         {p.referenceEpc}
                       </td>
                       <td className="px-2 py-1 font-mono text-[10px] text-[var(--wms-muted)]">
@@ -1359,6 +1370,7 @@ export function AntennaTestWorkspace() {
                   ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
@@ -1407,9 +1419,9 @@ export function AntennaTestWorkspace() {
           the table region scrolls sideways. table-auto + min-w-max + per-cell
           whitespace-nowrap means columns auto-size to their content — no
           truncation, no wrap, just scroll if it overflows. */}
-      <div className="overflow-x-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)]">
+      <div className="overflow-x-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-card)] max-md:max-h-[70dvh] max-md:overscroll-contain">
         <table className="min-w-max table-auto text-sm">
-          <thead className="bg-[var(--wms-bg)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)]">
+          <thead className="bg-[var(--wms-bg)] text-xs font-mono uppercase tracking-wide text-[var(--wms-muted)] max-md:sticky max-md:top-0 max-md:z-10">
             <tr>
               <th className="whitespace-nowrap px-3 py-2 text-right">#</th>
               <th
@@ -1456,23 +1468,23 @@ export function AntennaTestWorkspace() {
               >
                 Custom SKU{sortIndicator("sku")}
               </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">System ID</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Asset ID</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">System ID</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Asset ID</th>
               <th
                 className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("desc")}
               >
                 Name{sortIndicator("desc")}
               </th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Color</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Size</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">UPC</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Vendor</th>
-              <th className="whitespace-nowrap px-3 py-2 text-right">Price</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Color</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Size</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">UPC</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Vendor</th>
+              <th className="whitespace-nowrap px-3 py-2 text-right max-md:hidden">Price</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Item status</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Loc · Bin</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">First seen</th>
-              <th className="whitespace-nowrap px-3 py-2 text-left">Last seen</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">First seen</th>
+              <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Last seen</th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Calibrate</th>
             </tr>
           </thead>
@@ -1530,19 +1542,19 @@ export function AntennaTestWorkspace() {
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-[13px]">
                     {row.rssiDbm.toFixed(1)} dBm
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-[13px]">
                     {row.bestRssiDbm.toFixed(1)} dBm
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px] max-md:text-[13px]">
                     {row.reads}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">
                     <Sparkline points={row.spark} />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:text-[13px]">
                     {isReference && (
                       <span
                         className="mr-1 inline-block align-middle"
@@ -1567,28 +1579,28 @@ export function AntennaTestWorkspace() {
                   <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
                     {cat?.sku ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                     {cat?.sku_ls_system_id ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                     {cat?.asset_id ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
                     {cat?.name ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:hidden">
                     {cat?.color ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:hidden">
                     {cat?.size ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] max-md:hidden">
                     {cat?.upc ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-[11px] max-md:hidden">
                     {cat?.vendor ?? <span className="text-[var(--wms-muted)]">—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px]">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[11px] max-md:hidden">
                     {cat?.retail_price ? (
                       `$${Number(cat.retail_price).toFixed(2)}`
                     ) : (
@@ -1624,10 +1636,10 @@ export function AntennaTestWorkspace() {
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                     {fmtTs(row.firstSeenMs) || "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)]">
+                  <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[11px] text-[var(--wms-muted)] max-md:hidden">
                     {fmtTs(row.lastSeenMs) || "—"}
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5">

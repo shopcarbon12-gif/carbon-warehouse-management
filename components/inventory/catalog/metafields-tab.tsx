@@ -24,7 +24,7 @@ export type MetafieldsHandle = {
 
 const label = "block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
 const field =
-  "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)]";
+  "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)] max-md:text-base";
 
 export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function MetafieldsTab(
   { matrixId, shopifyProductId, canManage, showActions = true },
@@ -130,7 +130,7 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
               onChange={(e) => setValues((v) => ({ ...v, fullDescription: e.target.value }))}
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
             <div>
               <span className={label}>Gender (Google)</span>
               <select

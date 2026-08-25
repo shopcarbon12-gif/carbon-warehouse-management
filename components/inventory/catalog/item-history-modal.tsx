@@ -133,8 +133,8 @@ export function ItemHistoryModal({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+        <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
             <div className="flex items-center gap-3">
               <History className="h-5 w-5" style={{ color: "oklch(82.8% 0.111 230.318)" }} />
@@ -157,7 +157,7 @@ export function ItemHistoryModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -168,7 +168,7 @@ export function ItemHistoryModal({
             <button
               type="button"
               onClick={() => void mutate()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11"
               title="Refresh"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -176,7 +176,7 @@ export function ItemHistoryModal({
             </button>
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto max-md:overscroll-contain">
             {error ? (
               <div className="px-5 py-8 text-center font-mono text-sm text-red-400">
                 Failed to load item history.
@@ -184,9 +184,65 @@ export function ItemHistoryModal({
             ) : (
               /* Table renders even when empty so headers are always visible —
                  the empty state lives inside <tbody>. */
+              <>
+              {/* Mobile timeline list (<md) — same rows as the table below. */}
+              <div className="font-mono text-xs md:hidden">
+                {isLoading ? (
+                  <div className="px-5 py-8 text-center text-[var(--wms-muted)]">Loading…</div>
+                ) : rows.length === 0 ? (
+                  <div className="px-5 py-12 text-center text-[var(--wms-muted)]">
+                    No history yet — qty changes will appear here once syncs, counts, or POS events fire.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-[var(--wms-border)]/40">
+                    {rows.map((r) => {
+                      const transferLabel =
+                        r.transfer_slip_number || r.transfer_from_code || r.transfer_to_code
+                          ? `${r.transfer_slip_number ? `Slip #${r.transfer_slip_number} ` : ""}${
+                              r.transfer_from_code ?? "?"
+                            } → ${r.transfer_to_code ?? "?"}`
+                          : null;
+                      return (
+                        <li key={r.id} className="px-4 py-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`rounded border px-1.5 py-0.5 text-[0.7rem] uppercase tracking-wide ${sourceBadgeClass(r.source)}`}>
+                              {sourceLabel(r.source)}
+                            </span>
+                            <span className="tabular-nums">
+                              {r.delta_qty == null ? (
+                                <span className="text-[var(--wms-muted)]">—</span>
+                              ) : r.delta_qty === 0 ? (
+                                <span className="text-[var(--wms-muted)]">0</span>
+                              ) : r.delta_qty > 0 ? (
+                                <span className="text-green-300">+{r.delta_qty}</span>
+                              ) : (
+                                <span className="text-red-300">{r.delta_qty}</span>
+                              )}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 tabular-nums text-[var(--wms-fg)]">
+                            <span className="text-[var(--wms-muted)]">{r.previous_qty ?? "—"}</span>
+                            <span className="mx-1 text-[var(--wms-muted)]">→</span>
+                            <span className="font-semibold">{r.new_qty}</span>
+                          </div>
+                          <div className="mt-1 text-[var(--wms-muted)]">
+                            {formatDate(r.changed_at)}
+                            {r.changed_by_user_name ? ` · ${r.changed_by_user_name}` : ""}
+                          </div>
+                          {(transferLabel ?? r.notes) ? (
+                            <div className="mt-0.5 break-words text-[var(--wms-muted)]">
+                              {transferLabel ?? r.notes}
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
               <table
                 ref={tableRef}
-                className="w-full min-w-[800px] border-collapse font-mono text-xs"
+                className="w-full min-w-[800px] border-collapse font-mono text-xs max-md:hidden"
                 style={{ tableLayout: pickTableLayout(colWidths) }}
               >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
@@ -268,6 +324,7 @@ export function ItemHistoryModal({
                   )}
                 </tbody>
               </table>
+              </>
             )}
           </div>
         </div>

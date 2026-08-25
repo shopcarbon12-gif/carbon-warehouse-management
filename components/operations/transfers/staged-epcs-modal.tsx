@@ -70,7 +70,7 @@ export function StagedEpcsModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
           >
             <X className="h-4 w-4" />
           </button>
@@ -82,7 +82,7 @@ export function StagedEpcsModal({
               No EPCs staged.
             </p>
           ) : (
-            <ul className="divide-y divide-[var(--wms-border)]/60 font-mono text-[0.7rem]">
+            <ul className="divide-y divide-[var(--wms-border)]/60 font-mono text-[0.7rem] max-md:text-xs">
               {epcs.map((e) => (
                 <li
                   key={e}
@@ -94,7 +94,7 @@ export function StagedEpcsModal({
                       type="button"
                       onClick={() => onRemoveEpc(e)}
                       title="Remove from staged set"
-                      className="rounded border border-red-400/30 px-2 py-0.5 text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10"
+                      className="rounded border border-red-400/30 px-2 py-0.5 text-[0.6rem] uppercase text-red-400/80 hover:bg-red-400/10 max-md:px-3 max-md:py-2 max-md:text-[0.7rem]"
                     >
                       Remove
                     </button>
@@ -109,7 +109,7 @@ export function StagedEpcsModal({
           <button
             type="button"
             onClick={onClose}
-            className="w-full rounded border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="w-full rounded border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:min-h-11 max-md:text-[0.75rem]"
           >
             Close
           </button>

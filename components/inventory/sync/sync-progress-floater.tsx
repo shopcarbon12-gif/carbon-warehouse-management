@@ -111,7 +111,7 @@ export function SyncProgressFloater() {
   const isTerminal = status === "completed" || status === "failed" || status === "cancelled";
 
   return (
-    <div className="pointer-events-auto fixed right-4 top-4 z-[120] w-72 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-xl">
+    <div className="pointer-events-auto fixed right-4 top-4 z-[120] w-72 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-xl max-md:left-4 max-md:right-4 max-md:top-14 max-md:w-auto">
       <div className="flex items-center gap-2 border-b border-[var(--wms-border)] px-3 py-2">
         {status === "running" || status === "preview" ? (
           <RefreshCw className="h-3.5 w-3.5 animate-spin text-[var(--wms-accent)]" />
@@ -126,7 +126,7 @@ export function SyncProgressFloater() {
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+          className="rounded p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-m-1.5 max-md:p-2"
           aria-label="Dismiss"
         >
           <X className="h-3 w-3" />

@@ -507,8 +507,8 @@ export function EncodePrintWorkspace() {
                             : "hover:bg-white/[0.03]")
                         }
                       >
-                        <span className="font-mono text-xs font-semibold text-teal-300">{s.epc}</span>
-                        <span className="ml-auto h-[5px] w-[54px] overflow-hidden rounded bg-[#23304a]">
+                        <span className="font-mono text-xs font-semibold text-teal-300 max-md:min-w-0 max-md:truncate" title={s.epc}>{s.epc}</span>
+                        <span className="ml-auto h-[5px] w-[54px] overflow-hidden rounded bg-[#23304a] max-md:shrink-0">
                           <i className="block h-full bg-[var(--wms-accent)]" style={{ width: `${pct}%` }} />
                         </span>
                         <span className="w-[64px] text-right font-mono text-xs text-[var(--wms-muted)]">

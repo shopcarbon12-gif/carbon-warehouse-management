@@ -177,7 +177,7 @@ export function PrintLogsModal({ open, onClose }: Props) {
             ) : (
               <table
                 ref={tableRef}
-                className="w-full min-w-[640px] border-collapse text-left text-xs"
+                className="w-full min-w-[640px] border-collapse text-left text-xs max-md:min-w-0"
                 style={{ tableLayout: pickTableLayout(colWidths) }}
               >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)]">

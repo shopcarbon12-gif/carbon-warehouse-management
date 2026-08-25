@@ -33,8 +33,8 @@ export function DataTableContainer({
   return (
     <div className="relative overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
       {caption !== undefined ? (
-        <div className="flex items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
-          <span>{caption}</span>
+        <div className="flex items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:flex-wrap">
+          <span className="max-md:min-w-0 max-md:truncate">{caption}</span>
           {rightSlot}
         </div>
       ) : null}
@@ -45,7 +45,16 @@ export function DataTableContainer({
       >
         {children}
       </div>
-      <ThickScrollbars scrollRef={scrollRef} />
+      {/* Phone scroll affordance: hint that columns continue off-screen.
+          The overlay scrollbars below are mouse chrome — hidden on phones
+          so native touch panning owns the table. Both md-gated. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-[var(--wms-surface)] to-transparent md:hidden"
+      />
+      <div className="max-md:hidden">
+        <ThickScrollbars scrollRef={scrollRef} />
+      </div>
     </div>
   );
 }

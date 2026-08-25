@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { WMS_THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
 import "./globals.css";
@@ -18,6 +18,16 @@ const wmsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "CarbonWMS",
   description: "CarbonWMS — warehouse management, inventory, lots, and operations.",
+};
+
+// Explicit viewport (was Next's implicit default): viewportFit "cover"
+// activates env(safe-area-inset-*) on notched phones for mobile-view
+// fixed chrome. No maximumScale/userScalable caps — pinch-zoom stays
+// available (a11y); iOS focus-zoom is handled with ≥16px inputs instead.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

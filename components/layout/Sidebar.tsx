@@ -304,8 +304,10 @@ export function Sidebar({
   // POS behaviour where the pin "locks" the menu. Unpinned sidebars
   // close themselves like an overlay drawer.
   const onNavigate = useCallback(() => {
-    if (!pinned) onOpenChange(false);
-  }, [pinned, onOpenChange]);
+    // Unconditional: harmless at md+ when pinned (aside shows via `pinned`),
+    // required below md where even a pinned sidebar renders as a drawer.
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   // Same-route refresh: clicking a menu entry for the page you're
   // already on should fully reload it (window.location.reload), not a
@@ -324,7 +326,10 @@ export function Sidebar({
   );
 
   useEffect(() => {
-    if (!pinned) onOpenChange(false);
+    // Close on route change regardless of pin: at md+ a pinned sidebar is
+    // shown via `pinned` (open is irrelevant), and below md the sidebar is
+    // always an overlay drawer that must not cover the new page.
+    onOpenChange(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- close drawer on route change only
   }, [pathname]);
 
@@ -354,8 +359,12 @@ export function Sidebar({
         type="button"
         aria-label="Close menu"
         className={`fixed inset-0 ${maskZ} bg-black/70 backdrop-blur-sm transition-opacity ${
-          isOverlay && open ? "opacity-100" : "pointer-events-none opacity-0"
-        } ${pinned ? "hidden" : ""}`}
+          isOverlay && open
+            ? "opacity-100"
+            : open
+              ? "pointer-events-none opacity-0 max-md:pointer-events-auto max-md:opacity-100"
+              : "pointer-events-none opacity-0"
+        } ${pinned ? "hidden max-md:block" : ""}`}
         onClick={() => onOpenChange(false)}
       />
 
@@ -364,10 +373,10 @@ export function Sidebar({
         className={`${
           isOverlay
             ? `fixed inset-y-0 left-0 ${drawerZ} shadow-2xl`
-            : "static z-0 shadow-none"
-        } flex w-80 shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] transition-transform duration-200 ease-out ${
+            : "static z-0 shadow-none max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl"
+        } flex w-80 max-w-[85vw] shrink-0 flex-col border-r border-[var(--wms-border)] bg-[var(--wms-surface)] transition-transform duration-200 ease-out ${
           visible ? "translate-x-0" : "-translate-x-full"
-        }`}
+        } ${pinned && !open ? "max-md:-translate-x-full" : ""}`}
       >
         <div className="flex items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-4">
           <Link
@@ -396,7 +405,7 @@ export function Sidebar({
                   : "Pin — keep sidebar open"
               }
               onClick={onTogglePin}
-              className={`rounded-md p-2 transition-colors ${
+              className={`rounded-md p-2 transition-colors max-md:hidden ${
                 pinned
                   ? "bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)]"
                   : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
@@ -411,8 +420,8 @@ export function Sidebar({
             <button
               type="button"
               aria-label="Close sidebar"
-              className={`rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] ${
-                pinned ? "hidden" : ""
+              className={`rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:p-2.5 ${
+                pinned ? "hidden max-md:inline-flex max-md:items-center max-md:justify-center" : ""
               }`}
               onClick={() => onOpenChange(false)}
             >
@@ -459,7 +468,7 @@ export function Sidebar({
           <form action={logoutAction}>
             <button
               type="submit"
-              className="font-mono text-base text-[var(--wms-accent)] hover:underline"
+              className="font-mono text-base text-[var(--wms-accent)] hover:underline max-md:-m-2 max-md:inline-block max-md:p-2"
             >
               Sign out
             </button>

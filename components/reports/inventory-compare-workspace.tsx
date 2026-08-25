@@ -171,7 +171,7 @@ export function InventoryCompareWorkspace() {
       </div>
 
       {data.meta?.hint ? (
-        <p className="font-mono text-[0.65rem] leading-relaxed text-[var(--wms-muted)]">
+        <p className="font-mono text-[0.65rem] max-md:text-xs leading-relaxed text-[var(--wms-muted)]">
           {data.meta.hint}
           {data.meta.expected_qty_source ? (
             <>
@@ -183,26 +183,26 @@ export function InventoryCompareWorkspace() {
       ) : null}
 
       {integrationMsg ? (
-        <p className="font-mono text-[0.65rem] text-[var(--wms-fg)]" role="status">
+        <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-fg)]" role="status">
           {integrationMsg}
         </p>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => void pullLs()} className="rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
+        <button type="button" onClick={() => void pullLs()} className="max-md:min-h-11 rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
           Pull from LS
         </button>
-        <button type="button" onClick={() => void pushLs()} className="rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
+        <button type="button" onClick={() => void pushLs()} className="max-md:min-h-11 rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
           Push to LS
         </button>
-        <button type="button" onClick={importCsv} className="rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
+        <button type="button" onClick={importCsv} className="max-md:min-h-11 rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
           Import CSV
         </button>
-        <button type="button" onClick={exportCsv} className="rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
+        <button type="button" onClick={exportCsv} className="max-md:min-h-11 rounded-lg border border-[var(--wms-border)] px-3 py-1.5 font-mono text-xs dark:border-[var(--wms-border)]">
           Export CSV
         </button>
       </div>
-      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+      <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">
         <strong className="text-[var(--wms-fg)]">Push to LS</strong>: default is <strong>stub only</strong> (sync history + logs). Live{" "}
         <code className="rounded bg-[var(--wms-surface-elevated)] px-1">ItemShop qoh</code> PUT requires{" "}
         <code className="px-1">WMS_LS_PUSH_ITEM_SHOP=1</code>, R-Series OAuth, shop ID on the location, and{" "}
@@ -212,7 +212,7 @@ export function InventoryCompareWorkspace() {
         (<code className="px-1">fromSlipEpcs</code> optional), <code className="px-1">slip-transfer-send</code>; scope{" "}
         <code className="px-1">employee:transfers</code>. Receive in Lightspeed UI.
       </p>
-      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+      <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">
         Push uses variance rows only. With row checkboxes, only selected SKUs are sent in the payload; if none selected, all variance rows go.
       </p>
 
@@ -232,11 +232,11 @@ function CompareTable({
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
-  const cols: { label: string; align?: "right"; noResize?: boolean }[] = [
+  const cols: { label: string; align?: "right"; noResize?: boolean; mobileCls?: string }[] = [
     { label: "", noResize: true },
     { label: "SKU" },
     { label: "Name" },
-    { label: "LS ID", align: "right" },
+    { label: "LS ID", align: "right", mobileCls: "max-md:hidden" },
     { label: "Expected", align: "right" },
     { label: "Found", align: "right" },
     { label: "Missing", align: "right" },
@@ -246,10 +246,10 @@ function CompareTable({
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[900px] border-collapse text-left text-xs"
+        className="w-full min-w-[900px] max-md:min-w-[480px] border-collapse text-left text-xs"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.55rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.55rem] max-md:text-[0.7rem] uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -257,7 +257,7 @@ function CompareTable({
                 <th
                   key={c.label || `col-${i}`}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden ${i === 0 ? "w-10 px-2 py-2" : "px-2 py-2"} ${c.align === "right" ? "text-right tabular-nums" : ""}`}
+                  className={`relative overflow-hidden ${i === 0 ? "w-10 px-2 py-2" : "px-2 py-2"} ${c.align === "right" ? "text-right tabular-nums" : ""} ${c.mobileCls ?? ""}`}
                 >
                   <span>{c.label}</span>
                   {c.noResize ? null : (
@@ -273,14 +273,14 @@ function CompareTable({
             const hot = r.missing > 0 || r.extra > 0;
             return (
               <tr key={r.sku} className={hot ? "bg-amber-500/5" : ""}>
-                <td className="px-2 py-1.5">
+                <td className="px-2 py-1.5 max-md:px-3 max-md:py-2.5">
                   {hot ? (
-                    <input type="checkbox" checked={selected.has(r.sku)} onChange={() => toggle(r.sku)} aria-label={`Select ${r.sku}`} />
+                    <input type="checkbox" checked={selected.has(r.sku)} onChange={() => toggle(r.sku)} aria-label={`Select ${r.sku}`} className="max-md:h-5 max-md:w-5" />
                   ) : null}
                 </td>
                 <td className={`${cellTruncate} px-2 py-1.5`} title={r.sku}>{r.sku}</td>
                 <td className={`${cellTruncate} px-2 py-1.5 text-[var(--wms-muted)]`} title={r.name}>{r.name}</td>
-                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">
+                <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums text-[var(--wms-muted)] max-md:hidden">
                   {r.ls_item_id ?? "—"}
                 </td>
                 <td className="overflow-hidden px-2 py-1.5 text-right tabular-nums">{r.expected_ls}</td>

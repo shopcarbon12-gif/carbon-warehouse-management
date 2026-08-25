@@ -130,12 +130,13 @@ export function ReaderPicker({
   // Click-outside to close.
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (!ref.current) return;
       if (!ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    // pointerdown (not mousedown) so taps dismiss the popover on touch too.
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [open]);
 
   const toggleOne = (id: string) => {
@@ -183,12 +184,12 @@ export function ReaderPicker({
 
       {open ? (
         <div
-          className="absolute left-0 top-full z-30 mt-1 w-72 max-h-96 overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
+          className="absolute left-0 top-full z-30 mt-1 w-72 max-h-96 overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl max-md:fixed max-md:inset-x-3 max-md:top-24 max-md:z-50 max-md:w-auto max-md:max-h-[70dvh] max-md:overscroll-contain"
           role="listbox"
           aria-multiselectable="true"
         >
           {/* ALL toggle — sticky at the top */}
-          <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]">
+          <label className="sticky top-0 z-10 flex cursor-pointer items-center gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:py-2.5 active:bg-[var(--wms-surface)]">
             <input
               type="checkbox"
               checked={allChecked}
@@ -196,7 +197,7 @@ export function ReaderPicker({
                 if (el) el.indeterminate = !allChecked && someChecked;
               }}
               onChange={toggleAll}
-              className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)]"
+              className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
             />
             <span className="font-semibold">All</span>
             <span className="ml-auto text-[var(--wms-muted)]">{allIds.length}</span>
@@ -217,13 +218,13 @@ export function ReaderPicker({
                   return (
                     <label
                       key={r.id}
-                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:py-2.5 active:bg-[var(--wms-surface)]"
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOne(r.id)}
-                        className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)]"
+                        className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                       />
                       <span className={r.status_online ? "text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"}>
                         {r.name}

@@ -3,7 +3,7 @@
 import { CalendarRange, Search } from "lucide-react";
 
 const dateInputClass =
-  "rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 dark:border-[var(--wms-border)]";
+  "rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 dark:border-[var(--wms-border)] max-md:w-full max-md:flex-1 max-md:min-h-11 max-md:text-base";
 
 type ReportToolbarProps = {
   search: string;
@@ -45,18 +45,18 @@ export function ReportToolbar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search by SKU / EPC…"
-          className="w-full rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 pl-9 pr-3 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 dark:border-[var(--wms-border)]"
+          className="w-full rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 pl-9 pr-3 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 dark:border-[var(--wms-border)] max-md:min-h-11 max-md:text-base"
           autoComplete="off"
         />
       </label>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 max-md:w-full">
         <div
-          className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 dark:border-[var(--wms-border)]"
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 dark:border-[var(--wms-border)] max-md:w-full"
           title="Filter rows by created_at (inclusive end date, server date)"
         >
-          <CalendarRange className="h-3.5 w-3.5 shrink-0 text-[var(--wms-muted)]" aria-hidden />
-          <label className="flex items-center gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">From</span>
+          <CalendarRange className="h-3.5 w-3.5 shrink-0 text-[var(--wms-muted)] max-md:hidden" aria-hidden />
+          <label className="flex items-center gap-1 max-md:w-full">
+            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs">From</span>
             <input
               type="date"
               value={dateFrom}
@@ -64,8 +64,8 @@ export function ReportToolbar({
               className={dateInputClass}
             />
           </label>
-          <label className="flex items-center gap-1">
-            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">To</span>
+          <label className="flex items-center gap-1 max-md:w-full">
+            <span className="font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs">To</span>
             <input
               type="date"
               value={dateTo}
@@ -77,7 +77,7 @@ export function ReportToolbar({
             <button
               type="button"
               onClick={clearRange}
-              className="rounded-md px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-accent)] hover:underline"
+              className="rounded-md px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-accent)] hover:underline max-md:w-full max-md:min-h-11 max-md:px-3 max-md:py-2 max-md:text-xs"
             >
               Clear
             </button>
@@ -87,7 +87,7 @@ export function ReportToolbar({
           type="button"
           onClick={onExportCsv}
           disabled={exportDisabled}
-          className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] transition-colors hover:bg-[var(--wms-accent)]/15 hover:text-[var(--wms-accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[var(--wms-border)]"
+          className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] transition-colors hover:bg-[var(--wms-accent)]/15 hover:text-[var(--wms-accent)] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[var(--wms-border)] max-md:w-full max-md:min-h-11"
         >
           Export CSV
         </button>

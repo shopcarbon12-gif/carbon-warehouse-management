@@ -28,21 +28,26 @@ export function UploadLogsWorkspace() {
     return <p className="font-mono text-xs text-red-500/90">{String(error.message)}</p>;
   }
 
-  const cols: { label: string; align?: "right" }[] = [
+  const cols: { label: string; align?: "right"; mobileCls?: string }[] = [
     { label: "Date" },
     { label: "Device" },
     { label: "Mode" },
-    { label: "CSV", align: "right" },
+    {
+      label: "CSV",
+      align: "right",
+      mobileCls:
+        "max-md:sticky max-md:right-0 max-md:z-[11] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_2px_0_0_var(--wms-border)]",
+    },
   ];
 
   return (
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[640px] border-collapse text-left text-sm"
+        className="w-full min-w-[640px] max-md:min-w-[480px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -50,7 +55,7 @@ export function UploadLogsWorkspace() {
                 <th
                   key={c.label}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""} ${c.mobileCls ?? ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -80,10 +85,10 @@ export function UploadLogsWorkspace() {
                 </td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.device_id}>{row.device_id}</td>
                 <td className={`${cellTruncate} px-3 py-2.5`} title={row.workflow_mode}>{row.workflow_mode}</td>
-                <td className="overflow-hidden px-3 py-2.5 text-right">
+                <td className="overflow-hidden px-3 py-2.5 text-right max-md:sticky max-md:right-0 max-md:z-[5] max-md:bg-[var(--wms-surface)] max-md:shadow-[inset_2px_0_0_var(--wms-border)]">
                   <a
                     href={`/api/reports/upload-logs/${row.id}`}
-                    className="font-mono text-xs text-[var(--wms-accent)] hover:underline"
+                    className="font-mono text-xs text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
                     download
                   >
                     Download CSV

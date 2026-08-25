@@ -61,18 +61,18 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
         onClick={() => !busy && onClose()}
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
           <div className="flex items-start justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Resolve exception</h2>
-              <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+              <p className="mt-1 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
                 {row.action} · {new Date(row.created_at).toLocaleString()}
               </p>
             </div>
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
             >
               <X className="h-4 w-4" />
             </button>
@@ -100,7 +100,7 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
                   type="button"
                   disabled={busy}
                   onClick={() => void resolve("return_to_stock")}
-                  className="wms-btn-success-solid flex-1 font-mono disabled:opacity-50"
+                  className="wms-btn-success-solid flex-1 font-mono disabled:opacity-50 max-md:min-h-11"
                 >
                   Return to stock
                 </button>
@@ -108,12 +108,12 @@ export function ExceptionResolutionModal({ row, onClose, onResolved }: Props) {
                   type="button"
                   disabled={busy}
                   onClick={() => void resolve("mark_missing")}
-                  className="wms-btn-danger flex-1 font-mono disabled:opacity-50"
+                  className="wms-btn-danger flex-1 font-mono disabled:opacity-50 max-md:min-h-11"
                 >
                   Mark as missing
                 </button>
               </div>
-              <p className="mt-3 font-mono text-[0.55rem] leading-relaxed text-[var(--wms-muted)]">
+              <p className="mt-3 font-mono text-[0.55rem] leading-relaxed text-[var(--wms-muted)] max-md:text-[0.65rem]">
                 Return to stock closes the alarm without changing item rows. Mark as missing sets
                 matching tags to UNKNOWN and merges resolution into this audit row.
               </p>

@@ -217,8 +217,8 @@ export function RfidTagsModal({
         className="fixed inset-0 z-[60] bg-black/70"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+        <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           {/* Header */}
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
             <div className="min-w-0 flex-1">
@@ -236,7 +236,7 @@ export function RfidTagsModal({
             <button
               type="button"
               onClick={onClose}
-              className="shrink-0 rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+              className="shrink-0 rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
@@ -254,7 +254,7 @@ export function RfidTagsModal({
                     if (el) el.indeterminate = !allChecked && someChecked;
                   }}
                   onChange={toggleAll}
-                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                 />
                 Select all ({visibleItems.length})
               </label>
@@ -268,7 +268,7 @@ export function RfidTagsModal({
               <button
                 type="button"
                 onClick={() => setShowAllStatuses((v) => !v)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] max-md:min-h-11"
               >
                 {showAllStatuses ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 {showAllStatuses ? "Hide non-live" : "Show all statuses"}
@@ -277,7 +277,7 @@ export function RfidTagsModal({
                 type="button"
                 disabled={selectedCount === 0 || busy}
                 onClick={() => void handleSendToHandheld()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-accent)] hover:opacity-90 disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-accent)] hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
                 title="Push these EPCs to every handheld at your active location (Cloud + Geiger screen)"
               >
                 <Send className="h-3.5 w-3.5" />
@@ -287,7 +287,7 @@ export function RfidTagsModal({
                 type="button"
                 disabled={selectedCount === 0}
                 onClick={() => setStatusDrawerOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-40 max-md:min-h-11"
               >
                 Change status
               </button>
@@ -295,7 +295,7 @@ export function RfidTagsModal({
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-5 py-4 max-md:overscroll-contain">
             {itemsLoading ? (
               <p className="font-mono text-sm text-[var(--wms-muted)]">Loading EPCs…</p>
             ) : !itemData || itemData.length === 0 ? (
@@ -323,18 +323,18 @@ export function RfidTagsModal({
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleOne(it.epc)}
-                        className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                        className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                         aria-label={`Select EPC ${it.epc}`}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-base text-[var(--wms-fg)]">
                           <Radio className="h-3.5 w-3.5 shrink-0 text-[var(--wms-accent)]" />
-                          <span className="truncate font-semibold tracking-tight text-teal-400/90">
+                          <span className="truncate font-semibold tracking-tight text-teal-400/90 max-md:whitespace-normal max-md:break-all">
                             {it.epc}
                           </span>
                           {it.pinned_bin_code ? (
                             <span
-                              className="inline-flex items-center gap-1 rounded border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-wide text-emerald-300"
+                              className="inline-flex items-center gap-1 rounded border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[0.6rem] font-semibold uppercase tracking-wide text-emerald-300 max-md:text-xs"
                               title={`Pinned to "${it.pinned_bin_code.toLowerCase()}" bin via cycle count`}
                             >
                               <Pin className="h-2.5 w-2.5" />
@@ -359,7 +359,7 @@ export function RfidTagsModal({
                           </span>
                           <span className="ml-auto">
                             <span
-                              className={`inline-block rounded-md border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide ${statusPillClasses(it.status)}`}
+                              className={`inline-block rounded-md border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide max-md:text-xs ${statusPillClasses(it.status)}`}
                             >
                               {displayStatus(it.status)}
                             </span>
@@ -483,7 +483,7 @@ function ChangeStatusDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -501,7 +501,7 @@ function ChangeStatusDrawer({
                 >
                   <span className="text-sm font-semibold text-[var(--wms-fg)]">{s.label}</span>
                   <span
-                    className={`rounded-md border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide ${statusPillClasses(s.wms)}`}
+                    className={`rounded-md border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide max-md:text-xs ${statusPillClasses(s.wms)}`}
                   >
                     {s.label}
                   </span>

@@ -188,7 +188,7 @@ export function ReaderEditorModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-xl">
+      <div className="w-full max-w-lg rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">
             {editing ? "Edit reader" : "Add reader"}
@@ -258,7 +258,7 @@ export function ReaderEditorModal({
             </p>
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <Field label="Antenna count">
               <input
                 type="number"
@@ -324,7 +324,7 @@ export function ReaderEditorModal({
             Advanced ports / EPC prefix
           </button>
           {advanced ? (
-            <div className="grid grid-cols-2 gap-3 rounded border border-[var(--wms-border)]/60 p-3">
+            <div className="grid grid-cols-2 gap-3 rounded border border-[var(--wms-border)]/60 p-3 max-sm:grid-cols-1">
               <Field label="Reader TCP port">
                 <input
                   type="number"
@@ -399,7 +399,7 @@ export function ReaderEditorModal({
 }
 
 const inputCls =
-  "w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none";
+  "w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:py-2 max-md:text-base";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

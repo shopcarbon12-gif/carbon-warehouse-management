@@ -1064,8 +1064,8 @@ export function EncodeItemsWorkspace() {
 
       {/* Table */}
       <div className="overflow-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[1100px] border-collapse font-mono text-xs">
-          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+        <table className="w-full min-w-[1100px] border-collapse font-mono text-xs max-md:min-w-0">
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs">
             <tr>
               <th className="px-3 py-2 text-left">
                 <input
@@ -1073,15 +1073,15 @@ export function EncodeItemsWorkspace() {
                   checked={allChecked}
                   onChange={toggleAll}
                   disabled={rows.length === 0}
-                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                 />
               </th>
               <SortableTh label="EPC" sortKeyName="epc" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <SortableTh label="SKU" sortKeyName="sku" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
-              <SortableTh label="UPC" sortKeyName="upc" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
-              <SortableTh label="Name" sortKeyName="name" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
-              <SortableTh label="Size" sortKeyName="size" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
-              <SortableTh label="Color" sortKeyName="color" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
+              <SortableTh label="UPC" sortKeyName="upc" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} className="max-md:hidden" />
+              <SortableTh label="Name" sortKeyName="name" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} className="max-md:hidden" />
+              <SortableTh label="Size" sortKeyName="size" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} className="max-md:hidden" />
+              <SortableTh label="Color" sortKeyName="color" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} className="max-md:hidden" />
               {showRssi ? <th className="px-3 py-2 text-left">RSSI</th> : null}
               <SortableTh label="Status" sortKeyName="status" activeKey={sortKey} dir={sortDir} onClick={onHeaderClick} />
               <th className="px-3 py-2 text-left w-10"></th>
@@ -1113,19 +1113,19 @@ export function EncodeItemsWorkspace() {
                         checked={isChecked}
                         onChange={() => toggleCheck(r.epc)}
                         disabled={r.busy}
-                        className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                        className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                       />
                     </td>
-                    <td className="px-3 py-2 font-semibold text-teal-400/90" title={r.epc}>
+                    <td className="px-3 py-2 font-semibold text-teal-400/90 max-md:break-all" title={r.epc}>
                       {r.epc}
                     </td>
                     <td className="px-3 py-2 text-[var(--wms-fg)]">{r.sku ?? "—"}</td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{r.upc ?? "—"}</td>
-                    <td className="px-3 py-2 text-[var(--wms-fg)]" title={r.name ?? ""}>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{r.upc ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-fg)] max-md:hidden" title={r.name ?? ""}>
                       {r.name ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{r.size ?? "—"}</td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{r.color ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{r.size ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{r.color ?? "—"}</td>
                     {showRssi ? (
                       <td className="px-3 py-2 text-[var(--wms-muted)]">
                         {r.rssi != null ? `${r.rssi} dBm` : "—"}
@@ -1156,7 +1156,7 @@ export function EncodeItemsWorkspace() {
                         onClick={() => trashEpc(r.epc)}
                         disabled={r.busy}
                         title="Remove from this session (will reappear after Clear session if re-scanned)"
-                        className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 text-red-300 hover:bg-red-400/15 disabled:cursor-not-allowed disabled:opacity-50 max-md:p-2"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -1191,12 +1191,15 @@ function SortableTh<K extends string>({
   activeKey,
   dir,
   onClick,
+  className,
 }: {
   label: string;
   sortKeyName: K;
   activeKey: K | null;
   dir: "asc" | "desc";
   onClick: (key: K) => void;
+  /** Extra classes (mobile-only visibility gating); desktop output unchanged when omitted. */
+  className?: string;
 }) {
   const isActive = activeKey === sortKeyName;
   const Icon = !isActive ? ArrowUpDown : dir === "asc" ? ArrowUp : ArrowDown;
@@ -1206,7 +1209,8 @@ function SortableTh<K extends string>({
         "px-3 py-2 text-left select-none cursor-pointer transition-colors " +
         (isActive
           ? "text-[var(--wms-accent)]"
-          : "hover:text-[var(--wms-fg)]")
+          : "hover:text-[var(--wms-fg)]") +
+        (className ? ` ${className}` : "")
       }
       onClick={() => onClick(sortKeyName)}
       title={`Sort by ${label} (click to toggle A→Z / Z→A / off)`}

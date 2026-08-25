@@ -109,23 +109,23 @@ function AuditTable({
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 7);
-  const cols: { label: string; align?: "right" }[] = [
+  const cols: { label: string; align?: "right"; mobileCls?: string }[] = [
     { label: "When" },
     { label: "Type" },
-    { label: "Entity" },
+    { label: "Entity", mobileCls: "max-md:hidden" },
     { label: "Reference" },
     { label: "Old → New" },
     { label: "Reason" },
-    { label: "User", align: "right" },
+    { label: "User", align: "right", mobileCls: "max-md:hidden" },
   ];
   return (
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[880px] border-collapse text-left text-sm"
+        className="w-full min-w-[880px] max-md:min-w-[480px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -133,7 +133,7 @@ function AuditTable({
                 <th
                   key={c.label}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""} ${c.mobileCls ?? ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -162,11 +162,11 @@ function AuditTable({
                   {new Date(row.created_at).toLocaleString()}
                 </td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.log_type}>{row.log_type}</td>
-                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.entity_type}>{row.entity_type}</td>
+                <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 font-mono text-xs`} title={row.entity_type}>{row.entity_type}</td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.entity_reference}>
                   {row.entity_reference}
                 </td>
-                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]`}>
+                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]`}>
                   <span className="text-red-400/90">{row.old_value ?? "—"}</span>
                   <span className="mx-1 text-[var(--wms-fg)]">→</span>
                   <span className="wms-status-success">{row.new_value ?? "—"}</span>
@@ -174,7 +174,7 @@ function AuditTable({
                 <td className={`${cellTruncate} px-3 py-2.5 text-xs`} title={row.reason ?? ""}>
                   {row.reason ?? "—"}
                 </td>
-                <td className={`${cellTruncate} px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
+                <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums`}>
                   {row.user_id ?? "—"}
                 </td>
               </tr>

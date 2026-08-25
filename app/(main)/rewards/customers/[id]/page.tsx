@@ -188,7 +188,7 @@ export default async function CustomerDetail({
   const c = customer;
 
   return (
-    <main className="p-6 lg:p-8 max-w-5xl">
+    <main className="p-6 lg:p-8 max-w-5xl max-md:p-4">
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <UserSearch className="h-3.5 w-3.5" />
@@ -208,17 +208,17 @@ export default async function CustomerDetail({
               <span>
                 <b className="text-foreground">Source:</b> {provenanceLabel(c.created_via)}
               </span>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="max-md:hidden">·</span>
               <span>
                 <b className="text-foreground">Where added:</b>{" "}
                 {c.pos_location_name ?? c.created_at_geo ?? "—"}
               </span>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="max-md:hidden">·</span>
               <span>
                 <b className="text-foreground">By:</b>{" "}
                 {shortName(c.created_by_first, c.created_by_last, c.created_by_email)}
               </span>
-              <span aria-hidden>·</span>
+              <span aria-hidden className="max-md:hidden">·</span>
               <span>
                 <b className="text-foreground">When:</b> {new Date(c.created_at).toLocaleString()}
               </span>
@@ -241,7 +241,7 @@ export default async function CustomerDetail({
       ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
-        <section>
+        <section className="max-md:min-w-0">
           <div className="border border-border bg-card p-5 mb-4">
             <div className="flex items-baseline justify-between gap-3">
               <div>
@@ -267,14 +267,17 @@ export default async function CustomerDetail({
             <h2 className="text-base font-bold p-4 border-b border-border">
               Ledger · last 100
             </h2>
+            {/* Phone-only scroll box: keeps the "Ledger" heading in place while
+                only the table pans; inert (plain block) at md+. */}
+            <div className="max-md:overflow-x-auto max-md:overflow-y-auto max-md:max-h-[60dvh] max-md:overscroll-contain">
             <table className="w-full text-sm">
-              <thead className="bg-muted text-xs uppercase tracking-wider font-bold">
+              <thead className="bg-muted text-xs uppercase tracking-wider font-bold max-md:sticky max-md:top-0 max-md:z-10">
                 <tr>
                   <th className="text-left px-3 py-2">When</th>
                   <th className="text-right px-3 py-2">Δ Pts</th>
                   <th className="text-left px-3 py-2">Reason</th>
                   <th className="text-left px-3 py-2">Source</th>
-                  <th className="text-left px-3 py-2">Ref</th>
+                  <th className="text-left px-3 py-2 max-md:hidden">Ref</th>
                   <th className="text-right px-3 py-2">Basis</th>
                 </tr>
               </thead>
@@ -294,7 +297,7 @@ export default async function CustomerDetail({
                           ? `${row.pos_location_code} · ${row.pos_location_name ?? ""}`
                           : row.source}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs">{row.source_ref ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs max-md:hidden">{row.source_ref ?? "—"}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
                         {row.amount_basis ? `$${Number(row.amount_basis).toFixed(2)}` : "—"}
                       </td>
@@ -303,6 +306,7 @@ export default async function CustomerDetail({
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </section>
 

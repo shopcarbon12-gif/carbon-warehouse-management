@@ -206,12 +206,12 @@ export function AllEpcsTable({
   const cols: { label: string; align?: "right" | "center"; mdOnly?: boolean }[] = [
     { label: "SKU" },
     { label: "Description", mdOnly: true },
-    { label: "UPC" },
-    { label: "Color" },
-    { label: "Size" },
+    { label: "UPC", mdOnly: true },
+    { label: "Color", mdOnly: true },
+    { label: "Size", mdOnly: true },
     { label: "Expected bin" },
     { label: "State" },
-    { label: "Source" },
+    { label: "Source", mdOnly: true },
     { label: "EPC" },
   ];
 
@@ -226,10 +226,10 @@ export function AllEpcsTable({
       >
         <table
           ref={tableRef}
-          className="w-full min-w-[1100px] border-collapse text-left"
+          className="w-full min-w-[1100px] border-collapse text-left max-md:min-w-0"
           style={{ tableLayout: pickTableLayout(colWidths) }}
         >
-          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide max-md:text-xs">
             <tr>
               {cols.map((c, i) => {
                 const w = colWidths[i];
@@ -258,9 +258,9 @@ export function AllEpcsTable({
                 >
                   {r.description}
                 </td>
-                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.upc}>{r.upc || "—"}</td>
-                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.color}>{r.color || "—"}</td>
-                <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.size}>{r.size || "—"}</td>
+                <td className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`} title={r.upc}>{r.upc || "—"}</td>
+                <td className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`} title={r.color}>{r.color || "—"}</td>
+                <td className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`} title={r.size}>{r.size || "—"}</td>
                 <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`} title={r.bin}>{r.bin}</td>
                 <td className="overflow-hidden px-3 py-2">
                   <span className={STATE_CLS[r.state]}>{STATE_LABEL[r.state]}</span>
@@ -271,7 +271,7 @@ export function AllEpcsTable({
                   ) : null}
                 </td>
                 <td
-                  className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}
+                  className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`}
                   title={(() => {
                     const s = srcMap[r.epc.toUpperCase()];
                     return s ? `${s.kind} · ${s.name} · ${new Date(s.ts).toLocaleString()}` : "—";
@@ -318,7 +318,7 @@ export function AllEpcsTable({
           <button
             type="button"
             onClick={() => setVisibleCap((n) => n + PAGE_STEP)}
-            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:py-2"
           >
             Show {Math.min(PAGE_STEP, hiddenCount)} more
           </button>
@@ -326,7 +326,7 @@ export function AllEpcsTable({
             type="button"
             onClick={() => setVisibleCap(filtered.length)}
             title="Render every matching row — slow on big counts (intentional)."
-            className="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-amber-200 hover:bg-amber-900/40"
+            className="rounded-md border border-amber-500/40 bg-amber-950/40 px-3 py-1 text-amber-200 hover:bg-amber-900/40 max-md:py-2"
           >
             Show all ({filtered.length})
           </button>
@@ -415,7 +415,7 @@ function EpcHistoryModal({ epc, onClose }: { epc: string; onClose: () => void })
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:p-2.5"
               aria-label="Close"
             >
               <XIcon className="h-4 w-4" />
@@ -652,9 +652,9 @@ function BySkuTableInner({
     { label: "" },
     { label: "SKU" },
     { label: "Description", mdOnly: true },
-    { label: "Expected", align: "right" },
+    { label: "Expected", align: "right", mdOnly: true },
     { label: "Matched", align: "right" },
-    { label: "Missing", align: "right" },
+    { label: "Missing", align: "right", mdOnly: true },
     { label: "Coverage", align: "right" },
   ];
 
@@ -664,10 +664,10 @@ function BySkuTableInner({
     >
       <table
         ref={tableRef}
-        className="w-full min-w-[800px] border-collapse text-left"
+        className="w-full min-w-[800px] border-collapse text-left max-md:min-w-0"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide max-md:text-xs">
           <tr>
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -738,10 +738,10 @@ function SkuRow({
         <td className="px-3 py-2 hidden md:table-cell text-[var(--wms-muted)]">
           {a.description}
         </td>
-        <td className="px-3 py-2 text-right tabular-nums">{a.expected}</td>
+        <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">{a.expected}</td>
         <td className="px-3 py-2 text-right tabular-nums wms-status-success">{a.matched}</td>
         <td
-          className={`px-3 py-2 text-right tabular-nums ${a.missing > 0 ? "text-amber-400" : "text-[var(--wms-muted)]"}`}
+          className={`hidden px-3 py-2 text-right tabular-nums md:table-cell ${a.missing > 0 ? "text-amber-400" : "text-[var(--wms-muted)]"}`}
         >
           {a.missing}
         </td>
@@ -753,10 +753,10 @@ function SkuRow({
               <td></td>
               <td className="px-3 py-1.5 pl-9 text-[var(--wms-muted)]">↳ {b.bin_code}</td>
               <td className="px-3 py-1.5 hidden md:table-cell"></td>
-              <td className="px-3 py-1.5 text-right tabular-nums text-[var(--wms-muted)]">{b.expected}</td>
+              <td className="hidden px-3 py-1.5 text-right tabular-nums text-[var(--wms-muted)] md:table-cell">{b.expected}</td>
               <td className="px-3 py-1.5 text-right tabular-nums wms-status-success">{b.matched}</td>
               <td
-                className={`px-3 py-1.5 text-right tabular-nums ${
+                className={`hidden px-3 py-1.5 text-right tabular-nums md:table-cell ${
                   b.expected - b.matched > 0 ? "text-amber-400" : "text-[var(--wms-muted)]"
                 }`}
               >
@@ -835,10 +835,10 @@ function ByBinTableInner({
     >
       <table
         ref={tableRef}
-        className="w-full min-w-[600px] border-collapse text-left"
+        className="w-full min-w-[600px] border-collapse text-left max-md:min-w-0"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.65rem] uppercase tracking-wide max-md:text-xs">
           <tr>
             {cols.map((c, i) => {
               const w = colWidths[i];

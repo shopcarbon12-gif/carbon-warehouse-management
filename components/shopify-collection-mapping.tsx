@@ -664,6 +664,8 @@ export default function ShopifyCollectionMapping() {
   const [mobileSheetUnmappedOpen, setMobileSheetUnmappedOpen] = useState(false);
   /** Mobile-only: per-node expansion for sheet tree (collapsed by default). */
   const [mobileSheetTreeExpandedByNode, setMobileSheetTreeExpandedByNode] = useState<Record<string, boolean>>({});
+  /** Mobile-only: read-only store-menu bottom sheet (tree editing stays desktop-only by design). */
+  const [mobileTreeSheetOpen, setMobileTreeSheetOpen] = useState(false);
   const toggleWorkspaceMenuFromMobileHeader = () => {
     if (typeof document === "undefined") return;
     // On the mobile categories layout, this m3-shell top bar is fixed over the
@@ -5514,7 +5516,6 @@ export default function ShopifyCollectionMapping() {
                     className="m3-search-submit"
                     aria-label="Search"
                     onClick={() => resetPageForDataQuery()}
-                    style={{ width: 36, minWidth: 36, maxWidth: 36, height: 36, minHeight: 36, maxHeight: 36, borderRadius: 10 }}
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M10.5 3a7.5 7.5 0 104.8 13.3l4.7 4.7 1.4-1.4-4.7-4.7A7.5 7.5 0 0010.5 3zm0 2a5.5 5.5 0 110 11 5.5 5.5 0 010-11z" />
@@ -5525,7 +5526,6 @@ export default function ShopifyCollectionMapping() {
                     className="m3-search-filter-btn"
                     aria-label="Open more filters"
                     onClick={openFiltersDrawer}
-                    style={{ width: 36, minWidth: 36, maxWidth: 36, height: 36, minHeight: 36, maxHeight: 36, borderRadius: 10 }}
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M4 6a1 1 0 011-1h14a1 1 0 01.8 1.6l-5.8 7.73V19a1 1 0 01-1.45.9l-2-1A1 1 0 0110 18v-3.67L4.2 6.6A1 1 0 014 6z" />
@@ -6398,6 +6398,50 @@ export default function ShopifyCollectionMapping() {
                 <span className="m3-dock-menu-title">⚠ Remove all from selected ({selectedProductCount})</span>
                 <span className="m3-dock-menu-sub">Clears assignments only for selected products</span>
               </button>
+              <div className="m3-dock-menu-divider" />
+              <h3 className="m3-dock-menu-section">TOOLS</h3>
+              <button
+                type="button"
+                className="m3-dock-menu-item"
+                role="menuitem"
+                disabled={loading || saving || auditOpening}
+                onClick={() => { setMobileCommitOpen(false); setShowReportsModal(true); }}
+              >
+                <span className="m3-dock-menu-title">Reports &amp; exports</span>
+                <span className="m3-dock-menu-sub">Audit hub, error reports, Excel exports</span>
+              </button>
+              <button
+                type="button"
+                className="m3-dock-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMobileCommitOpen(false);
+                  setMobileSheetUnmappedOpen(false);
+                  setMobileSheetTreeExpandedByNode({});
+                  setMobileTreeSheetOpen(true);
+                }}
+              >
+                <span className="m3-dock-menu-title">View store menu</span>
+                <span className="m3-dock-menu-sub">Browse the menu tree (editing is desktop-only)</span>
+              </button>
+              <label className="m3-dock-menu-sort">
+                <span>Sort</span>
+                <select
+                  value={headerSortMode}
+                  onChange={(event) => setHeaderSortMode(event.target.value as HeaderSortMode)}
+                  aria-label="Sort products"
+                >
+                  <option value="product-az">Product A→Z</option>
+                  <option value="product-za">Product Z→A</option>
+                  <option value="picture-with-image">Picture: with image first</option>
+                  <option value="picture-without-image">Picture: without image first</option>
+                  <option value="suggested-with">Suggested: with suggestions first</option>
+                  <option value="suggested-without">Suggested: without suggestions first</option>
+                  <option value="status-synced">Status: Synced first</option>
+                  <option value="status-ready">Status: Ready to Push first</option>
+                  <option value="status-review">Status: Needs Review first</option>
+                </select>
+              </label>
             </div>
             {/* Pager + per-page row */}
             <div className="m3-dock-per-page">
@@ -6680,6 +6724,136 @@ export default function ShopifyCollectionMapping() {
           </>
         );
       })() : null}
+
+      {/* ─── MOBILE-ONLY: read-only store-menu sheet (tree editing stays desktop-only) ─── */}
+      {isMobileIdea3Layout && mobileTreeSheetOpen ? (
+        <>
+          <div
+            className="m3-sheet-scrim"
+            onClick={() => {
+              setMobileSheetUnmappedOpen(false);
+              setMobileSheetTreeExpandedByNode({});
+              setMobileTreeSheetOpen(false);
+            }}
+            aria-hidden="true"
+          />
+          <div className="m3-sheet" role="dialog" aria-label="Store menu tree">
+            <div className="m3-sheet-handle" aria-hidden="true" />
+            <div className="m3-sheet-head">
+              <h3 className="m3-sheet-title">Store menu{menuMeta.title ? ` · ${menuMeta.title}` : ""}</h3>
+              <button
+                type="button"
+                className="m3-sheet-close"
+                aria-label="Close store menu"
+                onClick={() => {
+                  setMobileSheetUnmappedOpen(false);
+                  setMobileSheetTreeExpandedByNode({});
+                  setMobileTreeSheetOpen(false);
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+            <div className="m3-sheet-body">
+              <p className="m3-sheet-tree-hint">
+                Read-only view of the store menu. Tap a parent row to expand. Tree editing (rename / move / add / delete)
+                is available on desktop only.
+              </p>
+              {mobileSheetVisibleNodes.length > 0 ? (
+                <ul className="m3-sheet-tree-list">
+                  {mobileSheetVisibleNodes.map((node) => {
+                    const childCount = (childrenByParent.get(node.nodeKey) || []).length;
+                    const isOpen = mobileSheetTreeExpandedByNode[node.nodeKey] === true;
+                    return (
+                      <li key={node.nodeKey} className="m3-sheet-tree-item">
+                        <button
+                          type="button"
+                          className={`m3-sheet-tree-node-btn${childCount > 0 ? " m3-sheet-tree-node-btn--parent" : ""}`}
+                          style={{ ["--m3-tree-depth" as string]: String(Math.max(0, node.depth)) }}
+                          onClick={() => {
+                            if (childCount < 1) return;
+                            setMobileSheetTreeExpandedByNode((prev) => ({
+                              ...prev,
+                              [node.nodeKey]: !prev[node.nodeKey],
+                            }));
+                          }}
+                        >
+                          <span className="m3-sheet-tree-node-label">
+                            {node.label}
+                            {node.linkedTargetLabel ? ` - ${node.linkedTargetLabel}` : ""}
+                          </span>
+                          {childCount > 0 ? (
+                            <svg
+                              className={`m3-sheet-tree-node-arrow${isOpen ? " m3-sheet-tree-node-arrow--open" : ""}`}
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path d="M7 10l5 5 5-5z" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="m3-sheet-tree-empty">No menu tree rows available.</p>
+              )}
+              <div className="m3-sheet-tree-wrap" style={{ marginTop: 14 }}>
+                <button
+                  type="button"
+                  className="m3-sheet-unmapped-toggle"
+                  aria-expanded={mobileSheetUnmappedOpen}
+                  onClick={() => setMobileSheetUnmappedOpen((prev) => !prev)}
+                >
+                  <span>Unmapped collections ({orderedUnmappedCollections.length})</span>
+                  <svg
+                    className={`m3-sheet-unmapped-arrow${mobileSheetUnmappedOpen ? " m3-sheet-unmapped-arrow--open" : ""}`}
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M7 10l5 5 5-5z" />
+                  </svg>
+                </button>
+                {mobileSheetUnmappedOpen ? (
+                  orderedUnmappedCollections.length > 0 ? (
+                    <ul className="m3-sheet-tree-list">
+                      {orderedUnmappedCollections.map((row) => (
+                        <li key={row.id} className="m3-sheet-tree-item">
+                          <span>{row.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="m3-sheet-tree-empty">No unmapped collections.</p>
+                  )
+                ) : null}
+              </div>
+            </div>
+            <div className="m3-sheet-footer">
+              <button
+                type="button"
+                className="m3-sheet-cancel"
+                onClick={() => {
+                  setMobileSheetUnmappedOpen(false);
+                  setMobileSheetTreeExpandedByNode({});
+                  setMobileTreeSheetOpen(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       {/* Custom horizontal scroll dock — spans full right panel, replaces native horizontal scrollbar */}
       <div
@@ -10501,7 +10675,11 @@ export default function ShopifyCollectionMapping() {
             -webkit-overflow-scrolling: touch !important;
             scrollbar-width: thin !important;
             pointer-events: auto !important;
-            z-index: 2147483640 !important;
+            /* App-scale z: this fixed strip only exists pre-hydration on phones
+               (the element unmounts once isMobileIdea3Layout flips true), so it
+               must sit above page content but below the shell drawer and the
+               sync floater — a max-scale 2147483640 here used to blanket both. */
+            z-index: 80 !important;
             background: linear-gradient(
               180deg,
               rgba(11, 19, 34, 0.94) 0%,
@@ -10531,7 +10709,7 @@ export default function ShopifyCollectionMapping() {
             max-width: 104px !important;
           }
           .headerKpiLabel {
-            font-size: 10px !important;
+            font-size: 11px !important;
           }
           .headerKpiValue {
             font-size: 20px !important;
@@ -10877,7 +11055,7 @@ export default function ShopifyCollectionMapping() {
             outline: 1px solid rgba(66, 71, 84, 0.35) !important;
             background: #030e22 !important;
             color: #9aa3bc !important;
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             text-transform: uppercase !important;
             letter-spacing: 0.06em !important;
@@ -10916,7 +11094,7 @@ export default function ShopifyCollectionMapping() {
           .m3-kpi-pill--purple .m3-kpi-dot { color: #a5b4fc !important; }
           .m3-kpi-sub {
             margin-left: 4px !important;
-            font-size: 9px !important;
+            font-size: 11px !important;
             font-weight: 700 !important;
             opacity: 0.85 !important;
             text-transform: none !important;
@@ -10980,13 +11158,13 @@ export default function ShopifyCollectionMapping() {
             box-shadow: inset 0 0 0 2px rgba(173, 198, 255, 0.35) !important;
           }
           .m3-search-submit {
-            flex: 0 0 36px !important;
-            width: 36px !important;
-            min-width: 36px !important;
-            max-width: 36px !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            max-height: 36px !important;
+            flex: 0 0 44px !important;
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
+            max-height: 44px !important;
             border-radius: 12px !important;
             border: none !important;
             background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, #4d8eff 100%) !important;
@@ -11006,13 +11184,13 @@ export default function ShopifyCollectionMapping() {
             margin: 0 !important;
           }
           .m3-search-filter-btn {
-            flex: 0 0 36px !important;
-            width: 36px !important;
-            min-width: 36px !important;
-            max-width: 36px !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            max-height: 36px !important;
+            flex: 0 0 44px !important;
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
+            max-height: 44px !important;
             border-radius: 12px !important;
             border: none !important;
             background: linear-gradient(180deg, rgba(173, 198, 255, 0.95) 0%, #4d8eff 100%) !important;
@@ -11030,16 +11208,16 @@ export default function ShopifyCollectionMapping() {
             height: 20px !important;
             margin: 0 auto !important;
           }
-          /* Hard override in active mobile row so generic button rules cannot force 44px. */
+          /* Hard override in active mobile row: 44px touch-target floor (mobile-view pass 2026-08). */
           .productPanel.productPanelMobileIdea3 .m3-search-row > .m3-search-submit,
           .productPanel.productPanelMobileIdea3 .m3-search-row > .m3-search-filter-btn {
-            flex: 0 0 36px !important;
-            width: 36px !important;
-            min-width: 36px !important;
-            max-width: 36px !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            max-height: 36px !important;
+            flex: 0 0 44px !important;
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
+            max-height: 44px !important;
             padding: 0 !important;
             line-height: 1 !important;
             box-sizing: border-box !important;
@@ -11056,7 +11234,7 @@ export default function ShopifyCollectionMapping() {
             margin-top: 4px !important;
           }
           .m3-section-label {
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 900 !important;
             letter-spacing: 0.1em !important;
             text-transform: uppercase !important;
@@ -11072,7 +11250,7 @@ export default function ShopifyCollectionMapping() {
             display: flex !important;
             align-items: center !important;
             gap: 8px !important;
-            font-size: 9px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             color: #adc6ff !important;
             text-transform: uppercase !important;
@@ -11083,6 +11261,8 @@ export default function ShopifyCollectionMapping() {
             flex-shrink: 0 !important;
           }
           .m3-select-all-lbl input[type="checkbox"] {
+            width: 20px !important;
+            height: 20px !important;
             accent-color: #4d8eff !important;
             cursor: pointer !important;
           }
@@ -11177,7 +11357,9 @@ export default function ShopifyCollectionMapping() {
             top: 6px !important;
             left: 6px !important;
             z-index: 2 !important;
-            margin: 0 !important;
+            /* Padded hit area (padding cancelled by negative margin → same visual spot). */
+            padding: 8px !important;
+            margin: -8px !important;
             line-height: 0 !important;
             cursor: pointer !important;
           }
@@ -11216,9 +11398,10 @@ export default function ShopifyCollectionMapping() {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 36px !important;
-            height: 36px !important;
-            min-width: 36px !important;
+            /* 40px card controls (was 36px) — mobile-view touch-target pass 2026-08. */
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
             border-radius: 12px !important;
             border: none !important;
             background: #151f35 !important;
@@ -11246,7 +11429,7 @@ export default function ShopifyCollectionMapping() {
             padding: 0 8px !important;
             border-radius: 8px !important;
             border: 1px solid transparent !important;
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             text-transform: uppercase !important;
             letter-spacing: 0.04em !important;
@@ -11301,7 +11484,7 @@ export default function ShopifyCollectionMapping() {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            font-size: 9px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             letter-spacing: 0.06em !important;
             text-transform: uppercase !important;
@@ -11312,6 +11495,9 @@ export default function ShopifyCollectionMapping() {
             border: 1.5px solid transparent !important;
             line-height: 1 !important;
             white-space: nowrap !important;
+            max-width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
             box-sizing: border-box !important;
             cursor: default !important;
             background: rgba(30, 41, 59, 0.65) !important;
@@ -11377,7 +11563,10 @@ export default function ShopifyCollectionMapping() {
             border: 1px solid rgba(124, 58, 237, 0.85) !important;
             background: rgba(63, 35, 104, 0.55) !important;
             color: #ede9fe !important;
-            font-size: 10px !important;
+            max-width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             letter-spacing: 0.04em !important;
             text-transform: uppercase !important;
@@ -11392,7 +11581,8 @@ export default function ShopifyCollectionMapping() {
             padding: 0 16px !important;
           }
           .m3-card--expanded .m3-card-details {
-            max-height: 720px !important;
+            /* Generous cap: long chip/path stacks exceeded 720px and were silently clipped. */
+            max-height: 2000px !important;
             padding: 0 16px 16px !important;
           }
           .m3-detail-stack {
@@ -11426,7 +11616,7 @@ export default function ShopifyCollectionMapping() {
           .m3-path-row-hint {
             display: block !important;
             margin-top: 6px !important;
-            font-size: 9px !important;
+            font-size: 11px !important;
             font-weight: 700 !important;
             letter-spacing: 0.08em !important;
             text-transform: uppercase !important;
@@ -11447,7 +11637,7 @@ export default function ShopifyCollectionMapping() {
             box-sizing: border-box !important;
           }
           .m3-suggestion-applied-label {
-            font-size: 9px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             letter-spacing: 0.12em !important;
             text-transform: uppercase !important;
@@ -11547,7 +11737,7 @@ export default function ShopifyCollectionMapping() {
           }
           .m3-dock-menu-section {
             margin: 0 0 8px !important;
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 900 !important;
             letter-spacing: 0.12em !important;
             color: #9aa3bc !important;
@@ -11621,8 +11811,8 @@ export default function ShopifyCollectionMapping() {
             flex-wrap: nowrap !important;
           }
           .m3-dock-pager-nav button {
-            min-width: 34px !important;
-            height: 34px !important;
+            min-width: 40px !important;
+            height: 40px !important;
             border-radius: 10px !important;
             border: none !important;
             background: #030e22 !important;
@@ -11699,8 +11889,9 @@ export default function ShopifyCollectionMapping() {
             display: inline-flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 34px !important;
-            height: 34px !important;
+            /* 44px close target (was 34px) — mobile-view touch-target pass 2026-08. */
+            width: 44px !important;
+            height: 44px !important;
             border-radius: 8px !important;
             border: none !important;
             background: transparent !important;
@@ -11872,7 +12063,7 @@ export default function ShopifyCollectionMapping() {
             background: rgba(77, 142, 255, 0.16) !important;
           }
           .m3-sheet-suggestion-kind {
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
             letter-spacing: 0.06em !important;
             text-transform: uppercase !important;
@@ -12063,6 +12254,83 @@ export default function ShopifyCollectionMapping() {
 
           /* Hairlines / handles → WMS border */
           .m3-sheet-handle { background: var(--wms-border) !important; }
+
+          /* ═══ Mobile-view pass (2026-08) — fixes below are mobile-only ═══ */
+
+          /* Notices (save/push errors + progress) were in normal flow under the
+             fixed m3 chrome — invisible on phones. Pin them just below the KPI
+             strip (shell 56px + strip 45px) and let long messages wrap. */
+          .noticeSlot {
+            position: fixed !important;
+            top: calc(env(safe-area-inset-top, 0px) + 105px) !important;
+            left: 8px !important;
+            right: 8px !important;
+            z-index: 265 !important;
+            min-height: 0 !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          .noticeSlot:empty {
+            display: none !important;
+          }
+          .noticeBar {
+            height: auto !important;
+            padding: 8px 10px !important;
+          }
+          .noticeText {
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
+          }
+
+          /* Explain modal: scroll internally so the Needs Review / Ready to
+             Push / Close footer stays reachable on short viewports. */
+          .mappingExplainModal {
+            overflow-y: auto !important;
+            max-height: 88dvh !important;
+          }
+          .mappingExplainHeadMain h3 {
+            font-size: 20px !important;
+          }
+
+          /* Pre-hydration CSS fallback: the desktop table is JS-hidden once
+             isMobileIdea3Layout hydrates; hide it by CSS too so the first
+             paint on phones never flashes the 620px-min-width table. */
+          .tableWrap {
+            display: none !important;
+          }
+
+          /* Dock-menu sort row (mobile path for the desktop header sort). */
+          .m3-dock-menu-sort {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 10px !important;
+            width: 100% !important;
+            padding: 10px 12px !important;
+            margin-bottom: 8px !important;
+            border-radius: 12px !important;
+            background: var(--wms-bg) !important;
+            color: var(--wms-muted) !important;
+            font-size: 11px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.06em !important;
+            text-transform: uppercase !important;
+            box-sizing: border-box !important;
+          }
+          .m3-dock-menu-sort select {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            min-height: 40px !important;
+            border-radius: 10px !important;
+            border: 1px solid var(--wms-border) !important;
+            padding: 8px !important;
+            background: var(--wms-surface-elevated) !important;
+            color: var(--wms-fg) !important;
+            font-weight: 600 !important;
+            /* ≥16px kills the iOS focus zoom on the select. */
+            font-size: 16px !important;
+            font-family: inherit !important;
+          }
         }
       `}</style>
     </>

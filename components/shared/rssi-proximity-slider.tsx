@@ -76,7 +76,7 @@ export function RssiProximitySlider({
   hint?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[var(--wms-border)] bg-[linear-gradient(180deg,rgba(45,212,191,0.06),transparent)] px-4 py-2.5">
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--wms-border)] bg-[linear-gradient(180deg,rgba(45,212,191,0.06),transparent)] px-4 py-2.5 max-md:flex-wrap max-md:gap-y-2">
       <span className="shrink-0 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
         Proximity
       </span>
@@ -89,7 +89,7 @@ export function RssiProximitySlider({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         aria-label="RFID proximity filter (RSSI threshold in dBm)"
-        className="h-1 flex-1 accent-[var(--wms-accent)]"
+        className="h-1 flex-1 accent-[var(--wms-accent)] max-md:h-2 max-md:min-w-[10rem] max-md:basis-full max-md:order-last"
       />
       <span className="text-[11px] text-[var(--wms-muted)]">near</span>
       <span className="w-[74px] text-right font-mono text-sm tabular-nums text-[var(--wms-accent)]">

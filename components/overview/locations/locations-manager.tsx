@@ -355,7 +355,7 @@ export function LocationsManager({
                 disabled={!selected || (selected?.bins.length ?? 0) === 0}
                 onClick={() => setShowAllBins((v) => !v)}
                 aria-pressed={showAllBins}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40 ${
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40 max-md:min-h-11 ${
                   showAllBins
                     ? "border-2 border-[var(--wms-accent)]/70 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-fg)]"
                     : "border-2 border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/40"
@@ -372,7 +372,7 @@ export function LocationsManager({
                 type="button"
                 disabled={!selected}
                 onClick={openAdd}
-                className="wms-btn-accent-soft inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40"
+                className="wms-btn-accent-soft inline-flex items-center gap-1.5 rounded-md px-3 py-2 font-mono text-sm disabled:opacity-40 max-md:min-h-11"
               >
                 <PackagePlus className="h-4 w-4 shrink-0" strokeWidth={2} />
                 Add new bin
@@ -392,14 +392,14 @@ export function LocationsManager({
                   value={binSearch}
                   onChange={(e) => setBinSearch(sanitizeBinSearch(e.target.value))}
                   placeholder="Search bin (e.g. 5A01 / 5a01) — auto-uppercased"
-                  className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
+                  className="flex-1 bg-transparent font-mono text-sm text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70 max-md:text-base"
                   aria-label="Search bin"
                 />
                 {binSearch ? (
                   <button
                     type="button"
                     onClick={() => setBinSearch("")}
-                    className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                    className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:-my-2 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                     aria-label="Clear search"
                     title="Clear search"
                   >
@@ -407,7 +407,7 @@ export function LocationsManager({
                   </button>
                 ) : null}
               </label>
-              <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+              <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs">
                 Type the bin prefix in any case (it'll uppercase as you type).{" "}
                 {showAllBins
                   ? "Live filter — every match below in real time."
@@ -464,7 +464,7 @@ export function LocationsManager({
                           style={w !== null ? { width: w, minWidth: w } : undefined}
                           className={`relative overflow-hidden px-3 py-2 ${
                             c.align === "right" ? "text-right tabular-nums" : ""
-                          } ${i === 4 ? "w-36" : ""}`}
+                          } ${i === 4 ? "w-36 max-md:sticky max-md:right-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_1px_0_0_var(--wms-border)]" : ""}`}
                         >
                           <span>{c.label}</span>
                           {c.noResize ? null : (
@@ -514,7 +514,7 @@ export function LocationsManager({
                           <button
                             type="button"
                             onClick={() => setEpcModalBin(b)}
-                            className="text-[var(--wms-accent)] hover:underline"
+                            className="text-[var(--wms-accent)] hover:underline max-md:-mx-2 max-md:-my-2 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-2"
                             title="View EPCs"
                           >
                             {b.in_stock_count}
@@ -523,7 +523,7 @@ export function LocationsManager({
                           b.in_stock_count
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 max-md:sticky max-md:right-0 max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_1px_0_0_var(--wms-border)]">
                         <div className="flex flex-wrap items-center justify-end gap-1">
                           {canCleanBins ? (
                             <button
@@ -531,7 +531,7 @@ export function LocationsManager({
                               title="Clean bin — unassign items"
                               disabled={cleanBusy === b.id || (b.in_stock_count ?? 0) === 0}
                               onClick={() => onCleanClick(b)}
-                              className="wms-table-btn-clean inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40"
+                              className="wms-table-btn-clean inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40 max-md:min-h-11 max-md:px-3"
                             >
                               <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                               Clean
@@ -540,7 +540,7 @@ export function LocationsManager({
                           <button
                             type="button"
                             onClick={() => openEdit(b)}
-                            className="wms-table-row-action inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
+                            className="wms-table-row-action inline-flex items-center gap-1 rounded px-2 py-1 text-xs max-md:min-h-11 max-md:px-3"
                           >
                             <Pencil className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
                             Edit
@@ -574,8 +574,8 @@ export function LocationsManager({
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={closeCleanFlow}
           />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:flex max-md:h-full max-md:max-w-none max-md:flex-col max-md:rounded-none max-md:border-0">
               <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
                 <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
                   Which item to remove from bin {cleanBin.code}?
@@ -583,13 +583,13 @@ export function LocationsManager({
                 <button
                   type="button"
                   onClick={closeCleanFlow}
-                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <ol className="px-4 py-3 font-mono text-sm text-[var(--wms-fg)]">
+              <ol className="px-4 py-3 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:overscroll-contain">
                 {cleanGroups.map((g, i) => (
                   <li key={g.skuPrefix} className="py-1">
                     {i + 1}. {g.label}{" "}
@@ -597,13 +597,13 @@ export function LocationsManager({
                   </li>
                 ))}
               </ol>
-              <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+              <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 {cleanGroups.map((g, i) => (
                   <button
                     key={g.skuPrefix}
                     type="button"
                     onClick={() => { setCleanTarget(g); setCleanStep("confirm"); }}
-                    className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-border)]"
+                    className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-border)] max-md:min-h-11 max-md:px-4"
                   >
                     Item {i + 1}
                   </button>
@@ -611,7 +611,7 @@ export function LocationsManager({
                 <button
                   type="button"
                   onClick={() => { setCleanTarget(null); setCleanStep("confirm"); }}
-                  className="rounded-md border border-red-500/50 bg-red-500/20 px-3 py-2 font-mono text-xs font-semibold text-red-400 hover:bg-red-500/30"
+                  className="rounded-md border border-red-500/50 bg-red-500/20 px-3 py-2 font-mono text-xs font-semibold text-red-400 hover:bg-red-500/30 max-md:min-h-11 max-md:px-4"
                 >
                   All
                 </button>
@@ -629,8 +629,8 @@ export function LocationsManager({
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={closeCleanFlow}
           />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+            <div className="w-full max-w-md overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:flex max-md:h-full max-md:max-w-none max-md:flex-col max-md:rounded-none max-md:border-0">
               <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
                 <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
                   Confirm clean
@@ -638,19 +638,19 @@ export function LocationsManager({
                 <button
                   type="button"
                   onClick={closeCleanFlow}
-                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="px-4 py-4 font-mono text-sm text-[var(--wms-fg)]">
+              <div className="px-4 py-4 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:overscroll-contain">
                 {cleanTarget
                   ? `Remove ${cleanTarget.label} from bin ${cleanBin.code}?`
                   : `Remove ALL items from bin ${cleanBin.code}?`}
                 <p className="mt-2 text-xs text-[var(--wms-muted)]">This is logged as clean_bin.</p>
               </div>
-              <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+              <div className="flex justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   disabled={cleanBusy === cleanBin.id}
@@ -664,7 +664,7 @@ export function LocationsManager({
                       closeCleanFlow();
                     }
                   }}
-                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40 max-md:min-h-11"
                 >
                   Cancel
                 </button>
@@ -672,7 +672,7 @@ export function LocationsManager({
                   type="button"
                   disabled={cleanBusy === cleanBin.id}
                   onClick={() => void runClean()}
-                  className="rounded-md border border-red-500/50 bg-red-500 px-4 py-2 font-mono text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-40"
+                  className="rounded-md border border-red-500/50 bg-red-500 px-4 py-2 font-mono text-xs font-semibold text-white shadow-sm hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
                 >
                   {cleanBusy === cleanBin.id ? "Removing…" : "Confirm"}
                 </button>
@@ -690,27 +690,27 @@ export function LocationsManager({
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={() => setEpcModalBin(null)}
           />
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <div className="flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+            <div className="flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0">
               <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
                 <div>
                   <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
                     Bin {epcModalBin.code} — EPCs
                   </h3>
-                  <p className="mt-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                  <p className="mt-0.5 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-xs">
                     {epcModalBin.in_stock_count} in-stock EPC{epcModalBin.in_stock_count === 1 ? "" : "s"}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setEpcModalBin(null)}
-                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div className="min-h-0 flex-1 overflow-auto max-md:overscroll-contain">
                 {epcLoading ? (
                   <p className="px-4 py-8 font-mono text-xs text-[var(--wms-muted)]">Loading EPCs…</p>
                 ) : !epcData || epcData.length === 0 ? (
@@ -718,12 +718,12 @@ export function LocationsManager({
                     No EPCs in this bin.
                   </p>
                 ) : (
-                  <table className="w-full min-w-[720px] border-collapse text-left">
+                  <table className="w-full min-w-[720px] border-collapse text-left max-md:min-w-0">
                     <thead className="sticky top-0 z-10">
                       <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
                         <th className="px-3 py-2 text-xs">Custom SKU</th>
-                        <th className="px-3 py-2 text-xs">UPC</th>
-                        <th className="px-3 py-2 text-xs">Description</th>
+                        <th className="px-3 py-2 text-xs max-md:hidden">UPC</th>
+                        <th className="px-3 py-2 text-xs max-md:hidden">Description</th>
                         <th className="px-3 py-2 text-xs">Serial #</th>
                         <th className="px-3 py-2 text-xs">EPC ID</th>
                       </tr>
@@ -732,8 +732,8 @@ export function LocationsManager({
                       {epcData.map((r) => (
                         <tr key={r.epc} className="hover:bg-[var(--wms-surface-elevated)]/50">
                           <td className="px-3 py-1.5">{r.sku}</td>
-                          <td className="px-3 py-1.5 text-[var(--wms-muted)]">{r.upc ?? "—"}</td>
-                          <td className="px-3 py-1.5 text-[var(--wms-muted)]" title={r.description}>
+                          <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{r.upc ?? "—"}</td>
+                          <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden" title={r.description}>
                             {r.description}
                           </td>
                           <td className="px-3 py-1.5 tabular-nums">{r.serial_number}</td>

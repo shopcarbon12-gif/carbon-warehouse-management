@@ -47,11 +47,12 @@ export function DateRangePicker({
 
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: PointerEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    // pointerdown (not mousedown) so taps dismiss the popover on touch too.
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
   }, [open]);
 
   const grid = useMemo(() => {
@@ -108,7 +109,7 @@ export function DateRangePicker({
       </button>
 
       {open ? (
-        <div className="absolute z-30 mt-1 w-[18rem] rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 shadow-2xl">
+        <div className="absolute z-30 mt-1 w-[18rem] rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 shadow-2xl max-md:fixed max-md:inset-x-3 max-md:top-24 max-md:z-50 max-md:w-auto max-md:max-h-[70dvh] max-md:overflow-y-auto max-md:overscroll-contain">
           <div className="mb-2 flex items-center justify-between">
             <button
               type="button"
@@ -142,7 +143,7 @@ export function DateRangePicker({
                   key={iso(d)}
                   type="button"
                   onClick={() => clickDay(d)}
-                  className={`rounded py-1 text-xs ${
+                  className={`rounded py-1 text-xs max-md:py-2 active:bg-[var(--wms-accent)]/20 ${
                     inRange(d)
                       ? "bg-[var(--wms-accent)]/30 text-[var(--wms-fg)]"
                       : "text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
@@ -159,13 +160,13 @@ export function DateRangePicker({
               type="date"
               value={value.from}
               onChange={(e) => onChange({ ...value, from: e.target.value })}
-              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)]"
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
             />
             <input
               type="date"
               value={value.to}
               onChange={(e) => onChange({ ...value, to: e.target.value })}
-              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)]"
+              className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
             />
           </div>
 
@@ -186,7 +187,7 @@ function Preset({ label, onClick }: { label: string; onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/10"
+      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/10 max-md:px-3 max-md:py-2 active:bg-[var(--wms-accent)]/15"
     >
       {label}
     </button>

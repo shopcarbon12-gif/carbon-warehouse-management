@@ -991,7 +991,7 @@ export function CarbonStudioTab({
                 type="checkbox"
                 checked={includeShopify}
                 onChange={toggleIncludeShopify}
-                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
               />
               include current Shopify pictures
             </label>
@@ -1037,14 +1037,14 @@ export function CarbonStudioTab({
                   key={m.key}
                   onDragOver={(e) => { if (mediaDragKey) e.preventDefault(); }}
                   onDrop={() => { dropOnMedia(m.key); setMediaDragKey(null); }}
-                  className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 ${mediaDragKey === m.key || (mediaDragKey && mediaSel.has(mediaDragKey) && mediaSel.has(m.key)) ? "opacity-50" : ""} ${mediaSel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${mediaDragKey && mediaDragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+                  className={`flex items-start gap-3 rounded border bg-[var(--wms-surface)] p-2 max-sm:flex-wrap ${mediaDragKey === m.key || (mediaDragKey && mediaSel.has(mediaDragKey) && mediaSel.has(m.key)) ? "opacity-50" : ""} ${mediaSel.has(m.key) ? "ring-1 ring-[var(--wms-accent)] " : ""}${mediaDragKey && mediaDragKey !== m.key ? "border-dashed border-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
                 >
                   <input
                     type="checkbox"
                     checked={mediaSel.has(m.key)}
                     onChange={() => toggleMediaSel(m.key)}
                     title="Select for multi-drag (drag any selected row to move them all)"
-                    className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                    className="mt-1 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                   />
                   <div className="relative shrink-0">
                     <img
@@ -1064,7 +1064,7 @@ export function CarbonStudioTab({
                   </div>
                   <div className="min-w-0 flex-1">
                     <textarea
-                      className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)]"
+                      className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:text-base"
                       rows={2}
                       placeholder="alt text"
                       value={m.alt}
@@ -1078,7 +1078,7 @@ export function CarbonStudioTab({
                         type="button"
                         disabled={mediaBusy !== null}
                         onClick={() => void genAlt(m.key)}
-                        className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50"
+                        className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50 max-md:py-2 max-md:px-3"
                       >
                         {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
                       </button>
@@ -1092,7 +1092,7 @@ export function CarbonStudioTab({
                         <>
                           <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">main pic for colour:</label>
                           <select
-                            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)]"
+                            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
                             value={m.color}
                             title="One image per colour — the chosen colour locks out of the other images"
                             onChange={(e) => {
@@ -1113,13 +1113,13 @@ export function CarbonStudioTab({
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col gap-1">
-                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]">⠿</div>
-                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↑</button>
-                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30">↓</button>
-                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30">★</button>
-                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)]">⬇</button>
-                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)]">✕</button>
+                  <div className="flex shrink-0 flex-col gap-1 max-sm:w-full max-sm:flex-row max-sm:flex-wrap">
+                    <div draggable onDragStart={() => setMediaDragKey(m.key)} onDragEnd={() => setMediaDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⠿</div>
+                    <button type="button" onClick={() => moveMedia(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↑</button>
+                    <button type="button" onClick={() => moveMedia(m.key, 1)} disabled={idx === mediaItems.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↓</button>
+                    <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">★</button>
+                    <button type="button" onClick={() => downloadImage(m.url, `${m.kind === "new" ? "carbon-studio" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⬇</button>
+                    <button type="button" onClick={() => removeMedia(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">✕</button>
                   </div>
                 </div>
               ))}

@@ -138,7 +138,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
         <div
           role="dialog"
           aria-modal="true"
-          className="flex w-full max-w-5xl max-h-[90vh] flex-col rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl"
+          className="flex w-full max-w-5xl max-h-[90vh] max-md:max-h-[90dvh] flex-col rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl"
         >
           <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
             <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
@@ -147,7 +147,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
             <button
               type="button"
               onClick={phase === "applying" ? undefined : onClose}
-              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-30"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               disabled={phase === "applying"}
             >
               <X className="h-4 w-4" />
@@ -180,7 +180,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
 
           {phase === "review" && data ? (
             <>
-              <div className="grid gap-3 border-b border-[var(--wms-border)] px-4 py-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="grid gap-3 border-b border-[var(--wms-border)] px-4 py-3 sm:grid-cols-3 lg:grid-cols-6 max-sm:grid-cols-2 max-sm:gap-2">
                 <SummaryStat label="LS items total" n={data.summary.lightspeed_total_variants} />
                 <SummaryStat label="LS matrices" n={data.summary.lightspeed_total_matrices} />
                 <SummaryStat label="LS regular" n={data.summary.lightspeed_regular_count} />
@@ -189,7 +189,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
                 <SummaryStat label="After sync" n={data.summary.wms_total_after} />
               </div>
 
-              <div className="flex items-center gap-2 border-b border-[var(--wms-border)] px-4 py-2">
+              <div className="flex items-center gap-2 border-b border-[var(--wms-border)] px-4 py-2 max-md:flex-wrap max-md:gap-y-1">
                 <TabBtn active={tab === "all"} onClick={() => { setTab("all"); setShowAll(false); }}>
                   All ({data.gained.length + data.lost.length})
                 </TabBtn>
@@ -199,14 +199,14 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
                 <TabBtn active={tab === "lost"} onClick={() => { setTab("lost"); setShowAll(false); }}>
                   <ArrowDown className="h-3 w-3" /> Lost ({data.lost.length})
                 </TabBtn>
-                <span className="ml-auto font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                <span className="ml-auto font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-xs">
                   {data.unchanged_count.toLocaleString()} unchanged
                 </span>
                 <a
                   href={`/api/inventory/sync/preview/${encodeURIComponent(data.token)}/xlsx`}
                   target="_blank"
                   rel="noopener"
-                  className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                  className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11 max-md:px-3 max-md:text-xs"
                   title="Download full diff as Excel (3 sheets: Catalog, Gained, Lost)"
                 >
                   <Download className="h-3 w-3" /> Excel
@@ -214,7 +214,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
               </div>
 
               <div className="flex-1 overflow-auto">
-                <table className="w-full border-collapse text-left font-mono text-[0.65rem]">
+                <table className="w-full border-collapse text-left font-mono text-[0.65rem] max-md:min-w-[720px] max-md:text-xs">
                   <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] uppercase tracking-wider text-[var(--wms-muted)]">
                     <tr className="border-b border-[var(--wms-border)]">
                       <th className="px-2 py-1.5">change</th>
@@ -242,7 +242,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
                           <tr key={`${isGained ? "g" : "l"}-${r.ls_system_id}`} className="hover:bg-[var(--wms-surface-elevated)]/40">
                             <td className="px-2 py-1.5">
                               <span
-                                className={`rounded px-1.5 py-0.5 text-[0.55rem] uppercase ${
+                                className={`rounded px-1.5 py-0.5 text-[0.55rem] uppercase max-md:text-[0.65rem] ${
                                   isGained ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"
                                 }`}
                               >
@@ -268,7 +268,7 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
                     <button
                       type="button"
                       onClick={() => setShowAll(true)}
-                      className="text-[var(--wms-accent)] hover:underline"
+                      className="text-[var(--wms-accent)] hover:underline max-md:py-2 max-md:text-xs"
                     >
                       Show all {allRows.length.toLocaleString()} rows
                     </button>
@@ -280,14 +280,14 @@ export function SyncPreviewModal({ open, onClose, onConfirmed }: Props) {
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={() => void onConfirm()}
-                  className="rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)] px-4 py-1.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90"
+                  className="rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)] px-4 py-1.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 max-md:min-h-11"
                 >
                   Confirm sync ({(data.gained.length + data.lost.length).toLocaleString()} change{data.gained.length + data.lost.length === 1 ? "" : "s"})
                 </button>
@@ -316,7 +316,7 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded px-2 py-1 font-mono text-[0.65rem] uppercase tracking-wider ${
+      className={`inline-flex items-center gap-1 rounded px-2 py-1 font-mono text-[0.65rem] uppercase tracking-wider max-md:min-h-11 max-md:px-3 max-md:text-xs ${
         active
           ? "bg-[var(--wms-accent)]/20 text-[var(--wms-accent)]"
           : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"

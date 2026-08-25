@@ -7,7 +7,7 @@ import { InventoryAuditLogWorkspace } from "@/components/reports/inventory-audit
 type StatusTab = "STATUS_CHANGE" | "KILLED_TAG" | "RESOLVED_KILLED_TAG";
 
 const TAB_TRIGGER =
-  "rounded-md px-3 py-2 font-mono text-[0.65rem] font-medium uppercase tracking-wider text-[var(--wms-muted)] transition-colors data-[state=active]:bg-[var(--wms-surface-elevated)] data-[state=active]:text-[var(--wms-accent)] data-[state=active]:ring-1 data-[state=active]:ring-[var(--wms-border)] hover:text-[var(--wms-fg)] dark:data-[state=active]:ring-[var(--wms-border)]";
+  "max-md:min-h-11 max-md:text-xs rounded-md px-3 py-2 font-mono text-[0.65rem] font-medium uppercase tracking-wider text-[var(--wms-muted)] transition-colors data-[state=active]:bg-[var(--wms-surface-elevated)] data-[state=active]:text-[var(--wms-accent)] data-[state=active]:ring-1 data-[state=active]:ring-[var(--wms-border)] hover:text-[var(--wms-fg)] dark:data-[state=active]:ring-[var(--wms-border)]";
 
 const EMPTY: Record<StatusTab, string> = {
   STATUS_CHANGE: "No status change entries yet.",

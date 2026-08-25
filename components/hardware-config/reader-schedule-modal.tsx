@@ -141,7 +141,7 @@ export function ReaderScheduleModal({
         <div
           role="dialog"
           aria-modal="true"
-          className="w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl"
+          className="w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain"
         >
           <div className="flex items-start justify-between gap-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--wms-fg)]">
@@ -171,7 +171,7 @@ export function ReaderScheduleModal({
           <select
             value={tz}
             onChange={(e) => setTz(e.target.value)}
-            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)]"
+            className="mt-1 w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] max-md:text-base"
             disabled={busy}
           >
             {US_TIMEZONES.map((z) => (
@@ -193,7 +193,7 @@ export function ReaderScheduleModal({
                     <button
                       type="button"
                       onClick={() => removeWindow(i)}
-                      className="rounded border border-red-400/30 px-1.5 py-0.5 font-mono text-[0.6rem] text-red-400/80 hover:bg-red-400/10"
+                      className="rounded border border-red-400/30 px-1.5 py-0.5 font-mono text-[0.6rem] text-red-400/80 hover:bg-red-400/10 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                       disabled={busy}
                     >
                       <Trash2 className="h-3 w-3" />
@@ -209,7 +209,7 @@ export function ReaderScheduleModal({
                         key={day}
                         onClick={() => toggleDay(i, day)}
                         disabled={busy}
-                        className={`rounded border px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide ${
+                        className={`rounded border px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wide max-md:min-h-11 max-md:min-w-11 max-md:px-3 max-md:py-2 max-md:text-[0.7rem] ${
                           on
                             ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/15 text-[var(--wms-accent-fg)]"
                             : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
@@ -227,7 +227,7 @@ export function ReaderScheduleModal({
                       type="time"
                       value={w.from}
                       onChange={(e) => updateWindow(i, { from: e.target.value })}
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
                       disabled={busy}
                     />
                   </label>
@@ -237,7 +237,7 @@ export function ReaderScheduleModal({
                       type="time"
                       value={w.to}
                       onChange={(e) => updateWindow(i, { to: e.target.value })}
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
                       disabled={busy}
                     />
                   </label>
@@ -248,7 +248,7 @@ export function ReaderScheduleModal({
               type="button"
               onClick={addWindow}
               disabled={busy}
-              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.65rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.65rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:min-h-11 max-md:px-3 max-md:py-2"
             >
               <Plus className="h-3 w-3" /> Add window
             </button>

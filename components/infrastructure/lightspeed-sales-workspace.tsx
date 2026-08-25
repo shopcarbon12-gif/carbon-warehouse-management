@@ -110,7 +110,7 @@ export function LightspeedSalesWorkspace() {
       <DataTableContainer maxHeight="min(70vh, 640px)">
         <table
           ref={tableRef}
-          className="w-full min-w-[720px] border-collapse text-left text-sm"
+          className="w-full min-w-[720px] border-collapse text-left text-sm max-md:min-w-[560px]"
           style={{ tableLayout: pickTableLayout(colWidths) }}
         >
           <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-xs uppercase text-[var(--wms-muted)]">
@@ -118,11 +118,14 @@ export function LightspeedSalesWorkspace() {
               {["Sale ID", "Time", "Total", "Done", "Void", "Reference", "Shop"].map(
                 (label, i) => {
                   const w = colWidths[i];
+                  // Done / Void are pruned at <md (td twins carry the same
+                  // max-md:hidden so column alignment stays in lockstep).
+                  const mobileHidden = label === "Done" || label === "Void";
                   return (
                     <th
                       key={label}
                       style={w !== null ? { width: w, minWidth: w } : undefined}
-                      className="relative overflow-hidden px-3 py-2"
+                      className={`relative overflow-hidden px-3 py-2${mobileHidden ? " max-md:hidden" : ""}`}
                     >
                       <span>{label}</span>
                       <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -145,8 +148,8 @@ export function LightspeedSalesWorkspace() {
                   <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-fg)]`} title={r.saleID}>{r.saleID || "—"}</td>
                   <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.timeStamp}>{r.timeStamp || "—"}</td>
                   <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-fg)]`} title={r.calcTotal}>{r.calcTotal || "—"}</td>
-                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.completed}>{r.completed || "—"}</td>
-                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.voided}>{r.voided || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)] max-md:hidden`} title={r.completed}>{r.completed || "—"}</td>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)] max-md:hidden`} title={r.voided}>{r.voided || "—"}</td>
                   <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.referenceNumber}>{r.referenceNumber || "—"}</td>
                   <td className={`${cellTruncate} px-3 py-2 font-mono text-xs text-[var(--wms-muted)]`} title={r.shopID}>{r.shopID || "—"}</td>
                 </tr>

@@ -192,7 +192,7 @@ function FragmentLikeRow({
           <button
             type="button"
             onClick={onToggle}
-            className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)]/80"
+            className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)]/80 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
             aria-label={open ? "Collapse" : "Expand"}
           >
             {open ? (
@@ -208,7 +208,7 @@ function FragmentLikeRow({
           <td colSpan={11} className="px-0 py-0">
             <div className="border-y border-[var(--wms-border)]/60">
               <table className="w-full border-collapse text-left text-xs">
-                <thead className="bg-orange-900/15 font-mono text-[0.55rem] uppercase tracking-wider text-orange-200/90">
+                <thead className="bg-orange-900/15 font-mono text-[0.55rem] uppercase tracking-wider text-orange-200/90 max-md:text-[0.65rem]">
                   <tr>
                     <th className="w-10 px-3 py-1.5"></th>
                     <th className="px-3 py-1.5">Serial #</th>
@@ -217,7 +217,7 @@ function FragmentLikeRow({
                     <th className="w-20 px-3 py-1.5 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[var(--wms-border)]/40 font-mono text-[0.7rem] text-[var(--wms-fg)]">
+                <tbody className="divide-y divide-[var(--wms-border)]/40 font-mono text-[0.7rem] text-[var(--wms-fg)] max-md:text-xs">
                   {g.rfid.map((r) => {
                     const checked = r.received || confirmedEpcs.has(r.epc);
                     const status: "pending" | "checked" | "received" = r.received
@@ -236,7 +236,7 @@ function FragmentLikeRow({
                             checked={checked}
                             disabled={r.received}
                             onChange={() => toggleEpc(r.epc)}
-                            className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)]"
+                            className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                           />
                         </td>
                         <td className="px-3 py-1 tabular-nums text-teal-400/85">
@@ -252,7 +252,7 @@ function FragmentLikeRow({
                           <button
                             type="button"
                             onClick={() => onPrint(r.epc)}
-                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:text-[0.7rem]"
                             title="Print label"
                           >
                             <Printer className="h-3 w-3" />
@@ -294,7 +294,7 @@ function FragmentLikeRow({
                             }}
                             placeholder={`/ ${a.qty}`}
                             title={`Sent ${a.qty} unit${a.qty === 1 ? "" : "s"} — type the received count`}
-                            className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 text-center tabular-nums text-[0.7rem] text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+                            className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 text-center tabular-nums text-[0.7rem] text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-50 max-md:w-16 max-md:py-2 max-md:text-base"
                             aria-label={`Received qty for manual line (sent ${a.qty})`}
                           />
                         </td>
@@ -302,7 +302,7 @@ function FragmentLikeRow({
                           Sent {a.qty}
                         </td>
                         <td className="px-3 py-1 text-[var(--wms-muted)]">
-                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-amber-300">
+                          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-amber-300 max-md:text-[0.65rem]">
                             Manual
                           </span>
                         </td>
@@ -313,7 +313,7 @@ function FragmentLikeRow({
                           <button
                             type="button"
                             disabled
-                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] opacity-40"
+                            className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-muted)] opacity-40 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:text-[0.7rem]"
                             title="Manual lines have no EPC to reprint"
                           >
                             <Printer className="h-3 w-3" />
@@ -341,7 +341,7 @@ function StatusPill({ status }: { status: "pending" | "checked" | "received" }) 
         : "bg-zinc-500/15 text-zinc-300";
   return (
     <span
-      className={`inline-block rounded px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider ${cls}`}
+      className={`inline-block rounded px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider max-md:text-[0.65rem] ${cls}`}
     >
       {status}
     </span>
@@ -689,7 +689,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
             <select
               value={selectedTransferId}
               onChange={(e) => setSelectedTransferId(e.target.value)}
-              className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)]"
+              className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] max-md:w-full max-md:min-w-0 max-md:text-base"
             >
               <option value="">— Select transfer —</option>
               {pending.map((p) => (
@@ -703,7 +703,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
             <button
               type="button"
               onClick={() => void refreshPending()}
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-muted)] hover:border-teal-500/40"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-muted)] hover:border-teal-500/40 max-md:min-h-11 max-md:min-w-11 max-md:justify-center"
               title="Refresh pending list"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -714,7 +714,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
 
       {/* Scan controls */}
       <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch">
           <button
             type="button"
             disabled={!selectedTransferId}
@@ -752,7 +752,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
             Clear confirmations
           </button>
         </div>
-        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
           Scans must match an EPC on the chosen transfer. Manual rows are confirmed by clicking
           the row (no scan possible). RFID will auto-route to the bin most-used by this SKU at
           the destination, otherwise unbinned.
@@ -766,8 +766,8 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
           {confirmedUnits} of {totalUnits} confirmed this session
         </div>
         <div className="max-h-[min(50vh,500px)] overflow-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <table className="w-full border-collapse text-left text-xs max-md:min-w-[860px]">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-[0.7rem]">
               <tr className="border-b border-[var(--wms-border)]">
                 <th className="w-10 px-3 py-2 text-right">#</th>
                 <th className="px-3 py-2">Custom SKU</th>
@@ -782,7 +782,7 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
                 <th className="w-10 px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)] max-md:text-sm">
               {grouped.length > 0 ? (
                 grouped.map((g, idx) => {
                   const open = openRows.has(g.custom_sku_id);
@@ -831,13 +831,16 @@ export function TransferInWorkspace({ sessionLocationId, isAdmin }: Props) {
           committing
         }
         onClick={() => void doReceive()}
-        className="rounded-lg border border-emerald-600/50 bg-emerald-950/30 px-5 py-2.5 font-mono text-sm text-emerald-200 hover:bg-emerald-900/25 disabled:opacity-40"
+        className="rounded-lg border border-emerald-600/50 bg-emerald-950/30 px-5 py-2.5 font-mono text-sm text-emerald-200 hover:bg-emerald-900/25 disabled:opacity-40 max-md:w-full max-md:min-h-11"
       >
         {committing ? "Receiving…" : "Review & receive"}
       </button>
 
       {toast ? (
-        <p className="font-mono text-xs text-amber-300/90" role="status">
+        <p
+          className="font-mono text-xs text-amber-300/90 max-md:fixed max-md:inset-x-4 max-md:bottom-4 max-md:z-50 max-md:rounded-lg max-md:border max-md:border-[var(--wms-border)] max-md:bg-[var(--wms-surface-elevated)] max-md:px-4 max-md:py-3 max-md:text-sm max-md:shadow-xl"
+          role="status"
+        >
           {toast}
         </p>
       ) : null}

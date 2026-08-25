@@ -44,10 +44,10 @@ export function ActivityHistoryWorkspace() {
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[720px] border-collapse text-left text-sm"
+        className="w-full min-w-[720px] max-md:min-w-[480px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {["When", "Event"].map((label, i) => {
               const w = colWidths[i];
@@ -82,7 +82,7 @@ export function ActivityHistoryWorkspace() {
               const line = formatLine(row);
               return (
                 <tr key={row.id}>
-                  <td className={`${cellTruncate} px-3 py-2.5 font-mono text-[0.65rem] tabular-nums text-[var(--wms-muted)]`}>
+                  <td className={`${cellTruncate} px-3 py-2.5 font-mono text-[0.65rem] max-md:text-xs tabular-nums text-[var(--wms-muted)]`}>
                     {new Date(row.created_at).toLocaleString()}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs leading-snug text-[var(--wms-fg)]`} title={line}>

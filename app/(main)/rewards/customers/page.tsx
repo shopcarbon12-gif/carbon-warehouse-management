@@ -155,8 +155,8 @@ export default async function RewardsCustomers({
     `?q=${encodeURIComponent(q)}&via=${encodeURIComponent(via)}&loc=${encodeURIComponent(loc)}&page=${p}`;
 
   return (
-    <main className="p-6 lg:p-8 max-w-7xl">
-      <header className="mb-6 flex items-start justify-between gap-4">
+    <main className="p-6 lg:p-8 max-w-7xl max-md:p-4">
+      <header className="mb-6 flex items-start justify-between gap-4 max-md:flex-col">
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
             <UserSearch className="h-3.5 w-3.5" />
@@ -168,7 +168,7 @@ export default async function RewardsCustomers({
             Click a row for the full ledger and to reward / adjust points.
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex gap-2 flex-wrap justify-end max-md:justify-start">
           <Link
             href="/rewards/customers/new"
             className="inline-flex items-center gap-2 px-4 py-2 border border-border bg-card hover:bg-muted text-sm font-semibold"
@@ -187,28 +187,28 @@ export default async function RewardsCustomers({
       </header>
 
       <form className="mb-4 flex flex-wrap gap-2 items-end">
-        <label className="flex flex-col gap-1 flex-1 min-w-[260px]">
+        <label className="flex flex-col gap-1 flex-1 min-w-[260px] max-sm:basis-full max-sm:min-w-0">
           <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Search</span>
           <input
             type="text"
             name="q"
             defaultValue={q}
             placeholder="Name, email, or phone…"
-            className="border border-border bg-card px-3 py-2"
+            className="border border-border bg-card px-3 py-2 max-md:text-base"
           />
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 max-sm:w-full max-sm:min-w-0">
           <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Source</span>
-          <select name="via" defaultValue={via} className="border border-border bg-card px-3 py-2">
+          <select name="via" defaultValue={via} className="border border-border bg-card px-3 py-2 max-sm:w-full max-sm:min-w-0 max-sm:max-w-full max-md:text-base">
             <option value="">All sources</option>
             {Object.entries(SOURCE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v.label}</option>
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex flex-col gap-1 max-sm:w-full max-sm:min-w-0">
           <span className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground">Added at location</span>
-          <select name="loc" defaultValue={loc} className="border border-border bg-card px-3 py-2">
+          <select name="loc" defaultValue={loc} className="border border-border bg-card px-3 py-2 max-sm:w-full max-sm:min-w-0 max-sm:max-w-full max-md:text-base">
             <option value="">All locations</option>
             {locations.map((l) => (
               <option key={l.id} value={l.id}>{l.name}</option>
@@ -235,17 +235,17 @@ export default async function RewardsCustomers({
 
       <div className="border border-border bg-card">
         <LoyaltyCustomersTable rows={rows} />
-        <div className="px-3 py-2 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+        <div className="px-3 py-2 border-t border-border flex items-center justify-between text-xs text-muted-foreground max-md:flex-wrap max-md:gap-2">
           <span>Showing {showFrom}–{showTo} of {total.toLocaleString()}</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 max-md:items-center">
             <Link
               href={baseHref(Math.max(1, page - 1))}
-              className={`px-2 py-1 border border-border ${page === 1 ? "opacity-40 pointer-events-none" : ""}`}
+              className={`px-2 py-1 border border-border max-md:px-3 max-md:py-2 ${page === 1 ? "opacity-40 pointer-events-none" : ""}`}
             >Prev</Link>
-            <span className="px-2 py-1">Page {page} / {totalPages}</span>
+            <span className="px-2 py-1 max-md:py-2">Page {page} / {totalPages}</span>
             <Link
               href={baseHref(Math.min(totalPages, page + 1))}
-              className={`px-2 py-1 border border-border ${page === totalPages ? "opacity-40 pointer-events-none" : ""}`}
+              className={`px-2 py-1 border border-border max-md:px-3 max-md:py-2 ${page === totalPages ? "opacity-40 pointer-events-none" : ""}`}
             >Next</Link>
           </div>
         </div>

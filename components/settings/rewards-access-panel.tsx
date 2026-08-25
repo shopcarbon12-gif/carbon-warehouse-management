@@ -125,14 +125,14 @@ function RewardsUsersTab() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-        <table className="w-full min-w-[640px] border-collapse text-left">
+        <table className="w-full min-w-[640px] border-collapse text-left max-md:min-w-[560px]">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
-              <th className="px-3 py-3">Name</th>
+              <th className="px-3 py-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Name</th>
               <th className="px-3 py-3">Email</th>
               <th className="px-3 py-3">Role</th>
-              <th className="px-3 py-3">Password</th>
-              <th className="px-3 py-3">Active</th>
+              <th className="px-3 py-3 max-md:hidden">Password</th>
+              <th className="px-3 py-3 max-md:hidden">Active</th>
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -154,7 +154,7 @@ function RewardsUsersTab() {
             ) : (
               users.map((u) => (
                 <tr key={u.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 text-[var(--wms-fg)]">
+                  <td className="px-3 py-2.5 text-[var(--wms-fg)] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">
                     {[u.first_name, u.last_name].filter(Boolean).join(" ") || (
                       <span className="text-[var(--wms-muted)]">—</span>
                     )}
@@ -163,14 +163,14 @@ function RewardsUsersTab() {
                   <td className="px-3 py-2.5 text-[var(--wms-muted)]">
                     {u.rewards_role_name ?? "—"}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] max-md:hidden">
                     {u.has_rewards_password ? (
                       <span className="text-emerald-500/85">●●●●●●</span>
                     ) : (
                       <span className="text-[var(--wms-muted)]">unset</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] max-md:hidden">
                     {u.is_active ? (
                       <span className="text-emerald-500/85">yes</span>
                     ) : (
@@ -181,7 +181,7 @@ function RewardsUsersTab() {
                     <button
                       type="button"
                       onClick={() => setEditing(u)}
-                      className="mr-3 font-medium text-[var(--wms-accent)] hover:underline"
+                      className="mr-3 font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
                     </button>
@@ -189,7 +189,7 @@ function RewardsUsersTab() {
                       <button
                         type="button"
                         onClick={() => void deactivate(u)}
-                        className="font-medium text-rose-400 hover:underline"
+                        className="font-medium text-rose-400 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                       >
                         Deactivate
                       </button>
@@ -284,7 +284,7 @@ function RewardsUserCreateModal({
         className="fixed inset-0 z-[60] bg-black/70"
       />
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
             Add rewards user
           </h3>
@@ -302,7 +302,7 @@ function RewardsUserCreateModal({
                 className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
               />
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <label className="grid gap-1">
                 <span className="text-[var(--wms-muted)]">First name</span>
                 <input
@@ -431,7 +431,7 @@ function RewardsUserEditModal({
         className="fixed inset-0 z-[60] bg-black/70"
       />
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
+        <div className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
             Edit rewards user
           </h3>
@@ -439,7 +439,7 @@ function RewardsUserEditModal({
             <span className="font-mono text-[var(--wms-fg)]">{user.email}</span>
           </p>
           <div className="mt-4 grid gap-3 font-mono text-xs">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
               <label className="grid gap-1">
                 <span className="text-[var(--wms-muted)]">First name</span>
                 <input

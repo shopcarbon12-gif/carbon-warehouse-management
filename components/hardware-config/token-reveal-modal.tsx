@@ -44,7 +44,7 @@ export function TokenRevealModal({ open, agentName, token, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-yellow-500/40 bg-[var(--wms-surface)] p-5 shadow-xl">
+      <div className="w-full max-w-lg rounded-lg border border-yellow-500/40 bg-[var(--wms-surface)] p-5 shadow-xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 font-mono text-sm font-semibold text-[var(--wms-fg)]">
             <KeyRound className="h-4 w-4 text-yellow-400" />

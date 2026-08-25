@@ -197,13 +197,13 @@ export function ShipScanOutWorkspace() {
             <div className="overflow-hidden rounded-lg border border-[var(--wms-border)]">
               {visible.map((s) => (
                 <div key={s.epc} className="flex items-center gap-3 border-b border-[var(--wms-border)]/50 px-3 py-2 last:border-b-0">
-                  <span className="font-mono text-xs font-semibold text-teal-300">{s.epc}</span>
-                  <span className="ml-auto font-mono text-xs text-[var(--wms-muted)]">{s.rssi == null ? "—" : `${s.rssi} dBm`}</span>
+                  <span className="font-mono text-xs font-semibold text-teal-300 max-md:min-w-0 max-md:truncate" title={s.epc}>{s.epc}</span>
+                  <span className="ml-auto font-mono text-xs text-[var(--wms-muted)] max-md:shrink-0">{s.rssi == null ? "—" : `${s.rssi} dBm`}</span>
                   <button
                     type="button"
                     disabled={busy !== null}
                     onClick={() => void shipOne(s.epc)}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-2.5 py-1 text-[0.65rem] font-semibold text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-40"
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-2.5 py-1 text-[0.65rem] font-semibold text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-40 max-md:shrink-0 max-md:px-3 max-md:py-2"
                   >
                     {busy === s.epc ? "…" : <><Truck className="h-3 w-3" /> Ship</>}
                   </button>

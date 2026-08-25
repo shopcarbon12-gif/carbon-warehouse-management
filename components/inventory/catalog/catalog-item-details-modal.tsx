@@ -293,11 +293,11 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
         className="fixed inset-0 z-[60] bg-black/70"
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-2 sm:p-4">
-        <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8">
+      <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-2 sm:p-4 max-md:overscroll-contain max-md:p-0">
+        <div className="my-4 w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl sm:my-8 max-md:my-0 max-md:min-h-dvh max-md:max-w-none max-md:rounded-none">
           {/* Top bar — Save Changes · Matrix · Print Label · Archive */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-2.5 max-md:flex-nowrap">
+            <div className="flex items-center gap-2 max-md:min-w-0 max-md:overflow-x-auto max-md:whitespace-nowrap">
               <button
                 type="button"
                 disabled={!canManage || !dirty || busy !== null}
@@ -307,14 +307,14 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                     ? "Save catalog edits (variant + matrix)"
                     : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:text-xs"
               >
                 {busy === "save" ? "Saving…" : "Save Changes"}
               </button>
               <button
                 type="button"
                 onClick={() => setMatrixOpen(true)}
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11 max-md:text-xs"
               >
                 Matrix
               </button>
@@ -327,7 +327,7 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                     ? "Print one RFID tag for this SKU to 192.168.1.3 (status: unknown)"
                     : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:text-xs"
               >
                 {busy === "print" ? "Printing…" : "Print RFID Label"}
               </button>
@@ -340,17 +340,17 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                     ? "Print one non-RFID (no-chip) tag for this SKU to 192.168.1.220"
                     : "Admin scope required"
                 }
-                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:text-xs"
               >
                 {busy === "print-nonrfid" ? "Printing…" : "Print Non-RFID Label"}
               </button>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 max-md:shrink-0">
               <button
                 type="button"
                 disabled={!canManage || busy !== null}
                 onClick={() => void archive()}
-                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50"
+                className="rounded-md border border-red-500/55 bg-red-950/40 px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-red-200 hover:bg-red-900/40 disabled:opacity-50 max-md:min-h-11 max-md:text-xs"
                 title={
                   canManage
                     ? row.archived
@@ -365,7 +365,7 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                 type="button"
                 aria-label="Close"
                 onClick={onClose}
-                className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)]"
+                className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               >
                 <XIcon className="h-4 w-4" />
               </button>
@@ -390,7 +390,7 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                   key={n.key}
                   type="button"
                   onClick={() => setTab(n.key)}
-                  className={`block whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs sm:w-full ${
+                  className={`block whitespace-nowrap px-4 py-1.5 text-left font-mono text-xs sm:w-full max-md:min-h-11 ${
                     tab === n.key
                       ? "border-[var(--wms-accent)] bg-[var(--wms-surface)] font-semibold text-[var(--wms-fg)] sm:border-l-2"
                       : "border-transparent text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] sm:border-l-2"
@@ -403,12 +403,12 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
 
             <div className="min-w-0 flex-1 p-3 sm:p-5">
               <h2
-                className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)]"
+                className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)] max-md:whitespace-normal max-md:break-words"
                 title={headerLabel}
               >
                 {headerLabel}
                 {row.archived ? (
-                  <span className="ml-2 rounded border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 align-middle font-mono text-[0.55rem] uppercase tracking-wide text-amber-200">
+                  <span className="ml-2 rounded border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 align-middle font-mono text-[0.55rem] uppercase tracking-wide text-amber-200 max-md:text-xs">
                     archived
                   </span>
                 ) : null}
@@ -575,7 +575,7 @@ function DetailsTab({
               <input
                 type="checkbox"
                 disabled
-                className="h-3.5 w-3.5 accent-[var(--wms-accent)] disabled:opacity-60"
+                className="h-3.5 w-3.5 accent-[var(--wms-accent)] disabled:opacity-60 max-md:h-5 max-md:w-5"
               />
               Publish to Shopify
             </label>
@@ -645,7 +645,7 @@ function ItemImage({ url, alt }: { url: string | null; alt: string }) {
   const [zoom, setZoom] = useState(false);
   if (!url) {
     return (
-      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="flex aspect-[3/4] w-full items-center justify-center rounded-md border border-dashed border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         No picture
       </div>
     );
@@ -676,7 +676,7 @@ function ItemImage({ url, alt }: { url: string | null; alt: string }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-      <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         {title}
       </div>
       <div className="divide-y divide-[var(--wms-border)]/60">{children}</div>
@@ -697,7 +697,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
-      <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         {label}
       </span>
       <span
@@ -736,7 +736,7 @@ function EditRow({
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
       <span
-        className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+        className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs"
         title={hint}
       >
         {label}
@@ -747,7 +747,7 @@ function EditRow({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={money ? () => onChange(money2(value)) : undefined}
-        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-40 ${
+        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-40 max-md:py-2 max-md:text-base ${
           mono ? "font-mono" : ""
         }`}
       />
@@ -757,7 +757,7 @@ function EditRow({
 
 function PriceHeader() {
   return (
-    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+    <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 bg-[var(--wms-surface-elevated)]/60 px-3 py-1 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
       <span>Name</span>
       <span className="text-left">Price</span>
       <span className="text-left">Markup</span>
@@ -779,7 +779,7 @@ function PriceRow({
 }) {
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 px-3 py-1.5 font-mono text-xs">
-      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         {label}
       </span>
       <span className="text-left text-[var(--wms-fg)]">{fmtMoney(amount)}</span>
@@ -809,7 +809,7 @@ function EditPriceRow({
   }
   return (
     <div className="grid grid-cols-[1fr_1fr_1fr_1fr] items-center gap-3 px-3 py-1.5 font-mono text-xs">
-      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+      <span className="text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         {label}
       </span>
       <input
@@ -817,7 +817,7 @@ function EditPriceRow({
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none"
+        className="w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-left text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none max-md:py-2 max-md:text-base"
       />
       <span className="text-left text-[var(--wms-muted)]">{fmtPct(markup)}</span>
       <span className="text-left text-[var(--wms-muted)]">{fmtPct(margin)}</span>

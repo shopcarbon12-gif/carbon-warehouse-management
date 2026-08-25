@@ -169,7 +169,7 @@ export function SyncDashboard() {
               aria-controls={panelId}
               tabIndex={selected ? 0 : -1}
               onClick={() => setActiveTab(t.id)}
-              className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide transition-colors ${
+              className={`rounded-t-md px-4 py-2 font-mono text-xs uppercase tracking-wide transition-colors max-md:min-h-11 ${
                 selected
                   ? "border border-b-0 border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] font-semibold text-[var(--wms-accent)] dark:bg-[var(--wms-surface-elevated)] dark:text-[var(--wms-accent)]"
                   : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"

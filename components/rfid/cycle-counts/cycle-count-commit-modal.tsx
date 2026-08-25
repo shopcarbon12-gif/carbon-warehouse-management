@@ -115,7 +115,7 @@ export function CycleCountCommitModal({
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:p-2.5"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -268,13 +268,14 @@ function MissingBucket({
           return (
             <li
               key={r.epc}
-              className={`flex items-center gap-2 px-3 py-1.5 ${checked ? "" : "opacity-50"}`}
+              className={`flex items-center gap-2 px-3 py-1.5 max-md:py-2.5 ${checked ? "" : "opacity-50"}`}
             >
               <input
                 type="checkbox"
                 checked={checked}
                 onChange={() => onToggle(r.epc)}
                 aria-label="apply this change"
+                className="max-md:h-5 max-md:w-5 max-md:accent-[var(--wms-accent)]"
               />
               <span className="truncate text-[var(--wms-accent)]">{r.epc}</span>
               <span className="text-[var(--wms-fg)]">{r.sku}</span>

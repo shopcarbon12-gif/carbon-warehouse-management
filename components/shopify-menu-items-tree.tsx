@@ -2226,6 +2226,22 @@ export default function ShopifyMenuItemsTree({
             grid-template-columns: 36px 36px minmax(0, 1fr) 36px;
           }
         }
+        /* Mobile-view pass (2026-08): tighter per-depth indent on narrow
+           viewports so depth-3 rows keep room for label + actions. Connector
+           offsets are scaled with the step so the elbow/stem lines stay
+           attached to the parent row. Media-scoped → desktop untouched. */
+        @media (max-width: 640px) {
+          :global(.treeNode) {
+            --indent-step: 20px;
+            --connector-stem-left: -12px;
+            --connector-elbow-width: 12px;
+          }
+          :global(.treeNode.depth-2),
+          :global(.treeNode.depth-3) {
+            --connector-stem-left: -32px;
+            --connector-elbow-width: 32px;
+          }
+        }
       `}</style>
     </div>
   );

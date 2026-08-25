@@ -37,7 +37,7 @@ export default async function RewardsPage() {
   );
 
   return (
-    <main className="p-6 lg:p-8 max-w-3xl">
+    <main className="p-6 lg:p-8 max-w-3xl max-md:p-4">
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Gift className="h-3.5 w-3.5" />

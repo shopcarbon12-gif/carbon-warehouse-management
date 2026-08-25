@@ -73,7 +73,7 @@ export function LiveStreamHandler({
 
   return (
     <div
-      className="pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-emerald-500/35 bg-[var(--wms-surface)]/95 px-4 py-3 font-mono text-xs text-emerald-100 shadow-lg shadow-emerald-900/20"
+      className="pointer-events-none fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-emerald-500/35 bg-[var(--wms-surface)]/95 px-4 py-3 font-mono text-xs text-emerald-100 shadow-lg shadow-emerald-900/20 max-sm:left-4 max-sm:right-4"
       role="status"
     >
       <div className="text-[0.6rem] uppercase tracking-wider text-emerald-500/90">Live edge</div>

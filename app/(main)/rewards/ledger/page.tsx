@@ -58,7 +58,7 @@ export default async function LedgerPage({
   );
 
   return (
-    <main className="p-6 lg:p-8 max-w-7xl">
+    <main className="p-6 lg:p-8 max-w-7xl max-md:p-4">
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Activity className="h-3.5 w-3.5" />
@@ -81,9 +81,9 @@ export default async function LedgerPage({
       <LoyaltyLedgerTable rows={rows} />
 
       <div className="mt-3 flex items-center gap-2 text-sm">
-        <Link className="px-3 py-1 border border-border" href={`?reason=${reason}&page=${Math.max(1, page - 1)}`}>Prev</Link>
+        <Link className="px-3 py-1 border border-border max-md:py-2" href={`?reason=${reason}&page=${Math.max(1, page - 1)}`}>Prev</Link>
         <span className="text-muted-foreground">Page {page}</span>
-        <Link className="px-3 py-1 border border-border" href={`?reason=${reason}&page=${page + 1}`}>Next</Link>
+        <Link className="px-3 py-1 border border-border max-md:py-2" href={`?reason=${reason}&page=${page + 1}`}>Next</Link>
       </div>
     </main>
   );

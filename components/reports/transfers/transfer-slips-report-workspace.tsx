@@ -56,6 +56,14 @@ function formatDate(iso: string | null): string {
   return d.toLocaleString();
 }
 
+/** Compact date for the mobile-only subline inside the Slip # cell. */
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString();
+}
+
 function StatusPill({ state }: { state: string }) {
   const label =
     state === "in-transit" ? "Pending"
@@ -68,7 +76,7 @@ function StatusPill({ state }: { state: string }) {
         : state === "cancelled" ? "bg-red-500/15 text-red-300"
           : "bg-zinc-500/15 text-zinc-300";
   return (
-    <span className={`inline-block rounded px-2 py-0.5 text-[0.6rem] uppercase tracking-wider ${cls}`}>
+    <span className={`inline-block rounded px-2 py-0.5 text-[0.6rem] max-md:text-xs uppercase tracking-wider ${cls}`}>
       {label}
     </span>
   );
@@ -121,8 +129,16 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
     window.open(`/api/operations/transfers/${id}/pdf?autoprint=1`, "_blank", "noopener");
   };
 
+  // Anchor-based same-tab download — survives mobile popup blockers, unlike
+  // window.open loops (which only allow the first popup per gesture).
   const downloadSlipCsv = (id: string) => {
-    window.open(`/api/operations/transfers/${id}/csv`, "_blank", "noopener");
+    const a = document.createElement("a");
+    a.href = `/api/operations/transfers/${id}/csv`;
+    a.download = "";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const StatusPillBtn = ({
@@ -150,9 +166,9 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
       <button
         type="button"
         onClick={onClick}
-        className={`rounded border px-3 py-1.5 font-mono text-xs ${baseCls}`}
+        className={`rounded border px-3 py-1.5 font-mono text-xs max-md:min-h-11 ${baseCls}`}
       >
-        <span className="text-[var(--wms-muted)] uppercase tracking-wider text-[0.6rem]">{label}: </span>
+        <span className="text-[var(--wms-muted)] uppercase tracking-wider text-[0.6rem] max-md:text-xs">{label}: </span>
         <span className={`tabular-nums font-semibold ${colorCls}`}>{n}</span>
       </button>
     );
@@ -162,20 +178,20 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
     <div className="space-y-4">
       {/* Top bar — search + filter pills + export */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-1 min-w-[280px] items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 focus-within:border-teal-500/50">
+        <div className="flex flex-1 min-w-[280px] items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 focus-within:border-teal-500/50 max-md:min-h-11">
           <Search className="h-4 w-4 text-[var(--wms-muted)]" />
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search slip #, EPC, custom SKU, UPC, item name…"
-            className="w-full bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
+            className="w-full bg-transparent font-mono text-xs max-md:text-base text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70"
           />
         </div>
         <button
           type="button"
           onClick={() => setExportOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90"
+          className="inline-flex items-center gap-2 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 max-md:min-h-11"
         >
           <Download className="h-3.5 w-3.5" />
           Export
@@ -195,28 +211,28 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
         <button
           type="button"
           onClick={() => setAdvancedOpen((o) => !o)}
-          className="flex w-full items-center justify-between px-4 py-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          className="flex w-full items-center justify-between px-4 py-2 font-mono text-[0.65rem] max-md:text-xs max-md:min-h-11 uppercase tracking-wider text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
         >
           <span>Advanced filters</span>
           {advancedOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
         {advancedOpen ? (
           <div className="grid gap-3 border-t border-[var(--wms-border)] p-4 sm:grid-cols-4">
-            <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <label className="block font-mono text-[0.6rem] max-md:text-xs uppercase tracking-wider text-[var(--wms-muted)]">
               Shipped date — from
-              <input type="date" value={shippedFrom} onChange={(e) => setShippedFrom(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]" />
+              <input type="date" value={shippedFrom} onChange={(e) => setShippedFrom(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs max-md:text-base max-md:min-h-11 text-[var(--wms-fg)]" />
             </label>
-            <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <label className="block font-mono text-[0.6rem] max-md:text-xs uppercase tracking-wider text-[var(--wms-muted)]">
               Shipped date — to
-              <input type="date" value={shippedTo} onChange={(e) => setShippedTo(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]" />
+              <input type="date" value={shippedTo} onChange={(e) => setShippedTo(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs max-md:text-base max-md:min-h-11 text-[var(--wms-fg)]" />
             </label>
-            <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <label className="block font-mono text-[0.6rem] max-md:text-xs uppercase tracking-wider text-[var(--wms-muted)]">
               Received date — from
-              <input type="date" value={receivedFrom} onChange={(e) => setReceivedFrom(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]" />
+              <input type="date" value={receivedFrom} onChange={(e) => setReceivedFrom(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs max-md:text-base max-md:min-h-11 text-[var(--wms-fg)]" />
             </label>
-            <label className="block font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <label className="block font-mono text-[0.6rem] max-md:text-xs uppercase tracking-wider text-[var(--wms-muted)]">
               Received date — to
-              <input type="date" value={receivedTo} onChange={(e) => setReceivedTo(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)]" />
+              <input type="date" value={receivedTo} onChange={(e) => setReceivedTo(e.target.value)} className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs max-md:text-base max-md:min-h-11 text-[var(--wms-fg)]" />
             </label>
             <div className="sm:col-span-4">
               <button
@@ -227,7 +243,7 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
                   setReceivedFrom("");
                   setReceivedTo("");
                 }}
-                className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 font-mono text-[0.65rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 font-mono text-[0.65rem] max-md:text-xs max-md:min-h-11 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
               >
                 Clear date filters
               </button>
@@ -240,16 +256,16 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
       <div className="overflow-hidden rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80">
         <div className="overflow-auto">
           <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)]">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase tracking-wider text-[var(--wms-muted)]">
               <tr className="border-b border-[var(--wms-border)]">
                 <th className="px-3 py-2"></th>
                 <th className="px-3 py-2">Slip #</th>
-                <th className="px-3 py-2">Created at</th>
+                <th className="px-3 py-2 max-md:hidden">Created at</th>
                 <th className="px-3 py-2">From</th>
                 <th className="px-3 py-2">To</th>
-                <th className="px-3 py-2">Received date</th>
-                <th className="px-3 py-2">DOC #</th>
-                <th className="px-3 py-2">REF #</th>
+                <th className="px-3 py-2 max-md:hidden">Received date</th>
+                <th className="px-3 py-2 max-md:hidden">DOC #</th>
+                <th className="px-3 py-2 max-md:hidden">REF #</th>
                 <th className="px-3 py-2 text-right">Sent QTY</th>
                 <th className="px-3 py-2 text-right">Received QTY</th>
                 <th className="px-3 py-2 text-right">Missing QTY</th>
@@ -269,33 +285,34 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
                     <button
                       type="button"
                       onClick={() => openSlipPdf(r.id)}
-                      className="rounded border border-[var(--wms-border)] px-1.5 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] px-1.5 py-1 text-[0.6rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                       title="Open printable slip in new tab"
                     >
-                      <FileText className="h-3 w-3" />
+                      <FileText className="h-3 w-3 max-md:h-4 max-md:w-4" />
                     </button>
                   </td>
                   <td className="px-3 py-1.5 tabular-nums">
                     <button
                       type="button"
                       onClick={() => openSlipPdf(r.id)}
-                      className="text-[var(--wms-accent)] hover:underline"
+                      className="text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-11 max-md:items-center"
                     >
                       {r.slip_number ?? "—"}
                     </button>
+                    <div className="md:hidden text-[0.65rem] text-[var(--wms-muted)]">{formatDateShort(r.created_at)}</div>
                   </td>
-                  <td className="px-3 py-1.5 text-[var(--wms-muted)]">{formatDate(r.created_at)}</td>
+                  <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{formatDate(r.created_at)}</td>
                   <td className="px-3 py-1.5">
                     <div>{r.source_location_code}</div>
-                    <div className="text-[0.6rem] text-[var(--wms-muted)]">{r.source_location_name}</div>
+                    <div className="text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]">{r.source_location_name}</div>
                   </td>
                   <td className="px-3 py-1.5">
                     <div>{r.destination_location_code}</div>
-                    <div className="text-[0.6rem] text-[var(--wms-muted)]">{r.destination_location_name}</div>
+                    <div className="text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]">{r.destination_location_name}</div>
                   </td>
-                  <td className="px-3 py-1.5 text-[var(--wms-muted)]">{formatDate(r.received_at)}</td>
-                  <td className="px-3 py-1.5 text-[var(--wms-muted)]">{r.doc_number ?? "—"}</td>
-                  <td className="px-3 py-1.5 text-[var(--wms-muted)]">{r.ref_number ?? "—"}</td>
+                  <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{formatDate(r.received_at)}</td>
+                  <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{r.doc_number ?? "—"}</td>
+                  <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{r.ref_number ?? "—"}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums">{r.sent_qty}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-emerald-300">{r.received_qty}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums text-red-400/90">{r.missing_qty}</td>
@@ -309,11 +326,11 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
 
       {/* Pagination */}
       {(data?.total ?? 0) > 0 ? (
-        <div className="flex items-center justify-between font-mono text-[0.65rem] text-[var(--wms-muted)]">
+        <div className="flex items-center justify-between font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">
           <span>{data?.total} row{data?.total === 1 ? "" : "s"} · page {page} / {totalPages}</span>
           <div className="flex gap-2">
-            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 disabled:opacity-40">Previous</button>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 disabled:opacity-40">Next</button>
+            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 max-md:py-2 max-md:min-h-11 disabled:opacity-40">Previous</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1 max-md:py-2 max-md:min-h-11 disabled:opacity-40">Next</button>
           </div>
         </div>
       ) : null}
@@ -323,11 +340,23 @@ export function TransferSlipsReportWorkspace({ direction }: Props) {
         <ExportModal
           onClose={() => setExportOpen(false)}
           onExportCsv={() => {
-            for (const r of rows) downloadSlipCsv(r.id);
+            // Stagger the anchor clicks so browsers don't coalesce/drop
+            // rapid multi-file downloads (esp. mobile Safari/Chrome).
+            rows.forEach((r, i) => {
+              window.setTimeout(() => downloadSlipCsv(r.id), i * 250);
+            });
             setExportOpen(false);
           }}
           onExportPdf={() => {
-            for (const r of rows) openSlipPdf(r.id);
+            // Popup blockers on phones only allow one window.open per
+            // gesture — open just the first slip there instead of silently
+            // dropping the rest. Desktop keeps the full loop.
+            const isPhone = window.matchMedia("(max-width: 767px)").matches;
+            if (isPhone && rows.length > 1) {
+              openSlipPdf(rows[0].id);
+            } else {
+              for (const r of rows) openSlipPdf(r.id);
+            }
             setExportOpen(false);
           }}
           rowCount={rows.length}
@@ -357,10 +386,10 @@ function ExportModal({
         onClick={onClose}
       />
       <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-        <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+        <div role="dialog" aria-modal="true" className="w-full max-w-md max-md:max-h-[85dvh] max-md:overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
           <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
             <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Export</h2>
-            <button type="button" onClick={onClose} className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={onClose} className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"><X className="h-4 w-4" /></button>
           </div>
           <div className="space-y-3 px-4 py-4">
             <p className="font-mono text-xs text-[var(--wms-muted)]">
@@ -372,7 +401,7 @@ function ExportModal({
                 type="button"
                 disabled={rowCount === 0}
                 onClick={onExportPdf}
-                className="flex-1 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-40"
+                className="flex-1 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
               >
                 Export as .PDF
               </button>
@@ -380,14 +409,14 @@ function ExportModal({
                 type="button"
                 disabled={rowCount === 0}
                 onClick={onExportCsv}
-                className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:opacity-90 disabled:opacity-40"
+                className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
               >
                 Export as .CSV
               </button>
             </div>
           </div>
           <div className="flex border-t border-[var(--wms-border)] px-4 py-3">
-            <button type="button" onClick={onClose} className="ml-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:opacity-90">Close</button>
+            <button type="button" onClick={onClose} className="ml-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-1.5 font-mono text-xs text-[var(--wms-fg)] hover:opacity-90 max-md:min-h-11">Close</button>
           </div>
         </div>
       </div>

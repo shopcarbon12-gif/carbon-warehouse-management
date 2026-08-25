@@ -422,15 +422,16 @@ export function CatalogWorkspace({
       if (!el || !(e.target instanceof Node) || el.contains(e.target)) return;
       setCatalogMenuOpen(null);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    // pointerdown (not mousedown) so touch taps dismiss the menus too.
+    document.addEventListener("pointerdown", onDoc);
+    return () => document.removeEventListener("pointerdown", onDoc);
   }, [catalogMenuOpen]);
 
   const showCatalogEmpty = !isLoading && total === 0 && !debounced;
   const showNoMatches = !isLoading && total === 0 && Boolean(debounced);
 
   const pagination = !showCatalogEmpty && total > 0 && (
-    <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+    <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">
       <div className="flex flex-wrap items-center gap-3">
         <span>
           {total} row{total === 1 ? "" : "s"} · page {page} / {totalPages}
@@ -444,7 +445,7 @@ export function CatalogWorkspace({
               if (v === "ALL") setPageSizeChoice("ALL");
               else setPageSizeChoice(Number(v) as (typeof PAGE_SIZE_OPTIONS)[number]);
             }}
-            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.65rem] text-[var(--wms-fg)]"
+            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 font-mono text-[0.65rem] text-[var(--wms-fg)] max-md:min-h-11 max-md:py-2 max-md:text-base"
           >
             {PAGE_SIZE_OPTIONS.map((opt) => (
               <option key={String(opt)} value={String(opt)}>
@@ -459,7 +460,7 @@ export function CatalogWorkspace({
           type="button"
           disabled={page <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
+          className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)] max-md:min-h-11 max-md:px-4 max-md:py-2"
         >
           Previous
         </button>
@@ -467,7 +468,7 @@ export function CatalogWorkspace({
           type="button"
           disabled={page >= totalPages}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)]"
+          className="rounded border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1 font-medium text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-45 disabled:text-[var(--wms-muted)] max-md:min-h-11 max-md:px-4 max-md:py-2"
         >
           Next
         </button>
@@ -484,13 +485,13 @@ export function CatalogWorkspace({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, SKU, UPC, system ID…"
-              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg"
+              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg max-md:text-base"
             />
           </div>
 
           <div
             ref={catalogToolbarRef}
-            className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--wms-border)]/80 pb-3"
+            className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--wms-border)]/80 pb-3 max-md:justify-start"
           >
             {canManageCatalog ? (
               <>
@@ -500,7 +501,7 @@ export function CatalogWorkspace({
                     setManualErr(null);
                     setNewItemOpen(true);
                   }}
-                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
+                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 max-md:min-h-11"
                 >
                   New
                 </button>
@@ -511,13 +512,13 @@ export function CatalogWorkspace({
                     setImportSummary(null);
                     setImportOpen(true);
                   }}
-                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
+                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 max-md:min-h-11"
                 >
                   Import
                 </button>
               </>
             ) : (
-              <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]" title="Admin scope required">
+              <span className="font-mono text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]" title="Admin scope required">
                 New / Import · admin only
               </span>
             )}
@@ -525,7 +526,7 @@ export function CatalogWorkspace({
               type="button"
               aria-pressed={showArchived}
               onClick={() => setShowArchived((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm ${
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold shadow-sm max-md:min-h-11 ${
                 showArchived
                   ? "border-amber-500/55 bg-amber-500/15 text-amber-200 hover:opacity-90 dark:bg-amber-950/40"
                   : "border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
@@ -544,7 +545,7 @@ export function CatalogWorkspace({
               role="group"
               aria-label="Filter by picture"
               title="Show all items, only items with a picture, or only items without a picture"
-              className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1.5 font-mono text-xs font-semibold shadow-sm"
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-2 py-1.5 font-mono text-xs font-semibold shadow-sm max-md:hidden"
             >
               <ImageIcon className="h-3.5 w-3.5 text-[var(--wms-muted)]" aria-hidden />
               {([
@@ -574,7 +575,7 @@ export function CatalogWorkspace({
             <button
               type="button"
               onClick={() => exportLightspeedCatalogCsv(rows)}
-              className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))]"
+              className="rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-fg)] shadow-sm hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] max-md:hidden"
             >
               Export
             </button>
@@ -582,7 +583,7 @@ export function CatalogWorkspace({
               type="button"
               aria-pressed={manualOnly}
               onClick={() => setManualOnly((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold tracking-widest shadow-sm hover:opacity-90 ${
+              className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-2 font-mono text-xs font-semibold tracking-widest shadow-sm hover:opacity-90 max-md:hidden ${
                 manualOnly ? "" : "transition-colors"
               }`}
               style={
@@ -607,7 +608,7 @@ export function CatalogWorkspace({
               MANUAL ITEMS{manualOnly ? ": ON" : ""}
             </button>
 
-            <div className="relative">
+            <div className="relative max-md:hidden">
               <button
                 type="button"
                 onClick={() =>
@@ -620,7 +621,7 @@ export function CatalogWorkspace({
               </button>
               {catalogMenuOpen === "lightspeed" ? (
                 <div
-                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
                   role="menu"
                 >
                   <button
@@ -666,7 +667,7 @@ export function CatalogWorkspace({
               </button>
               {catalogMenuOpen === "more" ? (
                 <div
-                  className="absolute right-0 z-20 mt-1 w-52 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
+                  className="absolute right-0 z-20 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
                   role="menu"
                 >
                   <button
@@ -676,7 +677,7 @@ export function CatalogWorkspace({
                       setCatalogMenuOpen(null);
                       setManualItemsOpen(true);
                     }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] max-md:py-3"
                   >
                     Manual Items
                   </button>
@@ -687,7 +688,7 @@ export function CatalogWorkspace({
                       setCatalogMenuOpen(null);
                       setDefectiveOpen(true);
                     }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
+                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] max-md:py-3"
                   >
                     Defective EPC&apos;s
                   </button>
@@ -697,7 +698,7 @@ export function CatalogWorkspace({
                     disabled
                     title="Not implemented yet"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)]"
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)] max-md:py-3"
                   >
                     Bulk tag assign (soon)
                   </button>
@@ -707,14 +708,91 @@ export function CatalogWorkspace({
                     disabled
                     title="Not implemented yet"
                     onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)]"
+                    className="block w-full cursor-not-allowed px-3 py-2 text-left font-mono text-xs text-[var(--wms-muted)] max-md:py-3"
                   >
                     Bulk archive (soon)
                   </button>
+                  {/* Mobile-only entries — these controls live directly in the toolbar at md+ */}
+                  <div className="mt-1 border-t border-[var(--wms-border)]/60 pt-1 md:hidden">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setCatalogMenuOpen(null);
+                        exportLightspeedCatalogCsv(rows);
+                      }}
+                      className="block w-full px-3 py-3 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))]"
+                    >
+                      Export CSV
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={manualOnly}
+                      onClick={() => {
+                        setCatalogMenuOpen(null);
+                        setManualOnly((v) => !v);
+                      }}
+                      className={`block w-full px-3 py-3 text-left font-mono text-xs hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] ${
+                        manualOnly ? "font-semibold text-[var(--wms-accent)]" : "text-[var(--wms-fg)]"
+                      }`}
+                    >
+                      Manual items only{manualOnly ? ": ON" : ""}
+                    </button>
+                    {(
+                      [
+                        { v: "", label: "Pictures: all" },
+                        { v: "with", label: "Pictures: with only" },
+                        { v: "without", label: "Pictures: without only" },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.v || "all"}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={pictureFilter === opt.v}
+                        onClick={() => {
+                          setCatalogMenuOpen(null);
+                          setPictureFilter(opt.v);
+                        }}
+                        className={`block w-full px-3 py-3 text-left font-mono text-xs hover:bg-[color-mix(in_srgb,var(--wms-muted)_18%,var(--wms-surface-elevated))] ${
+                          pictureFilter === opt.v ? "font-semibold text-[var(--wms-accent)]" : "text-[var(--wms-fg)]"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={syncBusy || !canTriggerLightspeedSync}
+                      onClick={() => {
+                        setCatalogMenuOpen(null);
+                        setSyncPreviewOpen(true);
+                      }}
+                      className="block w-full px-3 py-3 text-left font-mono text-xs font-medium text-[var(--wms-accent)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_10%,var(--wms-surface-elevated))] disabled:opacity-50"
+                    >
+                      {syncBusy ? "Syncing…" : "Sync Lightspeed"}
+                    </button>
+                    <Link
+                      href="/integrations/sync"
+                      role="menuitem"
+                      onClick={() => setCatalogMenuOpen(null)}
+                      className="block w-full px-3 py-3 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                    >
+                      Lightspeed sync workspace
+                    </Link>
+                  </div>
                 </div>
               ) : null}
             </div>
           </div>
+
+          <p className="mt-2 font-mono text-xs text-[var(--wms-muted)] md:hidden">
+            {showArchived
+              ? "Archived items only — tap the toggle to return to active items."
+              : "Active items shown. Search always includes archived items."}
+          </p>
 
           {syncMsg ? (
             <p className="font-mono text-xs text-[var(--wms-muted)]" role="status">
@@ -722,7 +800,7 @@ export function CatalogWorkspace({
             </p>
           ) : null}
           {!canTriggerLightspeedSync ? (
-            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+            <p className="font-mono text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]">
               Full sync API may require admin.{" "}
               <Link href="/integrations/sync" className="text-teal-500 hover:underline">
                 Lightspeed sync
@@ -739,7 +817,7 @@ export function CatalogWorkspace({
 
       {showCatalogEmpty ? (
         <div className="rounded-xl border border-[var(--wms-border)]/90 bg-gradient-to-b from-[var(--wms-surface)] to-[var(--wms-surface-elevated)] px-8 py-16 text-center">
-          <p className="font-mono text-[0.65rem] uppercase tracking-[0.25em] text-teal-500/80">
+          <p className="font-mono text-[0.65rem] max-md:text-xs uppercase tracking-[0.25em] text-teal-500/80">
             Lightspeed catalog
           </p>
           <h2 className="mt-3 text-lg font-semibold tracking-tight text-[var(--wms-fg)]">
@@ -768,12 +846,14 @@ export function CatalogWorkspace({
         </div>
       ) : (
         <>
-          <div className="relative">
+          <div className="relative max-md:hidden">
             <style>{`
-              .wms-catalog-scroll { scrollbar-width: none; }
-              .wms-catalog-scroll::-webkit-scrollbar { display: none; }
+              @media (min-width: 768px) {
+                .wms-catalog-scroll { scrollbar-width: none; }
+                .wms-catalog-scroll::-webkit-scrollbar { display: none; }
+              }
             `}</style>
-            <div ref={scrollRef} className="wms-catalog-scroll overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" style={{ maxHeight: "calc(100vh - 200px)" }}>
+            <div ref={scrollRef} className="wms-catalog-scroll max-h-[calc(100vh-200px)] max-md:max-h-[calc(100dvh-200px)] max-md:overscroll-contain overflow-auto rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]">
             <table
               ref={tableRef}
               className="w-full min-w-[1200px] border-collapse text-left"
@@ -1026,6 +1106,87 @@ export function CatalogWorkspace({
             </div>
             <ThickScrollbars scrollRef={scrollRef} />
           </div>
+          {/* Mobile card list (phones only) — the wide table above is hidden below md. */}
+          <div className="md:hidden">
+            {isLoading ? (
+              <p className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-10 text-center font-mono text-sm text-[var(--wms-muted)]">
+                Loading catalog…
+              </p>
+            ) : showNoMatches ? (
+              <p className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 py-10 text-center font-mono text-sm text-[var(--wms-muted)]">
+                No rows match your search.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {rows.map((r) => {
+                  const isArchived = r.archived || r.matrix_archived;
+                  return (
+                    <li key={r.custom_sku_id}>
+                      <button
+                        type="button"
+                        onClick={() => setDetailsRow(r)}
+                        title={isArchived ? "Archived in Lightspeed" : "View item details"}
+                        className={`flex min-h-11 w-full items-center gap-3 rounded-lg border border-[var(--wms-border)] p-3 text-left active:opacity-80 ${
+                          isArchived ? "bg-amber-500/15" : "bg-[var(--wms-surface-elevated)]"
+                        }`}
+                      >
+                        {r.shopify_image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={r.shopify_image_url}
+                            alt=""
+                            loading="lazy"
+                            className="h-12 w-12 shrink-0 rounded border border-[var(--wms-border)]/60 object-cover"
+                          />
+                        ) : (
+                          <span
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-[var(--wms-border)]/60 text-[var(--wms-border)]"
+                            aria-hidden
+                          >
+                            <ImageIcon className="h-6 w-6" />
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-mono text-sm font-semibold text-[var(--wms-accent)]">
+                            {r.sku}
+                          </span>
+                          <span
+                            className={`block truncate font-mono text-xs ${
+                              isArchived
+                                ? "italic text-amber-700 dark:text-amber-300"
+                                : "text-[var(--wms-fg)]"
+                            }`}
+                          >
+                            {r.name}
+                          </span>
+                          <span className="block truncate font-mono text-xs text-[var(--wms-muted)]">
+                            {[r.color?.trim(), r.size?.trim()].filter(Boolean).join(" · ") || "—"}
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 flex-col items-end gap-1.5">
+                          <span className="font-mono text-sm tabular-nums text-[var(--wms-fg)]">
+                            {r.active_epc_count}
+                          </span>
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{
+                              backgroundColor: r.shopify_linked
+                                ? "var(--wms-accent)"
+                                : "var(--wms-muted)",
+                              opacity: r.shopify_linked ? 1 : 0.45,
+                            }}
+                            title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                            aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                            role="img"
+                          />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
           {pagination}
         </>
       )}
@@ -1038,7 +1199,7 @@ export function CatalogWorkspace({
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={() => setNewItemOpen(false)}
           />
-          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
+          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4 max-md:max-h-dvh max-md:overscroll-contain">
             <div className="my-4 w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
               <h3 className="text-sm font-semibold text-[var(--wms-fg)]">New catalog item</h3>
               <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
@@ -1051,7 +1212,7 @@ export function CatalogWorkspace({
                   <input
                     value={manualMatrixUpc}
                     onChange={(e) => setManualMatrixUpc(e.target.value)}
-                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                   />
                 </label>
                 <label className="grid gap-1">
@@ -1059,7 +1220,7 @@ export function CatalogWorkspace({
                   <input
                     value={manualDesc}
                     onChange={(e) => setManualDesc(e.target.value)}
-                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                   />
                 </label>
                 <label className="grid gap-1">
@@ -1067,7 +1228,7 @@ export function CatalogWorkspace({
                   <input
                     value={manualSku}
                     onChange={(e) => setManualSku(e.target.value)}
-                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                   />
                 </label>
                 <label className="grid gap-1">
@@ -1075,16 +1236,16 @@ export function CatalogWorkspace({
                   <input
                     value={manualVariantUpc}
                     onChange={(e) => setManualVariantUpc(e.target.value)}
-                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                   />
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                   <label className="grid gap-1">
                     <span className="text-[var(--wms-muted)]">Vendor</span>
                     <input
                       value={manualVendor}
                       onChange={(e) => setManualVendor(e.target.value)}
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                     />
                   </label>
                   <label className="grid gap-1">
@@ -1092,18 +1253,19 @@ export function CatalogWorkspace({
                     <input
                       value={manualRetail}
                       onChange={(e) => setManualRetail(e.target.value)}
+                      inputMode="decimal"
                       placeholder="29.99"
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                     />
                   </label>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                   <label className="grid gap-1">
                     <span className="text-[var(--wms-muted)]">Color</span>
                     <input
                       value={manualColor}
                       onChange={(e) => setManualColor(e.target.value)}
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                     />
                   </label>
                   <label className="grid gap-1">
@@ -1111,7 +1273,7 @@ export function CatalogWorkspace({
                     <input
                       value={manualSize}
                       onChange={(e) => setManualSize(e.target.value)}
-                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)]"
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 text-[var(--wms-fg)] max-md:text-base"
                     />
                   </label>
                 </div>
@@ -1123,7 +1285,7 @@ export function CatalogWorkspace({
                 <button
                   type="button"
                   onClick={() => setNewItemOpen(false)}
-                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11"
                 >
                   Cancel
                 </button>
@@ -1136,7 +1298,7 @@ export function CatalogWorkspace({
                     !manualSku.trim()
                   }
                   onClick={() => void submitManualCatalogLine()}
-                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
+                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
                 >
                   {manualBusy ? "Creating…" : "Create"}
                 </button>
@@ -1154,7 +1316,7 @@ export function CatalogWorkspace({
             className="fixed inset-0 z-[60] bg-black/70"
             onClick={() => setImportOpen(false)}
           />
-          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4">
+          <div className="fixed inset-0 z-[70] flex max-h-screen items-center justify-center overflow-y-auto p-4 max-md:max-h-dvh max-md:overscroll-contain">
             <div className="my-4 w-full max-w-2xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
               <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Import catalog (CSV)</h3>
               <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
@@ -1180,7 +1342,7 @@ export function CatalogWorkspace({
                 onChange={(e) => setImportCsvText(e.target.value)}
                 placeholder="Or paste CSV here…"
                 rows={10}
-                className="mt-3 w-full resize-y rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-[0.65rem] text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
+                className="mt-3 w-full resize-y rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-[0.65rem] max-md:text-base text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
               />
               {importErr ? (
                 <p className="mt-2 font-mono text-xs text-red-400/90">{importErr}</p>
@@ -1192,7 +1354,7 @@ export function CatalogWorkspace({
                 <button
                   type="button"
                   onClick={() => setImportOpen(false)}
-                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded-md border border-[var(--wms-border)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11"
                 >
                   Close
                 </button>
@@ -1200,7 +1362,7 @@ export function CatalogWorkspace({
                   type="button"
                   disabled={importBusy || !importCsvText.trim()}
                   onClick={() => void runCatalogCsvImport()}
-                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40"
+                  className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90 disabled:opacity-40 max-md:min-h-11"
                 >
                   {importBusy ? "Importing…" : "Run import"}
                 </button>

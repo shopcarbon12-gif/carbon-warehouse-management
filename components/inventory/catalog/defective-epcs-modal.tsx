@@ -344,8 +344,8 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+        <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-400" />
@@ -361,7 +361,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -377,26 +377,26 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                   if (el) el.indeterminate = !allChecked && someChecked;
                 }}
                 onChange={toggleAll}
-                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
               />
               Select all
             </label>
             <span className="ml-2 font-mono text-xs text-[var(--wms-muted)]">
               {selected.size > 0 ? `${selected.size} selected` : " "}
             </span>
-            <div className="relative flex items-center">
+            <div className="relative flex items-center max-md:w-full">
               <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-[var(--wms-muted)]" />
               <input
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search EPC, system ID, device, status…"
-                className="w-64 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] py-1.5 pl-7 pr-2 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none"
+                className="w-64 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] py-1.5 pl-7 pr-2 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none max-md:w-full max-md:text-base"
                 aria-label="Search defective EPCs"
               />
             </div>
             {search ? (
-              <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]">
+              <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
                 {displayRows.length} of {rows.length} shown
               </span>
             ) : null}
@@ -404,7 +404,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
               <button
                 type="button"
                 onClick={() => void mutate()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11"
                 title="Refresh"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -414,7 +414,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 disabled={selected.size === 0}
                 onClick={handleExportCsv}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
               >
                 <Download className="h-3.5 w-3.5" />
                 Export CSV
@@ -423,7 +423,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 disabled={selected.size === 0 || busy}
                 onClick={() => void handleSendToHandheld()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-accent)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-[var(--wms-accent)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
                 title="Push these EPCs to every handheld at your active location (Cloud + Geiger screen)"
               >
                 <Send className="h-3.5 w-3.5" />
@@ -433,7 +433,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 disabled={selected.size === 0 || busy}
                 onClick={() => void handleDismiss()}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-amber-300 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-amber-300 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
                 title="Hide from this list (does not change status)"
               >
                 <EyeOff className="h-3.5 w-3.5" />
@@ -442,7 +442,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto max-md:overscroll-contain">
             {error ? (
               <div className="px-5 py-8 text-center font-mono text-sm text-red-400">
                 Failed to load defective EPCs.
@@ -460,9 +460,56 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                 No matches for &ldquo;{search}&rdquo;.
               </div>
             ) : (
+              <>
+              {/* Mobile card list (<md) — same rows/selection as the table below. */}
+              <ul className="divide-y divide-[var(--wms-border)]/40 font-mono md:hidden">
+                {displayRows.map((r) => {
+                  const checked = selected.has(r.epc);
+                  const age = ageDaysFrom(r.first_scanned_at);
+                  return (
+                    <li
+                      key={r.epc}
+                      className={`flex items-start gap-3 px-4 py-3 ${
+                        checked ? "bg-[color-mix(in_srgb,var(--wms-accent)_6%,transparent)]" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleOne(r.epc)}
+                        className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                        aria-label={`Select ${r.epc}`}
+                      />
+                      <div className="min-w-0 flex-1 text-xs">
+                        <div className="break-all font-semibold text-teal-400/90">{r.epc}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.7rem] uppercase tracking-wide text-red-300">
+                            {r.status_label}
+                          </span>
+                          {r.decode_reason ? (
+                            <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[0.7rem] uppercase tracking-wide text-amber-300">
+                              {r.decode_reason}
+                            </span>
+                          ) : (
+                            <span className="text-[var(--wms-fg)]">{r.system_id_padded}</span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-[var(--wms-muted)]">
+                          Last seen {formatDate(r.last_seen_at)}
+                          {age === null ? "" : ` · ${age}d old`}
+                        </div>
+                        <div className="mt-0.5 text-[var(--wms-muted)]">
+                          {sourceLabel(r.source)}
+                          {r.source_device_label ? ` · ${r.source_device_label}` : ""}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
               <table
                 ref={tableRef}
-                className="w-full min-w-[1100px] border-collapse font-mono text-xs"
+                className="w-full min-w-[1100px] border-collapse font-mono text-xs max-md:hidden"
                 style={{ tableLayout: pickTableLayout(colWidths) }}
               >
                 <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
@@ -573,6 +620,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                   })}
                 </tbody>
               </table>
+              </>
             )}
           </div>
 

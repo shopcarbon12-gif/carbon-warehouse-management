@@ -501,11 +501,11 @@ export function LiveScanWidget() {
             Live Scan
           </span>
           {state === "paused" ? (
-            <span className="rounded border border-amber-400/60 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300">
+            <span className="rounded border border-amber-400/60 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-amber-300 max-md:text-[0.7rem]">
               paused
             </span>
           ) : state === "stopped" ? (
-            <span className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <span className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 font-mono text-[0.55rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-[0.7rem]">
               stopped
             </span>
           ) : null}
@@ -523,7 +523,7 @@ export function LiveScanWidget() {
             </span>
           ) : null}
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 max-sm:ml-0 max-sm:w-full max-sm:justify-end">
           {state !== "running" ? (
             <button
               type="button"
@@ -600,7 +600,7 @@ export function LiveScanWidget() {
                   >
                     {a.reader_name}
                   </div>
-                  <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)]">
+                  <div className="truncate font-mono text-[0.55rem] text-[var(--wms-muted)] max-md:text-[0.65rem]">
                     {off ? "OFF · " : ""}
                     ant #{a.antenna_number}
                     {a.network_address ? ` · ${a.network_address}` : ""}

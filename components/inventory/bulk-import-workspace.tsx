@@ -494,7 +494,7 @@ export function BulkImportWorkspace() {
           onClick={() => void onScanToggle()}
           disabled={busy || selectedReaders.size === 0}
           className={
-            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 " +
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:w-full max-md:justify-center " +
             (scanning
               ? "border-red-400/50 bg-red-500/15 text-red-300 hover:bg-red-500/25"
               : "border-emerald-400/50 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25")
@@ -517,12 +517,12 @@ export function BulkImportWorkspace() {
           type="button"
           onClick={onClearList}
           disabled={busy || groups.size === 0}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-sm text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-sm text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:w-full max-md:justify-center"
         >
           Clear list
         </button>
 
-        <div className="flex min-w-[260px] flex-1 items-center gap-2">
+        <div className="flex min-w-[260px] flex-1 items-center gap-2 max-md:w-full">
           <Radio className="h-3.5 w-3.5 text-[var(--wms-muted)]" />
           <ReaderPicker
             selected={selectedReaders}
@@ -535,7 +535,7 @@ export function BulkImportWorkspace() {
           type="button"
           onClick={() => void onAddToInventory()}
           disabled={busy || selectedEpcs.size === 0}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-3 py-1.5 font-mono text-sm font-semibold text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/10 px-3 py-1.5 font-mono text-sm font-semibold text-[var(--wms-accent)] hover:bg-[var(--wms-accent)]/20 disabled:cursor-not-allowed disabled:opacity-50 max-md:min-h-11 max-md:w-full max-md:justify-center"
         >
           <PackagePlus className="h-3.5 w-3.5" />
           Add to inventory ({selectedEpcs.size})
@@ -555,8 +555,8 @@ export function BulkImportWorkspace() {
 
       {/* Table */}
       <div className="overflow-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[1100px] border-collapse font-mono text-xs">
-          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
+        <table className="w-full min-w-[1100px] max-md:min-w-[560px] border-collapse font-mono text-xs">
+          <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs">
             <tr>
               <th className="px-3 py-2 text-left">
                 <input
@@ -578,27 +578,33 @@ export function BulkImportWorkspace() {
                       setSelectedEpcs(allEpcs);
                     }
                   }}
-                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                  className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                 />
               </th>
               {(
                 [
                   { label: "Custom SKU", key: "sku" as const },
-                  { label: "UPC", key: "upc" as const },
+                  { label: "UPC", key: "upc" as const, hideMobile: true },
                   { label: "Item Name", key: "name" as const },
-                  { label: "Color", key: "color" as const },
-                  { label: "Size", key: "size" as const },
+                  { label: "Color", key: "color" as const, hideMobile: true },
+                  { label: "Size", key: "size" as const, hideMobile: true },
                   { label: "Qty", key: "qty" as const },
                 ] as const
               ).map((c) => {
                 const active = sortKey === c.key;
                 return (
-                  <th key={c.key} className="px-3 py-2 text-left">
+                  <th
+                    key={c.key}
+                    className={
+                      "px-3 py-2 text-left" +
+                      ("hideMobile" in c && c.hideMobile ? " max-md:hidden" : "")
+                    }
+                  >
                     <button
                       type="button"
                       onClick={() => toggleSort(c.key)}
                       className={
-                        "inline-flex items-center gap-1 select-none hover:text-[var(--wms-fg)] " +
+                        "inline-flex items-center gap-1 select-none hover:text-[var(--wms-fg)] max-md:-my-2 max-md:py-2 " +
                         (active ? "text-[var(--wms-accent)]" : "")
                       }
                       title={`Sort by ${c.label}`}
@@ -647,16 +653,16 @@ export function BulkImportWorkspace() {
                         type="checkbox"
                         checked={isSkuChecked}
                         onChange={() => toggleSkuCheck(g.custom_sku_id)}
-                        className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)]"
+                        className="h-4 w-4 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                       />
                     </td>
                     <td className="px-3 py-2 font-semibold text-teal-400/90">{g.sku}</td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{g.upc ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{g.upc ?? "—"}</td>
                     <td className="px-3 py-2 text-[var(--wms-fg)]" title={g.name}>
                       {g.name}
                     </td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{g.color ?? "—"}</td>
-                    <td className="px-3 py-2 text-[var(--wms-muted)]">{g.size ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{g.color ?? "—"}</td>
+                    <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{g.size ?? "—"}</td>
                     <td className="px-3 py-2 font-mono text-[var(--wms-fg)] tabular-nums">
                       {g.epcs.size}
                     </td>
@@ -664,7 +670,7 @@ export function BulkImportWorkspace() {
                       <button
                         type="button"
                         onClick={() => setModalSku(g.custom_sku_id)}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+                        className="inline-flex items-center gap-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)] max-md:min-h-11 max-md:px-3 max-md:text-xs"
                         title={`Show ${g.epcs.size} EPC${g.epcs.size === 1 ? "" : "s"}`}
                       >
                         <Tag className="h-3 w-3" />
@@ -679,7 +685,7 @@ export function BulkImportWorkspace() {
         </table>
       </div>
 
-      <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+      <div className="font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs">
         Filters in place: must pass the Carbon Jeans EPC formula, must NOT
         already exist in items at this location (any status), must resolve to
         a catalog SKU. Committing flips the EPC&apos;s status to in-stock
@@ -734,7 +740,7 @@ function EpcListModal({
         aria-hidden="true"
       />
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-        <div className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+        <div className="flex max-h-[85vh] max-md:max-h-[85dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-3">
             <div>
               <h2 className="font-mono text-sm font-semibold uppercase tracking-wider text-[var(--wms-fg)]">
@@ -751,7 +757,7 @@ function EpcListModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -774,7 +780,7 @@ function EpcListModal({
                     type="checkbox"
                     checked={checked}
                     onChange={() => onToggleEpc(epc)}
-                    className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                   />
                   <Tag className="h-3.5 w-3.5 shrink-0 text-[var(--wms-accent)]" />
                   <span className="flex-1 truncate font-mono text-xs font-semibold text-teal-400/90">
@@ -783,7 +789,7 @@ function EpcListModal({
                   <button
                     type="button"
                     onClick={() => onRemoveEpc(epc)}
-                    className="inline-flex items-center gap-1 rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-red-300 hover:bg-red-400/15"
+                    className="inline-flex items-center gap-1 rounded border border-red-400/30 bg-red-400/5 px-1.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide text-red-300 hover:bg-red-400/15 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:text-xs"
                     title="Remove from list (will be suppressed from re-scans this session)"
                   >
                     <Trash2 className="h-3 w-3" />

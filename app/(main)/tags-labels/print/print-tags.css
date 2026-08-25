@@ -137,6 +137,11 @@
 /* right column */
 .pt-root .label-stage { display: grid; place-items: center; padding: 8px; border-radius: 12px; background: repeating-conic-gradient(color-mix(in srgb, var(--wms-muted) 9%, transparent) 0% 25%, transparent 0% 50%) 50%/18px 18px; }
 .pt-root canvas { border-radius: 8px; border: 1px solid var(--wms-border); background: #fff; box-shadow: 0 14px 36px -16px #000; max-width: 100%; }
+/* Below md: keep the aspect ratio when max-width clamps the canvas width
+   (the height attribute would otherwise stay fixed and distort the preview). */
+@media (max-width: 767px) {
+  .pt-root canvas { height: auto; }
+}
 .pt-root .dims { margin-top: 8px; text-align: center; font-family: "JetBrains Mono", monospace; font-size: 14px; color: var(--wms-muted); }
 
 /* status stepper */

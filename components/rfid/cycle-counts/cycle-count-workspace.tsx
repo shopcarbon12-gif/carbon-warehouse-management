@@ -419,24 +419,25 @@ function SessionTable({
     label: string;
     align?: "right" | "center";
     noResize?: boolean;
+    hideMobile?: boolean;
   };
   const cols: ColCfg[] = isHistory
     ? [
         { label: "#" },
         { label: "Status" },
-        { label: "Expected", align: "right" },
+        { label: "Expected", align: "right", hideMobile: true },
         { label: "Scanned", align: "right" },
-        { label: "Started" },
-        { label: "By" },
+        { label: "Started", hideMobile: true },
+        { label: "By", hideMobile: true },
         { label: "", noResize: true },
       ]
     : [
         { label: "#" },
         { label: "Bin" },
         { label: "Status" },
-        { label: "Expected", align: "right" },
+        { label: "Expected", align: "right", hideMobile: true },
         { label: "Scanned", align: "right" },
-        { label: "Started" },
+        { label: "Started", hideMobile: true },
         { label: "", noResize: true },
       ];
 
@@ -444,10 +445,10 @@ function SessionTable({
     <DataTableContainer maxHeight="min(60vh, 560px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[800px] border-collapse text-left"
+        className="w-full min-w-[800px] border-collapse text-left max-md:min-w-0"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
           <tr>
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -467,7 +468,7 @@ function SessionTable({
                       : c.align === "center"
                         ? "text-center"
                         : ""
-                  }`}
+                  }${c.hideMobile ? " max-md:hidden" : ""}`}
                 >
                   <span>{c.label}</span>
                   {c.noResize ? null : (
@@ -496,14 +497,14 @@ function SessionTable({
               <td className="overflow-hidden px-3 py-2">
                 <StatusPill status={s.status} />
               </td>
-              <td className="overflow-hidden px-3 py-2 text-right tabular-nums">{s.expected_count}</td>
+              <td className="overflow-hidden px-3 py-2 text-right tabular-nums max-md:hidden">{s.expected_count}</td>
               <td className="overflow-hidden px-3 py-2 text-right tabular-nums">{s.scanned_count}</td>
-              <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}>
+              <td className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)] max-md:hidden`}>
                 {new Date(s.started_at).toLocaleString()}
               </td>
               {isHistory ? (
                 <td
-                  className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)]`}
+                  className={`${cellTruncate} px-3 py-2 text-[var(--wms-muted)] max-md:hidden`}
                   title={s.started_by_email ?? ""}
                 >
                   {shortName(s.started_by_first, s.started_by_last, s.started_by_email)}
@@ -513,7 +514,7 @@ function SessionTable({
                 <button
                   type="button"
                   onClick={() => onOpen(s.id)}
-                  className="rounded-md border border-[var(--wms-border)] px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                  className="rounded-md border border-[var(--wms-border)] px-3 py-1 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:py-2 max-md:text-[0.7rem]"
                 >
                   {isHistory ? "View" : "Open"}
                 </button>
@@ -1159,7 +1160,7 @@ function ActiveSessionView({
               <button
                 type="button"
                 onClick={() => setSourceFilter({ kind: "all" })}
-                className="ml-auto rounded border border-[var(--wms-border)] px-2 py-0.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                className="ml-auto rounded border border-[var(--wms-border)] px-2 py-0.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:px-3 max-md:py-1.5"
               >
                 Clear filter
               </button>
@@ -1305,7 +1306,7 @@ function ActiveSessionView({
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide ${
+              className={`px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide max-md:py-2.5 max-md:text-[0.7rem] ${
                 tab === t
                   ? "bg-[var(--wms-accent)] text-[var(--wms-accent-fg)]"
                   : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
@@ -1336,7 +1337,7 @@ function ActiveSessionView({
                   key={s}
                   type="button"
                   onClick={() => setStateFilter(s)}
-                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide ${
+                  className={`rounded-full border px-2.5 py-0.5 font-mono text-[0.6rem] uppercase tracking-wide max-md:px-3 max-md:py-1.5 max-md:text-[0.7rem] ${
                     stateFilter === s
                       ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
                       : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"

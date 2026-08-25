@@ -161,30 +161,31 @@ export function BinEditorDrawer({
           <button
             type="button"
             onClick={() => !busy && onClose()}
-            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+            className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 max-md:overscroll-contain">
           <div className="space-y-3 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/30 p-4">
             <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
               Bin name / identifier
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
               />
             </label>
             <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
               Capacity limit (optional)
               <input
                 type="number"
+                inputMode="numeric"
                 min={0}
                 value={capacity}
                 onChange={(e) => setCapacity(e.target.value)}
-                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
               />
             </label>
             <label className="block font-mono text-xs font-medium uppercase tracking-wide text-[var(--wms-fg)]">
@@ -192,7 +193,7 @@ export function BinEditorDrawer({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as "active" | "inactive")}
-                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
+                className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -214,7 +215,7 @@ export function BinEditorDrawer({
               type="button"
               disabled={busy}
               onClick={() => void saveBin()}
-              className="wms-btn-primary w-full font-mono"
+              className="wms-btn-primary w-full font-mono max-md:min-h-11"
             >
               Save bin
             </button>
@@ -229,7 +230,7 @@ export function BinEditorDrawer({
                     : undefined
                 }
                 onClick={() => void deleteBin()}
-                className="wms-btn-danger w-full font-mono"
+                className="wms-btn-danger w-full font-mono max-md:min-h-11"
               >
                 Delete bin
               </button>

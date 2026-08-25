@@ -130,7 +130,7 @@ export function AntennaEditorModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-md rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-xl">
+      <div className="w-full max-w-md rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">
             {editing ? "Edit antenna" : "Add antenna"}
@@ -149,7 +149,7 @@ export function AntennaEditorModal({
         </p>
 
         <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <div>
               <label className="mb-1 block font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
                 Antenna #
@@ -262,4 +262,4 @@ export function AntennaEditorModal({
 }
 
 const inputCls =
-  "w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none";
+  "w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:py-2 max-md:text-base";

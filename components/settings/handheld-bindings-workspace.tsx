@@ -66,15 +66,15 @@ export function HandheldBindingsWorkspace() {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] dark:border-[var(--wms-border)]">
-      <table className="w-full min-w-[960px] text-left text-sm">
+      <table className="w-full min-w-[960px] text-left text-sm max-md:min-w-[560px]">
         <thead>
-          <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+          <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] max-md:text-xs">
             <th className="px-3 py-2">Location</th>
             <th className="px-3 py-2">Name</th>
             <th className="px-3 py-2">Android ID</th>
-            <th className="px-3 py-2">Network / MAC</th>
-            <th className="px-3 py-2">Serial</th>
-            <th className="px-3 py-2">OS / radio</th>
+            <th className="px-3 py-2 max-md:hidden">Network / MAC</th>
+            <th className="px-3 py-2 max-md:hidden">Serial</th>
+            <th className="px-3 py-2 max-md:hidden">OS / radio</th>
             <th className="px-3 py-2">Authorized</th>
             <th className="px-3 py-2 text-right"> </th>
           </tr>
@@ -92,13 +92,13 @@ export function HandheldBindingsWorkspace() {
                 <td className="px-3 py-2 font-mono text-xs">{d.location_code}</td>
                 <td className="px-3 py-2">{d.name}</td>
                 <td className="px-3 py-2 font-mono text-xs">{d.android_id ?? "—"}</td>
-                <td className="max-w-[140px] truncate px-3 py-2 font-mono text-xs" title={d.network_address ?? ""}>
+                <td className="max-w-[140px] truncate px-3 py-2 font-mono text-xs max-md:hidden" title={d.network_address ?? ""}>
                   {d.network_address ?? "—"}
                 </td>
-                <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs" title={readClientInfo(d.config)?.serialNumber ?? ""}>
+                <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs max-md:hidden" title={readClientInfo(d.config)?.serialNumber ?? ""}>
                   {readClientInfo(d.config)?.serialNumber ?? "—"}
                 </td>
-                <td className="max-w-[180px] truncate px-3 py-2 font-mono text-[0.65rem] leading-tight text-[var(--wms-muted)]" title="">
+                <td className="max-w-[180px] truncate px-3 py-2 font-mono text-[0.65rem] leading-tight text-[var(--wms-muted)] max-md:hidden" title="">
                   {(() => {
                     const c = readClientInfo(d.config);
                     if (!c) return "—";
@@ -112,7 +112,7 @@ export function HandheldBindingsWorkspace() {
                     type="button"
                     disabled={busy === d.id || !d.android_id}
                     onClick={() => void authorize(d.id)}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 font-mono text-xs text-white disabled:opacity-50"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 font-mono text-xs text-white disabled:opacity-50 max-md:min-h-11 max-md:px-4"
                   >
                     Authorize
                   </button>

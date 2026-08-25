@@ -535,3 +535,41 @@ html[data-theme="light"] main table thead th {
 html.dark main table thead th {
   color: color-mix(in srgb, var(--wms-fg) 92%, var(--wms-muted)) !important;
 }
+
+/*
+ * ── Mobile view (below md / 768px) ─────────────────────────────────────
+ * Desktop (≥768px) is intentionally untouched by everything in this block.
+ * Phones get the standard 16px type scale: the 19px root above was tuned
+ * for desktop tables and inflates every rem-based utility ~19%, which is
+ * exactly the space a 390px viewport cannot spare. XL mode stays
+ * relatively larger. The `main table` bumps above are likewise desktop
+ * ergonomics — phones get compact table type so wide tables fit more
+ * columns per pan. (See .claude/skills/mobile-view-guard/SKILL.md.)
+ *
+ * App z-index scale for reference (documented, not migrated):
+ *   shell header z-30 · drawer mask z-40 · drawer z-50 · sync floater
+ *   z-[120] · categories m3 chrome z-200..260 (drawer bumps z-280/290
+ *   there) · categories sheets z-400/410 · lightbox z-500.
+ */
+@media (max-width: 767px) {
+  html {
+    font-size: 1rem;
+  }
+
+  html.wms-text-xl {
+    font-size: 1.125rem;
+  }
+
+  main table {
+    font-size: 0.875rem !important;
+    line-height: 1.45 !important;
+  }
+
+  main table thead th {
+    font-size: 0.75rem !important;
+  }
+
+  main table tbody td {
+    font-size: 0.875rem !important;
+  }
+}

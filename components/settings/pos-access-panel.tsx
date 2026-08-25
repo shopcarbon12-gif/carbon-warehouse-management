@@ -255,7 +255,7 @@ function PosUsersTab() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-        <table className="w-full min-w-[760px] border-collapse text-left">
+        <table className="w-full min-w-[760px] border-collapse text-left max-md:min-w-[560px]">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
               <th className="w-10 px-2 py-3">
@@ -264,14 +264,14 @@ function PosUsersTab() {
                   aria-label="Select all POS users"
                   checked={Boolean(users?.length) && selectedIds.size === (users?.length ?? 0)}
                   onChange={() => toggleSelectAll()}
-                  className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+                  className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] max-md:h-5 max-md:w-5"
                 />
               </th>
               <th className="px-3 py-3">Name</th>
               <th className="px-3 py-3">Email</th>
               <th className="px-3 py-3">POS role</th>
-              <th className="px-3 py-3">PIN</th>
-              <th className="px-3 py-3">Active</th>
+              <th className="px-3 py-3 max-md:hidden">PIN</th>
+              <th className="px-3 py-3 max-md:hidden">Active</th>
               <th className="px-3 py-3">Locations</th>
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
@@ -298,7 +298,7 @@ function PosUsersTab() {
                       aria-label={`Select ${u.email}`}
                       checked={selectedIds.has(u.id)}
                       onChange={() => toggleSelect(u.id)}
-                      className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
+                      className="rounded border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] max-md:h-5 max-md:w-5"
                     />
                   </td>
                   <td className="px-3 py-2.5 text-[var(--wms-fg)]">
@@ -314,14 +314,14 @@ function PosUsersTab() {
                       </span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] max-md:hidden">
                     {u.has_pin ? (
                       <span className="text-emerald-500/85">●●●●</span>
                     ) : (
                       <span className="text-[var(--wms-muted)]">none</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="px-3 py-2.5 font-mono text-[0.65rem] max-md:hidden">
                     {u.is_active ? (
                       <span className="text-emerald-500/85">yes</span>
                     ) : (
@@ -337,7 +337,7 @@ function PosUsersTab() {
                     <button
                       type="button"
                       onClick={() => setEditing(u)}
-                      className="font-medium text-[var(--wms-accent)] hover:underline"
+                      className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
                     </button>
@@ -452,7 +452,7 @@ function PosManagerCreateModal({
               placeholder="store@shopcarbon.com"
             />
           </label>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <label className="block text-[var(--wms-muted)]">
               First name
               <input
@@ -600,7 +600,7 @@ function PosUserEditModal({
         <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Edit POS user</h3>
         <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">{user.email}</p>
         <div className="mt-4 space-y-3 font-mono text-xs">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <label className="block text-[var(--wms-muted)]">
               First name
               <input

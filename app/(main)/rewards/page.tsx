@@ -88,7 +88,7 @@ export default async function LoyaltyOverview() {
   const live = stats.settings?.live ?? false;
 
   return (
-    <main className="p-6 lg:p-8 max-w-6xl">
+    <main className="p-6 lg:p-8 max-w-6xl max-md:p-4">
       <header className="mb-6">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-semibold text-muted-foreground">
           <Star className="h-3.5 w-3.5" />

@@ -45,9 +45,15 @@ export function CompareRunner() {
         type="button"
         disabled={pending}
         onClick={() => void run()}
-        className="rounded-md bg-[var(--accent)] px-4 py-2 font-mono text-sm font-semibold text-[var(--background)] disabled:opacity-50"
+        className="rounded-md bg-[var(--accent)] px-4 py-2 font-mono text-sm font-semibold text-[var(--background)] disabled:opacity-50 max-md:py-3"
       >
-        {pending ? "Running…" : "Run compare (POST /api/compare/runs)"}
+        {pending ? (
+          "Running…"
+        ) : (
+          <>
+            Run compare<span className="max-md:hidden"> (POST /api/compare/runs)</span>
+          </>
+        )}
       </button>
       {msg ? (
         <p className="font-mono text-sm text-[var(--accent)]" role="status">

@@ -62,10 +62,10 @@ export function ExternalSystemsReportWorkspace() {
         onDateFromChange={setDateFrom}
         onDateToChange={setDateTo}
       />
-      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)]">
-        <table className="w-full min-w-[800px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] dark:border-[var(--wms-border)]">
+      <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] dark:border-[var(--wms-border)] max-md:max-h-[70dvh] max-md:overflow-y-auto">
+        <table className="w-full min-w-[800px] max-md:min-w-[480px] border-collapse text-left text-sm">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)]">
+            <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)] dark:border-[var(--wms-border)]">
               <th className="px-3 py-3">When</th>
               <th className="px-3 py-3">System</th>
               <th className="px-3 py-3">Direction</th>
@@ -95,7 +95,7 @@ export function ExternalSystemsReportWorkspace() {
                   <td className="px-3 py-2.5 font-mono text-xs">{row.system_name}</td>
                   <td className="px-3 py-2.5 font-mono text-xs">{row.direction}</td>
                   <td className="px-3 py-2.5 font-mono text-xs">{row.status}</td>
-                  <td className="max-w-md truncate px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <td className="max-w-md truncate px-3 py-2.5 font-mono text-[0.65rem] max-md:text-xs max-md:whitespace-normal max-md:break-words text-[var(--wms-muted)]">
                     {row.payload_summary ?? "—"}
                   </td>
                 </tr>

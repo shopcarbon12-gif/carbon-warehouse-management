@@ -114,15 +114,15 @@ export function DevicesWorkspace() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[960px] border-collapse text-left text-xs">
-          <thead>
+      <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)] max-md:max-h-[70dvh] max-md:overflow-y-auto">
+        <table className="w-full min-w-[960px] border-collapse text-left text-xs max-md:min-w-[560px]">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)]">
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] font-mono uppercase tracking-wide">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Type</th>
+              <th className="px-3 py-2 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Name</th>
+              <th className="px-3 py-2 max-md:hidden">Type</th>
               <th className="px-3 py-2">IP / MAC</th>
               <th className="px-3 py-2">Location</th>
-              <th className="px-3 py-2">Bin</th>
+              <th className="px-3 py-2 max-md:hidden">Bin</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2 w-24"> </th>
             </tr>
@@ -155,15 +155,15 @@ export function DevicesWorkspace() {
             ) : (
               filtered.map((d) => (
                 <tr key={d.id} className="hover:bg-[var(--wms-surface-elevated)]/50">
-                  <td className="px-3 py-2 text-[var(--wms-fg)]">{d.name}</td>
-                  <td className="px-3 py-2 text-[var(--wms-muted)]">{d.device_type.replace(/_/g, " ")}</td>
+                  <td className="px-3 py-2 text-[var(--wms-fg)] max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">{d.name}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{d.device_type.replace(/_/g, " ")}</td>
                   <td className="max-w-[200px] truncate px-3 py-2 text-[var(--wms-muted)]" title={d.network_address ?? ""}>
                     {d.network_address ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-teal-400/85">
                     {d.location_code} · {d.location_name}
                   </td>
-                  <td className="px-3 py-2 text-[var(--wms-muted)]">{d.bin_code ?? "—"}</td>
+                  <td className="px-3 py-2 text-[var(--wms-muted)] max-md:hidden">{d.bin_code ?? "—"}</td>
                   <td className="px-3 py-2">
                     <span
                       className={
@@ -174,21 +174,21 @@ export function DevicesWorkspace() {
                     </span>
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 max-md:gap-1.5">
                       <button
                         type="button"
                         onClick={() => {
                           setEditing(d);
                           setModalOpen(true);
                         }}
-                        className="rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                        className="rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5 max-md:text-[0.7rem]"
                       >
                         Edit
                       </button>
                       <button
                         type="button"
                         onClick={() => void remove(d)}
-                        className="rounded border border-red-300 p-1.5 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400/90 dark:hover:bg-red-950/35"
+                        className="rounded border border-red-300 p-1.5 text-red-700 hover:bg-red-50 dark:border-red-800/50 dark:text-red-400/90 dark:hover:bg-red-950/35 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                         aria-label="Remove device"
                       >
                         <Trash2 className="h-3.5 w-3.5" />

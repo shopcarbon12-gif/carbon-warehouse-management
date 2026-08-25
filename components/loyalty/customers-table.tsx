@@ -67,26 +67,28 @@ const addedBy = (first: string | null, last: string | null) => {
 
 export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
   const tableRef = useRef<HTMLTableElement>(null);
-  const cols: { label: string; align?: "right" }[] = [
+  // hideMobile: column is CSS-hidden below md (th + td in lockstep). The
+  // array order / useColResize indices are untouched.
+  const cols: { label: string; align?: "right"; hideMobile?: boolean }[] = [
     { label: "First name" },
     { label: "Last name" },
     { label: "Phone 1" },
-    { label: "Phone 2" },
+    { label: "Phone 2", hideMobile: true },
     { label: "Email 1" },
-    { label: "Email 2" },
+    { label: "Email 2", hideMobile: true },
     { label: "Sales", align: "right" },
     { label: "Points", align: "right" },
     { label: "Store credit", align: "right" },
-    { label: "Created" },
-    { label: "Created by" },
-    { label: "Location created" },
+    { label: "Created", hideMobile: true },
+    { label: "Created by", hideMobile: true },
+    { label: "Location created", hideMobile: true },
   ];
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, cols.length);
   return (
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[1300px] border-collapse text-sm"
+        className="w-full min-w-[1300px] border-collapse text-sm max-md:min-w-[560px]"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
         <thead className="sticky top-0 z-10 bg-muted text-xs font-bold uppercase tracking-wider">
@@ -97,7 +99,7 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
                 <th
                   key={c.label || `col-${i}`}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden whitespace-nowrap px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}`}
+                  className={`relative overflow-hidden whitespace-nowrap px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}${c.hideMobile ? " max-md:hidden" : ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -129,13 +131,13 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
                   <td className={`${cellTruncate} px-3 py-2`} title={r.phone ?? ""}>
                     {r.phone ?? DASH}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2`} title={r.phone_2 ?? ""}>
+                  <td className={`${cellTruncate} px-3 py-2 max-md:hidden`} title={r.phone_2 ?? ""}>
                     {r.phone_2 ?? DASH}
                   </td>
                   <td className={`${cellTruncate} px-3 py-2`} title={r.email ?? ""}>
                     {r.email ?? DASH}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2`} title={r.email_2 ?? ""}>
+                  <td className={`${cellTruncate} px-3 py-2 max-md:hidden`} title={r.email_2 ?? ""}>
                     {r.email_2 ?? DASH}
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
@@ -147,13 +149,13 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
                     {usd(r.store_credit_balance)}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2 text-muted-foreground`}>
+                  <td className={`${cellTruncate} px-3 py-2 text-muted-foreground max-md:hidden`}>
                     {fmtDate(r.created_at)}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2`}>
+                  <td className={`${cellTruncate} px-3 py-2 max-md:hidden`}>
                     {addedBy(r.created_by_first, r.created_by_last)}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2`} title={where}>
+                  <td className={`${cellTruncate} px-3 py-2 max-md:hidden`} title={where}>
                     {where}
                   </td>
                 </tr>

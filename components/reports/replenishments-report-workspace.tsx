@@ -84,11 +84,11 @@ function ReplenishmentsTable({
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 6);
-  const cols: { label: string; align?: "right" }[] = [
+  const cols: { label: string; align?: "right"; mobileCls?: string }[] = [
     { label: "When" },
     { label: "SKU" },
     { label: "Qty", align: "right" },
-    { label: "From bin" },
+    { label: "From bin", mobileCls: "max-md:hidden" },
     { label: "To bin" },
     { label: "Status" },
   ];
@@ -96,10 +96,10 @@ function ReplenishmentsTable({
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[720px] border-collapse text-left text-sm"
+        className="w-full min-w-[720px] max-md:min-w-[480px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
-        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
+        <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
           <tr className="border-b border-[var(--wms-border)]">
             {cols.map((c, i) => {
               const w = colWidths[i];
@@ -107,7 +107,7 @@ function ReplenishmentsTable({
                 <th
                   key={c.label}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""}`}
+                  className={`relative overflow-hidden px-3 py-3 ${c.align === "right" ? "text-right" : ""} ${c.mobileCls ?? ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -137,7 +137,7 @@ function ReplenishmentsTable({
                 </td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.sku}>{row.sku}</td>
                 <td className="overflow-hidden px-3 py-2.5 text-right font-mono text-xs tabular-nums">{row.qty}</td>
-                <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.from_bin}>{row.from_bin}</td>
+                <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 font-mono text-xs`} title={row.from_bin}>{row.from_bin}</td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.to_bin}>{row.to_bin}</td>
                 <td className={`${cellTruncate} px-3 py-2.5 font-mono text-xs`} title={row.status}>{row.status}</td>
               </tr>

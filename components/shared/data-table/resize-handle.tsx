@@ -20,7 +20,7 @@ export function ResizeHandle({
     <span
       onMouseDown={(e) => startDrag(colIdx, e)}
       onDoubleClick={() => autoFit(colIdx)}
-      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-[var(--wms-accent)]/30 active:bg-[var(--wms-accent)]/50"
+      className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none hover:bg-[var(--wms-accent)]/30 active:bg-[var(--wms-accent)]/50 max-md:hidden"
       title="Drag to resize · double-click to fit"
     />
   );

@@ -344,12 +344,12 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     type="button"
                     onClick={() => toggleExpand(n.nodeKey)}
                     title={isOpen ? "Collapse" : "Expand"}
-                    className="w-4 shrink-0 font-mono text-[0.9rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                    className="w-4 shrink-0 font-mono text-[0.9rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:w-11 max-md:items-center max-md:justify-center"
                   >
                     {isOpen ? "▾" : "▸"}
                   </button>
                 ) : (
-                  <span className="inline-block w-4 shrink-0" />
+                  <span className="inline-block w-4 shrink-0 max-md:w-11" />
                 )}
                 {assignable ? (
                   <button
@@ -359,8 +359,8 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     title={checked ? "Assigned — click to unassign on next push" : "Click to assign on next push"}
                     className={
                       checked
-                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.82rem] font-semibold text-teal-200 shadow-[0_0_10px_rgba(45,212,191,0.55)] transition disabled:opacity-50"
-                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-0.5 font-mono text-[0.82rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2 py-0.5 font-mono text-[0.82rem] font-semibold text-teal-200 shadow-[0_0_10px_rgba(45,212,191,0.55)] transition disabled:opacity-50 max-md:py-2"
+                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-0.5 font-mono text-[0.82rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:py-2"
                     }
                   >
                     {n.label}
@@ -433,8 +433,8 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                   }
                   className={
                     stillAssigned
-                      ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.84rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50"
-                      : "rounded-md border border-red-400/60 bg-red-500/10 px-2.5 py-1 font-mono text-[0.84rem] text-red-200 line-through transition disabled:opacity-50"
+                      ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.84rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50 max-md:py-2"
+                      : "rounded-md border border-red-400/60 bg-red-500/10 px-2.5 py-1 font-mono text-[0.84rem] text-red-200 line-through transition disabled:opacity-50 max-md:py-2"
                   }
                 >
                   {c.title}
@@ -463,8 +463,8 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                     title={selected ? "Will be added on next push" : "Click to add on next push"}
                     className={
                       selected
-                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.68rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50"
-                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2.5 py-1 font-mono text-[0.68rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                        ? "rounded-md border border-teal-400 bg-teal-500/15 px-2.5 py-1 font-mono text-[0.68rem] font-semibold text-teal-100 shadow-[0_0_10px_rgba(45,212,191,0.5)] transition disabled:opacity-50 max-md:py-2"
+                        : "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2.5 py-1 font-mono text-[0.68rem] text-[var(--wms-fg)] transition hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:py-2"
                     }
                   >
                     {selected ? "✓ " : "+ "}
@@ -502,13 +502,13 @@ export function CollectionsTab({ upc, shopifyProductId, canManage, onCollections
                 Other collections (not in menu tree)
               </span>
               {tree.directHandles.map((h) => (
-                <label key={h} className="flex items-center gap-2 py-0.5">
+                <label key={h} className="flex items-center gap-2 py-0.5 max-md:py-2">
                   <input
                     type="checkbox"
                     checked={selDirect.has(h)}
                     disabled={!canManage || busy !== null || !tree.handleToId.has(h)}
                     onChange={() => toggleDirect(h)}
-                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)]"
+                    className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                   />
                   <span className="font-mono text-[0.82rem] text-[var(--wms-fg)]">{tree.handleToTitle.get(h) ?? h}</span>
                   {data.row.currentDirectCollections.includes(h) ? (

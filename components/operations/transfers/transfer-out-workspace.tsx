@@ -554,7 +554,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
 
       {/* Scan controls */}
       <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)]/80 p-4">
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3 max-md:flex-col max-md:items-stretch">
           <button
             type="button"
             disabled={isLocked}
@@ -600,13 +600,13 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
               onChange={(e) => setSearchQ(e.target.value)}
               onFocus={() => setSearchOpen(true)}
               placeholder="Non-RFID search — name / SKU / UPC / vendor / color / size / system ID"
-              className="flex-1 bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70 disabled:opacity-40"
+              className="flex-1 bg-transparent font-mono text-xs text-[var(--wms-fg)] outline-none placeholder:text-[var(--wms-muted)]/70 disabled:opacity-40 max-md:text-base"
             />
             {searchQ ? (
               <button
                 type="button"
                 onClick={() => setSearchQ("")}
-                className="rounded p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)]"
+                className="rounded p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                 aria-label="Clear"
               >
                 <Trash2 className="h-3 w-3" />
@@ -630,17 +630,17 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                     <span className="flex items-center gap-1.5 truncate font-semibold">
                       {r.name ?? r.sku}
                       {r.archived ? (
-                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider text-amber-300">
+                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.5rem] font-bold uppercase tracking-wider text-amber-300 max-md:text-[0.6rem]">
                           Archived
                         </span>
                       ) : null}
                     </span>
-                    <span className="truncate text-[0.6rem] text-[var(--wms-muted)]">
+                    <span className="truncate text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
                       SKU {r.sku} · {r.color?.trim() || "—"} · {r.size?.trim() || "—"} ·{" "}
                       {r.upc ?? "no upc"}
                     </span>
                   </div>
-                  <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-teal-300">
+                  <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider text-teal-300 max-md:text-[0.65rem]">
                     + Manual
                   </span>
                 </button>
@@ -649,7 +649,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
           ) : null}
         </div>
 
-        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        <p className="mt-3 font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
           Start scan acts as a pause/resume gate. Clear staged is the only wipe. Non-RFID search
           adds untagged units; source qty can go negative until inventory is reconciled.
         </p>
@@ -662,8 +662,8 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
           {totalUnits} unit{totalUnits === 1 ? "" : "s"}
         </div>
         <div className="max-h-[min(50vh,400px)] overflow-auto">
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <table className="w-full border-collapse text-left text-xs max-md:min-w-[860px]">
+            <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-[0.7rem]">
               <tr className="border-b border-[var(--wms-border)]">
                 <th className="px-3 py-2">System ID</th>
                 <th className="px-3 py-2">Item name</th>
@@ -677,7 +677,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
+            <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)] max-md:text-sm">
               {stagedList.map((g) => (
                 <tr key={g.custom_sku_id} className="hover:bg-[var(--wms-surface-elevated)]/50">
                   <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5 tabular-nums text-teal-400/85">
@@ -709,7 +709,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                       <button
                         type="button"
                         onClick={() => setEpcsModalSku(g)}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--wms-accent)] hover:opacity-90"
+                        className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--wms-accent)] hover:opacity-90 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:text-xs"
                         title="View EPCs"
                       >
                         <Radio className="h-3 w-3" />
@@ -721,7 +721,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                           type="button"
                           onClick={() => editManualQty(g.custom_sku_id, g.qty - 1)}
                           disabled={g.qty <= 1}
-                          className="rounded border border-[var(--wms-border)] p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-30"
+                          className="rounded border border-[var(--wms-border)] p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-30 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                           aria-label="Decrement"
                         >
                           <Minus className="h-3 w-3" />
@@ -735,12 +735,12 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                             const n = Math.max(1, Number(e.target.value) || 1);
                             editManualQty(g.custom_sku_id, n);
                           }}
-                          className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 text-right font-mono text-xs text-[var(--wms-fg)]"
+                          className="w-14 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 text-right font-mono text-xs text-[var(--wms-fg)] max-md:w-16 max-md:py-2 max-md:text-base"
                         />
                         <button
                           type="button"
                           onClick={() => editManualQty(g.custom_sku_id, g.qty + 1)}
-                          className="rounded border border-[var(--wms-border)] p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                          className="rounded border border-[var(--wms-border)] p-0.5 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                           aria-label="Increment"
                         >
                           <Plus className="h-3 w-3" />
@@ -750,7 +750,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                   </td>
                   <td className="overflow-hidden text-ellipsis whitespace-nowrap px-3 py-1.5">
                     <span
-                      className={`inline-block rounded px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider ${
+                      className={`inline-block rounded px-1.5 py-0.5 text-[0.55rem] uppercase tracking-wider max-md:text-[0.65rem] ${
                         g.type === "rfid"
                           ? "bg-teal-500/15 text-teal-300"
                           : "bg-amber-500/15 text-amber-300"
@@ -763,7 +763,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                     <button
                       type="button"
                       onClick={() => removeRow(g.custom_sku_id)}
-                      className="rounded p-1 text-[var(--wms-muted)] hover:bg-red-500/10 hover:text-red-300"
+                      className="rounded p-1 text-[var(--wms-muted)] hover:bg-red-500/10 hover:text-red-300 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                       aria-label="Remove"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -793,13 +793,16 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
           committing
         }
         onClick={() => void doCommit()}
-        className="rounded-lg border border-orange-600/50 bg-orange-950/30 px-5 py-2.5 font-mono text-sm text-orange-200 hover:bg-orange-900/25 disabled:opacity-40"
+        className="rounded-lg border border-orange-600/50 bg-orange-950/30 px-5 py-2.5 font-mono text-sm text-orange-200 hover:bg-orange-900/25 disabled:opacity-40 max-md:w-full max-md:min-h-11"
       >
         {committing ? "Transferring…" : "Review & transfer (IN TRANSIT)"}
       </button>
 
       {toast ? (
-        <p className="font-mono text-xs text-amber-300/90" role="status">
+        <p
+          className="font-mono text-xs text-amber-300/90 max-md:fixed max-md:inset-x-4 max-md:bottom-4 max-md:z-50 max-md:rounded-lg max-md:border max-md:border-[var(--wms-border)] max-md:bg-[var(--wms-surface-elevated)] max-md:px-4 max-md:py-3 max-md:text-sm max-md:shadow-xl"
+          role="status"
+        >
           {toast}
         </p>
       ) : null}

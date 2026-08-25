@@ -4,11 +4,28 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { SyncProgressFloater } from "@/components/inventory/sync/sync-progress-floater";
 
 /** localStorage key for the pin state (sidebar stays open across navigation). */
 const PIN_KEY = "wms.sidebar.pinned";
+
+/**
+ * Human title for the phone header (the md+ header keeps the brand).
+ * Derived from the last meaningful path segment; id-looking segments
+ * (uuids, numbers) fall back to their parent segment.
+ */
+function pageTitle(pathname: string): string {
+  const segs = pathname.split("/").filter(Boolean);
+  if (segs.length === 0) return "CarbonWMS";
+  let last = segs[segs.length - 1];
+  if (/^(\d+|[0-9a-f]{8}[0-9a-f-]*)$/i.test(last) && segs.length > 1) {
+    last = segs[segs.length - 2];
+  }
+  const words = last.replace(/[-_]+/g, " ").trim();
+  return words ? words.replace(/\b\w/g, (c) => c.toUpperCase()) : "CarbonWMS";
+}
 
 export function WmsShellClient({
   activeLocationId,
@@ -93,24 +110,28 @@ export function WmsShellClient({
               aria-expanded={open}
               aria-controls="wms-sidebar"
               aria-label="Open navigation menu"
-              className="rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+              className="rounded-md p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:p-2.5"
               onClick={() => setOpen(true)}
             >
               <Menu className="h-5 w-5" strokeWidth={1.75} />
             </button>
-            <span className="truncate text-sm font-semibold text-[var(--wms-fg)]">
+            <span className="truncate text-sm font-semibold text-[var(--wms-fg)] max-md:hidden">
               CarbonWMS
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--wms-fg)] md:hidden">
+              {pageTitle(pathname)}
             </span>
           </header>
           <main
             className={`flex flex-1 flex-col ${
-              forceCollapsed ? "p-0" : "p-5 md:p-7 lg:p-8"
+              forceCollapsed ? "p-0" : "p-5 max-md:p-3 max-md:pb-24 md:p-7 lg:p-8"
             }`}
           >
             {banner}
             {children}
           </main>
         </div>
+        {!forceCollapsed ? <MobileTabBar onMenu={() => setOpen(true)} /> : null}
         <SyncProgressFloater />
       </div>
     </ThemeProvider>

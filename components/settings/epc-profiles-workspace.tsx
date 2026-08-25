@@ -84,14 +84,14 @@ export function EpcProfilesWorkspace() {
       {isLoading || !data ? (
         <p className="font-mono text-xs text-[var(--wms-muted)]">Loading…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-          <table className="w-full min-w-[960px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)]">
-                <th className="px-3 py-3">Profile name</th>
+        <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 max-md:max-h-[70dvh] max-md:overflow-y-auto">
+          <table className="w-full min-w-[960px] border-collapse text-left text-sm max-md:min-w-[560px]">
+            <thead className="max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[var(--wms-surface-elevated)]">
+              <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono text-[0.6rem] uppercase text-[var(--wms-muted)] max-md:text-xs">
+                <th className="px-3 py-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Profile name</th>
                 <th className="px-3 py-3">EPC prefix</th>
-                <th className="px-3 py-3">Item start / len</th>
-                <th className="px-3 py-3">Serial start / len</th>
+                <th className="px-3 py-3 max-md:hidden">Item start / len</th>
+                <th className="px-3 py-3 max-md:hidden">Serial start / len</th>
                 <th className="px-3 py-3">Active</th>
                 <th className="px-3 py-3 text-right">Actions</th>
               </tr>
@@ -99,12 +99,12 @@ export function EpcProfilesWorkspace() {
             <tbody className="divide-y divide-[var(--wms-border)]/90">
               {data.epc_profiles.map((row) => (
                 <tr key={row.id} className="text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-medium">{row.name}</td>
+                  <td className="px-3 py-2.5 font-medium max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">{row.name}</td>
                   <td className="px-3 py-2.5 font-mono text-xs text-teal-400/85">{row.epcPrefix}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs">
+                  <td className="px-3 py-2.5 font-mono text-xs max-md:hidden">
                     {row.itemStartBit} / {row.itemLength}
                   </td>
-                  <td className="px-3 py-2.5 font-mono text-xs">
+                  <td className="px-3 py-2.5 font-mono text-xs max-md:hidden">
                     {row.serialStartBit} / {row.serialLength}
                   </td>
                   <td className="px-3 py-2.5">{row.isActive ? "Yes" : "No"}</td>
@@ -112,7 +112,7 @@ export function EpcProfilesWorkspace() {
                     <button
                       type="button"
                       onClick={() => setModal({ mode: "edit", row: { ...row } })}
-                      className="text-teal-400/90 hover:underline"
+                      className="text-teal-400/90 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
                     </button>
@@ -120,7 +120,7 @@ export function EpcProfilesWorkspace() {
                     <button
                       type="button"
                       onClick={() => void remove(row.id)}
-                      className="text-red-400/85 hover:underline"
+                      className="text-red-400/85 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Remove
                     </button>

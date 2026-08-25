@@ -159,7 +159,7 @@ export function RecoverReadersButton({ agentId, agentName }: { agentId: string; 
           setPhase("loading_diagnosis");
         }}
         title="Restart agent + reset stuck readers"
-        className="mr-2 inline-flex items-center gap-1 rounded border border-amber-400/40 px-2 py-1 font-mono text-[0.6rem] uppercase text-amber-300 hover:bg-amber-400/10"
+        className="mr-2 inline-flex items-center gap-1 rounded border border-amber-400/40 px-2 py-1 font-mono text-[0.6rem] uppercase text-amber-300 hover:bg-amber-400/10 max-md:min-h-9 max-md:px-2.5 max-md:text-[0.7rem]"
       >
         <LifeBuoy className="h-3 w-3" /> Recover
       </button>
@@ -176,7 +176,7 @@ export function RecoverReadersButton({ agentId, agentName }: { agentId: string; 
             <div
               role="dialog"
               aria-modal="true"
-              className="w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl"
+              className="w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-5 shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain"
             >
               <div className="flex items-start justify-between gap-3">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--wms-fg)]">

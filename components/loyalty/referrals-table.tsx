@@ -23,18 +23,20 @@ export type ReferralsTableRow = {
 export function LoyaltyReferralsTable({ rows }: { rows: ReferralsTableRow[] }) {
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 5);
-  const cols: { label: string; align?: "right" }[] = [
+  // hideMobile: column is CSS-hidden below md (th + td in lockstep). The
+  // array order / useColResize indices are untouched.
+  const cols: { label: string; align?: "right"; hideMobile?: boolean }[] = [
     { label: "When" },
     { label: "Referrer" },
     { label: "Referee" },
     { label: "First order", align: "right" },
-    { label: "Order" },
+    { label: "Order", hideMobile: true },
   ];
   return (
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[760px] border-collapse text-sm"
+        className="w-full min-w-[760px] border-collapse text-sm max-md:min-w-[480px]"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
         <thead className="sticky top-0 z-10 bg-muted text-xs font-bold uppercase tracking-wider">
@@ -45,7 +47,7 @@ export function LoyaltyReferralsTable({ rows }: { rows: ReferralsTableRow[] }) {
                 <th
                   key={c.label}
                   style={w !== null ? { width: w, minWidth: w } : undefined}
-                  className={`relative overflow-hidden px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}`}
+                  className={`relative overflow-hidden px-3 py-2 ${c.align === "right" ? "text-right" : "text-left"}${c.hideMobile ? " max-md:hidden" : ""}`}
                 >
                   <span>{c.label}</span>
                   <ResizeHandle colIdx={i} startDrag={startDrag} autoFit={autoFit} />
@@ -76,7 +78,7 @@ export function LoyaltyReferralsTable({ rows }: { rows: ReferralsTableRow[] }) {
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
                     {r.qualifying_amount ? `$${Number(r.qualifying_amount).toFixed(2)}` : "—"}
                   </td>
-                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs`} title={orderRef}>
+                  <td className={`${cellTruncate} px-3 py-2 font-mono text-xs max-md:hidden`} title={orderRef}>
                     {orderRef}
                   </td>
                 </tr>

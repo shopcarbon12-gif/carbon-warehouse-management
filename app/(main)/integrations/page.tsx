@@ -22,14 +22,14 @@ export default async function IntegrationsPage() {
         is null.
       </p>
       <div className="mt-6 overflow-x-auto rounded-lg border border-[var(--surface-border)]">
-        <table className="w-full min-w-[520px] text-left text-sm">
+        <table className="w-full min-w-[520px] text-left text-sm max-md:min-w-0">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-[var(--surface)] font-mono text-xs uppercase text-[var(--muted)]">
-              <th className="px-4 py-3">Provider</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Location</th>
-              <th className="px-4 py-3">Last OK</th>
-              <th className="px-4 py-3">Last job</th>
+              <th className="px-4 py-3 max-md:px-2">Provider</th>
+              <th className="px-4 py-3 max-md:px-2">Status</th>
+              <th className="px-4 py-3 max-md:px-2">Location</th>
+              <th className="px-4 py-3 max-md:px-2">Last OK</th>
+              <th className="px-4 py-3 max-md:px-2">Last job</th>
             </tr>
           </thead>
           <tbody>
@@ -45,15 +45,15 @@ export default async function IntegrationsPage() {
                   key={r.id}
                   className="border-b border-[var(--surface-border)]/60 hover:bg-[var(--surface)]/40"
                 >
-                  <td className="px-4 py-2 font-mono text-xs capitalize">{r.provider}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{r.status}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                  <td className="px-4 py-2 font-mono text-xs max-md:px-2 max-md:break-words capitalize">{r.provider}</td>
+                  <td className="px-4 py-2 font-mono text-xs max-md:px-2 max-md:break-words">{r.status}</td>
+                  <td className="px-4 py-2 font-mono text-xs max-md:px-2 max-md:break-words text-[var(--muted)]">
                     {r.location_code ?? "tenant"}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                  <td className="px-4 py-2 font-mono text-xs max-md:px-2 max-md:break-words text-[var(--muted)]">
                     {r.last_ok_at?.slice(0, 19) ?? "—"}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-[var(--muted)]">
+                  <td className="px-4 py-2 font-mono text-xs max-md:px-2 max-md:break-words text-[var(--muted)]">
                     {r.last_job_at?.slice(0, 19) ?? "—"}
                   </td>
                 </tr>

@@ -134,8 +134,19 @@ export function CategoryManagerModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 [@media(max-width:900px)]:z-[320]"
+      onClick={(e) => {
+        // Mobile-only backdrop close: on phones the Categories m3 chrome covers
+        // the modal header, so the close X can be unreachable. Desktop behavior
+        // is unchanged (gated behind the same ≤900px breakpoint as the z bump).
+        if (e.target !== e.currentTarget) return;
+        if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
+          onClose();
+        }
+      }}
+    >
+      <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:max-h-[88dvh]">
         {/* Breadcrumb bar + close */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-3">
           <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-[var(--wms-muted)]">
@@ -167,7 +178,7 @@ export function CategoryManagerModal({ onClose }: { onClose: () => void }) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:-m-1.5 max-md:p-2.5"
           >
             <X className="h-5 w-5" />
           </button>
@@ -253,7 +264,7 @@ function ListView({
         <button
           type="button"
           onClick={onNew}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 max-md:py-2.5"
         >
           <Plus className="h-4 w-4" />
           New Category
@@ -315,7 +326,7 @@ function TreeRow({
             onClick={() => onToggle(node.id)}
             aria-label={isCollapsed ? "Expand" : "Collapse"}
             aria-expanded={!isCollapsed}
-            className="shrink-0 rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="shrink-0 rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:-m-1 max-md:p-2"
           >
             {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
@@ -417,22 +428,22 @@ function NewCategoryView({
           type="button"
           onClick={save}
           disabled={busy || !name.trim()}
-          className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50"
+          className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50 max-md:py-2.5"
         >
           {busy ? "Saving…" : "Save Changes"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 font-mono text-xs text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 font-mono text-xs text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:py-2.5"
         >
           <ChevronLeft className="h-4 w-4" />
           Back
         </button>
       </div>
 
-      <div className="flex items-center gap-6 px-5 py-6">
-        <label className="w-40 shrink-0 font-medium text-[var(--wms-fg)]">Category Name</label>
+      <div className="flex items-center gap-6 px-5 py-6 max-md:flex-col max-md:items-stretch max-md:gap-2">
+        <label className="w-40 shrink-0 font-medium text-[var(--wms-fg)] max-md:w-auto">Category Name</label>
         <input
           autoFocus
           type="text"
@@ -443,7 +454,7 @@ function NewCategoryView({
             if (e.key === "Enter") save();
           }}
           placeholder="Category Name"
-          className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none"
+          className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:text-base"
         />
       </div>
       {err ? <p className="px-5 pb-4 font-mono text-xs text-red-400/90">{err}</p> : null}
@@ -552,14 +563,14 @@ function DetailView({
             type="button"
             onClick={rename}
             disabled={busy === "rename" || !name.trim() || name.trim() === category.name}
-            className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50"
+            className="rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50 max-md:py-2.5"
           >
             {busy === "rename" ? "Saving…" : "Save Changes"}
           </button>
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 font-mono text-xs text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 font-mono text-xs text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:py-2.5"
           >
             <ChevronLeft className="h-4 w-4" />
             Back
@@ -569,7 +580,7 @@ function DetailView({
           type="button"
           onClick={remove}
           disabled={busy === "delete"}
-          className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-red-500/40 px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide text-red-400 hover:bg-red-500/10 disabled:opacity-50 max-md:py-2.5"
         >
           <Trash2 className="h-4 w-4" />
           {busy === "delete" ? "Deleting…" : "Delete"}
@@ -577,8 +588,8 @@ function DetailView({
       </div>
 
       {/* Category name */}
-      <div className="flex items-center gap-6 px-5 py-5">
-        <label className="w-40 shrink-0 font-medium text-[var(--wms-fg)]">Category Name</label>
+      <div className="flex items-center gap-6 px-5 py-5 max-md:flex-col max-md:items-stretch max-md:gap-2">
+        <label className="w-40 shrink-0 font-medium text-[var(--wms-fg)] max-md:w-auto">Category Name</label>
         <input
           type="text"
           value={name}
@@ -587,7 +598,7 @@ function DetailView({
           onKeyDown={(e) => {
             if (e.key === "Enter") rename();
           }}
-          className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none"
+          className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:text-base"
         />
       </div>
 
@@ -597,7 +608,7 @@ function DetailView({
           <h4 className="mb-2 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-muted)]">
             Add {childLabel}
           </h4>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-md:flex-col max-md:items-stretch">
             <input
               type="text"
               value={subName}
@@ -607,13 +618,13 @@ function DetailView({
                 if (e.key === "Enter") addChild();
               }}
               placeholder="Name"
-              className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none"
+              className="w-full max-w-sm rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:text-base"
             />
             <button
               type="button"
               onClick={addChild}
               disabled={busy === "add" || !subName.trim()}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)] disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)] hover:text-[var(--wms-accent)] disabled:opacity-50 max-md:justify-center max-md:py-2.5"
             >
               <Plus className="h-4 w-4" />
               {busy === "add" ? "Adding…" : `Add ${childLabel}`}
@@ -651,7 +662,7 @@ function DetailView({
                   onClick={() => removeChild(s)}
                   disabled={busy === `sub:${s.id}`}
                   aria-label={`Delete ${s.name}`}
-                  className="rounded p-1 text-[var(--wms-muted)] hover:text-red-400 disabled:opacity-50"
+                  className="rounded p-1 text-[var(--wms-muted)] hover:text-red-400 disabled:opacity-50 max-md:-m-1 max-md:p-2"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

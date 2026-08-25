@@ -102,13 +102,13 @@ function SearchBar({
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={(e) => e.key === "Enter" && onSearch()}
         placeholder={queryPlaceholder}
-        className="min-w-[8rem] flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-xs text-[var(--wms-fg)]"
+        className="min-w-[8rem] flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:text-base max-sm:w-full"
       />
       {locations && setLocationId ? (
         <select
           value={locationId}
           onChange={(e) => setLocationId(e.target.value)}
-          className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-xs text-[var(--wms-fg)]"
+          className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:text-base max-sm:w-full"
           title="Location filter"
         >
           <option value="">All locations</option>
@@ -122,7 +122,7 @@ function SearchBar({
       <button
         type="button"
         onClick={onSearch}
-        className="rounded-md border border-[var(--wms-accent)]/55 bg-[var(--wms-accent)]/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25"
+        className="rounded-md border border-[var(--wms-accent)]/55 bg-[var(--wms-accent)]/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 max-md:min-h-11"
       >
         Search
       </button>
@@ -162,11 +162,11 @@ export function ItemSalesTab({ customSkuId }: { customSkuId: string }) {
       />
 
       {error ? <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p> : null}
-      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">{rows.length} result(s)</p>
+      <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">{rows.length} result(s)</p>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[860px] border-collapse font-mono text-xs">
-          <thead className="bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] max-md:text-xs uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
               <th className="px-3 py-2 text-left">ID</th>
               <th className="px-3 py-2 text-left">Date</th>
@@ -283,11 +283,11 @@ export function ItemCustomersTab({ customSkuId }: { customSkuId: string }) {
         onSearch={() => setApplied({ from: range.from, to: range.to, customer })}
       />
       {error ? <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p> : null}
-      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">{grouped.length} result(s)</p>
+      <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">{grouped.length} result(s)</p>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[860px] border-collapse font-mono text-xs">
-          <thead className="bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] max-md:text-xs uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
               <th className="px-3 py-2 text-left">Customer</th>
               <th className="px-3 py-2 text-right">Qty</th>
@@ -365,20 +365,20 @@ export function ItemHistoryTab({ customSkuId }: { customSkuId: string }) {
         <button
           type="button"
           onClick={() => setApplied(range)}
-          className="rounded-md border border-[var(--wms-accent)]/55 bg-[var(--wms-accent)]/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25"
+          className="rounded-md border border-[var(--wms-accent)]/55 bg-[var(--wms-accent)]/15 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 max-md:min-h-11"
         >
           Search
         </button>
-        <span className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+        <span className="font-mono text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]">
           Sources: Carbon-POS sales + manual adjustments / transfers / counts.
         </span>
       </div>
       {error ? <p className="font-mono text-xs text-red-400/90">{(error as Error).message}</p> : null}
-      <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">{rows.length} result(s)</p>
+      <p className="font-mono text-[0.65rem] max-md:text-xs text-[var(--wms-muted)]">{rows.length} result(s)</p>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
         <table className="w-full min-w-[820px] border-collapse font-mono text-xs">
-          <thead className="bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          <thead className="max-md:sticky max-md:top-0 max-md:z-10 bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] max-md:text-xs uppercase tracking-wide text-[var(--wms-muted)]">
             <tr>
               <th className="px-3 py-2 text-left">Date / Time</th>
               <th className="px-3 py-2 text-left">Employee</th>

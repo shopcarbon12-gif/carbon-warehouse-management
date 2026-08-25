@@ -123,14 +123,14 @@ export function LocationsSettingsWorkspace() {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]/60">
-        <table className="w-full min-w-[900px] border-collapse text-left">
+        <table className="w-full min-w-[900px] border-collapse text-left max-md:min-w-[560px]">
           <thead>
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
-              <th className="px-3 py-3">Location name</th>
+              <th className="px-3 py-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Location name</th>
               <th className="px-3 py-3">Code</th>
-              <th className="px-3 py-3">Lightspeed shop ID</th>
+              <th className="px-3 py-3 max-md:hidden">Lightspeed shop ID</th>
               <th className="px-3 py-3">POS email</th>
-              <th className="px-3 py-3">POS password</th>
+              <th className="px-3 py-3 max-md:hidden">POS password</th>
               <th className="px-3 py-3">Status</th>
               <th className="px-3 py-3">Assigned users</th>
               <th className="px-3 py-3 text-right">Actions</th>
@@ -146,19 +146,19 @@ export function LocationsSettingsWorkspace() {
             ) : (
               locations.map((row) => (
                 <tr key={row.id} className="align-top text-[var(--wms-fg)]">
-                  <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)] break-words">
+                  <td className="px-3 py-2.5 font-medium text-[var(--wms-fg)] break-words max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">
                     {row.name}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
                     {row.code}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)]">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)] max-md:hidden">
                     {row.lightspeed_shop_id ?? "—"}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)] break-all">
                     {row.email ?? "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[0.65rem]">
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[0.65rem] max-md:hidden">
                     {row.has_password ? (
                       <span className="text-emerald-500/85">●●●●●●●●</span>
                     ) : (
@@ -169,7 +169,7 @@ export function LocationsSettingsWorkspace() {
                     <button
                       type="button"
                       onClick={() => void toggleActive(row)}
-                      className={`rounded-full px-2.5 py-0.5 font-mono text-xs font-medium ${
+                      className={`rounded-full px-2.5 py-0.5 font-mono text-xs font-medium max-md:min-h-9 ${
                         row.is_active
                           ? "bg-emerald-100 text-emerald-900 ring-1 ring-emerald-600/40 dark:bg-emerald-950/50 dark:text-emerald-200/95 dark:ring-emerald-700/45"
                           : "bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)] ring-1 ring-[var(--wms-border)]"
@@ -185,7 +185,7 @@ export function LocationsSettingsWorkspace() {
                     <button
                       type="button"
                       onClick={() => setModal({ mode: "edit", row })}
-                      className="text-teal-400/90 hover:underline"
+                      className="text-teal-400/90 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
                     </button>
@@ -193,7 +193,7 @@ export function LocationsSettingsWorkspace() {
                     <button
                       type="button"
                       onClick={() => void resetPassword(row)}
-                      className="text-amber-400/85 hover:underline"
+                      className="text-amber-400/85 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Reset password
                     </button>
@@ -201,7 +201,7 @@ export function LocationsSettingsWorkspace() {
                     <button
                       type="button"
                       onClick={() => void removeLocation(row)}
-                      className="text-red-400/85 hover:underline"
+                      className="text-red-400/85 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Remove
                     </button>

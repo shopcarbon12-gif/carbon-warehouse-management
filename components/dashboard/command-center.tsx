@@ -170,7 +170,7 @@ function PulsePill({
           {label}
         </div>
         {hint ? (
-          <div className="text-[0.6rem] font-medium uppercase tracking-wide text-[var(--wms-fg)]">
+          <div className="text-[0.6rem] font-medium uppercase tracking-wide text-[var(--wms-fg)] max-md:text-xs">
             {hint}
           </div>
         ) : (
@@ -619,7 +619,7 @@ export function CommandCenter() {
           <PulsePill label="Handhelds" count={kpis.hardware.handhelds} Icon={Smartphone} />
         </div>
         {hardwareTotal === 0 ? (
-          <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+          <p className="mt-2 font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs">
             No hardware configured at this location — Live scan is disabled.
           </p>
         ) : null}
@@ -677,7 +677,7 @@ export function CommandCenter() {
                     />
                   ) : null}
                   <div className="min-w-0 flex-1">
-                    <p className="font-mono text-base leading-snug text-[var(--wms-fg)]">
+                    <p className="font-mono text-base leading-snug text-[var(--wms-fg)] max-md:break-words">
                       {formatAuditLine(row)}
                     </p>
                     <p className="mt-1.5 font-mono text-sm tabular-nums text-[color-mix(in_srgb,var(--wms-fg)_62%,var(--wms-muted))]">

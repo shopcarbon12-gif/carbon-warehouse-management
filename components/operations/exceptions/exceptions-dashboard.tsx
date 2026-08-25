@@ -63,7 +63,7 @@ export function ExceptionsDashboard() {
             key={f}
             type="button"
             onClick={() => setFilter(f)}
-            className={`rounded-md border px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide ${
+            className={`rounded-md border px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:justify-center ${
               filter === f
                 ? "border-red-800 bg-red-100 text-red-900 dark:border-red-500/45 dark:bg-red-950/40 dark:text-red-100"
                 : "border-[var(--wms-border)] text-[var(--wms-muted)] hover:border-[var(--wms-border)] hover:bg-[var(--wms-surface-elevated)]"
@@ -76,7 +76,7 @@ export function ExceptionsDashboard() {
           type="button"
           disabled={simBusy}
           onClick={() => void simulate()}
-          className="wms-btn-danger wms-btn-sm ml-auto font-mono disabled:opacity-50"
+          className="wms-btn-danger wms-btn-sm ml-auto font-mono disabled:opacity-50 max-md:min-h-11"
         >
           <BellRing className="h-4 w-4" />
           {simBusy ? "Simulating…" : "Simulate dock alarm"}
@@ -85,7 +85,7 @@ export function ExceptionsDashboard() {
           type="button"
           onClick={() => void mutate()}
           disabled={isValidating}
-          className="inline-flex items-center gap-1 rounded-lg border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+          className="inline-flex items-center gap-1 rounded-lg border border-[var(--wms-border)] px-3 py-2 font-mono text-xs text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-11 max-md:justify-center"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isValidating ? "animate-spin" : ""}`} />
           Refresh
@@ -99,7 +99,7 @@ export function ExceptionsDashboard() {
       ) : null}
       {toast ? <p className="font-mono text-xs text-[var(--wms-muted)]">{toast}</p> : null}
 
-      <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+      <p className="font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
         Inbox auto-refreshes every 10s (SWR). Records are{" "}
         <code className="text-[var(--wms-muted)]">audit_log</code> rows with{" "}
         <code className="text-[var(--wms-muted)]">rfid_alarm</code> /{" "}
@@ -126,11 +126,11 @@ export function ExceptionsDashboard() {
                   >
                     {r.action}
                   </span>
-                  <span className="text-[0.6rem] text-[var(--wms-muted)]">
+                  <span className="text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
                     {new Date(r.created_at).toLocaleString()}
                   </span>
                 </div>
-                <div className="mt-1 text-[0.6rem] text-[var(--wms-muted)]">
+                <div className="mt-1 text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
                   {open ? "OPEN" : "RESOLVED"} · {r.entity} · {r.id.slice(0, 8)}…
                 </div>
               </button>

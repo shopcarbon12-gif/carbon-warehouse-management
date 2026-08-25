@@ -117,7 +117,7 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
         <div
           role="dialog"
           aria-modal="true"
-          className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl"
+          className="w-full max-w-md rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain"
         >
           <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--wms-fg)]">
@@ -127,7 +127,7 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
             <button
               type="button"
               onClick={() => !busy && onClose()}
-              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+              className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -166,7 +166,7 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
                 </select>
               )}
             </div>
-            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+            <p className="font-mono text-[0.6rem] text-[var(--wms-muted)] max-md:text-[0.7rem]">
               Uses the label dimensions and ZPL format from{" "}
               <a
                 className="text-[var(--wms-accent)] hover:underline"
@@ -188,7 +188,7 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
               type="button"
               disabled={busy}
               onClick={() => onClose()}
-              className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 font-mono text-xs text-[var(--wms-fg)] hover:opacity-90 disabled:opacity-50"
+              className="flex-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-2 font-mono text-xs text-[var(--wms-fg)] hover:opacity-90 disabled:opacity-50 max-md:min-h-11"
             >
               Close
             </button>
@@ -196,7 +196,7 @@ export function PrintActionsModal({ open, epc, onClose }: Props) {
               type="button"
               disabled={busy || !epc}
               onClick={() => void reprint()}
-              className="flex-1 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50"
+              className="flex-1 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] hover:opacity-90 disabled:opacity-50 max-md:min-h-11"
             >
               {busy ? "Printing…" : "Reprint"}
             </button>

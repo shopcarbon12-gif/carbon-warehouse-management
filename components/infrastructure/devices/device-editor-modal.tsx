@@ -230,7 +230,7 @@ export function DeviceEditorModal({ open, editing, onClose, onSaved }: Props) {
                     className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-2 font-mono text-sm text-[var(--wms-fg)]"
                   />
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
                   <label className="block font-mono text-[0.65rem] uppercase text-[var(--wms-muted)]">
                     Port
                     <input

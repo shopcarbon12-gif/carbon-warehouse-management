@@ -540,7 +540,7 @@ export function BulkGeigerWorkspace() {
           Import CSV / XLSX
         </button>
 
-        <div className="mx-2 h-6 w-px bg-[var(--wms-border)]" />
+        <div className="mx-2 h-6 w-px bg-[var(--wms-border)] max-md:hidden" />
 
         <button
           type="button"
@@ -585,10 +585,13 @@ export function BulkGeigerWorkspace() {
             type="checkbox"
             checked={autoAdd}
             onChange={(e) => setAutoAdd(e.target.checked)}
-            className="h-3.5 w-3.5 accent-[var(--wms-accent)]"
+            className="h-3.5 w-3.5 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
           />
           Auto-add found to inventory (LIVE)
         </label>
+        <span className="w-full font-mono text-[10px] leading-snug text-[var(--wms-muted)] md:hidden">
+          Auto-add: found tags that pass the formula and have no / unknown status flip to LIVE and join inventory.
+        </span>
         <span className="ml-auto font-mono text-[10px] text-[var(--wms-muted)]">
           <strong className="text-[var(--wms-fg)]">{foundCount}</strong> found ·{" "}
           <strong className="text-emerald-300">{addedCount}</strong> added to inventory
@@ -603,8 +606,8 @@ export function BulkGeigerWorkspace() {
       ) : null}
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)]">
-        <table className="w-full min-w-[820px] border-collapse font-mono text-xs">
-          <thead className="bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)]">
+        <table className="w-full min-w-[820px] border-collapse font-mono text-xs max-md:min-w-0">
+          <thead className="bg-[var(--wms-surface-elevated)]/80 text-[0.6rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
             <tr>
               <th className="w-10 px-3 py-2 text-left">
                 <input
@@ -613,12 +616,12 @@ export function BulkGeigerWorkspace() {
                   checked={allChecked}
                   disabled={rows.length === 0}
                   onChange={toggleAll}
-                  className="h-4 w-4 accent-[var(--wms-accent)]"
+                  className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                 />
               </th>
               <th className="px-3 py-2 text-left">EPC</th>
-              <th className="px-3 py-2 text-left">Custom SKU</th>
-              <th className="px-3 py-2 text-left">Item Description</th>
+              <th className="px-3 py-2 text-left max-md:hidden">Custom SKU</th>
+              <th className="px-3 py-2 text-left max-md:hidden">Item Description</th>
               <th className="px-3 py-2 text-left">Found</th>
               <th className="px-3 py-2 text-left">Status</th>
             </tr>
@@ -645,7 +648,7 @@ export function BulkGeigerWorkspace() {
                     spellCheck={false}
                     autoComplete="off"
                     aria-label="Add EPC manually"
-                    className="w-full max-w-[460px] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-xs uppercase text-[var(--wms-fg)] placeholder:normal-case placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none disabled:opacity-50"
+                    className="w-full max-w-[460px] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-xs uppercase text-[var(--wms-fg)] placeholder:normal-case placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none disabled:opacity-50 max-md:text-base"
                   />
                   <button
                     type="button"
@@ -680,12 +683,12 @@ export function BulkGeigerWorkspace() {
                         aria-label={`Select ${r.epc}`}
                         checked={checked.has(r.epc)}
                         onChange={() => toggleOne(r.epc)}
-                        className="h-4 w-4 accent-[var(--wms-accent)]"
+                        className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
                       />
                     </td>
-                    <td className="px-3 py-2 font-semibold text-teal-400/90">{r.epc}</td>
-                    <td className="px-3 py-2">{r.resolved ? r.sku ?? "N/A" : "N/A"}</td>
-                    <td className={`px-3 py-2 ${r.resolved ? "text-[var(--wms-fg)]" : "text-amber-300/80"}`}>{desc}</td>
+                    <td className="px-3 py-2 font-semibold text-teal-400/90 max-md:break-all">{r.epc}</td>
+                    <td className="px-3 py-2 max-md:hidden">{r.resolved ? r.sku ?? "N/A" : "N/A"}</td>
+                    <td className={`px-3 py-2 max-md:hidden ${r.resolved ? "text-[var(--wms-fg)]" : "text-amber-300/80"}`}>{desc}</td>
                     <td className="px-3 py-2">
                       {r.found ? (
                         <span className="inline-block rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-emerald-300">
