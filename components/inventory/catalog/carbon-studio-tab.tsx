@@ -162,6 +162,8 @@ export function CarbonStudioTab({
 }: Props) {
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
+  /** Phone pose-plan banner's "Change model" jumps here. */
+  const modelSelectRef = useRef<HTMLSelectElement | null>(null);
   const [itemType, setItemType] = useState<string>(defaultItemType);
   const [instruction, setInstruction] = useState<string>("");
   const [panels, setPanels] = useState<number[]>([...PANELS]);
@@ -388,6 +390,17 @@ export function CarbonStudioTab({
     // products; kept consistent across this run's panels for set coherence.
     const expressionDirective = pickExpressionDirective();
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
+    // Touch devices only: keep the screen awake while the panels generate — a
+    // locked phone suspends the page and aborts the in-flight fetches, which
+    // surfaces as "failed" panels / missing poses. Desktop never requests one.
+    let wakeLock: WakeLockSentinel | null = null;
+    try {
+      if (window.matchMedia("(pointer: coarse)").matches && "wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+      }
+    } catch {
+      /* unavailable (low battery, older iOS) — generation proceeds without it */
+    }
 
     const genOnePanel = async (panel: number): Promise<Crop[]> => {
       const [poseA, poseB] = getPanelPosePair(model.gender, panel);
@@ -461,6 +474,7 @@ export function CarbonStudioTab({
     } finally {
       setBusy(null);
       setProgress("");
+      void wakeLock?.release().catch(() => {});
     }
   }, [model, itemRefs, panels, itemType, instruction, crops]);
 
@@ -823,7 +837,7 @@ export function CarbonStudioTab({
           <span className={label}>
             Model{itemGender ? <span className="text-[var(--wms-muted)]"> · {itemGender} only</span> : null}
           </span>
-          <select className={field} value={modelId} onChange={(e) => setModelId(e.target.value)}>
+          <select ref={modelSelectRef} className={field} value={modelId} onChange={(e) => setModelId(e.target.value)}>
             {visibleModels.length === 0 ? (
               <option value="">{models.length ? `No ${itemGender ?? ""} models` : "No models"}</option>
             ) : null}
@@ -891,6 +905,46 @@ export function CarbonStudioTab({
           </button>
         </div>
       </div>
+
+      {/* Phone-only pose-plan banner. The Model dropdown auto-picks the NEWEST
+          model when the item's gender can't be read from its category, which on
+          a small screen goes unnoticed — and the pose pairs AND the Manage &
+          publish order both follow the model's gender. Make it unmissable right
+          above Generate. Desktop (md+) never renders this. */}
+      {model ? (() => {
+        const mg = (model.gender || "").toLowerCase();
+        const mismatch = itemGender ? mg !== itemGender : true;
+        return (
+          <div
+            className={`rounded-md border px-3 py-2 font-mono text-xs md:hidden ${
+              mismatch
+                ? "border-amber-500/55 bg-amber-950/30 text-amber-200"
+                : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)]"
+            }`}
+          >
+            <div>
+              Model: <b>{model.name}</b> ({mg || "?"}) → {mg === "female" ? "FEMALE" : "MALE"} pose plan
+              {itemGender && mg !== itemGender ? ` · item is ${itemGender} — check the model` : ""}
+              {!itemGender ? " · item gender unknown — auto-picked newest model" : ""}
+            </div>
+            <div className={mismatch ? "text-amber-200/80" : "text-[var(--wms-muted)]"}>
+              {panels.length
+                ? panels.map((p) => `P${p}: pose ${getPanelPosePair(model.gender, p).join("+")}`).join(" · ")
+                : "No panels selected"}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                modelSelectRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+                modelSelectRef.current?.focus();
+              }}
+              className="mt-1 min-h-9 text-[var(--wms-accent)] underline underline-offset-2"
+            >
+              Change model
+            </button>
+          </div>
+        );
+      })() : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <button
