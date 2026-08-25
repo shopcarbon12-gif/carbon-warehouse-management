@@ -478,7 +478,9 @@ export function CatalogWorkspace({
 
   return (
     <div className="space-y-4">
-      <div>
+      {/* Phone: search and the button row are stacked blocks — give them the
+          same 12px rhythm as the rest of the toolbar (md+ spacing unchanged). */}
+      <div className="max-md:space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"

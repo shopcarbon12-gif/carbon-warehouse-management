@@ -24,7 +24,7 @@ export default async function ProductCatalogPage() {
         <CatalogHeaderStats />
         <Link
           href="/inventory"
-          className="shrink-0 font-mono text-xs text-teal-400 hover:text-teal-300 hover:underline"
+          className="shrink-0 font-mono text-xs text-teal-400 hover:text-teal-300 hover:underline max-md:basis-full max-md:py-1"
         >
           Legacy inventory
         </Link>
