@@ -14,6 +14,7 @@ import {
   RotateCcw,
   ChevronLeft,
   MoreHorizontal,
+  Globe,
   Settings2,
   LayoutGrid,
   Image as ImageTabIcon,
@@ -1046,6 +1047,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               >
                 <MoreHorizontal className="h-5 w-5" />
               </button>
+              {/* Phone-only "View online" icon (sits between ⋯ and ✕). */}
+              <button
+                type="button"
+                aria-label={data?.matrix.shopify_product_id ? "View online" : "View online (link to Shopify first)"}
+                title={
+                  data?.matrix.shopify_product_id
+                    ? "Open this item on the ShopCarbon website"
+                    : "Link this product to Shopify to view it online"
+                }
+                disabled={!data?.matrix.shopify_product_id}
+                onClick={() => void openOnline()}
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-accent)] active:bg-[var(--wms-surface-elevated)] disabled:opacity-40 md:hidden"
+              >
+                <Globe className="h-5 w-5" />
+              </button>
               <button
                 type="button"
                 aria-label="Close"
@@ -1102,17 +1118,6 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   More actions
                 </p>
                 <div className="flex flex-col gap-2 font-mono text-[0.8rem] uppercase tracking-wide">
-                  <button
-                    type="button"
-                    disabled={!data?.matrix.shopify_product_id}
-                    onClick={() => {
-                      setMoreOpen(false);
-                      void openOnline();
-                    }}
-                    className="flex min-h-12 items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 text-left text-[var(--wms-fg)] active:opacity-80 disabled:opacity-50"
-                  >
-                    {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online (not linked)"}
-                  </button>
                   {data && !data.matrix.shopify_product_id ? (
                     <button
                       type="button"
