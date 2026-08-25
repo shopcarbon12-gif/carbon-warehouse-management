@@ -802,7 +802,20 @@ export function CarbonStudioTab({
           <button
             type="button"
             disabled={!canManage || busy === "upload"}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => {
+              const input = fileRef.current;
+              if (!input) return;
+              // Android's Photo Picker hijacks accept="image/*" and opens Google
+              // Photos only. On touch devices drop the filter for this click so
+              // the OS shows the full chooser (Camera / Files / Photos / Drive…);
+              // uploadItems still keeps only image/* files. Desktop keeps the
+              // image filter in its file dialog. Behaviour-only (handler), no
+              // render branching.
+              const touch = window.matchMedia("(pointer: coarse)").matches;
+              if (touch) input.removeAttribute("accept");
+              input.click();
+              if (touch) setTimeout(() => input.setAttribute("accept", "image/*"), 0);
+            }}
             className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
           >
             {busy === "upload" ? "…" : "＋ Upload"}
