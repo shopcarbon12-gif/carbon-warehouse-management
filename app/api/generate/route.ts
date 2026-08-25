@@ -734,7 +734,58 @@ async function runPanelComplianceCheck(args: {
   };
 }
 
+/**
+ * Heartbeat wrapper. A panel generation holds an otherwise-idle HTTP
+ * connection for 60–90 s while OpenAI renders; mobile carriers / iOS Safari
+ * drop idle connections in that window ("Load failed"), even though the
+ * server finishes and logs success. When the client opts in with
+ * `x-generate-stream: 1`, we answer 200 immediately and stream one space
+ * every 10 s until the real JSON body is ready, then append it. Leading
+ * whitespace is valid JSON, so `resp.json()` on the client is unchanged.
+ * Non-2xx results are forwarded as their JSON body (status collapses to
+ * 200); the client already treats a body without `imageBase64` — or with
+ * `error` / `degraded` — as a failed panel. Without the header, behaviour is
+ * exactly as before.
+ */
 export async function POST(req: NextRequest) {
+  if (req.headers.get("x-generate-stream") !== "1") return handleGenerate(req);
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(" "));
+        } catch {
+          /* stream already closed */
+        }
+      }, 10_000);
+      try {
+        const res = await handleGenerate(req);
+        const text = await res.text();
+        clearInterval(heartbeat);
+        controller.enqueue(encoder.encode(text));
+      } catch (err) {
+        clearInterval(heartbeat);
+        controller.enqueue(
+          encoder.encode(JSON.stringify({ error: err instanceof Error ? err.message : "Generate failed" })),
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
+async function handleGenerate(req: NextRequest): Promise<Response> {
   try {
     // WMS auth: authenticated admin session (replaces carbon-gen cookie auth).
     const session = await getSessionFromRequest(req);

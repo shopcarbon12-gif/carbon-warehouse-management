@@ -420,7 +420,10 @@ export function CarbonStudioTab({
       });
       const resp = await fetch("/api/generate", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        // x-generate-stream: the server heartbeats whitespace every 10s while
+        // OpenAI works so mobile networks / iOS don't drop the otherwise-idle
+        // 60-90s connection ("Load failed"). Leading whitespace is valid JSON.
+        headers: { "Content-Type": "application/json", Accept: "application/json", "x-generate-stream": "1" },
         body: JSON.stringify({
           prompt,
           size: "1536x1024",
