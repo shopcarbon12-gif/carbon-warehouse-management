@@ -665,7 +665,9 @@ export function CarbonStudioTab({
         itemType,
         itemStyleInstructions: instruction,
         expressionDirective,
-        itemSpec: specForRun || undefined,
+        // itemSpec travels as its own request field (server appends it inside the
+        // protected lock block) — NOT inside the prompt, which is near the
+        // model's length limit and gets trimmed from the middle.
       });
       const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
       let json: PanelResponse | null = null;
@@ -689,6 +691,7 @@ export function CarbonStudioTab({
             modelRefs: model.ref_image_urls,
             itemRefs: refUrls,
             panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
+            itemSpec: specForRun || undefined,
           }),
         });
         const parsed = (await resp.json().catch(() => null)) as PanelResponse | null;

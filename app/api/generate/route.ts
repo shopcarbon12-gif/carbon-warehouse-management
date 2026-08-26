@@ -50,6 +50,9 @@ function normalizeReferenceUrls(values: unknown[], label: string) {
   return { urls, errors };
 }
 
+/** Downloaded reference: the upload File for images.edit AND a data URL for
+ * the QA vision pass (OpenAI cannot fetch our private R2 endpoint URLs, which
+ * had left the compliance gate permanently "unavailable" → fail-open). */
 async function downloadReferenceAsFile(url: string, index: number) {
   const attempts = [url];
   const encoded = encodeURI(url);
@@ -64,7 +67,10 @@ async function downloadReferenceAsFile(url: string, index: number) {
         maxBytes: getImageFetchMaxBytes(),
       });
       const ext = extFromContentType(contentType);
-      return toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType });
+      return {
+        file: await toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType }),
+        dataUrl: `data:${contentType || "image/png"};base64,${Buffer.from(bytes).toString("base64")}`,
+      };
     } catch (err: any) {
       lastError = err?.message || "Image fetch failed";
     }
@@ -74,7 +80,10 @@ async function downloadReferenceAsFile(url: string, index: number) {
       const { body, contentType } = await downloadStorageObject(storagePath);
       const bytes = Buffer.from(body);
       const ext = extFromContentType(contentType);
-      return toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType });
+      return {
+        file: await toFile(bytes, `ref-${index + 1}.${ext}`, { type: contentType }),
+        dataUrl: `data:${contentType || "image/png"};base64,${bytes.toString("base64")}`,
+      };
     } catch (err: any) {
       const storageErr = err?.message || "Storage fetch failed";
       lastError = lastError ? `${lastError}; ${storageErr}` : storageErr;
@@ -156,6 +165,19 @@ function isOpenAiImagesEditModelError(err: unknown) {
 // safety margin under the documented 32000 ceiling.
 const MODEL_PROMPT_MAX_CHARS = 31800;
 
+// OpenAI's 32000 limit is NOT JavaScript's UTF-16 `.length`: prompts full of
+// "—", "×", "➘", "…" (pose libraries, the item spec) measured under the cap in
+// JS yet were rejected with 400 "string too long" (seen on Panel 4,
+// 2026-08-26). Measure UTF-8 bytes — stricter than any counting OpenAI uses.
+const promptLen = (s: string) => Buffer.byteLength(s, "utf8");
+/** Hard byte cut that never splits a multi-byte character. */
+function cutToBytes(s: string, maxBytes: number) {
+  if (promptLen(s) <= maxBytes) return s;
+  let out = s;
+  while (promptLen(out) > maxBytes) out = out.slice(0, Math.max(0, out.length - Math.ceil((promptLen(out) - maxBytes) / 2) - 1));
+  return out;
+}
+
 // Enforce the model prompt length limit while always preserving the
 // server-appended identity/safety/coverage locks (they are non-negotiable).
 // Only the client-built portion is trimmed, keeping its head (scene setup) and
@@ -167,7 +189,7 @@ function clampLockedPrompt(
 ) {
   const separator = "\n\n";
   const full = `${clientPrompt}${separator}${serverLockBlock}`;
-  if (full.length <= maxLen) return { prompt: full, trimmed: false };
+  if (promptLen(full) <= maxLen) return { prompt: full, trimmed: false };
 
   // First try a lossless pass: collapse runs of blank lines and trailing
   // whitespace in the client portion. This often recovers the small overflow
@@ -177,44 +199,55 @@ function clampLockedPrompt(
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   const compactedFull = `${compactedClient}${separator}${serverLockBlock}`;
-  if (compactedFull.length <= maxLen) return { prompt: compactedFull, trimmed: false };
+  if (promptLen(compactedFull) <= maxLen) return { prompt: compactedFull, trimmed: false };
 
-  const reserved = serverLockBlock.length + separator.length;
+  const reserved = promptLen(serverLockBlock) + separator.length;
   const ellipsis = "\n...[prompt trimmed to fit model length limit]...\n";
-  const budget = maxLen - reserved;
+  let budget = maxLen - reserved;
   // Pathological case: the server lock block alone is near/over the limit.
   // Hard-cap the whole string so we never exceed the API contract.
   if (budget <= ellipsis.length) {
-    return { prompt: compactedFull.slice(0, maxLen), trimmed: true };
+    return { prompt: cutToBytes(compactedFull, maxLen), trimmed: true };
   }
-  const keep = budget - ellipsis.length;
-  const headLen = Math.ceil(keep * 0.6);
-  const tailLen = keep - headLen;
-  const head = compactedClient.slice(0, headLen).trimEnd();
-  const tail = compactedClient.slice(compactedClient.length - tailLen).trimStart();
-  const trimmedClient = `${head}${ellipsis}${tail}`;
-  return { prompt: `${trimmedClient}${separator}${serverLockBlock}`, trimmed: true };
+  // Byte budget → character slices; shrink until the UTF-8 size fits.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const keep = budget - ellipsis.length;
+    const headLen = Math.ceil(keep * 0.6);
+    const tailLen = keep - headLen;
+    const head = compactedClient.slice(0, headLen).trimEnd();
+    const tail = compactedClient.slice(Math.max(0, compactedClient.length - tailLen)).trimStart();
+    const candidate = `${head}${ellipsis}${tail}${separator}${serverLockBlock}`;
+    if (promptLen(candidate) <= maxLen) return { prompt: candidate, trimmed: true };
+    budget = Math.floor(budget * 0.9);
+  }
+  return { prompt: cutToBytes(compactedFull, maxLen), trimmed: true };
 }
 
 // Final hard guard applied at the single point where any prompt is sent to a
 // modern image model — covers the main prompt AND the safety-retry prompts
 // (which append text to the locked prompt and could otherwise exceed the limit).
 function enforcePromptLength(prompt: string, maxLen = MODEL_PROMPT_MAX_CHARS) {
-  if (prompt.length <= maxLen) return prompt;
+  if (promptLen(prompt) <= maxLen) return prompt;
   const compacted = prompt
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  if (compacted.length <= maxLen) return compacted;
+  if (promptLen(compacted) <= maxLen) return compacted;
   const ellipsis = "\n...[prompt trimmed to fit model length limit]...\n";
-  const keep = maxLen - ellipsis.length;
-  if (keep <= 0) return compacted.slice(0, maxLen);
-  const headLen = Math.ceil(keep * 0.6);
-  const tailLen = keep - headLen;
-  const head = compacted.slice(0, headLen).trimEnd();
-  const tail = compacted.slice(compacted.length - tailLen).trimStart();
-  return `${head}${ellipsis}${tail}`;
+  let keep = maxLen - ellipsis.length;
+  if (keep <= 0) return cutToBytes(compacted, maxLen);
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const headLen = Math.ceil(keep * 0.6);
+    const tailLen = keep - headLen;
+    const head = compacted.slice(0, headLen).trimEnd();
+    const tail = compacted.slice(Math.max(0, compacted.length - tailLen)).trimStart();
+    const candidate = `${head}${ellipsis}${tail}`;
+    if (promptLen(candidate) <= maxLen) return candidate;
+    keep = Math.floor(keep * 0.9);
+  }
+  return cutToBytes(compacted, maxLen);
 }
+
 
 function compactPromptForDalle2(prompt: string, maxLen = 1000) {
   const normalized = String(prompt || "").replace(/\s+/g, " ").trim();
@@ -836,8 +869,15 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       );
     }
 
-    const { prompt, size, modelRefs, itemRefs, panelQa, variationStrength, variationSeed } =
+    const { prompt, size, modelRefs, itemRefs, panelQa, variationStrength, variationSeed, itemSpec } =
       await req.json();
+    // Pre-generation item analysis (client → /api/openai/item-spec). Appended
+    // INSIDE the server lock block so prompt trimming can never drop it, and
+    // capped so it can never push the prompt over the model limit.
+    const itemSpecText =
+      typeof itemSpec === "string" && itemSpec.trim()
+        ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), 2600)
+        : "";
     const normalizedPanelQa = normalizePanelQa(panelQa);
     // Pose/expression variation: rotate by a per-generation seed so consecutive
     // shots never collapse to the same default pose/face. Falls back to a
@@ -939,6 +979,16 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     });
     const serverLockBlock = [
       serverIdentityLockPrompt,
+      ...(itemSpecText
+        ? [
+            "VERIFIED ITEM SPEC HARD LOCK (SERVER — pre-generation analysis of the actual item photos; every line was observed on the product and MUST appear exactly as stated in every panel and frame; this overrides any generic styling):",
+            itemSpecText,
+            "- Every TEXT line is rendered letter-perfect (same words, spelling, case, letterforms, colour, size, placement). Every TEXT / LOGO / GRAPHIC appears ONLY at its listed placement and side (front vs back vs sleeve): never duplicate a back print onto the front or vice versa, never merge or swap words between placements, never invent extra text.",
+            "- Print EFFECTS are part of the design: a blurred / ghosted / faded / gradient / halftone / cracked print must be rendered with that exact effect, never as a crisp clean version.",
+            "- The FIT / SILHOUETTE line is absolute: an oversized / boxy / drop-shoulder / relaxed fit must read as clearly oversized on the model (dropped shoulder seams, wide body, longer sleeves), never slim or regular; a slim fit must never become loose.",
+            "- HARDWARE / STITCHING / POCKET / MATERIAL lines must match in kind, count, colour, finish and position. Anything listed as NOT CLEARLY VISIBLE stays plain/neutral — never invented.",
+          ]
+        : []),
       buildNudityCeilingLock(),
       ...(poseVariationDirective ? [poseVariationDirective] : []),
       ...(swimwearActive
@@ -970,7 +1020,16 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
 
     const referenceFiles = downloaded
       .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>> => r.status === "fulfilled")
-      .map((r) => r.value);
+      .map((r) => r.value.file);
+    // Data URLs for the QA vision pass (same bytes the edit call uses).
+    const modelRefDataUrls = downloaded
+      .slice(0, modelAnchors.length)
+      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>> => r.status === "fulfilled")
+      .map((r) => r.value.dataUrl);
+    const itemRefDataUrls = downloaded
+      .slice(modelAnchors.length)
+      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>> => r.status === "fulfilled")
+      .map((r) => r.value.dataUrl);
     const modelFilesCount = downloaded
       .slice(0, modelAnchors.length)
       .filter((r) => r.status === "fulfilled").length;
@@ -1150,8 +1209,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         qa = await runPanelComplianceCheck({
           openai,
           imageBase64: b64,
-          modelRefs: modelAnchors,
-          itemRefs: itemAnchors,
+          modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
+          itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
           panelQa: normalizedPanelQa,
           timeoutMs: imageTimeoutMs,
         });

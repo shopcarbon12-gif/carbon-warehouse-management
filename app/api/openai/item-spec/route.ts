@@ -144,7 +144,17 @@ function buildLockText(spec: any): string {
   for (const s of list(spec?.other_details)) push(`DETAIL: ${s}.`);
   const unc = list(spec?.uncertain);
   if (unc.length) push(`NOT CLEARLY VISIBLE (do not invent): ${unc.join("; ")}.`);
-  return lines.slice(0, 40).map((l, i) => `${i + 1}. ${l}`).join("\n");
+  // Hard cap so the spec can never push the image prompt over the model limit
+  // (the generate route appends it inside its protected lock block, ≤2600 B).
+  const out: string[] = [];
+  let bytes = 0;
+  for (const [i, l] of lines.slice(0, 40).entries()) {
+    const line = `${i + 1}. ${l}`;
+    bytes += Buffer.byteLength(line, "utf8") + 1;
+    if (bytes > 2500) break;
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 export async function POST(req: NextRequest) {
@@ -183,6 +193,8 @@ export async function POST(req: NextRequest) {
       '  "graphics_prints": [{ "description": string, "placement": string, "colors": string, "technique": string, "finish": string }] — prints, patterns, artwork, embroidery, appliqués,',
       '  "labels_patches": string[] (woven/printed labels, leather/jacron patches, hang tags visible, with text and placement),',
       '  "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[] }',
+      'PLACEMENT must always name the SIDE and zone: e.g. "front, right shoulder near collar", "back, lower centre", "left sleeve". Text that appears on more than one side gets one entry per side. STYLE must describe the print EFFECT when present: motion-blur / ghosted edges, faded, gradient, halftone, cracked / distressed, outline, 3D / shadowed, italic / bold / condensed, letter-spacing.',
+      'FIT_SILHOUETTE must be specific: oversized / boxy / drop-shoulder / relaxed / regular / slim / cropped / longline, sleeve length and shape, body length, hem shape, neckline (crew / V / ribbed collar width).',
       'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
       "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam', 'white silicone raised logo 4 cm wide on left chest'). Ignore any person, background, or styling in the photos — describe the product only.",
     ].join("\n");
