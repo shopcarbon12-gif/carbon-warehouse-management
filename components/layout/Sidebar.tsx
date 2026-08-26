@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ClipboardList,
   Cpu,
+  Crosshair,
   Download,
   FolderInput,
   Image as ImageIcon,
@@ -92,6 +93,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/tags-labels/print", label: "Print tags", icon: Printer },
       { href: "/tags-labels/bulk-geiger", label: "Bulk Geiger", icon: Search },
+      { href: "/tags-labels/locate", label: "Locate Tag", icon: Crosshair },
       { href: "/tags-labels/encode-items", label: "Encode Items", icon: Tags },
       { href: "/tags-labels/encode-print", label: "Encode & Print", icon: Stamp },
       { href: "/tags-labels/bulk-status", label: "Bulk status", icon: SlidersHorizontal },

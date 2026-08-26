@@ -169,7 +169,7 @@ export function ReaderPicker({
         type="button"
         disabled={disabled || allIds.length === 0}
         onClick={() => setOpen((o) => !o)}
-        className={`inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40 ${
+        className={`inline-flex items-center gap-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-xs text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11 ${
           open ? "border-teal-500/50" : ""
         }`}
         title="Filter scanned EPCs to specific readers"

@@ -10,6 +10,7 @@ export type ReaderWakeKind =
   | "bulk-import"
   | "bulk-status"
   | "bulk-geiger"
+  | "geiger"
   | "scan-epc";
 
 /**

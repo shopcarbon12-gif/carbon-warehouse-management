@@ -18,14 +18,13 @@
 
 import type { Pool } from "pg";
 
-export type CalibrationPoint = {
-  id: string;
-  distanceFt: number;
-  firstReadPowerArg: number;
-  referenceEpc: string;
-  measuredAt: string;
-  notes: string | null;
-};
+// The point shape and the power→feet interpolation are pure and shared with
+// the client (Tags & Labels → Locate Tag), so they live in a client-safe
+// module. Re-exported here so existing server importers keep working.
+export type { CalibrationPoint } from "@/lib/rfid-geiger-distance";
+export { estimateDistanceFt } from "@/lib/rfid-geiger-distance";
+
+import type { CalibrationPoint } from "@/lib/rfid-geiger-distance";
 
 export async function listCalibrationPoints(
   pool: Pool,
@@ -108,77 +107,4 @@ export async function deleteCalibrationPoint(
     [pointId, tenantId],
   );
   return { deleted: (r.rowCount ?? 0) > 0 };
-}
-
-/**
- * Convert a first-read-power observation (dBm × 10) into estimated feet,
- * piecewise-linearly interpolating the calibration points.
- *
- *   - 0 points: returns null (caller falls back to heuristic bucket).
- *   - 1 point:  returns "≥X" or "<X" only — single point can't bracket.
- *   - 2+ points: linear interpolation between bracketing points; nearest-
- *               segment extrapolation outside the range.
- *
- * Returned `band` is meant for UI display: "10 ft", "≈12 ft ±3", ">25 ft".
- */
-export function estimateDistanceFt(
-  points: CalibrationPoint[],
-  observedPowerArg: number,
-): { feet: number | null; band: string; precision: "exact" | "interp" | "extrap" | "sparse" | "uncalibrated" } {
-  if (points.length === 0) {
-    return { feet: null, band: "—", precision: "uncalibrated" };
-  }
-  // Sort by power ascending — closer tags need less power to read.
-  const pts = [...points].sort((a, b) => a.firstReadPowerArg - b.firstReadPowerArg);
-
-  if (pts.length === 1) {
-    const p = pts[0]!;
-    if (observedPowerArg <= p.firstReadPowerArg) {
-      return {
-        feet: p.distanceFt,
-        band: `≤ ${p.distanceFt.toFixed(1)} ft`,
-        precision: "sparse",
-      };
-    }
-    return {
-      feet: p.distanceFt,
-      band: `> ${p.distanceFt.toFixed(1)} ft`,
-      precision: "sparse",
-    };
-  }
-
-  // Find bracketing pair.
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i]!;
-    const b = pts[i + 1]!;
-    if (observedPowerArg >= a.firstReadPowerArg && observedPowerArg <= b.firstReadPowerArg) {
-      const t = (observedPowerArg - a.firstReadPowerArg) /
-                Math.max(1, b.firstReadPowerArg - a.firstReadPowerArg);
-      const feet = a.distanceFt + t * (b.distanceFt - a.distanceFt);
-      // Uncertainty band: half the gap between the two anchors.
-      const span = Math.abs(b.distanceFt - a.distanceFt);
-      const half = Math.max(1, Math.round(span / 2));
-      return {
-        feet,
-        band: `${feet.toFixed(1)} ft ±${half}`,
-        precision: i === 0 || i === pts.length - 2 ? "interp" : "interp",
-      };
-    }
-  }
-
-  // Outside the calibrated range — extrapolate from the nearest segment.
-  const first = pts[0]!;
-  const last = pts[pts.length - 1]!;
-  if (observedPowerArg < first.firstReadPowerArg) {
-    return {
-      feet: first.distanceFt,
-      band: `≤ ${first.distanceFt.toFixed(1)} ft (extrap)`,
-      precision: "extrap",
-    };
-  }
-  return {
-    feet: last.distanceFt,
-    band: `> ${last.distanceFt.toFixed(1)} ft (extrap)`,
-    precision: "extrap",
-  };
 }

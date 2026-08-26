@@ -36,6 +36,7 @@ const bodySchema = z.object({
     "bulk-import",
     "bulk-status",
     "bulk-geiger",
+    "geiger",
     "scan-epc",
   ]),
   locationId: z.string().uuid().optional(),

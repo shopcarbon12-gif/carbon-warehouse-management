@@ -61,6 +61,7 @@ export type ScanSessionKind =
   | "bulk-import"
   | "bulk-status"
   | "bulk-geiger"
+  | "geiger"
   | "scan-epc";
 
 export type ScanSession = {
