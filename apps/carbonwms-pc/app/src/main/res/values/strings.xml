@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CarbonWMS-PC</string>
+    <string name="diagnostics_title">Diagnostics</string>
+
+    <string name="offline_title">No connection to WMS</string>
+    <string name="offline_network">Your phone is offline. The app will reconnect automatically.</string>
+    <string name="offline_server">wms.shopcarbon.com did not answer. Check the connection or try again.</string>
+    <string name="offline_tls">Secure connection failed (certificate problem). The app never bypasses this.</string>
+    <string name="retry">Retry</string>
+    <string name="open_diagnostics">Diagnostics</string>
+
+    <string name="engine_title">Update Android System WebView</string>
+    <string name="engine_message">This phone\'s web engine (%1$s) is older than CarbonWMS requires (Chrome %2$d+). Update \"Android System WebView\" in Google Play, then tap Retry.</string>
+    <string name="engine_update">Update in Play</string>
+
+    <string name="popup_close">Close</string>
+    <string name="popup_print">Print</string>
+
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_copy">Copy</string>
+    <string name="copied">Copied</string>
+
+    <string name="chooser_title">Upload</string>
+    <string name="back_again">Press Back again to exit</string>
+    <string name="saved_to_downloads">Saved to Downloads: %1$s</string>
+    <string name="download_started">Downloading %1$s…</string>
+    <string name="update_available">CarbonWMS-PC %1$s is available</string>
+    <string name="update_install">Update</string>
+    <string name="no_app_for_link">No app can open this link</string>
+</resources>

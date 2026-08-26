@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirrors the WMS dark theme tokens in app/globals.css -->
+<resources>
+    <color name="wms_bg">#0C0F12</color>
+    <color name="wms_surface">#09090B</color>
+    <color name="wms_surface_elevated">#18181B</color>
+    <color name="wms_accent">#2DD4BF</color>
+    <color name="wms_text">#F4F4F5</color>
+    <color name="wms_muted">#A1A1AA</color>
+    <color name="ic_launcher_background">#0C0F12</color>
+</resources>

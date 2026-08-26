@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-first like the WMS itself; the page paints its own light theme when the user picks it. -->
+    <style name="Theme.CarbonWmsPc" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/wms_accent</item>
+        <item name="colorOnPrimary">@color/wms_bg</item>
+        <item name="colorSurface">@color/wms_surface_elevated</item>
+        <item name="android:colorBackground">@color/wms_bg</item>
+        <item name="android:windowBackground">@color/wms_bg</item>
+        <item name="android:windowSplashScreenBackground">@color/wms_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>

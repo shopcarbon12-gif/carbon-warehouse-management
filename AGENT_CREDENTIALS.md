@@ -34,6 +34,7 @@ The actual secret values live on this developer machine in gitignored files (see
 | `~/.ssh/id_ed25519` | Outbound SSH private key — used for `shopcarbon@192.168.1.219` |
 | `~/.ssh/id_ed25519.pub` | Public counterpart (the same line should be in `/home/shopcarbon/.ssh/authorized_keys` on the agent VM) |
 | `192.168.1.219:/opt/carbon-cdm/.env` | **Production CDM agent env** — `CARBON_CDM_TOKEN` (prod), `CARBON_WMS_URL` |
+| `apps/carbonwms-pc/key.properties` + `apps/carbonwms-pc/keys/carbonwms-pc-release.jks` | **CarbonWMS-PC release signing key** (Android shell app, package `com.shopcarbon.wmspc`). Created 2026-08-25 by `scripts/build-release.sh`; every future APK must use it. Backup: `~/CarbonWmsPcRelease/keys-backup/`; values also mirrored in `.env.agent-secrets` |
 
 ### Variable name reference
 

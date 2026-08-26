@@ -11,6 +11,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 bash mobile/carbon_wms/scripts/build-release.sh
 ```
 
+**CarbonWMS-PC APK (all agents):** the separate Android *web-shell* app for the WMS PC/mobile view lives in `apps/carbonwms-pc/` (Kotlin, package `com.shopcarbon.wmspc`, no Flutter, no connection to `mobile/carbon_wms`). It loads `https://wms.shopcarbon.com` as-is — web changes never need an APK. Build with:
+```bash
+bash apps/carbonwms-pc/scripts/build-release.sh
+```
+Output: `~/CarbonWmsPcRelease/CarbonWMS-PC V{appVersionName}.apk` (version in `apps/carbonwms-pc/app/build.gradle.kts`). See `apps/carbonwms-pc/README.md`.
+
 ---
 
 ## Linux build environment

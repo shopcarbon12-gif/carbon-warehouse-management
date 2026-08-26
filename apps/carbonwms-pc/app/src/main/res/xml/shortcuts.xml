@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon → "Diagnostics" (server URL override, logs, WebView version). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="diagnostics"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/diagnostics_title"
+        android:shortcutLongLabel="@string/diagnostics_title">
+        <intent
+            android:action="android.intent.action.MAIN"
+            android:targetPackage="com.shopcarbon.wmspc"
+            android:targetClass="com.shopcarbon.wmspc.settings.DiagnosticsActivity" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS everywhere, except the warehouse Zebra printers: the web app POSTs ZPL to
+  http://<printer>/pstprnt directly from the page (see report §4.1). Those hosts — and the
+  LAN dev box used through the Diagnostics origin override — are the only cleartext exceptions.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.3</domain>
+        <domain includeSubdomains="false">192.168.1.220</domain>
+        <domain includeSubdomains="false">192.168.1.214</domain>
+    </domain-config>
+</network-security-config>
