@@ -87,7 +87,18 @@ async function handleFlat(req: NextRequest): Promise<Response> {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const refs = (Array.isArray(body?.itemRefs) ? body.itemRefs : []).map(text).filter(Boolean).slice(0, MAX_REFS);
+    // Studio sorts item photos into General / Front / Back; the images go to
+    // OpenAI in that order so the prompt can bind LEFT (front view) to the
+    // FRONT photos and RIGHT (back view) to the BACK photos.
+    const listOf = (v: unknown) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);
+    const views = body?.itemRefViews && typeof body.itemRefViews === "object" ? body.itemRefViews : null;
+    const viewLists = views
+      ? { general: listOf(views.general), front: listOf(views.front), back: listOf(views.back) }
+      : { general: listOf(body?.itemRefs), front: [] as string[], back: [] as string[] };
+    if (!viewLists.general.length && !viewLists.front.length && !viewLists.back.length) {
+      viewLists.general = listOf(body?.itemRefs);
+    }
+    const refs = [...viewLists.general, ...viewLists.front, ...viewLists.back].slice(0, MAX_REFS);
     const itemType = text(body?.itemType) || "apparel item";
     if (!refs.length) return NextResponse.json({ error: "Add item references first — flats are generated from them." }, { status: 400 });
 
@@ -111,10 +122,46 @@ async function handleFlat(req: NextRequest): Promise<Response> {
     const isDalle2 = imageModel === "dall-e-2";
     const supportsFidelity = !isDalle2 && !imageModel.startsWith("gpt-image-2");
 
+    // View map for the prompt, computed from the images that actually
+    // downloaded (a failed download shifts every index after it).
+    const okViews = downloaded
+      .map((r, i) =>
+        i < viewLists.general.length ? "general" : i < viewLists.general.length + viewLists.front.length ? "front" : "back"
+      )
+      .filter((_, i) => downloaded[i].status === "fulfilled");
+    const nGeneral = okViews.filter((v) => v === "general").length;
+    const nFront = okViews.filter((v) => v === "front").length;
+    const nBack = okViews.filter((v) => v === "back").length;
+    const range = (start: number, count: number) => (count === 1 ? `image ${start}` : `images ${start}–${start + count - 1}`);
+    const viewMapLines: string[] = [];
+    if (nFront || nBack) {
+      const parts: string[] = [];
+      let cursor = 1;
+      if (nGeneral) {
+        parts.push(`${range(cursor, nGeneral)} = general photo(s) (any view)`);
+        cursor += nGeneral;
+      }
+      if (nFront) {
+        parts.push(`${range(cursor, nFront)} = the FRONT of the item`);
+        cursor += nFront;
+      }
+      if (nBack) {
+        parts.push(`${range(cursor, nBack)} = the BACK of the item`);
+        cursor += nBack;
+      }
+      viewMapLines.push(
+        `REFERENCE VIEW MAP (authoritative — the operator sorted the photos): ${parts.join("; ")}.`,
+        "The LEFT (front) view must reproduce the FRONT photo(s) exactly; the RIGHT (back) view must reproduce the BACK photo(s) exactly. Never copy back content onto the front view or front content onto the back view."
+      );
+      if (nFront && !nBack) viewMapLines.push("No BACK photo was supplied: render the back from the general photos if they show it; otherwise keep the back clean in the item colour — never invent a back design.");
+      if (nBack && !nFront) viewMapLines.push("No FRONT photo was supplied: render the front from the general photos if they show it; otherwise keep the front clean in the item colour — never invent a front design.");
+    }
+
     const prompt = [
       `Create one ecommerce flat-lay image for a ${itemType}.`,
       "Output must be a side-by-side two-view composition.",
       "Left side: front view. Right side: back view.",
+      ...viewMapLines,
       "Keep both views centered, same scale, and fully visible.",
       "No model, no person, no mannequin, no hanger, no hands, no props.",
       "Use clean pure white studio background only.",

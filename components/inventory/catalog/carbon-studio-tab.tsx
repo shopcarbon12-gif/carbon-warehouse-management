@@ -24,7 +24,26 @@ type StudioVariant = { id: string; color: string | null; shopify_variant_id?: st
 type Crop = { id: string; b64: string; label: string; selected: boolean; qaWarnings?: string[]; qaNotes?: string[] };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
-type ItemRef = { url: string; preview?: string };
+/** Item-reference sections (owner, 2026-08-26): General = exactly the old
+ *  single box (accessories, flats, any view); Front / Back = the front / back
+ *  of the garment, so analysis + generation + QA know which photo is which side
+ *  and can never copy a back print onto the front. */
+type RefView = "general" | "front" | "back";
+type ItemRef = { url: string; preview?: string; view?: RefView };
+type RefViewLists = { general: string[]; front: string[]; back: string[] };
+const REF_VIEWS: { view: RefView; title: string; hint: string }[] = [
+  { view: "general", title: "General", hint: "Accessories, flats, any view — works exactly as before." },
+  { view: "front", title: "Front", hint: "The FRONT of the item (jeans, shirts, dresses…)." },
+  { view: "back", title: "Back", hint: "The BACK of the item." },
+];
+function groupRefs(refs: ItemRef[]): RefViewLists {
+  const out: RefViewLists = { general: [], front: [], back: [] };
+  for (const r of refs) out[r.view ?? "general"].push(r.url);
+  return out;
+}
+/** Server-side image order: general → front → back (the prompt's view map counts on it). */
+const orderedRefUrls = (v: RefViewLists) => [...v.general, ...v.front, ...v.back];
+const refViewKey = (v: RefViewLists) => (["general", "front", "back"] as const).map((k) => `${k}:${v[k].join(",")}`).join("|");
 /** A media-manager row: an existing Shopify image or a new crop to add.
  * `color` = the variant colour this image is the MAIN pic for (all sizes). */
 type MediaItem = {
@@ -354,7 +373,16 @@ export function CarbonStudioTab({
       return next;
     });
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+  /** Which reference section is highlighted for drops; and which one pasted /
+   *  phone-camera photos go to (the last section the operator touched). */
+  const [dragOverView, setDragOverView] = useState<RefView | null>(null);
+  const [activeView, setActiveView] = useState<RefView>("general");
+  const activeViewRef = useRef<RefView>("general");
+  const uploadViewRef = useRef<RefView>("general");
+  const selectView = useCallback((v: RefView) => {
+    activeViewRef.current = v;
+    setActiveView(v);
+  }, []);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const colors = useMemo(() => {
@@ -427,9 +455,9 @@ export function CarbonStudioTab({
         // all arrive in one tick via `images`.
         if (alive && j.ready) {
           const batch = j.images?.length
-            ? j.images.map((im) => ({ url: im.imageUrl, preview: im.previewUrl }))
+            ? j.images.map((im) => ({ url: im.imageUrl, preview: im.previewUrl, view: activeViewRef.current }))
             : j.imageUrl
-              ? [{ url: j.imageUrl, preview: j.previewUrl }]
+              ? [{ url: j.imageUrl, preview: j.previewUrl, view: activeViewRef.current }]
               : [];
           if (batch.length) {
             setItemRefs((prev) => [...prev, ...batch]);
@@ -466,9 +494,10 @@ export function CarbonStudioTab({
 
   const model = models.find((m) => m.model_id === modelId) || null;
 
-  const uploadItems = useCallback(async (files: File[]) => {
+  const uploadItems = useCallback(async (files: File[], view?: RefView) => {
     const list = files.filter((f) => f.type.startsWith("image/"));
     if (!list.length) return;
+    const targetView: RefView = view ?? activeViewRef.current;
     setBusy("upload");
     setErr(null);
     try {
@@ -480,7 +509,7 @@ export function CarbonStudioTab({
           const r = await fetch("/api/models/upload", { method: "POST", body: fd });
           const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
           if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);
-          return { url: j.url as string, preview: dataUrl } as ItemRef;
+          return { url: j.url as string, preview: dataUrl, view: targetView } as ItemRef;
         }),
       );
       const ok = results
@@ -536,7 +565,8 @@ export function CarbonStudioTab({
   /** High-detail vision pass over the item reference photos → numbered lock
    *  list (see /api/openai/item-spec). Stores the spec + the refs it covers. */
   const analyzeItem = useCallback(
-    async (refUrls: string[]): Promise<string | null> => {
+    async (views: RefViewLists): Promise<string | null> => {
+      const refUrls = orderedRefUrls(views);
       if (!refUrls.length) {
         setErr("Add at least one item photo before analyzing.");
         return null;
@@ -545,12 +575,12 @@ export function CarbonStudioTab({
         const r = await fetch("/api/openai/item-spec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itemRefs: refUrls, itemType }),
+          body: JSON.stringify({ itemRefs: refUrls, itemRefViews: views, itemType }),
         });
         const j = (await r.json().catch(() => ({}))) as { lockText?: string; error?: string; imagesAnalyzed?: number };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
-        setSpecRefsKey(refUrls.join("|"));
+        setSpecRefsKey(refViewKey(views));
         setErr(null);
         return j.lockText;
       } catch (e) {
@@ -579,10 +609,11 @@ export function CarbonStudioTab({
       } catch {
         /* unavailable */
       }
+      const flatViews = groupRefs(itemRefs);
       const resp = await fetch("/api/openai/item-flat", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json", "x-generate-stream": "1" },
-        body: JSON.stringify({ itemRefs: itemRefs.map((r) => r.url), itemType }),
+        body: JSON.stringify({ itemRefs: orderedRefUrls(flatViews), itemRefViews: flatViews, itemType }),
       });
       const json = (await resp.json().catch(() => ({}))) as { imageBase64?: string; error?: string | { message?: string } };
       if (!json.imageBase64) {
@@ -592,9 +623,11 @@ export function CarbonStudioTab({
       const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
       setProgress("Adding the flats to the item references…");
       const added: ItemRef[] = [];
+      // The front flat goes to the FRONT section and the back flat to BACK, so
+      // the view map downstream is exact.
       for (const f of [
-        { b64: left, name: "flat-front" },
-        { b64: right, name: "flat-back" },
+        { b64: left, name: "flat-front", view: "front" as const },
+        { b64: right, name: "flat-back", view: "back" as const },
       ]) {
         const bytes = Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0));
         const fd = new FormData();
@@ -602,10 +635,10 @@ export function CarbonStudioTab({
         const r = await fetch("/api/models/upload", { method: "POST", body: fd });
         const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
         if (!r.ok || !j.url) throw new Error(j.error ?? `Flat upload failed (HTTP ${r.status})`);
-        added.push({ url: j.url, preview: `data:image/png;base64,${f.b64}` });
+        added.push({ url: j.url, preview: `data:image/png;base64,${f.b64}`, view: f.view });
       }
       setItemRefs((prev) => [...prev, ...added]);
-      setMsg("Flat front + back created and added to the item references.");
+      setMsg("Flats created: front → Front section, back → Back section.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Flat generation failed");
     } finally {
@@ -619,7 +652,8 @@ export function CarbonStudioTab({
     if (!model) return setErr("Pick a model first.");
     if (!itemRefs.length) return setErr("Add at least one item photo (upload or phone camera).");
     if (!panels.length) return setErr("Select at least one panel.");
-    const refUrls = itemRefs.map((r) => r.url);
+    const refViews = groupRefs(itemRefs);
+    const refUrls = orderedRefUrls(refViews);
     setBusy("generate");
     setNativeBusy(true);
     setErr(null);
@@ -628,9 +662,9 @@ export function CarbonStudioTab({
     // spec already covers exactly these photos): every word, graphic, material,
     // hardware piece and stitch is inventoried and locked into the prompt.
     let specForRun = itemSpec.trim();
-    if (!specForRun || specRefsKey !== refUrls.join("|")) {
+    if (!specForRun || specRefsKey !== refViewKey(refViews)) {
       setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
-      const analyzed = await analyzeItem(refUrls);
+      const analyzed = await analyzeItem(refViews);
       if (!analyzed) {
         setBusy(null);
         setNativeBusy(false);
@@ -713,6 +747,7 @@ export function CarbonStudioTab({
             size: "1536x1024",
             modelRefs: model.ref_image_urls,
             itemRefs: refUrls,
+            itemRefViews: refViews,
             panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
             itemSpec: specForRun || undefined,
           }),
@@ -1062,108 +1097,156 @@ export function CarbonStudioTab({
 
   return (
     <div className="space-y-3">
-      {/* Item photos */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          if (canManage) setDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          if (!canManage) return;
-          const imgs = imageFilesFromTransfer(e.dataTransfer);
-          if (imgs.length) void uploadItems(imgs);
-        }}
-        className={`rounded-md border p-3 transition-colors ${
-          dragOver
-            ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
-            : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
-        }`}
-      >
+      {/* Item photos — three sections: General (exactly the old box), Front, Back */}
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-3">
         <span className={label}>Item photo(s) — the garment reference</span>
         <p className="mb-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-          Drag &amp; drop images here, paste from clipboard (⌘/Ctrl+V), upload, or use the phone camera.
+          Sort the photos by view so the front and the back can never be mixed up. Drag &amp; drop into a section,
+          paste from clipboard (⌘/Ctrl+V — lands in the highlighted section), upload, or use the phone camera.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          {itemRefs.map((ref, i) => (
-            <div key={ref.url + i} className="relative">
-              {ref.preview ? (
-                <img
-                  src={ref.preview}
-                  alt="item ref"
-                  title="Click to view full size"
-                  className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
-                  onClick={() => setZoom(ref.preview as string)}
-                />
-              ) : (
-                <div className="flex h-28 w-24 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.62rem] text-[var(--wms-status-success-fg)]">
-                  ✓ photo
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setItemRefs((p) => p.filter((x) => x.url !== ref.url))}
-                className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-status-danger-fg)]"
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = e.target.files ? Array.from(e.target.files) : [];
+            if (files.length) void uploadItems(files, uploadViewRef.current);
+            e.target.value = "";
+          }}
+        />
+        <div className="grid gap-2 md:grid-cols-3">
+          {REF_VIEWS.map((zone) => {
+            const zoneRefs = itemRefs.filter((r) => (r.view ?? "general") === zone.view);
+            const isActive = activeView === zone.view;
+            const isOver = dragOverView === zone.view;
+            return (
+              <div
+                key={zone.view}
+                onClick={() => selectView(zone.view)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (canManage) setDragOverView(zone.view);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  setDragOverView((v) => (v === zone.view ? null : v));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOverView(null);
+                  if (!canManage) return;
+                  selectView(zone.view);
+                  const imgs = imageFilesFromTransfer(e.dataTransfer);
+                  if (imgs.length) void uploadItems(imgs, zone.view);
+                }}
+                className={`rounded-md border p-2 transition-colors ${
+                  isOver
+                    ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
+                    : isActive
+                      ? "border-[var(--wms-accent)]/60 bg-[var(--wms-surface)]"
+                      : "border-[var(--wms-border)] bg-[var(--wms-surface)]/60"
+                }`}
               >
-                ✕
-              </button>
-            </div>
-          ))}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              const files = e.target.files ? Array.from(e.target.files) : [];
-              if (files.length) void uploadItems(files);
-              e.target.value = "";
-            }}
-          />
-          <button
-            type="button"
-            disabled={!canManage || busy === "upload"}
-            onClick={() => {
-              const input = fileRef.current;
-              if (!input) return;
-              // Android's Photo Picker hijacks accept="image/*" and opens Google
-              // Photos only. On touch devices drop the filter for this click so
-              // the OS shows the full chooser (Camera / Files / Photos / Drive…);
-              // uploadItems still keeps only image/* files. Desktop keeps the
-              // image filter in its file dialog. Behaviour-only (handler), no
-              // render branching.
-              const touch = window.matchMedia("(pointer: coarse)").matches;
-              if (touch) input.removeAttribute("accept");
-              input.click();
-              if (touch) setTimeout(() => input.setAttribute("accept", "image/*"), 0);
-            }}
-            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
-          >
-            {busy === "upload" ? "…" : "＋ Upload"}
-          </button>
-          <button
-            type="button"
-            disabled={!canManage}
-            onClick={() => void startPhoneCamera()}
-            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
-          >
-            📱 Phone camera (QR)
-          </button>
-          <button
-            type="button"
-            disabled={!canManage || busy !== null || !itemRefs.length}
-            onClick={() => void createFlats()}
-            title="Generate a clean front + back flat of the item from these references and add both views to the item references (carbon-gen flats)"
-            className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
-          >
-            {busy === "flats" ? "… Creating flats" : "✦ Create flats"}
-          </button>
+                <div className="mb-1 flex items-baseline justify-between gap-2">
+                  <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
+                    {zone.title}
+                    {zoneRefs.length ? ` · ${zoneRefs.length}` : ""}
+                  </span>
+                  {isActive ? (
+                    <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)]">
+                      paste / camera target
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">{zone.hint}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {zoneRefs.map((ref, i) => (
+                    <div key={ref.url + i} className="relative">
+                      {ref.preview ? (
+                        <img
+                          src={ref.preview}
+                          alt={`item ref (${zone.title})`}
+                          title="Click to view full size"
+                          className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setZoom(ref.preview as string);
+                          }}
+                        />
+                      ) : (
+                        <div className="flex h-28 w-24 items-center justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] text-center font-mono text-[0.62rem] text-[var(--wms-status-success-fg)]">
+                          ✓ photo
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setItemRefs((p) => p.filter((x) => x.url !== ref.url));
+                        }}
+                        className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-status-danger-fg)]"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={!canManage || busy === "upload"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectView(zone.view);
+                      uploadViewRef.current = zone.view;
+                      const input = fileRef.current;
+                      if (!input) return;
+                      // Android's Photo Picker hijacks accept="image/*" and opens Google
+                      // Photos only. On touch devices drop the filter for this click so
+                      // the OS shows the full chooser (Camera / Files / Photos / Drive…);
+                      // uploadItems still keeps only image/* files. Desktop keeps the
+                      // image filter in its file dialog. Behaviour-only (handler), no
+                      // render branching.
+                      const touch = window.matchMedia("(pointer: coarse)").matches;
+                      if (touch) input.removeAttribute("accept");
+                      input.click();
+                      if (touch) setTimeout(() => input.setAttribute("accept", "image/*"), 0);
+                    }}
+                    className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
+                  >
+                    {busy === "upload" && uploadViewRef.current === zone.view ? "…" : "＋ Upload"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canManage}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      selectView(zone.view);
+                      void startPhoneCamera();
+                    }}
+                    title={`Phone camera (QR) — photos land in ${zone.title}`}
+                    className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
+                  >
+                    📱 Phone camera
+                  </button>
+                  {zone.view === "general" ? (
+                    <button
+                      type="button"
+                      disabled={!canManage || busy !== null || !itemRefs.length}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void createFlats();
+                      }}
+                      title="Generate a clean front + back flat of the item from all item references; the front flat lands in Front, the back flat in Back (carbon-gen flats)"
+                      className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
+                    >
+                      {busy === "flats" ? "… Creating flats" : "✦ Create flats"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
         </div>
         {qr ? (
           <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">

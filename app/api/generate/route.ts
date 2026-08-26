@@ -597,6 +597,84 @@ function normalizeReasons(value: unknown) {
     .slice(0, 8);
 }
 
+/** Studio item-reference sections: General (any view — accessories, flats),
+ *  Front (front of the garment), Back (back of the garment). */
+type ItemRefView = "general" | "front" | "back";
+type ItemRefViewLists = { general: string[]; front: string[]; back: string[] };
+
+function parseItemRefViews(views: unknown, fallbackRefs: unknown): ItemRefViewLists {
+  const strList = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
+  if (views && typeof views === "object") {
+    const o = views as Record<string, unknown>;
+    const lists = { general: strList(o.general), front: strList(o.front), back: strList(o.back) };
+    if (lists.general.length || lists.front.length || lists.back.length) return lists;
+  }
+  return { general: strList(fallbackRefs), front: [], back: [] };
+}
+
+/** Which attached images are the FRONT and which are the BACK — so the
+ *  generator can never copy a back print onto the front (or vice versa).
+ *  Only emitted when the operator actually sorted photos into Front/Back. */
+function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefView[] }): string[] {
+  const front = args.itemViews.filter((v) => v === "front").length;
+  const back = args.itemViews.filter((v) => v === "back").length;
+  if (!front && !back) return [];
+  const general = args.itemViews.filter((v) => v === "general").length;
+  const range = (start: number, count: number) => (count === 1 ? `image ${start}` : `images ${start}–${start + count - 1}`);
+  let cursor = args.modelCount + 1;
+  const parts: string[] = [];
+  if (general) {
+    parts.push(`${range(cursor, general)} = GENERAL item photo(s) (any view: accessories, flats, details)`);
+    cursor += general;
+  }
+  if (front) {
+    parts.push(`${range(cursor, front)} = the FRONT of the item`);
+    cursor += front;
+  }
+  if (back) {
+    parts.push(`${range(cursor, back)} = the BACK of the item`);
+    cursor += back;
+  }
+  return [
+    "ITEM REFERENCE VIEW MAP (SERVER — the operator sorted the item photos by view; this is authoritative):",
+    `- Attached reference images, in order: ${range(1, args.modelCount)} = MODEL identity refs; ${parts.join("; ")}.`,
+    "- Everything visible on a FRONT photo exists ONLY on the front of the garment; everything visible on a BACK photo exists ONLY on the back. Never copy a back print / text / graphic onto the front, and never copy a front print / text / graphic onto the back.",
+    "- Front-facing frames show only the FRONT content; back-facing frames show only the BACK content; side / three-quarter views show each side's own content in perspective.",
+    ...(front && !back
+      ? ["- No BACK photo was supplied: render the back exactly as the general photos / verified spec show it; if they show nothing, keep the back clean in the item colour — never invent a back design."]
+      : []),
+    ...(back && !front
+      ? ["- No FRONT photo was supplied: render the front exactly as the general photos / verified spec show it; if they show nothing, keep the front clean in the item colour — never invent a front design."]
+      : []),
+  ];
+}
+
+/** QA judge input: item refs grouped and labelled by view. */
+function buildLabelledItemRefContent(itemRefs: string[], views?: ItemRefView[]): any[] {
+  const tagged = itemRefs.map((url, i) => ({ url, view: views?.[i] ?? "general" }));
+  const groups: { view: ItemRefView; label: string }[] = [
+    { view: "general", label: "ITEM reference images — GENERAL (any view: accessories, flats, details):" },
+    { view: "front", label: "ITEM reference images — FRONT of the garment (everything here is on the front only):" },
+    { view: "back", label: "ITEM reference images — BACK of the garment (everything here is on the back only):" },
+  ];
+  const hasSorted = tagged.some((t) => t.view !== "general");
+  if (!hasSorted) {
+    return [
+      { type: "input_text", text: "ITEM reference images (outfit lock):" },
+      ...tagged.map((t) => ({ type: "input_image", image_url: t.url })),
+    ];
+  }
+  const out: any[] = [];
+  for (const g of groups) {
+    const urls = tagged.filter((t) => t.view === g.view).map((t) => t.url);
+    if (!urls.length) continue;
+    out.push({ type: "input_text", text: g.label });
+    out.push(...urls.map((url) => ({ type: "input_image", image_url: url })));
+  }
+  return out;
+}
+
 type QaFrame = "left" | "right" | "both";
 type QaReason = { frame: QaFrame; text: string };
 const QA_MIN_CONFIDENCE = 0.75;
@@ -649,6 +727,8 @@ async function runPanelComplianceCheck(args: {
   modelRefs: string[];
   itemRefs: string[];
   panelQa: PanelQaInput;
+  /** View tag per itemRefs entry (general / front / back), same order. */
+  itemRefViews?: ItemRefView[];
   /** Verified item spec (pre-generation analysis) so the judge can check text
    *  letter by letter and graphic placement side by side. */
   itemSpec?: string;
@@ -737,8 +817,7 @@ async function runPanelComplianceCheck(args: {
       : []),
     { type: "input_text", text: "MODEL reference images (identity lock):" },
     ...args.modelRefs.slice(0, 4).map((url) => ({ type: "input_image", image_url: url })),
-    { type: "input_text", text: "ITEM reference images (outfit lock):" },
-    ...args.itemRefs.map((url) => ({ type: "input_image", image_url: url })),
+    ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
     { type: "input_text", text: "Generated panel to audit:" },
     { type: "input_image", image_url: `data:image/png;base64,${args.imageBase64}` },
     {
@@ -962,8 +1041,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       );
     }
 
-    const { prompt, size, modelRefs, itemRefs, panelQa, variationStrength, variationSeed, itemSpec } =
+    const { prompt, size, modelRefs, itemRefs, itemRefViews, panelQa, variationStrength, variationSeed, itemSpec } =
       await req.json();
+    // Item refs sorted by view (Studio: General / Front / Back sections). The
+    // image order sent to OpenAI is general → front → back so the prompt can
+    // say which attached images are the front and which are the back.
+    const viewLists = parseItemRefViews(itemRefViews, itemRefs);
     // Pre-generation item analysis (client → /api/openai/item-spec). Appended
     // INSIDE the server lock block so prompt trimming can never drop it, and
     // capped so it can never push the prompt over the model limit.
@@ -994,7 +1077,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     }
 
     const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
-    const itemRefValues = Array.isArray(itemRefs) ? itemRefs : [];
+    const itemRefValues = [...viewLists.general, ...viewLists.front, ...viewLists.back];
+    const itemRefViewTags: ItemRefView[] = [
+      ...viewLists.general.map((): ItemRefView => "general"),
+      ...viewLists.front.map((): ItemRefView => "front"),
+      ...viewLists.back.map((): ItemRefView => "back"),
+    ];
     const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
     const itemRefNormalization = normalizeReferenceUrls(itemRefValues, "Item");
     const normalizedModelRefs = modelRefNormalization.urls;
@@ -1080,8 +1168,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       strength: normalizeStrength(variationStrength),
       seed: resolvedVariationSeed,
     });
-    const serverLockBlock = [
+    // NOTE: the server lock block is assembled AFTER the reference downloads
+    // below, because its ITEM VIEW MAP must describe the images that actually
+    // reached OpenAI (a failed download shifts every index after it).
+    const buildServerLockBlock = (itemViewMapLines: string[]) => [
       serverIdentityLockPrompt,
+      ...itemViewMapLines,
       ...(itemSpecText
         ? [
             "VERIFIED ITEM SPEC HARD LOCK (SERVER — pre-generation analysis of the actual item photos; every line was observed on the product and MUST appear exactly as stated in every panel and frame; this overrides any generic styling):",
@@ -1110,17 +1202,14 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           ]
         : [buildNonSwimwearCoverageLock(normalizedPanelQa.itemType)]),
     ].join("\n");
-    const clamped = clampLockedPrompt(prompt, serverLockBlock);
-    const lockedPrompt = clamped.prompt;
-    if (clamped.trimmed) {
-      console.warn(
-        `[generate] prompt exceeded ${MODEL_PROMPT_MAX_CHARS} chars (client portion ${prompt.length}); trimmed client prompt to fit while preserving server locks.`
-      );
-    }
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
     const modelAnchors = normalizedModelRefs.slice(0, 6);
     const itemAnchors = normalizedItemRefs;
+    // View tag per item anchor; if normalisation changed the count (it only
+    // drops on error, which 400s above) fall back to "general" for all.
+    const itemAnchorViews: ItemRefView[] =
+      itemRefViewTags.length === itemAnchors.length ? itemRefViewTags : itemAnchors.map((): ItemRefView => "general");
 
     const allRefs = [...modelAnchors, ...itemAnchors];
     const downloaded = await Promise.allSettled(
@@ -1135,10 +1224,15 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       .slice(0, modelAnchors.length)
       .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>> => r.status === "fulfilled")
       .map((r) => r.value.dataUrl);
-    const itemRefDataUrls = downloaded
+    const itemRefDownloads = downloaded
       .slice(modelAnchors.length)
-      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>> => r.status === "fulfilled")
-      .map((r) => r.value.dataUrl);
+      .map((r, i) => ({ r, view: itemAnchorViews[i] ?? "general" }))
+      .filter(
+        (e): e is { r: PromiseFulfilledResult<Awaited<ReturnType<typeof downloadReferenceAsFile>>>; view: ItemRefView } =>
+          e.r.status === "fulfilled"
+      );
+    const itemRefDataUrls = itemRefDownloads.map((e) => e.r.value.dataUrl);
+    const itemRefViewsForQa = itemRefDownloads.map((e) => e.view);
     const modelFilesCount = downloaded
       .slice(0, modelAnchors.length)
       .filter((r) => r.status === "fulfilled").length;
@@ -1162,6 +1256,17 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           failedIndexes: summary.failedIndexes,
         },
         { status: 400 }
+      );
+    }
+
+    const serverLockBlock = buildServerLockBlock(
+      buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa })
+    );
+    const clamped = clampLockedPrompt(prompt, serverLockBlock);
+    const lockedPrompt = clamped.prompt;
+    if (clamped.trimmed) {
+      console.warn(
+        `[generate] prompt exceeded ${MODEL_PROMPT_MAX_CHARS} chars (client portion ${prompt.length}); trimmed client prompt to fit while preserving server locks.`
       );
     }
     if (modelFilesCount < 3) {
@@ -1323,6 +1428,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           imageBase64: b64,
           modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
           itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
+          itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
           panelQa: normalizedPanelQa,
           itemSpec: itemSpecText,
           specHasBackDesign,

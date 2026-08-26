@@ -167,7 +167,24 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const refs = (Array.isArray(body?.itemRefs) ? body.itemRefs : []).map(text).filter(Boolean).slice(0, MAX_REFS);
+    // Studio sorts item photos into General / Front / Back. When Front/Back are
+    // used, each image is labelled with its view so the placement SIDE in the
+    // spec comes from the operator's sorting, not from a guess.
+    const listOf = (v: unknown) => (Array.isArray(v) ? v.map(text).filter(Boolean) : []);
+    const views = body?.itemRefViews && typeof body.itemRefViews === "object" ? body.itemRefViews : null;
+    const viewLists = views
+      ? { general: listOf(views.general), front: listOf(views.front), back: listOf(views.back) }
+      : { general: listOf(body?.itemRefs), front: [] as string[], back: [] as string[] };
+    if (!viewLists.general.length && !viewLists.front.length && !viewLists.back.length) {
+      viewLists.general = listOf(body?.itemRefs);
+    }
+    const entries = [
+      ...viewLists.general.map((url) => ({ url, view: "general" as const })),
+      ...viewLists.front.map((url) => ({ url, view: "front" as const })),
+      ...viewLists.back.map((url) => ({ url, view: "back" as const })),
+    ].slice(0, MAX_REFS);
+    const refs = entries.map((e) => e.url);
+    const sortedViews = entries.some((e) => e.view !== "general");
     const itemType = text(body?.itemType) || "apparel item";
     if (!refs.length) return NextResponse.json({ error: "itemRefs required" }, { status: 400 });
 
@@ -175,7 +192,11 @@ export async function POST(req: NextRequest) {
     if (!apiKey) return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
 
     const resolved = await Promise.allSettled(refs.map((r: string) => toDataUrl(r)));
-    const images = resolved.filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled" && !!r.value).map((r) => r.value);
+    const loaded = resolved
+      .map((r, i) => ({ r, view: entries[i].view }))
+      .filter((e): e is { r: PromiseFulfilledResult<string>; view: "general" | "front" | "back" } => e.r.status === "fulfilled" && !!e.r.value)
+      .map((e) => ({ url: e.r.value, view: e.view }));
+    const images = loaded.map((e) => e.url);
     if (!images.length) {
       return NextResponse.json({ error: "None of the item reference images could be loaded." }, { status: 400 });
     }
@@ -197,7 +218,24 @@ export async function POST(req: NextRequest) {
       'FIT_SILHOUETTE must be specific: oversized / boxy / drop-shoulder / relaxed / regular / slim / cropped / longline, sleeve length and shape, body length, hem shape, neckline (crew / V / ribbed collar width).',
       'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
       "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam', 'white silicone raised logo 4 cm wide on left chest'). Ignore any person, background, or styling in the photos — describe the product only.",
+      ...(sortedViews
+        ? [
+            "VIEW LABELS ARE AUTHORITATIVE: the reference images below are grouped under GENERAL / FRONT / BACK headings chosen by the operator. Anything seen on a FRONT-labelled image gets placement \"front, …\"; anything on a BACK-labelled image gets placement \"back, …\". Never decide the side from the garment shape when a label is given. Text or graphics that appear on both a FRONT and a BACK image get one entry per side.",
+          ]
+        : []),
     ].join("\n");
+    const viewHeading: Record<"general" | "front" | "back", string> = {
+      general: "GENERAL reference image(s) — any view (accessories, flats, details):",
+      front: "FRONT reference image(s) — this is the FRONT of the garment; everything visible here is on the front:",
+      back: "BACK reference image(s) — this is the BACK of the garment; everything visible here is on the back:",
+    };
+    const imageContent: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
+    for (const view of ["general", "front", "back"] as const) {
+      const urls = loaded.filter((e) => e.view === view).map((e) => e.url);
+      if (!urls.length) continue;
+      if (sortedViews) imageContent.push({ type: "text", text: viewHeading[view] });
+      imageContent.push(...urls.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })));
+    }
 
     const client = new OpenAI({ apiKey });
     const ac = new AbortController();
@@ -216,7 +254,7 @@ export async function POST(req: NextRequest) {
               role: "user",
               content: [
                 { type: "text", text: instruction },
-                ...images.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })),
+                ...imageContent,
               ],
             },
           ],
