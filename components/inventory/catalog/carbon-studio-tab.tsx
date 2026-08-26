@@ -711,23 +711,24 @@ export function CarbonStudioTab({
         color: "",
       }));
       setShopifyExisting(existing);
-      // Only the SELECTED generated crops are shown by default. Default ordering
-      // in Manage & publish depends on the model gender:
-      //  • MEN → Pose 4 LAST, Pose 7 second-to-last (rest keep their order).
-      //  • otherwise → the Pose-2 crop (right frame, id "-r-") goes last so Pose 1
-      //    leads / becomes hero.
+      // Only the SELECTED generated crops are shown by default. Base order is
+      // carbon-gen's canonical push order — ascending POSE NUMBER (the female
+      // panels render 7+5 / 6+8, so generation order ≠ pose order) — then the
+      // gender rule is applied on top:
+      //  • MEN → Pose 4 LAST, Pose 7 second-to-last (8b3787c).
+      //  • WOMEN → Pose 2 LAST so Pose 1 leads / becomes hero (9942a07). The
+      //    previous implementation pushed EVERY right-frame crop last
+      //    (1,3,7,6,2,4,5,8) — that was a bug against its own spec.
       const picked = crops.filter((c) => c.selected && c.b64);
       const poseNum = (c: Crop) => {
         const m = c.label.match(/Pose (\d+)/);
         return m ? Number(m[1]) : 0;
       };
       const isMale = (model?.gender || "").toLowerCase() === "male";
-      const ordered = isMale
-        ? [...picked].sort((a, b) => {
-            const rank = (c: Crop) => (poseNum(c) === 4 ? 2 : poseNum(c) === 7 ? 1 : 0);
-            return rank(a) - rank(b);
-          })
-        : [...picked.filter((c) => !c.id.includes("-r-")), ...picked.filter((c) => c.id.includes("-r-"))];
+      const rank = isMale
+        ? (c: Crop) => (poseNum(c) === 4 ? 2 : poseNum(c) === 7 ? 1 : 0)
+        : (c: Crop) => (poseNum(c) === 2 ? 1 : 0);
+      const ordered = [...picked].sort((a, b) => rank(a) - rank(b) || poseNum(a) - poseNum(b));
       const news: MediaItem[] = ordered.map((c) => ({
         key: `new-${c.id}`,
         kind: "new",
