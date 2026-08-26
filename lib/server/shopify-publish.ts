@@ -15,7 +15,7 @@ import {
   resolveShopContext,
   productSet,
   primaryLocationId,
-  setInventoryQuantity,
+  setInventoryQuantitiesBulk,
   onlineStorePublicationId,
   publishToPublication,
   type SetVariant,
@@ -187,13 +187,17 @@ export async function pushMatrixToShopify(
   const locId = await primaryLocationId(ctx);
   if (locId) {
     const onHand = await onHandBySku(pool, matrixId, locationId);
+    // ONE bulk inventorySetQuantities for every variant (was one call per size).
+    const quantities: Array<{ inventoryItemId: string; locationId: string; quantity: number }> = [];
     for (const v of variants) {
       const sv = bySku.get((v.sku || "").trim().toLowerCase());
       const invId = sv?.inventoryItem?.id;
       if (!invId) continue;
-      const qty = onHand.get(v.id) || 0;
-      const r = await setInventoryQuantity(ctx, invId, locId, qty);
-      if (!r.ok) warnings.push(`Inventory ${v.sku}: ${r.error}`);
+      quantities.push({ inventoryItemId: invId, locationId: locId, quantity: onHand.get(v.id) || 0 });
+    }
+    if (quantities.length) {
+      const r = await setInventoryQuantitiesBulk(ctx, quantities);
+      if (!r.ok) warnings.push(`Inventory: ${r.error}`);
     }
   } else {
     warnings.push("No Shopify location found — inventory not set.");

@@ -154,20 +154,21 @@ export async function POST(req: NextRequest) {
       .slice(0, MAX_VISION_IMAGES);
     const images: { id: string; dataUrl: string }[] = [];
     if (useVision) {
-      for (const a of candidateImages) {
-        try {
+      // Fetch the candidate images in parallel (was one at a time); order is
+      // preserved and unreachable images are skipped exactly as before.
+      const fetched = await Promise.allSettled(
+        candidateImages.map(async (a) => {
           const safeUrl = normalizeRemoteImageUrl(String(a.url));
           const { bytes, contentType } = await fetchRemoteImageBytes(safeUrl, {
             timeoutMs: getImageFetchTimeoutMs(),
           });
-          images.push({
+          return {
             id: String(a.id),
             dataUrl: `data:${contentType || "image/jpeg"};base64,${bytes.toString("base64")}`,
-          });
-        } catch {
-          /* skip unreachable image */
-        }
-      }
+          };
+        }),
+      );
+      for (const f of fetched) if (f.status === "fulfilled") images.push(f.value);
     }
     const visionActive = useVision && images.length > 0;
     const altImageIds = images.filter((img) => altIdSet.has(img.id)).map((img) => img.id);

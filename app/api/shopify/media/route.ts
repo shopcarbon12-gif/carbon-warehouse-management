@@ -11,9 +11,12 @@ import {
   reorderProductMedia,
   createProductMedia,
   stageImageUpload,
-  appendMediaToVariant,
-  detachMediaFromVariant,
+  appendMediaToVariants,
+  createProductMediaBatch,
+  detachMediaFromVariants,
   listVariantMedia,
+  stageImageUploads,
+  type StagedFile,
 } from "@/lib/server/shopify-write";
 import { syncShopifyImagesForMatrix } from "@/lib/server/shopify-catalog-images";
 
@@ -97,34 +100,48 @@ export async function POST(req: Request) {
   const warnings: string[] = [];
   const current = await listProductMedia(ctx, productId);
 
-  // 1) Create new media (stage → createProductMedia) and build the final order
-  //    + per-image variant assignments.
+  // 1) Create ALL new media in one pass — one stagedUploadsCreate, parallel
+  //    byte uploads, one productCreateMedia, one status poll per round —
+  //    instead of stage→create→poll per image in series (was 3-5 s × N).
+  //    Warning prefixes ("stage:" / "create:") are contractual: the client
+  //    classifies them as hard failures vs benign notes.
   const finalOrder: string[] = [];
   const variantAssignments: Array<{ mediaId: string; variantId: string }> = [];
   const keptExisting = new Set<string>();
-  for (const it of items) {
+  const newMediaIdByIndex = new Map<number, string>();
+  {
+    const toStage: Array<{ index: number; file: StagedFile; alt: string }> = [];
+    const stamp = Date.now();
+    items.forEach((it, index) => {
+      if (it.kind !== "new") return;
+      const bytes = new Uint8Array(Buffer.from(it.b64, "base64"));
+      if (!bytes.byteLength) {
+        warnings.push("create: empty image data");
+        return;
+      }
+      const sniff = sniffImage(bytes);
+      toStage.push({ index, file: { filename: `studio-${stamp}-${index}.${sniff.ext}`, mimeType: sniff.mime, bytes }, alt: it.alt || "" });
+    });
+    const staged = await stageImageUploads(ctx, toStage.map((t) => t.file));
+    const toCreate: Array<{ index: number; source: string; alt: string }> = [];
+    staged.forEach((s, i) => {
+      if (s.ok) toCreate.push({ index: toStage[i].index, source: s.resourceUrl, alt: toStage[i].alt });
+      else warnings.push(`stage: ${s.error}`);
+    });
+    const created = await createProductMediaBatch(ctx, productId, toCreate.map((c) => ({ source: c.source, alt: c.alt })));
+    created.forEach((c, i) => {
+      if (c.ok) newMediaIdByIndex.set(toCreate[i].index, c.mediaId);
+      else warnings.push(`create: ${c.error}`);
+    });
+  }
+  for (const [index, it] of items.entries()) {
     let mediaId = "";
     if (it.kind === "existing") {
       mediaId = it.mediaId;
       keptExisting.add(it.mediaId);
     } else {
-      const bytes = new Uint8Array(Buffer.from(it.b64, "base64"));
-      if (!bytes.byteLength) {
-        warnings.push("create: empty image data");
-        continue;
-      }
-      const sniff = sniffImage(bytes);
-      const staged = await stageImageUpload(ctx, `studio-${Date.now()}.${sniff.ext}`, sniff.mime, bytes);
-      if (!staged.ok) {
-        warnings.push(`stage: ${staged.error}`);
-        continue;
-      }
-      const media = await createProductMedia(ctx, productId, staged.resourceUrl, it.alt || "");
-      if (!media.ok) {
-        warnings.push(`create: ${media.error}`);
-        continue;
-      }
-      mediaId = media.mediaId;
+      mediaId = newMediaIdByIndex.get(index) || "";
+      if (!mediaId) continue; // failed stage/create — warning already recorded
     }
     finalOrder.push(mediaId);
     // Per-image variant assignment. `variantIds` (all sizes of one colour) takes
@@ -169,17 +186,22 @@ export async function POST(req: Request) {
   // Now: skip when unchanged, detach the current media first when different.
   const currentVariantMedia = assigns.length ? await listVariantMedia(ctx, productId) : new Map<string, string | null>();
   const asVariantGid = (id: string) => (id.startsWith("gid://") ? id : `gid://shopify/ProductVariant/${id}`);
+  // Batched: ONE detach call + ONE append call for every variant that changes
+  // (was one round-trip per variant, i.e. per size).
+  const detaches: Array<{ variantId: string; mediaId: string }> = [];
+  const appends: Array<{ variantId: string; mediaId: string }> = [];
   for (const a of assigns) {
     const cur = currentVariantMedia.get(asVariantGid(a.variantId)) ?? currentVariantMedia.get(a.variantId) ?? null;
     if (cur === a.mediaId) continue;
-    if (cur) {
-      const dt = await detachMediaFromVariant(ctx, productId, a.variantId, cur);
-      if (!dt.ok) {
-        warnings.push(`variant image (detach old): ${dt.error}`);
-        continue;
-      }
-    }
-    const av = await appendMediaToVariant(ctx, productId, a.variantId, a.mediaId);
+    if (cur) detaches.push({ variantId: a.variantId, mediaId: cur });
+    appends.push({ variantId: a.variantId, mediaId: a.mediaId });
+  }
+  if (detaches.length) {
+    const dt = await detachMediaFromVariants(ctx, productId, detaches);
+    if (!dt.ok) warnings.push(`variant image (detach old): ${dt.error}`);
+  }
+  if (appends.length) {
+    const av = await appendMediaToVariants(ctx, productId, appends);
     if (!av.ok) warnings.push(`variant image: ${av.error}`);
   }
 

@@ -353,6 +353,201 @@ export async function createProductMedia(
   return { ok: false, error: "media not READY after timeout" };
 }
 
+// ── Batched variants of the above (one Shopify round-trip instead of N) ──────
+
+/** Bulk inventory set — one inventorySetQuantities call per 100 items. */
+export async function setInventoryQuantitiesBulk(
+  ctx: ShopCtx,
+  quantities: Array<{ inventoryItemId: string; locationId: string; quantity: number }>,
+): Promise<{ ok: boolean; error?: string }> {
+  const errors: string[] = [];
+  for (let i = 0; i < quantities.length; i += 100) {
+    const chunk = quantities.slice(i, i + 100).map((q) => ({
+      inventoryItemId: q.inventoryItemId,
+      locationId: q.locationId,
+      quantity: Math.max(0, Math.trunc(q.quantity)),
+    }));
+    const res = await gql<{ inventorySetQuantities?: { userErrors?: Array<{ message: string }> } }>(
+      ctx,
+      `mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
+        inventorySetQuantities(input: $input) { userErrors { message } }
+      }`,
+      { input: { name: "available", reason: "correction", ignoreCompareQuantity: true, quantities: chunk } },
+    );
+    if (!res.data) errors.push("inventorySetQuantities request failed");
+    const errs = res.data?.inventorySetQuantities?.userErrors || [];
+    if (errs.length) errors.push(errs.map((e) => e.message).join("; "));
+  }
+  return errors.length ? { ok: false, error: errors.join("; ") } : { ok: true };
+}
+
+export type StagedFile = { filename: string; mimeType: string; bytes: Uint8Array };
+export type StagedResult = { ok: true; resourceUrl: string } | { ok: false; error: string };
+
+/** Stage N images with ONE stagedUploadsCreate, then POST the bytes in
+ * parallel (bounded concurrency). Results are index-aligned with `files`. */
+export async function stageImageUploads(
+  ctx: ShopCtx,
+  files: StagedFile[],
+  concurrency = 4,
+): Promise<StagedResult[]> {
+  if (!files.length) return [];
+  const res = await gql<{
+    stagedUploadsCreate?: { stagedTargets?: StagedTarget[]; userErrors?: Array<{ message: string }> };
+  }>(
+    ctx,
+    `mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
+      stagedUploadsCreate(input: $input) {
+        stagedTargets { url resourceUrl parameters { name value } }
+        userErrors { field message }
+      }
+    }`,
+    {
+      input: files.map((f) => ({
+        filename: f.filename,
+        mimeType: f.mimeType,
+        resource: "IMAGE",
+        httpMethod: "POST",
+        fileSize: String(f.bytes.byteLength),
+      })),
+    },
+  );
+  const errs = res.data?.stagedUploadsCreate?.userErrors || [];
+  if (errs.length) {
+    const error = errs.map((e) => e.message).join("; ");
+    return files.map(() => ({ ok: false, error }));
+  }
+  const targets = res.data?.stagedUploadsCreate?.stagedTargets || [];
+  const out: StagedResult[] = new Array(files.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= files.length) return;
+      const t = targets[i];
+      if (!t?.url || !t.resourceUrl) {
+        out[i] = { ok: false, error: "stagedUploadsCreate returned no target" };
+        continue;
+      }
+      try {
+        const form = new FormData();
+        for (const p of t.parameters) form.append(p.name, p.value);
+        form.append("file", new Blob([files[i].bytes as unknown as BlobPart], { type: files[i].mimeType }), files[i].filename);
+        const put = await fetch(t.url, { method: "POST", body: form });
+        out[i] = put.ok
+          ? { ok: true, resourceUrl: t.resourceUrl }
+          : { ok: false, error: `staged upload PUT failed: HTTP ${put.status}` };
+      } catch (e) {
+        out[i] = { ok: false, error: e instanceof Error ? e.message : "staged upload failed" };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
+  return out;
+}
+
+export type CreatedMedia = { ok: true; mediaId: string; imageUrl: string } | { ok: false; error: string };
+
+/** Create N product media with ONE productCreateMedia, then poll all of them
+ * with ONE nodes() query per round until READY. Index-aligned with `inputs`. */
+export async function createProductMediaBatch(
+  ctx: ShopCtx,
+  productId: string,
+  inputs: Array<{ source: string; alt: string }>,
+): Promise<CreatedMedia[]> {
+  if (!inputs.length) return [];
+  const create = await gql<{
+    productCreateMedia?: {
+      media?: Array<{ id: string; status?: string; image?: { url?: string } }>;
+      mediaUserErrors?: Array<{ field?: string[]; message: string }>;
+    };
+  }>(
+    ctx,
+    `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+      productCreateMedia(productId: $productId, media: $media) {
+        media { ... on MediaImage { id status image { url } } }
+        mediaUserErrors { field message }
+      }
+    }`,
+    {
+      productId: toProductGid(productId),
+      media: inputs.map((m) => ({ mediaContentType: "IMAGE", originalSource: m.source, alt: m.alt })),
+    },
+  );
+  const errs = create.data?.productCreateMedia?.mediaUserErrors || [];
+  const errText = errs.map((e) => e.message).join("; ");
+  const media = create.data?.productCreateMedia?.media || [];
+  // Shopify returns created media in input order; a missing slot = rejected input.
+  const ids: (string | null)[] = inputs.map((_, i) => media[i]?.id || null);
+  const out: CreatedMedia[] = ids.map((id) =>
+    id ? { ok: false, error: "pending" } : { ok: false, error: errText || "productCreateMedia returned no media" },
+  );
+  const pending = new Set(ids.map((id, i) => (id ? i : -1)).filter((i) => i >= 0));
+
+  for (let round = 0; round < 20 && pending.size; round++) {
+    const q = await gql<{ nodes?: Array<{ id: string; status?: string; image?: { url?: string } } | null> }>(
+      ctx,
+      `query mediaStatus($ids: [ID!]!) { nodes(ids: $ids) { ... on MediaImage { id status image { url } } } }`,
+      { ids: [...pending].map((i) => ids[i]) },
+    );
+    for (const n of q.data?.nodes || []) {
+      if (!n?.id) continue;
+      const i = ids.indexOf(n.id);
+      if (i < 0 || !pending.has(i)) continue;
+      if (n.status === "READY" && n.image?.url) {
+        out[i] = { ok: true, mediaId: n.id, imageUrl: n.image.url };
+        pending.delete(i);
+      } else if (n.status === "FAILED") {
+        out[i] = { ok: false, error: "media processing FAILED" };
+        pending.delete(i);
+      }
+    }
+    if (pending.size) await new Promise((r) => setTimeout(r, 800));
+  }
+  for (const i of pending) out[i] = { ok: false, error: "media not READY after timeout" };
+  return out;
+}
+
+/** productVariantAppendMedia for many (variant, media) pairs in ONE call. */
+export async function appendMediaToVariants(
+  ctx: ShopCtx,
+  productId: string,
+  pairs: Array<{ variantId: string; mediaId: string }>,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!pairs.length) return { ok: true };
+  const res = await gql<{ productVariantAppendMedia?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productVariantAppendMedia($productId: ID!, $variantMedia: [ProductVariantAppendMediaInput!]!) {
+      productVariantAppendMedia(productId: $productId, variantMedia: $variantMedia) {
+        userErrors { field message }
+      }
+    }`,
+    { productId: toProductGid(productId), variantMedia: pairs.map((p) => ({ variantId: p.variantId, mediaIds: [p.mediaId] })) },
+  );
+  const errs = res.data?.productVariantAppendMedia?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
+/** productVariantDetachMedia for many (variant, media) pairs in ONE call. */
+export async function detachMediaFromVariants(
+  ctx: ShopCtx,
+  productId: string,
+  pairs: Array<{ variantId: string; mediaId: string }>,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!pairs.length) return { ok: true };
+  const res = await gql<{ productVariantDetachMedia?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productVariantDetachMedia($productId: ID!, $variantMedia: [ProductVariantDetachMediaInput!]!) {
+      productVariantDetachMedia(productId: $productId, variantMedia: $variantMedia) {
+        userErrors { field message }
+      }
+    }`,
+    { productId: toProductGid(productId), variantMedia: pairs.map((p) => ({ variantId: p.variantId, mediaIds: [p.mediaId] })) },
+  );
+  const errs = res.data?.productVariantDetachMedia?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 export type ProductMedia = { id: string; url: string; alt: string };
 
 /** List a product's IMAGE media (id, url, alt) in current order. */
