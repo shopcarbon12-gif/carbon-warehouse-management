@@ -21,7 +21,7 @@ type StudioVariant = { id: string; color: string | null; shopify_variant_id?: st
 /** qaWarnings = the server's post-generation lock QA found mismatches (text,
  * graphics, fit, identity, background…). The crop is still delivered — flagged
  * and unselected — so the operator sees the render AND the reasons and decides. */
-type Crop = { id: string; b64: string; label: string; selected: boolean; qaWarnings?: string[] };
+type Crop = { id: string; b64: string; label: string; selected: boolean; qaWarnings?: string[]; qaNotes?: string[] };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 type ItemRef = { url: string; preview?: string };
@@ -160,6 +160,8 @@ type PanelResponse = {
   degraded?: boolean;
   warning?: string;
   qaWarnings?: string[];
+  /** Cosmetic observations from QA (background, centring…) — never a failure. */
+  qaNotes?: string[];
   error?: unknown;
   status?: string;
 };
@@ -282,9 +284,10 @@ async function panelResponseToCrops(
   // image and the reasons and opts in explicitly.
   const qaWarnings = Array.isArray(json.qaWarnings) && json.qaWarnings.length ? json.qaWarnings : undefined;
   const selected = !qaWarnings;
+  const qaNotes = Array.isArray(json.qaNotes) && json.qaNotes.length ? json.qaNotes : undefined;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected, qaWarnings },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected, qaWarnings },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected, qaWarnings, qaNotes },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected, qaWarnings, qaNotes },
   ];
 }
 
@@ -1379,6 +1382,18 @@ export function CarbonStudioTab({
                         </li>
                       ))}
                     </ul>
+                  </div>
+                ) : null}
+                {c.qaNotes?.length ? (
+                  <div
+                    className="max-w-36 border-t border-[var(--wms-border)] px-1.5 py-1 font-mono text-[0.58rem] leading-snug text-[var(--wms-muted)]"
+                    title={c.qaNotes.join("\n")}
+                  >
+                    <span className="uppercase tracking-wide">QA notes:</span>{" "}
+                    {c.qaNotes
+                      .slice(0, 2)
+                      .map((n) => (n.length > 90 ? `${n.slice(0, 87)}…` : n))
+                      .join(" · ")}
                   </div>
                 ) : null}
               </div>

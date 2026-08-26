@@ -603,11 +603,22 @@ async function runPanelComplianceCheck(args: {
   modelRefs: string[];
   itemRefs: string[];
   panelQa: PanelQaInput;
+  /** Verified item spec (pre-generation analysis) so the judge can check text
+   *  letter by letter and graphic placement side by side. */
+  itemSpec?: string;
+  specHasBackDesign?: boolean;
   timeoutMs: number;
 }) {
   // gpt-4o (not -mini): the verdict is now shown to the operator per crop, so
   // it has to be worth reading — mini's face/background judgements were noisy.
   const qaModel = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
+  const qaGender = String(args.panelQa.modelGender || "").trim().toLowerCase();
+  const legsCropPose = qaGender === "female" ? 7 : 5;
+  const legsCropActive =
+    Number(args.panelQa.poseA) === legsCropPose || Number(args.panelQa.poseB) === legsCropPose;
+  const qaCategory = inferItemTypeCategory(args.panelQa.itemType);
+  const upperBodyItem = qaCategory === "top" || qaCategory === "outerwear";
+  const itemSpecForQa = String(args.itemSpec || "").trim();
   const panelName =
     args.panelQa.panelLabel ||
     (args.panelQa.panelNumber ? `Panel ${args.panelQa.panelNumber}` : "Panel");
@@ -652,11 +663,32 @@ async function runPanelComplianceCheck(args: {
               "- If item refs do not clearly show a back design, any added back graphic should fail.",
             ]
           : []),
-        "- Identity fidelity lock active: generated person must match MODEL refs for facial geometry and skin tone/undertone.",
-        "- Background lock active: seamless pure white studio background only (#FFFFFF), no tint.",
-        "- 3:4 center-crop lock active: each left/right pose should be centered in its half so a center 3:4 crop keeps key subject details intact.",
+        ...(legsCropActive
+          ? [
+              upperBodyItem
+                ? `- Crop lock: Pose ${legsCropPose} is an UPPER-BODY product crop of the top (neckline to hem, head out of frame). A legs/shorts crop or a full standing body in that frame is a FAIL.`
+                : `- Crop lock: Pose ${legsCropPose} is a LEGS-ONLY crop (waist to feet). A full standing body in that frame is a FAIL.`,
+            ]
+          : []),
+        ...(args.specHasBackDesign
+          ? [
+              "- Back design: the verified spec lists a design on the BACK of the item. Any back-facing frame must show it in full; a clean back, or a shrunken / relocated version, is a FAIL.",
+            ]
+          : []),
+        "- Identity: the person must be the same individual as the MODEL refs.",
+        "- Cosmetics (background tint, centring, lighting) are observations only — never failures.",
       ].join("\n"),
     },
+    ...(itemSpecForQa
+      ? [
+          {
+            type: "input_text",
+            text:
+              "VERIFIED ITEM SPEC (what the item references contain — check every TEXT line letter by letter, and every LOGO / GRAPHIC placement and side, against the generated panel):\n" +
+              itemSpecForQa,
+          },
+        ]
+      : []),
     { type: "input_text", text: "MODEL reference images (identity lock):" },
     ...args.modelRefs.slice(0, 4).map((url) => ({ type: "input_image", image_url: url })),
     { type: "input_text", text: "ITEM reference images (outfit lock):" },
@@ -669,22 +701,18 @@ async function runPanelComplianceCheck(args: {
         "Return JSON only with these keys:",
         "{",
         '  "pass": boolean,',
-        '  "reasons": string[]',
+        '  "reasons": string[],',
+        '  "notes": string[]',
         "}",
+        "Set pass=false ONLY for the four failure classes below. Each reason must name the frame (left/right) and state exactly what is wrong.",
+        "1. PRODUCT: any text is misspelled, garbled, merged, missing, duplicated, or on the wrong side/placement versus the item refs / spec; a logo or graphic is missing, invented, moved, resized, or its print effect changed; the garment colour, fit/silhouette, or construction clearly differs from the refs; a back-facing frame lacks the back design the refs / spec show, or shows a back design the refs do not.",
+        "2. POSE / CROP: a frame shows a full standing body where a crop pose is expected; a crop of the wrong body region (e.g. legs/shorts where the top is expected); a close-up of the wrong item category; label/logo/patch details missing or relocated in the close-up; or the left/right poses swapped.",
+        "3. IDENTITY: the person is clearly a DIFFERENT individual from the MODEL refs (different face structure, ethnicity, hair colour/length, or apparent age). Minor angle, expression, or lighting differences are NOT a failure.",
         swimwearActive
-          ? "For swimwear item type, uncovered feet are allowed; fail only if output is suggestive or mismatched to refs."
-          : "If any full-body pose appears barefoot or socks-only, set pass=false.",
-        "If close-up subject lock is active and the right close-up clearly focuses on a different item type/category than the locked section 0.5 item type, set pass=false.",
-        "If close-up subject lock is active and visible label/logo/patch details in item refs are missing/replaced/relocated in the right close-up, set pass=false.",
-        "If back-view strict lock is active and back-facing design does not clearly match item refs, set pass=false.",
-        "If either side appears significantly off-center such that a center 3:4 crop would cut key model/item content, set pass=false.",
-        "If item type is non-swimwear bottom (jeans/pants/shorts) and output shows shirtless/bare torso styling, set pass=false.",
-        "If the output shows any nudity or partial nudity, set pass=false.",
-        "If exposure exceeds standard commercial swimwear coverage (women beyond a regular bikini/one-piece, men beyond swim trunks), or a non-swimwear item is shown without a proper top, set pass=false.",
-        "If facial geometry or skin tone/undertone clearly drifts from MODEL refs, set pass=false.",
-        "If background is not seamless pure white (any pink/warm/cream/gray tint, gradient, vignette, texture, or colored cast), set pass=false.",
-        "Set pass=false only when you are clearly confident this output violates model/item/pose lock.",
-        "If uncertain, set pass=true and include reason that result is inconclusive.",
+          ? "4. COVERAGE: nudity or partial nudity, or exposure beyond a regular bikini / one-piece (women) or swim trunks (men). Uncovered feet are allowed for swimwear."
+          : "4. COVERAGE: nudity or partial nudity; a non-swimwear item shown without a proper top or with a bare torso; or a full-body frame that is barefoot / socks-only.",
+        "NEVER fail for background tint, gradient, shadow, vignette, slight off-centre framing, lighting or colour temperature, expression, or hand position. Put such observations in \"notes\" (short, optional) — not in \"reasons\".",
+        "If uncertain about a failure, set pass=true and put the doubt in notes.",
       ].join("\n"),
     },
   ];
@@ -698,7 +726,7 @@ async function runPanelComplianceCheck(args: {
         args.openai.responses.create({
           model: qaModel,
           temperature: 0,
-          max_output_tokens: 260,
+          max_output_tokens: 420,
           input: [
             {
               role: "system",
@@ -706,10 +734,9 @@ async function runPanelComplianceCheck(args: {
                 {
                   type: "input_text",
                   text:
-                    "You are a strict pass/fail QA gate for fashion ecommerce panel outputs. " +
-                    "Fail the audit if model identity is not clearly from model refs, item/outfit is not clearly from item refs, " +
-                    "or expected pose pairing is not respected. Treat face-geometry drift and skin-tone drift from model refs as identity failures. " +
-                    "Also fail any non-pure-white/tinted background. No prose. Return JSON only.",
+                    "You are a product-accuracy QA reviewer for fashion ecommerce panel outputs. " +
+                    "You fail an output ONLY for a product mismatch against the item references / spec, a pose or crop violation, a clearly different person than the model references, or a coverage problem. " +
+                    "Cosmetic issues (background tint, centring, lighting, expression) are notes, never failures. No prose. Return JSON only.",
                 },
               ],
             },
@@ -761,11 +788,13 @@ async function runPanelComplianceCheck(args: {
     };
   }
   const reasons = normalizeReasons(parsed.reasons);
+  const notes = normalizeReasons(parsed.notes);
   return {
     decisive: true,
     pass: passFlag === true,
     unavailable: false,
     reasons: reasons.length ? reasons : passFlag ? [] : ["Compliance check failed."],
+    notes,
     raw,
   };
 }
@@ -880,6 +909,10 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       typeof itemSpec === "string" && itemSpec.trim()
         ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), 2600)
         : "";
+    // A TEXT / LOGO / GRAPHIC line whose placement names the BACK: the back-facing
+    // poses must then render it (Pose 7's old "keep the back clean" wording made
+    // the generator drop the SIMPLIFY back print, 2026-08-26).
+    const specHasBackDesign = /^(?:TEXT|LOGO\/ICON|GRAPHIC\/PRINT)[^\n]*\bback\b/im.test(itemSpecText);
     const normalizedPanelQa = normalizePanelQa(panelQa);
     // Pose/expression variation: rotate by a per-generation seed so consecutive
     // shots never collapse to the same default pose/face. Falls back to a
@@ -989,6 +1022,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
             "- Print EFFECTS are part of the design: a blurred / ghosted / faded / gradient / halftone / cracked print must be rendered with that exact effect, never as a crisp clean version.",
             "- The FIT / SILHOUETTE line is absolute: an oversized / boxy / drop-shoulder / relaxed fit must read as clearly oversized on the model (dropped shoulder seams, wide body, longer sleeves), never slim or regular; a slim fit must never become loose.",
             "- HARDWARE / STITCHING / POCKET / MATERIAL lines must match in kind, count, colour, finish and position. Anything listed as NOT CLEARLY VISIBLE stays plain/neutral — never invented.",
+            ...(specHasBackDesign
+              ? [
+                  "- BACK DESIGN PRESENT (verified on the product): the item carries a design on its BACK. Every back-facing frame (male Pose 4 and Pose 7, female Pose 2) MUST show that back design in full — same size, same position, same print effect. A clean/blank back, a shrunken version, or a version moved up to the neck is WRONG.",
+                ]
+              : []),
+            "- SMALL TEXT LEGIBILITY: small chest / sleeve / neck text keeps its true garment size but must still be spelled letter-perfect in crisp, clean letterforms — even in full-body frames. Never render it as pseudo-letters, scribbles, or a smudge; prefer slightly bolder clean letters over illegible detail.",
           ]
         : []),
       buildNudityCeilingLock(),
@@ -1206,6 +1245,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const qaFailOpen =
       (process.env.PANEL_QA_FAIL_OPEN || "true").trim().toLowerCase() !== "false";
     let qaWarnings: string[] = [];
+    let qaNotes: string[] = [];
     if (strictLocksEnabled) {
       let qa: any;
       try {
@@ -1215,6 +1255,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
           itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
           panelQa: normalizedPanelQa,
+          itemSpec: itemSpecText,
+          specHasBackDesign,
           timeoutMs: imageTimeoutMs,
         });
       } catch (qaErr: any) {
@@ -1233,6 +1275,11 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         // four panels of a run with no explanation.
         qaWarnings = (Array.isArray(qa.reasons) ? qa.reasons : []).map((r: unknown) => String(r)).filter(Boolean);
         console.warn(`[generate] Panel QA FAILED — serving flagged: ${qaWarnings.join(" | ")}`);
+      }
+      if (qa.decisive) {
+        // Cosmetic observations (background tint, centring, lighting) never fail
+        // a render; they ride along as muted notes for the operator.
+        qaNotes = (Array.isArray(qa.notes) ? qa.notes : []).map((r: unknown) => String(r)).filter(Boolean);
       }
       if (!qa.decisive && !qaFailOpen) {
         // Strict mode: block when QA could not confidently clear the image.
@@ -1258,7 +1305,11 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         );
       }
     }
-    return NextResponse.json(qaWarnings.length ? { imageBase64: b64, qaWarnings } : { imageBase64: b64 });
+    return NextResponse.json({
+      imageBase64: b64,
+      ...(qaWarnings.length ? { qaWarnings } : {}),
+      ...(qaNotes.length ? { qaNotes } : {}),
+    });
   } catch (err: unknown) {
     console.error("Generate failed:", err);
     if (isOpenAiAuthError(err)) {

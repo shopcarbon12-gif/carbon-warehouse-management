@@ -258,9 +258,53 @@ export function getCloseUpCategoryRule(itemTypeValue: string) {
   return "- Category lock: close-up must focus on the exact item type entered in section 0.5.";
 }
 
+/** Poses the libraries define as a waist-to-feet LEGS crop (they were written for
+ *  bottoms): male Pose 5, female Pose 7. */
+export function isLegsCropPose(gender: string, pose: number) {
+  const p = Number(pose);
+  return String(gender || "").trim().toLowerCase() === "female" ? p === 7 : p === 5;
+}
+
+/** Tops / outerwear live above the waist, so the legs crop would photograph the
+ *  stylist's shorts instead of the product (SIMPLIFY tee, 2026-08-26). For these
+ *  categories the legs-crop pose is swapped for an upper-body product crop. */
+export function isUpperBodyProductCategory(itemTypeValue: string) {
+  const c = inferItemTypeCategory(itemTypeValue);
+  return c === "top" || c === "outerwear";
+}
+
+export function getUpperBodyCropPoseBlock(poseNumber: number) {
+  return [
+    `POSE ${poseNumber} - Upper Body / Torso Product Crop (TOPS VARIANT — replaces the library's Lower Body / Legs definition because the locked item is a top / outerwear)`,
+    "Base",
+    "- Crop: neckline to just below the garment hem. The head is OUT of frame (crop at the chin / neck line); everything below the hem (hips, shorts/pants, legs, shoes) is OUT of frame.",
+    "- Front-facing, body square to camera, even weight; arms relaxed at the sides so the whole garment body, both sleeves and the hem are visible.",
+    "- Emphasize fit and construction: shoulder-seam drop, chest/body width, sleeve length and cuff, hem finish, neckline rib, fabric drape and texture.",
+    "- Any front chest / sleeve text, logo or graphic must be fully visible, sharp, letter-perfect and never covered by hands.",
+    "Variation Options (pick ONE)",
+    `- ${poseNumber}A: Arms straight down, hands just out of frame (cleanest)`,
+    `- ${poseNumber}B: Slight 10 deg body turn to show the side seam`,
+    `- ${poseNumber}C: One hand resting lightly at the hem (no pulling, no covering print)`,
+  ].join("\n");
+}
+
+/** The active pose block for a prompt: the library text, except that the legs
+ *  crop becomes the upper-body product crop for tops / outerwear. */
+export function getEffectivePoseBlock(library: string, gender: string, poseNumber: number, itemTypeValue: string) {
+  if (isLegsCropPose(gender, poseNumber) && isUpperBodyProductCategory(itemTypeValue)) {
+    return getUpperBodyCropPoseBlock(poseNumber);
+  }
+  return extractPoseBlock(library, poseNumber);
+}
+
+function upperBodyCropLockLine(poseNumber: number) {
+  return `- LEFT Pose ${poseNumber} is an UPPER-BODY PRODUCT crop (neckline to hem) of the locked top, NOT a full body and NOT a legs crop. HARD CROP LOCK: the head/face is OUT of frame (crop at the neck) and everything below the garment hem (shorts/pants/legs/shoes) is OUT of frame. Fill the frame with the top: shoulders, chest, both sleeves, hem, with any front text/graphic sharp and fully visible. A waist-to-feet legs crop or a full standing body is WRONG.`;
+}
+
 export function getPanelCriticalLockLines(gender: string, panelNumber: number, itemTypeValue = "") {
   const panelAdultLock = "- HARD AGE LOCK: the model is over 25+.";
   const lockedItemType = String(itemTypeValue || "").trim();
+  const upperBodyItem = isUpperBodyProductCategory(lockedItemType);
   const normalizedItemType =
     String(gender || "").trim().toLowerCase() === "female" && isSwimwearItemType(lockedItemType)
       ? "swimwear"
@@ -301,7 +345,9 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       return [
         "FEMALE PANEL 3 CRITICAL LOCK (Pose 7 + Pose 5):",
         panelAdultLock,
-        "- LEFT Pose 7 is a LEGS-ONLY crop (waist to feet), NOT a full body, showing the same exact selected bottom (same color/fabric/details). HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband + closure, front rise, pockets, thighs, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
+        upperBodyItem
+          ? upperBodyCropLockLine(7)
+          : "- LEFT Pose 7 is a LEGS-ONLY crop (waist to feet), NOT a full body, showing the same exact selected bottom (same color/fabric/details). HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband + closure, front rise, pockets, thighs, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
         "- RIGHT Pose 5 must be a close-up of the most detailed item from that same selected look.",
         closeUpSubjectLine,
         closeUpCategoryRule,
@@ -344,7 +390,9 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     return [
       "MALE PANEL 3 CRITICAL LOCK (Pose 5 + Pose 6):",
       panelAdultLock,
-      "- LEFT Pose 5 is a LEGS-ONLY crop (waist to feet), NOT a full body. HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband, hips, thighs, knees, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
+      upperBodyItem
+        ? upperBodyCropLockLine(5)
+        : "- LEFT Pose 5 is a LEGS-ONLY crop (waist to feet), NOT a full body. HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband, hips, thighs, knees, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.",
       "- RIGHT Pose 6 must be one close-up detail from the same selected item/look.",
       closeUpSubjectLine,
       closeUpCategoryRule,
@@ -355,8 +403,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     "MALE PANEL 4 CRITICAL LOCK (Pose 7 + Pose 8):",
     panelAdultLock,
     "- LEFT Pose 7 is a TORSO-BACK crop (mid-thigh to head), back-facing, with an over-the-shoulder head turn — NOT a full body. HARD CROP LOCK: crop the frame at mid-thigh; the lower legs and feet MUST be OUT of frame. If a full head-to-toe standing body appears, it is WRONG and must be re-framed as a mid-thigh-to-head crop.",
-    "- LEFT Pose 7 back-surface lock: keep the back clean. Do not invent or add any back print/graphic/logo design.",
-    "- Only show a back design if that exact design is clearly present in the locked item references.",
+    "- LEFT Pose 7 back-surface lock: the back must be EXACTLY what the item references show. If the references show a back print / graphic / text, it MUST appear on Pose 7 at the same size, position and print effect — omitting it, shrinking it, or moving it up to the neck is WRONG. If the references show a clean back, keep it clean. Never invent a back design.",
     "- RIGHT Pose 8 must be a single controlled creative pose from the same selected look.",
     "- Keep the same identity and item lock in both frames.",
   ];
@@ -430,8 +477,15 @@ export function buildMasterPanelPrompt(args: {
     String(args.modelGender || "").toLowerCase() === "female"
       ? FEMALE_PANEL_MAPPING_TEXT
       : MALE_PANEL_MAPPING_TEXT;
-  const poseABlock = extractPoseBlock(poseLibrary, args.poseA);
-  const poseBBlock = extractPoseBlock(poseLibrary, args.poseB);
+  const poseABlock = getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseA, args.itemType);
+  const poseBBlock = getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseB, args.itemType);
+  const upperBodyItem = isUpperBodyProductCategory(args.itemType);
+  const legsCropOverrideActive =
+    upperBodyItem &&
+    (isLegsCropPose(args.modelGender, args.poseA) || isLegsCropPose(args.modelGender, args.poseB));
+  const legsCropDescription = upperBodyItem
+    ? "UPPER BODY ONLY (neckline to hem, head out of frame — TOPS variant)"
+    : "LEGS ONLY (waist to feet)";
   const criticalLockLines = getPanelCriticalLockLines(
     args.modelGender,
     args.panelNumberForLocks ?? args.panelNumber,
@@ -595,7 +649,12 @@ export function buildMasterPanelPrompt(args: {
     "All non-active poses are reference only and must not execute in this image.",
     "Full-body framing lock (male + female): whenever an active pose is full-body, include full head and both feet entirely in frame. No cropping of head, hair, chin, toes, or shoes.",
     "Full-body no-crop applies to: Male poses 1,2,4 and Female poses 1,2,3,6.",
-    "CROP-ONLY LOCK (these poses are NEVER a full standing body): Male Pose 5 = LEGS ONLY (waist to feet), Male Pose 3 = mid-thigh to head, Male Pose 7 = torso-back mid-thigh to head, Female Pose 7 = LEGS ONLY (waist to feet), Female Pose 4 = upper body, Female Pose 5 = close-up. For each of these, the out-of-frame body parts (head/torso for legs crops; lower legs/feet for torso crops) MUST be cropped OUT of the frame. Rendering a full head-to-toe standing body for any of these is WRONG.",
+    `CROP-ONLY LOCK (these poses are NEVER a full standing body): Male Pose 5 = ${legsCropDescription}, Male Pose 3 = mid-thigh to head, Male Pose 7 = torso-back mid-thigh to head, Female Pose 7 = ${legsCropDescription}, Female Pose 4 = upper body, Female Pose 5 = close-up. For each of these, the out-of-frame body parts (head/torso for legs crops; head for upper-body crops; lower legs/feet for torso crops) MUST be cropped OUT of the frame. Rendering a full head-to-toe standing body for any of these is WRONG.`,
+    ...(legsCropOverrideActive
+      ? [
+          "TOPS OVERRIDE (this generation): the locked item is a top / outerwear, so the library's 'Lower Body / Legs' definition for the active crop pose is REPLACED by the 'Upper Body / Torso Product Crop' block given as the ACTIVE POSE above. Do NOT photograph the legs, shorts or pants in that frame — the product is the top.",
+        ]
+      : []),
     "3:4 split centering hard lock: each panel half is center-cropped to a final 3:4 portrait. Keep each active pose centered in its own half.",
     "3:4 safe-zone math lock (for 1536x1024 panel output): each half is 768x1024 (already 3:4). Keep head/body/garment details inside this center-safe zone.",
     swimwearActive
