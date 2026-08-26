@@ -867,13 +867,15 @@ export function CarbonStudioTab({
     setErr(null);
     setMsg(null);
     try {
-      // Main-pic assignment: with ONE colour the hero (index 0) is auto-set as
-      // that colour's main pic; with MULTIPLE colours the operator assigns one
+      // Main-pic assignment: with ONE colour the hero (index 0) is that colour's
+      // main pic BY DEFAULT, unless the operator explicitly picked another image
+      // (then only that image is); with MULTIPLE colours the operator assigns one
       // image per colour (default none). Only images with a colour push as the
       // variant main pic.
       const single = colorOpts.length === 1 ? colorOpts[0] : null;
+      const overridden = single ? mediaItems.some((x) => x.color) : false;
       const items = mediaItems.map((m, idx) => {
-        const colorName = single ? (idx === 0 ? single.color : "") : m.color;
+        const colorName = single ? (overridden ? m.color : idx === 0 ? single.color : "") : m.color;
         const variantIds = colorName ? colorOpts.find((o) => o.color === colorName)?.variantIds : undefined;
         return m.kind === "existing"
           ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
@@ -1343,11 +1345,37 @@ export function CarbonStudioTab({
                         {mediaBusy === `alt-${m.key}` ? "…" : "✨ Generate alt"}
                       </button>
                       {singleColor ? (
-                        idx === 0 ? (
-                          <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">
-                            ★ main pic for {singleColor.color} (auto)
-                          </span>
-                        ) : null
+                        /* Hero is the main pic by default; any other image can take
+                           it (picking it here moves the assignment off the hero). */
+                        (() => {
+                          const overridden = mediaItems.some((x) => x.color);
+                          const effective = overridden ? m.color : idx === 0 ? singleColor.color : "";
+                          return (
+                            <>
+                              <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">main pic for {singleColor.color}:</label>
+                              <select
+                                className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)] max-md:py-2 max-md:text-base"
+                                value={effective}
+                                title="Which image is the main (variant) pic for this colour — the hero by default; pick another image to use it instead"
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setMediaItems((prev) =>
+                                    prev.map((x) => (x.key === m.key ? { ...x, color: v } : { ...x, color: v ? "" : x.color })),
+                                  );
+                                }}
+                              >
+                                <option value="">— not this one —</option>
+                                <option value={singleColor.color}>
+                                  {effective
+                                    ? idx === 0 && !overridden
+                                      ? "★ yes · hero (auto)"
+                                      : "★ yes · this image"
+                                    : `use this image · all ${singleColor.variantIds.length} size${singleColor.variantIds.length === 1 ? "" : "s"}`}
+                                </option>
+                              </select>
+                            </>
+                          );
+                        })()
                       ) : (
                         <>
                           <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">main pic for colour:</label>

@@ -287,11 +287,14 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     setErr(null);
     setMsg(null);
     try {
-      // One colour → hero (index 0) auto-set as its main pic; many colours → the
-      // per-image colour the operator picked (each colour used at most once).
+      // One colour → the hero (index 0) is its main pic BY DEFAULT, unless the
+      // operator explicitly picked another image (then only that image is);
+      // many colours → the per-image colour the operator picked (each colour
+      // used at most once).
       const single = colorOpts.length === 1 ? colorOpts[0] : null;
+      const overridden = single ? items.some((x) => x.color) : false;
       const payload = items.map((m, idx) => {
-        const colorName = single ? (idx === 0 ? single.color : "") : m.color;
+        const colorName = single ? (overridden ? m.color : idx === 0 ? single.color : "") : m.color;
         const variantIds = colorName ? colorOpts.find((o) => o.color === colorName)?.variantIds : undefined;
         return m.kind === "existing"
           ? { kind: "existing", mediaId: m.mediaId, alt: m.alt, variantIds }
@@ -394,9 +397,21 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" disabled={busy !== null} onClick={() => void genAlt(m.key)} className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.68rem] text-[var(--wms-accent)] disabled:opacity-50 max-md:py-2 max-md:px-3">{busy === `alt-${m.key}` ? "…" : "✨ alt"}</button>
                 {singleColor ? (
-                  idx === 0 ? (
-                    <span className="font-mono text-[0.68rem] text-[var(--wms-accent)]">★ main pic for {singleColor.color} (auto)</span>
-                  ) : null
+                  /* Hero is the main pic by default; any other image can take it
+                     (picking it here moves the assignment off the hero). */
+                  (() => {
+                    const overridden = items.some((x) => x.color);
+                    const effective = overridden ? m.color : idx === 0 ? singleColor.color : "";
+                    return (
+                      <>
+                        <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">main pic for {singleColor.color}:</label>
+                        <select className={field} value={effective} title="Which image is the main (variant) pic for this colour — the hero by default; pick another image to use it instead" onChange={(e) => { const v = e.target.value; setItems((prev) => prev.map((x) => (x.key === m.key ? { ...x, color: v } : { ...x, color: v ? "" : x.color }))); }}>
+                          <option value="">— not this one —</option>
+                          <option value={singleColor.color}>{effective ? (idx === 0 && !overridden ? "★ yes · hero (auto)" : "★ yes · this image") : `use this image · all ${singleColor.variantIds.length} size${singleColor.variantIds.length === 1 ? "" : "s"}`}</option>
+                        </select>
+                      </>
+                    );
+                  })()
                 ) : (
                   <>
                     <label className="font-mono text-[0.68rem] text-[var(--wms-muted)]">colour:</label>
