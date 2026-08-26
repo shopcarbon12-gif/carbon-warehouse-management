@@ -414,6 +414,10 @@ export function buildMasterPanelPrompt(args: {
   poseSafetySuggestions?: string[];
   /** Per-generation facial-expression cue (varies run-to-run so models don't look robotic). */
   expressionDirective?: string;
+  /** Pre-generation item analysis (numbered lock lines from /api/openai/item-spec):
+   *  every word, graphic, material, hardware piece and stitch that must be
+   *  reproduced exactly. Injected as a hard lock ahead of the no-guess rules. */
+  itemSpec?: string;
 }) {
   const poseLibrary = getPoseLibraryForGender(args.modelGender);
   const fullPoseLibraries = [
@@ -479,6 +483,14 @@ export function buildMasterPanelPrompt(args: {
     "- Reproduce all logos, brand marks, text, prints, graphics, and patterns EXACTLY (same artwork, position, scale, and colors). Never invent, move, resize, mirror, recolor, or restyle them, and never add logos/prints that are not in the references.",
     "- Shoes must be the EXACT same pair (model, color, material, laces, sole) in every full-body frame; never swap or restyle footwear across panels.",
     "- The item color, material, weave, and texture must stay identical across the entire run under consistent lighting; no colorway or fabric drift between panels.",
+    ...(normalizePromptInstruction(args.itemSpec, 6000)
+      ? [
+          "VERIFIED ITEM SPEC HARD LOCK (pre-analysis of the item reference photos — every line below was observed on the actual product and MUST appear exactly as stated in every panel and frame; this list overrides any guess or generic styling):",
+          normalizePromptInstruction(args.itemSpec, 6000),
+          "- Every TEXT line must be rendered letter-perfect (same spelling, case, letterforms, placement, colour). Every GRAPHIC/HARDWARE/STITCHING/POCKET/MATERIAL line must match in kind, count, colour, finish and position.",
+          "- Anything listed as NOT CLEARLY VISIBLE must be left plain/neutral — never invented.",
+        ]
+      : []),
     "NO-GUESS / NO-INVENTION HARD LOCK (all genders):",
     "- Never invent, add, or hallucinate garments, accessories, prints, logos, branding, patterns, hardware, or styling that are not clearly shown in the item references or explicitly requested in the styling instructions. When unsure, do not add it.",
     "- If only part of an outfit is provided (e.g. a single top), do NOT invent a designed or branded outfit around it. Any complementary basics needed to complete a clean full-body shot must be plain, neutral, solid-color, and unbranded, and must defer to the styling instructions whenever they are given.",

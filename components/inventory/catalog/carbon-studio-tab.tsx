@@ -301,6 +301,16 @@ export function CarbonStudioTab({
   );
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>("");
+  // Pre-generation item analysis (owner requirement): the item reference photos
+  // are inspected at high detail — every word, graphic, material, button,
+  // stitch — and the findings are locked into the prompt BEFORE rendering.
+  // `itemSpec` is operator-editable; `specRefsKey` remembers which refs it was
+  // computed for so a changed photo set re-analyzes automatically.
+  const [specEnabled, setSpecEnabled] = useState(true);
+  const [itemSpec, setItemSpec] = useState<string>("");
+  const [specRefsKey, setSpecRefsKey] = useState<string>("");
+  const [specBusy, setSpecBusy] = useState(false);
+  const [specOpen, setSpecOpen] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -502,6 +512,38 @@ export function CarbonStudioTab({
     setPanels((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort()));
   }, []);
 
+  /** High-detail vision pass over the item reference photos → numbered lock
+   *  list (see /api/openai/item-spec). Stores the spec + the refs it covers. */
+  const analyzeItem = useCallback(
+    async (refUrls: string[]): Promise<string | null> => {
+      if (!refUrls.length) {
+        setErr("Add at least one item photo before analyzing.");
+        return null;
+      }
+      setSpecBusy(true);
+      try {
+        const r = await fetch("/api/openai/item-spec", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ itemRefs: refUrls, itemType }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { lockText?: string; error?: string; imagesAnalyzed?: number };
+        if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
+        setItemSpec(j.lockText);
+        setSpecRefsKey(refUrls.join("|"));
+        setSpecOpen(true);
+        setErr(null);
+        return j.lockText;
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Item analysis failed");
+        return null;
+      } finally {
+        setSpecBusy(false);
+      }
+    },
+    [itemType],
+  );
+
   const generate = useCallback(async () => {
     if (!model) return setErr("Pick a model first.");
     if (!itemRefs.length) return setErr("Add at least one item photo (upload or phone camera).");
@@ -511,6 +553,21 @@ export function CarbonStudioTab({
     setNativeBusy(true);
     setErr(null);
     setMsg(null);
+    // Analyze the item references FIRST (unless switched off, or the current
+    // spec already covers exactly these photos): every word, graphic, material,
+    // hardware piece and stitch is inventoried and locked into the prompt.
+    let specForRun = itemSpec.trim();
+    if (specEnabled && (!specForRun || specRefsKey !== refUrls.join("|"))) {
+      setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
+      const analyzed = await analyzeItem(refUrls);
+      if (!analyzed) {
+        setBusy(null);
+        setNativeBusy(false);
+        setProgress("");
+        return; // analyzeItem already surfaced the error
+      }
+      specForRun = analyzed;
+    }
     // Regenerate flow (carbon-gen): keep the crops you selected, append fresh
     // ones below; unselected old crops are dropped. runTag keeps ids unique.
     const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
@@ -560,6 +617,7 @@ export function CarbonStudioTab({
         itemType,
         itemStyleInstructions: instruction,
         expressionDirective,
+        itemSpec: specEnabled ? specForRun : undefined,
       });
       const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
       let json: PanelResponse | null = null;
@@ -622,7 +680,7 @@ export function CarbonStudioTab({
       setProgress("");
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, panels, itemType, instruction, crops, matrixId]);
+  }, [model, itemRefs, panels, itemType, instruction, crops, matrixId, specEnabled, itemSpec, specRefsKey, analyzeItem]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -1083,6 +1141,54 @@ export function CarbonStudioTab({
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
         />
+      </div>
+
+      {/* Item details spec — analyzed from the item photos before generating */}
+      <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
+            <input
+              type="checkbox"
+              className="max-md:h-5 max-md:w-5"
+              checked={specEnabled}
+              onChange={(e) => setSpecEnabled(e.target.checked)}
+            />
+            Analyze item details before generating
+          </label>
+          <button
+            type="button"
+            disabled={!canManage || specBusy || busy !== null || !itemRefs.length}
+            onClick={() => void analyzeItem(itemRefs.map((r) => r.url))}
+            className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
+          >
+            {specBusy ? "Analyzing…" : itemSpec ? "↻ Re-analyze" : "🔍 Analyze now"}
+          </button>
+          {itemSpec ? (
+            <button
+              type="button"
+              onClick={() => setSpecOpen((o) => !o)}
+              className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.74rem] text-[var(--wms-muted)] max-md:min-h-11 max-md:px-3"
+            >
+              {specOpen ? "Hide spec" : `View / edit spec (${itemSpec.split("\n").filter(Boolean).length} details)`}
+            </button>
+          ) : null}
+          <span className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
+            {itemSpec
+              ? specRefsKey === itemRefs.map((r) => r.url).join("|")
+                ? "Spec matches the current item photos — locked into every panel prompt."
+                : "Item photos changed — will re-analyze on Generate."
+              : "Every word, graphic, material, button and stitch on the item is inventoried first and locked into the prompt."}
+          </span>
+        </div>
+        {itemSpec && specOpen ? (
+          <textarea
+            className="mt-2 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.74rem] leading-snug text-[var(--wms-fg)] max-md:text-base"
+            rows={Math.min(18, Math.max(6, itemSpec.split("\n").length + 1))}
+            value={itemSpec}
+            onChange={(e) => setItemSpec(e.target.value)}
+            spellCheck={false}
+          />
+        ) : null}
       </div>
 
       {/* Panels */}
