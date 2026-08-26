@@ -59,7 +59,7 @@ function list(v: unknown, max = 20): string[] {
   };
   return v.map(flat).filter(Boolean).slice(0, max);
 }
-const NONE = /^(none|no|n\/a|not visible|not applicable|-)\.?$/i;
+const NONE = /^(none|no\b|n\/a|nothing|not (visible|applicable|present|apparent)|-)/i;
 
 async function toDataUrl(rawUrl: string): Promise<string> {
   const url = text(rawUrl);
@@ -83,8 +83,16 @@ async function toDataUrl(rawUrl: string): Promise<string> {
   return `data:${text(contentType) || "image/png"};base64,${bytes.toString("base64")}`;
 }
 
-type TextItem = { text?: string; placement?: string; style?: string; color?: string };
-type GraphicItem = { description?: string; placement?: string; colors?: string };
+type TextItem = { text?: string; placement?: string; style?: string; color?: string; technique?: string };
+type GraphicItem = { description?: string; placement?: string; colors?: string; technique?: string; finish?: string; size?: string };
+
+/** "technique / finish" suffix for graphic-type lines (omits unknowns). */
+function applied(g: { technique?: string; finish?: string }): string {
+  const t = text(g?.technique);
+  const f = text(g?.finish);
+  const parts = [t && !/unclear|unknown/i.test(t) ? t : "", f && !/unclear|unknown/i.test(f) ? f : ""].filter(Boolean);
+  return parts.length ? ` — applied as ${parts.join(", ")}` : "";
+}
 
 /** Deterministic, prompt-ready numbered lock list built from the JSON spec. */
 function buildLockText(spec: any): string {
@@ -100,13 +108,18 @@ function buildLockText(spec: any): string {
     const w = text(t?.text);
     if (!w) continue;
     push(
-      `TEXT (exact spelling, case and letterforms): "${w}"${t.placement ? ` at ${text(t.placement)}` : ""}${t.style ? `, ${text(t.style)}` : ""}${t.color ? `, ${text(t.color)}` : ""}. Reproduce verbatim — never paraphrase, translate, drop, or add letters.`,
+      `TEXT (exact spelling, case and letterforms): "${w}"${t.placement ? ` at ${text(t.placement)}` : ""}${t.style ? `, ${text(t.style)}` : ""}${t.color ? `, ${text(t.color)}` : ""}${applied(t)}. Reproduce verbatim — never paraphrase, translate, drop, or add letters.`,
     );
+  }
+  for (const lg of (Array.isArray(spec?.logos_icons) ? spec.logos_icons : []) as GraphicItem[]) {
+    const d = text(lg?.description);
+    if (!d) continue;
+    push(`LOGO/ICON: ${d}${lg.placement ? ` at ${text(lg.placement)}` : ""}${lg.size ? `, ${text(lg.size)}` : ""}${lg.colors ? ` (${text(lg.colors)})` : ""}${applied(lg)} — same mark, scale, position, colours and surface look (flat vs raised, matte vs gloss).`);
   }
   for (const gr of (Array.isArray(spec?.graphics_prints) ? spec.graphics_prints : []) as GraphicItem[]) {
     const d = text(gr?.description);
     if (!d) continue;
-    push(`GRAPHIC/PRINT: ${d}${gr.placement ? ` at ${text(gr.placement)}` : ""}${gr.colors ? ` (${text(gr.colors)})` : ""} — same artwork, scale, position and colours.`);
+    push(`GRAPHIC/PRINT: ${d}${gr.placement ? ` at ${text(gr.placement)}` : ""}${gr.colors ? ` (${text(gr.colors)})` : ""}${applied(gr)} — same artwork, scale, position, colours and surface look.`);
   }
   for (const s of list(spec?.labels_patches)) push(`LABEL/PATCH: ${s}.`);
   for (const s of list(spec?.hardware)) push(`HARDWARE: ${s}.`);
@@ -165,10 +178,13 @@ export async function POST(req: NextRequest) {
       '  "hardware": string[] (each: item, count, finish/colour, exact location — buttons, rivets, zips, eyelets, snaps, buckles, D-rings),',
       '  "stitching": string (thread colour(s), single/double/triple topstitch, bar tacks, decorative stitching, where),',
       '  "pockets": string[] (type, count, placement, details), "closures": string, "seams_panels": string,',
-      '  "text": [{ "text": exact characters as printed (keep case, punctuation, spacing), "placement": string, "style": string, "color": string }] — include EVERY word, number, logo wordmark, label text, embroidery and print lettering; transcribe letter-by-letter,',
-      '  "graphics_prints": [{ "description": string, "placement": string, "colors": string }] — logos, prints, patterns, embroidery, appliqués,',
-      '  "labels_patches": string[], "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[] }',
-      "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam'). Ignore any person, background, or styling in the photos — describe the product only.",
+      '  "text": [{ "text": exact characters as printed (keep case, punctuation, spacing), "placement": string, "style": string, "color": string, "technique": string }] — include EVERY word, number, logo wordmark, label text, embroidery and print lettering; transcribe letter-by-letter,',
+      '  "logos_icons": [{ "description": string, "placement": string, "size": string, "colors": string, "technique": string, "finish": string }] — every brand mark, symbol, icon, emblem, monogram, artwork or illustration,',
+      '  "graphics_prints": [{ "description": string, "placement": string, "colors": string, "technique": string, "finish": string }] — prints, patterns, artwork, embroidery, appliqués,',
+      '  "labels_patches": string[] (woven/printed labels, leather/jacron patches, hang tags visible, with text and placement),',
+      '  "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[] }',
+      'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
+      "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam', 'white silicone raised logo 4 cm wide on left chest'). Ignore any person, background, or styling in the photos — describe the product only.",
     ].join("\n");
 
     const client = new OpenAI({ apiKey });
