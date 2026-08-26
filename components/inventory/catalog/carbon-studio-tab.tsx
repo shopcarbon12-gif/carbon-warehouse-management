@@ -18,7 +18,10 @@ import {
  */
 type Model = { model_id: string; name: string; gender: string; ref_image_urls: string[] };
 type StudioVariant = { id: string; color: string | null; shopify_variant_id?: string | null };
-type Crop = { id: string; b64: string; label: string; selected: boolean };
+/** qaWarnings = the server's post-generation lock QA found mismatches (text,
+ * graphics, fit, identity, background…). The crop is still delivered — flagged
+ * and unselected — so the operator sees the render AND the reasons and decides. */
+type Crop = { id: string; b64: string; label: string; selected: boolean; qaWarnings?: string[] };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 type ItemRef = { url: string; preview?: string };
@@ -156,6 +159,7 @@ type PanelResponse = {
   imageBase64?: string;
   degraded?: boolean;
   warning?: string;
+  qaWarnings?: string[];
   error?: unknown;
   status?: string;
 };
@@ -274,9 +278,13 @@ async function panelResponseToCrops(
     return [{ id: `p${panel}-err-${runTag}`, b64: "", label: `Panel ${panel}: ${detail}`, selected: false }];
   }
   const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
+  // QA-flagged renders are delivered but NOT pre-selected: the operator sees the
+  // image and the reasons and opts in explicitly.
+  const qaWarnings = Array.isArray(json.qaWarnings) && json.qaWarnings.length ? json.qaWarnings : undefined;
+  const selected = !qaWarnings;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected, qaWarnings },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected, qaWarnings },
   ];
 }
 
@@ -1316,7 +1324,11 @@ export function CarbonStudioTab({
               <div
                 key={c.id}
                 className={`relative overflow-hidden rounded-md border ${
-                  c.selected ? "border-[var(--wms-accent)] ring-1 ring-[var(--wms-accent)]" : "border-[var(--wms-border)]"
+                  c.selected
+                    ? "border-[var(--wms-accent)] ring-1 ring-[var(--wms-accent)]"
+                    : c.qaWarnings?.length
+                      ? "border-red-500/70"
+                      : "border-[var(--wms-border)]"
                 }`}
               >
                 <img
@@ -1354,6 +1366,21 @@ export function CarbonStudioTab({
                 <span className="block px-1 py-0.5 text-center font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
                 </span>
+                {c.qaWarnings?.length ? (
+                  <div
+                    className="max-w-36 border-t border-red-500/40 bg-red-950/40 px-1.5 py-1 font-mono text-[0.6rem] leading-snug text-red-200"
+                    title={c.qaWarnings.join("\n")}
+                  >
+                    <span className="font-semibold uppercase tracking-wide">⚠ QA flagged</span>
+                    <ul className="mt-0.5 list-disc pl-3">
+                      {c.qaWarnings.slice(0, 3).map((w, i) => (
+                        <li key={i} className="break-words">
+                          {w.length > 110 ? `${w.slice(0, 107)}…` : w}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <span key={c.id} className="max-w-[240px] font-mono text-[0.68rem] text-[var(--wms-status-danger-fg)]">

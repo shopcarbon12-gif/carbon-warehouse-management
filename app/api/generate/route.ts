@@ -605,7 +605,9 @@ async function runPanelComplianceCheck(args: {
   panelQa: PanelQaInput;
   timeoutMs: number;
 }) {
-  const qaModel = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o-mini").trim() || "gpt-4o-mini";
+  // gpt-4o (not -mini): the verdict is now shown to the operator per crop, so
+  // it has to be worth reading — mini's face/background judgements were noisy.
+  const qaModel = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
   const panelName =
     args.panelQa.panelLabel ||
     (args.panelQa.panelNumber ? `Panel ${args.panelQa.panelNumber}` : "Panel");
@@ -1203,6 +1205,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     // instead of discarding it. Set PANEL_QA_FAIL_OPEN=false to hard-block instead.
     const qaFailOpen =
       (process.env.PANEL_QA_FAIL_OPEN || "true").trim().toLowerCase() !== "false";
+    let qaWarnings: string[] = [];
     if (strictLocksEnabled) {
       let qa: any;
       try {
@@ -1223,19 +1226,13 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         };
       }
       if (qa.decisive && !qa.pass) {
-        // Confident lock violation — keep blocking.
-        return NextResponse.json(
-          {
-            error: {
-              type: "lock_violation",
-              code: "identity_or_item_lock_failed",
-              message:
-                "Generated output failed identity/item lock QA. Regenerate this panel with stricter matching.",
-              reasons: qa.reasons,
-            },
-          },
-          { status: 422 }
-        );
+        // Confident lock violation. Owner decision 2026-08-26: NEVER discard a
+        // paid render — serve it flagged with the exact reasons so the operator
+        // sees the image AND the verdict and decides (the Studio delivers such
+        // crops unselected with a red QA badge). Blocking here threw away all
+        // four panels of a run with no explanation.
+        qaWarnings = (Array.isArray(qa.reasons) ? qa.reasons : []).map((r: unknown) => String(r)).filter(Boolean);
+        console.warn(`[generate] Panel QA FAILED — serving flagged: ${qaWarnings.join(" | ")}`);
       }
       if (!qa.decisive && !qaFailOpen) {
         // Strict mode: block when QA could not confidently clear the image.
@@ -1261,7 +1258,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         );
       }
     }
-    return NextResponse.json({ imageBase64: b64 });
+    return NextResponse.json(qaWarnings.length ? { imageBase64: b64, qaWarnings } : { imageBase64: b64 });
   } catch (err: unknown) {
     console.error("Generate failed:", err);
     if (isOpenAiAuthError(err)) {
