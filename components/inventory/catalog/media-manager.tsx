@@ -314,6 +314,9 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       if (!r.ok) throw new Error(j.error ?? "Publish failed");
       setItems((j.media || []).map((m) => ({ key: `ex-${m.id}`, kind: "existing", mediaId: m.id, url: m.url, alt: m.alt || "", color: "" })));
       setSel(new Set());
+      // Tell the matrix window (and through it the catalog grid) to revalidate —
+      // gallery, per-colour images and thumbnails changed on the server.
+      window.dispatchEvent(new CustomEvent("wms:media-published", { detail: { matrixId } }));
       // Distinguish images that FAILED to push (stage/create) from benign notes
       // (reorder/writeback) — a failed image push must never read as success.
       const allWarn = j.warnings ?? [];

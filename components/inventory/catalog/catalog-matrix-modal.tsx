@@ -212,6 +212,20 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "collections" | "studio">("matrix");
 
   useEffect(() => {
+    // Studio / Images publishes change the gallery + per-colour images on the
+    // server; refresh this window's data and the catalog grid behind it so the
+    // operator sees the new state without a manual reload.
+    const onPublished = (e: Event) => {
+      const d = (e as CustomEvent<{ matrixId?: string }>).detail;
+      if (d?.matrixId && d.matrixId !== matrixId) return;
+      void mutate();
+      onMutated?.();
+    };
+    window.addEventListener("wms:media-published", onPublished);
+    return () => window.removeEventListener("wms:media-published", onPublished);
+  }, [matrixId, mutate, onMutated]);
+
+  useEffect(() => {
     // Keep the active tab visible in the phone tab strip (behavior only —
     // gated on the same <sm breakpoint as the strip; no render branching).
     if (!window.matchMedia("(max-width: 639px)").matches) return;

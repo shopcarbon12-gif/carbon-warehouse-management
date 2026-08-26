@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, ImageIcon, PackageOpen, Pin, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
@@ -193,7 +194,35 @@ export function CatalogWorkspace({
   const [historyForSku, setHistoryForSku] = useState<string | null>(null);
   const [detailsRow, setDetailsRow] = useState<CatalogGridRow | null>(null);
   // Matrix window opened by clicking a UPC cell — keyed by matrix id.
-  const [matrixModalId, setMatrixModalId] = useState<string | null>(null);
+  // The open matrix window lives in the URL (?matrix=<id>) so a browser refresh
+  // — or a shared link — lands back in the same window instead of the bare
+  // catalog. Lazy initial state (no set-state-in-effect) + router.replace keeps
+  // history clean.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [matrixModalId, setMatrixModalId] = useState<string | null>(() => searchParams?.get("matrix") ?? null);
+  const syncMatrixParam = useCallback(
+    (id: string | null) => {
+      const sp = new URLSearchParams(searchParams?.toString() ?? "");
+      if (id) sp.set("matrix", id);
+      else sp.delete("matrix");
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+  const openMatrix = useCallback(
+    (id: string) => {
+      setMatrixModalId(id);
+      syncMatrixParam(id);
+    },
+    [syncMatrixParam],
+  );
+  const closeMatrix = useCallback(() => {
+    setMatrixModalId(null);
+    syncMatrixParam(null);
+  }, [syncMatrixParam]);
   // Variant picture popup opened by the small image icon on a catalog row.
   const [imgPreview, setImgPreview] = useState<{ url: string; alt: string } | null>(null);
   const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
@@ -288,7 +317,7 @@ export function CatalogWorkspace({
     async (variant: { id: string; sku: string }) => {
       const local = rows.find((r) => r.custom_sku_id === variant.id);
       if (local) {
-        setMatrixModalId(null);
+        closeMatrix();
         setDetailsRow(local);
         return;
       }
@@ -300,7 +329,7 @@ export function CatalogWorkspace({
         const j = (await res.json()) as { rows?: CatalogGridRow[] };
         const found = j.rows?.find((r) => r.custom_sku_id === variant.id);
         if (found) {
-          setMatrixModalId(null);
+          closeMatrix();
           setDetailsRow(found);
         }
       } catch (e) {
@@ -995,7 +1024,7 @@ export function CatalogWorkspace({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setMatrixModalId(r.matrix_id)}
+                            onClick={() => openMatrix(r.matrix_id)}
                             className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
                             title="Open matrix (pictures + all sizes/colors)"
                           >
@@ -1194,7 +1223,7 @@ export function CatalogWorkspace({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setMatrixModalId(r.matrix_id)}
+                          onClick={() => openMatrix(r.matrix_id)}
                           title="Open matrix (pictures + all sizes/colors)"
                           className="flex min-h-11 w-full items-center justify-between gap-2 border-t border-[var(--wms-border)]/60 px-3 py-2 text-left font-mono text-xs active:bg-[var(--wms-surface)]"
                         >
@@ -1439,7 +1468,7 @@ export function CatalogWorkspace({
         <CatalogMatrixModal
           matrixId={matrixModalId}
           canManage={canManageCatalog}
-          onClose={() => setMatrixModalId(null)}
+          onClose={() => closeMatrix()}
           onMutated={() => void mutate()}
           onOpenSku={openSkuFromMatrix}
         />
