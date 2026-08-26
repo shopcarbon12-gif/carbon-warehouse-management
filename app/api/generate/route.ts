@@ -597,6 +597,52 @@ function normalizeReasons(value: unknown) {
     .slice(0, 8);
 }
 
+type QaFrame = "left" | "right" | "both";
+type QaReason = { frame: QaFrame; text: string };
+const QA_MIN_CONFIDENCE = 0.75;
+const normalizeForCompare = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+
+/**
+ * Structured judge verdicts → operator-facing reasons. The judge has produced
+ * "misspelled as '<the expected string>'" and "full standing body" on an
+ * upper-body crop, so each reason carries expected/observed/confidence and:
+ * - expected == observed (after normalisation) is a self-contradiction → dropped;
+ * - confidence < QA_MIN_CONFIDENCE → demoted to a note;
+ * - the frame lets the Studio flag only the crop that is actually wrong.
+ * Legacy string reasons are kept as-is on both frames.
+ */
+function parseQaReasons(value: unknown): { kept: QaReason[]; demoted: string[] } {
+  const kept: QaReason[] = [];
+  const demoted: string[] = [];
+  if (!Array.isArray(value)) return { kept, demoted };
+  for (const v of value.slice(0, 10)) {
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t) kept.push({ frame: "both", text: t });
+      continue;
+    }
+    if (!v || typeof v !== "object") continue;
+    const r = v as Record<string, unknown>;
+    const cls = String(r.class || "").toUpperCase().trim();
+    const frameRaw = String(r.frame || "").toLowerCase().trim();
+    const frame: QaFrame = frameRaw.startsWith("l") ? "left" : frameRaw.startsWith("r") ? "right" : "both";
+    const expected = typeof r.expected === "string" ? r.expected.trim() : "";
+    const observed = typeof r.observed === "string" ? r.observed.trim() : "";
+    const detail = typeof r.detail === "string" ? r.detail.trim() : "";
+    const confidence = Number(r.confidence);
+    const body = detail || (expected || observed ? `expected "${expected}", saw "${observed}"` : "");
+    const text = [cls ? `${cls}:` : "", body].filter(Boolean).join(" ").trim().slice(0, 240);
+    if (!text) continue;
+    if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) continue;
+    if (Number.isFinite(confidence) && confidence < QA_MIN_CONFIDENCE) {
+      demoted.push(`${text} (low confidence)`);
+      continue;
+    }
+    kept.push({ frame, text });
+  }
+  return { kept: kept.slice(0, 8), demoted: demoted.slice(0, 6) };
+}
+
 async function runPanelComplianceCheck(args: {
   openai: OpenAI;
   imageBase64: string;
@@ -701,10 +747,13 @@ async function runPanelComplianceCheck(args: {
         "Return JSON only with these keys:",
         "{",
         '  "pass": boolean,',
-        '  "reasons": string[],',
+        '  "reasons": [ { "frame": "left" | "right" | "both", "class": "PRODUCT" | "POSE" | "IDENTITY" | "COVERAGE", "expected": string, "observed": string, "detail": string, "confidence": number 0-1 } ],',
         '  "notes": string[]',
         "}",
-        "Set pass=false ONLY for the four failure classes below. Each reason must name the frame (left/right) and state exactly what is wrong.",
+        "Set pass=false ONLY for the four failure classes below. Each reason names the frame it applies to, what was expected (from the refs / spec / pose lock), what you actually observe, and your confidence (anything under 0.75 is treated as a note, not a failure).",
+        "SCALE RULE: in a FULL-BODY frame small text (taglines, chest / back small lines) is only a few pixels tall — do NOT judge its spelling, legibility, or print effect there, and do not fail for it being faint; judge small text only in torso-crop and close-up frames. Large graphics in full-body frames are judged for presence, side and rough placement only.",
+        "MISSPELLING RULE: before reporting a misspelling, transcribe the letters you actually see into \"observed\". If they equal \"expected\", it is NOT a failure — omit it.",
+        "CROP RULE: an upper-body crop shows the garment from neckline to hem with the head cut off; a torso crop shows mid-thigh to head; a legs crop shows waist to feet. \"Full standing body\" means the head AND both feet are visible in that frame — report it only when both are.",
         "1. PRODUCT: any text is misspelled, garbled, merged, missing, duplicated, or on the wrong side/placement versus the item refs / spec; a logo or graphic is missing, invented, moved, resized, or its print effect changed; the garment colour, fit/silhouette, or construction clearly differs from the refs; a back-facing frame lacks the back design the refs / spec show, or shows a back design the refs do not.",
         "2. POSE / CROP: a frame shows a full standing body where a crop pose is expected; a crop of the wrong body region (e.g. legs/shorts where the top is expected); a close-up of the wrong item category; label/logo/patch details missing or relocated in the close-up; or the left/right poses swapped.",
         "3. IDENTITY: the person is clearly a DIFFERENT individual from the MODEL refs (different face structure, ethnicity, hair colour/length, or apparent age). Minor angle, expression, or lighting differences are NOT a failure.",
@@ -787,13 +836,26 @@ async function runPanelComplianceCheck(args: {
       raw,
     };
   }
-  const reasons = normalizeReasons(parsed.reasons);
-  const notes = normalizeReasons(parsed.notes);
+  const { kept, demoted } = parseQaReasons(parsed.reasons);
+  // A judge "fail" whose every reason was filtered out (self-contradiction /
+  // low confidence) is a pass; a judge "pass" that still lists reasons keeps
+  // them as notes only.
+  const failing = passFlag === false ? kept : [];
+  const notes = [
+    ...normalizeReasons(parsed.notes),
+    ...demoted,
+    ...(passFlag === true ? kept.map((r) => r.text) : []),
+  ].slice(0, 8);
+  const pass = failing.length === 0;
   return {
     decisive: true,
-    pass: passFlag === true,
+    pass,
     unavailable: false,
-    reasons: reasons.length ? reasons : passFlag ? [] : ["Compliance check failed."],
+    reasons: pass ? [] : failing.map((r) => r.text),
+    reasonsBySide: {
+      left: failing.filter((r) => r.frame !== "right").map((r) => r.text),
+      right: failing.filter((r) => r.frame !== "left").map((r) => r.text),
+    },
     notes,
     raw,
   };
@@ -914,6 +976,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     // the generator drop the SIMPLIFY back print, 2026-08-26).
     const specHasBackDesign = /^(?:TEXT|LOGO\/ICON|GRAPHIC\/PRINT)[^\n]*\bback\b/im.test(itemSpecText);
     const normalizedPanelQa = normalizePanelQa(panelQa);
+    // Only the CURRENT gender's back-facing poses may be named: listing
+    // "female Pose 2" on a male run turned male Pose 2 into a back view.
+    const backFacingPoseLabel =
+      String(normalizedPanelQa.modelGender || "").trim().toLowerCase() === "female"
+        ? "female Pose 2 only"
+        : "male Pose 4 and Pose 7 only";
     // Pose/expression variation: rotate by a per-generation seed so consecutive
     // shots never collapse to the same default pose/face. Falls back to a
     // time-derived seed when the client doesn't send one (older builders).
@@ -1024,7 +1092,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
             "- HARDWARE / STITCHING / POCKET / MATERIAL lines must match in kind, count, colour, finish and position. Anything listed as NOT CLEARLY VISIBLE stays plain/neutral — never invented.",
             ...(specHasBackDesign
               ? [
-                  "- BACK DESIGN PRESENT (verified on the product): the item carries a design on its BACK. Every back-facing frame (male Pose 4 and Pose 7, female Pose 2) MUST show that back design in full — same size, same position, same print effect. A clean/blank back, a shrunken version, or a version moved up to the neck is WRONG.",
+                  `- BACK DESIGN PRESENT (verified on the product): the item carries a design on its BACK. Every back-facing frame (${backFacingPoseLabel}) MUST show that back design in full — same size, same position, same print effect. A clean/blank back, a shrunken version, or a version moved up to the neck is WRONG. This does NOT turn any front-facing pose into a back view: all other poses keep their defined facing.`,
                 ]
               : []),
             "- SMALL TEXT LEGIBILITY: small chest / sleeve / neck text keeps its true garment size but must still be spelled letter-perfect in crisp, clean letterforms — even in full-body frames. Never render it as pseudo-letters, scribbles, or a smudge; prefer slightly bolder clean letters over illegible detail.",
@@ -1245,6 +1313,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const qaFailOpen =
       (process.env.PANEL_QA_FAIL_OPEN || "true").trim().toLowerCase() !== "false";
     let qaWarnings: string[] = [];
+    let qaWarningsBySide: { left: string[]; right: string[] } | null = null;
     let qaNotes: string[] = [];
     if (strictLocksEnabled) {
       let qa: any;
@@ -1274,6 +1343,10 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         // crops unselected with a red QA badge). Blocking here threw away all
         // four panels of a run with no explanation.
         qaWarnings = (Array.isArray(qa.reasons) ? qa.reasons : []).map((r: unknown) => String(r)).filter(Boolean);
+        const side = qa.reasonsBySide;
+        if (side && Array.isArray(side.left) && Array.isArray(side.right)) {
+          qaWarningsBySide = { left: side.left.map(String), right: side.right.map(String) };
+        }
         console.warn(`[generate] Panel QA FAILED — serving flagged: ${qaWarnings.join(" | ")}`);
       }
       if (qa.decisive) {
@@ -1308,6 +1381,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     return NextResponse.json({
       imageBase64: b64,
       ...(qaWarnings.length ? { qaWarnings } : {}),
+      ...(qaWarnings.length && qaWarningsBySide ? { qaWarningsBySide } : {}),
       ...(qaNotes.length ? { qaNotes } : {}),
     });
   } catch (err: unknown) {

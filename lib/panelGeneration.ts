@@ -368,7 +368,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       "MALE PANEL 1 CRITICAL LOCK (Pose 1 + Pose 2):",
       panelAdultLock,
       "- LEFT Pose 1 must be full-body front neutral hero, straight-on camera.",
-      "- RIGHT Pose 2 must be full-body lifestyle with subtle weight shift only.",
+      "- RIGHT Pose 2 must be full-body FRONT-FACING lifestyle with subtle weight shift only (face to camera; NOT a back view, NOT over-the-shoulder).",
       "- Both frames must show full head and full feet in frame (no cropping).",
       footwearHardLockLine,
       "- Do not rotate LEFT frame into lifestyle angle. Do not replace RIGHT frame with torso crop.",

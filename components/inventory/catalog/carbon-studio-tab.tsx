@@ -160,6 +160,8 @@ type PanelResponse = {
   degraded?: boolean;
   warning?: string;
   qaWarnings?: string[];
+  /** Per-frame split of qaWarnings so only the crop that is wrong gets flagged. */
+  qaWarningsBySide?: { left?: string[]; right?: string[] };
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
   qaNotes?: string[];
   error?: unknown;
@@ -283,11 +285,21 @@ async function panelResponseToCrops(
   // QA-flagged renders are delivered but NOT pre-selected: the operator sees the
   // image and the reasons and opts in explicitly.
   const qaWarnings = Array.isArray(json.qaWarnings) && json.qaWarnings.length ? json.qaWarnings : undefined;
-  const selected = !qaWarnings;
+  const bySide = json.qaWarningsBySide;
+  // Per-frame attribution when the server provides it (a perfect close-up must
+  // not wear its neighbour's flag); otherwise both crops share the panel verdict.
+  const forSide = (side: "left" | "right"): string[] | undefined => {
+    if (!qaWarnings) return undefined;
+    const s = bySide?.[side];
+    if (bySide && Array.isArray(s)) return s.length ? s : undefined;
+    return qaWarnings;
+  };
+  const leftWarnings = forSide("left");
+  const rightWarnings = forSide("right");
   const qaNotes = Array.isArray(json.qaNotes) && json.qaNotes.length ? json.qaNotes : undefined;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected, qaWarnings, qaNotes },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected, qaWarnings, qaNotes },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes },
   ];
 }
 
