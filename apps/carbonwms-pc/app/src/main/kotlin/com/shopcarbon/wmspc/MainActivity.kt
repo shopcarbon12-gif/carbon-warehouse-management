@@ -41,6 +41,7 @@ import com.shopcarbon.wmspc.util.Diag
 import com.shopcarbon.wmspc.util.Prefs
 import com.shopcarbon.wmspc.web.DownloadBridge
 import com.shopcarbon.wmspc.web.EngineGate
+import com.shopcarbon.wmspc.web.GenerationService
 import com.shopcarbon.wmspc.web.NativeBridge
 import com.shopcarbon.wmspc.web.PopupSheet
 import com.shopcarbon.wmspc.web.WebViewConfig
@@ -121,6 +122,12 @@ class MainActivity : AppCompatActivity() {
         pendingPermission = null
     }
 
+    /** Notifications carry the "still generating" foreground service and the update banner. */
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Diag.log("notification permission granted=$granted")
+        }
+
     private val connectivity by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -173,6 +180,10 @@ class MainActivity : AppCompatActivity() {
 
         onBackPressedDispatcher.addCallback(this) { handleBack() }
 
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         val url = startUrl(intent)
         Diag.log("load $url")
         web.loadUrl(url)
@@ -211,6 +222,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (isFinishing) {
+            GenerationService.forceStop(this)
             // Owner decision D3: leaving the app (back-exit / swipe away) ends the WMS session.
             runCatching {
                 CookieManager.getInstance().removeAllCookies(null)

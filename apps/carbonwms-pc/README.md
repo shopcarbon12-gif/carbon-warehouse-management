@@ -34,6 +34,21 @@ unchanged `POST /api/auth/login`; the server's `wms_session` cookie is copied in
 - "Use a different account" on the sheet, or Diagnostics → "Forget saved fingerprint login", removes it.
 - Nothing changes on the server; the web login page still works in browsers exactly as before.
 
+## Background image generation (v1.2.0)
+
+A Carbon Studio panel takes OpenAI 60–90 s. The operator can now leave the app (or the browser tab)
+mid-run without losing it:
+
+- **Server** parks every render: each panel POST carries `x-generate-job: <id>`, the generation runs
+  detached from the connection, and the finished body waits under that id for up to 15 min
+  (`lib/server/generate-jobs.ts`, `GET /api/generate/job?id=…`). Applies to the mobile web view too.
+- **Web** claims it: if the connection dies, the Studio tab polls for the result instead of showing a
+  failed panel; a run whose page was discarded is picked up from `sessionStorage` when the tab returns.
+- **App** keeps going: `GenerationService` (foreground service, `dataSync`) runs while the page reports
+  `CarbonWMSPC.setBusy("…", true)`, so Android does not freeze the WebView — the crops are finished and
+  waiting when the operator comes back, rather than resuming on return. 15-minute watchdog; stopped when
+  the run ends or the activity finishes. Needs the notification permission (asked once on first launch).
+
 ## What the shell handles (no web change needed)
 
 - Cookie session persistence while open; HTTPS only; TLS errors never bypassed.

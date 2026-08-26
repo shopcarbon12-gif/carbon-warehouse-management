@@ -7,7 +7,7 @@ plugins {
 }
 
 /** Dotted-only version (X.Y.Z). versionCode is derived — same scheme as the handheld app. */
-val appVersionName = "1.1.0"
+val appVersionName = "1.2.0"
 
 fun computeVersionCode(versionName: String): Int {
     val parts = versionName.trim().split('.')

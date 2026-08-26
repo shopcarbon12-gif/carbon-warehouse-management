@@ -30,6 +30,9 @@
     <string name="update_install">Update</string>
     <string name="no_app_for_link">No app can open this link</string>
 
+    <string name="gen_channel_name">Image generation</string>
+    <string name="gen_channel_desc">Keeps CarbonWMS working while Carbon Studio renders panels.</string>
+
     <string name="login_title">CarbonWMS</string>
     <string name="login_subtitle">Sign in to %1$s</string>
     <string name="login_email">Email</string>

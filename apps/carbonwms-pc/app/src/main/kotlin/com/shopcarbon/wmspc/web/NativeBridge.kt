@@ -67,6 +67,17 @@ class NativeBridge(private val a: MainActivity, private val webProvider: () -> W
         }
     }
 
+    /**
+     * The page marks a long job (Carbon Studio panel generation) as running so the
+     * shell can keep working while the operator switches to another app — without
+     * it Android freezes the process within seconds and the run stalls until they
+     * come back. Safe no-op in a browser: `window.CarbonWMSPC` only exists here.
+     */
+    @JavascriptInterface
+    fun setBusy(label: String, busy: Boolean) {
+        a.runOnUiThread { GenerationService.setBusy(a, label.ifBlank { "Working…" }, busy) }
+    }
+
     @JavascriptInterface
     fun log(msg: String) {
         Diag.log("page: $msg")

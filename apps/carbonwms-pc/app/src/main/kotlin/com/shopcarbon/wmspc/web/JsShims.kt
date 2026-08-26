@@ -52,6 +52,7 @@ object JsShims {
         return N.saveBlob(String(name || 'download'), blob.type || 'application/octet-stream', b64);
       });
     },
+    setBusy: function (label, busy) { try { N.setBusy(String(label || 'Working…'), !!busy); } catch (e) {} },
     log: function (m) { N.log(String(m)); }
   };
 

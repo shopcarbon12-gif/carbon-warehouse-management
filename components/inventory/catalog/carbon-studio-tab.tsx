@@ -151,6 +151,135 @@ function downloadImage(src: string, name: string) {
   a.remove();
 }
 
+/** What a panel generation answers with, from the direct POST or a job claim. */
+type PanelResponse = {
+  imageBase64?: string;
+  degraded?: boolean;
+  warning?: string;
+  error?: unknown;
+  status?: string;
+};
+
+/**
+ * Background-safe generation.
+ *
+ * A panel takes OpenAI 60–90 s. The operator should be able to switch apps,
+ * lock the phone or change browser tab in that window without losing the run:
+ * every panel POST carries `x-generate-job`, so the server keeps rendering even
+ * if this page is frozen/discarded and parks the result. When our connection
+ * dies we claim that result instead of reporting a failed panel; if the page
+ * itself was thrown away, the pending run in sessionStorage lets the Studio tab
+ * pick the panels up when it comes back.
+ */
+const STUDIO_RUN_KEY = "wms_studio_pending_run";
+const JOB_POLL_INTERVAL_MS = 3_000;
+/** Long enough for a full render started just before the connection dropped. */
+const JOB_POLL_TIMEOUT_MS = 5 * 60_000;
+/** Matches the server-side park window (lib/server/generate-jobs.ts). */
+const JOB_MAX_AGE_MS = 15 * 60_000;
+
+type PendingRun = {
+  matrixId: string;
+  runTag: string;
+  gender: string;
+  startedAt: number;
+  jobs: { panel: number; jobId: string }[];
+};
+
+function readPendingRun(matrixId: string): PendingRun | null {
+  try {
+    const raw = sessionStorage.getItem(STUDIO_RUN_KEY);
+    if (!raw) return null;
+    const run = JSON.parse(raw) as PendingRun;
+    if (run?.matrixId !== matrixId || !Array.isArray(run.jobs) || !run.jobs.length) return null;
+    if (Date.now() - run.startedAt > JOB_MAX_AGE_MS) {
+      sessionStorage.removeItem(STUDIO_RUN_KEY);
+      return null;
+    }
+    return run;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingRun(run: PendingRun | null): void {
+  try {
+    if (run) sessionStorage.setItem(STUDIO_RUN_KEY, JSON.stringify(run));
+    else sessionStorage.removeItem(STUDIO_RUN_KEY);
+  } catch {
+    /* private mode / storage full — generation still works, just no resume */
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Tell the CarbonWMS-PC Android shell that a long render is in flight, so it keeps
+ * the page running while the operator is in another app (Android otherwise freezes
+ * a backgrounded process within seconds). No-op in every browser and in app builds
+ * that predate the hook — `window.CarbonWMSPC` simply isn't there.
+ */
+function setNativeBusy(busy: boolean): void {
+  try {
+    (
+      window as unknown as { CarbonWMSPC?: { setBusy?: (label: string, busy: boolean) => void } }
+    ).CarbonWMSPC?.setBusy?.("Generating Carbon Studio images…", busy);
+  } catch {
+    /* bridge unavailable — generation is unaffected */
+  }
+}
+
+function newJobId(runTag: string, panel: number): string {
+  return `${runTag}-p${panel}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Poll until the detached render lands. null = gone (expired, or server restarted). */
+async function claimPanelJob(jobId: string, deadline: number): Promise<PanelResponse | null> {
+  while (Date.now() < deadline) {
+    await sleep(JOB_POLL_INTERVAL_MS);
+    try {
+      const r = await fetch(`/api/generate/job?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
+      // 404 = expired/already claimed; 401/403 = session went away while we were
+      // backgrounded. Neither improves by asking again for five minutes.
+      if (r.status === 404 || r.status === 401 || r.status === 403) return null;
+      if (!r.ok) continue;
+      const j = (await r.json()) as PanelResponse;
+      if (j.status === "done") return j;
+    } catch {
+      /* offline / still frozen — keep trying until the deadline */
+    }
+  }
+  return null;
+}
+
+/** We already have the image; drop the server's parked copy. */
+function releasePanelJob(jobId: string): void {
+  void fetch(`/api/generate/job?id=${encodeURIComponent(jobId)}`, { method: "DELETE" }).catch(() => {});
+}
+
+/** One panel response → the two crops the gallery shows (shared by run + resume). */
+async function panelResponseToCrops(
+  json: PanelResponse | null,
+  panel: number,
+  poseA: number,
+  poseB: number,
+  runTag: string,
+): Promise<Crop[]> {
+  if (!json || json.degraded || !json.imageBase64) {
+    const e = json?.error;
+    const detail =
+      (typeof e === "string" ? e : (e as { message?: string })?.message) ||
+      json?.warning ||
+      (json ? "failed" : "lost connection and the result was no longer available");
+    return [{ id: `p${panel}-err-${runTag}`, b64: "", label: `Panel ${panel}: ${detail}`, selected: false }];
+  }
+  const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
+  return [
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
+  ];
+}
+
 export function CarbonStudioTab({
   matrixId,
   shopifyProductId,
@@ -379,6 +508,7 @@ export function CarbonStudioTab({
     if (!panels.length) return setErr("Select at least one panel.");
     const refUrls = itemRefs.map((r) => r.url);
     setBusy("generate");
+    setNativeBusy(true);
     setErr(null);
     setMsg(null);
     // Regenerate flow (carbon-gen): keep the crops you selected, append fresh
@@ -402,7 +532,20 @@ export function CarbonStudioTab({
       /* unavailable (low battery, older iOS) — generation proceeds without it */
     }
 
+    // One job id per panel, written down BEFORE the first request: if this page
+    // is frozen or discarded mid-run (app switch, phone lock, tab evicted) the
+    // renders keep going server-side and these ids are how we get them back.
+    const jobIds = new Map<number, string>(chosen.map((p) => [p, newJobId(runTag, p)]));
+    writePendingRun({
+      matrixId,
+      runTag,
+      gender: model.gender,
+      startedAt: Date.now(),
+      jobs: chosen.map((p) => ({ panel: p, jobId: jobIds.get(p)! })),
+    });
+
     const genOnePanel = async (panel: number): Promise<Crop[]> => {
+      const jobId = jobIds.get(panel)!;
       const [poseA, poseB] = getPanelPosePair(model.gender, panel);
       const panelLabel = getPanelButtonLabel(model.gender, panel);
       const prompt = buildMasterPanelPrompt({
@@ -418,42 +561,40 @@ export function CarbonStudioTab({
         itemStyleInstructions: instruction,
         expressionDirective,
       });
-      const resp = await fetch("/api/generate", {
-        method: "POST",
-        // x-generate-stream: the server heartbeats whitespace every 10s while
-        // OpenAI works so mobile networks / iOS don't drop the otherwise-idle
-        // 60-90s connection ("Load failed"). Leading whitespace is valid JSON.
-        headers: { "Content-Type": "application/json", Accept: "application/json", "x-generate-stream": "1" },
-        body: JSON.stringify({
-          prompt,
-          size: "1536x1024",
-          modelRefs: model.ref_image_urls,
-          itemRefs: refUrls,
-          panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
-        }),
-      });
-      const json = (await resp.json().catch(() => ({}))) as {
-        imageBase64?: string;
-        degraded?: boolean;
-        warning?: string;
-        error?: unknown;
-      };
-      if (!resp.ok || json.degraded || !json.imageBase64) {
-        const e = json.error;
-        return [
-          {
-            id: `p${panel}-err-${runTag}`,
-            b64: "",
-            label: `Panel ${panel}: ${(typeof e === "string" ? e : (e as { message?: string })?.message) || json.warning || "failed"}`,
-            selected: false,
+      const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
+      let json: PanelResponse | null = null;
+      try {
+        const resp = await fetch("/api/generate", {
+          method: "POST",
+          // x-generate-stream: the server heartbeats whitespace every 10s while
+          // OpenAI works so mobile networks / iOS don't drop the otherwise-idle
+          // 60-90s connection ("Load failed"). Leading whitespace is valid JSON.
+          // x-generate-job: run it detached from this connection so backgrounding
+          // the app/tab can't cancel the render — we claim the result below.
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "x-generate-stream": "1",
+            "x-generate-job": jobId,
           },
-        ];
+          body: JSON.stringify({
+            prompt,
+            size: "1536x1024",
+            modelRefs: model.ref_image_urls,
+            itemRefs: refUrls,
+            panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
+          }),
+        });
+        const parsed = (await resp.json().catch(() => null)) as PanelResponse | null;
+        // A body that says nothing useful means the stream was cut mid-flight
+        // (frozen page, dropped carrier connection) — go claim the real result.
+        json = parsed && (parsed.imageBase64 || parsed.error || parsed.degraded) ? parsed : null;
+      } catch {
+        json = null; // connection died — the render is still running server-side
       }
-      const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
-      return [
-        { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true },
-        { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true },
-      ];
+      if (!json) json = await claimPanelJob(jobId, deadline);
+      else releasePanelJob(jobId);
+      return panelResponseToCrops(json, panel, poseA, poseB, runTag);
     };
 
     try {
@@ -475,11 +616,59 @@ export function CarbonStudioTab({
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
     } finally {
+      writePendingRun(null);
+      setNativeBusy(false);
       setBusy(null);
       setProgress("");
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, panels, itemType, instruction, crops]);
+  }, [model, itemRefs, panels, itemType, instruction, crops, matrixId]);
+
+  /**
+   * Resume a run whose page was thrown away mid-flight (tab discarded under
+   * memory pressure, app killed while backgrounded). The panels kept rendering
+   * server-side; claim them instead of making the operator generate again.
+   */
+  const resumeStartedRef = useRef(false);
+  useEffect(() => {
+    if (resumeStartedRef.current) return;
+    const run = readPendingRun(matrixId);
+    if (!run) return;
+    resumeStartedRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      setBusy("generate");
+      setNativeBusy(true);
+      setProgress(`Reconnecting to ${run.jobs.length} panel(s) still generating…`);
+      try {
+        const deadline = Math.min(Date.now() + JOB_POLL_TIMEOUT_MS, run.startedAt + JOB_MAX_AGE_MS);
+        const settled = await Promise.allSettled(
+          run.jobs.map(async ({ panel, jobId }) => {
+            const [poseA, poseB] = getPanelPosePair(run.gender, panel);
+            const json = await claimPanelJob(jobId, deadline);
+            return panelResponseToCrops(json, panel, poseA, poseB, run.runTag);
+          }),
+        );
+        if (cancelled) return;
+        const recovered = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
+        const ok = recovered.filter((c) => c.b64);
+        setCrops((prev) => [...prev, ...recovered]);
+        setMsg(
+          ok.length
+            ? `Recovered ${ok.length} crop(s) from the run that was interrupted.`
+            : "The interrupted run could not be recovered — please generate again.",
+        );
+      } finally {
+        writePendingRun(null);
+        setNativeBusy(false);
+        setBusy(null);
+        setProgress("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [matrixId]);
 
   // ---- Media manager (matches carbon-gen's Publish step) ----
   // Auto-fill alt text for any image that's missing it (silent background pass);
