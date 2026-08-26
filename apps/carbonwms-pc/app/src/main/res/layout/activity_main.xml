@@ -26,6 +26,13 @@
         android:background="@android:color/black"
         android:visibility="gone" />
 
+    <!-- Native sign-in sheet (replaces the web /login page inside the app; biometric re-login) -->
+    <FrameLayout
+        android:id="@+id/login_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <include
         android:id="@+id/offline"
         layout="@layout/view_offline"

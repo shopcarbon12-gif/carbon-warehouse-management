@@ -21,6 +21,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 import com.shopcarbon.wmspc.BuildConfig
 import com.shopcarbon.wmspc.MainActivity
 import com.shopcarbon.wmspc.R
+import com.shopcarbon.wmspc.auth.SecureStore
 import com.shopcarbon.wmspc.util.Diag
 import com.shopcarbon.wmspc.util.Prefs
 
@@ -72,6 +73,13 @@ class DiagnosticsActivity : AppCompatActivity() {
             render(info, log)
         }
 
+        findViewById<Button>(R.id.diag_forget_login).setOnClickListener {
+            SecureStore(this).clear()
+            Diag.log("saved biometric login removed from Diagnostics")
+            Toast.makeText(this, "Saved fingerprint login removed", Toast.LENGTH_SHORT).show()
+            render(info, log)
+        }
+
         findViewById<Button>(R.id.diag_share).setOnClickListener {
             val text = buildString {
                 appendLine(summary())
@@ -103,6 +111,7 @@ class DiagnosticsActivity : AppCompatActivity() {
             appendLine("Session cookie: ${if (hasSession) "present" else "none (login required)"}")
             appendLine("Network: ${network()}")
             appendLine("Keep screen on: ${Prefs.keepScreenOn}")
+            appendLine("Saved fingerprint login: ${SecureStore(this@DiagnosticsActivity).email() ?: "none"}")
             append("Install id: ${Prefs.installId}")
         }
     }

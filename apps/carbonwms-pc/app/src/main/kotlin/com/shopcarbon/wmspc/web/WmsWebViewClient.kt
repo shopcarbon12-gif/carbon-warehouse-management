@@ -33,13 +33,18 @@ class WmsWebViewClient(private val a: MainActivity, private val isPopup: Boolean
     }
 
     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-        if (!isPopup) a.hideOffline()
-        if (Uri.parse(url).path == "/login") Diag.log("session: at /login")
+        if (isPopup) return
+        a.hideOffline()
+        val u = Uri.parse(url)
+        if (u.host.equals(a.originHost, ignoreCase = true) && u.path == "/login") {
+            Diag.log("session: at /login → native sign-in")
+            a.onWebLoginPage(u.getQueryParameter("next"))
+        }
     }
 
     override fun onPageFinished(view: WebView, url: String) {
         view.evaluateJavascript(JsShims.SOURCE, null)
-        if (isPopup) a.popup.onTitle(view.title, url)
+        if (isPopup) a.popup.onTitle(view.title, url) else a.onPageLoaded()
     }
 
     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

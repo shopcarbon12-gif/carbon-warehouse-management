@@ -17,6 +17,23 @@ Plan and audit: `Dropbox/elior perez/CarbonWMS-PC-Android-App-Plan-2026-08-25.ht
 | D3 re-login on full close | session cookies cleared at process start and when the activity finishes | `App.onCreate`, `MainActivity.onDestroy` |
 | D4 branding | id from `wmspc.shopcarbon.com` → `com.shopcarbon.wmspc`; icon = shopcarbon.com favicon in white on `#0c0f12` | `res/mipmap-*` |
 
+## Biometric login (v1.1.0)
+
+The app replaces the web `/login` page with a native sign-in sheet (`auth/LoginSheet.kt`), talking to the
+unchanged `POST /api/auth/login`; the server's `wms_session` cookie is copied into the WebView.
+
+- First sign-in: email + password, switch **"Use fingerprint / screen lock next time"** (on by default when
+  the phone has a fingerprint or screen lock). Confirming once with the fingerprint saves the login.
+- Every later open (cookies are cleared on full close — decision D3): the fingerprint prompt appears
+  immediately; success → straight to the dashboard (or to the `?next=` page after a session expiry).
+- Storage (`auth/SecureStore.kt`): password AES-256-GCM encrypted with an Android hardware-keystore key
+  that only works right after a **Class-3 biometric (fingerprint) or the device PIN/pattern** succeeds
+  (per-use auth). Re-enrolling fingerprints invalidates the key → the app asks for the password again.
+  Samsung face unlock is Class 2 and is therefore not accepted by Android for this — fingerprint or PIN.
+- Server rejects the saved password (changed in WMS) → saved login is dropped, normal form shown.
+- "Use a different account" on the sheet, or Diagnostics → "Forget saved fingerprint login", removes it.
+- Nothing changes on the server; the web login page still works in browsers exactly as before.
+
 ## What the shell handles (no web change needed)
 
 - Cookie session persistence while open; HTTPS only; TLS errors never bypassed.

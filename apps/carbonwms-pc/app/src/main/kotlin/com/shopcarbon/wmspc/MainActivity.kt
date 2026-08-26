@@ -34,6 +34,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import com.shopcarbon.wmspc.auth.LoginSheet
 import com.shopcarbon.wmspc.settings.DiagnosticsActivity
 import com.shopcarbon.wmspc.update.UpdateChecker
 import com.shopcarbon.wmspc.util.Diag
@@ -77,6 +78,8 @@ class MainActivity : AppCompatActivity() {
         private set
     lateinit var popup: PopupSheet
         private set
+    lateinit var loginSheet: LoginSheet
+        private set
 
     val origin: String get() = Prefs.origin
     val originHost: String? get() = Prefs.originHost()
@@ -87,6 +90,7 @@ class MainActivity : AppCompatActivity() {
     private var customViewCallback: WebChromeClient.CustomViewCallback? = null
     private var lastBackAt = 0L
     private var gateOpen = false
+    private var clearHistoryOnNextLoad = false
 
     // ---- file chooser ------------------------------------------------------------------------
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -160,6 +164,7 @@ class MainActivity : AppCompatActivity() {
         DownloadBridge.registerApkInstaller(this)
 
         popup = PopupSheet(this, findViewById(R.id.popup_container))
+        loginSheet = LoginSheet(this, findViewById(R.id.login_container))
 
         offline.findViewById<Button>(R.id.offline_retry).setOnClickListener { hideOffline(); reloadOrStart() }
         offline.findViewById<Button>(R.id.offline_diagnostics).setOnClickListener {
@@ -233,10 +238,31 @@ class MainActivity : AppCompatActivity() {
         if (current.isNullOrBlank() || current == "about:blank") web.loadUrl(startUrl(intent)) else web.reload()
     }
 
+    /** The main WebView reached /login → native sign-in sheet (biometric when a login is saved). */
+    fun onWebLoginPage(next: String?) {
+        if (::loginSheet.isInitialized) loginSheet.onLoginPage(next)
+    }
+
+    /** Native sign-in succeeded: the cookie is set, continue to `next` and drop /login from history. */
+    fun onLoggedIn(next: String?) {
+        val path = next?.takeIf { it.startsWith("/") && !it.startsWith("//") } ?: "/dashboard"
+        clearHistoryOnNextLoad = true
+        Diag.log("logged in → $path")
+        web.loadUrl("$origin$path")
+    }
+
+    fun onPageLoaded() {
+        if (clearHistoryOnNextLoad) {
+            clearHistoryOnNextLoad = false
+            web.clearHistory()
+        }
+    }
+
     private fun handleBack() {
         when {
             customViewCallback != null -> hideCustomView()
             popup.isOpen -> popup.close()
+            loginSheet.isVisible -> confirmExit()
             offline.isVisible -> confirmExit()
             web.canGoBack() -> web.goBack()
             else -> confirmExit()
