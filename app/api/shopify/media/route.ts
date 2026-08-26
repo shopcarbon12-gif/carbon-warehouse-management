@@ -12,6 +12,8 @@ import {
   createProductMedia,
   stageImageUpload,
   appendMediaToVariant,
+  detachMediaFromVariant,
+  listVariantMedia,
 } from "@/lib/server/shopify-write";
 import { syncShopifyImagesForMatrix } from "@/lib/server/shopify-catalog-images";
 
@@ -160,7 +162,23 @@ export async function POST(req: Request) {
   if (body.heroVariantId && finalOrder[0] && !assigns.some((a) => a.mediaId === finalOrder[0])) {
     assigns.push({ mediaId: finalOrder[0], variantId: body.heroVariantId });
   }
+  // A Shopify variant holds at most ONE media, and productVariantAppendMedia
+  // rejects a variant that already has one — which is exactly the state after
+  // the first publish (hero attached). Without a detach the operator's pick of
+  // a different image silently stayed a warning and Shopify/WMS never changed.
+  // Now: skip when unchanged, detach the current media first when different.
+  const currentVariantMedia = assigns.length ? await listVariantMedia(ctx, productId) : new Map<string, string | null>();
+  const asVariantGid = (id: string) => (id.startsWith("gid://") ? id : `gid://shopify/ProductVariant/${id}`);
   for (const a of assigns) {
+    const cur = currentVariantMedia.get(asVariantGid(a.variantId)) ?? currentVariantMedia.get(a.variantId) ?? null;
+    if (cur === a.mediaId) continue;
+    if (cur) {
+      const dt = await detachMediaFromVariant(ctx, productId, a.variantId, cur);
+      if (!dt.ok) {
+        warnings.push(`variant image (detach old): ${dt.error}`);
+        continue;
+      }
+    }
     const av = await appendMediaToVariant(ctx, productId, a.variantId, a.mediaId);
     if (!av.ok) warnings.push(`variant image: ${av.error}`);
   }

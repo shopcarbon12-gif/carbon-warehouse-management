@@ -456,6 +456,55 @@ export async function appendMediaToVariant(
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
 }
 
+/**
+ * Current media attached to each variant (a Shopify variant carries at most ONE
+ * media). Keyed by variant GID → media GID (or null when unassigned).
+ */
+export async function listVariantMedia(
+  ctx: ShopCtx,
+  productId: string,
+): Promise<Map<string, string | null>> {
+  const res = await gql<{
+    product?: { variants?: { nodes?: Array<{ id: string; media?: { nodes?: Array<{ id: string }> } }> } } | null;
+  }>(
+    ctx,
+    `query variantMedia($id: ID!) {
+      product(id: $id) {
+        variants(first: 250) { nodes { id media(first: 1) { nodes { id } } } }
+      }
+    }`,
+    { id: toProductGid(productId) },
+  );
+  const out = new Map<string, string | null>();
+  for (const v of res.data?.product?.variants?.nodes || []) {
+    out.set(v.id, v.media?.nodes?.[0]?.id ?? null);
+  }
+  return out;
+}
+
+/** productVariantDetachMedia — required before appending a different image to a variant that already has one. */
+export async function detachMediaFromVariant(
+  ctx: ShopCtx,
+  productId: string,
+  variantId: string,
+  mediaId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await gql<{ productVariantDetachMedia?: { userErrors?: Array<{ message: string }> } }>(
+    ctx,
+    `mutation productVariantDetachMedia($productId: ID!, $variantMedia: [ProductVariantDetachMediaInput!]!) {
+      productVariantDetachMedia(productId: $productId, variantMedia: $variantMedia) {
+        userErrors { field message }
+      }
+    }`,
+    {
+      productId: toProductGid(productId),
+      variantMedia: [{ variantId, mediaIds: [mediaId] }],
+    },
+  );
+  const errs = res.data?.productVariantDetachMedia?.userErrors || [];
+  return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
 export type MetafieldInput = {
   ownerId: string;
   namespace: string;
