@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import ShopifyMenuItemsTree from "@/components/shopify-menu-items-tree";
 import { CategoryManagerModal } from "@/components/inventory/categories-legacy-manager";
 import { formatAppDateTime } from "@/lib/formatAppDateTime";
+import { useUrlFlag } from "@/lib/use-url-param";
 import { normalizeMenuPath } from "@/lib/shopifyCollectionSkuParser";
 import {
   KPI_NEEDS_REVIEW_UNION_FILTER,
@@ -612,7 +613,7 @@ export default function ShopifyCollectionMapping() {
     pathname === "/shopify-collection-mapping" ||
     pathname === "/inventory/categories" ||
     pathname === "/inventory/categories/collection-mapping";
-  const [legacyManagerOpen, setLegacyManagerOpen] = useState(false);
+  const [legacyManagerOpen, setLegacyManagerOpen] = useUrlFlag("legacy");
   const [shop, setShop] = useState("");
   const [nodes, setNodes] = useState<MenuNode[]>([]);
   const [lastSyncedNodes, setLastSyncedNodes] = useState<MenuNode[]>([]);

@@ -19,6 +19,7 @@ import {
   type RfidTaskPhase,
 } from "./commissioning-status-bar";
 import { PrintLogsModal } from "./print-logs-modal";
+import { useUrlFlag } from "@/lib/use-url-param";
 
 type BinRow = { id: string; code: string };
 
@@ -60,7 +61,8 @@ export function CommissioningWorkspace() {
   const [lastEpcs, setLastEpcs] = useState<string[]>([]);
 
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
+  // ?logs=1 — survives a browser refresh (see lib/use-url-param.ts).
+  const [logsOpen, setLogsOpen] = useUrlFlag("logs");
 
   const [nextSerial, setNextSerial] = useState(1);
 

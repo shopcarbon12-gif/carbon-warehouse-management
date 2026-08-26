@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { Pencil } from "lucide-react";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { StatusLabelRow } from "@/lib/queries/status-labels";
 import { STATUS_LABEL_NAME_TOOLTIPS } from "@/lib/settings/status-label-tooltips";
 
@@ -103,7 +104,13 @@ export function StatusLabelsWorkspace() {
     fetcher,
     { revalidateOnFocus: false },
   );
-  const [editRow, setEditRow] = useState<StatusLabelRow | null>(null);
+  // `status` = <status id> — the edit window survives a browser refresh; the
+  // row object is derived from the loaded list.
+  const [statusParam, setStatusParam] = useUrlParam("status");
+  const editRow = useMemo<StatusLabelRow | null>(() => {
+    if (!statusParam) return null;
+    return data?.find((r) => String(r.id) === statusParam) ?? null;
+  }, [data, statusParam]);
   const [displayLabel, setDisplayLabel] = useState("");
   const [legacyId, setLegacyId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -117,7 +124,7 @@ export function StatusLabelsWorkspace() {
   }, [editRow]);
 
   const closeModals = () => {
-    setEditRow(null);
+    setStatusParam(null);
     setFormError(null);
   };
 
@@ -212,7 +219,7 @@ export function StatusLabelsWorkspace() {
                     <button
                       type="button"
                       className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-9 max-md:px-2.5"
-                      onClick={() => setEditRow(row)}
+                      onClick={() => setStatusParam(String(row.id))}
                     >
                       <Pencil className="h-3.5 w-3.5" aria-hidden />
                       View / edit label

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { TenantLocationAdminRow } from "@/lib/queries/settings-locations-admin";
 import type { TenantUserListRow } from "@/lib/queries/settings-users";
 
@@ -24,9 +25,14 @@ export function LocationsSettingsWorkspace() {
     revalidateOnFocus: false,
   });
 
-  const [modal, setModal] = useState<null | { mode: "add" } | { mode: "edit"; row: TenantLocationAdminRow }>(
-    null,
-  );
+  // `location` = "new" (add) | <location id> (edit) — survives a browser refresh.
+  const [locationParam, setLocationParam] = useUrlParam("location");
+  const modal = useMemo<null | { mode: "add" } | { mode: "edit"; row: TenantLocationAdminRow }>(() => {
+    if (!locationParam) return null;
+    if (locationParam === "new") return { mode: "add" };
+    const row = locations?.find((l) => l.id === locationParam);
+    return row ? { mode: "edit", row } : null;
+  }, [locations, locationParam]);
 
   const toggleActive = useCallback(
     async (row: TenantLocationAdminRow) => {
@@ -109,7 +115,7 @@ export function LocationsSettingsWorkspace() {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => setModal({ mode: "add" })}
+          onClick={() => setLocationParam("new")}
           className="wms-btn-primary wms-btn-sm font-mono"
         >
           Add location
@@ -184,7 +190,7 @@ export function LocationsSettingsWorkspace() {
                   <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
-                      onClick={() => setModal({ mode: "edit", row })}
+                      onClick={() => setLocationParam(row.id)}
                       className="text-teal-400/90 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
@@ -223,9 +229,9 @@ export function LocationsSettingsWorkspace() {
           mode={modal.mode}
           row={modal.mode === "edit" ? modal.row : null}
           users={users ?? []}
-          onClose={() => setModal(null)}
+          onClose={() => setLocationParam(null)}
           onSaved={() => {
-            setModal(null);
+            setLocationParam(null);
             void mutate();
           }}
         />

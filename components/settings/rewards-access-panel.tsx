@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { RewardsUserListRow } from "@/lib/queries/settings-rewards-users";
 import type { UserRoleRow } from "@/lib/queries/settings-user-roles";
 
@@ -82,8 +83,13 @@ function RewardsUsersTab() {
     { revalidateOnFocus: false },
   );
 
-  const [adding, setAdding] = useState(false);
-  const [editing, setEditing] = useState<RewardsUserListRow | null>(null);
+  // `rwuser` = "new" (create window) | <rewards user id> (edit window).
+  const [rwUserParam, setRwUserParam] = useUrlParam("rwuser");
+  const adding = rwUserParam === "new";
+  const editing = useMemo<RewardsUserListRow | null>(() => {
+    if (!rwUserParam || rwUserParam === "new") return null;
+    return users?.find((u) => u.id === rwUserParam) ?? null;
+  }, [users, rwUserParam]);
 
   const deactivate = useCallback(
     async (u: RewardsUserListRow) => {
@@ -111,7 +117,7 @@ function RewardsUsersTab() {
         </p>
         <button
           type="button"
-          onClick={() => setAdding(true)}
+          onClick={() => setRwUserParam("new")}
           className="wms-btn-primary wms-btn-sm font-mono"
         >
           Add rewards user
@@ -180,7 +186,7 @@ function RewardsUsersTab() {
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
-                      onClick={() => setEditing(u)}
+                      onClick={() => setRwUserParam(u.id)}
                       className="mr-3 font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
@@ -204,9 +210,9 @@ function RewardsUsersTab() {
 
       {adding ? (
         <RewardsUserCreateModal
-          onClose={() => setAdding(false)}
+          onClose={() => setRwUserParam(null)}
           onSaved={() => {
-            setAdding(false);
+            setRwUserParam(null);
             void mutate();
           }}
         />
@@ -216,9 +222,9 @@ function RewardsUsersTab() {
         <RewardsUserEditModal
           user={editing}
           roles={roles ?? []}
-          onClose={() => setEditing(null)}
+          onClose={() => setRwUserParam(null)}
           onSaved={() => {
-            setEditing(null);
+            setRwUserParam(null);
             void mutate();
           }}
         />

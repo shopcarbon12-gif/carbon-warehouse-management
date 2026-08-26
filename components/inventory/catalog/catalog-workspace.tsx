@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useUrlFlag, useUrlParam } from "@/lib/use-url-param";
 import useSWR from "swr";
 import { Archive, ChevronDown, ChevronUp, ChevronsUpDown, ImageIcon, PackageOpen, Pin, Radio } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
@@ -182,47 +182,29 @@ export function CatalogWorkspace({
   const [debounced, setDebounced] = useState("");
   const [sortBy, setSortBy] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [modalSku, setModalSku] = useState<CatalogGridRow | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncPreviewOpen, setSyncPreviewOpen] = useState(false);
   const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [defectiveOpen, setDefectiveOpen] = useState(false);
-  const [manualItemsOpen, setManualItemsOpen] = useState(false);
-  const [historyForSku, setHistoryForSku] = useState<string | null>(null);
-  const [detailsRow, setDetailsRow] = useState<CatalogGridRow | null>(null);
-  // Matrix window opened by clicking a UPC cell — keyed by matrix id.
-  // The open matrix window lives in the URL (?matrix=<id>) so a browser refresh
-  // — or a shared link — lands back in the same window instead of the bare
-  // catalog. Lazy initial state (no set-state-in-effect) + router.replace keeps
-  // history clean.
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const [matrixModalId, setMatrixModalId] = useState<string | null>(() => searchParams?.get("matrix") ?? null);
-  const syncMatrixParam = useCallback(
-    (id: string | null) => {
-      const sp = new URLSearchParams(searchParams?.toString() ?? "");
-      if (id) sp.set("matrix", id);
-      else sp.delete("matrix");
-      const qs = sp.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [router, pathname, searchParams],
-  );
-  const openMatrix = useCallback(
-    (id: string) => {
-      setMatrixModalId(id);
-      syncMatrixParam(id);
-    },
-    [syncMatrixParam],
-  );
-  const closeMatrix = useCallback(() => {
-    setMatrixModalId(null);
-    syncMatrixParam(null);
-  }, [syncMatrixParam]);
+  // Popup windows without a dedicated URL live in query params so a browser
+  // refresh (or a shared link) reopens the same window instead of dropping the
+  // operator back on the bare catalog. Record-keyed windows keep only the id in
+  // the URL and derive the row from the loaded grid (no set-state-in-effect).
+  const [defectiveOpen, setDefectiveOpen] = useUrlFlag("defective");
+  const [manualItemsOpen, setManualItemsOpen] = useUrlFlag("manual");
+  const [historyForSku, setHistoryForSku] = useUrlParam("history");
+  const [tagsSkuId, setTagsSkuId] = useUrlParam("tags");
+  const [detailsSkuId, setDetailsSkuId] = useUrlParam("sku");
+  // Fallback for a details row that is not in the current grid page (opened
+  // from a matrix SKU that had to be fetched). Only consulted when the id in
+  // the URL is not present in `rows`.
+  const [detailsRowOverride, setDetailsRowOverride] = useState<CatalogGridRow | null>(null);
+  // Matrix window opened by clicking a UPC cell — keyed by matrix id (?matrix=<id>).
+  const [matrixModalId, setMatrixParam] = useUrlParam("matrix");
+  const openMatrix = useCallback((id: string) => setMatrixParam(id), [setMatrixParam]);
+  const closeMatrix = useCallback(() => setMatrixParam(null), [setMatrixParam]);
   // Variant picture popup opened by the small image icon on a catalog row.
   const [imgPreview, setImgPreview] = useState<{ url: string; alt: string } | null>(null);
   const [movingRow, setMovingRow] = useState<CatalogGridRow | null>(null);
@@ -296,7 +278,7 @@ export function CatalogWorkspace({
     vendors: string[];
   }>(url, fetcher, { revalidateOnFocus: false });
 
-  const rows = data?.rows ?? [];
+  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
 
@@ -307,7 +289,22 @@ export function CatalogWorkspace({
   void autoFitDoneRef;
   void autoFit;
 
-  const closeModal = useCallback(() => setModalSku(null), []);
+  const modalSku = useMemo(
+    () => (tagsSkuId ? rows.find((r) => r.custom_sku_id === tagsSkuId) ?? null : null),
+    [rows, tagsSkuId],
+  );
+  const closeModal = useCallback(() => setTagsSkuId(null), [setTagsSkuId]);
+
+  const detailsRow = useMemo(() => {
+    if (!detailsSkuId) return null;
+    const local = rows.find((r) => r.custom_sku_id === detailsSkuId);
+    if (local) return local;
+    return detailsRowOverride?.custom_sku_id === detailsSkuId ? detailsRowOverride : null;
+  }, [rows, detailsSkuId, detailsRowOverride]);
+  const closeDetails = useCallback(() => {
+    setDetailsSkuId(null);
+    setDetailsRowOverride(null);
+  }, [setDetailsSkuId]);
 
   // Open a variant's item-details pop-up from a SKU clicked in the matrix
   // window. The matrix modal only carries minimal variant data, so resolve the
@@ -318,7 +315,7 @@ export function CatalogWorkspace({
       const local = rows.find((r) => r.custom_sku_id === variant.id);
       if (local) {
         closeMatrix();
-        setDetailsRow(local);
+        setDetailsSkuId(local.custom_sku_id);
         return;
       }
       try {
@@ -330,13 +327,14 @@ export function CatalogWorkspace({
         const found = j.rows?.find((r) => r.custom_sku_id === variant.id);
         if (found) {
           closeMatrix();
-          setDetailsRow(found);
+          setDetailsRowOverride(found);
+          setDetailsSkuId(found.custom_sku_id);
         }
       } catch (e) {
         console.error("[catalog] open item from matrix SKU failed", e);
       }
     },
-    [rows],
+    [rows, closeMatrix, setDetailsSkuId],
   );
 
   const submitManualCatalogLine = useCallback(async () => {
@@ -1010,7 +1008,7 @@ export function CatalogWorkspace({
                           )}
                           <button
                             type="button"
-                            onClick={() => setDetailsRow(r)}
+                            onClick={() => setDetailsSkuId(r.custom_sku_id)}
                             className="text-left text-[var(--wms-accent)] underline-offset-2 hover:underline"
                             title="View item details"
                           >
@@ -1044,7 +1042,7 @@ export function CatalogWorkspace({
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => setDetailsRow(r)}
+                          onClick={() => setDetailsSkuId(r.custom_sku_id)}
                           className="text-left text-[var(--wms-fg)] underline-offset-2 hover:underline"
                           title="View item details"
                         >
@@ -1092,7 +1090,7 @@ export function CatalogWorkspace({
                         ) : (
                           <button
                             type="button"
-                            onClick={() => setModalSku(r)}
+                            onClick={() => setTagsSkuId(r.custom_sku_id)}
                             className="inline-flex h-[22px] w-[78px] items-center justify-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 text-[0.6rem] font-medium text-[var(--wms-accent)] hover:opacity-90 dark:text-[var(--wms-accent)]"
                             title="RFID item — view EPCs"
                             aria-label="RFID item — view EPCs"
@@ -1160,7 +1158,7 @@ export function CatalogWorkspace({
                     >
                       <button
                         type="button"
-                        onClick={() => setDetailsRow(r)}
+                        onClick={() => setDetailsSkuId(r.custom_sku_id)}
                         title={isArchived ? "Archived in Lightspeed" : "View item details"}
                         className="flex min-h-11 w-full items-center gap-3 p-3 text-left active:opacity-80"
                       >
@@ -1458,7 +1456,7 @@ export function CatalogWorkspace({
         <CatalogItemDetailsModal
           row={detailsRow}
           canManage={canManageCatalog}
-          onClose={() => setDetailsRow(null)}
+          onClose={closeDetails}
           onMutated={() => void mutate()}
           onOpenSku={openSkuFromMatrix}
         />

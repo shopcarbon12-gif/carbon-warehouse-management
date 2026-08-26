@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { ArrowRight, PackagePlus, Pencil, Plus, Search, X } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
+import { useUrlParam } from "@/lib/use-url-param";
 
 /**
  * Shelf Map tab content for `/overview/locations`.
@@ -117,28 +118,44 @@ export function ShelfMap({
     line: ShelfMapBin["lines"][number];
   } | null>(null);
   const [adding, setAdding] = useState<ShelfMapBin | null>(null);
-  // Local BinEditorDrawer state. Drawer is reused from the List tab.
-  const [drawer, setDrawer] = useState<
-    | { mode: "add"; presetCode?: string }
-    | { mode: "edit"; editingBin: BinRow }
-    | null
-  >(null);
+  // BinEditorDrawer (reused from the List tab) lives in the URL so a manual
+  // refresh reopens it: ?bin=<bin id> → edit, ?bin=new → add. Same key as
+  // the List tab — the two tabs are never mounted at the same time. The
+  // "+ Add 1A05R" preset code is transient (not in the URL).
+  const [binParam, setBinParam] = useUrlParam("bin");
+  const [presetCode, setPresetCode] = useState<string | undefined>(undefined);
+
+  // Derive the bin being edited from what this tab has loaded (current
+  // section cells + the unmapped panel). Same synthesized BinRow shape the
+  // old openEditBin built.
+  const editingBin = useMemo<BinRow | null>(() => {
+    if (!binParam || binParam === "new") return null;
+    const hit =
+      sectionData?.bins.find((b) => b.id === binParam) ??
+      nav?.unmapped.find((b) => b.id === binParam);
+    if (!hit) return null;
+    return {
+      id: hit.id,
+      code: hit.code,
+      capacity: null,
+      in_stock_count: 0,
+      status: hit.status,
+      bin_items: null,
+    };
+  }, [binParam, sectionData, nav]);
+  const drawerMode: "add" | "edit" | null =
+    binParam === "new" ? "add" : editingBin ? "edit" : null;
 
   const openEditBin = (b: { id: string; code: string; status: string }) => {
-    setDrawer({
-      mode: "edit",
-      editingBin: {
-        id: b.id,
-        code: b.code,
-        capacity: null,
-        in_stock_count: 0,
-        status: b.status,
-        bin_items: null,
-      },
-    });
+    setBinParam(b.id);
   };
   const openAddBin = (preset?: { code?: string }) => {
-    setDrawer({ mode: "add", presetCode: preset?.code });
+    setPresetCode(preset?.code);
+    setBinParam("new");
+  };
+  const closeDrawer = () => {
+    setBinParam(null);
+    setPresetCode(undefined);
   };
 
   const refreshAll = () => {
@@ -319,15 +336,15 @@ export function ShelfMap({
           instance). Wired via local state so add/edit work directly from
           a Shelf Map cell. */}
       <BinEditorDrawer
-        open={drawer !== null}
-        mode={drawer?.mode ?? null}
-        editingBin={drawer?.mode === "edit" ? drawer.editingBin : null}
-        presetCode={drawer?.mode === "add" ? drawer.presetCode : undefined}
+        open={drawerMode !== null}
+        mode={drawerMode}
+        editingBin={drawerMode === "edit" ? editingBin : null}
+        presetCode={drawerMode === "add" ? presetCode : undefined}
         locationId={nav?.location?.id ?? ""}
         locationLabel={nav?.location ? `${nav.location.code} · ${nav.location.name}` : ""}
-        onClose={() => setDrawer(null)}
+        onClose={closeDrawer}
         onSaved={() => {
-          setDrawer(null);
+          closeDrawer();
           refreshAll();
         }}
       />

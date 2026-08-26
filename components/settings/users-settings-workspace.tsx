@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { ChevronDown } from "lucide-react";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { TenantUserListRow } from "@/lib/queries/settings-users";
 import type { UserRoleRow } from "@/lib/queries/settings-user-roles";
 import {
@@ -40,15 +42,23 @@ type TopTab = "wms" | "pos" | "rewards" | "mobile";
 type WmsSubTab = "users" | "roles";
 
 export function UsersSettingsWorkspace() {
-  const [topTab, setTopTab] = useState<TopTab>("wms");
-  const [tab, setTab] = useState<WmsSubTab>("users");
+  // Popup windows live in the URL so a manual refresh reopens the same window.
+  // `user` = "new" (add) | <user id> (edit); `role` = "new" (add) | <role id> (edit).
+  const [userParam, setUserParam] = useUrlParam("user");
+  const [roleParam, setRoleParam] = useUrlParam("role");
+  // Land on the tab that owns the window the URL names (child panels use
+  // posuser/posrole/posmanager, rwuser, mobrole/mobassign). Initial-state only.
+  const searchParams = useSearchParams();
+  const [topTab, setTopTab] = useState<TopTab>(() => {
+    const has = (k: string) => searchParams?.get(k) != null;
+    if (has("posuser") || has("posrole") || has("posmanager")) return "pos";
+    if (has("rwuser")) return "rewards";
+    if (has("mobrole") || has("mobassign")) return "mobile";
+    return "wms";
+  });
+  const [tab, setTab] = useState<WmsSubTab>(() => (roleParam !== null ? "roles" : "users"));
   const [bulkOpen, setBulkOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [addUserOpen, setAddUserOpen] = useState(false);
-  const [editUser, setEditUser] = useState<TenantUserListRow | null>(null);
-  const [roleModal, setRoleModal] = useState<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(
-    null,
-  );
 
   const { data: users, error: usersErr, mutate: muUsers } = useSWR<TenantUserListRow[]>(
     "/api/settings/access/users",
@@ -60,6 +70,18 @@ export function UsersSettingsWorkspace() {
     fetcher,
     { revalidateOnFocus: false },
   );
+
+  const addUserOpen = userParam === "new";
+  const editUser = useMemo<TenantUserListRow | null>(() => {
+    if (!userParam || userParam === "new") return null;
+    return users?.find((u) => u.id === userParam) ?? null;
+  }, [users, userParam]);
+  const roleModal = useMemo<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(() => {
+    if (!roleParam) return null;
+    if (roleParam === "new") return { mode: "add" };
+    const row = roles?.find((r) => String(r.id) === roleParam);
+    return row ? { mode: "edit", row } : null;
+  }, [roles, roleParam]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -253,7 +275,7 @@ export function UsersSettingsWorkspace() {
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() => setAddUserOpen(true)}
+              onClick={() => setUserParam("new")}
               className="wms-btn-primary wms-btn-sm font-mono"
             >
               Add user
@@ -355,7 +377,7 @@ export function UsersSettingsWorkspace() {
                       <td className="px-3 py-2.5 text-right font-mono text-xs">
                         <button
                           type="button"
-                          onClick={() => setEditUser(u)}
+                          onClick={() => setUserParam(u.id)}
                           className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                         >
                           Edit
@@ -380,9 +402,9 @@ export function UsersSettingsWorkspace() {
             <UserFormModal
               title="Add user"
               roles={roles ?? []}
-              onClose={() => setAddUserOpen(false)}
+              onClose={() => setUserParam(null)}
               onSaved={() => {
-                setAddUserOpen(false);
+                setUserParam(null);
                 void muUsers();
               }}
             />
@@ -392,9 +414,9 @@ export function UsersSettingsWorkspace() {
               title="Edit user"
               roles={roles ?? []}
               initial={editUser}
-              onClose={() => setEditUser(null)}
+              onClose={() => setUserParam(null)}
               onSaved={() => {
-                setEditUser(null);
+                setUserParam(null);
                 void muUsers();
               }}
             />
@@ -405,7 +427,7 @@ export function UsersSettingsWorkspace() {
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => setRoleModal({ mode: "add" })}
+              onClick={() => setRoleParam("new")}
               className="wms-btn-primary wms-btn-sm font-mono"
             >
               Add role
@@ -438,7 +460,7 @@ export function UsersSettingsWorkspace() {
                       <td className="px-3 py-2.5 text-right">
                         <button
                           type="button"
-                          onClick={() => setRoleModal({ mode: "edit", row: r })}
+                          onClick={() => setRoleParam(String(r.id))}
                           className="font-mono text-xs text-teal-400/90 hover:underline"
                         >
                           Edit role
@@ -455,9 +477,9 @@ export function UsersSettingsWorkspace() {
             <RolePermissionsModal
               mode={roleModal.mode}
               row={roleModal.mode === "edit" ? roleModal.row : null}
-              onClose={() => setRoleModal(null)}
+              onClose={() => setRoleParam(null)}
               onSaved={() => {
-                setRoleModal(null);
+                setRoleParam(null);
                 void muRoles();
               }}
             />

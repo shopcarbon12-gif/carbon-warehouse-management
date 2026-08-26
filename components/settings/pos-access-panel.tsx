@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { ChevronDown } from "lucide-react";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { PosUserListRow } from "@/lib/queries/settings-pos-users";
 import type { UserRoleRow } from "@/lib/queries/settings-user-roles";
 import {
@@ -41,7 +42,9 @@ type SubTab = "users" | "roles";
  * POS roles. Lives under the parent "POS" tab.
  */
 export function PosAccessPanel() {
-  const [sub, setSub] = useState<SubTab>("users");
+  // Open the sub-tab that owns the window named in the URL (initial state only).
+  const [posRoleParam] = useUrlParam("posrole");
+  const [sub, setSub] = useState<SubTab>(() => (posRoleParam !== null ? "roles" : "users"));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2" role="tablist">
@@ -102,8 +105,14 @@ function PosUsersTab() {
     { revalidateOnFocus: false },
   );
 
-  const [editing, setEditing] = useState<PosUserListRow | null>(null);
-  const [adding, setAdding] = useState(false);
+  // `posuser` = <pos user id> (edit window); `posmanager` = "new" (create window).
+  const [posUserParam, setPosUserParam] = useUrlParam("posuser");
+  const [posManagerParam, setPosManagerParam] = useUrlParam("posmanager");
+  const editing = useMemo<PosUserListRow | null>(() => {
+    if (!posUserParam) return null;
+    return users?.find((u) => u.id === posUserParam) ?? null;
+  }, [users, posUserParam]);
+  const adding = posManagerParam === "new";
   const [bulkOpen, setBulkOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
@@ -205,7 +214,7 @@ function PosUsersTab() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setAdding(true)}
+            onClick={() => setPosManagerParam("new")}
             className="wms-btn-primary wms-btn-sm font-mono"
           >
             Add POS manager
@@ -336,7 +345,7 @@ function PosUsersTab() {
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
-                      onClick={() => setEditing(u)}
+                      onClick={() => setPosUserParam(u.id)}
                       className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
@@ -353,9 +362,9 @@ function PosUsersTab() {
         <PosUserEditModal
           user={editing}
           roles={roles ?? []}
-          onClose={() => setEditing(null)}
+          onClose={() => setPosUserParam(null)}
           onSaved={() => {
-            setEditing(null);
+            setPosUserParam(null);
             void mutate();
           }}
         />
@@ -364,9 +373,9 @@ function PosUsersTab() {
       {adding ? (
         <PosManagerCreateModal
           locations={locations ?? []}
-          onClose={() => setAdding(false)}
+          onClose={() => setPosManagerParam(null)}
           onSaved={() => {
-            setAdding(false);
+            setPosManagerParam(null);
             void mutate();
           }}
         />
@@ -706,14 +715,21 @@ function PosRolesTab() {
     fetcher,
     { revalidateOnFocus: false },
   );
-  const [modal, setModal] = useState<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(null);
+  // `posrole` = "new" (add) | <role id> (edit) — survives a browser refresh.
+  const [posRoleParam, setPosRoleParam] = useUrlParam("posrole");
+  const modal = useMemo<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(() => {
+    if (!posRoleParam) return null;
+    if (posRoleParam === "new") return { mode: "add" };
+    const row = roles?.find((r) => String(r.id) === posRoleParam);
+    return row ? { mode: "edit", row } : null;
+  }, [roles, posRoleParam]);
 
   return (
     <>
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => setModal({ mode: "add" })}
+          onClick={() => setPosRoleParam("new")}
           className="wms-btn-primary wms-btn-sm font-mono"
         >
           Add POS role
@@ -746,7 +762,7 @@ function PosRolesTab() {
                   <td className="px-3 py-2.5 text-right">
                     <button
                       type="button"
-                      onClick={() => setModal({ mode: "edit", row: r })}
+                      onClick={() => setPosRoleParam(String(r.id))}
                       className="font-mono text-xs text-teal-400/90 hover:underline"
                     >
                       Edit role
@@ -763,9 +779,9 @@ function PosRolesTab() {
         <PosRolePermissionsModal
           mode={modal.mode}
           row={modal.mode === "edit" ? modal.row : null}
-          onClose={() => setModal(null)}
+          onClose={() => setPosRoleParam(null)}
           onSaved={() => {
-            setModal(null);
+            setPosRoleParam(null);
             void mutate();
           }}
         />

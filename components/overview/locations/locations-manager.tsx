@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { MapPin, PackagePlus, Pencil, Search, Trash2, X } from "lucide-react";
 import { BinEditorDrawer, type BinRow } from "./bin-editor-drawer";
+import { useUrlParam } from "@/lib/use-url-param";
 import {
   cellTruncate,
   DataTableContainer,
@@ -134,10 +135,35 @@ export function LocationsManager({
 
   const locations = data?.locations ?? [];
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerMode, setDrawerMode] = useState<DrawerMode | null>(null);
-  const [drawerBin, setDrawerBin] = useState<BinRow | null>(null);
-  const [epcModalBin, setEpcModalBin] = useState<BinRow | null>(null);
+  // Popup windows live in the URL so a manual refresh reopens them:
+  //   ?bin=<bin id>   → edit drawer      ?bin=new → add drawer
+  //   ?epcs=<bin id>  → EPC list modal
+  // The bin objects are derived from the loaded locations (no mirrored state).
+  const [binParam, setBinParam] = useUrlParam("bin");
+  const [epcParam, setEpcParam] = useUrlParam("epcs");
+
+  const binById = useMemo(() => {
+    const m = new Map<string, { bin: BinRow; locationId: string }>();
+    for (const l of data?.locations ?? []) {
+      for (const b of l.bins) m.set(b.id, { bin: b, locationId: l.id });
+    }
+    return m;
+  }, [data]);
+
+  const drawerBin = useMemo<BinRow | null>(
+    () => (binParam && binParam !== "new" ? binById.get(binParam)?.bin ?? null : null),
+    [binParam, binById],
+  );
+  const epcModalBin = useMemo<BinRow | null>(
+    () => (epcParam ? binById.get(epcParam)?.bin ?? null : null),
+    [epcParam, binById],
+  );
+
+  // Location that owns the bin named in the URL — used only to seed the
+  // initial selection after a refresh so the drawer/modal opens in the
+  // right pane (and the drawer saves against the right locationId).
+  const urlBinLocationId =
+    binById.get(binParam ?? "")?.locationId ?? binById.get(epcParam ?? "")?.locationId ?? null;
 
   const { data: epcData, isLoading: epcLoading } = useSWR<BinEpcRow[]>(
     epcModalBin ? `/api/locations/bins/${epcModalBin.id}/epcs` : null,
@@ -149,14 +175,18 @@ export function LocationsManager({
     if (locations.length === 0) return;
     setSelectedId((cur) => {
       if (cur && locations.some((l) => l.id === cur)) return cur;
-      return locations[0]!.id;
+      return urlBinLocationId ?? locations[0]!.id;
     });
-  }, [locations]);
+  }, [locations, urlBinLocationId]);
 
   const selected = useMemo(
     () => locations.find((l) => l.id === selectedId) ?? null,
     [locations, selectedId],
   );
+
+  const drawerMode: DrawerMode | null =
+    binParam === "new" ? (selected ? "add" : null) : drawerBin ? "edit" : null;
+  const drawerOpen = drawerMode !== null;
 
   // Bin search: enforce digit-then-letter pattern; default-empty shows
   // the first DEFAULT_VISIBLE_BINS sorted (L→C→R per group). Reset
@@ -192,21 +222,15 @@ export function LocationsManager({
 
   const openAdd = () => {
     if (!selected) return;
-    setDrawerMode("add");
-    setDrawerBin(null);
-    setDrawerOpen(true);
+    setBinParam("new");
   };
 
   const openEdit = (b: BinRow) => {
-    setDrawerMode("edit");
-    setDrawerBin(b);
-    setDrawerOpen(true);
+    setBinParam(b.id);
   };
 
   const closeDrawer = () => {
-    setDrawerOpen(false);
-    setDrawerMode(null);
-    setDrawerBin(null);
+    setBinParam(null);
   };
 
   const [cleanBusy, setCleanBusy] = useState<string | null>(null);
@@ -408,7 +432,7 @@ export function LocationsManager({
                 ) : null}
               </label>
               <p className="mt-1 px-1 font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs">
-                Type the bin prefix in any case (it'll uppercase as you type).{" "}
+                Type the bin prefix in any case (it&apos;ll uppercase as you type).{" "}
                 {showAllBins
                   ? "Live filter — every match below in real time."
                   : `First ${DEFAULT_VISIBLE_BINS} matches show below (L → C → R within the same row).`}
@@ -513,7 +537,7 @@ export function LocationsManager({
                         {(b.in_stock_count ?? 0) > 0 ? (
                           <button
                             type="button"
-                            onClick={() => setEpcModalBin(b)}
+                            onClick={() => setEpcParam(b.id)}
                             className="text-[var(--wms-accent)] hover:underline max-md:-mx-2 max-md:-my-2 max-md:inline-flex max-md:min-h-11 max-md:items-center max-md:px-2"
                             title="View EPCs"
                           >
@@ -688,7 +712,7 @@ export function LocationsManager({
             type="button"
             aria-label="Close"
             className="fixed inset-0 z-[60] bg-black/70"
-            onClick={() => setEpcModalBin(null)}
+            onClick={() => setEpcParam(null)}
           />
           <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
             <div className="flex max-h-[min(90vh,720px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0">
@@ -703,7 +727,7 @@ export function LocationsManager({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEpcModalBin(null)}
+                  onClick={() => setEpcParam(null)}
                   className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
                   aria-label="Close"
                 >

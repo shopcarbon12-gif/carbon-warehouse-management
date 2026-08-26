@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { TenantUserListRow } from "@/lib/queries/settings-users";
 import type { UserRoleRow } from "@/lib/queries/settings-user-roles";
 import {
@@ -43,7 +44,9 @@ function hydrateMobilePermissions(raw: unknown): PermissionsMap {
 type SubTab = "users" | "roles";
 
 export function MobileAccessPanel() {
-  const [sub, setSub] = useState<SubTab>("users");
+  // Open the sub-tab that owns the window named in the URL (initial state only).
+  const [mobRoleParam] = useUrlParam("mobrole");
+  const [sub, setSub] = useState<SubTab>(() => (mobRoleParam !== null ? "roles" : "users"));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 border-b border-[var(--wms-border)] pb-2" role="tablist">
@@ -88,7 +91,12 @@ function MobileUsersTab() {
     fetcher,
     { revalidateOnFocus: false },
   );
-  const [editing, setEditing] = useState<TenantUserListRow | null>(null);
+  // `mobassign` = <user id> — the assign window survives a browser refresh.
+  const [mobAssignParam, setMobAssignParam] = useUrlParam("mobassign");
+  const editing = useMemo<TenantUserListRow | null>(() => {
+    if (!mobAssignParam) return null;
+    return users?.find((u) => u.id === mobAssignParam) ?? null;
+  }, [users, mobAssignParam]);
 
   return (
     <>
@@ -146,7 +154,7 @@ function MobileUsersTab() {
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
-                      onClick={() => setEditing(u)}
+                      onClick={() => setMobAssignParam(u.id)}
                       className="font-medium text-[var(--wms-accent)] hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Set mobile role
@@ -163,9 +171,9 @@ function MobileUsersTab() {
         <MobileRoleAssignModal
           user={editing}
           roles={roles ?? []}
-          onClose={() => setEditing(null)}
+          onClose={() => setMobAssignParam(null)}
           onSaved={() => {
-            setEditing(null);
+            setMobAssignParam(null);
             void mutate();
           }}
         />
@@ -262,7 +270,14 @@ function MobileRolesTab() {
     fetcher,
     { revalidateOnFocus: false },
   );
-  const [modal, setModal] = useState<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(null);
+  // `mobrole` = "new" (add) | <role id> (edit) — survives a browser refresh.
+  const [mobRoleParam, setMobRoleParam] = useUrlParam("mobrole");
+  const modal = useMemo<null | { mode: "add" } | { mode: "edit"; row: UserRoleRow }>(() => {
+    if (!mobRoleParam) return null;
+    if (mobRoleParam === "new") return { mode: "add" };
+    const row = roles?.find((r) => String(r.id) === mobRoleParam);
+    return row ? { mode: "edit", row } : null;
+  }, [roles, mobRoleParam]);
 
   return (
     <>
@@ -274,7 +289,7 @@ function MobileRolesTab() {
         </p>
         <button
           type="button"
-          onClick={() => setModal({ mode: "add" })}
+          onClick={() => setMobRoleParam("new")}
           className="wms-btn-primary wms-btn-sm font-mono"
         >
           Add mobile role
@@ -314,7 +329,7 @@ function MobileRolesTab() {
                   <td className="px-3 py-2.5 text-right">
                     <button
                       type="button"
-                      onClick={() => setModal({ mode: "edit", row: r })}
+                      onClick={() => setMobRoleParam(String(r.id))}
                       className="font-mono text-xs text-teal-400/90 hover:underline"
                     >
                       Edit role
@@ -331,9 +346,9 @@ function MobileRolesTab() {
         <MobileRolePermissionsModal
           mode={modal.mode}
           row={modal.mode === "edit" ? modal.row : null}
-          onClose={() => setModal(null)}
+          onClose={() => setMobRoleParam(null)}
           onSaved={() => {
-            setModal(null);
+            setMobRoleParam(null);
             void mutate();
           }}
         />

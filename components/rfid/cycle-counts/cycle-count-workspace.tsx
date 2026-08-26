@@ -40,6 +40,7 @@ import {
   useColResize,
 } from "@/components/shared/data-table";
 import { shortName } from "@/lib/format-name";
+import { useUrlFlag } from "@/lib/use-url-param";
 
 type LocationRow = { id: string; code: string; name: string };
 type BinRow = { id: string; code: string; in_stock_count: number };
@@ -180,6 +181,10 @@ export function CycleCountWorkspace({ isAdmin = false }: { isAdmin?: boolean }) 
   const leaveSession = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("session");
+    // Session-scoped popup params (manual-items modal, EPC history) must not
+    // leak into the next session the operator opens.
+    params.delete("manual");
+    params.delete("epc");
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   }, [router, pathname, searchParams]);
@@ -651,7 +656,8 @@ function ActiveSessionView({
   // the only path that closes the session + runs reconcile + flips
   // truly-missing tags to tag_killed.
   const [finishOpen, setFinishOpen] = useState(false);
-  const [manualItemsOpen, setManualItemsOpen] = useState(false);
+  // ?manual=1 — survives a browser refresh (see lib/use-url-param.ts).
+  const [manualItemsOpen, setManualItemsOpen] = useUrlFlag("manual");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // Tracks whether scanning has been started at least once in this mount.

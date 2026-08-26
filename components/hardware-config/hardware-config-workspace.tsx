@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import {
   Antenna as AntennaIcon,
   Clock,
@@ -64,20 +65,71 @@ export function HardwareConfigWorkspace() {
     revalidateOnFocus: true,
   });
 
-  // Modal state
-  const [zoneModalOpen, setZoneModalOpen] = useState(false);
-  const [zoneModalLocationId, setZoneModalLocationId] = useState<string | null>(null);
-  const [agentModalOpen, setAgentModalOpen] = useState(false);
+  // Modal state. The editor windows have no URL of their own, so the open
+  // window + record id live in a query param and survive a manual browser
+  // refresh:  ?reader=<id> | new:<zoneId>   ?antenna=<id> | new:<readerId>
+  //           ?zone=new:<locationId>        ?agent=new    ?schedule=<readerId>
+  // The record itself is derived from the loaded tree by id (never restored
+  // via set-state-in-effect). TokenRevealModal shows a secret and therefore
+  // stays in plain React state.
+  const [zoneParam, setZoneParam] = useUrlParam("zone");
+  const [agentParam, setAgentParam] = useUrlParam("agent");
+  const [readerParam, setReaderParam] = useUrlParam("reader");
+  const [antennaParam, setAntennaParam] = useUrlParam("antenna");
+  const [scheduleParam, setScheduleParam] = useUrlParam("schedule");
   const [revealToken, setRevealToken] = useState<{ name: string; token: string } | null>(
     null,
   );
-  const [readerModalOpen, setReaderModalOpen] = useState(false);
-  const [readerEditing, setReaderEditing] = useState<HardwareReaderRow | null>(null);
-  const [readerDefaultZoneId, setReaderDefaultZoneId] = useState<string | null>(null);
-  const [antennaModalOpen, setAntennaModalOpen] = useState(false);
-  const [antennaParent, setAntennaParent] = useState<HardwareReaderRow | null>(null);
-  const [antennaEditing, setAntennaEditing] = useState<HardwareAntennaRow | null>(null);
-  const [scheduleModalReader, setScheduleModalReader] = useState<HardwareReaderRow | null>(null);
+
+  const readers = useMemo(() => allReaders(tree.data), [tree.data]);
+
+  const zoneWindow = useMemo(() => parseWindowParam(zoneParam), [zoneParam]);
+  const zoneModalOpen = zoneWindow?.kind === "new";
+  const zoneModalLocationId = zoneWindow?.kind === "new" ? zoneWindow.parentId : null;
+
+  const agentModalOpen = agentParam === "new";
+
+  const readerWindow = useMemo(() => parseWindowParam(readerParam), [readerParam]);
+  const readerLive = useMemo(
+    () =>
+      readerWindow?.kind === "edit"
+        ? (readers.find((r) => r.id === readerWindow.id) ?? null)
+        : null,
+    [readers, readerWindow],
+  );
+  const readerEditing = useSnapshotByKey(readerParam, readerLive);
+  const readerDefaultZoneId = readerWindow?.kind === "new" ? readerWindow.parentId : null;
+  // Edit mode waits for the row to resolve so the form initialises with the
+  // record (not as a blank "new reader" that flips a moment later).
+  const readerModalOpen =
+    readerWindow !== null && (readerWindow.kind === "new" || readerEditing !== null);
+
+  const antennaWindow = useMemo(() => parseWindowParam(antennaParam), [antennaParam]);
+  const antennaLive = useMemo((): {
+    parent: HardwareReaderRow;
+    editing: HardwareAntennaRow | null;
+  } | null => {
+    if (!antennaWindow) return null;
+    if (antennaWindow.kind === "new") {
+      const parent = readers.find((r) => r.id === antennaWindow.parentId) ?? null;
+      return parent ? { parent, editing: null } : null;
+    }
+    for (const r of readers) {
+      const a = r.antennas.find((x) => x.id === antennaWindow.id);
+      if (a) return { parent: r, editing: a };
+    }
+    return null;
+  }, [readers, antennaWindow]);
+  const antennaSnap = useSnapshotByKey(antennaParam, antennaLive);
+  const antennaModalOpen = antennaWindow !== null && antennaSnap !== null;
+  const antennaParent = antennaSnap?.parent ?? null;
+  const antennaEditing = antennaSnap?.editing ?? null;
+
+  const scheduleLive = useMemo(
+    () => (scheduleParam ? (readers.find((r) => r.id === scheduleParam) ?? null) : null),
+    [readers, scheduleParam],
+  );
+  const scheduleModalReader = useSnapshotByKey(scheduleParam, scheduleLive);
 
   const reload = async () => {
     await Promise.all([tree.mutate(), zones.mutate(), agents.mutate()]);
@@ -263,7 +315,7 @@ export function HardwareConfigWorkspace() {
 
       <CdmAgentsSection
         agents={agents.data?.agents ?? []}
-        onCreate={() => setAgentModalOpen(true)}
+        onCreate={() => setAgentParam("new")}
         onDelete={removeAgent}
         onRotateToken={rotateAgentToken}
       />
@@ -272,32 +324,13 @@ export function HardwareConfigWorkspace() {
 
       <HardwareTreeSection
         tree={tree.data}
-        onAddZone={(locationId) => {
-          setZoneModalLocationId(locationId);
-          setZoneModalOpen(true);
-        }}
+        onAddZone={(locationId) => setZoneParam(`new:${locationId}`)}
         onDeleteZone={removeZone}
-        onAddReader={(zoneId) => {
-          setReaderEditing(null);
-          setReaderDefaultZoneId(zoneId);
-          setReaderModalOpen(true);
-        }}
-        onEditReader={(reader) => {
-          setReaderEditing(reader);
-          setReaderDefaultZoneId(null);
-          setReaderModalOpen(true);
-        }}
+        onAddReader={(zoneId) => setReaderParam(`new:${zoneId}`)}
+        onEditReader={(reader) => setReaderParam(reader.id)}
         onDeleteReader={removeReader}
-        onAddAntenna={(reader) => {
-          setAntennaParent(reader);
-          setAntennaEditing(null);
-          setAntennaModalOpen(true);
-        }}
-        onEditAntenna={(reader, antenna) => {
-          setAntennaParent(reader);
-          setAntennaEditing(antenna);
-          setAntennaModalOpen(true);
-        }}
+        onAddAntenna={(reader) => setAntennaParam(`new:${reader.id}`)}
+        onEditAntenna={(_reader, antenna) => setAntennaParam(antenna.id)}
         onDeleteAntenna={removeAntenna}
         onPauseReader={pauseReader}
         onResumeReader={resumeReader}
@@ -306,7 +339,7 @@ export function HardwareConfigWorkspace() {
         onPauseAllReaders={pauseAllReaders}
         onResumeAllReaders={resumeAllReaders}
         onHardResetAll={hardResetAll}
-        onOpenSchedule={(reader) => setScheduleModalReader(reader)}
+        onOpenSchedule={(reader) => setScheduleParam(reader.id)}
       />
 
       {scheduleModalReader ? (
@@ -315,7 +348,7 @@ export function HardwareConfigWorkspace() {
           readerId={scheduleModalReader.id}
           readerName={scheduleModalReader.name}
           initialSchedule={scheduleModalReader.scan_schedule as ReaderScheduleType | null}
-          onClose={() => setScheduleModalReader(null)}
+          onClose={() => setScheduleParam(null)}
           onSaved={() => void reload()}
         />
       ) : null}
@@ -323,18 +356,18 @@ export function HardwareConfigWorkspace() {
       <ZoneEditorModal
         open={zoneModalOpen}
         locationId={zoneModalLocationId}
-        onClose={() => setZoneModalOpen(false)}
+        onClose={() => setZoneParam(null)}
         onSaved={async () => {
-          setZoneModalOpen(false);
+          setZoneParam(null);
           await reload();
         }}
       />
 
       <CdmAgentEditorModal
         open={agentModalOpen}
-        onClose={() => setAgentModalOpen(false)}
+        onClose={() => setAgentParam(null)}
         onCreated={async (token, name) => {
-          setAgentModalOpen(false);
+          setAgentParam(null);
           setRevealToken({ name, token });
           await reload();
         }}
@@ -351,9 +384,9 @@ export function HardwareConfigWorkspace() {
         open={readerModalOpen}
         editing={readerEditing}
         defaultZoneId={readerDefaultZoneId}
-        onClose={() => setReaderModalOpen(false)}
+        onClose={() => setReaderParam(null)}
         onSaved={async () => {
-          setReaderModalOpen(false);
+          setReaderParam(null);
           await reload();
         }}
       />
@@ -362,14 +395,66 @@ export function HardwareConfigWorkspace() {
         open={antennaModalOpen}
         parent={antennaParent}
         editing={antennaEditing}
-        onClose={() => setAntennaModalOpen(false)}
+        onClose={() => setAntennaParam(null)}
         onSaved={async () => {
-          setAntennaModalOpen(false);
+          setAntennaParam(null);
           await reload();
         }}
       />
     </div>
   );
+}
+
+/**
+ * Decode an editor-window query param:
+ *   "new"            → create, no parent
+ *   "new:<parentId>" → create under <parentId> (zone for a reader, reader for
+ *                      an antenna, location for a zone)
+ *   "<id>"           → edit record <id>
+ */
+function parseWindowParam(
+  raw: string | null,
+): { kind: "new"; parentId: string | null } | { kind: "edit"; id: string } | null {
+  if (raw === null || raw === "") return null;
+  if (raw === "new") return { kind: "new", parentId: null };
+  if (raw.startsWith("new:")) return { kind: "new", parentId: raw.slice(4) || null };
+  return { kind: "edit", id: raw };
+}
+
+/** Every reader in the tree (zoned + unzoned) in a flat list for id lookups. */
+function allReaders(tree: HardwareConfigTree | undefined): HardwareReaderRow[] {
+  if (!tree) return [];
+  return tree.locations.flatMap((l) => [
+    ...l.zones.flatMap((z) => z.readers),
+    ...l.unzonedReaders,
+  ]);
+}
+
+/**
+ * Freeze the record handed to an editor for as long as the same window key
+ * (the raw URL param) stays selected.
+ *
+ * The editor modals re-initialise their form whenever the `editing` /
+ * `parent` / `initialSchedule` prop identity changes, and the hardware tree
+ * is re-polled every 10 s with live fields (reads, running state, bridge
+ * state). Passing the freshly derived row straight through would therefore
+ * wipe the operator's draft on every poll. This reproduces the previous
+ * click-time snapshot while still letting a URL id resolve once the tree
+ * arrives after a browser refresh: the snapshot is (re)taken the first time
+ * the row is found for the current key, and dropped when the key changes.
+ * Adjusting state during render on a key change is the React-sanctioned
+ * "store information from previous renders" pattern (no effect, no ref).
+ */
+function useSnapshotByKey<T>(key: string | null, live: T | null): T | null {
+  const [snap, setSnap] = useState<{ key: string | null; value: T | null }>({
+    key: null,
+    value: null,
+  });
+  if (snap.key !== key || (snap.value === null && live !== null)) {
+    setSnap({ key, value: live });
+    return live;
+  }
+  return snap.value;
 }
 
 async function callDelete(url: string, onSuccess: () => Promise<void>) {

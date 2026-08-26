@@ -25,6 +25,7 @@ import { Radio, ScanLine, Search, Trash2, Plus, Minus } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { StagedEpcsModal } from "./staged-epcs-modal";
+import { useUrlParam } from "@/lib/use-url-param";
 
 type LocationRow = { id: string; code: string; name: string };
 
@@ -164,8 +165,18 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
   const [searchResults, setSearchResults] = useState<CatalogSearchRow[]>([]);
   const searchAnchor = useRef<HTMLDivElement | null>(null);
 
-  // Per-row EPC popup.
-  const [epcsModalSku, setEpcsModalSku] = useState<StagedSku | null>(null);
+  // Per-row EPC popup. The open window lives in the URL as ?staged=<sku> so
+  // it survives a browser refresh; the StagedSku object is derived from the
+  // staged map (staged itself is in-memory only, so after a reload the param
+  // resolves to nothing and the popup simply stays closed).
+  const [epcsModalSkuKey, setEpcsModalSku] = useUrlParam("staged");
+  const epcsModalSku = useMemo<StagedSku | null>(() => {
+    if (!epcsModalSkuKey) return null;
+    for (const s of staged.values()) {
+      if (s.sku === epcsModalSkuKey) return s;
+    }
+    return null;
+  }, [staged, epcsModalSkuKey]);
 
   // Commit progress.
   const [committing, setCommitting] = useState(false);
@@ -312,7 +323,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
     setSearchOpen(false);
     setSearchResults([]);
     setEpcsModalSku(null);
-  }, []);
+  }, [setEpcsModalSku]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // SSE — gated by scanningRef + selectedReadersRef
@@ -708,7 +719,7 @@ export function TransferOutWorkspace({ sessionLocationId, isAdmin }: Props) {
                     {g.type === "rfid" ? (
                       <button
                         type="button"
-                        onClick={() => setEpcsModalSku(g)}
+                        onClick={() => setEpcsModalSku(g.sku)}
                         className="inline-flex items-center gap-1 rounded border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-2 py-0.5 text-[0.65rem] font-medium text-[var(--wms-accent)] hover:opacity-90 max-md:min-h-11 max-md:min-w-11 max-md:justify-center max-md:text-xs"
                         title="View EPCs"
                       >

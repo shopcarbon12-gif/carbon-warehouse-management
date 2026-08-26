@@ -10,6 +10,7 @@ import {
   type DeviceType,
 } from "@/lib/constants/device-registry";
 import { DeviceEditorModal } from "./device-editor-modal";
+import { useUrlParam } from "@/lib/use-url-param";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -35,8 +36,21 @@ export function DevicesWorkspace() {
 
   const devices = data?.devices ?? [];
   const [tab, setTab] = useState<FilterTab>("all");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<DeviceGridRow | null>(null);
+  // The editor window has no URL of its own: `?device=<id>` (edit) or
+  // `?device=new` survives a manual browser refresh. The row is derived from
+  // the loaded list by id (this list is not polled, so the identity only
+  // changes after a save/delete mutate).
+  const [deviceParam, setDeviceParam] = useUrlParam("device");
+  const editing = useMemo(
+    () =>
+      deviceParam && deviceParam !== "new"
+        ? (data?.devices.find((d) => d.id === deviceParam) ?? null)
+        : null,
+    [data, deviceParam],
+  );
+  // Edit mode waits for the row to resolve so the form initialises with the
+  // record instead of flashing a blank "new device" form first.
+  const modalOpen = deviceParam === "new" || editing !== null;
 
   const filtered = useMemo(() => {
     if (tab === "all") return devices;
@@ -97,10 +111,7 @@ export function DevicesWorkspace() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            setEditing(null);
-            setModalOpen(true);
-          }}
+          onClick={() => setDeviceParam("new")}
           className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-4 py-2 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -142,10 +153,7 @@ export function DevicesWorkspace() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditing(null);
-                      setModalOpen(true);
-                    }}
+                    onClick={() => setDeviceParam("new")}
                     className="mt-6 rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-5 py-2.5 font-mono text-xs font-semibold text-[var(--wms-accent-fg)] shadow-sm hover:opacity-90"
                   >
                     Register a device
@@ -177,10 +185,7 @@ export function DevicesWorkspace() {
                     <div className="flex gap-1 max-md:gap-1.5">
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditing(d);
-                          setModalOpen(true);
-                        }}
+                        onClick={() => setDeviceParam(d.id)}
                         className="rounded border border-[var(--wms-border)] px-2 py-1 text-[0.6rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5 max-md:text-[0.7rem]"
                       >
                         Edit
@@ -205,10 +210,7 @@ export function DevicesWorkspace() {
       <DeviceEditorModal
         open={modalOpen}
         editing={editing}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
+        onClose={() => setDeviceParam(null)}
         onSaved={() => void mutate()}
       />
     </div>

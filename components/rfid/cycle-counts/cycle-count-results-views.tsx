@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, ChevronDown, X as XIcon, Loader2 } from "lucide-react";
 import type { TrackerItemDetail } from "@/lib/rfid-tracker-types";
 import { shortName } from "@/lib/format-name";
+import { useUrlParam } from "@/lib/use-url-param";
 import {
   cellTruncate,
   DataTableContainer,
@@ -199,7 +200,9 @@ export function AllEpcsTable({
   );
   const hiddenCount = Math.max(0, filtered.length - visibleRows.length);
 
-  const [openEpc, setOpenEpc] = useState<string | null>(null);
+  // ?epc=<EPC> — the history popup survives a browser refresh; the modal
+  // fetches its own data from the EPC so nothing else needs restoring.
+  const [openEpc, setOpenEpc] = useUrlParam("epc");
   const tableRef = useRef<HTMLTableElement>(null);
   const { colWidths, startDrag, autoFit } = useColResize(tableRef, 9);
 

@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useUrlParam } from "@/lib/use-url-param";
 import { LocationsManager } from "./locations-manager";
 import { ShelfMap } from "./shelf-map";
 
 type Tab = "list" | "map";
 
-/** Tab strip wrapping the existing List view + the new Shelf Map view. */
+/** Tab strip wrapping the existing List view + the new Shelf Map view.
+ *  The active tab lives in the URL (?tab=map; List is the default) so a
+ *  browser refresh — and a restored ?bin= drawer — lands on the same view. */
 export function LocationsTabs({ canCleanBins }: { canCleanBins: boolean }) {
-  const [tab, setTab] = useState<Tab>("list");
+  const [tabParam, setTabParam] = useUrlParam("tab");
+  const tab: Tab = tabParam === "map" ? "map" : "list";
+  const setTab = (t: Tab) => setTabParam(t === "map" ? "map" : null);
 
   return (
     <div className="space-y-4">

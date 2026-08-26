@@ -8,6 +8,7 @@ import {
   generateRfidTagPreviewBatch,
 } from "@/lib/utils/zpl-carbon-tag-203";
 import { PrintLogsModal } from "@/components/rfid/commissioning/print-logs-modal";
+import { useUrlFlag } from "@/lib/use-url-param";
 import { LabelPreviewCanvas } from "./label-preview-canvas";
 
 type Mode = "rfid" | "nonrfid";
@@ -69,7 +70,8 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
   const [lastJob, setLastJob] = useState<string[]>([]);
   const [nextSerial, setNextSerial] = useState(1);
   const [zplOpen, setZplOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
+  // ?logs=1 — survives a browser refresh (see lib/use-url-param.ts).
+  const [logsOpen, setLogsOpen] = useUrlFlag("logs");
   const busy = phase === "ENCODING" || phase === "PRINTING";
 
   useEffect(() => {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import type { EpcProfile, TenantSettingsRow } from "@/lib/settings/tenant-settings-defaults";
 
 const fetcher = async (url: string) => {
@@ -31,7 +32,16 @@ export function EpcProfilesWorkspace() {
     revalidateOnFocus: false,
   });
 
-  const [modal, setModal] = useState<null | { mode: "add" } | { mode: "edit"; row: EpcProfile }>(null);
+  // `profile` = "new" (add) | <profile id> (edit) — survives a browser refresh.
+  // The "add" draft object is memoised on the param so the modal's initial
+  // value keeps a stable identity while the window is open.
+  const [profileParam, setProfileParam] = useUrlParam("profile");
+  const modal = useMemo<null | { mode: "add"; row: EpcProfile } | { mode: "edit"; row: EpcProfile }>(() => {
+    if (!profileParam) return null;
+    if (profileParam === "new") return { mode: "add", row: emptyProfile() };
+    const row = data?.epc_profiles.find((p) => p.id === profileParam);
+    return row ? { mode: "edit", row: { ...row } } : null;
+  }, [data, profileParam]);
   const [busy, setBusy] = useState(false);
 
   const saveProfiles = useCallback(
@@ -73,7 +83,7 @@ export function EpcProfilesWorkspace() {
         <button
           type="button"
           disabled={busy || !data}
-          onClick={() => setModal({ mode: "add" })}
+          onClick={() => setProfileParam("new")}
           className="wms-btn-primary wms-btn-sm font-mono disabled:opacity-50"
         >
           Add profile
@@ -111,7 +121,7 @@ export function EpcProfilesWorkspace() {
                   <td className="px-3 py-2.5 text-right font-mono text-xs">
                     <button
                       type="button"
-                      onClick={() => setModal({ mode: "edit", row: { ...row } })}
+                      onClick={() => setProfileParam(row.id)}
                       className="text-teal-400/90 hover:underline max-md:inline-flex max-md:min-h-9 max-md:items-center max-md:px-2.5"
                     >
                       Edit
@@ -135,9 +145,9 @@ export function EpcProfilesWorkspace() {
       {modal ? (
         <ProfileModal
           mode={modal.mode}
-          initial={modal.mode === "edit" ? modal.row : emptyProfile()}
+          initial={modal.row}
           busy={busy}
-          onClose={() => setModal(null)}
+          onClose={() => setProfileParam(null)}
           onSave={async (row) => {
             if (!data) return;
             const list = [...data.epc_profiles];
@@ -146,7 +156,7 @@ export function EpcProfilesWorkspace() {
             else if (i >= 0) list[i] = row;
             try {
               await saveProfiles(list);
-              setModal(null);
+              setProfileParam(null);
             } catch (e) {
               window.alert(e instanceof Error ? e.message : "Save failed");
             }
