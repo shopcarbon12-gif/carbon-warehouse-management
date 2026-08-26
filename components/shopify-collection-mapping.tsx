@@ -11830,6 +11830,14 @@ export default function ShopifyCollectionMapping() {
             padding: 0 4px !important;
             white-space: nowrap !important;
           }
+          /* Light theme: the dock is a fixed dark surface, but "Page … of …" /
+             "Per page" labels outside the nav inherit var(--wms-muted), which
+             is a DARK grey in light mode → 1.8:1 on the dock. Pin them to the
+             dock's own light grey there. Dark theme unchanged (selector never
+             matches). */
+          :global(html[data-theme="light"]) .m3-dock-pager span {
+            color: #9aa3bc !important;
+          }
           .m3-dock-per-page-select {
             display: flex !important;
             align-items: center !important;
