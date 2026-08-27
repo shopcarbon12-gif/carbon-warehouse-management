@@ -213,7 +213,9 @@ class ScanSoundPool(private val context: Context) : MethodChannel.MethodCallHand
     // userVolume == 0 still hard-mutes the SoundPool output as a fail-safe so
     // a saved zero pref silences cues even before the stream-volume push lands.
     val finalVol = if (userVolume <= 0f) 0f else volume.coerceIn(0f, 1f)
-    Log.d("LAT", "BEEP_PLAY ts=${System.currentTimeMillis()} cue=$cue base=$volume user=$userVolume final=$finalVol")
+    // No per-play logging: the Locate-Tag proximity beep fires up to ~20x/sec
+    // and the per-tag beep once per read, so this line was a hot-path logcat
+    // write during exactly the sweep we need to keep smooth.
     val streamId = p.play(sid, finalVol, finalVol, 1, 0, 1.0f)
     if (streamId == 0) {
       Log.w(TAG, "playCue($cue): SoundPool.play returned 0 (sid=$sid, pool busy?)")

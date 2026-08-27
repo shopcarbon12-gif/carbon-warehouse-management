@@ -136,8 +136,26 @@ class MainActivity : FlutterFragmentActivity() {
         override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
           zebra.setTagSink(events)
           chainway.setTagSink(events)
-          bridge.tagSink = events
-          bridge.start()
+          // ScannerLogcatBridge only exists to recover EPCs from Chainway
+          // scanner-service firmware logs on MTK handhelds. On a Zebra RFD8500
+          // host (Samsung phone + BT sled) it has nothing legitimate to find,
+          // but it still forked `logcat -v time` and regex-scanned EVERY line
+          // of the system log — including the Zebra API3 SDK's own chatter.
+          // Those SDK lines contain both "rfid" and "epc", so the bridge
+          // happily extracted the hex tag ID out of them and re-injected it as
+          // a synthetic read. Two failures fell out of that:
+          //   1. CPU: hundreds of regex scans/sec competing with the UI thread.
+          //   2. Correctness: the synthetic reads carried no real signal
+          //      strength, so the Locate meter jumped to a bogus value that had
+          //      nothing to do with how close the operator actually was.
+          // Start it only where it belongs.
+          if (isMtkDevice()) {
+            bridge.tagSink = events
+            bridge.start()
+          } else {
+            bridge.tagSink = null
+            Log.d(TAG, "ScannerLogcatBridge disabled — non-MTK host (Zebra sled path)")
+          }
         }
 
         override fun onCancel(arguments: Any?) {
@@ -157,9 +175,7 @@ class MainActivity : FlutterFragmentActivity() {
           // Never call resolveUhfClass() on MTK — it loads DeviceAPIM.so via PathClassLoader
           // which can open /dev/ttyMT1 as a JNI_OnLoad side-effect on some firmware builds.
           // On MTK we run broadcast-only so the SDK presence is irrelevant.
-          val isMtk = android.os.Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
-                      android.os.Build.BOARD.startsWith("mt", ignoreCase = true)
-          val present = if (isMtk) false else (chainway.resolveUhfClass() != null)
+          val present = if (isMtkDevice()) false else (chainway.resolveUhfClass() != null)
           result.success(present)
         }
         "device.openScannerSettings" -> {
@@ -196,9 +212,7 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(true)
         }
         "device.diagnostics" -> {
-          val isMtk = Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
-                      Build.BOARD.startsWith("mt", ignoreCase = true)
-          val chainwaySdk = if (isMtk) false else (chainway.resolveUhfClass() != null)
+          val chainwaySdk = if (isMtkDevice()) false else (chainway.resolveUhfClass() != null)
           val zebraSdk = classPresent(ZEBRA_RFID_READER)
           result.success(
             mapOf(
@@ -312,6 +326,9 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(null)
         }
         "chainway.stopInventory" -> {
+          // See "chainway.startInventory" below — never drive the Chainway
+          // radio while a Zebra sled owns the session.
+          if (zebra.isReady()) { result.success(null); return@setMethodCallHandler }
           chainway.stopInventoryAsync()
           result.success(null)
         }
@@ -321,11 +338,22 @@ class MainActivity : FlutterFragmentActivity() {
           result.success(null)
         }
         "chainway.startInventory" -> {
-          val isMtk = Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
-                      Build.BOARD.startsWith("mt", ignoreCase = true)
+          // Screens that drive the radio "defensively" call BOTH vendor start
+          // paths. On an RFD8500 host that was actively harmful: the Chainway
+          // DeviceAPI AAR is bundled in this APK, so resolveUhfClass() finds
+          // RFIDWithUHFUART even on a Samsung phone that has no Chainway radio
+          // at all. Every trigger pull therefore kicked off a full UART hunt —
+          // System.load of vendor .so files, UHFInit probes against
+          // /dev/ttyMT* behind 5 s timeouts, killBackgroundProcesses, a 300 ms
+          // sleep and a re-init retry — plus file I/O on the platform thread
+          // inside resolveUhfClass() itself. None of it can ever succeed here,
+          // and all of it lands between the operator's trigger pull and the
+          // radio actually starting. Hand back a clean no-op when the Zebra
+          // sled owns the session.
+          if (zebra.isReady()) { result.success(null); return@setMethodCallHandler }
           // On MTK we run broadcast-only — skip the SDK check entirely to avoid
           // loading DeviceAPIM.so (which can open /dev/ttyMT1 as a JNI_OnLoad side-effect).
-          if (!isMtk && chainway.resolveUhfClass() == null) {
+          if (!isMtkDevice() && chainway.resolveUhfClass() == null) {
             result.error("NO_SDK", "Chainway DeviceAPI not present.", null)
             return@setMethodCallHandler
           }
@@ -425,6 +453,16 @@ class MainActivity : FlutterFragmentActivity() {
     const val ZEBRA_RFID_READER = "com.zebra.rfid.api3.RFIDReader"
     private const val SCANNER_PACKAGE = "com.rscja.scanner"
     @Volatile var scannerLogcatBridge: ScannerLogcatBridge? = null
+
+    /**
+     * True on Chainway-class MediaTek handhelds (C72E and friends), where the
+     * built-in UHF radio, the `com.rscja.scanner` service and the logcat EPC
+     * bridge are all real. False on a Samsung/Zebra host driving an RFD8500
+     * over Bluetooth, where none of that hardware exists.
+     */
+    fun isMtkDevice(): Boolean =
+      Build.HARDWARE.startsWith("mt", ignoreCase = true) ||
+        Build.BOARD.startsWith("mt", ignoreCase = true)
 
     fun enableScannerRfidMode(context: Context, logTag: String = TAG) {
       closeScanner2dEngine(context, logTag)

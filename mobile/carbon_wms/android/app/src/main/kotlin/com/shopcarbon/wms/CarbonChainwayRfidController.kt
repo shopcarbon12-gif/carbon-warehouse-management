@@ -547,7 +547,9 @@ class CarbonChainwayRfidController(private val context: Context) {
               hits++
               consecutiveNullReads = 0
               val epc = tag.getEPC()
-              Log.d(TAG, "TRACE TagThread: HIT #$hits epc=$epc rssi=${tag.getRssi()}")
+              if (VERBOSE_TAG_TRACE) {
+                Log.d(TAG, "TRACE TagThread: HIT #$hits epc=$epc rssi=${tag.getRssi()}")
+              }
               if (!epc.isNullOrBlank()) {
                 val normalized = epc.trim().uppercase()
                 val rssiDbm = parseRssiDbm(tag.getRssi())
@@ -1775,14 +1777,21 @@ class CarbonChainwayRfidController(private val context: Context) {
     // seenEpcs intentionally NOT cleared — dedup persists across start/stop cycles
   }
 
-  private fun emitEpc(hex: String, rssi: Int?) {
+  private fun emitEpc(hex: String, rssiRaw: Int?) {
     val up = hex.uppercase().replace(Regex("[^0-9A-F]"), "")
     if (up.isEmpty()) {
-      Log.d(TAG, "TRACE emitEpc: input empty after normalize ('$hex')")
+      if (VERBOSE_TAG_TRACE) Log.d(TAG, "TRACE emitEpc: input empty after normalize ('$hex')")
       return
     }
-    Log.d(TAG, "TRACE emitEpc: ENTER epc=$up rssi=$rssi sinkBound=${tagSink != null}")
-    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$up rssi=$rssi")
+    // Same guard as the Zebra controller: only a plausible negative dBm counts
+    // as a real reading. 0 is not "very strong", it's "the SDK had nothing".
+    val rssi = rssiRaw?.takeIf { it < 0 && it > -110 }
+    // Hot path — one call per tag read, which is hundreds per second during a
+    // geiger sweep. Logging here cost real frame time and fed the logcat
+    // bridge's regex scanner; keep it behind a flag for field diagnosis.
+    if (VERBOSE_TAG_TRACE) {
+      Log.d(TAG, "TRACE emitEpc: ENTER epc=$up rssi=$rssi sinkBound=${tagSink != null}")
+    }
     ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi))
     val sink = tagSink ?: run {
       Log.w(TAG, "TRACE emitEpc: tagSink is NULL — Dart never subscribed to rfid_tag_stream OR setTagSink(null) was called")
@@ -1802,7 +1811,9 @@ class CarbonChainwayRfidController(private val context: Context) {
     mainHandler.post {
       try {
         sink.success(payload)
-        Log.d(TAG, "TRACE emitEpc: SINK POSTED epc=$up rssi=${rssi ?: "null"}")
+        if (VERBOSE_TAG_TRACE) {
+          Log.d(TAG, "TRACE emitEpc: SINK POSTED epc=$up rssi=${rssi ?: "null"}")
+        }
       } catch (e: Throwable) {
         Log.w(TAG, "TRACE emitEpc: sink.success threw: ${e.message}")
       }
@@ -1881,6 +1892,13 @@ class CarbonChainwayRfidController(private val context: Context) {
     private const val TAG = "CarbonChainway"
     private const val FUNCTION_UHF = 11
     private const val ACCESS_PWD = "00000000"
+
+    /**
+     * Per-tag-read logging. Flip to true only while diagnosing a "no reads
+     * reach Dart" report. Leave false in shipped builds: these lines fire once
+     * per read (hundreds/sec on a geiger sweep) and directly cost frame time.
+     */
+    private const val VERBOSE_TAG_TRACE = false
 
     const val SCANNER_WRITE_EPC_ACTION = "com.shopcarbon.wms.RFID_EPC"
     const val SCANNER_WRITE_EPC_KEY = "epc"

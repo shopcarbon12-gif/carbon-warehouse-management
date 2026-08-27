@@ -100,6 +100,26 @@ class CarbonZebraRfidController(
   // BarcodeDelegate); re-armed on scanner disappearance / session termination.
   @Volatile private var needsBarcodeRebind: Boolean = true
 
+  // ── Cached radio state (RFD8500 latency fix) ────────────────────────────────
+  // Every Config write below is a real Bluetooth round-trip to the sled
+  // (~80-300 ms each). Locate-Tag re-asserted trigger-mode + pre-filter +
+  // singulation on EVERY trigger pull on the theory that "vendor calls are
+  // idempotent, so re-asserting is cheap". On RFD8500 that is false: the
+  // re-assert cost ~800 ms of serialised SPP traffic before Inventory.perform()
+  // could even run, which is exactly the "geiger lags / doesn't feel instant"
+  // symptom. Caching what we last successfully pushed turns a redundant
+  // re-assert into a true no-op.
+  //
+  // Every field is reset in disconnectSync() and re-seeded in
+  // connectAndConfigureReader(), so a dropped + re-paired sled can never
+  // inherit a stale belief about the radio's state.
+  @Volatile private var currentTriggerModeRfid: Boolean? = null
+  @Volatile private var currentPrefilterEpc: String? = null
+  @Volatile private var currentSessionZero: Boolean? = null
+
+  /** True while UHF inventory is streaming. Lets Dart skip redundant starts. */
+  fun isInventoryActive(): Boolean = inventoryActive
+
   fun getLastError(): String? = lastError
 
   fun setTagSink(sink: EventChannel.EventSink?) {
@@ -135,6 +155,10 @@ class CarbonZebraRfidController(
       }
       if (!r.isConnected) {
         Log.w(TAG, "setTriggerModeBarcode: reader.isConnected=false (RFD8500 link dropped)")
+        return@execute
+      }
+      if (currentTriggerModeRfid == false) {
+        Log.d(TAG, "setTriggerModeBarcode: already in BARCODE_MODE, skipping BT config write")
         return@execute
       }
       try {
@@ -180,6 +204,7 @@ class CarbonZebraRfidController(
             false
           }
           Log.d(TAG, "setTriggerMode(BARCODE_MODE) returned=$accepted")
+          currentTriggerModeRfid = false
           if (!accepted) {
             // Fallback: call the hardware-level toggle. switchMode is unconditional;
             // if the trigger was already in BARCODE this would put it back to RFID,
@@ -228,6 +253,14 @@ class CarbonZebraRfidController(
         Log.w(TAG, "setTriggerModeRfid: reader.isConnected=false")
         return@execute
       }
+      if (currentTriggerModeRfid == true) {
+        // Already in RFID mode. Skipping saves a setTriggerMode round-trip plus
+        // the two setBeeperVolume writes and the 150 ms settle inside
+        // silenceModeSwitchBeep — ~400 ms off every Locate-Tag entry, which is
+        // the single biggest chunk of the "trigger feels delayed" complaint.
+        Log.d(TAG, "setTriggerModeRfid: already in RFID_MODE, skipping BT config write")
+        return@execute
+      }
       try {
         silenceModeSwitchBeep(r) {
           val accepted = try {
@@ -237,6 +270,7 @@ class CarbonZebraRfidController(
             false
           }
           Log.d(TAG, "setTriggerMode(RFID_MODE) returned=$accepted")
+          currentTriggerModeRfid = true
           if (!accepted) {
             try {
               r.switchMode()
@@ -1292,6 +1326,7 @@ class CarbonZebraRfidController(
     r.Events.setTagReadEvent(true)
     r.Events.setAttachTagDataWithReadEvent(false)
     r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
+    currentTriggerModeRfid = true
     r.Config.setStartTrigger(triggerInfo.StartTrigger)
     r.Config.setStopTrigger(triggerInfo.StopTrigger)
 
@@ -1305,6 +1340,7 @@ class CarbonZebraRfidController(
     applyOptionalSingulationControl(r)
     try {
       r.Actions.PreFilters.deleteAll()
+      currentPrefilterEpc = null
     } catch (e: Exception) {
       Log.w(TAG, "PreFilters.deleteAll ignored: ${e.message}")
     }
@@ -1320,11 +1356,15 @@ class CarbonZebraRfidController(
         sing.Action.setSLFlag(SL_FLAG.SL_ALL)
         r.Config.Antennas.setSingulationControl(1, sing)
         Log.d(TAG, "singulation: $session accepted")
+        currentSessionZero = session == SESSION.SESSION_S0
         return
       } catch (e: Exception) {
         Log.w(TAG, "singulation: $session rejected (${e.message}); trying next")
       }
     }
+    // Unknown state — leave the cache null so the next explicit request always
+    // writes rather than trusting a belief we never established.
+    currentSessionZero = null
     Log.w(TAG, "singulation: all fallbacks rejected — using reader defaults")
   }
 
@@ -1349,6 +1389,14 @@ class CarbonZebraRfidController(
           return@execute
         }
         val cleanEpc = epcHex?.trim()?.uppercase()?.replace(Regex("[^0-9A-F]"), "")
+          ?.takeIf { it.length == 24 }
+        if (currentPrefilterEpc == cleanEpc) {
+          // Same filter already installed. Skipping avoids stop + deleteAll +
+          // add — three SPP round-trips — on every Locate-Tag trigger pull.
+          Log.d(TAG, "setEpcInventoryFilter: already ${cleanEpc ?: "cleared"}, skipping")
+          mainHandler.post { result.success(true) }
+          return@execute
+        }
         val wasActive = inventoryActive
         if (wasActive) {
           try { r.Actions.Inventory.stop() } catch (_: Exception) {}
@@ -1356,8 +1404,9 @@ class CarbonZebraRfidController(
         }
         runCatching { r.Actions.PreFilters.deleteAll() }
           .onFailure { Log.w(TAG, "PreFilters.deleteAll ignored: ${it.message}") }
+        currentPrefilterEpc = null
         var addedOk = false
-        if (cleanEpc != null && cleanEpc.length == 24) {
+        if (cleanEpc != null) {
           try {
             val pf = r.Actions.PreFilters.PreFilter()
             pf.setMemoryBank(com.zebra.rfid.api3.MEMORY_BANK.MEMORY_BANK_EPC)
@@ -1371,6 +1420,7 @@ class CarbonZebraRfidController(
             )
             r.Actions.PreFilters.add(pf)
             addedOk = true
+            currentPrefilterEpc = cleanEpc
             Log.d(TAG, "setEpcInventoryFilter: installed pre-filter for $cleanEpc (match→A, others→B)")
           } catch (e: Exception) {
             Log.w(TAG, "setEpcInventoryFilter: add failed: ${e.javaClass.simpleName}: ${e.message}")
@@ -1410,6 +1460,12 @@ class CarbonZebraRfidController(
           mainHandler.post { result.success(false) }
           return@execute
         }
+        if (currentSessionZero == useSessionZero) {
+          // Already on the requested session — skip the get/set round-trips.
+          Log.d(TAG, "setSingulationSession: already S${if (useSessionZero) 0 else 1}, skipping")
+          mainHandler.post { result.success(true) }
+          return@execute
+        }
         val wasActive = inventoryActive
         if (wasActive) {
           try { r.Actions.Inventory.stop() } catch (_: Exception) {}
@@ -1424,6 +1480,7 @@ class CarbonZebraRfidController(
           sing.Action.setSLFlag(SL_FLAG.SL_ALL)
           r.Config.Antennas.setSingulationControl(1, sing)
           Log.d(TAG, "setSingulationSession: $target accepted")
+          currentSessionZero = useSessionZero
           ok = true
         } catch (e: Exception) {
           Log.w(TAG, "setSingulationSession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
@@ -1451,6 +1508,12 @@ class CarbonZebraRfidController(
    */
   private fun disconnectSync() {
     inventoryActive = false
+    // Drop every cached belief about the radio — a re-paired sled starts from
+    // firmware defaults, so trusting the old cache would skip config writes the
+    // new link genuinely needs.
+    currentTriggerModeRfid = null
+    currentPrefilterEpc = null
+    currentSessionZero = null
 
     // Beeper restore lives in stopInventoryAsync now — by the time
     // disconnect runs, the sled is already back at HIGH_BEEP from the
@@ -1518,8 +1581,18 @@ class CarbonZebraRfidController(
   private fun emitTag(epc: String, rssi: Short?) {
     val sink = tagSink ?: return
     val clean = epc.trim().uppercase()
-    Log.d("LAT", "NATIVE_EPC ts=${System.currentTimeMillis()} epc=$clean rssi=$rssi")
-    val rssiInt = rssi?.toInt()
+    // NOTE: deliberately NO per-tag Log.d here. With a Locate-Tag pre-filter +
+    // SESSION_S0 the RFD8500 reports 200-400 tags/sec for a single tag; one
+    // logcat write per read saturated the log buffer, and ScannerLogcatBridge
+    // (which tails the WHOLE system log) then had to regex-scan every one of
+    // those lines. That pair alone was burning a core during a geiger sweep.
+    val rssiRaw = rssi?.toInt()
+    // Peak RSSI is a negative dBm figure. Some firmware revisions report 0 (or
+    // a positive value) when the reading is unavailable — passing that through
+    // made the Locate screen compute 100 % proximity for a tag that might be
+    // metres away, which is the "meter pins at full and never drops" symptom.
+    // Anything outside a plausible UHF window is treated as "no RSSI".
+    val rssiInt = rssiRaw?.takeIf { it < 0 && it > -110 }
     // Native-originated per-tag beep — fire before sink post so audio feedback
     // does not wait for Dart scheduling. The beep falls back to -56 when RSSI
     // is missing (mid-range volume), but the WIRE payload to Dart must keep

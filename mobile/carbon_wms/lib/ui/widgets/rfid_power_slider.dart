@@ -29,7 +29,16 @@ import 'package:carbon_wms/theme/app_theme.dart';
 /// label is moving. Same pattern the POS antenna slider needed
 /// (rate-limit + coalesce, project_pos_power_rate_limit_2026_05_26).
 class RfidPowerSlider extends StatefulWidget {
-  const RfidPowerSlider({super.key, this.defaultDbm});
+  const RfidPowerSlider({super.key, this.defaultDbm, this.onCommit});
+
+  /// Fired with the committed dBm whenever the slider actually pushes a new
+  /// value to the radio (LOCAL mode only). Screens that also register a
+  /// session-level power override with [RfidManager] use this to keep the
+  /// override in step — otherwise the next
+  /// `reapplyHandheldHardwareSettings()` (settings sync, scan-context change)
+  /// would silently stomp the operator's slider back to the global config
+  /// power mid-scan.
+  final ValueChanged<int>? onCommit;
 
   /// When non-null the slider runs in **LOCAL mode**: it seeds to this value on
   /// first mount and pushes changes straight to the radio via
@@ -82,7 +91,13 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
       // Push the per-screen default to the radio once mounted (the native
       // controller clamps to the nearest supported level for the sled).
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(RfidVendorChannel.setAntennaPowerDbm(seed));
+        if (!mounted) return;
+        final commit = widget.onCommit;
+        if (commit != null) {
+          commit(seed);
+        } else {
+          unawaited(RfidVendorChannel.setAntennaPowerDbm(seed));
+        }
       });
     }
   }
@@ -98,7 +113,14 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
   void _apply(MobileSettingsRepository repo, int dbm) {
     if (_isLocal) {
       _localDbm = dbm;
-      unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
+      final commit = widget.onCommit;
+      if (commit != null) {
+        // The owner drives the radio (via a session power override); don't
+        // double-push or the radio takes two stop→apply→resume cycles per drag.
+        commit(dbm);
+      } else {
+        unawaited(RfidVendorChannel.setAntennaPowerDbm(dbm));
+      }
     } else {
       unawaited(repo.setGlobalAntennaPower(dbm));
     }

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:developer' as developer;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -40,18 +40,53 @@ double rssiToProximity01(int? rssi) {
 /// Tap-to-locate Geiger screen.
 ///
 /// Behaviour:
-///   * **Tap once to start**, tap again to stop. (Operator feedback: holding
-///     the trigger felt fatiguing for long sweeps across the warehouse.)
+///   * **Pull the trigger to start**, pull again to stop.
 ///   * Closer to the target → faster beep cadence, louder, higher %.
-///   * Out-of-range → 0%, silence, idle motion only.
-///   * If reads come in for OTHER tags but not the target, a subtle diagnostic
-///     line surfaces the strongest in-range EPC so the operator can confirm
-///     the radio is actually streaming.
+///   * Out-of-range → decays to 0%, silence, idle motion only.
 ///
-/// Visual: animated **radar sweep** (rotating teal cone) + a halo whose blur
-/// and scale grow with proximity. When the operator gets close, the dial
-/// "blooms" — a much stronger affordance than the pre-1.2.39 concentric
-/// rings, which read as a static decoration.
+/// ## Why this screen is built the way it is (1.2.149 rework)
+///
+/// The complaint was "hot and cold should be instant, but it lags, stutters
+/// and sometimes gets stuck". Four things were causing that, all fixed here:
+///
+///  1. **The read callback drove the UI directly.** On an RFD8500 with the
+///     locate pre-filter + SESSION_S0 installed, a single tag in the field
+///     reports 200-400 times per second — that is the whole point of the
+///     filter. Every one of those reads called `setState()` (twice) and
+///     kicked an `AnimationController.animateTo()`, rebuilding and
+///     repainting a screen whose centrepiece is a blurred, shadowed,
+///     sweep-gradient radar. The UI thread never got a clear frame, and the
+///     beep timer — starved along with everything else — fired at whatever
+///     cadence it could get, which is exactly the "beeping without logic"
+///     the operator described. Reads now only write plain fields; a single
+///     fixed-rate engine tick ([_tickMs]) does the signal processing and
+///     publishes to [ValueNotifier]s that only small leaf widgets listen to.
+///     Nothing above those leaves rebuilds while scanning.
+///
+///  2. **Every trigger pull re-pushed the whole radio config.** Filter,
+///     singulation session and power were re-asserted on each `_startScan`
+///     on the theory that "vendor-channel calls are idempotent, so
+///     re-asserting is cheap". On an RFD8500 each of those is a real
+///     Bluetooth round-trip to the sled, and they are serialised on the
+///     controller's single executor — roughly 800 ms of SPP traffic between
+///     the trigger pull and `Inventory.perform()`. The radio is now armed
+///     ONCE ([_armRadio]) and a trigger pull does nothing but start
+///     inventory. (The native side caches the same state, so a redundant
+///     call is a no-op there too.)
+///
+///  3. **No re-entrancy guard on the toggle.** Two quick trigger pulls
+///     interleaved `_startScan` and `_stopScan`, and because both await
+///     platform calls the subscription and the `_scanning` flag could end up
+///     disagreeing with the radio: reader streaming while the screen ignored
+///     every read, or reader stopped while the screen said SCANNING. That is
+///     the "gets stuck" report. [_toggleScan] is now guarded and debounced.
+///
+///  4. **Proximity decayed far too slowly.** 1300 ms of hold followed by a
+///     15%-per-150 ms ramp meant ~2.7 s to fall from 100% to zero. In a
+///     hot/cold game the operator sweeps past the tag and the meter is still
+///     showing "hot" a full second later, which reads as lag even when the
+///     radio is perfect. Now: [_holdMs] grace, then a time-based exponential
+///     with a [_decayTauMs] constant — about a second from pinned to cold.
 class LocateTagScreen extends StatefulWidget {
   const LocateTagScreen({
     super.key,
@@ -89,47 +124,121 @@ class LocateTagScreen extends StatefulWidget {
   State<LocateTagScreen> createState() => _LocateTagScreenState();
 }
 
+/// Immutable snapshot of the diagnostic counters, published at a low rate so
+/// the debug banner never drags the proximity engine down with it.
+class _Diag {
+  const _Diag({
+    this.targetReads = 0,
+    this.otherReads = 0,
+    this.nullRssiReads = 0,
+    this.readsPerSec = 0,
+    this.lastSeenEpcs = const <String>[],
+    this.lastSeenRssi,
+    this.otherEpc,
+    this.otherRssi,
+    this.otherFresh = false,
+  });
+
+  final int targetReads;
+  final int otherReads;
+  final int nullRssiReads;
+  final int readsPerSec;
+  final List<String> lastSeenEpcs;
+  final int? lastSeenRssi;
+  final String? otherEpc;
+  final int? otherRssi;
+  final bool otherFresh;
+}
+
 class _LocateTagScreenState extends State<LocateTagScreen>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
+
+  // ── Engine tuning ─────────────────────────────────────────────────────────
+  /// Signal-processing / UI-publish rate. 30 Hz is smooth to the eye and
+  /// gives ~33 ms beep-cadence granularity, while being ~10x less work than
+  /// the old "rebuild on every read" behaviour at RFD8500 read rates.
+  static const int _tickMs = 33;
+
+  /// Grace period after the last target read before proximity starts falling.
+  /// Covers the natural read gap when the antenna goes momentarily off-axis
+  /// without letting a genuine walk-away sit at "hot".
+  static const int _holdMs = 220;
+
+  /// Exponential decay time constant once the grace period lapses.
+  /// ~1 s from pinned to effectively cold.
+  static const double _decayTauMs = 320;
+
+  /// Beep interval at zero proximity / at full proximity (ms). Interpolated
+  /// geometrically, so the cadence accelerates smoothly and continuously
+  /// across the WHOLE range instead of the old two-segment ramp that only
+  /// spanned 1.1 → 2.9 Hz below 90%.
+  static const double _beepSlowMs = 650;
+  static const double _beepFastMs = 45;
+
+  /// Default locate power. Held as a session override on [RfidManager] so a
+  /// settings sync can't quietly stomp it back to the global config power
+  /// mid-sweep (which stopped and restarted the radio, freezing the meter).
+  static const int _defaultPowerDbm = 30;
 
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _readSub;
   StreamSubscription<String>? _triggerSub;
-  Timer? _beepTimer;
-  Timer? _staleTimer;
+  Timer? _engine;
 
   late final AnimationController _sweep; // radar rotation
-  late final AnimationController _bloom; // proximity-driven halo bloom
 
+  // ── Published UI state — only leaf widgets listen to these ────────────────
+  final ValueNotifier<double> _proximity = ValueNotifier<double>(0);
+  final ValueNotifier<int?> _rssiOut = ValueNotifier<int?>(null);
+  final ValueNotifier<_Diag> _diag = ValueNotifier<_Diag>(const _Diag());
+
+  /// Coarse state that genuinely changes the layout. setState is fine here —
+  /// it fires at most once per trigger pull.
   bool _scanning = false;
-  int? _liveRssi;
-  double _proximity01 = 0;
-  DateTime? _lastTargetReadAt;
 
-  // Diagnostic counters — surfaced as a small overlay so the operator
-  // (and us) can tell at a glance whether the radio is hearing the target
-  // tag at all. Pre-fix, the % was stuck at 0 because reads were either
-  // not arriving for the target EPC or arriving with null RSSI (Zebra's
-  // streaming inventory occasionally drops RSSI on weak reads). The
-  // counter makes that distinction visible without ADB logcat.
+  /// Re-entrancy guard for [_toggleScan]. Start/stop both await platform
+  /// calls; without this a second trigger pull could interleave them.
+  bool _busy = false;
+  DateTime _lastToggleAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// True once filter + session + power have been pushed to the radio for
+  /// this screen. Reset by [_showActionPicker]'s hand-off, which deliberately
+  /// tears that config down for the destination screen.
+  bool _radioArmed = false;
+
+  int _powerDbm = _defaultPowerDbm;
+
+  // ── Hot-path fields — written by the read callback, read by the engine.
+  //    Never touched by build(), never wrapped in setState. ─────────────────
+  /// Strongest RSSI seen for the target inside the current engine window.
+  /// Peak (not mean) is deliberate: multipath in a racking aisle causes
+  /// *fades*, not gains, so the strongest read in a 33 ms window is the
+  /// honest distance estimate and the dips are the artefact.
+  int? _windowPeakRssi;
+  int _windowReads = 0;
+  int _readsPerSec = 0;
+  int _rateAccum = 0;
+  int _rateTicks = 0;
+
   int _targetReads = 0;
   int _otherReads = 0;
   int _nullRssiReads = 0;
+  int? _lastRssi;
+  DateTime? _lastTargetReadAt;
 
-  /// Last 3 EPCs heard, in order (newest first). Used by the on-screen
-  /// diagnostic banner so the operator can see "is the radio hearing
-  /// anything" and "does the target's EPC actually match what's coming
-  /// off the air" without leaving the screen for logcat.
-  final List<String> _lastSeenEpcs = <String>[];
-  int? _lastSeenRssi;
+  /// Engine-owned smoothed proximity. [_proximity] mirrors it at tick rate.
+  double _prox = 0;
 
-  // Diagnostic: strongest non-target EPC + RSSI we've seen this session.
-  // Surfaces a "WE SEE ANOTHER TAG" hint so the operator can tell the radio
-  // is alive and the issue is "wrong tag in range" not "scanner broken".
   String? _otherEpc;
   int? _otherRssi;
   DateTime? _otherSeenAt;
+  final List<String> _lastSeenEpcs = <String>[];
+  int? _lastSeenRssi;
+  bool _diagDirty = false;
+  int _diagTickCounter = 0;
+
+  DateTime _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   String get _epcUpper => (widget.targetEpc ?? '').trim().toUpperCase();
   bool get _epcValid => _epc24.hasMatch(_epcUpper);
@@ -141,57 +250,24 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     );
-    _bloom = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-      lowerBound: 0,
-      upperBound: 1,
-    );
-    // Switch the manager into geiger routing immediately. Pre-1.2.41 this
-    // ran in a postFrame callback, which left a small window where the
-    // listener was attached but reads were still going to the unified
-    // sink. Setting it here closes that window — and we re-assert it on
-    // every scan toggle for belt-and-braces safety.
     unawaited(ScanSounds.instance.init());
-    // CRITICAL for Locate UX: silence the native per-tag-read beep that
-    // ScanSoundPool fires from inside CarbonChainwayRfidController.emitEpc
-    // / CarbonZebraRfidController.emitTag. Without this, every tag in the
-    // antenna's field fires a beep — at 8 dBm in a packed bin area the
-    // operator gets a constant rattle that swamps the proximity beep
-    // _playBeep() drives. Result the operator sees today: "beeping like
-    // crazy without logic, doesn't slow/speed when I pull away." With
-    // this suppressed the only beep is _scheduleBeeps' proximity-driven
-    // cadence (target match only), which actually correlates with the %
-    // bar. Restored on dispose so Count / Status Change / Encode still
-    // get their per-tag beep.
+    // Silence the native per-tag-read beep that ScanSoundPool fires from
+    // inside the controllers' emit path. Without this, every tag in the
+    // field beeps — at close range on a filtered RFD8500 that is hundreds of
+    // beeps a second, which completely swamps the proximity cadence that is
+    // the actual signal. Restored on dispose so Count / Status Change /
+    // Encode keep their per-tag beep.
     unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    // Lock the device to RFID-only mode on entry. Geiger search uses 2D;
-    // when the operator picks a result and lands here we must flip the
-    // trigger back to UHF and physically close the 2D engine on Chainway
-    // so a stray laser can't fire mid-sweep.
+    // Lock the device to RFID-only mode on entry. Geiger search uses 2D; when
+    // the operator picks a result and lands here we must flip the trigger back
+    // to UHF and physically close the 2D engine on Chainway so a stray laser
+    // can't fire mid-sweep. Both calls are no-ops on the native side when the
+    // radio is already in the requested mode.
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.close2dBarcode());
-    // Flip Zebra radio to SESSION_S0 so the target tag re-responds on
-    // every inventory cycle. With the default S1 the tag goes silent
-    // for several seconds after the first read — at touching distance
-    // the proximity meter dropped to 80, 64, 51 % during those quiet
-    // periods even though nothing physically moved. S0 keeps the tag
-    // chattering continuously, so the dial stays pinned at 100 % when
-    // the operator is on top of it. Restored to S1 in dispose.
-    unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: true));
-    // PreFilter the inventory to only the target EPC. Without this,
-    // the radio's per-cycle time slots are shared across every visible
-    // tag — in a warehouse with 400+ tags in range the target ends up
-    // with only a handful of reads per second and wildly variable RSSI
-    // (multipath from competing tag responses). With the filter the
-    // radio dedicates 100 % of its slots to the target → consistent
-    // ~150 reads/sec at close range, stable RSSI, distance-honest
-    // proximity. Cleared on dispose so other screens see the full field.
-    final target = _epcUpper;
-    if (_epc24.hasMatch(target)) {
-      unawaited(RfidVendorChannel.setEpcInventoryFilter(target));
-    }
+    // Arm the radio once, here — NOT on every trigger pull. See the class doc.
+    unawaited(_armRadio());
     // Subscribe to the physical trigger immediately on entry so the very
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
@@ -208,27 +284,43 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_rfid == null) {
-      _rfid = context.read<RfidManager>();
-      _rfid!.scanContext = 'GEIGER_FIND';
+      final m = context.read<RfidManager>();
+      _rfid = m;
+      // Claim the power BEFORE switching scan context. The context setter
+      // triggers reapplyHandheldHardwareSettings(), which honours the session
+      // override when one is set — so claiming first means the radio takes a
+      // single power write instead of "config power, then locate power".
+      unawaited(m.setSessionPowerOverrideDbm(_powerDbm));
+      m.scanContext = 'GEIGER_FIND';
     }
   }
 
   @override
   void dispose() {
-    _beepTimer?.cancel();
-    _staleTimer?.cancel();
+    // Close the read path first. A tag event already queued on the platform
+    // channel can still be delivered after cancel(), and _onGeigerRead only
+    // touches plain fields — but flipping this makes it an explicit no-op
+    // rather than something that happens to be harmless.
+    _scanning = false;
+    _engine?.cancel();
     _sweep.dispose();
-    _bloom.dispose();
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
+    // Stop the radio through every path. Backing out of the screen while
+    // scanning must never leave the sled transmitting for the next screen.
+    unawaited(RfidVendorChannel.stopZebraInventory());
+    unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(_rfid?.stopLocateScanning());
+    // Release the locate power claim so the next screen inherits the global
+    // handheld-config power again.
+    unawaited(_rfid?.setSessionPowerOverrideDbm(null));
     // Clear the target-EPC pre-filter so the next screen's inventory
     // sees the full field again.
     unawaited(RfidVendorChannel.setEpcInventoryFilter(null));
-    // Restore Zebra inventory session back to S1 so the next screen's
-    // multi-tag passes (count, transfer, etc.) get the throughput they
-    // expect — S0 floods the read pipe with re-reads of every visible
-    // tag, which is the right thing for locate but wrong for inventory.
+    // Restore inventory session back to S1 so the next screen's multi-tag
+    // passes (count, transfer, etc.) get the throughput they expect — S0
+    // floods the read pipe with re-reads of every visible tag, which is the
+    // right thing for locate but wrong for inventory.
     unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: false));
     // Restore the per-tag native beep so Count / Status Change / etc.
     // get their feedback back on the next screen.
@@ -236,94 +328,317 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // Re-open the 2D engine so the next screen (which may need barcode
     // scanning) doesn't inherit a powered-off imager.
     unawaited(RfidVendorChannel.open2dBarcode());
+    _proximity.dispose();
+    _rssiOut.dispose();
+    _diag.dispose();
     super.dispose();
+  }
+
+  // ── Radio arming ─────────────────────────────────────────────────────────
+
+  /// Push the locate-specific radio configuration. Called once on entry and
+  /// again only if [_showActionPicker]'s hand-off tore it down.
+  ///
+  /// Ordering matters and is preserved by the native single-thread executor:
+  /// pre-filter first (so the radio knows which tag it cares about), then the
+  /// session flip, then inventory start from [_startScan].
+  Future<void> _armRadio() async {
+    if (_radioArmed) return;
+    _radioArmed = true;
+    final target = _epcUpper;
+    if (_epc24.hasMatch(target)) {
+      // Gate inventory to the target EPC. Without this the radio's per-cycle
+      // time slots are shared across every tag in range — in a bin area with
+      // hundreds of tags the target gets a handful of reads per second and
+      // wildly variable RSSI (multipath from competing responses). With the
+      // filter the radio spends all its slots on the target: dense reads,
+      // stable RSSI, distance-honest proximity.
+      await RfidVendorChannel.setEpcInventoryFilter(target);
+    }
+    // SESSION_S0 so the target re-responds on every inventory round. Under
+    // the default S1 the tag falls silent for seconds after its first reply,
+    // and the meter sagged from 100 → 80 → 64 → 51 while the operator stood
+    // perfectly still on top of the tag.
+    await RfidVendorChannel.setSingulationSession(useSessionZero: true);
+    await ScanSounds.instance.setTagBeepSuppressed(true);
   }
 
   // ── Toggle scan ──────────────────────────────────────────────────────────
 
   Future<void> _toggleScan() async {
-    if (_scanning) {
-      await _stopScan();
-    } else {
-      await _startScan();
+    // Guard against re-entrancy AND against the sled's trigger repeating.
+    // Both start and stop await platform calls; letting a second pull in
+    // mid-flight is what left the radio and the screen disagreeing.
+    if (_busy) return;
+    final now = DateTime.now();
+    if (now.difference(_lastToggleAt).inMilliseconds < 250) return;
+    _lastToggleAt = now;
+    _busy = true;
+    try {
+      if (_scanning) {
+        await _stopScan();
+      } else {
+        await _startScan();
+      }
+    } finally {
+      _busy = false;
     }
+  }
+
+  void _resetSignal() {
+    _windowPeakRssi = null;
+    _windowReads = 0;
+    _readsPerSec = 0;
+    _rateAccum = 0;
+    _rateTicks = 0;
+    _targetReads = 0;
+    _otherReads = 0;
+    _nullRssiReads = 0;
+    _lastRssi = null;
+    _lastTargetReadAt = null;
+    _prox = 0;
+    _otherEpc = null;
+    _otherRssi = null;
+    _otherSeenAt = null;
+    _lastSeenEpcs.clear();
+    _lastSeenRssi = null;
+    _diagDirty = false;
+    _diagTickCounter = 0;
+    _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
+    _proximity.value = 0;
+    _rssiOut.value = null;
+    _diag.value = const _Diag();
   }
 
   Future<void> _startScan() async {
     final m = _rfid;
     if (m == null || !_epcValid) return;
     ScanSounds.instance.play(ScanCue.start);
-    m.scanContext = 'GEIGER_FIND';
-    setState(() {
-      _scanning = true;
-      _liveRssi = null;
-      _proximity01 = 0;
-      _lastTargetReadAt = null;
-      _otherEpc = null;
-      _otherRssi = null;
-      _otherSeenAt = null;
-      _targetReads = 0;
-      _otherReads = 0;
-      _nullRssiReads = 0;
-      _lastSeenEpcs.clear();
-      _lastSeenRssi = null;
-    });
+    _resetSignal();
+    setState(() => _scanning = true);
     _sweep
       ..reset()
       ..repeat();
-    _bloom.value = 0;
+
+    // Subscribe to the RAW vendor tag stream. The manager path goes through
+    // `_active.startScanning`, which silently fails when the manager's
+    // active-driver state is out of sync with the actual sled (seen after the
+    // encode screen drove the radio via RfidVendorChannel directly). Listening
+    // to the vendor stream guarantees reads reach _onGeigerRead regardless.
     await _readSub?.cancel();
-    // Subscribe to the RAW vendor tag stream as well as the RfidManager's
-    // geiger stream. The manager path goes through `_active.startScanning`
-    // which silently fails when the manager's active-driver state is out
-    // of sync with the actual sled (seen after the encode screen drove the
-    // radio via RfidVendorChannel directly). Listening to the vendor
-    // stream guarantees reads reach _onGeigerRead regardless of manager
-    // state.
-    _readSub = RfidVendorChannel.tagReadStream().listen(_onGeigerRead);
-    // Re-apply the locate-specific radio config every trigger pull. These
-    // are also set in initState, but the action-picker handOff (Status
-    // change / Encode / Re-encode) intentionally clears them so the
-    // destination screen sees the full RF field. When the operator pops
-    // back here and pulls the trigger, the radio would otherwise be in
-    // SESSION_S1 with no filter — proximity dies and the % bar floats.
-    // Vendor-channel calls are idempotent, so re-asserting is cheap.
-    final target = _epcUpper;
-    if (_epc24.hasMatch(target)) {
-      unawaited(RfidVendorChannel.setEpcInventoryFilter(target));
-    }
-    unawaited(RfidVendorChannel.setSingulationSession(useSessionZero: true));
-    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    // Start the radio via BOTH paths — the vendor channel is idempotent
-    // and the manager path keeps the manager's internal state consistent
-    // for other screens.
-    unawaited(RfidVendorChannel.startChainwayInventory());
-    unawaited(RfidVendorChannel.startZebraInventory());
+    _readSub =
+        RfidVendorChannel.tagReadStream().listen(_onGeigerRead, onError: (_) {});
+
+    // Only re-arms if the action-picker hand-off cleared the config; a normal
+    // trigger pull skips straight past this.
+    await _armRadio();
+
+    _startEngine();
+
+    // Start via BOTH vendor paths plus the manager. All three are cheap
+    // no-ops on the native side once inventory is already streaming, and the
+    // manager path keeps its internal state consistent for other screens.
+    // Wrapped individually: on a Zebra-only host `startChainwayInventory`
+    // resolves to a native no-op, and on a Chainway-only host
+    // `startZebraInventory` rejects with NOT_CONNECTED — neither should
+    // surface as an unhandled async error.
+    try {
+      await RfidVendorChannel.startZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startChainwayInventory();
+    } catch (_) {}
     await m.startLocateScanning();
-    _scheduleBeeps();
-    _scheduleStaleSweep();
   }
 
   Future<void> _stopScan() async {
     ScanSounds.instance.play(ScanCue.stop);
-    _beepTimer?.cancel();
-    _beepTimer = null;
-    _staleTimer?.cancel();
-    _staleTimer = null;
+    _engine?.cancel();
+    _engine = null;
     _sweep.stop();
-    _bloom.animateTo(0, duration: const Duration(milliseconds: 220));
     await _readSub?.cancel();
     _readSub = null;
-    unawaited(RfidVendorChannel.stopChainwayInventory());
-    unawaited(RfidVendorChannel.stopZebraInventory());
+    try {
+      await RfidVendorChannel.stopZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.stopChainwayInventory();
+    } catch (_) {}
     await _rfid?.stopLocateScanning();
     if (!mounted) return;
-    setState(() {
-      _scanning = false;
-      _liveRssi = null;
-      _proximity01 = 0;
-      _lastTargetReadAt = null;
-    });
+    setState(() => _scanning = false);
+    _prox = 0;
+    _lastTargetReadAt = null;
+    _proximity.value = 0;
+    _rssiOut.value = null;
+  }
+
+  // ── Read path ────────────────────────────────────────────────────────────
+  // Runs up to several hundred times per second. It must stay allocation-free
+  // and must never touch setState, an AnimationController, or the logger.
+
+  void _onGeigerRead(RfidTagRead read) {
+    if (!_scanning) return;
+    final epc = read.epcHex24;
+    // Treat a zero / positive / absurd RSSI as "not reported". A literal 0 is
+    // otherwise read as an extremely strong signal and saturates the meter at
+    // 100% regardless of distance.
+    var rssi = read.rssi;
+    if (rssi != null && (rssi >= 0 || rssi <= -110)) rssi = null;
+
+    if (_lastSeenEpcs.isEmpty || _lastSeenEpcs.first != epc) {
+      _lastSeenEpcs.insert(0, epc);
+      if (_lastSeenEpcs.length > 3) _lastSeenEpcs.removeLast();
+      _diagDirty = true;
+    }
+    if (rssi != null) _lastSeenRssi = rssi;
+
+    if (_matchesTarget(epc)) {
+      _targetReads++;
+      _windowReads++;
+      if (rssi == null) {
+        _nullRssiReads++;
+        // Keep the meter alive through a null-RSSI burst by reusing the last
+        // real reading; -65 dBm (mid-range) only seeds the very first one.
+        rssi = _lastRssi ?? -65;
+      } else {
+        _lastRssi = rssi;
+      }
+      final peak = _windowPeakRssi;
+      if (peak == null || rssi > peak) _windowPeakRssi = rssi;
+      _diagDirty = true;
+      return;
+    }
+
+    _otherReads++;
+    // Track the strongest non-target tag purely as a "radio is alive, wrong
+    // tag in range" diagnostic. It never affects the percentage.
+    if (rssi != null && rssi > (_otherRssi ?? -200)) {
+      _otherEpc = epc;
+      _otherRssi = rssi;
+      _otherSeenAt = DateTime.now();
+    }
+    _diagDirty = true;
+  }
+
+  /// Match the live read EPC against the target. Exact equality first;
+  /// if that fails, fall back to a suffix match on the last 16 hex
+  /// chars (item + serial bits — the company-prefix bits sometimes
+  /// arrive padded or shifted on different SDK versions, which is what
+  /// kept biting earlier "% stays at 0" attempts). Both forms are
+  /// uppercase + alphanumeric only.
+  bool _matchesTarget(String observed) {
+    if (observed == _epcUpper) return true;
+    if (_epcUpper.length < 16 || observed.length < 16) return false;
+    return observed.substring(observed.length - 16) ==
+        _epcUpper.substring(_epcUpper.length - 16);
+  }
+
+  // ── Fixed-rate engine ────────────────────────────────────────────────────
+
+  void _startEngine() {
+    _engine?.cancel();
+    _engine = Timer.periodic(
+      const Duration(milliseconds: _tickMs),
+      (_) => _engineTick(),
+    );
+  }
+
+  void _engineTick() {
+    if (!mounted || !_scanning) return;
+    final now = DateTime.now();
+
+    // 1. Fold this window's reads into the smoothed proximity.
+    final peak = _windowPeakRssi;
+    _windowPeakRssi = null;
+    _rateAccum += _windowReads;
+    _windowReads = 0;
+    _rateTicks++;
+
+    if (peak != null) {
+      final raw = rssiToProximity01(peak);
+      // Asymmetric EMA at a FIXED rate — the old version ran per read, so at
+      // 300 reads/sec it converged in ~10 ms and the meter was effectively raw
+      // (and jittery). Anchoring it to the tick makes the response time a real
+      // constant: ~60 ms closing in, ~110 ms falling back.
+      final alpha = raw >= _prox ? 0.55 : 0.30;
+      _prox = (_prox + (raw - _prox) * alpha).clamp(0.0, 1.0);
+      _lastTargetReadAt = now;
+    } else {
+      final last = _lastTargetReadAt;
+      if (last == null) {
+        _prox = 0;
+      } else if (now.difference(last).inMilliseconds > _holdMs) {
+        // Time-based exponential so the fall-off is identical regardless of
+        // how punctual the timer is under load.
+        _prox *= math.exp(-_tickMs / _decayTauMs);
+        if (_prox < 0.02) _prox = 0;
+      }
+    }
+
+    // 2. Proximity beep. Decided every tick against the CURRENT proximity, so
+    //    closing in speeds the cadence up immediately instead of waiting out
+    //    an interval that was computed when the operator was still far away.
+    if (_prox > 0.02) {
+      if (now.difference(_lastBeepAt).inMilliseconds >= _beepDelayMs(_prox)) {
+        _playProximityBeep(_prox);
+        _lastBeepAt = now;
+      }
+    }
+
+    // 3. Publish. Each notifier only rebuilds its own leaf widget.
+    if ((_proximity.value - _prox).abs() > 0.0005) _proximity.value = _prox;
+    final outRssi = _prox <= 0 ? null : _lastRssi;
+    if (_rssiOut.value != outRssi) _rssiOut.value = outRssi;
+
+    // 4. Diagnostics at ~5 Hz — counters don't need frame-rate fidelity.
+    _diagTickCounter++;
+    if (_diagTickCounter >= 6) {
+      final elapsedMs = _rateTicks * _tickMs;
+      if (elapsedMs > 0) {
+        _readsPerSec = (_rateAccum * 1000 / elapsedMs).round();
+      }
+      _rateAccum = 0;
+      _rateTicks = 0;
+      _diagTickCounter = 0;
+      if (_diagDirty) {
+        _diagDirty = false;
+        final seenAt = _otherSeenAt;
+        _diag.value = _Diag(
+          targetReads: _targetReads,
+          otherReads: _otherReads,
+          nullRssiReads: _nullRssiReads,
+          readsPerSec: _readsPerSec,
+          lastSeenEpcs: List<String>.unmodifiable(_lastSeenEpcs),
+          lastSeenRssi: _lastSeenRssi,
+          otherEpc: _otherEpc,
+          otherRssi: _otherRssi,
+          otherFresh: seenAt != null &&
+              now.difference(seenAt) < const Duration(seconds: 5),
+        );
+      }
+    }
+  }
+
+  /// Geometric cadence curve: `slow * (fast/slow)^p`. Unlike the old
+  /// two-segment ramp (which only spanned 1.1 → 2.9 Hz across the entire
+  /// lower 90% and then jumped), this accelerates continuously and
+  /// perceptually evenly the whole way — 1.5 Hz at arm's length, ~6 Hz at
+  /// half, ~22 Hz on top of the tag.
+  int _beepDelayMs(double p) {
+    final clamped = p.clamp(0.0, 1.0);
+    return (_beepSlowMs * math.pow(_beepFastMs / _beepSlowMs, clamped))
+        .round()
+        .clamp(_beepFastMs.round(), _beepSlowMs.round());
+  }
+
+  /// Proximity beep routed through the native SoundPool (same path that
+  /// already drives start/stop/success/error cues reliably). It is
+  /// unaffected by `setTagBeepSuppressed`, which only gates the auto-beep the
+  /// SDK fires per raw tag read.
+  void _playProximityBeep(double proximity) {
+    final volume = (0.40 + 0.60 * proximity).clamp(0.0, 1.0);
+    ScanSounds.instance.play(ScanCue.read, volume: volume);
   }
 
   /// Cloud+Geiger only — show a bottom sheet with the action choices
@@ -333,17 +648,17 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   void _showActionPicker() {
     if (!mounted) return;
 
-    // Hand the radio off to the next screen in a clean state. Locate's
-    // initState sets a single-EPC PreFilter, flips Zebra to SESSION_S0 and
-    // suppresses the per-tag native beep — all correct for proximity work,
-    // all WRONG for a screen the operator is about to scan many fresh
-    // tags on. Because we navigate via Navigator.push, locate stays in
-    // the stack and its dispose() doesn't run, so those settings would
-    // persist into Status Change / Encode / Re-encode and silently filter
-    // the inventory down to one tag. Reset them here so the next screen
-    // sees the full RF field, and stop any inventory that might still be
-    // running.
+    // Hand the radio off to the next screen in a clean state. This screen
+    // installs a single-EPC pre-filter, flips to SESSION_S0 and suppresses the
+    // per-tag native beep — all correct for proximity work, all WRONG for a
+    // screen the operator is about to scan many fresh tags on. Because we
+    // navigate via Navigator.push, locate stays in the stack and its dispose()
+    // doesn't run, so those settings would persist into Status Change / Encode
+    // / Re-encode and silently filter inventory down to one tag.
     Future<void> handOffRadio() async {
+      // Mark the radio as no longer ours, so coming back and pulling the
+      // trigger re-arms it instead of scanning with no filter and S1.
+      _radioArmed = false;
       try {
         await RfidVendorChannel.stopChainwayInventory();
       } catch (_) {}
@@ -486,161 +801,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     );
   }
 
-  /// Match the live read EPC against the target. Exact equality first;
-  /// if that fails, fall back to a suffix match on the last 16 hex
-  /// chars (item + serial bits — the company-prefix bits sometimes
-  /// arrive padded or shifted on different SDK versions, which is what
-  /// kept biting earlier "% stays at 0" attempts). Both forms are
-  /// uppercase + alphanumeric only.
-  bool _matchesTarget(String observed) {
-    if (observed == _epcUpper) return true;
-    if (_epcUpper.length < 16 || observed.length < 16) return false;
-    return observed.substring(observed.length - 16) ==
-        _epcUpper.substring(_epcUpper.length - 16);
-  }
-
-  void _onGeigerRead(RfidTagRead read) {
-    if (!_scanning) return;
-    if (!mounted) return;
-    final epc = read.epcHex24.toUpperCase();
-    final matched = _matchesTarget(epc);
-    // Logcat trace for every read seen by this screen — survives release
-    // builds (developer.log writes to platform logging, unlike print()).
-    // Pair with LOCATE_RFID logs from rfid_manager; together they reveal
-    // whether reads arrive at all AND whether the match logic accepts
-    // them. Filter on device: `adb logcat -s flutter:*`.
-    developer.log(
-      'epc=$epc target=$_epcUpper match=$matched rssi=${read.rssi}',
-      name: 'LOCATE_SCREEN',
-    );
-    // Maintain a rolling 3-deep buffer of EPCs heard (any tag) so the
-    // on-screen diagnostic banner can show whether reads are arriving
-    // at all. The previous "stuck at 0%" reports were impossible to
-    // diagnose without this — operator couldn't tell whether the radio
-    // was silent or whether the target match was failing.
-    final readRssi = read.rssi;
-    setState(() {
-      if (readRssi != null) _lastSeenRssi = readRssi;
-      if (_lastSeenEpcs.isEmpty || _lastSeenEpcs.first != epc) {
-        _lastSeenEpcs.insert(0, epc);
-        if (_lastSeenEpcs.length > 3) _lastSeenEpcs.removeLast();
-      }
-    });
-    if (matched) {
-      const fallbackRssiOnNull = -65;
-      final effectiveRssi = read.rssi ?? _liveRssi ?? fallbackRssiOnNull;
-      final raw = rssiToProximity01(effectiveRssi);
-      // Adaptive EMA: when the operator closes in on the tag (raw goes
-      // UP), track fast — 70 % weight on the new read — so the dial
-      // responds quickly to genuine approach. When RSSI dips (raw goes
-      // DOWN), only 40 % weight, which damps the natural ±2-3 dB read
-      // jitter at touching range that the pre-1.2.92 raw mapping made
-      // look like instability on screen. Net effect: dial leaps up
-      // toward the tag, settles steady when held in place.
-      final delta = raw - _proximity01;
-      final alpha = delta >= 0 ? 0.7 : 0.4;
-      final smoothed = (_proximity01 + delta * alpha).clamp(0.0, 1.0);
-      setState(() {
-        _liveRssi = effectiveRssi;
-        _proximity01 = smoothed;
-        _lastTargetReadAt = DateTime.now();
-        _targetReads += 1;
-        if (read.rssi == null) _nullRssiReads += 1;
-      });
-      _bloom.animateTo(_proximity01, duration: const Duration(milliseconds: 100));
-      return;
-    }
-    setState(() => _otherReads += 1);
-    // Track the strongest non-target tag. Only used as a "we're alive but
-    // wrong tag in range" diagnostic — does not affect the percentage.
-    final r = read.rssi;
-    if (r != null && (r > (_otherRssi ?? -200))) {
-      setState(() {
-        _otherEpc = epc;
-        _otherRssi = r;
-        _otherSeenAt = DateTime.now();
-      });
-    }
-  }
-
-  /// Decay the target proximity if we haven't heard from the tag in a
-  /// while. RFD8500 routinely gaps for 400-800 ms when the antenna is
-  /// off-axis even though the operator hasn't moved, so the previous
-  /// 700 ms threshold made the meter flicker downward in place. 1300 ms
-  /// gives the radio a couple of natural read frames to recover before
-  /// we start decaying.
-  void _scheduleStaleSweep() {
-    _staleTimer?.cancel();
-    _staleTimer = Timer.periodic(const Duration(milliseconds: 150), (_) {
-      if (!mounted || !_scanning) return;
-      final last = _lastTargetReadAt;
-      if (last == null) return;
-      final age = DateTime.now().difference(last).inMilliseconds;
-      if (age > 1300 && _proximity01 > 0) {
-        final next = (_proximity01 * 0.85);
-        setState(() {
-          _proximity01 = next < 0.04 ? 0 : next;
-          if (_proximity01 == 0) _liveRssi = null;
-        });
-        _bloom.animateTo(_proximity01,
-            duration: const Duration(milliseconds: 150));
-      }
-    });
-  }
-
-  /// Fast-poll cadence engine. The earlier design slept for the FULL
-  /// computed beep interval, so if the operator's aim closed from 30 %
-  /// to 95 % during a 700 ms slow-band wait the cadence didn't speed up
-  /// until the next beep fired — felt sluggish. This tick runs every
-  /// 40 ms and decides on each pass whether enough time has elapsed
-  /// since the previous beep at the CURRENT proximity. That keeps
-  /// cadence locked to actual proximity at ~40 ms granularity instead
-  /// of being a step behind.
-  DateTime _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
-  void _scheduleBeeps() {
-    _beepTimer?.cancel();
-    _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
-    void tick() {
-      if (!_scanning || !mounted) return;
-      if (_proximity01 > 0.02) {
-        final now = DateTime.now();
-        final sinceLast = now.difference(_lastBeepAt).inMilliseconds;
-        if (sinceLast >= _beepDelayMs(_proximity01)) {
-          _playProximityBeep(_proximity01);
-          _lastBeepAt = now;
-        }
-      }
-      _beepTimer = Timer(const Duration(milliseconds: 40), tick);
-    }
-
-    tick();
-  }
-
-  /// Piecewise cadence with a deliberately wider slow-band gradient so
-  /// the operator can hear distance change inside the lower 90 %:
-  ///   * `[0, 0.9)`   linear 900 -> 350 ms (≈ 2.5x speedup, 1.1 -> 2.9 Hz)
-  ///   * `[0.9, 1.0]` linear 180 -> 50 ms  (frantic chirp, 5.5 -> 20 Hz)
-  /// The 90 % boundary intentionally jumps from 350 ms straight to 180 ms
-  /// — that abrupt acceleration is the "you're on top of it" cue.
-  int _beepDelayMs(double p) {
-    if (p < 0.9) {
-      return (900 - (p / 0.9) * 550).round().clamp(350, 900);
-    }
-    return (180 - ((p - 0.9) / 0.1) * 130).round().clamp(50, 180);
-  }
-
-  /// Proximity beep routed through the native SoundPool (same path that
-  /// already drives start/stop/success/error cues reliably). The
-  /// audioplayers BytesSource path the screen used pre-1.2.87 was
-  /// silently no-oping in release builds on some devices — the native
-  /// SoundPool sample (registered as ScanCue.read) is short, low-latency,
-  /// and unaffected by `setTagBeepSuppressed`, which only gates the
-  /// auto-beep the SDK fires per raw tag read.
-  void _playProximityBeep(double proximity) {
-    final volume = (0.35 + 0.65 * proximity).clamp(0.0, 1.0);
-    ScanSounds.instance.play(ScanCue.read, volume: volume);
-  }
-
   // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
@@ -675,37 +835,24 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               SizedBox(height: 16.h),
               _StatusBar(
                 scanning: _scanning,
-                rssi: _liveRssi,
+                rssi: _rssiOut,
                 epcValid: _epcValid,
               ),
               SizedBox(height: 24.h),
               Expanded(
                 child: Center(
-                  child: _RadarVisualizer(
-                    sweep: _sweep,
-                    bloom: _bloom,
-                    scanning: _scanning,
-                    proximity01: _proximity01,
+                  child: RepaintBoundary(
+                    child: _RadarVisualizer(
+                      sweep: _sweep,
+                      proximity: _proximity,
+                      scanning: _scanning,
+                    ),
                   ),
                 ),
               ),
-              _DiagnosticHint(
-                scanning: _scanning,
-                hasTargetSignal: _liveRssi != null,
-                otherEpc: _otherEpc,
-                otherRssi: _otherRssi,
-                otherSeenAt: _otherSeenAt,
-              ),
+              _DiagnosticHint(scanning: _scanning, diag: _diag),
               if (_scanning)
-                _LiveDiagnosticBanner(
-                  targetReads: _targetReads,
-                  otherReads: _otherReads,
-                  nullRssiReads: _nullRssiReads,
-                  lastSeenEpcs: _lastSeenEpcs,
-                  lastSeenRssi: _lastSeenRssi,
-                  targetEpc: _epcUpper,
-                  liveProximity01: _proximity01,
-                ),
+                _LiveDiagnosticBanner(diag: _diag, targetEpc: _epcUpper),
               SizedBox(height: 12.h),
               // Cloud+Geiger mode only: "Take an action" routes the operator
               // straight from this located tag into Status Change / Encode /
@@ -721,7 +868,16 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 enabled: _epcValid,
               ),
               SizedBox(height: 8.h),
-              const RfidPowerSlider(defaultDbm: 30),
+              RfidPowerSlider(
+                defaultDbm: _defaultPowerDbm,
+                // Route through the session override rather than pushing
+                // straight to the radio, so a later settings sync can't
+                // silently undo the operator's choice mid-sweep.
+                onCommit: (dbm) {
+                  _powerDbm = dbm;
+                  unawaited(_rfid?.setSessionPowerOverrideDbm(dbm));
+                },
+              ),
               SizedBox(height: 4.h),
             ],
           ),
@@ -732,7 +888,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Header — EPC (left) / BIN (right)
+// Header — EPC
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _HeaderRow extends StatelessWidget {
@@ -923,7 +1079,7 @@ class _StatusBar extends StatelessWidget {
   });
 
   final bool scanning;
-  final int? rssi;
+  final ValueListenable<int?> rssi;
   final bool epcValid;
 
   @override
@@ -958,12 +1114,16 @@ class _StatusBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          Text(
-            rssi != null ? 'RSSI: $rssi dBm' : 'RSSI: —',
-            style: GoogleFonts.spaceGrotesk(
-              fontSize: 11.sp,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF3D4949),
+          // Only this label rebuilds as RSSI moves.
+          ValueListenableBuilder<int?>(
+            valueListenable: rssi,
+            builder: (_, v, __) => Text(
+              v != null ? 'RSSI: $v dBm' : 'RSSI: —',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF3D4949),
+              ),
             ),
           ),
         ],
@@ -990,7 +1150,20 @@ class _BlinkingDotState extends State<_BlinkingDot>
     _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
+    );
+    if (widget.active) _c.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BlinkingDot old) {
+    super.didUpdateWidget(old);
+    // Don't leave a ticker spinning while idle — it wakes the engine every
+    // frame for a dot nobody is watching.
+    if (widget.active && !_c.isAnimating) {
+      _c.repeat(reverse: true);
+    } else if (!widget.active && _c.isAnimating) {
+      _c.stop();
+    }
   }
 
   @override
@@ -1009,15 +1182,17 @@ class _BlinkingDotState extends State<_BlinkingDot>
             BoxDecoration(color: widget.color, shape: BoxShape.circle),
       );
     }
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, __) => Opacity(
-        opacity: 0.4 + 0.6 * _c.value,
-        child: Container(
-          width: 8,
-          height: 8,
-          decoration:
-              BoxDecoration(color: widget.color, shape: BoxShape.circle),
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) => Opacity(
+          opacity: 0.4 + 0.6 * _c.value,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration:
+                BoxDecoration(color: widget.color, shape: BoxShape.circle),
+          ),
         ),
       ),
     );
@@ -1031,15 +1206,13 @@ class _BlinkingDotState extends State<_BlinkingDot>
 class _RadarVisualizer extends StatelessWidget {
   const _RadarVisualizer({
     required this.sweep,
-    required this.bloom,
+    required this.proximity,
     required this.scanning,
-    required this.proximity01,
   });
 
   final AnimationController sweep;
-  final AnimationController bloom;
+  final ValueListenable<double> proximity;
   final bool scanning;
-  final double proximity01;
 
   @override
   Widget build(BuildContext context) {
@@ -1061,13 +1234,17 @@ class _RadarVisualizer extends StatelessWidget {
                   ),
                 ),
                 ..._rangeCircles(size),
-                AnimatedBuilder(
-                  animation: bloom,
-                  builder: (_, __) {
-                    final p = bloom.value;
+                // Proximity halo. blurRadius/spreadRadius are deliberately
+                // capped well below the previous 30→100 / 4→16 ramp: a
+                // large-radius BoxShadow is one of the most expensive things
+                // you can repaint, and at 30 Hz on a rugged handheld's GPU it
+                // was a measurable share of the frame budget by itself.
+                ValueListenableBuilder<double>(
+                  valueListenable: proximity,
+                  builder: (_, p, __) {
                     return Container(
-                      width: (size * (0.55 + 0.30 * p)),
-                      height: (size * (0.55 + 0.30 * p)),
+                      width: size * (0.55 + 0.30 * p),
+                      height: size * (0.55 + 0.30 * p),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppColors.primary
@@ -1076,8 +1253,8 @@ class _RadarVisualizer extends StatelessWidget {
                           BoxShadow(
                             color: AppColors.primary
                                 .withValues(alpha: 0.25 + 0.40 * p),
-                            blurRadius: 30 + 70 * p,
-                            spreadRadius: 4 + 12 * p,
+                            blurRadius: 20 + 28 * p,
+                            spreadRadius: 3 + 7 * p,
                           ),
                         ],
                       ),
@@ -1085,23 +1262,28 @@ class _RadarVisualizer extends StatelessWidget {
                   },
                 ),
                 if (scanning)
-                  AnimatedBuilder(
-                    animation: sweep,
-                    builder: (_, __) => CustomPaint(
-                      size: Size(size, size),
-                      painter: _SweepPainter(
-                        angle: sweep.value * 2 * math.pi,
-                        proximity: proximity01,
+                  RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([sweep, proximity]),
+                      builder: (_, __) => CustomPaint(
+                        size: Size(size, size),
+                        painter: _SweepPainter(
+                          angle: sweep.value * 2 * math.pi,
+                          proximity: proximity.value,
+                        ),
                       ),
                     ),
                   ),
-                // Central dial — raw value, no tween. RFD8500 reads land
-                // every ~100-150 ms; any artificial smoothing on top of
-                // that adds visible lag between the operator's aim and
-                // the percentage on screen. The bloom halo (animated
-                // separately via _bloom) still eases for visual polish;
-                // the number itself just tracks _proximity01.
-                _CoreDial(percent: (proximity01 * 100).round()),
+                // Central dial — tracks the engine's smoothed value with no
+                // further tweening. The smoothing already happens at a fixed
+                // rate in _engineTick; layering a widget animation on top of
+                // it would just add visible lag between the operator's aim
+                // and the number on screen.
+                ValueListenableBuilder<double>(
+                  valueListenable: proximity,
+                  builder: (_, p, __) =>
+                      _CoreDial(percent: (p * 100).round()),
+                ),
               ],
             ),
           );
@@ -1220,45 +1402,39 @@ class _CoreDial extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _DiagnosticHint extends StatelessWidget {
-  const _DiagnosticHint({
-    required this.scanning,
-    required this.hasTargetSignal,
-    required this.otherEpc,
-    required this.otherRssi,
-    required this.otherSeenAt,
-  });
+  const _DiagnosticHint({required this.scanning, required this.diag});
 
   final bool scanning;
-  final bool hasTargetSignal;
-  final String? otherEpc;
-  final int? otherRssi;
-  final DateTime? otherSeenAt;
-
-  bool get _showOther {
-    if (!scanning || hasTargetSignal) return false;
-    if (otherEpc == null || otherSeenAt == null) return false;
-    return DateTime.now().difference(otherSeenAt!) <
-        const Duration(seconds: 5);
-  }
+  final ValueListenable<_Diag> diag;
 
   @override
   Widget build(BuildContext context) {
-    if (!_showOther) {
-      return SizedBox(height: 32.h);
-    }
-    return Container(
-      height: 32.h,
-      alignment: Alignment.center,
-      child: Text(
-        'TARGET NOT IN RANGE · NEAREST: ${otherEpc!.substring(otherEpc!.length - 8)} (${otherRssi}dBm)',
-        textAlign: TextAlign.center,
-        style: GoogleFonts.spaceGrotesk(
-          fontSize: 10.sp,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.2,
-          color: const Color(0xFF6D7979),
-        ),
-      ),
+    if (!scanning) return SizedBox(height: 32.h);
+    return ValueListenableBuilder<_Diag>(
+      valueListenable: diag,
+      builder: (_, d, __) {
+        final show = d.targetReads == 0 &&
+            d.otherFresh &&
+            d.otherEpc != null &&
+            d.otherRssi != null;
+        if (!show) return SizedBox(height: 32.h);
+        final epc = d.otherEpc!;
+        return Container(
+          height: 32.h,
+          alignment: Alignment.center,
+          child: Text(
+            'TARGET NOT IN RANGE · NEAREST: '
+            '${epc.substring(epc.length - 8)} (${d.otherRssi}dBm)',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.2,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -1366,105 +1542,103 @@ class _TakeActionButton extends StatelessWidget {
 /// Live diagnostic banner — visible only while scanning. Shows the data
 /// that lets the operator (and the dev) see exactly why the % is or
 /// isn't climbing:
-///   * counts: target / others / no-RSSI
+///   * counts: target / others / no-RSSI, plus the live target read rate
 ///   * last seen EPC + RSSI (any tag)
-///   * computed proximity %
 /// If TARGET stays at 0 while OTHERS climbs, the radio hears tags but
 /// the EPC match is failing — operator should compare LAST SEEN against
 /// TARGET to spot a format mismatch. If both stay at 0, the radio isn't
-/// hearing anything.
+/// hearing anything. TGT/s is the tell for pre-filter health: with the
+/// filter installed a tag in range should sit in the hundreds, and a
+/// double-digit rate means the filter didn't take.
+///
+/// Repaints at ~5 Hz off the diag notifier, independently of the meter.
 class _LiveDiagnosticBanner extends StatelessWidget {
-  const _LiveDiagnosticBanner({
-    required this.targetReads,
-    required this.otherReads,
-    required this.nullRssiReads,
-    required this.lastSeenEpcs,
-    required this.lastSeenRssi,
-    required this.targetEpc,
-    required this.liveProximity01,
-  });
+  const _LiveDiagnosticBanner({required this.diag, required this.targetEpc});
 
-  final int targetReads;
-  final int otherReads;
-  final int nullRssiReads;
-  final List<String> lastSeenEpcs;
-  final int? lastSeenRssi;
+  final ValueListenable<_Diag> diag;
   final String targetEpc;
-  final double liveProximity01;
 
   @override
   Widget build(BuildContext context) {
-    final pctNum = (liveProximity01 * 100).clamp(0, 100).toStringAsFixed(0);
-    final tone = targetReads > 0
-        ? const Color(0xFF1B7F4F)            // green — match found
-        : (otherReads > 0
-            ? const Color(0xFFB87A00)         // amber — radio alive, no match
-            : const Color(0xFFB23A3A));       // red — radio silent
-    return Container(
-      margin: EdgeInsets.only(top: 8.h),
-      padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 10.h),
-      decoration: BoxDecoration(
-        color: tone.withValues(alpha: 0.06),
-        border: Border.all(color: tone.withValues(alpha: 0.4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return ValueListenableBuilder<_Diag>(
+      valueListenable: diag,
+      builder: (_, d, __) {
+        final tone = d.targetReads > 0
+            ? const Color(0xFF1B7F4F) // green — match found
+            : (d.otherReads > 0
+                ? const Color(0xFFB87A00) // amber — radio alive, no match
+                : const Color(0xFFB23A3A)); // red — radio silent
+        return Container(
+          margin: EdgeInsets.only(top: 8.h),
+          padding: EdgeInsets.fromLTRB(12.w, 10.h, 12.w, 10.h),
+          decoration: BoxDecoration(
+            color: tone.withValues(alpha: 0.06),
+            border: Border.all(color: tone.withValues(alpha: 0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                color: tone,
-                child: Text(
-                  targetReads > 0
-                      ? 'MATCH $pctNum%'
-                      : (otherReads > 0 ? 'NO MATCH' : 'NO READS'),
-                  style: GoogleFonts.spaceGrotesk(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4,
-                    color: Colors.white,
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                    color: tone,
+                    child: Text(
+                      d.targetReads > 0
+                          ? 'MATCH ${d.readsPerSec}/s'
+                          : (d.otherReads > 0 ? 'NO MATCH' : 'NO READS'),
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.4,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: Text(
+                      'TGT ${d.targetReads} · OTH ${d.otherReads}'
+                      '${d.nullRssiReads > 0 ? ' · NULL-RSSI ${d.nullRssiReads}' : ''}'
+                      '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: const Color(0xFF333333),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              SizedBox(width: 8.w),
+              SizedBox(height: 4.h),
               Text(
-                'TGT $targetReads · OTH $otherReads'
-                '${nullRssiReads > 0 ? ' · NULL-RSSI $nullRssiReads' : ''}'
-                '${lastSeenRssi != null ? ' · ${lastSeenRssi}dBm' : ''}',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: const Color(0xFF333333),
+                'TGT  $targetEpc',
+                style: GoogleFonts.firaCode(
+                  fontSize: 9.sp,
+                  color: const Color(0xFF555555),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              ...d.lastSeenEpcs.map(
+                (e) => Text(
+                  'SEEN $e',
+                  style: GoogleFonts.firaCode(
+                    fontSize: 9.sp,
+                    color: e == targetEpc
+                        ? const Color(0xFF1B7F4F)
+                        : const Color(0xFF555555),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          SizedBox(height: 4.h),
-          Text(
-            'TGT  $targetEpc',
-            style: GoogleFonts.firaCode(
-              fontSize: 9.sp,
-              color: const Color(0xFF555555),
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (lastSeenEpcs.isNotEmpty)
-            ...lastSeenEpcs.map(
-              (e) => Text(
-                'SEEN $e',
-                style: GoogleFonts.firaCode(
-                  fontSize: 9.sp,
-                  color: e == targetEpc
-                      ? const Color(0xFF1B7F4F)
-                      : const Color(0xFF555555),
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

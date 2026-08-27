@@ -129,7 +129,13 @@ class ScannerLogcatBridge(
       })
     }
     val sink = tagSink ?: return
-    mainHandler.post { sink.success(mapOf("epc" to clean, "rssi" to 0)) }
+    // rssi MUST be null, never 0. A logcat-recovered EPC carries no signal
+    // strength at all, but 0 is a *valid-looking* dBm value: the Locate screen's
+    // dBm→proximity mapping saturates anything stronger than -45 dBm, so a
+    // literal 0 pinned the proximity meter to 100 % and it stayed there no
+    // matter how far the operator walked from the tag. null routes to the
+    // screen's explicit "no signal on this read" path instead.
+    mainHandler.post { sink.success(mapOf("epc" to clean, "rssi" to null)) }
   }
 
   fun dispose() {
