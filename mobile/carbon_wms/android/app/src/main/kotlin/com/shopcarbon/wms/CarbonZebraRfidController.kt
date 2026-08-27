@@ -117,6 +117,17 @@ class CarbonZebraRfidController(
   @Volatile private var currentPrefilterEpc: String? = null
   @Volatile private var currentSessionZero: Boolean? = null
 
+  /// Transmit-power index last written to antenna 1, or -1 for "unknown".
+  /// startInventory re-applied power on EVERY start, which is a
+  /// getAntennaRfConfig + setAntennaRfConfig pair — two SPP round-trips sitting
+  /// between the operator's trigger pull and the radio actually transmitting,
+  /// for a value that almost never changes between pulls.
+  @Volatile private var currentPowerIdx: Int = -1
+
+  /// Beeper volume last written. Same story: QUIET on every scan start and HIGH
+  /// on every stop is another round-trip per pull each way.
+  @Volatile private var currentBeeperVolume: BEEPER_VOLUME? = null
+
   /** True while UHF inventory is streaming. Lets Dart skip redundant starts. */
   fun isInventoryActive(): Boolean = inventoryActive
 
@@ -234,12 +245,12 @@ class CarbonZebraRfidController(
    * next genuine decode still beeps. Best-effort; never throws.
    */
   private fun silenceModeSwitchBeep(r: RFIDReader, block: () -> Unit) {
-    runCatching { r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP) }
+    setBeeperVolumeCached(r, BEEPER_VOLUME.QUIET_BEEP)
     try {
       block()
     } finally {
       try { Thread.sleep(150) } catch (_: InterruptedException) { /* ignore */ }
-      runCatching { r.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP) }
+      setBeeperVolumeCached(r, BEEPER_VOLUME.HIGH_BEEP)
     }
   }
 
@@ -572,12 +583,7 @@ class CarbonZebraRfidController(
         // inventory burst. Restored to HIGH in stopInventoryAsync so
         // the sled is back at the resting volume by the time anything
         // outside scan (connect/disconnect chime, power chime) fires.
-        try {
-          r.Config.setBeeperVolume(BEEPER_VOLUME.QUIET_BEEP)
-          Log.d(TAG, "BeeperVolume -> QUIET_BEEP (scan-start)")
-        } catch (e: Exception) {
-          Log.w(TAG, "scan-start setBeeperVolume failed: ${e.message}")
-        }
+        setBeeperVolumeCached(r, BEEPER_VOLUME.QUIET_BEEP)
         // Retry the START perform() the same way the resume/stop paths do. A
         // single silent BUSY here used to strand inventoryActive=false — which
         // the eventReadNotify gate then turned into a "scanning but frozen, zero
@@ -665,11 +671,8 @@ class CarbonZebraRfidController(
       // (mode change → done elsewhere, disconnect, power) fire audibly,
       // including after a force-close because NVRAM is now HIGH. This
       // is the central guarantee of the at-rest=HIGH policy.
-      try {
-        reader?.takeIf { it.isConnected }?.Config?.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
-        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (scan-stop)")
-      } catch (e: Exception) {
-        Log.w(TAG, "scan-stop setBeeperVolume failed: ${e.message}")
+      reader?.takeIf { it.isConnected }?.let {
+        setBeeperVolumeCached(it, BEEPER_VOLUME.HIGH_BEEP)
       }
     }
   }
@@ -813,6 +816,10 @@ class CarbonZebraRfidController(
     // commit the new EPC, so writeWait returned without exception while
     // the silicon rejected the write. 50+ "defective" tags traced back to
     // this. Force max power for the write window, restore afterwards.
+    // This routine drives setTransmitPowerIndex directly (boost, power-cycle,
+    // verify, restore), so the applyTransmitPowerDbm cache can no longer be
+    // trusted. Drop it for the duration and leave it dropped on exit.
+    currentPowerIdx = -1
     val levels = r.ReaderCapabilities.transmitPowerLevelValues
     val prevPowerIdx = runCatching {
       r.Config.Antennas.getAntennaRfConfig(1).getTransmitPowerIndex()
@@ -1052,6 +1059,7 @@ class CarbonZebraRfidController(
             r.Config.Antennas.setAntennaRfConfig(1, cfg)
             Log.d(TAG, "performWriteEpc finally: restored power idx=$prevPowerIdx after early exit")
           }
+          currentPowerIdx = prevPowerIdx
         }.onFailure { Log.w(TAG, "performWriteEpc finally: restore power failed: ${it.message}") }
       }
       if (wasRunning) {
@@ -1188,6 +1196,11 @@ class CarbonZebraRfidController(
         maxRaw <= 330 -> 10 to "deci-dBm"
         else -> 100 to "centi-dBm"
       }
+      if (idx == currentPowerIdx) {
+        // Already there. Skipping saves the get/set pair — the single biggest
+        // avoidable chunk of trigger-to-transmit latency on a repeat scan.
+        return true
+      }
       val pickedRaw = levels[idx]
       val pickedDbm = pickedRaw / divisor
       val config = r.Config.Antennas.getAntennaRfConfig(1)
@@ -1198,6 +1211,7 @@ class CarbonZebraRfidController(
       // fields at whatever the radio's region profile chose at connect
       // time; we only want the power index here.
       r.Config.Antennas.setAntennaRfConfig(1, config)
+      currentPowerIdx = idx
       Log.d(
         TAG,
         "applyTransmitPowerDbm: tgt=${tgt}dBm idx=$idx picked=${pickedDbm}dBm (raw=$pickedRaw $unit) levelsLen=${levels.size}",
@@ -1206,7 +1220,25 @@ class CarbonZebraRfidController(
     } catch (e: Exception) {
       Log.w(TAG, "applyTransmitPowerDbm failed: ${e.javaClass.simpleName}: ${e.message}")
       lastError = e.message ?: e.javaClass.simpleName
+      currentPowerIdx = -1
       false
+    }
+  }
+
+  /**
+   * Write the sled's beeper volume only when it isn't already there. Each write
+   * is an SPP round-trip, and the scan-start/scan-stop pair fired one every
+   * time regardless of the current state.
+   */
+  private fun setBeeperVolumeCached(r: RFIDReader, volume: BEEPER_VOLUME) {
+    if (currentBeeperVolume == volume) return
+    try {
+      r.Config.setBeeperVolume(volume)
+      currentBeeperVolume = volume
+      Log.d(TAG, "BeeperVolume -> $volume")
+    } catch (e: Exception) {
+      Log.w(TAG, "setBeeperVolume($volume) failed: ${e.message}")
+      currentBeeperVolume = null
     }
   }
 
@@ -1307,12 +1339,7 @@ class CarbonZebraRfidController(
     // a scan + stop cycle manually to prime it.
     val rJustConnected = reader
     if (rJustConnected != null && rJustConnected.isConnected) {
-      try {
-        rJustConnected.Config.setBeeperVolume(BEEPER_VOLUME.HIGH_BEEP)
-        Log.d(TAG, "BeeperVolume -> HIGH_BEEP (post-connect, at-rest)")
-      } catch (e: Exception) {
-        Log.w(TAG, "post-connect setBeeperVolume failed: ${e.message}")
-      }
+      setBeeperVolumeCached(rJustConnected, BEEPER_VOLUME.HIGH_BEEP)
     }
     val triggerInfo = TriggerInfo()
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
@@ -1514,6 +1541,8 @@ class CarbonZebraRfidController(
     currentTriggerModeRfid = null
     currentPrefilterEpc = null
     currentSessionZero = null
+    currentPowerIdx = -1
+    currentBeeperVolume = null
 
     // Beeper restore lives in stopInventoryAsync now — by the time
     // disconnect runs, the sled is already back at HIGH_BEEP from the
@@ -1578,33 +1607,47 @@ class CarbonZebraRfidController(
     readers = null
   }
 
-  private fun emitTag(epc: String, rssi: Short?) {
+  /**
+   * Emit one read-event's worth of tags as a SINGLE Flutter message.
+   *
+   * The previous shape was one `mainHandler.post` + one EventChannel message
+   * per tag. With a Locate pre-filter and SESSION_S0 the RFD8500 reports a
+   * single tag 200-400 times a second, so that was several hundred main-thread
+   * runnables per second, each with its own map encode, channel hop and Dart
+   * decode. The queue backed up, and a backed-up queue is latency the operator
+   * feels directly as the meter lagging their hand.
+   *
+   * Batching collapses that to one hop per read event. The Dart side accepts
+   * both shapes, so nothing that consumed single maps had to change.
+   *
+   * NOTE: deliberately NO per-tag Log.d here either — one logcat write per read
+   * saturated the log buffer, and ScannerLogcatBridge (which tails the WHOLE
+   * system log) then had to regex-scan every one of those lines.
+   */
+  private fun emitTags(tags: Array<TagData>) {
     val sink = tagSink ?: return
-    val clean = epc.trim().uppercase()
-    // NOTE: deliberately NO per-tag Log.d here. With a Locate-Tag pre-filter +
-    // SESSION_S0 the RFD8500 reports 200-400 tags/sec for a single tag; one
-    // logcat write per read saturated the log buffer, and ScannerLogcatBridge
-    // (which tails the WHOLE system log) then had to regex-scan every one of
-    // those lines. That pair alone was burning a core during a geiger sweep.
-    val rssiRaw = rssi?.toInt()
-    // Peak RSSI is a negative dBm figure. Some firmware revisions report 0 (or
-    // a positive value) when the reading is unavailable — passing that through
-    // made the Locate screen compute 100 % proximity for a tag that might be
-    // metres away, which is the "meter pins at full and never drops" symptom.
-    // Anything outside a plausible UHF window is treated as "no RSSI".
-    val rssiInt = rssiRaw?.takeIf { it < 0 && it > -110 }
-    // Native-originated per-tag beep — fire before sink post so audio feedback
-    // does not wait for Dart scheduling. The beep falls back to -56 when RSSI
-    // is missing (mid-range volume), but the WIRE payload to Dart must keep
-    // `null` so the Locate-Tag screen's fallbackRssiOnNull path can fire
-    // instead of pinning the proximity bar near 69% (the value a -56 dBm
-    // reading would produce on the rssiToProximity01 formula).
-    ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssiInt ?: -56))
-    val payload: Map<String, Any?> = if (rssiInt != null) {
-      mapOf("epc" to clean, "rssi" to rssiInt)
-    } else {
-      mapOf("epc" to clean, "rssi" to null)
+    val payload = ArrayList<Map<String, Any?>>(tags.size)
+    for (t in tags) {
+      val id = t.getTagID() ?: continue
+      if (id.isBlank()) continue
+      val rssiRaw = try {
+        t.getPeakRSSI().toInt()
+      } catch (_: Exception) {
+        null
+      }
+      // Peak RSSI is a negative dBm figure. Some firmware revisions report 0
+      // (or a positive value) when the reading is unavailable — passing that
+      // through made the Locate screen compute 100 % proximity for a tag that
+      // might be metres away, the "meter pins at full and never drops"
+      // symptom. Anything outside a plausible UHF window is "no RSSI".
+      val rssi = rssiRaw?.takeIf { it < 0 && it > -110 }
+      // Native-originated per-tag beep — fired here so audio feedback does not
+      // wait on Dart scheduling. Falls back to -56 for volume only; the WIRE
+      // payload keeps null so the Locate screen can take its own no-RSSI path.
+      ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi ?: -56))
+      payload.add(mapOf("epc" to id.trim().uppercase(), "rssi" to rssi))
     }
+    if (payload.isEmpty()) return
     mainHandler.post { sink.success(payload) }
   }
 
@@ -1643,18 +1686,8 @@ class CarbonZebraRfidController(
         } catch (_: Exception) {
           null
         }
-      if (tags == null) return
-      for (t in tags) {
-        val id = t.getTagID() ?: continue
-        if (id.isBlank()) continue
-        val rssi =
-          try {
-            t.getPeakRSSI()
-          } catch (_: Exception) {
-            null
-          }
-        emitTag(id, rssi)
-      }
+      if (tags == null || tags.isEmpty()) return
+      emitTags(tags)
     }
 
     override fun eventStatusNotify(rfidStatusEvents: RfidStatusEvents?) {

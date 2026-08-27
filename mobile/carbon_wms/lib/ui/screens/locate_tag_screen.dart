@@ -11,6 +11,7 @@ import 'package:carbon_wms/services/handheld_runtime_config.dart'
     show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
+import 'package:carbon_wms/hardware/locate_bearing.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
@@ -192,6 +193,47 @@ class LocateTagScreen extends StatefulWidget {
   State<LocateTagScreen> createState() => _LocateTagScreenState();
 }
 
+/// What the direction panel is currently able to tell the operator.
+enum DirectionStatus {
+  /// Operator switched guidance off — panel is a tap target to switch it back.
+  off,
+
+  /// Guidance is on but there isn't a usable fix yet: not enough of an arc has
+  /// been swept, or the field is too flat to pick a peak out of. Deliberately
+  /// silent rather than pointing somewhere plausible-but-wrong.
+  searching,
+
+  /// A bearing we're prepared to stand behind.
+  locked,
+}
+
+/// Immutable snapshot of the direction panel, published at ~10 Hz.
+class _DirectionState {
+  const _DirectionState({
+    required this.status,
+    required this.headline,
+    required this.detail,
+    this.relativeDeg,
+  });
+
+  const _DirectionState.off()
+      : status = DirectionStatus.off,
+        headline = 'OFF DIRECTIONS',
+        detail = 'TAP TO ENABLE',
+        relativeDeg = null;
+
+  const _DirectionState.searching()
+      : status = DirectionStatus.searching,
+        headline = 'OFF DIRECTIONS',
+        detail = 'SWEEP LEFT ↔ RIGHT TO GET A BEARING',
+        relativeDeg = null;
+
+  final DirectionStatus status;
+  final String headline;
+  final String detail;
+  final double? relativeDeg;
+}
+
 /// Immutable snapshot of the diagnostic counters, published at a low rate so
 /// the debug banner never drags the proximity engine down with it.
 class _Diag {
@@ -233,19 +275,31 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
 
   // ── Engine tuning ─────────────────────────────────────────────────────────
-  /// Signal-processing / UI-publish rate. 30 Hz is smooth to the eye and
-  /// gives ~33 ms beep-cadence granularity, while being ~10x less work than
-  /// the old "rebuild on every read" behaviour at RFD8500 read rates.
-  static const int _tickMs = 33;
+  /// Signal-processing / UI-publish rate. 60 Hz — one pass per display frame,
+  /// so the meter can move on every frame the screen can actually draw and the
+  /// beep cadence is decided with ~16 ms granularity. This is affordable only
+  /// because reads no longer drive rebuilds: the tick does a few dozen
+  /// arithmetic ops and writes at most three notifiers.
+  static const int _tickMs = 16;
 
   /// Grace period after the last target read before proximity starts falling.
   /// Covers the natural read gap when the antenna goes momentarily off-axis
   /// without letting a genuine walk-away sit at "hot".
-  static const int _holdMs = 220;
+  static const int _holdMs = 180;
 
   /// Exponential decay time constant once the grace period lapses.
   /// ~1 s from pinned to effectively cold.
-  static const double _decayTauMs = 320;
+  static const double _decayTauMs = 300;
+
+  /// Smoothing time constants, in milliseconds, for the meter closing in and
+  /// falling back. Expressed as TIME rather than a per-tick weight so the feel
+  /// is identical whatever the tick rate or however late a tick actually
+  /// fires — the old fixed alpha silently changed the response curve whenever
+  /// the timer slipped under load, which is exactly when it mattered most.
+  /// Rising is deliberately faster than falling: chasing the tag should feel
+  /// immediate, while backing off shouldn't twitch on read-to-read jitter.
+  static const double _riseTauMs = 35;
+  static const double _fallTauMs = 80;
 
   /// Beep interval at zero proximity / at full proximity (ms). Interpolated
   /// geometrically, so the cadence accelerates smoothly and continuously
@@ -270,6 +324,39 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   final ValueNotifier<double> _proximity = ValueNotifier<double>(0);
   final ValueNotifier<int?> _rssiOut = ValueNotifier<int?>(null);
   final ValueNotifier<_Diag> _diag = ValueNotifier<_Diag>(const _Diag());
+  final ValueNotifier<_DirectionState> _direction =
+      ValueNotifier<_DirectionState>(const _DirectionState.searching());
+
+  // ── Direction finding ────────────────────────────────────────────────────
+  // Entirely additive. It consumes the SAME power-normalised RSSI the
+  // proximity engine already computes and pairs it with device yaw; it does
+  // not touch the radio, the proximity maths, the beep cadence or any shared
+  // state. With [_directionsOn] false the screen behaves exactly as it did
+  // before this feature existed.
+  final BearingEstimator _bearing = BearingEstimator();
+  StreamSubscription<double>? _yawSub;
+  double? _yawDeg;
+  bool _directionsOn = true;
+
+  /// Proximity sampled ~600 ms ago, for the closer/further cue. Needs no
+  /// sensors at all — it's just the trend of the meter we already have.
+  double _trendRefProx = 0;
+  DateTime _trendRefAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _trendDir = 0; // -1 moving away, 0 holding, +1 closing in
+
+  /// Latest power-normalised RSSI, used for the distance estimate.
+  int? _lastNormRssi;
+  int _directionTick = 0;
+
+  // ── Radio health indicator ───────────────────────────────────────────────
+  // Deliberately NOT derived from [_scanning]. The whole value of this dot is
+  // that it can disagree with the button: the RFD8500 rejects config writes
+  // mid-stream, so a resume can silently fail and leave the radio stopped while
+  // the screen still says SCANNING. Polling the controller's own
+  // `inventoryActive` — set only when the SDK's Inventory.perform() actually
+  // succeeded — is the one signal that catches that.
+  Timer? _radioPoll;
+  final ValueNotifier<bool> _radioLive = ValueNotifier<bool>(false);
 
   /// Coarse state that genuinely changes the layout. setState is fine here —
   /// it fires at most once per trigger pull.
@@ -358,9 +445,19 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   int _diagTickCounter = 0;
 
   DateTime _lastBeepAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastTickAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  String get _epcUpper => (widget.targetEpc ?? '').trim().toUpperCase();
-  bool get _epcValid => _epc24.hasMatch(_epcUpper);
+  /// Computed ONCE. This was a getter doing trim + toUpperCase on every
+  /// access, and the read path touches it up to three times per tag — hundreds
+  /// of throwaway strings a second on the UI isolate for a value that cannot
+  /// change while the screen is alive.
+  late final String _epcUpper = (widget.targetEpc ?? '').trim().toUpperCase();
+
+  /// Last 16 hex chars of the target, precomputed for [_matchesTarget].
+  late final String? _epcSuffix16 =
+      _epcUpper.length >= 16 ? _epcUpper.substring(_epcUpper.length - 16) : null;
+
+  late final bool _epcValid = _epc24.hasMatch(_epcUpper);
 
   @override
   void initState() {
@@ -390,6 +487,14 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // Learn the radio's real power ceiling so proximity can be normalised
     // against it at any slider position.
     unawaited(_loadPowerRange());
+    // Poll the radio's own state for the whole time we're on this screen, not
+    // just while scanning — the operator wants to be able to glance at it any
+    // time and know whether the scanner is genuinely running.
+    _radioPoll = Timer.periodic(
+      const Duration(milliseconds: 700),
+      (_) => unawaited(_pollRadio()),
+    );
+    unawaited(_pollRadio());
     // Subscribe to the physical trigger immediately on entry so the very
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
@@ -425,6 +530,8 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // rather than something that happens to be harmless.
     _scanning = false;
     _engine?.cancel();
+    _radioPoll?.cancel();
+    _stopYaw();
     _sweep.dispose();
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
@@ -453,7 +560,19 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _proximity.dispose();
     _rssiOut.dispose();
     _diag.dispose();
+    _direction.dispose();
+    _radioLive.dispose();
     super.dispose();
+  }
+
+  /// Refresh the radio-health dot. Green means the controller reports the
+  /// radio genuinely inventorying; red means it is not, whatever the start /
+  /// stop button currently says.
+  Future<void> _pollRadio() async {
+    final status = await RfidVendorChannel.readerStatus();
+    if (!mounted) return;
+    final live = status != null && status.connected && status.inventoryActive;
+    if (_radioLive.value != live) _radioLive.value = live;
   }
 
   /// Ask the connected radio what it can actually transmit. RFD8500 reports
@@ -571,6 +690,17 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // Every hunt re-calibrates its own top of scale from scratch.
     _strongRef = kLocateStrongDbm;
     _sessionPeakRssi = null;
+    // Bearing evidence is tied to where the operator was standing, so it never
+    // carries across hunts.
+    _bearing.reset();
+    _lastNormRssi = null;
+    _trendRefProx = 0;
+    _trendRefAt = DateTime.fromMillisecondsSinceEpoch(0);
+    _trendDir = 0;
+    _directionTick = 0;
+    _direction.value = _directionsOn
+        ? const _DirectionState.searching()
+        : const _DirectionState.off();
     _otherEpc = null;
     _otherRssi = null;
     _otherSeenAt = null;
@@ -607,44 +737,63 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // trigger pull skips straight past this.
     await _armRadio();
 
+    _startYaw();
     _startEngine();
 
-    // Start via BOTH vendor paths plus the manager. All three are cheap
-    // no-ops on the native side once inventory is already streaming, and the
-    // manager path keeps its internal state consistent for other screens.
-    // Wrapped individually: on a Zebra-only host `startChainwayInventory`
-    // resolves to a native no-op, and on a Chainway-only host
-    // `startZebraInventory` rejects with NOT_CONNECTED — neither should
-    // surface as an unhandled async error.
+    // Only the Zebra start is on the critical path to the radio transmitting.
+    // The other two are belt-and-braces for hosts where the manager's view of
+    // the active driver has drifted, and they are no-ops once inventory is
+    // already streaming — so awaiting them just held _busy (and therefore the
+    // operator's ability to pull the trigger again to stop) for two extra
+    // platform round-trips.
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
-    try {
-      await RfidVendorChannel.startChainwayInventory();
-    } catch (_) {}
-    await m.startLocateScanning();
+    unawaited(RfidVendorChannel.startChainwayInventory().catchError((_) {}));
+    unawaited(m.startLocateScanning());
+  }
+
+  /// Attach the yaw sensor. Only while scanning with guidance on, so the
+  /// sensor is unregistered natively the rest of the time.
+  void _startYaw() {
+    if (!_directionsOn || _yawSub != null) return;
+    _yawSub = RfidVendorChannel.deviceYawStream().listen(
+      (deg) => _yawDeg = deg,
+      onError: (_) {},
+    );
+  }
+
+  void _stopYaw() {
+    unawaited(_yawSub?.cancel());
+    _yawSub = null;
+    _yawDeg = null;
   }
 
   Future<void> _stopScan() async {
+    // Everything the operator can SEE or HEAR happens first, synchronously.
+    // Previously the screen didn't flip out of SCANNING until three awaited
+    // platform calls had come back, so a stop looked frozen for a few hundred
+    // milliseconds. The radio calls below don't need to gate the UI: the
+    // native stop flips its read gate inline, so tags stop reaching us the
+    // instant the call is dispatched.
     ScanSounds.instance.play(ScanCue.stop);
     _engine?.cancel();
     _engine = null;
+    _stopYaw();
     _sweep.stop();
-    await _readSub?.cancel();
-    _readSub = null;
-    try {
-      await RfidVendorChannel.stopZebraInventory();
-    } catch (_) {}
-    try {
-      await RfidVendorChannel.stopChainwayInventory();
-    } catch (_) {}
-    await _rfid?.stopLocateScanning();
-    if (!mounted) return;
-    setState(() => _scanning = false);
     _prox = 0;
     _lastTargetReadAt = null;
     _proximity.value = 0;
     _rssiOut.value = null;
+    if (mounted) setState(() => _scanning = false);
+
+    unawaited(_readSub?.cancel());
+    _readSub = null;
+    try {
+      await RfidVendorChannel.stopZebraInventory();
+    } catch (_) {}
+    unawaited(RfidVendorChannel.stopChainwayInventory().catchError((_) {}));
+    unawaited(_rfid?.stopLocateScanning());
   }
 
   // ── Read path ────────────────────────────────────────────────────────────
@@ -703,15 +852,19 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   /// uppercase + alphanumeric only.
   bool _matchesTarget(String observed) {
     if (observed == _epcUpper) return true;
-    if (_epcUpper.length < 16 || observed.length < 16) return false;
-    return observed.substring(observed.length - 16) ==
-        _epcUpper.substring(_epcUpper.length - 16);
+    final suffix = _epcSuffix16;
+    if (suffix == null || observed.length < 16) return false;
+    // One substring instead of two, against a precomputed target suffix.
+    return observed.endsWith(suffix);
   }
 
   // ── Fixed-rate engine ────────────────────────────────────────────────────
 
   void _startEngine() {
     _engine?.cancel();
+    // Seed the dt baseline, or the first tick would see the whole gap since
+    // the last hunt and apply a full decay step before any read lands.
+    _lastTickAt = DateTime.now();
     _engine = Timer.periodic(
       const Duration(milliseconds: _tickMs),
       (_) => _engineTick(),
@@ -721,6 +874,12 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   void _engineTick() {
     if (!mounted || !_scanning) return;
     final now = DateTime.now();
+    // Real elapsed time, not the nominal period. Timers slip under load and
+    // every filter below is written against actual dt so the feel holds up
+    // precisely when the device is busiest.
+    final rawDt = now.difference(_lastTickAt).inMicroseconds / 1000.0;
+    final dtMs = rawDt.clamp(1.0, 250.0);
+    _lastTickAt = now;
 
     // 1. Fold this window's reads into the smoothed proximity.
     final peak = _windowPeakRssi;
@@ -748,13 +907,28 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       if (norm > _strongRef) {
         _strongRef += (norm - _strongRef) * _strongAttack;
       }
+      _lastNormRssi = norm;
+      // Feed direction finding from the same normalised value. Doing it here,
+      // on the tick, rather than in the read callback keeps it rate-limited to
+      // 30 Hz and off the hot path.
+      final yaw = _yawDeg;
+      if (_directionsOn && yaw != null) _bearing.add(yaw, norm, now);
       final raw = rssiToProximity01(norm, strongDbm: _strongRef);
-      // Asymmetric EMA at a FIXED rate — the old version ran per read, so at
-      // 300 reads/sec it converged in ~10 ms and the meter was effectively raw
-      // (and jittery). Anchoring it to the tick makes the response time a real
-      // constant: ~60 ms closing in, ~110 ms falling back.
-      final alpha = raw >= _prox ? 0.55 : 0.30;
-      _prox = (_prox + (raw - _prox) * alpha).clamp(0.0, 1.0);
+      if (_prox <= 0) {
+        // First read of a hunt (or straight after a decay to zero): snap to it.
+        // Easing up from zero here is pure invented lag — the radio has just
+        // told us exactly where we are.
+        _prox = raw;
+      } else {
+        // Asymmetric exponential smoothing against REAL elapsed time. The old
+        // version applied a fixed weight per read, so at 300 reads/sec it
+        // converged in ~10 ms and the meter was effectively raw and jittery;
+        // a fixed weight per tick then drifted whenever the timer slipped.
+        // alpha = 1 - e^(-dt/tau) makes the response a true time constant.
+        final tau = raw >= _prox ? _riseTauMs : _fallTauMs;
+        final alpha = 1 - math.exp(-dtMs / tau);
+        _prox = (_prox + (raw - _prox) * alpha).clamp(0.0, 1.0);
+      }
       _lastTargetReadAt = now;
     } else {
       final last = _lastTargetReadAt;
@@ -763,7 +937,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       } else if (now.difference(last).inMilliseconds > _holdMs) {
         // Time-based exponential so the fall-off is identical regardless of
         // how punctual the timer is under load.
-        _prox *= math.exp(-_tickMs / _decayTauMs);
+        _prox *= math.exp(-dtMs / _decayTauMs);
         if (_prox < 0.02) _prox = 0;
       }
     }
@@ -778,14 +952,33 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       }
     }
 
+    // 2b. Closer / further trend, sampled on a ~600 ms baseline so it reflects
+    //     the operator walking rather than read-to-read jitter.
+    if (now.difference(_trendRefAt).inMilliseconds >= 600) {
+      final delta = _prox - _trendRefProx;
+      _trendDir = delta > 0.04 ? 1 : (delta < -0.04 ? -1 : 0);
+      _trendRefProx = _prox;
+      _trendRefAt = now;
+    }
+
+    // 2c. Direction panel, republished at ~10 Hz.
+    _directionTick++;
+    if (_directionTick >= 6) {
+      _directionTick = 0;
+      _publishDirection(now);
+    }
+
     // 3. Publish. Each notifier only rebuilds its own leaf widget.
-    if ((_proximity.value - _prox).abs() > 0.0005) _proximity.value = _prox;
+    // 0.3% is finer than the dial's integer percent and finer than the halo
+    // can visibly render, but coarse enough to stop a drifting signal
+    // repainting a large-radius BoxShadow on literally every frame.
+    if ((_proximity.value - _prox).abs() > 0.003) _proximity.value = _prox;
     final outRssi = _prox <= 0 ? null : _lastRssi;
     if (_rssiOut.value != outRssi) _rssiOut.value = outRssi;
 
     // 4. Diagnostics at ~5 Hz — counters don't need frame-rate fidelity.
     _diagTickCounter++;
-    if (_diagTickCounter >= 6) {
+    if (_diagTickCounter >= 12) {
       final elapsedMs = _rateTicks * _tickMs;
       if (elapsedMs > 0) {
         _readsPerSec = (_rateAccum * 1000 / elapsedMs).round();
@@ -812,6 +1005,60 @@ class _LocateTagScreenState extends State<LocateTagScreen>
         );
       }
     }
+  }
+
+  /// Build the direction panel's state from the current bearing fix, distance
+  /// estimate and closer/further trend.
+  void _publishDirection(DateTime now) {
+    if (!_directionsOn) {
+      _setDirection(const _DirectionState.off());
+      return;
+    }
+    final yaw = _yawDeg;
+    if (yaw == null) {
+      // No rotation-vector sensor on this device, or it hasn't reported yet.
+      _setDirection(const _DirectionState.searching());
+      return;
+    }
+    final fix = _bearing.fix(yaw, now);
+    if (fix == null) {
+      _setDirection(const _DirectionState.searching());
+      return;
+    }
+    final turn = turnLabel(fix.relativeDeg);
+    final distance = distanceLabel(_lastNormRssi);
+    final sub = distanceSubLabel(_lastNormRssi);
+    // Only claim "keep going / go back" when the operator is actually pointed
+    // at the tag — walking forward while aimed 90° off it means nothing.
+    final aimed = fix.relativeDeg.abs() <= 30;
+    final String move;
+    if (!aimed) {
+      move = 'TURN TO IT';
+    } else if (_trendDir > 0) {
+      move = 'KEEP GOING';
+    } else if (_trendDir < 0) {
+      move = 'GO BACK';
+    } else {
+      move = 'HOLD';
+    }
+    _setDirection(
+      _DirectionState(
+        status: DirectionStatus.locked,
+        headline: turn,
+        detail: '${sub ?? distance} · $move',
+        relativeDeg: fix.relativeDeg,
+      ),
+    );
+  }
+
+  void _setDirection(_DirectionState next) {
+    final cur = _direction.value;
+    if (cur.status == next.status &&
+        cur.headline == next.headline &&
+        cur.detail == next.detail) {
+      return;
+    }
+    _direction.value = next;
   }
 
   /// Geometric cadence curve: `slow * (fast/slow)^p`. Unlike the old
@@ -1031,6 +1278,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 scanning: _scanning,
                 rssi: _rssiOut,
                 epcValid: _epcValid,
+                radioLive: _radioLive,
               ),
               SizedBox(height: 24.h),
               Expanded(
@@ -1055,6 +1303,24 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               // while the radio is sweeping).
               if (widget.cloudGeigerMode && !_scanning) ...[
                 _TakeActionButton(onPressed: _showActionPicker),
+                SizedBox(height: 8.h),
+              ],
+              // Direction guidance, directly above the start/stop control.
+              // Tapping it toggles guidance on/off.
+              if (_scanning) ...[
+                _DirectionPanel(
+                  direction: _direction,
+                  onToggle: () {
+                    setState(() => _directionsOn = !_directionsOn);
+                    if (_directionsOn) {
+                      _bearing.reset();
+                      _startYaw();
+                    } else {
+                      _stopYaw();
+                    }
+                    _publishDirection(DateTime.now());
+                  },
+                ),
                 SizedBox(height: 8.h),
               ],
               _ToggleScanButton(
@@ -1272,11 +1538,16 @@ class _StatusBar extends StatelessWidget {
     required this.scanning,
     required this.rssi,
     required this.epcValid,
+    required this.radioLive,
   });
 
   final bool scanning;
   final ValueListenable<int?> rssi;
   final bool epcValid;
+
+  /// The radio's OWN state, polled from the native controller. Intentionally
+  /// independent of [scanning] — see [_RadioDot].
+  final ValueListenable<bool> radioLive;
 
   @override
   Widget build(BuildContext context) {
@@ -1284,14 +1555,14 @@ class _StatusBar extends StatelessWidget {
     if (!epcValid) {
       label = 'NO TARGET';
     } else if (scanning) {
-      label = 'SCANNING · TAP OR TRIGGER TO STOP';
+      label = 'SCANNING';
     } else {
-      label = 'TAP OR PULL TRIGGER TO LOCATE';
+      label = 'IDLE';
     }
     final dotColor = scanning ? AppColors.primary : const Color(0xFFBCC9C9);
     return Container(
       height: 40.h,
-      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      padding: EdgeInsets.symmetric(horizontal: 12.w),
       decoration: const BoxDecoration(
         color: Color(0xFFF0F5F4),
         borderRadius: BorderRadius.all(Radius.circular(2)),
@@ -1299,7 +1570,7 @@ class _StatusBar extends StatelessWidget {
       child: Row(
         children: [
           _BlinkingDot(active: scanning, color: dotColor),
-          SizedBox(width: 8.w),
+          SizedBox(width: 6.w),
           Text(
             label,
             style: GoogleFonts.spaceGrotesk(
@@ -1310,11 +1581,13 @@ class _StatusBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          _RadioDot(live: radioLive),
+          SizedBox(width: 10.w),
           // Only this label rebuilds as RSSI moves.
           ValueListenableBuilder<int?>(
             valueListenable: rssi,
             builder: (_, v, __) => Text(
-              v != null ? 'RSSI: $v dBm' : 'RSSI: —',
+              v != null ? '$v dBm' : '— dBm',
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 11.sp,
                 fontWeight: FontWeight.w500,
@@ -1324,6 +1597,62 @@ class _StatusBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Hardware truth light for the UHF radio.
+///
+/// Green = the controller reports the radio genuinely inventorying. Red = it
+/// is not, **regardless of what the start/stop button says**. That
+/// disagreement is the entire reason this exists: the RFD8500 rejects config
+/// writes while inventory streams, so a resume can quietly fail and strand the
+/// radio stopped while the screen still shows SCANNING. Wiring this dot to the
+/// scan flag would make it agree with the button by construction and tell the
+/// operator nothing.
+class _RadioDot extends StatelessWidget {
+  const _RadioDot({required this.live});
+
+  final ValueListenable<bool> live;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: live,
+      builder: (_, on, __) {
+        final color =
+            on ? const Color(0xFF1B7F4F) : const Color(0xFFB23A3A);
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.45),
+                    blurRadius: 5,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(width: 5.w),
+            Text(
+              'RFID',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 10.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: color,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1723,6 +2052,96 @@ class _ToggleScanButton extends StatelessWidget {
   }
 }
 
+/// Direction guidance strip, sitting directly above the start/stop control.
+///
+/// Green whenever there is a bearing worth acting on. Red "OFF DIRECTIONS"
+/// otherwise — which covers both "the operator switched guidance off" and "the
+/// operator isn't sweeping, so a single-antenna reader has nothing to say about
+/// direction". The second case is a hard physical limit, not a shortcoming of
+/// the estimator, so the panel asks for the sweep rather than inventing an
+/// arrow. Tap anywhere on it to turn guidance off and back on.
+class _DirectionPanel extends StatelessWidget {
+  const _DirectionPanel({required this.direction, required this.onToggle});
+
+  final ValueListenable<_DirectionState> direction;
+  final VoidCallback onToggle;
+
+  static const Color _green = Color(0xFF1B7F4F);
+  static const Color _red = Color(0xFFB23A3A);
+
+  IconData _arrow(_DirectionState d) {
+    final rel = d.relativeDeg;
+    if (d.status != DirectionStatus.locked || rel == null) {
+      return Icons.explore_off_outlined;
+    }
+    final a = rel.abs();
+    if (a <= 20) return Icons.arrow_upward;
+    if (a >= 135) return Icons.arrow_downward;
+    return rel < 0 ? Icons.arrow_back : Icons.arrow_forward;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_DirectionState>(
+      valueListenable: direction,
+      builder: (_, d, __) {
+        final locked = d.status == DirectionStatus.locked;
+        final tone = locked ? _green : _red;
+        return Material(
+          color: tone.withValues(alpha: 0.10),
+          child: InkWell(
+            onTap: onToggle,
+            child: Container(
+              height: 56.h,
+              padding: EdgeInsets.symmetric(horizontal: 14.w),
+              decoration: BoxDecoration(
+                border: Border.all(color: tone.withValues(alpha: 0.55), width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(_arrow(d), size: 26.sp, color: tone),
+                  SizedBox(width: 12.w),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          d.headline,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.4,
+                            color: tone,
+                          ),
+                        ),
+                        SizedBox(height: 2.h),
+                        Text(
+                          d.detail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 10.sp,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: tone.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Cloud+Geiger-only secondary affordance shown above the scan toggle
 /// while the radio is idle. Opens a bottom sheet with Status Change /
 /// Encode / Re-encode so the operator can act on the located tag
@@ -1801,26 +2220,16 @@ class _LiveDiagnosticBanner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                    color: tone,
-                    child: Text(
-                      d.targetReads > 0
-                          ? 'MATCH ${d.readsPerSec}/s'
-                          : (d.otherReads > 0 ? 'NO MATCH' : 'NO READS'),
-                      style: GoogleFonts.spaceGrotesk(
-                        fontSize: 10.sp,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.4,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
+                  // The MATCH x/s badge that used to sit here was dropped in
+                  // favour of the direction panel above the trigger control.
+                  // The read rate it carried is the tell for pre-filter health
+                  // — with the filter installed a tag in range should sit in
+                  // the hundreds, and a double-digit rate means it didn't take
+                  // — so it moves inline rather than being lost.
                   Expanded(
                     child: Text(
-                      'TGT ${d.targetReads} · OTH ${d.otherReads}'
+                      '${d.targetReads > 0 ? "${d.readsPerSec}/s" : (d.otherReads > 0 ? "NO MATCH" : "NO READS")}'
+                      ' · TGT ${d.targetReads} · OTH ${d.otherReads}'
                       '${d.nullRssiReads > 0 ? ' · NULL-RSSI ${d.nullRssiReads}' : ''}'
                       '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}'
                       // Explains a "-68 dBm but the dial reads 86%" pairing:

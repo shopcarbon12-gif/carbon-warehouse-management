@@ -1877,6 +1877,14 @@ class CarbonChainwayRfidController(private val context: Context) {
   fun isReady(): Boolean = uhfReader != null || (uhfInstance != null && uartOwned)
 
   /**
+   * True while the radio is genuinely inventorying — i.e. `startInventoryTag`
+   * returned true and the poll thread is draining tags. Independent of whatever
+   * any Flutter screen believes it asked for, which is the point: it is the
+   * evidence for "is the scanner actually running".
+   */
+  fun isInventoryActive(): Boolean = scanning.get() && uhfInventoryActive
+
+  /**
    * Achievable power range in integer dBm for the Chainway C72E radio.
    * Matches the clamp in [setAntennaPowerDbm] above (5..23) — the chip's
    * firmware silently rejects anything outside this window. Used by the

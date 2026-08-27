@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 
@@ -374,18 +373,21 @@ class RfidManager extends ChangeNotifier {
   void _handleTagRead(RfidTagRead read) {
     final u = read.epcHex24;
     if (u.isEmpty) return;
-    if (!_unifiedReads.isClosed) _unifiedReads.add(read);
+    // hasListener guard: this is the hottest path in the app (hundreds of
+    // reads/sec during a Locate sweep) and pushing into a broadcast controller
+    // nobody is reading from is pure cost.
+    if (!_unifiedReads.isClosed && _unifiedReads.hasListener) {
+      _unifiedReads.add(read);
+    }
 
     if (_scanContext == 'GEIGER_FIND') {
-      // Diagnostic trace: every tag read, with EPC + RSSI, while in
-      // Geiger mode. Visible via `adb logcat -s LOCATE_RFID:*`.
-      // Helps diagnose "% stuck at 0" — if these log lines appear but
-      // proximity stays at 0, the issue is target-match, not radio.
-      developer.log(
-        'tagRead epc=$u rssi=${read.rssi} ctx=$_scanContext geigerClosed=${_geigerReads.isClosed}',
-        name: 'LOCATE_RFID',
-      );
-      if (!_geigerReads.isClosed) _geigerReads.add(read);
+      // NO per-read logging here. This used to carry a developer.log tracing
+      // every tag, which is a platform logging call on the UI isolate — at
+      // Locate read rates it was one of the largest single costs in the
+      // pipeline and it directly cost the geiger its smoothness.
+      if (!_geigerReads.isClosed && _geigerReads.hasListener) {
+        _geigerReads.add(read);
+      }
       return;
     }
 

@@ -24,6 +24,7 @@ class MainActivity : FlutterFragmentActivity() {
   private var hardwareTriggerRelay: CarbonHardwareTriggerRelay? = null
   private var scannerLogcatBridge: ScannerLogcatBridge? = null
   private var scanSoundPool: ScanSoundPool? = null
+  private var motionRelay: CarbonMotionRelay? = null
 
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -104,6 +105,13 @@ class MainActivity : FlutterFragmentActivity() {
     // login screen. The wake-up now happens lazily when Bin Assign loads
     // (see fast_putaway_screen.dart), which is the only screen that
     // actually needs the imager warm.
+
+    // Device yaw for Locate-Tag direction finding. Purely additive: the sensor
+    // is only registered while a Dart listener is attached, so it costs nothing
+    // on every other screen.
+    val motion = CarbonMotionRelay(this)
+    motionRelay = motion
+    EventChannel(messenger, "carbon_wms/device_motion").setStreamHandler(motion)
 
     EventChannel(messenger, "carbon_wms/hardware_barcode").setStreamHandler(barcodeRelay)
     EventChannel(messenger, "carbon_wms/hardware_trigger").setStreamHandler(
@@ -367,6 +375,33 @@ class MainActivity : FlutterFragmentActivity() {
           chainway.setAntennaPowerDbm(p)
           result.success(null)
         }
+        // Ground truth about the radio, straight from the controllers. This is
+        // deliberately NOT derived from anything a Flutter screen asked for:
+        // `inventoryActive` is set only when the SDK's Inventory.perform()
+        // actually succeeded and cleared when it stops or its retries give up.
+        // That distinction is the whole point — a screen can believe it is
+        // scanning while the radio is silent, which is exactly the failure the
+        // Locate indicator needs to expose.
+        "rfid.readerStatus" -> {
+          val zebraReady = zebra.isReady()
+          val chainwayReady = chainway.isReady()
+          val active = when {
+            zebraReady -> zebra.isInventoryActive()
+            chainwayReady -> chainway.isInventoryActive()
+            else -> false
+          }
+          result.success(
+            mapOf(
+              "connected" to (zebraReady || chainwayReady),
+              "inventoryActive" to active,
+              "stack" to when {
+                zebraReady -> "zebra"
+                chainwayReady -> "chainway"
+                else -> "none"
+              },
+            ),
+          )
+        }
         "rfid.getPowerRangeDbm" -> {
           // Prefer Zebra when connected — RFD8500 is the sled the user
           // explicitly singled out for slider accuracy. Otherwise fall
@@ -428,6 +463,8 @@ class MainActivity : FlutterFragmentActivity() {
     hardwareBarcodeRelay?.dispose()
     hardwareTriggerRelay?.dispose()
     scannerLogcatBridge?.dispose()
+    motionRelay?.dispose()
+    motionRelay = null
     hardwareBarcodeRelay = null
     hardwareTriggerRelay = null
     zebraController = null

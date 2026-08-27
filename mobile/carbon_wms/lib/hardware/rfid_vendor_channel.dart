@@ -28,6 +28,8 @@ class RfidVendorChannel {
       EventChannel('carbon_wms/hardware_barcode');
   static const EventChannel _hardwareTriggerEvents =
       EventChannel('carbon_wms/hardware_trigger');
+  static const EventChannel _deviceMotionEvents =
+      EventChannel('carbon_wms/device_motion');
 
   static Future<String?> ping() async {
     try {
@@ -367,19 +369,38 @@ class RfidVendorChannel {
     }
   }
 
-  /// Tag reads from native layer (`epc` hex string, optional `rssi`).
+  /// Tag reads from the native layer (`epc` hex string, optional `rssi`).
+  ///
+  /// Accepts BOTH wire shapes: a single `{epc, rssi}` map, and a list of them.
+  /// The Zebra controller batches a whole read-event into one message because
+  /// at Locate read rates (hundreds/sec for one tag behind a pre-filter) a
+  /// message per tag backed the platform channel up badly. Older emitters that
+  /// still send one map at a time keep working unchanged.
   static Stream<RfidTagRead> tagReadStream() {
-    return _events
-        .receiveBroadcastStream()
-        .map((dynamic e) {
-          if (e is! Map) return null;
-          final m = Map<String, dynamic>.from(e);
-          final hex = m['epc']?.toString().trim().toUpperCase() ?? '';
-          final rssi = m['rssi'] is num ? (m['rssi'] as num).round() : null;
-          return RfidTagRead.tryParse(hex, rssi: rssi);
-        })
-        .where((r) => r != null)
-        .cast<RfidTagRead>();
+    return _events.receiveBroadcastStream().expand<RfidTagRead>((dynamic e) {
+      if (e is Map) {
+        final r = _parseTagRead(e);
+        return r == null ? const <RfidTagRead>[] : <RfidTagRead>[r];
+      }
+      if (e is List) {
+        final out = <RfidTagRead>[];
+        for (final item in e) {
+          if (item is! Map) continue;
+          final r = _parseTagRead(item);
+          if (r != null) out.add(r);
+        }
+        return out;
+      }
+      return const <RfidTagRead>[];
+    });
+  }
+
+  static RfidTagRead? _parseTagRead(Map<dynamic, dynamic> m) {
+    final hex = m['epc']?.toString().trim().toUpperCase() ?? '';
+    if (hex.isEmpty) return null;
+    final raw = m['rssi'];
+    final rssi = raw is num ? raw.round() : null;
+    return RfidTagRead.tryParse(hex, rssi: rssi);
   }
 
   static Stream<String> hardwareBarcodeStream() {
@@ -395,6 +416,43 @@ class RfidVendorChannel {
     return _hardwareTriggerEvents.receiveBroadcastStream().map((dynamic e) {
       return (e?.toString() ?? '').trim().toLowerCase();
     }).where((s) => s == 'down' || s == 'up');
+  }
+
+  /// Live radio state, straight from the native controllers.
+  ///
+  /// [inventoryActive] is the radio's OWN view of whether it is transmitting —
+  /// set only when the SDK's inventory call actually succeeded, cleared when it
+  /// stops or its retries are exhausted. It is not derived from what any screen
+  /// requested, so it stays honest when a screen believes it is scanning but
+  /// the radio quietly isn't.
+  static Future<({bool connected, bool inventoryActive, String stack})?>
+      readerStatus() async {
+    if (!_isAndroid) return null;
+    try {
+      final m = await _method.invokeMapMethod<String, dynamic>('rfid.readerStatus');
+      if (m == null) return null;
+      return (
+        connected: m['connected'] == true,
+        inventoryActive: m['inventoryActive'] == true,
+        stack: m['stack']?.toString() ?? 'none',
+      );
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Handheld yaw in degrees (rotation about the world vertical axis), for
+  /// Locate-Tag direction finding. Sourced from the gyro+accelerometer fusion,
+  /// NOT the compass — see [CarbonMotionRelay]. The native sensor is only
+  /// registered while this stream has a listener.
+  static Stream<double> deviceYawStream() {
+    if (!_isAndroid) return const Stream<double>.empty();
+    return _deviceMotionEvents
+        .receiveBroadcastStream()
+        .map((dynamic e) => e is num ? e.toDouble() : double.nan)
+        .where((v) => v.isFinite);
   }
 
   static bool get _isAndroid =>
