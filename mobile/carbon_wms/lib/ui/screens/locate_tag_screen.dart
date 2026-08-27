@@ -7,6 +7,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/services/handheld_runtime_config.dart'
+    show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -30,11 +32,52 @@ import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 /// Linear in between. Everything tighter than -45 still maps to 100,
 /// which is what the operator wants — "I'm there" — instead of capping
 /// at 50% because the room never gets closer to the theoretical -30.
+///
+/// **This window is only meaningful at the power it was calibrated at.** See
+/// [powerNormalisedRssi] — always feed this a normalised value, never a raw
+/// read, or the meter silently stops working below full power.
 double rssiToProximity01(int? rssi) {
   if (rssi == null) return 0;
   const weak = -80.0;
   const strong = -45.0;
   return ((rssi - weak) / (strong - weak)).clamp(0.0, 1.0);
+}
+
+/// Shift a raw RSSI back onto the full-power reference the proximity window
+/// above is calibrated against.
+///
+/// ## Why this is needed — the "geiger only works at 30 dBm" bug
+///
+/// Proximity was mapped from an ABSOLUTE dBm window (-80 → -45) that was
+/// measured with the radio at full power. But for monostatic passive
+/// backscatter the received signal is
+///
+///     P_rx(dBm) = P_tx(dBm) + K − 40·log10(distance)
+///
+/// — the tag has no transmitter of its own, so it re-radiates the carrier the
+/// reader sent it. Turning the reader down by N dB therefore moves EVERY read
+/// down by N dB, at every distance. Drop from 30 to 12 dBm and a tag that used
+/// to read -50 dBm at arm's length now reads about -68: the same spot on the
+/// floor that used to show 86% shows 34%, and nothing anywhere in the aisle can
+/// reach 100% any more. The meter looked broken at anything other than the
+/// power it happened to be calibrated at, which is exactly what the operator
+/// reported.
+///
+/// Normalising by how far the radio is turned down from ITS OWN maximum
+/// ([maxDbm], read from the reader's capabilities — 30 on RFD8500, 23 on the
+/// C72E) makes the gradient identical at every power setting. At full power the
+/// offset is zero, so the existing warehouse calibration is preserved exactly
+/// on both handhelds and nothing about today's behaviour changes.
+///
+/// What legitimately still changes with power is REACH: at 10 dBm the tag stops
+/// answering much sooner because it can't harvest enough energy to power up.
+/// That is real physics and the right behaviour — lower power is how an
+/// operator narrows a search down inside a dense bin.
+int? powerNormalisedRssi(int? rssi, {required int powerDbm, required int maxDbm}) {
+  if (rssi == null) return null;
+  // Clamped so a bogus capability read can never blow the meter up to 100%.
+  final offset = (maxDbm - powerDbm).clamp(0, 25);
+  return rssi + offset;
 }
 
 /// Tap-to-locate Geiger screen.
@@ -132,6 +175,7 @@ class _Diag {
     this.otherReads = 0,
     this.nullRssiReads = 0,
     this.readsPerSec = 0,
+    this.powerOffsetDb = 0,
     this.lastSeenEpcs = const <String>[],
     this.lastSeenRssi,
     this.otherEpc,
@@ -143,6 +187,10 @@ class _Diag {
   final int otherReads;
   final int nullRssiReads;
   final int readsPerSec;
+
+  /// dB the proximity maths adds to each raw read to compensate for the radio
+  /// running below its maximum. 0 at full power.
+  final int powerOffsetDb;
   final List<String> lastSeenEpcs;
   final int? lastSeenRssi;
   final String? otherEpc;
@@ -209,6 +257,19 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 
   int _powerDbm = _defaultPowerDbm;
 
+  /// The radio's own ceiling, read from its capabilities (30 dBm on RFD8500,
+  /// 23 on the C72E). Proximity is normalised against this so the meter reads
+  /// the same at every slider position — see [powerNormalisedRssi]. Seeded
+  /// optimistically at 30 so the very first reads before the capability query
+  /// lands behave exactly as they did before.
+  int _maxPowerDbm = _defaultPowerDbm;
+
+  /// dB the radio is currently turned down from [_maxPowerDbm]. Recomputed
+  /// whenever either side changes; surfaced in the diagnostic banner so a
+  /// "-68 dBm but the dial says 86%" reading is explainable on the floor.
+  int get _powerOffsetDb =>
+      (_maxPowerDbm - math.min(_powerDbm, _maxPowerDbm)).clamp(0, 25).toInt();
+
   // ── Hot-path fields — written by the read callback, read by the engine.
   //    Never touched by build(), never wrapped in setState. ─────────────────
   /// Strongest RSSI seen for the target inside the current engine window.
@@ -268,6 +329,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(RfidVendorChannel.close2dBarcode());
     // Arm the radio once, here — NOT on every trigger pull. See the class doc.
     unawaited(_armRadio());
+    // Learn the radio's real power ceiling so proximity can be normalised
+    // against it at any slider position.
+    unawaited(_loadPowerRange());
     // Subscribe to the physical trigger immediately on entry so the very
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
@@ -334,6 +398,28 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     super.dispose();
   }
 
+  /// Ask the connected radio what it can actually transmit. RFD8500 reports
+  /// 30 dBm, the C72E is hard-capped at 23. Retried a couple of times because
+  /// the query returns null until the reader link is up, and we enter this
+  /// screen straight off a navigation.
+  Future<void> _loadPowerRange() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!mounted) return;
+      final range = await RfidVendorChannel.getPowerRangeDbm();
+      if (range != null) {
+        final max = range.maxDbm.clamp(5, kAntennaPowerDbmMax);
+        _maxPowerDbm = max;
+        // The native controllers clamp internally, so a slider sitting above
+        // the radio's ceiling means the radio is really at the ceiling. Track
+        // that or the normalisation offset would be computed against a power
+        // the hardware never used.
+        if (_powerDbm > max) _powerDbm = max;
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+  }
+
   // ── Radio arming ─────────────────────────────────────────────────────────
 
   /// Push the locate-specific radio configuration. Called once on entry and
@@ -361,6 +447,33 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // perfectly still on top of the tag.
     await RfidVendorChannel.setSingulationSession(useSessionZero: true);
     await ScanSounds.instance.setTagBeepSuppressed(true);
+  }
+
+  /// Apply a new transmit power. Two things have to happen beyond pushing the
+  /// value: the proximity normalisation has to learn the new offset (so the
+  /// meter keeps the same gradient at the new power), and the radio has to be
+  /// confirmed still streaming.
+  ///
+  /// That second part matters because the RFD8500 rejects
+  /// `setAntennaRfConfig` while inventory is running, so the native controller
+  /// does stop → apply → `resumeInventoryWithRetry`. If every resume attempt
+  /// lands inside the sled's settle window the retry gives up, leaving
+  /// `inventoryActive=false` while this screen still says SCANNING — a dead
+  /// meter that looks exactly like "the geiger doesn't work at this dBm".
+  /// Re-issuing the start is a no-op when the resume succeeded and a clean
+  /// recovery when it didn't.
+  void _onPowerCommitted(int dbm) {
+    _powerDbm = dbm.clamp(1, _maxPowerDbm);
+    unawaited(() async {
+      await _rfid?.setSessionPowerOverrideDbm(dbm);
+      if (!mounted || !_scanning) return;
+      try {
+        await RfidVendorChannel.startZebraInventory();
+      } catch (_) {}
+      try {
+        await RfidVendorChannel.startChainwayInventory();
+      } catch (_) {}
+    }());
   }
 
   // ── Toggle scan ──────────────────────────────────────────────────────────
@@ -556,7 +669,12 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _rateTicks++;
 
     if (peak != null) {
-      final raw = rssiToProximity01(peak);
+      // Normalise to full power BEFORE mapping. Without this the meter only
+      // works at the power the -80/-45 window was calibrated at; see
+      // powerNormalisedRssi.
+      final raw = rssiToProximity01(
+        powerNormalisedRssi(peak, powerDbm: _powerDbm, maxDbm: _maxPowerDbm),
+      );
       // Asymmetric EMA at a FIXED rate — the old version ran per read, so at
       // 300 reads/sec it converged in ~10 ms and the meter was effectively raw
       // (and jittery). Anchoring it to the tick makes the response time a real
@@ -609,6 +727,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
           otherReads: _otherReads,
           nullRssiReads: _nullRssiReads,
           readsPerSec: _readsPerSec,
+          powerOffsetDb: _powerOffsetDb,
           lastSeenEpcs: List<String>.unmodifiable(_lastSeenEpcs),
           lastSeenRssi: _lastSeenRssi,
           otherEpc: _otherEpc,
@@ -866,6 +985,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
               _ToggleScanButton(
                 scanning: _scanning,
                 enabled: _epcValid,
+                // The button is a real control now, not just a status strip.
+                // It shares the guarded/debounced _toggleScan with the gun
+                // trigger, so tapping and pulling do exactly the same thing
+                // and can't fight each other.
+                onPressed: _epcValid ? () => unawaited(_toggleScan()) : null,
               ),
               SizedBox(height: 8.h),
               RfidPowerSlider(
@@ -873,10 +997,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 // Route through the session override rather than pushing
                 // straight to the radio, so a later settings sync can't
                 // silently undo the operator's choice mid-sweep.
-                onCommit: (dbm) {
-                  _powerDbm = dbm;
-                  unawaited(_rfid?.setSessionPowerOverrideDbm(dbm));
-                },
+                onCommit: _onPowerCommitted,
               ),
               SizedBox(height: 4.h),
             ],
@@ -1088,9 +1209,9 @@ class _StatusBar extends StatelessWidget {
     if (!epcValid) {
       label = 'NO TARGET';
     } else if (scanning) {
-      label = 'SCANNING · PULL TRIGGER TO STOP';
+      label = 'SCANNING · TAP OR TRIGGER TO STOP';
     } else {
-      label = 'PULL TRIGGER TO LOCATE';
+      label = 'TAP OR PULL TRIGGER TO LOCATE';
     }
     final dotColor = scanning ? AppColors.primary : const Color(0xFFBCC9C9);
     return Container(
@@ -1440,20 +1561,24 @@ class _DiagnosticHint extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Trigger-only banner. Operator feedback (1.2.41): on-screen tap-to-locate
-// was an extra step the operator had to remember mid-sweep. The locate flow
-// is now driven entirely by the physical trigger; this widget is a status
-// affordance, not a button — it never receives taps.
+// Start/stop control. 1.2.41 made this a passive status strip on the theory
+// that the physical trigger was the only thing the operator should reach for.
+// In practice both are wanted: the trigger for one-handed sweeping, the button
+// for when the handheld is resting on a shelf or the operator's other hand is
+// full. Both routes call the same guarded, debounced _toggleScan, so a tap and
+// a trigger pull can never end up fighting each other.
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ToggleScanButton extends StatelessWidget {
   const _ToggleScanButton({
     required this.scanning,
     required this.enabled,
+    required this.onPressed,
   });
 
   final bool scanning;
   final bool enabled;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1478,25 +1603,46 @@ class _ToggleScanButton extends StatelessWidget {
           ),
         ],
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            scanning ? Icons.stop_circle_outlined : Icons.sensors,
-            color: Colors.white,
-            size: 22.sp,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                scanning ? Icons.stop_circle_outlined : Icons.sensors,
+                color: Colors.white,
+                size: 22.sp,
+              ),
+              SizedBox(width: 12.w),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    scanning ? 'STOP' : 'START LOCATE',
+                    style: GoogleFonts.manrope(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 2.h),
+                  Text(
+                    'TAP OR PULL TRIGGER',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 9.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          SizedBox(width: 12.w),
-          Text(
-            scanning ? 'PULL TRIGGER TO STOP' : 'PULL TRIGGER TO LOCATE',
-            style: GoogleFonts.manrope(
-              fontSize: 15.sp,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2.0,
-              color: Colors.white,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1601,7 +1747,10 @@ class _LiveDiagnosticBanner extends StatelessWidget {
                     child: Text(
                       'TGT ${d.targetReads} · OTH ${d.otherReads}'
                       '${d.nullRssiReads > 0 ? ' · NULL-RSSI ${d.nullRssiReads}' : ''}'
-                      '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}',
+                      '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}'
+                      // Explains a "-68 dBm but the dial reads 86%" pairing:
+                      // the meter is normalised back to full power.
+                      '${d.powerOffsetDb > 0 ? ' · PWR+${d.powerOffsetDb}dB' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.spaceGrotesk(

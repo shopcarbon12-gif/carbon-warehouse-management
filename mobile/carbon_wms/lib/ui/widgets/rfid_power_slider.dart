@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -79,11 +80,25 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
   /// non-null). Seeded on mount, never touches the shared global setting.
   int? _localDbm;
 
+  /// The radio's real achievable range, once its capabilities answer. Until
+  /// then we show the historical 1..30 span. Narrowing to what the hardware
+  /// can actually accept stops the operator dragging into dead travel — the
+  /// C72E is hard-capped at 23 dBm and the RFD8500 floors around 5, and the
+  /// native controllers silently clamp, so those regions of the bar moved the
+  /// label without moving the radio.
+  int? _hwMinDbm;
+  int? _hwMaxDbm;
+
+  int get _minBound =>
+      math.max(RfidPowerSlider._minDbm, _hwMinDbm ?? RfidPowerSlider._minDbm);
+  int get _maxBound => _hwMaxDbm ?? kAntennaPowerDbmMax;
+
   bool get _isLocal => widget.defaultDbm != null;
 
   @override
   void initState() {
     super.initState();
+    unawaited(_loadRange());
     if (_isLocal) {
       final seed = widget.defaultDbm!
           .clamp(RfidPowerSlider._minDbm, kAntennaPowerDbmMax);
@@ -106,6 +121,26 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
   void dispose() {
     _coalesceTimer?.cancel();
     super.dispose();
+  }
+
+  /// Read the connected radio's transmit-power capabilities. Retried a few
+  /// times because the query returns null until the reader link is up, which
+  /// on a Bluetooth sled can be a moment after the screen mounts. Purely
+  /// cosmetic — a null answer just leaves the historical 1..30 span in place.
+  Future<void> _loadRange() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!mounted) return;
+      final r = await RfidVendorChannel.getPowerRangeDbm();
+      if (r != null && r.maxDbm >= r.minDbm) {
+        if (!mounted) return;
+        setState(() {
+          _hwMinDbm = r.minDbm.clamp(1, kAntennaPowerDbmMax);
+          _hwMaxDbm = r.maxDbm.clamp(1, kAntennaPowerDbmMax);
+        });
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
   }
 
   /// Apply a committed power value: straight to the radio in local mode, or via
@@ -145,11 +180,16 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
       builder: (context, repo, _) {
         // Both transferOut/In are kept in sync by setGlobalAntennaPower;
         // reading either is fine.
-        final repoValue = repo.config.transferOutAntennaPower
-            .clamp(RfidPowerSlider._minDbm, kAntennaPowerDbmMax);
+        final lo = _minBound;
+        final hi = math.max(_maxBound, lo + 1);
+        final repoValue =
+            repo.config.transferOutAntennaPower.clamp(lo, hi);
         // Local mode shows its own value; global mode tracks the shared power.
         final base = _isLocal ? (_localDbm ?? repoValue) : repoValue;
-        final displayed = _dragOverride ?? base;
+        // Clamp into the hardware range so a value carried over from a screen
+        // with a higher default can't sit outside the Slider's own min/max
+        // (which asserts) once the capabilities answer.
+        final displayed = (_dragOverride ?? base).clamp(lo, hi);
         return Container(
           color: const Color(0xFFF0F5F4),
           padding: EdgeInsets.fromLTRB(14.w, 4.h, 14.w, 4.h),
@@ -180,10 +220,9 @@ class _RfidPowerSliderState extends State<RfidPowerSlider> {
                   ),
                   child: Slider(
                     value: displayed.toDouble(),
-                    min: RfidPowerSlider._minDbm.toDouble(),
-                    max: kAntennaPowerDbmMax.toDouble(),
-                    divisions:
-                        kAntennaPowerDbmMax - RfidPowerSlider._minDbm,
+                    min: lo.toDouble(),
+                    max: hi.toDouble(),
+                    divisions: hi - lo,
                     onChanged: (v) {
                       final next = v.round();
                       // Update the visual label immediately so it tracks
