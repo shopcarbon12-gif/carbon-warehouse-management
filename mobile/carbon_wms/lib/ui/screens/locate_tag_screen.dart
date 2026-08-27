@@ -22,25 +22,50 @@ import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
 
-/// Map RSSI (dBm) to 0–1 proximity, calibrated to the actual values the
-/// SA-2000 + Chainway/Zebra UHF reads in this warehouse. The previous
-/// theoretical range (-90 → -30) made the bar feel dead because real
-/// "close" reads sit around -50 to -55 dBm, not -30. With the new
-/// window:
-///   -80 dBm → 0%   (radio can hear it but the operator is far)
-///   -45 dBm → 100% (right on top of the tag — saturates at 100)
-/// Linear in between. Everything tighter than -45 still maps to 100,
-/// which is what the operator wants — "I'm there" — instead of capping
-/// at 50% because the room never gets closer to the theoretical -30.
+/// RSSI (dBm) at the noise floor — the far edge of useful range, ~6-8 m on an
+/// RFD8500 at full power. Maps to 0%.
+const double kLocateWeakDbm = -80.0;
+
+/// RSSI (dBm) that means "the gun is on the tag" — maps to 100%.
 ///
-/// **This window is only meaningful at the power it was calibrated at.** See
-/// [powerNormalisedRssi] — always feed this a normalised value, never a raw
-/// read, or the meter silently stops working below full power.
-double rssiToProximity01(int? rssi) {
+/// This anchor is the whole reason the meter used to feel wrong. It was -45,
+/// but -45 dBm is roughly a METRE away on an RFD8500 at full power, so the
+/// dial saturated at 100% long before the operator was anywhere near the tag
+/// and the entire top of the scale was dead travel. 95-100% has to mean the
+/// last few centimetres, so the anchor has to sit where a tag actually reads
+/// when it's about to be touched.
+///
+/// It is also a floor, not a fixed value — see [_strongRef]. If this
+/// particular gun/tag combination reads hotter than -35 at contact, the scale
+/// stretches to match so 100% stays reachable.
+const double kLocateStrongDbm = -35.0;
+
+/// Map RSSI (dBm) to 0–1 proximity.
+///
+/// ## Why linear in dB is the correct "distance" scale
+///
+/// The operator wants the number to track distance. For monostatic passive
+/// backscatter the received power obeys
+///
+///     P_rx(dBm) = P_tx(dBm) + K − 40·log10(d)
+///
+/// so `d ∝ 10^(−P_rx/40)` — distance is exponential in dBm. Interpolating
+/// linearly in dB is therefore exactly linear in log-distance, which gives a
+/// constant percentage drop per doubling of distance: every 12 dB is 2x
+/// further away and costs the same slice of the bar wherever you are. That is
+/// what makes it behave like hot-and-cold instead of pinning at one end.
+///
+/// With [kLocateWeakDbm]..[kLocateStrongDbm] at full power that works out to
+/// roughly: touching → 100%, 1 m → ~67%, 2 m → ~40%, 4 m → ~13%, out of range
+/// → 0%.
+///
+/// **Always feed this a POWER-NORMALISED value** ([powerNormalisedRssi]), never
+/// a raw read, or the meter silently stops working below full power.
+double rssiToProximity01(int? rssi, {double strongDbm = kLocateStrongDbm}) {
   if (rssi == null) return 0;
-  const weak = -80.0;
-  const strong = -45.0;
-  return ((rssi - weak) / (strong - weak)).clamp(0.0, 1.0);
+  // Guard the span so a pathological strong reference can't divide by ~0.
+  final span = math.max(strongDbm - kLocateWeakDbm, 10.0);
+  return ((rssi - kLocateWeakDbm) / span).clamp(0.0, 1.0);
 }
 
 /// Shift a raw RSSI back onto the full-power reference the proximity window
@@ -176,6 +201,7 @@ class _Diag {
     this.nullRssiReads = 0,
     this.readsPerSec = 0,
     this.powerOffsetDb = 0,
+    this.sessionPeakRssi,
     this.lastSeenEpcs = const <String>[],
     this.lastSeenRssi,
     this.otherEpc,
@@ -191,6 +217,10 @@ class _Diag {
   /// dB the proximity maths adds to each raw read to compensate for the radio
   /// running below its maximum. 0 at full power.
   final int powerOffsetDb;
+
+  /// Hottest power-normalised read this scan. With the gun touching the tag
+  /// this is the ground truth for where 100% should sit.
+  final int? sessionPeakRssi;
   final List<String> lastSeenEpcs;
   final int? lastSeenRssi;
   final String? otherEpc;
@@ -290,6 +320,34 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 
   /// Engine-owned smoothed proximity. [_proximity] mirrors it at tick rate.
   double _prox = 0;
+
+  /// The RSSI currently treated as 100%. Starts at [kLocateStrongDbm] and only
+  /// ever moves UP (toward 0 dBm) within a scan, never down.
+  ///
+  /// This exists so 100% is always actually reachable. A fixed anchor has to
+  /// guess what a tag reads when the gun is touching it, and that depends on
+  /// the inlay, the gun's antenna and how the tag is mounted — guess too low
+  /// and the dial saturates a metre out (the old -45 bug), guess too high and
+  /// it tops out at 85% with the gun physically on the tag. Tracking the
+  /// session's own hottest read removes the guess: whatever the strongest
+  /// signal this tag can produce turns out to be, that becomes 100%.
+  ///
+  /// Two properties matter and both are deliberate:
+  ///  * **Monotone within a scan.** It never decays, so closing in can never
+  ///    make the number go DOWN because the scale moved under the operator.
+  ///  * **Slow attack** ([_strongAttack]). A single constructive-multipath
+  ///    spike moves the reference only slightly; a genuine approach — which
+  ///    holds its new peak across many windows — converges in ~300 ms. Without
+  ///    this, one freak read would permanently squash the rest of the sweep.
+  ///
+  /// Reset per scan in [_resetSignal], so every hunt calibrates itself fresh.
+  double _strongRef = kLocateStrongDbm;
+  static const double _strongAttack = 0.25;
+
+  /// Hottest normalised read this scan, for the diagnostic banner. This is the
+  /// number to read off the screen with the gun touching the tag if the top of
+  /// the scale ever needs re-calibrating.
+  int? _sessionPeakRssi;
 
   String? _otherEpc;
   int? _otherRssi;
@@ -510,6 +568,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _lastRssi = null;
     _lastTargetReadAt = null;
     _prox = 0;
+    // Every hunt re-calibrates its own top of scale from scratch.
+    _strongRef = kLocateStrongDbm;
+    _sessionPeakRssi = null;
     _otherEpc = null;
     _otherRssi = null;
     _otherSeenAt = null;
@@ -669,12 +730,25 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _rateTicks++;
 
     if (peak != null) {
-      // Normalise to full power BEFORE mapping. Without this the meter only
-      // works at the power the -80/-45 window was calibrated at; see
-      // powerNormalisedRssi.
-      final raw = rssiToProximity01(
-        powerNormalisedRssi(peak, powerDbm: _powerDbm, maxDbm: _maxPowerDbm),
-      );
+      // Normalise to full power BEFORE anything else. Without this the meter
+      // only works at the power the window was calibrated at; see
+      // powerNormalisedRssi. Everything downstream — including the
+      // self-calibrating top of the scale — works in normalised dBm, so
+      // changing power mid-hunt doesn't invalidate the reference.
+      final norm = powerNormalisedRssi(
+        peak,
+        powerDbm: _powerDbm,
+        maxDbm: _maxPowerDbm,
+      )!;
+      if (_sessionPeakRssi == null || norm > _sessionPeakRssi!) {
+        _sessionPeakRssi = norm;
+      }
+      // Stretch the top of the scale toward anything hotter than the current
+      // reference, slowly, and never back down — see _strongRef.
+      if (norm > _strongRef) {
+        _strongRef += (norm - _strongRef) * _strongAttack;
+      }
+      final raw = rssiToProximity01(norm, strongDbm: _strongRef);
       // Asymmetric EMA at a FIXED rate — the old version ran per read, so at
       // 300 reads/sec it converged in ~10 ms and the meter was effectively raw
       // (and jittery). Anchoring it to the tick makes the response time a real
@@ -728,6 +802,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
           nullRssiReads: _nullRssiReads,
           readsPerSec: _readsPerSec,
           powerOffsetDb: _powerOffsetDb,
+          sessionPeakRssi: _sessionPeakRssi,
           lastSeenEpcs: List<String>.unmodifiable(_lastSeenEpcs),
           lastSeenRssi: _lastSeenRssi,
           otherEpc: _otherEpc,
@@ -1750,7 +1825,10 @@ class _LiveDiagnosticBanner extends StatelessWidget {
                       '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}'
                       // Explains a "-68 dBm but the dial reads 86%" pairing:
                       // the meter is normalised back to full power.
-                      '${d.powerOffsetDb > 0 ? ' · PWR+${d.powerOffsetDb}dB' : ''}',
+                      '${d.powerOffsetDb > 0 ? ' · PWR+${d.powerOffsetDb}dB' : ''}'
+                      // Read this with the gun ON the tag: it is where 100%
+                      // actually sits for this gun/tag pair.
+                      '${d.sessionPeakRssi != null ? ' · PEAK ${d.sessionPeakRssi}' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.spaceGrotesk(
