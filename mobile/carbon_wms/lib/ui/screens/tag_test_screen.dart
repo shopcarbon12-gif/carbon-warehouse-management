@@ -37,7 +37,8 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 ///      is what makes this unambiguous — at 30 dBm you would capture half the
 ///      rack. Nothing more than a foot or so away can even answer.
 ///   2. Step 1: hold the tag physically touching the gun. Pull the trigger
-///      once. Release it — no need to hold.
+///      once. Release it — no need to hold. Keep the tag still for the ~30 s
+///      the sweep takes; the screen counts each level down.
 ///   3. Step 2: one foot away. Trigger again. Step 3: two feet. And so on.
 ///   4. Keep going until a step detects nothing at any power. That silence is
 ///      the measurement — it's the gun's real maximum range for this tag.
@@ -46,8 +47,9 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 /// ## Why each trigger pull sweeps the power levels
 ///
 /// The operator asked for one pull per step, and that is what this does — but
-/// each pull measures at every power level in [kTagTestPowerLadderDbm] before it
-/// stops, taking about five seconds.
+/// each pull measures at every power level in [kTagTestPowerLadderDbm] before
+/// it stops — five seconds of listening per level, so roughly half a minute
+/// per step.
 ///
 /// That is deliberate, and it is the whole reason the run is worth doing.
 /// Signal strength at 30 dBm alone cannot tell us whether a proximity design
@@ -142,7 +144,17 @@ class _TagTestScreenState extends State<TagTestScreen> {
   static const int _captureDbm = 5;
 
   /// How long to listen at each power level once it has settled.
-  static const int _sampleWindowMs = 600;
+  ///
+  /// Five seconds per level, so a full step is about half a minute. That is
+  /// deliberate: the reading that matters most is at the FAR end of the run,
+  /// where the tag answers only occasionally, and a short window there cannot
+  /// tell "out of range" apart from "did not happen to answer in the last
+  /// half second". A long window makes a recorded zero genuinely mean zero.
+  static const int _sampleWindowMs = 5000;
+
+  /// How often the on-screen counter refreshes during a sample window. A
+  /// 30-second step with no visible progress reads as a hang.
+  static const int _progressTickMs = 250;
 
   /// Settling time after a power change. The sled has to stop inventory,
   /// write the antenna config and restart, so reads in this window belong to
@@ -334,7 +346,9 @@ class _TagTestScreenState extends State<TagTestScreen> {
     setState(() {
       _busy = true;
       _uploadResult = null;
-      _status = 'Step $step — measuring at $distanceFt ft…';
+      _status = 'Step $step — measuring at $distanceFt ft '
+          '(${kTagTestPowerLadderDbm.length} levels, ~'
+          '${(kTagTestPowerLadderDbm.length * (_sampleWindowMs + _powerSettleMs) / 1000).round()}s)…';
     });
     ScanSounds.instance.play(ScanCue.start);
 
@@ -348,7 +362,8 @@ class _TagTestScreenState extends State<TagTestScreen> {
 
       for (final power in kTagTestPowerLadderDbm) {
         if (!mounted) break;
-        setState(() => _status = 'Step $step ($distanceFt ft) — $power dBm…');
+        setState(() => _status =
+            'Step $step ($distanceFt ft) — $power dBm settling…');
         await _rfid?.setSessionPowerOverrideDbm(power);
         try {
           await RfidVendorChannel.startZebraInventory();
@@ -365,9 +380,23 @@ class _TagTestScreenState extends State<TagTestScreen> {
         _windowReads = 0;
         _collectEpc = epc;
         _collecting = true;
-        await Future<void>.delayed(
-          const Duration(milliseconds: _sampleWindowMs),
-        );
+        // Sliced rather than one long await, purely so the operator can watch
+        // the read count climb and the countdown run down.
+        final levelIndex = kTagTestPowerLadderDbm.indexOf(power) + 1;
+        var elapsed = 0;
+        while (elapsed < _sampleWindowMs) {
+          await Future<void>.delayed(
+            const Duration(milliseconds: _progressTickMs),
+          );
+          elapsed += _progressTickMs;
+          if (!mounted) break;
+          final left = ((_sampleWindowMs - elapsed) / 1000).ceil();
+          setState(() {
+            _status = 'Step $step ($distanceFt ft) · $power dBm '
+                '[$levelIndex/${kTagTestPowerLadderDbm.length}] · '
+                '${left}s left · $_windowReads reads';
+          });
+        }
         _collecting = false;
 
         final rssi = List<int>.from(_windowRssi);
