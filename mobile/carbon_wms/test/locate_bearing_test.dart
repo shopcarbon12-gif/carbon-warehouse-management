@@ -226,42 +226,6 @@ void main() {
     });
   });
 
-  group('hot/cold (works with no orientation sensor at all)', () {
-    // This is the path used when the phone is NOT rigidly attached to the
-    // sled, so device yaw says nothing about where the antenna points. It
-    // cannot name a side — that genuinely needs the two locked together — but
-    // it still answers "did that movement help", which is most of a geiger.
-    test('at the recent best reads as hottest', () {
-      expect(hotColdFrom(0.80, 0.80), HotCold.hottest);
-      expect(hotColdFrom(0.75, 0.80), HotCold.hottest);
-    });
-
-    test('a modest drop is still warm', () {
-      expect(hotColdFrom(0.65, 0.80), HotCold.warm);
-    });
-
-    test('a big drop means the operator swept past it', () {
-      expect(hotColdFrom(0.40, 0.80), HotCold.colder);
-      expect(hotColdFrom(0.05, 0.80), HotCold.colder);
-    });
-
-    test('is scale-free — same verdict close in and far out', () {
-      // Half of the recent best is "colder" whether the best was 0.9 or 0.2.
-      expect(hotColdFrom(0.45, 0.90), HotCold.colder);
-      expect(hotColdFrom(0.10, 0.20), HotCold.colder);
-      expect(hotColdFrom(0.88, 0.90), HotCold.hottest);
-      expect(hotColdFrom(0.196, 0.20), HotCold.hottest);
-    });
-
-    test('no history yet is neutral rather than alarming', () {
-      expect(hotColdFrom(0.5, 0), HotCold.warm);
-    });
-
-    test('a new maximum never reads as colder', () {
-      expect(hotColdFrom(0.95, 0.80), HotCold.hottest);
-    });
-  });
-
   group('normaliseDeg', () {
     test('wraps into -180..180', () {
       expect(normaliseDeg(0), 0);

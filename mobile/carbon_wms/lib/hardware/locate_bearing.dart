@@ -216,35 +216,6 @@ class BearingEstimator {
   }
 }
 
-/// Where the current reading sits against the best of the last few seconds.
-///
-/// This is the sensor-free half of direction finding. It needs no orientation
-/// at all — only the signal's own history — so it works when the phone is NOT
-/// rigidly attached to the sled and yaw is therefore meaningless. It cannot
-/// name a side, but "you just passed the hottest point, sweep back" is most of
-/// the value of a geiger and it is always available.
-enum HotCold {
-  /// At or near the strongest signal seen recently — you are pointed at it.
-  hottest,
-
-  /// Off the peak but still in the useful part of the lobe.
-  warm,
-
-  /// Well below the recent best — you have swept past it or turned away.
-  colder,
-}
-
-/// Classify [proximity] against [sweepPeak], the decaying best of the last few
-/// seconds. Ratios rather than absolute values, so it behaves the same close in
-/// and far out.
-HotCold hotColdFrom(double proximity, double sweepPeak) {
-  if (sweepPeak <= 0) return HotCold.warm;
-  final ratio = (proximity / sweepPeak).clamp(0.0, 2.0);
-  if (ratio >= 0.92) return HotCold.hottest;
-  if (ratio >= 0.75) return HotCold.warm;
-  return HotCold.colder;
-}
-
 /// Wrap an angle into -180..180, where negative reads as "to the left".
 double normaliseDeg(double deg) {
   var x = deg % 360;

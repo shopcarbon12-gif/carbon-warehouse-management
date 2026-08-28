@@ -7,11 +7,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import 'package:carbon_wms/services/handheld_runtime_config.dart'
-    show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/locate_bearing.dart';
+import 'package:carbon_wms/hardware/locate_proximity.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
@@ -21,90 +20,6 @@ import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
-import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
-
-/// RSSI (dBm) at the noise floor — the far edge of useful range, ~6-8 m on an
-/// RFD8500 at full power. Maps to 0%.
-const double kLocateWeakDbm = -80.0;
-
-/// RSSI (dBm) that means "the gun is on the tag" — maps to 100%.
-///
-/// This anchor is the whole reason the meter used to feel wrong. It was -45,
-/// but -45 dBm is roughly a METRE away on an RFD8500 at full power, so the
-/// dial saturated at 100% long before the operator was anywhere near the tag
-/// and the entire top of the scale was dead travel. 95-100% has to mean the
-/// last few centimetres, so the anchor has to sit where a tag actually reads
-/// when it's about to be touched.
-///
-/// It is also a floor, not a fixed value — see [_strongRef]. If this
-/// particular gun/tag combination reads hotter than -35 at contact, the scale
-/// stretches to match so 100% stays reachable.
-const double kLocateStrongDbm = -35.0;
-
-/// Map RSSI (dBm) to 0–1 proximity.
-///
-/// ## Why linear in dB is the correct "distance" scale
-///
-/// The operator wants the number to track distance. For monostatic passive
-/// backscatter the received power obeys
-///
-///     P_rx(dBm) = P_tx(dBm) + K − 40·log10(d)
-///
-/// so `d ∝ 10^(−P_rx/40)` — distance is exponential in dBm. Interpolating
-/// linearly in dB is therefore exactly linear in log-distance, which gives a
-/// constant percentage drop per doubling of distance: every 12 dB is 2x
-/// further away and costs the same slice of the bar wherever you are. That is
-/// what makes it behave like hot-and-cold instead of pinning at one end.
-///
-/// With [kLocateWeakDbm]..[kLocateStrongDbm] at full power that works out to
-/// roughly: touching → 100%, 1 m → ~67%, 2 m → ~40%, 4 m → ~13%, out of range
-/// → 0%.
-///
-/// **Always feed this a POWER-NORMALISED value** ([powerNormalisedRssi]), never
-/// a raw read, or the meter silently stops working below full power.
-double rssiToProximity01(int? rssi, {double strongDbm = kLocateStrongDbm}) {
-  if (rssi == null) return 0;
-  // Guard the span so a pathological strong reference can't divide by ~0.
-  final span = math.max(strongDbm - kLocateWeakDbm, 10.0);
-  return ((rssi - kLocateWeakDbm) / span).clamp(0.0, 1.0);
-}
-
-/// Shift a raw RSSI back onto the full-power reference the proximity window
-/// above is calibrated against.
-///
-/// ## Why this is needed — the "geiger only works at 30 dBm" bug
-///
-/// Proximity was mapped from an ABSOLUTE dBm window (-80 → -45) that was
-/// measured with the radio at full power. But for monostatic passive
-/// backscatter the received signal is
-///
-///     P_rx(dBm) = P_tx(dBm) + K − 40·log10(distance)
-///
-/// — the tag has no transmitter of its own, so it re-radiates the carrier the
-/// reader sent it. Turning the reader down by N dB therefore moves EVERY read
-/// down by N dB, at every distance. Drop from 30 to 12 dBm and a tag that used
-/// to read -50 dBm at arm's length now reads about -68: the same spot on the
-/// floor that used to show 86% shows 34%, and nothing anywhere in the aisle can
-/// reach 100% any more. The meter looked broken at anything other than the
-/// power it happened to be calibrated at, which is exactly what the operator
-/// reported.
-///
-/// Normalising by how far the radio is turned down from ITS OWN maximum
-/// ([maxDbm], read from the reader's capabilities — 30 on RFD8500, 23 on the
-/// C72E) makes the gradient identical at every power setting. At full power the
-/// offset is zero, so the existing warehouse calibration is preserved exactly
-/// on both handhelds and nothing about today's behaviour changes.
-///
-/// What legitimately still changes with power is REACH: at 10 dBm the tag stops
-/// answering much sooner because it can't harvest enough energy to power up.
-/// That is real physics and the right behaviour — lower power is how an
-/// operator narrows a search down inside a dense bin.
-int? powerNormalisedRssi(int? rssi, {required int powerDbm, required int maxDbm}) {
-  if (rssi == null) return null;
-  // Clamped so a bogus capability read can never blow the meter up to 100%.
-  final offset = (maxDbm - powerDbm).clamp(0, 25);
-  return rssi + offset;
-}
 
 /// Tap-to-locate Geiger screen.
 ///
@@ -261,7 +176,7 @@ class _Diag {
     this.otherReads = 0,
     this.nullRssiReads = 0,
     this.readsPerSec = 0,
-    this.powerOffsetDb = 0,
+    this.rungDbm = 30,
     this.sessionPeakRssi,
     this.yawDeg,
     this.lastSeenEpcs = const <String>[],
@@ -276,9 +191,9 @@ class _Diag {
   final int nullRssiReads;
   final int readsPerSec;
 
-  /// dB the proximity maths adds to each raw read to compensate for the radio
-  /// running below its maximum. 0 at full power.
-  final int powerOffsetDb;
+  /// Transmit power the auto-ladder currently sits on. This is the meter's
+  /// primary distance signal, so it belongs in the diagnostics.
+  final int rungDbm;
 
   /// Hottest power-normalised read this scan. With the gun touching the tag
   /// this is the ground truth for where 100% should sit.
@@ -331,10 +246,45 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   static const double _beepSlowMs = 650;
   static const double _beepFastMs = 45;
 
-  /// Default locate power. Held as a session override on [RfidManager] so a
-  /// settings sync can't quietly stomp it back to the global config power
-  /// mid-sweep (which stopped and restarted the radio, freezing the meter).
-  static const int _defaultPowerDbm = 30;
+  /// Rolling window the signal peak is taken over.
+  ///
+  /// 16 ms (one frame) was wrong. Tag Test measured the real read rate at
+  /// 20-60 per second — one read roughly every 50 ms, not the hundreds/sec
+  /// assumed — so a one-frame window was EMPTY about two ticks in three and
+  /// the meter kept falling through to its decay path between reads. A 250 ms
+  /// window always contains several reads, and taking the strongest of them
+  /// rides straight over the multipath nulls the test data is full of.
+  static const int _peakWindowMs = 250;
+
+  /// Minimum time on a rung before the ladder may move again. Without it the
+  /// ladder oscillates at a boundary, and every move costs a radio blink.
+  static const int _rungMinDwellMs = 1100;
+
+  /// Reads needed inside [_peakWindowMs] to justify stepping DOWN a rung.
+  /// At a measured 20-60 reads/sec a 250 ms window holds 5-15 when the tag is
+  /// solidly heard, so 4 means "really there", not "one lucky read".
+  static const int _rungDownReads = 4;
+
+  /// Silence at the current rung before stepping back UP. Longer than the
+  /// meter's own grace period so a brief null never widens the search.
+  static const int _rungUpSilenceMs = 900;
+
+  /// How long reads are ignored after a deliberate power change. The sled must
+  /// stop inventory, write the antenna config and restart; anything arriving
+  /// in that window belongs to the previous rung.
+  static const int _rungSettleMs = 400;
+
+  /// How far up a rung's band the signal must sit before the ladder will try
+  /// the next rung down. Chosen from the Tag Test curve: at 5 ft the reading
+  /// clears this and 25 dBm does turn out to be audible there, while at 9 ft
+  /// it does not and 25 dBm is genuinely out of reach. It keeps the ladder
+  /// from probing rungs that measurement says will fail.
+  static const double _rungDownFraction = 0.35;
+
+  /// Lock-out on stepping down again straight after stepping up. Without it a
+  /// boundary produces a continuous down-up-down cycle, and every edge of that
+  /// cycle is a radio blink.
+  static const int _rungDownLockMs = 3000;
 
   RfidManager? _rfid;
   StreamSubscription<RfidTagRead>? _readSub;
@@ -376,6 +326,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   double _sweepPeakProx = 0;
   static const double _sweepPeakTauMs = 4000;
   int _directionTick = 0;
+  HotCold? _hotCold;
+  DateTime _directionChangedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Minimum time a direction message stays on screen before it may change.
+  static const int _directionDwellMs = 1500;
 
   // ── Radio health indicator ───────────────────────────────────────────────
   // Deliberately NOT derived from [_scanning]. The whole value of this dot is
@@ -401,28 +356,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   /// tears that config down for the destination screen.
   bool _radioArmed = false;
 
-  int _powerDbm = _defaultPowerDbm;
-
-  /// The radio's own ceiling, read from its capabilities (30 dBm on RFD8500,
-  /// 23 on the C72E). Proximity is normalised against this so the meter reads
-  /// the same at every slider position — see [powerNormalisedRssi]. Seeded
-  /// optimistically at 30 so the very first reads before the capability query
-  /// lands behave exactly as they did before.
-  int _maxPowerDbm = _defaultPowerDbm;
-
-  /// dB the radio is currently turned down from [_maxPowerDbm]. Recomputed
-  /// whenever either side changes; surfaced in the diagnostic banner so a
-  /// "-68 dBm but the dial says 86%" reading is explainable on the floor.
-  int get _powerOffsetDb =>
-      (_maxPowerDbm - math.min(_powerDbm, _maxPowerDbm)).clamp(0, 25).toInt();
+  int get _rungDbm => kLocateRungsDbm[_rungIndex];
 
   // ── Hot-path fields — written by the read callback, read by the engine.
   //    Never touched by build(), never wrapped in setState. ─────────────────
-  /// Strongest RSSI seen for the target inside the current engine window.
-  /// Peak (not mean) is deliberate: multipath in a racking aisle causes
-  /// *fades*, not gains, so the strongest read in a 33 ms window is the
-  /// honest distance estimate and the dips are the artefact.
-  int? _windowPeakRssi;
   int _windowReads = 0;
   int _readsPerSec = 0;
   int _rateAccum = 0;
@@ -437,32 +374,41 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   /// Engine-owned smoothed proximity. [_proximity] mirrors it at tick rate.
   double _prox = 0;
 
-  /// The RSSI currently treated as 100%. Starts at [kLocateStrongDbm] and only
-  /// ever moves UP (toward 0 dBm) within a scan, never down.
-  ///
-  /// This exists so 100% is always actually reachable. A fixed anchor has to
-  /// guess what a tag reads when the gun is touching it, and that depends on
-  /// the inlay, the gun's antenna and how the tag is mounted — guess too low
-  /// and the dial saturates a metre out (the old -45 bug), guess too high and
-  /// it tops out at 85% with the gun physically on the tag. Tracking the
-  /// session's own hottest read removes the guess: whatever the strongest
-  /// signal this tag can produce turns out to be, that becomes 100%.
-  ///
-  /// Two properties matter and both are deliberate:
-  ///  * **Monotone within a scan.** It never decays, so closing in can never
-  ///    make the number go DOWN because the scale moved under the operator.
-  ///  * **Slow attack** ([_strongAttack]). A single constructive-multipath
-  ///    spike moves the reference only slightly; a genuine approach — which
-  ///    holds its new peak across many windows — converges in ~300 ms. Without
-  ///    this, one freak read would permanently squash the rest of the sweep.
-  ///
-  /// Reset per scan in [_resetSignal], so every hunt calibrates itself fresh.
-  double _strongRef = kLocateStrongDbm;
-  static const double _strongAttack = 0.25;
+  /// Rolling window of (timestampMs, rssi) for the last [_peakWindowMs].
+  final List<(int, int)> _recent = <(int, int)>[];
 
-  /// Hottest normalised read this scan, for the diagnostic banner. This is the
-  /// number to read off the screen with the gun touching the tag if the top of
-  /// the scale ever needs re-calibrating.
+  /// Current rung into [kLocateRungsDbm]. 0 = 30 dBm = widest search.
+  int _rungIndex = 0;
+  DateTime _rungChangedAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// While set, the radio is mid power-change: reads are stale and the meter
+  /// is held steady so a deliberate rung step reads as a step rather than as
+  /// the tag vanishing.
+  DateTime? _rungSettleUntil;
+
+  /// Set after a step up; blocks stepping down again until it passes.
+  DateTime? _rungDownLockUntil;
+
+  /// Signal strength (as a within-band fraction) at which a probe down from a
+  /// given rung last FAILED. Simulated against the measured Tag Test data, a
+  /// ladder without this memory re-probed a rung it had already found
+  /// unreachable roughly every two seconds — 16 rung changes in 30 s of
+  /// standing still, each one a radio blink. With it, the same simulation
+  /// settles and produces no further changes at any distance.
+  ///
+  /// The rule it encodes: only try a narrower power again once the signal here
+  /// has genuinely improved, i.e. the operator has actually moved closer.
+  /// Standing still is not new information.
+  final Map<int, double> _probeFailFraction = <int, double>{};
+
+  /// Strength we had when we last stepped down, so a failure can be attributed
+  /// back to the rung it was launched from.
+  double? _probeFromFraction;
+
+  /// How much the signal must improve before re-probing a failed rung.
+  static const double _probeImproveDelta = 0.08;
+
+  /// Hottest raw reading this scan, for the diagnostic line.
   int? _sessionPeakRssi;
 
   String? _otherEpc;
@@ -515,7 +461,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     unawaited(_armRadio());
     // Learn the radio's real power ceiling so proximity can be normalised
     // against it at any slider position.
-    unawaited(_loadPowerRange());
+    unawaited(_applyRungPower());
     // Poll the radio's own state for the whole time we're on this screen, not
     // just while scanning — the operator wants to be able to glance at it any
     // time and know whether the scanner is genuinely running.
@@ -546,7 +492,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       // triggers reapplyHandheldHardwareSettings(), which honours the session
       // override when one is set — so claiming first means the radio takes a
       // single power write instead of "config power, then locate power".
-      unawaited(m.setSessionPowerOverrideDbm(_powerDbm));
+      unawaited(m.setSessionPowerOverrideDbm(_rungDbm));
       m.scanContext = 'GEIGER_FIND';
     }
   }
@@ -604,26 +550,42 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     if (_radioLive.value != live) _radioLive.value = live;
   }
 
-  /// Ask the connected radio what it can actually transmit. RFD8500 reports
-  /// 30 dBm, the C72E is hard-capped at 23. Retried a couple of times because
-  /// the query returns null until the reader link is up, and we enter this
-  /// screen straight off a navigation.
-  Future<void> _loadPowerRange() async {
-    for (var attempt = 0; attempt < 3; attempt++) {
-      if (!mounted) return;
-      final range = await RfidVendorChannel.getPowerRangeDbm();
-      if (range != null) {
-        final max = range.maxDbm.clamp(5, kAntennaPowerDbmMax);
-        _maxPowerDbm = max;
-        // The native controllers clamp internally, so a slider sitting above
-        // the radio's ceiling means the radio is really at the ceiling. Track
-        // that or the normalisation offset would be computed against a power
-        // the hardware never used.
-        if (_powerDbm > max) _powerDbm = max;
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-    }
+  /// Push the current rung's power to the radio and open a settle window.
+  ///
+  /// The RFD8500 refuses a power change while it is listening, so the native
+  /// controller stops inventory, writes the config and restarts. That leaves
+  /// a real hole of a few hundred milliseconds with no reads — which the
+  /// meter must NOT read as "the tag disappeared". [_rungSettleUntil] both
+  /// freezes the meter and suppresses the ladder's own silence detector for
+  /// the duration, so a deliberate rung change reads as a step.
+  ///
+  /// Re-issuing the inventory start afterwards is belt-and-braces: the
+  /// controller retries its own resume, but if every retry lands inside the
+  /// sled's settle window it gives up and strands the radio stopped while the
+  /// screen still says SCANNING. This turns that into a self-heal.
+  Future<void> _applyRungPower() async {
+    final dbm = _rungDbm;
+    _rungSettleUntil =
+        DateTime.now().add(const Duration(milliseconds: _rungSettleMs));
+    await _rfid?.setSessionPowerOverrideDbm(dbm);
+    if (!mounted || !_scanning) return;
+    try {
+      await RfidVendorChannel.startZebraInventory();
+    } catch (_) {}
+    try {
+      await RfidVendorChannel.startChainwayInventory();
+    } catch (_) {}
+  }
+
+  /// Move the ladder one rung and re-arm the radio at the new power.
+  void _setRung(int next, DateTime now) {
+    final clamped = next.clamp(0, kLocateRungsDbm.length - 1);
+    if (clamped == _rungIndex) return;
+    _rungIndex = clamped;
+    _rungChangedAt = now;
+    // Evidence gathered at the old power says nothing about the new one.
+    _recent.clear();
+    unawaited(_applyRungPower());
   }
 
   // ── Radio arming ─────────────────────────────────────────────────────────
@@ -655,33 +617,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     await ScanSounds.instance.setTagBeepSuppressed(true);
   }
 
-  /// Apply a new transmit power. Two things have to happen beyond pushing the
-  /// value: the proximity normalisation has to learn the new offset (so the
-  /// meter keeps the same gradient at the new power), and the radio has to be
-  /// confirmed still streaming.
-  ///
-  /// That second part matters because the RFD8500 rejects
-  /// `setAntennaRfConfig` while inventory is running, so the native controller
-  /// does stop → apply → `resumeInventoryWithRetry`. If every resume attempt
-  /// lands inside the sled's settle window the retry gives up, leaving
-  /// `inventoryActive=false` while this screen still says SCANNING — a dead
-  /// meter that looks exactly like "the geiger doesn't work at this dBm".
-  /// Re-issuing the start is a no-op when the resume succeeded and a clean
-  /// recovery when it didn't.
-  void _onPowerCommitted(int dbm) {
-    _powerDbm = dbm.clamp(1, _maxPowerDbm);
-    unawaited(() async {
-      await _rfid?.setSessionPowerOverrideDbm(dbm);
-      if (!mounted || !_scanning) return;
-      try {
-        await RfidVendorChannel.startZebraInventory();
-      } catch (_) {}
-      try {
-        await RfidVendorChannel.startChainwayInventory();
-      } catch (_) {}
-    }());
-  }
-
   // ── Toggle scan ──────────────────────────────────────────────────────────
 
   Future<void> _toggleScan() async {
@@ -705,7 +640,6 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   }
 
   void _resetSignal() {
-    _windowPeakRssi = null;
     _windowReads = 0;
     _readsPerSec = 0;
     _rateAccum = 0;
@@ -716,9 +650,16 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _lastRssi = null;
     _lastTargetReadAt = null;
     _prox = 0;
-    // Every hunt re-calibrates its own top of scale from scratch.
-    _strongRef = kLocateStrongDbm;
+    // Every hunt starts wide and narrows its way in.
+    _recent.clear();
+    _rungIndex = 0;
+    _rungChangedAt = DateTime.fromMillisecondsSinceEpoch(0);
+    _rungSettleUntil = null;
+    _rungDownLockUntil = null;
+    _probeFailFraction.clear();
+    _probeFromFraction = null;
     _sessionPeakRssi = null;
+    unawaited(_applyRungPower());
     // Bearing evidence is tied to where the operator was standing, so it never
     // carries across hunts.
     _bearing.reset();
@@ -728,6 +669,8 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _trendDir = 0;
     _sweepPeakProx = 0;
     _directionTick = 0;
+    _hotCold = null;
+    _directionChangedAt = DateTime.fromMillisecondsSinceEpoch(0);
     _direction.value = _directionsOn
         ? const _DirectionState.searching()
         : const _DirectionState.off();
@@ -857,8 +800,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       } else {
         _lastRssi = rssi;
       }
-      final peak = _windowPeakRssi;
-      if (peak == null || rssi > peak) _windowPeakRssi = rssi;
+      _recent.add((DateTime.now().millisecondsSinceEpoch, rssi));
+      // Hard cap so a burst can never grow this without bound; the engine
+      // prunes by age every tick anyway.
+      if (_recent.length > 512) _recent.removeAt(0);
       _diagDirty = true;
       return;
     }
@@ -901,6 +846,61 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     );
   }
 
+  /// The power ladder.
+  ///
+  /// Steps DOWN (narrowing the search) when the tag is solidly heard at the
+  /// current power AND its strength sits well up this rung's band — the second
+  /// condition matters, because "audible" alone would march the ladder all the
+  /// way to 5 dBm from across the room and then have to climb back.
+  ///
+  /// Steps UP when the tag goes quiet, which at a narrowed power is the
+  /// measurement, not a failure: it means the operator is further away than
+  /// this rung reaches.
+  ///
+  /// Three separate brakes stop it oscillating at a boundary, where "just
+  /// audible" and "just silent" alternate: a minimum dwell on every rung, a
+  /// longer lock-out on stepping down again right after a step up, and the
+  /// asymmetry between the two conditions. Each move costs a radio blink, so
+  /// thrash is expensive as well as ugly.
+  void _runLadder(DateTime now, int? peak) {
+    if (now.difference(_rungChangedAt).inMilliseconds < _rungMinDwellMs) return;
+    final last = _lastTargetReadAt;
+    final silentMs =
+        last == null ? 1 << 20 : now.difference(last).inMilliseconds;
+
+    if (silentMs > _rungUpSilenceMs) {
+      if (_rungIndex > 0) {
+        // The narrower power cannot hear the tag from here. Remember how
+        // strong the signal was when we launched that probe, so we don't
+        // repeat it until something actually changes.
+        final from = _rungIndex - 1;
+        if (_probeFromFraction != null) {
+          _probeFailFraction[from] = _probeFromFraction!;
+        }
+        _rungDownLockUntil =
+            now.add(const Duration(milliseconds: _rungDownLockMs));
+        _setRung(from, now);
+      }
+      return;
+    }
+
+    final locked =
+        _rungDownLockUntil != null && now.isBefore(_rungDownLockUntil!);
+    if (locked || peak == null) return;
+    if (_rungIndex >= kLocateRungsDbm.length - 1) return;
+    if (_recent.length < _rungDownReads) return;
+
+    final fraction = rungFraction(peak);
+    if (fraction < _rungDownFraction) return;
+    // Already learned this rung is out of reach at roughly this signal level.
+    final failedAt = _probeFailFraction[_rungIndex];
+    if (failedAt != null && fraction <= failedAt + _probeImproveDelta) return;
+
+    _probeFromFraction = fraction;
+    _probeFailFraction.remove(_rungIndex);
+    _setRung(_rungIndex + 1, now);
+  }
+
   void _engineTick() {
     if (!mounted || !_scanning) return;
     final now = DateTime.now();
@@ -911,62 +911,61 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     final dtMs = rawDt.clamp(1.0, 250.0);
     _lastTickAt = now;
 
-    // 1. Fold this window's reads into the smoothed proximity.
-    final peak = _windowPeakRssi;
-    _windowPeakRssi = null;
+    // 1. Trailing-window peak. Reads land in _recent from the read callback;
+    //    here we drop anything older than the window and take the strongest
+    //    of what's left. Strongest, not average: the Tag Test data is full of
+    //    multipath nulls (one step read 4 times, the next 322), and a null is
+    //    an artefact of where you're standing, not a statement about distance.
+    final nowMs = now.millisecondsSinceEpoch;
+    _recent.removeWhere((e) => nowMs - e.$1 > _peakWindowMs);
+    int? peak;
+    for (final e in _recent) {
+      if (peak == null || e.$2 > peak) peak = e.$2;
+    }
     _rateAccum += _windowReads;
     _windowReads = 0;
     _rateTicks++;
 
-    if (peak != null) {
-      // Normalise to full power BEFORE anything else. Without this the meter
-      // only works at the power the window was calibrated at; see
-      // powerNormalisedRssi. Everything downstream — including the
-      // self-calibrating top of the scale — works in normalised dBm, so
-      // changing power mid-hunt doesn't invalidate the reference.
-      final norm = powerNormalisedRssi(
-        peak,
-        powerDbm: _powerDbm,
-        maxDbm: _maxPowerDbm,
-      )!;
-      if (_sessionPeakRssi == null || norm > _sessionPeakRssi!) {
-        _sessionPeakRssi = norm;
+    // 2. Hold everything steady while a deliberate power change lands. The
+    //    radio really is silent here, but the tag has not gone anywhere.
+    final settling =
+        _rungSettleUntil != null && now.isBefore(_rungSettleUntil!);
+    if (settling) {
+      _recent.clear();
+    } else {
+      _rungSettleUntil = null;
+      _runLadder(now, peak);
+    }
+
+    if (peak != null && !settling) {
+      if (_sessionPeakRssi == null || peak > _sessionPeakRssi!) {
+        _sessionPeakRssi = peak;
       }
-      // Stretch the top of the scale toward anything hotter than the current
-      // reference, slowly, and never back down — see _strongRef.
-      if (norm > _strongRef) {
-        _strongRef += (norm - _strongRef) * _strongAttack;
-      }
-      _lastNormRssi = norm;
-      // Feed direction finding from the same normalised value. Doing it here,
-      // on the tick, rather than in the read callback keeps it rate-limited to
-      // 30 Hz and off the hot path.
+      _lastNormRssi = peak;
+      // Direction finding runs off the same reading, on the tick rather than
+      // the read callback, so it stays rate-limited and off the hot path.
       final yaw = _yawDeg;
-      if (_directionsOn && yaw != null) _bearing.add(yaw, norm, now);
-      final raw = rssiToProximity01(norm, strongDbm: _strongRef);
+      if (_directionsOn && yaw != null) _bearing.add(yaw, peak, now);
+
+      // The rung carries the distance claim; signal strength only positions
+      // the meter inside that rung's band. See locate_proximity.dart for why
+      // it is this way round.
+      final raw = proximityFor(_rungIndex, peak);
       if (_prox <= 0) {
-        // First read of a hunt (or straight after a decay to zero): snap to it.
-        // Easing up from zero here is pure invented lag — the radio has just
-        // told us exactly where we are.
+        // First read of a hunt: snap to it. Easing up from zero is invented
+        // lag — the radio has just said exactly where we are.
         _prox = raw;
       } else {
-        // Asymmetric exponential smoothing against REAL elapsed time. The old
-        // version applied a fixed weight per read, so at 300 reads/sec it
-        // converged in ~10 ms and the meter was effectively raw and jittery;
-        // a fixed weight per tick then drifted whenever the timer slipped.
-        // alpha = 1 - e^(-dt/tau) makes the response a true time constant.
         final tau = raw >= _prox ? _riseTauMs : _fallTauMs;
         final alpha = 1 - math.exp(-dtMs / tau);
         _prox = (_prox + (raw - _prox) * alpha).clamp(0.0, 1.0);
       }
       _lastTargetReadAt = now;
-    } else {
+    } else if (!settling) {
       final last = _lastTargetReadAt;
       if (last == null) {
         _prox = 0;
       } else if (now.difference(last).inMilliseconds > _holdMs) {
-        // Time-based exponential so the fall-off is identical regardless of
-        // how punctual the timer is under load.
         _prox *= math.exp(-dtMs / _decayTauMs);
         if (_prox < 0.02) _prox = 0;
       }
@@ -996,8 +995,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     }
 
     // 2c. Direction panel, republished at ~10 Hz.
+    // ~3 Hz. Words do not need frame-rate refresh, and a slower cadence is
+    // part of what makes them readable.
     _directionTick++;
-    if (_directionTick >= 6) {
+    if (_directionTick >= 20) {
       _directionTick = 0;
       _publishDirection(now);
     }
@@ -1028,7 +1029,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
           otherReads: _otherReads,
           nullRssiReads: _nullRssiReads,
           readsPerSec: _readsPerSec,
-          powerOffsetDb: _powerOffsetDb,
+          rungDbm: _rungDbm,
           sessionPeakRssi: _sessionPeakRssi,
           yawDeg: _yawDeg,
           lastSeenEpcs: List<String>.unmodifiable(_lastSeenEpcs),
@@ -1096,8 +1097,11 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // that genuinely requires the phone and the antenna to move as one — but
     // "you just swept past it" is most of what a geiger is for, and it works
     // however the operator is holding the two pieces.
+    // Hysteresis: feed the current state back in so a signal hovering near a
+    // boundary holds instead of flipping the word on every dip.
+    _hotCold = hotColdFrom(_prox, _sweepPeakProx, previous: _hotCold);
     final String headline;
-    switch (hotColdFrom(_prox, _sweepPeakProx)) {
+    switch (_hotCold!) {
       case HotCold.hottest:
         headline = 'HOTTEST HERE';
       case HotCold.warm:
@@ -1128,6 +1132,15 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     );
   }
 
+  /// Publish a direction state, with a minimum dwell so the panel stays
+  /// readable.
+  ///
+  /// The words were previously recomputed and republished ten times a second
+  /// straight off a jittery number, so they changed faster than anyone could
+  /// read them — "HOTTEST HERE" to "COLD" inside a second. Anything that
+  /// changes what the operator is being TOLD now has to hold for
+  /// [_directionDwellMs] first. Switching guidance off is exempt: that is a
+  /// direct response to a tap and must feel immediate.
   void _setDirection(_DirectionState next) {
     final cur = _direction.value;
     if (cur.status == next.status &&
@@ -1135,6 +1148,15 @@ class _LocateTagScreenState extends State<LocateTagScreen>
         cur.detail == next.detail) {
       return;
     }
+    final now = DateTime.now();
+    final immediate = next.status == DirectionStatus.off ||
+        cur.status == DirectionStatus.off;
+    if (!immediate &&
+        now.difference(_directionChangedAt).inMilliseconds <
+            _directionDwellMs) {
+      return;
+    }
+    _directionChangedAt = now;
     _direction.value = next;
   }
 
@@ -1410,13 +1432,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 onPressed: _epcValid ? () => unawaited(_toggleScan()) : null,
               ),
               SizedBox(height: 8.h),
-              RfidPowerSlider(
-                defaultDbm: _defaultPowerDbm,
-                // Route through the session override rather than pushing
-                // straight to the radio, so a later settings sync can't
-                // silently undo the operator's choice mid-sweep.
-                onCommit: _onPowerCommitted,
-              ),
+              // The ladder owns transmit power now, so a manual slider here
+              // would only fight it. This reports what it is doing instead.
+              _RungBar(rungDbm: _rungDbm, proximity: _proximity),
               SizedBox(height: 4.h),
             ],
           ),
@@ -1429,6 +1447,61 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 // ═══════════════════════════════════════════════════════════════════════════
 // Header — EPC
 // ═══════════════════════════════════════════════════════════════════════════
+
+/// Reports what the auto power-ladder is doing, and how each rung maps to
+/// distance. The rung IS the meter's distance measurement (signal strength is
+/// saturated in the near zone — see locate_proximity.dart), so showing it
+/// makes the percentage explainable rather than magic.
+class _RungBar extends StatelessWidget {
+  const _RungBar({required this.rungDbm, required this.proximity});
+
+  final int rungDbm;
+  final ValueListenable<double> proximity;
+
+  @override
+  Widget build(BuildContext context) {
+    final idx = kLocateRungsDbm.indexOf(rungDbm);
+    return Container(
+      color: const Color(0xFFF0F5F4),
+      padding: EdgeInsets.fromLTRB(12.w, 6.h, 12.w, 6.h),
+      child: Row(
+        children: [
+          Text(
+            'AUTO PWR',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+          SizedBox(width: 10.w),
+          // One pip per rung, filled up to the current one. Narrowing the
+          // search lights more pips, so the ladder's progress is visible.
+          for (var i = 0; i < kLocateRungsDbm.length; i++) ...[
+            Container(
+              width: 14.w,
+              height: 6.h,
+              margin: EdgeInsets.only(right: 3.w),
+              color: i <= idx
+                  ? AppColors.primary
+                  : AppColors.primary.withValues(alpha: 0.18),
+            ),
+          ],
+          const Spacer(),
+          Text(
+            '$rungDbm dBm · ${rungDistanceHint(idx < 0 ? 0 : idx)}',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textMain,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _HeaderRow extends StatelessWidget {
   const _HeaderRow({required this.epc});
@@ -2311,7 +2384,7 @@ class _LiveDiagnosticBanner extends StatelessWidget {
                       '${d.lastSeenRssi != null ? ' · ${d.lastSeenRssi}dBm' : ''}'
                       // Explains a "-68 dBm but the dial reads 86%" pairing:
                       // the meter is normalised back to full power.
-                      '${d.powerOffsetDb > 0 ? ' · PWR+${d.powerOffsetDb}dB' : ''}'
+                      ' · PWR ${d.rungDbm}dBm'
                       // Read this with the gun ON the tag: it is where 100%
                       // actually sits for this gun/tag pair.
                       '${d.sessionPeakRssi != null ? ' · PEAK ${d.sessionPeakRssi}' : ''}'
