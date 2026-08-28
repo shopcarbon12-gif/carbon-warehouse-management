@@ -578,6 +578,11 @@ class CarbonZebraRfidController(
           mainHandler.post { result.success(null) }
           return@execute
         }
+        // Force the antenna config write on the start path rather than
+        // trusting the cache. The cache is a latency optimisation for the
+        // slider; starting inventory is the one moment where being wrong
+        // about the radio's state costs the operator the whole screen.
+        currentPowerIdx = -1
         applyTransmitPowerDbm(r)
         // Silence the sled's per-tag beeper ONLY during this active
         // inventory burst. Restored to HIGH in stopInventoryAsync so
@@ -1407,7 +1412,11 @@ class CarbonZebraRfidController(
    * consistent RSSI, no fading from cross-talk. Cleared on exit so
    * other screens see the full field.
    */
-  fun setEpcInventoryFilter(epcHex: String?, result: MethodChannel.Result) {
+  fun setEpcInventoryFilter(
+    epcHex: String?,
+    result: MethodChannel.Result,
+    force: Boolean = false,
+  ) {
     executor.execute {
       try {
         val r = reader
@@ -1417,7 +1426,7 @@ class CarbonZebraRfidController(
         }
         val cleanEpc = epcHex?.trim()?.uppercase()?.replace(Regex("[^0-9A-F]"), "")
           ?.takeIf { it.length == 24 }
-        if (currentPrefilterEpc == cleanEpc) {
+        if (!force && currentPrefilterEpc == cleanEpc) {
           // Same filter already installed. Skipping avoids stop + deleteAll +
           // add — three SPP round-trips — on every Locate-Tag trigger pull.
           Log.d(TAG, "setEpcInventoryFilter: already ${cleanEpc ?: "cleared"}, skipping")
@@ -1479,7 +1488,11 @@ class CarbonZebraRfidController(
    * OperationFailureException if you setSingulationControl while a
    * stream is running.
    */
-  fun setSingulationSession(useSessionZero: Boolean, result: MethodChannel.Result) {
+  fun setSingulationSession(
+    useSessionZero: Boolean,
+    result: MethodChannel.Result,
+    force: Boolean = false,
+  ) {
     executor.execute {
       try {
         val r = reader
@@ -1487,7 +1500,7 @@ class CarbonZebraRfidController(
           mainHandler.post { result.success(false) }
           return@execute
         }
-        if (currentSessionZero == useSessionZero) {
+        if (!force && currentSessionZero == useSessionZero) {
           // Already on the requested session — skip the get/set round-trips.
           Log.d(TAG, "setSingulationSession: already S${if (useSessionZero) 0 else 1}, skipping")
           mainHandler.post { result.success(true) }

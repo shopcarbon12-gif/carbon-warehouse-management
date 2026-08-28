@@ -335,12 +335,15 @@ class RfidVendorChannel {
   /// entry; every other screen sticks with the connect-time S1 (better
   /// inventory throughput for multi-tag passes). Returns true if the
   /// flip was accepted by the radio.
-  static Future<bool> setSingulationSession({required bool useSessionZero}) async {
+  static Future<bool> setSingulationSession({
+    required bool useSessionZero,
+    bool force = false,
+  }) async {
     if (!_isAndroid) return false;
     try {
       final ok = await _method.invokeMethod<bool>(
         'rfid.setSingulationSession',
-        <String, dynamic>{'useSessionZero': useSessionZero},
+        <String, dynamic>{'useSessionZero': useSessionZero, 'force': force},
       );
       return ok == true;
     } catch (_) {
@@ -356,12 +359,12 @@ class RfidVendorChannel {
   /// Used by Locate-Tag on entry to make RSSI stable when the warehouse
   /// has hundreds of other tags in the field, and cleared on exit so
   /// other screens see normal inventory.
-  static Future<bool> setEpcInventoryFilter(String? epc) async {
+  static Future<bool> setEpcInventoryFilter(String? epc, {bool force = false}) async {
     if (!_isAndroid) return false;
     try {
       final ok = await _method.invokeMethod<bool>(
         'rfid.setEpcInventoryFilter',
-        <String, dynamic>{'epc': epc},
+        <String, dynamic>{'epc': epc, 'force': force},
       );
       return ok == true;
     } catch (_) {

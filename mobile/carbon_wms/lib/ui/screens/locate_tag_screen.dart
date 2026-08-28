@@ -596,8 +596,22 @@ class _LocateTagScreenState extends State<LocateTagScreen>
   /// Ordering matters and is preserved by the native single-thread executor:
   /// pre-filter first (so the radio knows which tag it cares about), then the
   /// session flip, then inventory start from [_startScan].
-  Future<void> _armRadio() async {
-    if (_radioArmed) return;
+  /// Push the locate radio configuration.
+  ///
+  /// This used to run ONCE per screen entry, latched behind [_radioArmed], as
+  /// a latency optimisation. That was a mistake, and it cost the operator the
+  /// entire screen. Stacked on top of the native controller's own "skip if
+  /// already applied" cache, it meant that if the radio's real state ever
+  /// drifted from either cache — a link drop and reconnect wipes the native
+  /// side, and `connectAndConfigureReader` deletes every pre-filter — then
+  /// NOTHING re-applied it. Locate then ran with no pre-filter and the wrong
+  /// session, and inventory refused to start, permanently.
+  ///
+  /// Correctness beats a couple of hundred milliseconds. Every scan start now
+  /// re-asserts the configuration and forces it past the native cache, so the
+  /// screen can always recover itself.
+  Future<void> _armRadio({bool force = false}) async {
+    if (_radioArmed && !force) return;
     _radioArmed = true;
     final target = _epcUpper;
     if (_epc24.hasMatch(target)) {
@@ -607,13 +621,16 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       // wildly variable RSSI (multipath from competing responses). With the
       // filter the radio spends all its slots on the target: dense reads,
       // stable RSSI, distance-honest proximity.
-      await RfidVendorChannel.setEpcInventoryFilter(target);
+      await RfidVendorChannel.setEpcInventoryFilter(target, force: force);
     }
     // SESSION_S0 so the target re-responds on every inventory round. Under
     // the default S1 the tag falls silent for seconds after its first reply,
     // and the meter sagged from 100 → 80 → 64 → 51 while the operator stood
     // perfectly still on top of the tag.
-    await RfidVendorChannel.setSingulationSession(useSessionZero: true);
+    await RfidVendorChannel.setSingulationSession(
+      useSessionZero: true,
+      force: force,
+    );
     await ScanSounds.instance.setTagBeepSuppressed(true);
   }
 
@@ -706,9 +723,9 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _readSub =
         RfidVendorChannel.tagReadStream().listen(_onGeigerRead, onError: (_) {});
 
-    // Only re-arms if the action-picker hand-off cleared the config; a normal
-    // trigger pull skips straight past this.
-    await _armRadio();
+    // Re-assert the radio configuration on EVERY start, forcing it past the
+    // native cache. See _armRadio for why arming once was a mistake.
+    await _armRadio(force: true);
 
     _startYaw();
     _startEngine();

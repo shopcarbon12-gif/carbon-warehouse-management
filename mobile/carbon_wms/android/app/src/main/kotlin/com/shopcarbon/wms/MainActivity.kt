@@ -417,12 +417,14 @@ class MainActivity : FlutterFragmentActivity() {
         "rfid.setSingulationSession" -> {
           val args = call.arguments as? Map<*, *>
           val useS0 = (args?.get("useSessionZero") as? Boolean) ?: false
-          zebra.setSingulationSession(useS0, result)
+          val forceS = (args?.get("force") as? Boolean) ?: false
+          zebra.setSingulationSession(useS0, result, forceS)
         }
         "rfid.setEpcInventoryFilter" -> {
           val args = call.arguments as? Map<*, *>
           val epc = args?.get("epc") as? String
-          zebra.setEpcInventoryFilter(epc, result)
+          val forceF = (args?.get("force") as? Boolean) ?: false
+          zebra.setEpcInventoryFilter(epc, result, forceF)
         }
         "rfid.writeEpc" -> {
           val args = call.arguments as? Map<*, *>
