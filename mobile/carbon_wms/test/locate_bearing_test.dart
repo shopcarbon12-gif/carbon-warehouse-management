@@ -70,7 +70,7 @@ void main() {
     test('contrast below the threshold is rejected', () {
       final est = BearingEstimator();
       for (var yaw = 0.0; yaw < 360; yaw += 10) {
-        // 3 dB of spread — under the 6 dB minimum.
+        // 3 dB of spread — under the 4 dB minimum.
         est.add(yaw, yaw == 90 ? -52 : -55, t0);
       }
       expect(est.fix(0, t0), isNull);
@@ -111,6 +111,103 @@ void main() {
     });
   });
 
+  group('regression: evidence must not become immortal', () {
+    // 1.2.152 refreshed a bin's timestamp on EVERY sample, including weaker
+    // ones. So a bin holding an old strong reading never aged out as long as
+    // the operator kept sweeping through that heading INSIDE the TTL — the
+    // refresh kept resetting the clock. The picture froze at whatever geometry
+    // once produced the strongest reads, peak-to-median collapsed, and the
+    // contrast guard then rejected everything. On the floor: a permanent
+    // "OFF DIRECTIONS" that got worse the harder you swept.
+    //
+    // Reproducing it requires CONTINUOUS sweeping with gaps shorter than the
+    // TTL. A single long pause expires the bin the honest way and hides the
+    // bug entirely.
+    test('a stale strong bin cannot be kept alive by sweeping past it', () {
+      final est = BearingEstimator();
+      est.add(90, -25, t0); // one very strong historical read
+
+      // Sweep the full circle once a second for well past the 6 s TTL. Every
+      // gap is under the TTL, which is exactly the condition the bug needed:
+      // the weaker read at 90 kept resetting that bin's clock instead of
+      // letting its stale -25 die. 200 deg carries the only real signal now.
+      var now = t0;
+      for (var i = 0; i < 30; i++) {
+        now = now.add(const Duration(seconds: 1));
+        for (var yaw = 0.0; yaw < 360; yaw += 10) {
+          est.add(yaw, yaw == 200 ? -45 : -60, now);
+        }
+      }
+
+      final r = est.evaluate(0, now);
+      expect(r.fix, isNotNull);
+      // -25 is 30 s stale. If it is still the peak, bins are immortal again.
+      expect(r.fix!.peakRssi, -45);
+    });
+
+    test('the fix follows the CURRENT geometry, not the strongest history', () {
+      final est = BearingEstimator();
+      var now = t0;
+
+      // Phase 1: operator close to a tag at 90 deg. Strong reads all round.
+      for (var yaw = 0.0; yaw < 360; yaw += 10) {
+        est.add(yaw, simulatedRssi(yaw, 90, peak: -30), now);
+      }
+      expect(est.fix(0, now)!.relativeDeg, closeTo(90, 15));
+
+      // Phase 2: the operator has moved; the tag now bears 270 and reads
+      // weaker. They sweep continuously for 20 s — never pausing long enough
+      // for phase 1's readings to expire on their own.
+      for (var pass = 0; pass < 40; pass++) {
+        now = now.add(const Duration(milliseconds: 500));
+        for (var yaw = 0.0; yaw < 360; yaw += 10) {
+          est.add(yaw, simulatedRssi(yaw, 270, peak: -45), now);
+        }
+      }
+
+      final fix = est.fix(0, now);
+      expect(fix, isNotNull);
+      expect(fix!.relativeDeg, closeTo(-90, 15),
+          reason: 'bearing 270 is -90 once wrapped; 90 would mean stale '
+              'phase-1 evidence survived');
+    });
+  });
+
+  group('evaluate reasons', () {
+    test('too little sweep is reported as needing more sweep', () {
+      final est = BearingEstimator();
+      for (var yaw = 0.0; yaw <= 20; yaw += 5) {
+        est.add(yaw, simulatedRssi(yaw, 90), t0);
+      }
+      final r = est.evaluate(0, t0);
+      expect(r.fix, isNull);
+      expect(r.reason, BearingReason.needMoreSweep);
+      expect(r.coverageDeg, lessThan(60));
+    });
+
+    test('a flat field is reported as flat, not as needing more sweep', () {
+      final est = BearingEstimator();
+      for (var yaw = 0.0; yaw < 360; yaw += 10) {
+        est.add(yaw, -55, t0);
+      }
+      final r = est.evaluate(0, t0);
+      expect(r.fix, isNull);
+      expect(r.reason, BearingReason.fieldTooFlat);
+      expect(r.coverageDeg, greaterThanOrEqualTo(60));
+    });
+
+    test('a good sweep reports locked with its contrast', () {
+      final est = BearingEstimator();
+      for (var yaw = 0.0; yaw <= 180; yaw += 5) {
+        est.add(yaw, simulatedRssi(yaw, 90), t0);
+      }
+      final r = est.evaluate(0, t0);
+      expect(r.reason, BearingReason.locked);
+      expect(r.fix, isNotNull);
+      expect(r.contrastDb, greaterThanOrEqualTo(4));
+    });
+  });
+
   group('turnLabel', () {
     test('dead ahead reads as straight, not a tiny angle', () {
       expect(turnLabel(0), 'STRAIGHT AHEAD');
@@ -126,6 +223,42 @@ void main() {
     test('sides carry the angle', () {
       expect(turnLabel(-45), 'LEFT 45°');
       expect(turnLabel(60), 'RIGHT 60°');
+    });
+  });
+
+  group('hot/cold (works with no orientation sensor at all)', () {
+    // This is the path used when the phone is NOT rigidly attached to the
+    // sled, so device yaw says nothing about where the antenna points. It
+    // cannot name a side — that genuinely needs the two locked together — but
+    // it still answers "did that movement help", which is most of a geiger.
+    test('at the recent best reads as hottest', () {
+      expect(hotColdFrom(0.80, 0.80), HotCold.hottest);
+      expect(hotColdFrom(0.75, 0.80), HotCold.hottest);
+    });
+
+    test('a modest drop is still warm', () {
+      expect(hotColdFrom(0.65, 0.80), HotCold.warm);
+    });
+
+    test('a big drop means the operator swept past it', () {
+      expect(hotColdFrom(0.40, 0.80), HotCold.colder);
+      expect(hotColdFrom(0.05, 0.80), HotCold.colder);
+    });
+
+    test('is scale-free — same verdict close in and far out', () {
+      // Half of the recent best is "colder" whether the best was 0.9 or 0.2.
+      expect(hotColdFrom(0.45, 0.90), HotCold.colder);
+      expect(hotColdFrom(0.10, 0.20), HotCold.colder);
+      expect(hotColdFrom(0.88, 0.90), HotCold.hottest);
+      expect(hotColdFrom(0.196, 0.20), HotCold.hottest);
+    });
+
+    test('no history yet is neutral rather than alarming', () {
+      expect(hotColdFrom(0.5, 0), HotCold.warm);
+    });
+
+    test('a new maximum never reads as colder', () {
+      expect(hotColdFrom(0.95, 0.80), HotCold.hottest);
     });
   });
 

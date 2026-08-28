@@ -63,6 +63,35 @@ class BearingFix {
   final double coverageDeg;
 }
 
+/// Why the estimator can or cannot name a direction right now.
+enum BearingReason {
+  /// Not enough of an arc swept yet — the operator needs to keep turning.
+  needMoreSweep,
+
+  /// Swept plenty, but signal barely varies with heading. Either the tag is so
+  /// close that the antenna lobe stops discriminating, or the aisle is
+  /// reflective enough that there is no honest peak to point at.
+  fieldTooFlat,
+
+  /// Good fix.
+  locked,
+}
+
+/// Outcome of one bearing evaluation, including the reason when there's no fix.
+class BearingResult {
+  const BearingResult({
+    required this.reason,
+    required this.coverageDeg,
+    required this.contrastDb,
+    this.fix,
+  });
+
+  final BearingReason reason;
+  final double coverageDeg;
+  final double contrastDb;
+  final BearingFix? fix;
+}
+
 /// Accumulates signal-vs-heading and extracts a bearing once the operator has
 /// swept enough of an arc for the answer to mean something.
 class BearingEstimator {
@@ -70,7 +99,7 @@ class BearingEstimator {
     this.binCount = 36,
     this.ttl = const Duration(seconds: 6),
     this.minCoverageDeg = 60,
-    this.minContrastDb = 6,
+    this.minContrastDb = 4,
   }) : assert(binCount > 0);
 
   /// Angular resolution. 36 bins = 10° each, which is finer than the antenna
@@ -91,6 +120,10 @@ class BearingEstimator {
   /// steel aisle a reflection off an upright can put a real lobe in the wrong
   /// place, but a genuine line-of-sight peak stands proud of the field. If
   /// nothing stands out we report no fix rather than pointing somewhere wrong.
+  ///
+  /// 4 dB, not 6: a handheld's front-to-back rejection is 10-20 dB, so a real
+  /// sweep past a tag clears this comfortably, while 6 dB was rejecting
+  /// legitimate fixes when the operator swept a shallower arc.
   final double minContrastDb;
 
   final Map<int, _Bin> _bins = <int, _Bin>{};
@@ -101,25 +134,45 @@ class BearingEstimator {
 
   /// Fold one observation in. Keeps the strongest reading per bin — fades are
   /// multipath artefacts, peaks are the honest geometry.
+  ///
+  /// A bin's age is the age of the READING IT HOLDS, and a weaker read must
+  /// never refresh it. Getting that wrong made the estimator destroy itself:
+  /// the previous version bumped `at` on every sample regardless of strength,
+  /// so a bin's all-time maximum could never expire while the operator kept
+  /// sweeping through it. Sweep back and forth a few times and every bin was
+  /// pinned at its historical peak, the peak-to-median spread collapsed to
+  /// nothing, and the contrast guard rejected everything from then on — a
+  /// permanent "OFF DIRECTIONS" that got worse the harder the operator tried.
   void add(double yawDeg, int rssi, DateTime now) {
     final idx = _binOf(yawDeg);
     final existing = _bins[idx];
-    if (existing == null || rssi >= existing.rssi || _expired(existing, now)) {
+    if (existing == null || _expired(existing, now) || rssi >= existing.rssi) {
       _bins[idx] = _Bin(rssi, now);
-    } else {
-      // Keep the bin alive even when this read was weaker, so a bearing the
-      // operator is still sweeping past doesn't age out mid-sweep.
-      existing.at = now;
     }
+    // Otherwise: a weaker read at a heading we already have a stronger, still
+    // fresh reading for. Leave it — and leave its age alone so it expires on
+    // schedule and the picture keeps refreshing.
   }
 
   /// Best available bearing, or null when the evidence doesn't support one.
-  BearingFix? fix(double currentYawDeg, DateTime now) {
-    _bins.removeWhere((_, b) => _expired(b, now));
-    if (_bins.length < 2) return null;
+  BearingFix? fix(double currentYawDeg, DateTime now) =>
+      evaluate(currentYawDeg, now).fix;
 
+  /// Like [fix], but also reports WHY there is no fix. The UI surfaces this so
+  /// a "no direction" on the floor is self-explaining — needing a wider sweep
+  /// and seeing a flat multipath field look identical to the operator
+  /// otherwise, and they call for opposite reactions.
+  BearingResult evaluate(double currentYawDeg, DateTime now) {
+    _bins.removeWhere((_, b) => _expired(b, now));
     final coverage = _bins.length * _binWidth;
-    if (coverage < minCoverageDeg) return null;
+
+    if (_bins.length < 2 || coverage < minCoverageDeg) {
+      return BearingResult(
+        reason: BearingReason.needMoreSweep,
+        coverageDeg: coverage,
+        contrastDb: 0,
+      );
+    }
 
     var peakIdx = -1;
     var peakRssi = -1000;
@@ -129,19 +182,29 @@ class BearingEstimator {
         peakIdx = e.key;
       }
     }
-    if (peakIdx < 0) return null;
 
     final sorted = _bins.values.map((b) => b.rssi).toList()..sort();
     final median = sorted[sorted.length ~/ 2].toDouble();
     final contrast = peakRssi - median;
-    if (contrast < minContrastDb) return null;
+    if (contrast < minContrastDb) {
+      return BearingResult(
+        reason: BearingReason.fieldTooFlat,
+        coverageDeg: coverage,
+        contrastDb: contrast,
+      );
+    }
 
     final peakYaw = peakIdx * _binWidth + _binWidth / 2;
-    return BearingFix(
-      relativeDeg: normaliseDeg(peakYaw - currentYawDeg),
-      contrastDb: contrast,
-      peakRssi: peakRssi,
+    return BearingResult(
+      reason: BearingReason.locked,
       coverageDeg: coverage,
+      contrastDb: contrast,
+      fix: BearingFix(
+        relativeDeg: normaliseDeg(peakYaw - currentYawDeg),
+        contrastDb: contrast,
+        peakRssi: peakRssi,
+        coverageDeg: coverage,
+      ),
     );
   }
 
@@ -151,6 +214,35 @@ class BearingEstimator {
     final wrapped = yawDeg % 360;
     return (wrapped / _binWidth).floor() % binCount;
   }
+}
+
+/// Where the current reading sits against the best of the last few seconds.
+///
+/// This is the sensor-free half of direction finding. It needs no orientation
+/// at all — only the signal's own history — so it works when the phone is NOT
+/// rigidly attached to the sled and yaw is therefore meaningless. It cannot
+/// name a side, but "you just passed the hottest point, sweep back" is most of
+/// the value of a geiger and it is always available.
+enum HotCold {
+  /// At or near the strongest signal seen recently — you are pointed at it.
+  hottest,
+
+  /// Off the peak but still in the useful part of the lobe.
+  warm,
+
+  /// Well below the recent best — you have swept past it or turned away.
+  colder,
+}
+
+/// Classify [proximity] against [sweepPeak], the decaying best of the last few
+/// seconds. Ratios rather than absolute values, so it behaves the same close in
+/// and far out.
+HotCold hotColdFrom(double proximity, double sweepPeak) {
+  if (sweepPeak <= 0) return HotCold.warm;
+  final ratio = (proximity / sweepPeak).clamp(0.0, 2.0);
+  if (ratio >= 0.92) return HotCold.hottest;
+  if (ratio >= 0.75) return HotCold.warm;
+  return HotCold.colder;
 }
 
 /// Wrap an angle into -180..180, where negative reads as "to the left".

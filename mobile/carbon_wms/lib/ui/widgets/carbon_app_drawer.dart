@@ -14,6 +14,7 @@ class CarbonAppDrawer extends StatelessWidget {
     this.canChangeLocation = false,
     required this.onSettings,
     required this.onRefresh,
+    this.onTagTest,
     this.onChangeLocation,
     this.onLogout,
   });
@@ -23,6 +24,9 @@ class CarbonAppDrawer extends StatelessWidget {
   final bool canChangeLocation;
   final VoidCallback onSettings;
   final VoidCallback onRefresh;
+
+  /// Opens the Tag Test bench (RSSI vs distance measurement). Null hides it.
+  final VoidCallback? onTagTest;
   final VoidCallback? onChangeLocation;
   final VoidCallback? onLogout;
 
@@ -121,6 +125,14 @@ class CarbonAppDrawer extends StatelessWidget {
             onTap: onSettings,
           ),
           SizedBox(height: 4.h),
+          if (onTagTest != null) ...[
+            _DrawerItem(
+              icon: Icons.straighten,
+              label: 'Tag Test',
+              onTap: onTagTest!,
+            ),
+            SizedBox(height: 4.h),
+          ],
           _DrawerItem(
             icon: Icons.sync,
             label: 'Refresh Settings / Permissions',

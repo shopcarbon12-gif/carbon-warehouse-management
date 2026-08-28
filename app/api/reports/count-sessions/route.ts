@@ -35,6 +35,17 @@ const postBodySchema = z.object({
   overrideCatalog: z.boolean().optional().default(false),
   rows: z.array(reportRowSchema).min(1).max(50_000),
   deviceId: z.string().min(1).max(256).optional(),
+  // Pre-built CSV. When supplied, it is archived verbatim instead of being
+  // rendered from `rows` against the count-session column set, and catalog
+  // enrichment is skipped.
+  //
+  // This exists for reports whose natural shape isn't one-row-per-EPC — the
+  // Tag Test module uploads one row per (step, power level) with signal
+  // columns that have no meaning in the count schema. Reusing this endpoint
+  // gives those reports the same storage, retention, listing and download
+  // path as every other report for the cost of one optional field, instead of
+  // a parallel stack that would have to be kept in step with this one.
+  csv: z.string().min(1).max(5_000_000).optional(),
 });
 
 const CSV_HEADER =
@@ -122,9 +133,12 @@ export async function POST(req: Request) {
   //   true            — replace mobile-supplied values with the catalog
   //                     hit, useful when an operator suspects the mobile's
   //                     cached metadata is stale.
-  const epcsToResolve = parsed.data.rows
-    .map((r) => (r.epc ?? "").trim())
-    .filter((e) => e.length > 0);
+  const suppliedCsv = parsed.data.csv;
+  const epcsToResolve = suppliedCsv
+    ? []
+    : parsed.data.rows
+        .map((r) => (r.epc ?? "").trim())
+        .filter((e) => e.length > 0);
 
   let enrichedRows = parsed.data.rows;
   if (epcsToResolve.length > 0) {
@@ -160,7 +174,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const csv = buildCsvFromRows(enrichedRows);
+  const csv = suppliedCsv ?? buildCsvFromRows(enrichedRows);
   const filename = buildFilename(parsed.data.activity, whenDate);
 
   try {

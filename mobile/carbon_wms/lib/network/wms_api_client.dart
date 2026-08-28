@@ -620,6 +620,50 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  /// Archive a Tag Test run as a CSV under Reports.
+  ///
+  /// Rides the count-sessions report pipeline with a pre-built CSV, so the
+  /// run gets the same storage, retention, listing and download path as every
+  /// other report without a parallel stack. It lands under the activity label
+  /// [activity] (default `TAG TEST`) and is downloadable from
+  /// Reports -> Count Sessions.
+  Future<Map<String, dynamic>> uploadTagTestReport({
+    required String csv,
+    required int rowCount,
+    required String epc,
+    String activity = 'TAG TEST',
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/reports/count-sessions');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final body = jsonEncode({
+      'activity': activity,
+      'when': DateTime.now().toUtc().toIso8601String(),
+      'overrideCatalog': false,
+      // The server requires at least one row for schema reasons; the CSV it
+      // actually stores is the one supplied below.
+      'rows': [
+        {'epc': epc, 'seen_count': rowCount},
+      ],
+      'csv': csv,
+      'deviceId': deviceId,
+    });
+    final res = await _http.post(
+      uri,
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        ...await sessionAuthHeaders(),
+      },
+      body: body,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    return <String, dynamic>{};
+  }
+
   /// Paginated list of count-session reports for the active tenant.
   /// Powers the in-app Reports → Count Reports list. Server returns
   /// `{rows: [{id, activity, uploaded_at, uploaded_by_email, device_id,

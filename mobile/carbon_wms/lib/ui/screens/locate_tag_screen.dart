@@ -228,6 +228,25 @@ class _DirectionState {
         detail = 'SWEEP LEFT ↔ RIGHT TO GET A BEARING',
         relativeDeg = null;
 
+  /// Nothing being heard from the target, so there is nothing to guide with.
+  const _DirectionState.noSignal()
+      : status = DirectionStatus.searching,
+        headline = 'OFF DIRECTIONS',
+        detail = 'NO SIGNAL FROM THIS TAG YET',
+        relativeDeg = null;
+
+  /// Sensor-free guidance: hotter/colder against the best of the last few
+  /// seconds, plus distance and the walking trend. This is what the operator
+  /// gets when the phone is not rigidly attached to the sled, so device yaw
+  /// cannot stand in for where the antenna points. It names no side — that
+  /// genuinely requires the two to be locked together — but it still says
+  /// whether the last movement helped.
+  const _DirectionState.hotCold({
+    required this.headline,
+    required this.detail,
+  })  : status = DirectionStatus.locked,
+        relativeDeg = null;
+
   final DirectionStatus status;
   final String headline;
   final String detail;
@@ -244,6 +263,7 @@ class _Diag {
     this.readsPerSec = 0,
     this.powerOffsetDb = 0,
     this.sessionPeakRssi,
+    this.yawDeg,
     this.lastSeenEpcs = const <String>[],
     this.lastSeenRssi,
     this.otherEpc,
@@ -263,6 +283,9 @@ class _Diag {
   /// Hottest power-normalised read this scan. With the gun touching the tag
   /// this is the ground truth for where 100% should sit.
   final int? sessionPeakRssi;
+
+  /// Latest device yaw, or null when the motion sensor isn't reporting.
+  final double? yawDeg;
   final List<String> lastSeenEpcs;
   final int? lastSeenRssi;
   final String? otherEpc;
@@ -346,6 +369,12 @@ class _LocateTagScreenState extends State<LocateTagScreen>
 
   /// Latest power-normalised RSSI, used for the distance estimate.
   int? _lastNormRssi;
+
+  /// Best proximity seen in the last few seconds, decaying. The reference the
+  /// sensor-free hotter/colder cue is measured against; it decays so the
+  /// comparison stays about the CURRENT sweep rather than the whole hunt.
+  double _sweepPeakProx = 0;
+  static const double _sweepPeakTauMs = 4000;
   int _directionTick = 0;
 
   // ── Radio health indicator ───────────────────────────────────────────────
@@ -697,6 +726,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     _trendRefProx = 0;
     _trendRefAt = DateTime.fromMillisecondsSinceEpoch(0);
     _trendDir = 0;
+    _sweepPeakProx = 0;
     _directionTick = 0;
     _direction.value = _directionsOn
         ? const _DirectionState.searching()
@@ -952,6 +982,10 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       }
     }
 
+    // 2a. Decaying peak of the last few seconds, for the sensor-free
+    //     hotter/colder cue.
+    _sweepPeakProx = math.max(_prox, _sweepPeakProx * math.exp(-dtMs / _sweepPeakTauMs));
+
     // 2b. Closer / further trend, sampled on a ~600 ms baseline so it reflects
     //     the operator walking rather than read-to-read jitter.
     if (now.difference(_trendRefAt).inMilliseconds >= 600) {
@@ -996,6 +1030,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
           readsPerSec: _readsPerSec,
           powerOffsetDb: _powerOffsetDb,
           sessionPeakRssi: _sessionPeakRssi,
+          yawDeg: _yawDeg,
           lastSeenEpcs: List<String>.unmodifiable(_lastSeenEpcs),
           lastSeenRssi: _lastSeenRssi,
           otherEpc: _otherEpc,
@@ -1014,40 +1049,82 @@ class _LocateTagScreenState extends State<LocateTagScreen>
       _setDirection(const _DirectionState.off());
       return;
     }
+
+    // Nothing heard from the target — neither half of direction finding has
+    // anything to work with.
+    if (_lastNormRssi == null || _prox <= 0.02) {
+      _setDirection(const _DirectionState.noSignal());
+      return;
+    }
+
+    final distText =
+        distanceSubLabel(_lastNormRssi) ?? distanceLabel(_lastNormRssi);
+
+    // Best case: the phone is rigidly mounted to the sled, so its yaw IS the
+    // antenna's, and a sweep resolves an actual bearing.
     final yaw = _yawDeg;
-    if (yaw == null) {
-      // No rotation-vector sensor on this device, or it hasn't reported yet.
-      _setDirection(const _DirectionState.searching());
-      return;
+    BearingResult? bearing;
+    if (yaw != null) {
+      bearing = _bearing.evaluate(yaw, now);
+      final fix = bearing.fix;
+      if (fix != null) {
+        final aimed = fix.relativeDeg.abs() <= 30;
+        final String move;
+        if (!aimed) {
+          move = 'TURN TO IT';
+        } else if (_trendDir > 0) {
+          move = 'KEEP GOING';
+        } else if (_trendDir < 0) {
+          move = 'GO BACK';
+        } else {
+          move = 'HOLD';
+        }
+        _setDirection(
+          _DirectionState(
+            status: DirectionStatus.locked,
+            headline: turnLabel(fix.relativeDeg),
+            detail: '$distText · $move',
+            relativeDeg: fix.relativeDeg,
+          ),
+        );
+        return;
+      }
     }
-    final fix = _bearing.fix(yaw, now);
-    if (fix == null) {
-      _setDirection(const _DirectionState.searching());
-      return;
+
+    // Fallback that needs NO orientation sensor and no rigid mounting: compare
+    // the signal to the best of the last few seconds. It can't name a side —
+    // that genuinely requires the phone and the antenna to move as one — but
+    // "you just swept past it" is most of what a geiger is for, and it works
+    // however the operator is holding the two pieces.
+    final String headline;
+    switch (hotColdFrom(_prox, _sweepPeakProx)) {
+      case HotCold.hottest:
+        headline = 'HOTTEST HERE';
+      case HotCold.warm:
+        headline = 'WARM';
+      case HotCold.colder:
+        headline = 'COLDER · SWEEP BACK';
     }
-    final turn = turnLabel(fix.relativeDeg);
-    final distance = distanceLabel(_lastNormRssi);
-    final sub = distanceSubLabel(_lastNormRssi);
-    // Only claim "keep going / go back" when the operator is actually pointed
-    // at the tag — walking forward while aimed 90° off it means nothing.
-    final aimed = fix.relativeDeg.abs() <= 30;
+    // While walking, the trend is the most useful thing to say. While standing
+    // still, say what the bearing estimator is waiting for instead — that is
+    // the difference between "keep turning" and "this aisle has no usable
+    // peak", and the operator can act on each differently.
     final String move;
-    if (!aimed) {
-      move = 'TURN TO IT';
-    } else if (_trendDir > 0) {
+    if (_trendDir > 0) {
       move = 'KEEP GOING';
     } else if (_trendDir < 0) {
       move = 'GO BACK';
+    } else if (yaw == null) {
+      move = 'NO BEARING · SENSOR OFF';
+    } else if (bearing == null) {
+      move = 'SWEEP FOR A BEARING';
+    } else if (bearing.reason == BearingReason.fieldTooFlat) {
+      move = 'SWEEP WIDER (${bearing.contrastDb.toStringAsFixed(0)}dB)';
     } else {
-      move = 'HOLD';
+      move = 'SWEEP ${bearing.coverageDeg.round()}°/60° FOR A BEARING';
     }
     _setDirection(
-      _DirectionState(
-        status: DirectionStatus.locked,
-        headline: turn,
-        detail: '${sub ?? distance} · $move',
-        relativeDeg: fix.relativeDeg,
-      ),
+      _DirectionState.hotCold(headline: headline, detail: '$distText · $move'),
     );
   }
 
@@ -2237,7 +2314,10 @@ class _LiveDiagnosticBanner extends StatelessWidget {
                       '${d.powerOffsetDb > 0 ? ' · PWR+${d.powerOffsetDb}dB' : ''}'
                       // Read this with the gun ON the tag: it is where 100%
                       // actually sits for this gun/tag pair.
-                      '${d.sessionPeakRssi != null ? ' · PEAK ${d.sessionPeakRssi}' : ''}',
+                      '${d.sessionPeakRssi != null ? ' · PEAK ${d.sessionPeakRssi}' : ''}'
+                      // YAW is the direction finder's input. "—" here means the
+                      // motion sensor never reported and no sweep can help.
+                      ' · YAW ${d.yawDeg == null ? "—" : d.yawDeg!.round()}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.spaceGrotesk(

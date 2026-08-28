@@ -9,6 +9,7 @@ import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/handheld_settings_screen.dart';
+import 'package:carbon_wms/ui/screens/tag_test_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_app_drawer.dart';
 
 /// Renders "WMS" with a visible stroke so it looks physically thicker
@@ -151,6 +152,13 @@ class _CarbonScaffoldState extends State<CarbonScaffold> {
           MaterialPageRoute<void>(
             builder: (_) => const HandheldSettingsScreen(),
           ),
+        );
+      },
+      onTagTest: () {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => const TagTestScreen()),
         );
       },
       onRefresh: () async {
