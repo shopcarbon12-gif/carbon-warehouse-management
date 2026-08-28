@@ -641,6 +641,19 @@ class _TagTestScreenState extends State<TagTestScreen> {
                 ),
               ],
               SizedBox(height: 8.h),
+              // Primary action. Routed through the SAME _onTrigger the gun
+              // trigger uses, so tapping and pulling are literally the same
+              // code path and the _busy guard covers both — they can never
+              // interleave into a half-started measurement.
+              _StepTriggerButton(
+                enabled: !_busy && !_uploading,
+                busy: _busy,
+                epcValid: epcValid,
+                nextStep: nextStep,
+                nextFt: nextFt,
+                onPressed: () => unawaited(_onTrigger()),
+              ),
+              SizedBox(height: 8.h),
               Row(
                 children: [
                   Expanded(
@@ -687,6 +700,99 @@ class _TagTestScreenState extends State<TagTestScreen> {
                     foregroundColor: Colors.white,
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Big primary control for starting a step — the on-screen twin of the gun
+/// trigger. Before an EPC is captured it runs the capture instead, so a single
+/// control carries the operator through the whole run without them having to
+/// decide which button applies right now.
+class _StepTriggerButton extends StatelessWidget {
+  const _StepTriggerButton({
+    required this.enabled,
+    required this.busy,
+    required this.epcValid,
+    required this.nextStep,
+    required this.nextFt,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final bool busy;
+  final bool epcValid;
+  final int nextStep;
+  final int nextFt;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final String headline;
+    if (busy) {
+      headline = 'MEASURING…';
+    } else if (!epcValid) {
+      headline = 'SCAN TAG ON THE GUN';
+    } else if (nextFt == 0) {
+      headline = 'START STEP 1 · TOUCHING';
+    } else {
+      headline = 'START STEP $nextStep · $nextFt FT';
+    }
+    final bg = !enabled
+        ? const Color(0xFFBCC9C9)
+        : (busy ? const Color(0xFFB87A00) : AppColors.primary);
+    return SizedBox(
+      height: 64.h,
+      child: Material(
+        color: bg,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (busy)
+                SizedBox(
+                  width: 20.w,
+                  height: 20.w,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                Icon(
+                  epcValid ? Icons.play_arrow : Icons.nfc,
+                  color: Colors.white,
+                  size: 24.sp,
+                ),
+              SizedBox(width: 12.w),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    headline,
+                    style: GoogleFonts.manrope(
+                      fontSize: 15.sp,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 2.h),
+                  Text(
+                    'TAP OR PULL TRIGGER',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontSize: 9.sp,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                      color: Colors.white.withValues(alpha: 0.75),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
