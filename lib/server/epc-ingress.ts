@@ -261,7 +261,25 @@ async function writeItem(
      ON CONFLICT (epc) DO UPDATE SET
        serial_number       = EXCLUDED.serial_number,
        custom_sku_id       = EXCLUDED.custom_sku_id,
-       status              = EXCLUDED.status,
+       -- A tag written off as destroyed, ruined or gone stays written off. No
+       -- amount of re-reading it changes the physical fact, and this upsert is
+       -- where every scan module converges — Count, Add-On Catalog, Add-On
+       -- Count, the fixed readers — so an unconditional overwrite here is what
+       -- silently resurrected 64 killed tags in one day's counting on
+       -- 2026-09-02. Only a manual status change or an encode may reverse it.
+       --
+       -- 'unknown' is deliberately excluded: it means "lost track", and a
+       -- stray scan recovering it is exactly what it exists for.
+       --
+       -- Migration 0089 enforces the same rule at the DB layer for callers
+       -- that never come through here; this keeps the intent visible at the
+       -- point of the write rather than only in a trigger.
+       status              = CASE
+                               WHEN items.status IN ('tag_killed','damaged','stolen')
+                                    AND EXCLUDED.status = 'in-stock'
+                               THEN items.status
+                               ELSE EXCLUDED.status
+                             END,
        last_seen_at        = EXCLUDED.last_seen_at,
        location_id         = EXCLUDED.location_id,
        first_scanned_at    = COALESCE(items.first_scanned_at, EXCLUDED.first_scanned_at),

@@ -1,0 +1,441 @@
+{
+  "what": "EPCs whose last recorded status decision was tag_killed/damaged/stolen but which were silently promoted back to in-stock by scan ingest (Count Inventory / Add-On Catalog / Add-On Count). epc-ingress writes no audit row, so these flips left no trail.",
+  "rule": "last STATUS_CHANGE in (tag_killed,damaged,stolen) AND status now in-stock AND no encode_event whose new_epc is this EPC dated AFTER that decision (encode-after-kill is a legitimate revival; encode-before-kill is not).",
+  "restored_on": "2026-09-02",
+  "restored": [
+    {
+      "epc": "F0A0B30E4F9CA1B000013417",
+      "restore_to": "tag_killed",
+      "killed_at": "05-26 04:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D60A0000187DD",
+      "restore_to": "tag_killed",
+      "killed_at": "05-28 11:46",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D60A0000187DE",
+      "restore_to": "tag_killed",
+      "killed_at": "05-28 11:58",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BC08000001A7D",
+      "restore_to": "tag_killed",
+      "killed_at": "05-28 22:46",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D3AB000000001",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CD1D00001881E",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C012000000004",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C2680000F2AD1",
+      "restore_to": "tag_killed",
+      "killed_at": "06-01 10:58",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D5630000F2301",
+      "restore_to": "tag_killed",
+      "killed_at": "06-01 11:10",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C704000047F53",
+      "restore_to": "tag_killed",
+      "killed_at": "06-01 14:00",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C853000014596",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 05:45",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C55F000018A60",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 05:45",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CD1D000013428",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 05:45",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D08400001873B",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 14:09",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BC5900000138B",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 14:09",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C738000018AEF",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 14:09",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CB1C00001A00F",
+      "restore_to": "tag_killed",
+      "killed_at": "06-13 08:24",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C251000000570",
+      "restore_to": "tag_killed",
+      "killed_at": "07-25 22:32",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C2680000F1F19",
+      "restore_to": "tag_killed",
+      "killed_at": "08-13 08:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CA120000189D9",
+      "restore_to": "tag_killed",
+      "killed_at": "08-20 17:49",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9B929000013570",
+      "restore_to": "tag_killed",
+      "killed_at": "08-20 17:50",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BEF9000000D52",
+      "restore_to": "tag_killed",
+      "killed_at": "08-21 18:20",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BCB00000022A5",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 15:51",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CBE2000018A5F",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 15:56",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D1DF0000187B5",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 15:59",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CFFA0000188A6",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 16:01",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CC9C00001881D",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 16:07",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BA31000001F55",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 16:08",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D504000018709",
+      "restore_to": "tag_killed",
+      "killed_at": "09-01 16:14",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BEEE000001148",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BEED00000209A",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BE1D000012AD3",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D3F000001877D",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9B8F7000012FCB",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C56900001892B",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9B9D30000E38AE",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D31C00001876E",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:23",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CC360000187F4",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C5870000188D5",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C932000013D86",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CB630000188F4",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CB690000189A3",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CB900000186CF",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CBEA0000186EA",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CC61000018B53",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D52C000018751",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:28",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C7B60000132CA",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C6C8000018CC4",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CD41000018797",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D38C00001874A",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D2B6000018842",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CE3D0000188BF",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CF19000018B0A",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CF39000018720",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BC33000001441",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:29",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C7BB000013207",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CC20000018A6B",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C7B60000132CF",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9CF520000188FD",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9C55F000018A5B",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D37C0000186BE",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9D41F000018911",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BB55000001408",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    },
+    {
+      "epc": "F0A0B30E4F9BA3800001391C",
+      "restore_to": "tag_killed",
+      "killed_at": "09-02 14:30",
+      "seen_today": true
+    }
+  ],
+  "not_restored_out_of_scope": [
+    {
+      "epc": "F0A0B30E4F9BD860000CAEA4",
+      "restore_to": "tag_killed",
+      "killed_at": "06-02 04:50",
+      "seen_today": null
+    },
+    {
+      "epc": "F0A0B30E4F9C012000000005",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9CD1D000018815",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9CA82000018DF2",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9BE700000186A1",
+      "restore_to": "tag_killed",
+      "killed_at": "05-30 22:54",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9D2040000BC290",
+      "restore_to": "tag_killed",
+      "killed_at": "06-12 03:23",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9B94D000000016",
+      "restore_to": "tag_killed",
+      "killed_at": "06-12 03:23",
+      "seen_today": false
+    },
+    {
+      "epc": "F0A0B30E4F9B9B8019806098",
+      "restore_to": "tag_killed",
+      "killed_at": "07-17 19:58",
+      "seen_today": false
+    }
+  ]
+}

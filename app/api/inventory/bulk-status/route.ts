@@ -220,6 +220,12 @@ export async function POST(req: Request) {
         );
       }
 
+      // This is the sanctioned MANUAL path, so it is allowed to reverse a
+      // terminal status (tag_killed / damaged / stolen). Migration 0089 blocks
+      // that transition for everything that does not opt in, which is what
+      // stops a scan from silently resurrecting a written-off tag. The setting
+      // is transaction-scoped, so it lapses at COMMIT/ROLLBACK.
+      await client.query("SET LOCAL app.allow_status_revive = 'on'");
       const u = await client.query(
         `UPDATE items i
          SET status = $2
