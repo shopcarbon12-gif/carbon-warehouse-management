@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { DEFECTIVE_SCOPE_CTE, DEFECTIVE_SCOPE_WHERE } from "@/lib/server/defective-epc-scope";
 
 export type HardwareCounts = {
   readers: number;
@@ -59,18 +60,18 @@ export async function getCommandCenterKpis(
        AND tr.state IN ('in-transit', 'partially_received')`,
     [tenantId, locationId],
   );
-  // Defective EPCs: same predicate as the modal — tag_killed and not yet
-  // dismissed, OR re-scanned since the last dismissal so they re-appear
-  // automatically. Scoped to the *active location* so switching from Orlando
-  // to FL Mall doesn't leak Orlando's defective items into the FL count.
+  // Defective EPCs: shared predicate with the modal (see
+  // lib/server/defective-epc-scope). Scoped to the LATEST committed cycle
+  // count plus every manually-killed tag, rather than every tag_killed row
+  // ever — the old scope only grew and could not distinguish this count's
+  // findings from months of accumulation. Still scoped to the active location
+  // so switching from Orlando to FL Mall doesn't leak one into the other.
   const defective = await pool.query<{ c: string }>(
-    `SELECT count(*)::text AS c
+    `WITH ${DEFECTIVE_SCOPE_CTE}
+     SELECT count(*)::text AS c
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-     WHERE i.location_id = $2::uuid
-       AND i.status = 'tag_killed'
-       AND (i.defective_acknowledged_at IS NULL
-            OR i.last_seen_at > i.defective_acknowledged_at)`,
+     WHERE ${DEFECTIVE_SCOPE_WHERE}`,
     [tenantId, locationId],
   );
   // Hardware counts reflect "currently operational" state, not "ever

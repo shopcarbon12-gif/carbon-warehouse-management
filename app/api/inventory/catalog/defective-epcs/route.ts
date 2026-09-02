@@ -6,6 +6,7 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { decodeEpc, formatSystemId, type EpcConfig } from "@/lib/server/epc-decode";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
+import { DEFECTIVE_SCOPE_CTE, DEFECTIVE_SCOPE_WHERE } from "@/lib/server/defective-epc-scope";
 
 /**
  * GET → List of items in `tag_killed` status that haven't been dismissed
@@ -84,7 +85,8 @@ export async function GET(req: Request) {
     source: string | null;
     source_device_label: string | null;
   }>(
-    `SELECT i.epc,
+    `WITH ${DEFECTIVE_SCOPE_CTE}
+     SELECT i.epc,
             i.serial_number::text AS serial_number,
             i.status,
             i.first_scanned_at,
@@ -93,10 +95,7 @@ export async function GET(req: Request) {
             i.source_device_label
        FROM items i
        INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
-       WHERE i.location_id = $2::uuid
-         AND i.status = 'tag_killed'
-         AND (i.defective_acknowledged_at IS NULL
-              OR i.last_seen_at > i.defective_acknowledged_at)
+       WHERE ${DEFECTIVE_SCOPE_WHERE}
        ORDER BY i.first_scanned_at DESC NULLS LAST, i.last_seen_at DESC NULLS LAST
        LIMIT $3::int`,
     [session.tid, session.lid, MAX_ROWS],
