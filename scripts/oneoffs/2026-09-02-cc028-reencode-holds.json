@@ -1,0 +1,139 @@
+{
+  "context": "Cycle count 028 (2026-09-02) had 191 expected EPCs that were never scanned.",
+  "applied_2026_09_02": {
+    "deleted_old_epcs": [
+      "F0A0B30E4F9B94D000000016",
+      "F0A0B30E4F9BD860000CAEA4",
+      "F0A0B30E4F9C0120000C1594",
+      "F0A0B30E4F9D2040000BC290"
+    ],
+    "deleted_rule": "Re-encoded AND the replacement EPC exists and is in-stock. Same safety gate encode-finalize uses: the old tag is only retired once the new one is provably live.",
+    "written_off_to_unknown": 172,
+    "write_off_rule": "Expected but not read, and not seen by ANY reader in 30+ days (most last seen June 2026). 'unknown' keeps them recoverable if one turns up."
+  },
+  "NOT_actioned_needs_investigation": {
+    "why": "These were re-encoded, but the REPLACEMENT tag is not live inventory. Deleting the old row would erase the garment from inventory entirely — the re-encode old-EPC vanish failure this system already hit once. Left alone deliberately.",
+    "rows": [
+      {
+        "old_epc": "F0A0B30E4F9BD86000001715",
+        "new_epc": "F0A0B30E4F9C0120000F2D31",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9BE700000186A1",
+        "new_epc": "F0A0B30E4F9C583000052F4C",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9C012000000005",
+        "new_epc": "F0A0B30E4F9C012000063A09",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9C01200003F08D",
+        "new_epc": "F0A0B30E4F9C0120000E7AE0",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9C0120000C76DE",
+        "new_epc": "F0A0B30E4F9BD860000EEB29",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9C0120000DB8D1",
+        "new_epc": "F0A0B30E4F9BD8600001FC57",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9CA82000018DF2",
+        "new_epc": "F0A0B30E4F9C5830000A5220",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9CD1D000018815",
+        "new_epc": "F0A0B30E4F9D43F00006C6A1",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9D67C00001883A",
+        "new_epc": "F0A0B30E4F9D698000053BC7",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9D69100004A574",
+        "new_epc": "F0A0B30E4F9CA820000569D5",
+        "encode_status": "ok",
+        "replacement_row_exists": true,
+        "replacement_status": "tag_killed",
+        "diagnosis": "Encode ok but replacement is 'tag_killed', not live."
+      },
+      {
+        "old_epc": "F0A0B30E4F9D69100005E979",
+        "new_epc": "F0A0B30E4F9BF070000D3BE5",
+        "encode_status": "ok",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode marked ok but the replacement EPC has NO inventory row at all."
+      },
+      {
+        "old_epc": "F0A0B30E4F9B963000001344",
+        "new_epc": "F0A0B30E4F9B9630000220FD",
+        "encode_status": "pending",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode never finalised — the chip may or may not carry the new EPC. Read the physical tag."
+      },
+      {
+        "old_epc": "F0A0B30E4F9BD87000013BE6",
+        "new_epc": "F0A0B30E4F9BDB90000765DF",
+        "encode_status": "pending",
+        "replacement_row_exists": true,
+        "replacement_status": "unknown",
+        "diagnosis": "Encode never finalised — the chip may or may not carry the new EPC. Read the physical tag."
+      },
+      {
+        "old_epc": "F0A0B30E4F9C221000000517",
+        "new_epc": "F0A0B30E4F9C1EA0000932FD",
+        "encode_status": "pending",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode never finalised — the chip may or may not carry the new EPC. Read the physical tag."
+      },
+      {
+        "old_epc": "F0A0B30E4F9CB2200001A071",
+        "new_epc": "F0A0B30E4F9B9DC00008CE9E",
+        "encode_status": "pending",
+        "replacement_row_exists": false,
+        "replacement_status": null,
+        "diagnosis": "Encode never finalised — the chip may or may not carry the new EPC. Read the physical tag."
+      }
+    ]
+  }
+}

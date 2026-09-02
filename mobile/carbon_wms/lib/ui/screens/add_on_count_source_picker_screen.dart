@@ -194,8 +194,27 @@ class _AddOnCountSourcePickerScreenState
       return;
     }
 
+    // Re-open can land on a DIFFERENT session than the one we asked for, and
+    // the id it returns is the only reliable handle afterwards.
+    //
+    // The picker's `locked_session_id` deliberately prefers an active/paused
+    // session over a historical completed one, so a row showing "completed"
+    // can hand us an id that isn't the completed session at all. The server
+    // handles that by finding the source's latest COMPLETED session and
+    // re-opening THAT instead — then returns its id.
+    //
+    // Ignoring the returned id and navigating with the one we sent meant the
+    // count screen attached to a session the server never re-opened: it
+    // hydrated that session's ledger, streamed its events, heartbeat it, and —
+    // worst of all — submitted the operator's scans and finalised into it,
+    // while the session that was actually re-opened sat paused and empty.
+    final String reopenedId;
     try {
-      await api.reopenAddOnSession(sessionIdToUse);
+      final res = await api.reopenAddOnSession(sessionIdToUse);
+      final returned = res['id'];
+      reopenedId = (returned is String && returned.isNotEmpty)
+          ? returned
+          : sessionIdToUse;
     } catch (e) {
       if (!mounted) return;
       // WmsApiException carries the HTTP status — 403 = not super admin.
@@ -219,7 +238,7 @@ class _AddOnCountSourcePickerScreenState
       await Navigator.of(context).push<void>(
         MaterialPageRoute<void>(
           builder: (_) => AddOnCountScreen(
-            sessionId: sessionIdToUse!,
+            sessionId: reopenedId,
             sourceType: row['source_type'] as String,
             sourceId: row['source_id'] as String,
             sourceSlip: slip,
