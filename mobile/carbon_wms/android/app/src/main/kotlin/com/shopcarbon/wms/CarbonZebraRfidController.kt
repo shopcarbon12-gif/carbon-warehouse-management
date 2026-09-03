@@ -1371,17 +1371,48 @@ class CarbonZebraRfidController(
     triggerInfo.StartTrigger.setTriggerType(START_TRIGGER_TYPE.START_TRIGGER_TYPE_IMMEDIATE)
     triggerInfo.StopTrigger.setTriggerType(STOP_TRIGGER_TYPE.STOP_TRIGGER_TYPE_IMMEDIATE)
 
+    // Everything below is CONFIGURATION, not connection. It used to run bare,
+    // so a single rejected config write threw straight out of here into
+    // connectAsync's catch, which called disconnectSync() and tore down a link
+    // that had actually connected fine. The operator then had no reader at
+    // all: no connect chime, no trigger events (the sled is the only source of
+    // those on a non-Chainway host), and every scan failing NOT_CONNECTED —
+    // three symptoms from one rejected call.
+    //
+    // This sled is known to reject config operations: SESSION_S1 came back
+    // OperationFailureException in a 2026-08-28 log. applyOptionalSingulation
+    // Control below already survives that; the calls here did not.
+    //
+    // A reader connected but imperfectly configured is far more useful than no
+    // reader, so each step is now independent and failures are loud but not
+    // fatal.
     if (eventHandler == null) {
       eventHandler = ZebraEventHandler()
     }
+    // The events listener is the one genuinely load-bearing piece — without it
+    // no tag reads and no trigger events reach us — so it is still allowed to
+    // fail the connect.
     r.Events.addEventsListener(eventHandler)
-    r.Events.setHandheldEvent(true)
-    r.Events.setTagReadEvent(true)
-    r.Events.setAttachTagDataWithReadEvent(false)
-    r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
-    currentTriggerModeRfid = true
-    r.Config.setStartTrigger(triggerInfo.StartTrigger)
-    r.Config.setStopTrigger(triggerInfo.StopTrigger)
+    runCatching { r.Events.setHandheldEvent(true) }
+      .onFailure { Log.w(TAG, "connect: setHandheldEvent rejected: ${it.message}") }
+    runCatching { r.Events.setTagReadEvent(true) }
+      .onFailure { Log.w(TAG, "connect: setTagReadEvent rejected: ${it.message}") }
+    runCatching { r.Events.setAttachTagDataWithReadEvent(false) }
+      .onFailure { Log.w(TAG, "connect: setAttachTagData rejected: ${it.message}") }
+    runCatching {
+      r.Config.setTriggerMode(ENUM_TRIGGER_MODE.RFID_MODE, true)
+      currentTriggerModeRfid = true
+    }.onFailure {
+      // Leave the cache null, not true: we do not know what mode the sled is
+      // in, so the next explicit request must actually write rather than be
+      // skipped as redundant.
+      currentTriggerModeRfid = null
+      Log.w(TAG, "connect: setTriggerMode(RFID) rejected: ${it.message} — trigger may fire the imager")
+    }
+    runCatching { r.Config.setStartTrigger(triggerInfo.StartTrigger) }
+      .onFailure { Log.w(TAG, "connect: setStartTrigger rejected: ${it.message}") }
+    runCatching { r.Config.setStopTrigger(triggerInfo.StopTrigger) }
+      .onFailure { Log.w(TAG, "connect: setStopTrigger rejected: ${it.message}") }
 
     applyTransmitPowerDbm(r)
 
