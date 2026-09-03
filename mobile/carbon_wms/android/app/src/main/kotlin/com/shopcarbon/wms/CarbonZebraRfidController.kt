@@ -630,13 +630,34 @@ class CarbonZebraRfidController(
         if (i > 0) Log.d(TAG, "resumeInventoryWithRetry: perform ok on attempt ${i + 1}")
         return true
       } catch (e: Exception) {
-        Log.w(TAG, "resumeInventoryWithRetry: perform ${i + 1}/$attempts failed: ${e.message}")
+        // e.message is null for essentially every Zebra failure, so the old
+        // line ("failed: null") could not tell reader-busy from
+        // wrong-trigger-mode from a wedged link. Report what the SDK actually
+        // carries, plus the radio state we believed we were in.
+        Log.w(
+          TAG,
+          "resumeInventoryWithRetry: perform ${i + 1}/$attempts failed: " +
+            "${e.javaClass.simpleName} msg=${e.message} " +
+            "detail=${describeZebraError(e)} connected=${r.isConnected} " +
+            "triggerRfid=$currentTriggerModeRfid prefilter=$currentPrefilterEpc " +
+            "sessionZero=$currentSessionZero powerIdx=$currentPowerIdx",
+        )
         try { Thread.sleep(60) } catch (_: InterruptedException) { /* ignore */ }
       }
     }
     lastError = "resume_perform_failed"
     inventoryActive = false
     return false
+  }
+
+  /** Zebra puts its real error detail here, never in [Throwable.message]. */
+  private fun describeZebraError(e: Exception): String = when (e) {
+    is InvalidUsageException ->
+      "info=${runCatching { e.info }.getOrNull()} vendor=${runCatching { e.vendorMessage }.getOrNull()}"
+    is OperationFailureException ->
+      "status=${runCatching { e.statusDescription }.getOrNull()} " +
+        "vendor=${runCatching { e.vendorMessage }.getOrNull()}"
+    else -> "-"
   }
 
   /**
