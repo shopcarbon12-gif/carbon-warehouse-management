@@ -22,6 +22,7 @@ import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/screens/epc_detail_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Item Lookup — scan/type an EPC · UPC · SKU and get a centred product card
 /// (image, name, SKU, on-hand, retail, current bin) plus a one-tap Geiger
@@ -206,7 +207,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     }, onError: (_) {});
 
     _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (_mode != _Mode.rfid) return; // barcode is handled natively
       if (event == 'down' && !_busy) unawaited(_rfidSingleRead());
     }, onError: (_) {});

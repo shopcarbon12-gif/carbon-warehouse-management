@@ -17,6 +17,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/services/transfer_slip_printer.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Transfer In — receive workspace. The operator scans EPCs at the
 /// destination; each scan is matched against the slip's expected manifest.
@@ -238,7 +239,7 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
       if (epc != null) _ingestEpc(epc);
     }, onError: (_) {});
     await _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down') {
         if (_scanning) {
           unawaited(_stopScan());

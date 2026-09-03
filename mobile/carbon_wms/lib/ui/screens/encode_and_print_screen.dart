@@ -16,6 +16,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Handheld Encode & Print — 3-step commissioning flow, redesigned 2026-06
 /// on the Encode-screen visual system (approved HTML mockup):
@@ -159,7 +160,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
 
     // Trigger — commits the encode in Step 2.
     _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down' && _step == _Step.encode && !_busy) {
         unawaited(_runEncode());
       }

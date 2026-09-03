@@ -10,6 +10,7 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 const Color _kErrorRed = Color(0xFFD9534F);
 const Color _kSuccessGreen = Color(0xFF2A8E2A);
@@ -93,7 +94,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
     unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
     _tagSub = RfidVendorChannel.tagReadStream().listen(_onRead);
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen(_onTrigger);
+    _triggerSub = hardwareTriggerFor(this).listen(_onTrigger);
   }
 
   void _onPowerSliderChanged(int dbm) {

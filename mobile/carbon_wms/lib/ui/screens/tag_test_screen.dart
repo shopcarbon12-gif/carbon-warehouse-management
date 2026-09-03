@@ -16,6 +16,7 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Tag Test — measures how this gun hears this tag, at known distances.
 ///
@@ -198,7 +199,7 @@ class _TagTestScreenState extends State<TagTestScreen> {
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(_loadDeviceInfo());
     _readSub = RfidVendorChannel.tagReadStream().listen(_onRead, onError: (_) {});
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((e) {
+    _triggerSub = hardwareTriggerFor(this).listen((e) {
       if (!mounted || e != 'down') return;
       unawaited(_onTrigger());
     }, onError: (_) {});

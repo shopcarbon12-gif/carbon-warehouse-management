@@ -24,6 +24,7 @@ import 'package:carbon_wms/ui/screens/add_on_count_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_review_screen.dart';
 import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Add-On Count scan screen.
 ///
@@ -145,7 +146,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       await RfidVendorChannel.setZebraTriggerModeRfid();
     } catch (_) {/* best-effort — channel may no-op when sled not connected */}
 
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       // Q18 contract: single trigger press toggles start/pause. 'down' is
       // press; we ignore 'up' so a held trigger doesn't keep retoggling.
       if (event == 'down') {

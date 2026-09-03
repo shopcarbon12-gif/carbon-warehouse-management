@@ -18,6 +18,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Cloud + Geiger — landing pad for EPCs that were "Sent to handheld" from
 /// the web defective-EPCs drawer. Each EPC renders as a count-style
@@ -142,7 +143,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
         await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
       } catch (_) {}
 
-      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+      _triggerSub = hardwareTriggerFor(this).listen((event) {
         if (!mounted) return;
         if (event != 'down') return;
         // No EPCs to find → ignore the trigger entirely. We never want

@@ -20,6 +20,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 enum _TargetField { customSku, sku, barcode }
 
@@ -186,7 +187,7 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
     }, onError: (_) {});
 
     await _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down') unawaited(_toggleScan());
     }, onError: (_) {});
   }

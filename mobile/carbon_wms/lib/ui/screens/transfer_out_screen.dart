@@ -18,6 +18,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
     show CatalogRowCard;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Transfer OUT — a standalone feature (separate from Transfer In). The
 /// operator picks a destination, pulls the trigger to scan RFID items, and/or
@@ -167,7 +168,7 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
       if (epc != null) _ingestEpc(epc);
     }, onError: (_) {});
     await _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down') {
         if (_scanning) {
           unawaited(_stopScan());

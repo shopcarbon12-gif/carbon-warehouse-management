@@ -17,6 +17,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/rfid_power_slider.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Handheld Encode — single-tag commissioning flow, redesigned 2026-06 on the
 /// Encode & Print design system (approved mockup):
@@ -170,7 +171,7 @@ class _EncodeScreenState extends State<EncodeScreen> {
 
     // Trigger — commits the encode in Step 2.
     _triggerSub?.cancel();
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down' && _step == _Step.encode && !_busy) {
         unawaited(_runEncode());
       }

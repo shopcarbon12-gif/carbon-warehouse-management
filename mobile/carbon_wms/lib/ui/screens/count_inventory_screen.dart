@@ -23,6 +23,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
 const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
@@ -485,7 +486,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         _ingestEpc(epc: epc, rssi: 0);
       }, onError: (_) {});
       await _triggerSub?.cancel();
-      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+      _triggerSub = hardwareTriggerFor(this).listen((event) {
         if (kDebugMode) print('[CountInventory] hardware_trigger event=$event');
         if (event == 'down') {
           if (_scanOn) {

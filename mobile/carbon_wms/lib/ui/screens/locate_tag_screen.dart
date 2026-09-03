@@ -20,6 +20,7 @@ import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Tap-to-locate Geiger screen.
 ///
@@ -474,7 +475,7 @@ class _LocateTagScreenState extends State<LocateTagScreen>
     // first pull lights up the locate flow — count_inventory_screen does
     // the same. Trigger 'down' is the only thing we care about; 'up' is
     // ignored (the locate UX is press-to-toggle, not press-and-hold).
-    _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+    _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (!mounted) return;
       if (event == 'down') {
         unawaited(_toggleScan());

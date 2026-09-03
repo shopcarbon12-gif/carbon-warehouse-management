@@ -15,6 +15,7 @@ import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/status_pick_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Status Change — RFID-only handheld flow.
 ///
@@ -130,7 +131,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
       } catch (_) {}
 
-      _triggerSub = RfidVendorChannel.hardwareTriggerStream().listen((event) {
+      _triggerSub = hardwareTriggerFor(this).listen((event) {
         if (!mounted) return;
         if (event == 'down') {
           if (_scanning) {
