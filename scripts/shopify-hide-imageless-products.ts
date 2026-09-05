@@ -1,17 +1,22 @@
 /**
- * Enforce: a product with no image is visible on NO sales channel.
+ * Enforce: a product with no image is visible on no ONLINE sales channel.
  *
- * Why this exists as a sweep rather than a pre-publish check: images can only
- * be attached to a product that already exists in Shopify — see
+ * POINT OF SALE IS EXEMPT, deliberately. The brick-and-mortar store sells by
+ * scanning a tag at the counter — nobody browses a listing, so a missing photo
+ * costs nothing there. Holding imageless stock back from POS just makes it
+ * unsellable in the shop. Every other channel is a browsable listing (Online
+ * Store, Shop) or a product feed (Google, Meta, TikTok, Pinterest, Snapchat)
+ * where an imageless item is dead or outright disapproved.
+ *
+ * Keep POS publishing in sync with scripts/shopify-sync-pos-channel.ts, which
+ * pushes every active product TO Point of Sale. The two must not fight: this
+ * script must never remove a POS publication that one adds.
+ *
+ * Why this is a sweep rather than a pre-publish check: images can only be
+ * attached to a product that already exists in Shopify — see
  * lib/server/shopify-image-push.ts, which refuses to run without a
- * shopify_product_id. Blocking publish on "has an image" would therefore
- * deadlock: no product, so no media, so no product.
- *
- * The workable rule is the one this script enforces — a product may exist in
- * Shopify (so media can attach to it) but must not reach the Online Store,
- * POS, Shop, TikTok, Google, Meta, Pinterest or Snapchat until it has at least
- * one image. An imageless listing is a dead listing everywhere it appears, and
- * on the ad channels it is a feed disapproval.
+ * shopify_product_id. Blocking publish on "has an image" would deadlock: no
+ * product, so no media, so no product.
  *
  * Safe to run repeatedly. It only ever REMOVES publications, never adds them,
  * so it cannot make a product visible.
@@ -43,6 +48,13 @@ if (!SHOP || !TOKEN) {
   console.error("Missing SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_ACCESS_TOKEN.");
   process.exit(1);
 }
+
+/**
+ * Channels this rule does NOT apply to. Matched on Shopify's publication name.
+ * Point of Sale is in-store only: the sale starts by scanning a tag, so a
+ * product without a photo is perfectly sellable there.
+ */
+const EXEMPT_CHANNELS = new Set(["Point of Sale"]);
 
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   for (let a = 0; a < 10; a++) {
@@ -120,7 +132,9 @@ async function main() {
       imageless++;
       const pubs = p.resourcePublicationsV2.nodes
         .filter((n: any) => n.isPublished)
-        .map((n: any) => ({ id: n.publication.id, name: n.publication.name }));
+        .map((n: any) => ({ id: n.publication.id, name: n.publication.name }))
+        // Point of Sale is exempt — the shop scans a tag, it never shows a listing.
+        .filter((pub: { name: string }) => !EXEMPT_CHANNELS.has(pub.name));
       if (!pubs.length) continue; // already correct — nothing to do
       const units = p.variants.nodes.reduce(
         (a: number, v: any) => a + Math.max(0, v.inventoryQuantity ?? 0), 0);
@@ -139,11 +153,12 @@ async function main() {
 
   console.log(`\nProducts scanned                    : ${scanned}`);
   console.log(`Products with no image              : ${imageless}`);
-  console.log(`  ...already on no channel (correct): ${imageless - offenders.length}`);
-  console.log(`  ...VISIBLE somewhere (violations)  : ${offenders.length}`);
+  console.log(`  ...already off every online channel: ${imageless - offenders.length}`);
+  console.log(`  ...VISIBLE on an online channel    : ${offenders.length}`);
 
   if (!offenders.length) {
-    console.log("\nNothing to do — every imageless product is already hidden from all channels.");
+    console.log("\nNothing to do — every imageless product is already hidden from all ONLINE channels.");
+    console.log("(Point of Sale is exempt by design — the shop sells by scanning a tag.)");
     return;
   }
 
