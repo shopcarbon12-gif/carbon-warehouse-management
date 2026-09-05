@@ -79,3 +79,6 @@ carbon_rfid_recon_v1.1.13_delta.zip
 
 # Rollback snapshots written by scripts/shopify-variant-weights.ts (~2.4MB each)
 scripts/.weight-backups/
+
+# Records written by scripts/shopify-hide-imageless-products.ts
+scripts/.imageless-sweeps/
