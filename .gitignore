@@ -82,3 +82,15 @@ scripts/.weight-backups/
 
 # Records written by scripts/shopify-hide-imageless-products.ts
 scripts/.imageless-sweeps/
+
+# Google service-account keys — NEVER commit. Matches the console's default
+# download name (<project>-<keyid>.json) as well as any name we choose.
+.gcp-merchant-key.json
+.gcp-merchant-key.JSON
+*.iam.gserviceaccount.json
+shopify-ai-catalog-*.json
+*-service-account*.json
+gcp-*-key.json
+
+# Plans written by scripts/shopify-backfill-google-attributes.ts
+scripts/.attribute-backfills/
