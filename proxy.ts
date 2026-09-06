@@ -19,6 +19,10 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/lightspeed/auth")) return true;
   if (pathname.startsWith("/api/lightspeed/callback")) return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
+  /* Storefront wishlist sync: called from shopcarbon.com by a shopper's browser,
+   * which has no WMS session. Authenticates inside the route via an HMAC that
+   * Shopify's Liquid mints for the logged-in customer. */
+  if (pathname === "/api/wishlist") return true;
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;

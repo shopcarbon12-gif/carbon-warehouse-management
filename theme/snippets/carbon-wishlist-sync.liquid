@@ -1,0 +1,96 @@
+{%- comment -%}
+  Wishlist sync — carries a logged-in customer's saved items between devices.
+
+  The wishlist itself is the browser's (assets/carbon-wishlist.js), which is why
+  it works for guests with no account and no request. This snippet adds the
+  cross-device layer for signed-in customers, and does nothing at all for
+  everyone else.
+
+  Reading costs no request: Liquid renders the saved list straight into the page
+  below, so a customer's wishlist is already present in the HTML on first paint.
+
+  Writing goes to the WMS, because a Shopify storefront cannot write customer
+  metafields itself — that needs the Admin API and a token that must never reach
+  a browser. To stop a browser simply claiming someone else's customer id, we
+  sign the id here, server-side, with a shared secret; only Shopify knows who is
+  logged in, and the secret stays in this Liquid source and never appears in the
+  rendered HTML. The endpoint re-computes the signature and refuses anything
+  that does not match. See app/api/wishlist/route.ts in the WMS.
+
+  SECRET HANDLING: the literal below is substituted at upload time by
+  scripts/deploy-wishlist.mjs from CARBON_WISHLIST_SECRET in .env.local. The
+  copy of this file in the repository keeps the placeholder, so the secret is
+  never committed. Rotating it means changing both the WMS env var and the
+  copy of this snippet on the theme.
+
+  Merge behaviour lives in the store's setSyncAdapter: signing in unions the
+  device list with the stored one rather than letting either overwrite the
+  other, because silently losing a shopper's saved items is far worse than
+  keeping one they had already removed elsewhere.
+{%- endcomment -%}
+
+{%- if customer -%}
+  {%- assign cw_secret = '__CARBON_WISHLIST_SECRET__' -%}
+  {%- assign cw_ts = 'now' | date: '%s' -%}
+  {%- capture cw_payload -%}{{ customer.id }}.{{ cw_ts }}{%- endcapture -%}
+  {%- assign cw_sig = cw_payload | hmac_sha256: cw_secret -%}
+  {%- assign cw_saved = customer.metafields.carbon.wishlist.value -%}
+  <script>
+  (function () {
+    var cfg = {
+      endpoint: "https://wms.shopcarbon.com/api/wishlist",
+      customerId: {{ customer.id | json }},
+      ts: {{ cw_ts | json }},
+      sig: {{ cw_sig | json }},
+      initial: {% if cw_saved %}{{ cw_saved | json }}{% else %}[]{% endif %}
+    };
+
+    function ready(fn) {
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+      else fn();
+    }
+
+    ready(function () {
+      var store = window.CarbonWishlist;
+      if (!store) return;
+
+      var timer = null;
+      var pending = null;
+
+      /* One request per burst, not one per click: adding three items in quick
+         succession should cost a single write. */
+      function flush() {
+        timer = null;
+        var items = pending;
+        pending = null;
+        if (!items) return;
+        try {
+          fetch(cfg.endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerId: cfg.customerId,
+              ts: cfg.ts,
+              sig: cfg.sig,
+              items: items
+            }),
+            keepalive: true,        /* survives the shopper navigating away mid-save */
+            mode: 'cors'
+          }).catch(function () { /* offline: the device copy is still correct */ });
+        } catch (e) {}
+      }
+
+      store.setSyncAdapter({
+        pull: function () {
+          return Promise.resolve(Array.isArray(cfg.initial) ? cfg.initial : []);
+        },
+        push: function (items) {
+          pending = items;
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(flush, 800);
+        }
+      });
+    });
+  })();
+  </script>
+{%- endif -%}

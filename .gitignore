@@ -94,3 +94,6 @@ gcp-*-key.json
 
 # Plans written by scripts/shopify-backfill-google-attributes.ts
 scripts/.attribute-backfills/
+
+# Title-case run snapshots (bulk before/after dumps, not source).
+scripts/.titlecase/

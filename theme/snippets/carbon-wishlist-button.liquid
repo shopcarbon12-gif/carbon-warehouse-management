@@ -1,0 +1,162 @@
+{%- comment -%}
+  Carbon wishlist button — a heart-plus icon that sits in the Add to Cart row.
+
+  This is our own control backed by our own store (assets/carbon-wishlist.js).
+  It does not depend on Swym or any other wishlist app: saving works for every
+  visitor, logged in or not, with no third-party script and nothing to switch
+  on. If Swym is ever re-enabled its button is hidden by the CSS below so the
+  page never shows two wishlist controls.
+
+  Behaviour:
+    not saved -> outlined heart with a plus, transparent fill
+    saved     -> solid black heart, plus swapped for a tick
+
+  The button is square and inherits the Add to Cart height via align-self, so
+  it lines up on desktop and mobile without a media query.
+
+  It saves the *variant* the shopper is currently looking at, not the product,
+  so a wishlisted item comes back in the size and colour they chose. Switching
+  variant re-reads the saved state, which is why the heart can fill and empty
+  as you move between sizes.
+
+  Usage:  {%- render 'carbon-wishlist-button', product: product -%}
+  Requires assets/carbon-wishlist.js, loaded once in layout/theme.liquid.
+{%- endcomment -%}
+
+<button
+  type="button"
+  class="carbon-wishlist-btn"
+  aria-label="Add to wishlist"
+  aria-pressed="false"
+  data-product-id="{{ product.id }}"
+  data-handle="{{ product.handle }}"
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+>
+  {%- comment -%}
+    The heart is shifted down-left inside a roomier viewBox so the plus badge
+    at top-right sits in clear space instead of colliding with the heart's
+    upper lobe. The badge disc is painted in the button's own background so the
+    plus reads cleanly in both the outlined and the filled state.
+  {%- endcomment -%}
+  <svg viewBox="0 0 28 28" width="23" height="23" focusable="false" aria-hidden="true">
+    <g transform="translate(0.5, 4)">
+      <path class="cwb-heart"
+        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </g>
+    <circle class="cwb-badge" cx="21.5" cy="6.5" r="6.5"/>
+    <g class="cwb-plus"><path d="M21.5 3.4v6.2M18.4 6.5h6.2"/></g>
+    <g class="cwb-tick"><path d="M18.6 6.6l2 2 4-4.3"/></g>
+  </svg>
+</button>
+
+<style>
+  /* If Swym is ever switched back on, keep its button out of the layout so
+     the page never offers two competing wishlist controls. */
+  .swym-btn-container,
+  button.swym-button.swym-add-to-wishlist { display: none !important; }
+
+  .add_to_cart_holder .carbon-wishlist-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;          /* match the Add to Cart height exactly */
+    min-height: 48px;
+    width: 48px;
+    margin-left: 8px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--color-border, #d9d9d9);
+    border-radius: var(--button-border-radius, 0);
+    color: var(--color-body, #151515);
+    cursor: pointer;
+    transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .carbon-wishlist-btn svg { display: block; overflow: visible; }
+
+  /* default: outlined heart + plus */
+  .carbon-wishlist-btn .cwb-heart { fill: none; stroke: currentColor; stroke-width: 1.9; }
+  .carbon-wishlist-btn .cwb-plus path,
+  .carbon-wishlist-btn .cwb-tick path {
+    fill: none; stroke: currentColor; stroke-width: 2.2;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+  /* the badge is a hole punched in the icon so the plus never touches the heart */
+  .carbon-wishlist-btn .cwb-badge { fill: #fff; }
+  .carbon-wishlist-btn .cwb-tick { display: none; }
+
+  .carbon-wishlist-btn:hover { border-color: var(--color-body, #151515); }
+  .carbon-wishlist-btn:focus-visible {
+    outline: 2px solid var(--color-body, #151515);
+    outline-offset: 2px;
+  }
+
+  /* saved: solid black heart, plus becomes a tick */
+  .carbon-wishlist-btn.is-saved {
+    background: var(--color-body, #151515);
+    border-color: var(--color-body, #151515);
+    color: #fff;
+  }
+  .carbon-wishlist-btn.is-saved .cwb-heart { fill: currentColor; stroke: currentColor; }
+  .carbon-wishlist-btn.is-saved .cwb-badge { fill: var(--color-body, #151515); }
+  .carbon-wishlist-btn.is-saved .cwb-plus { display: none; }
+  .carbon-wishlist-btn.is-saved .cwb-tick { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .carbon-wishlist-btn { transition: none; }
+  }
+</style>
+
+<script>
+(function () {
+  /* carbon-wishlist.js is loaded with `defer` in the head, so it has always
+     executed by DOMContentLoaded but may not have when this inline script
+     runs. Wait for the document rather than polling for the global. */
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  ready(function () {
+    var el = document.querySelector('.add_to_cart_holder .carbon-wishlist-btn');
+    var store = window.CarbonWishlist;
+    if (!el || !store) return;
+
+    /* The chosen variant lives in the product form, which the theme rewrites
+       as the shopper picks options. Read it live rather than caching it. */
+    function variantId() {
+      var form = el.closest('form');
+      var input = form && form.querySelector('[name="id"]');
+      return (input && input.value) || el.dataset.variantId;
+    }
+
+    function paint() {
+      var on = store.has(variantId());
+      el.classList.toggle('is-saved', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+      el.setAttribute('aria-label', on ? 'Remove from wishlist' : 'Add to wishlist');
+    }
+
+    el.addEventListener('click', function () {
+      store.toggle({
+        v: variantId(),
+        p: el.dataset.productId,
+        h: el.dataset.handle
+      });
+      /* no optimistic paint — the store fires a change event and we repaint
+         from it, so the icon can never disagree with what is actually saved */
+    });
+
+    store.subscribe(paint);
+
+    /* Variant switches change which item this button represents. The theme
+       updates the hidden id input, so repaint after any change inside the
+       form; a frame's delay lets the theme write the new value first. */
+    var form = el.closest('form');
+    if (form) {
+      form.addEventListener('change', function () { requestAnimationFrame(paint); });
+    }
+  });
+})();
+</script>

@@ -1,0 +1,104 @@
+{%- comment -%}
+  Styling and behaviour for the product-card hearts, rendered once per page
+  from layout/theme.liquid.
+
+  The click handling is delegated from the document rather than bound per
+  button, so hearts added after load — infinite scroll, filtered collection
+  results, quick view, product recommendations — work without re-binding.
+{%- endcomment -%}
+
+<style>
+  /* Sits over the image, opposite the theme's own badges (which are top-left
+     at z-index 30), so the two never collide. */
+  .cw-card-heart {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 31;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, .9);
+    border: 1px solid transparent;
+    border-radius: 50%;
+    color: var(--color-body, #151515);
+    cursor: pointer;
+    line-height: 0;
+    opacity: 0;                     /* revealed once the store confirms it works */
+    transition: opacity .15s ease, background-color .15s ease, color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cw-card-heart svg { display: block; }
+  .cw-card-heart path { fill: none; stroke: currentColor; stroke-width: 1.8; }
+
+  .cw-ready .cw-card-heart { opacity: 1; }
+  .cw-card-heart:hover { background: #fff; }
+  .cw-card-heart:focus-visible { outline: 2px solid var(--color-body, #151515); outline-offset: 2px; }
+
+  .cw-card-heart.is-saved { background: var(--color-body, #151515); color: #fff; }
+  .cw-card-heart.is-saved path { fill: currentColor; stroke: currentColor; }
+
+  /* Touch devices have no hover, so the control must be permanently legible. */
+  @media (hover: none) {
+    .cw-card-heart { background: rgba(255, 255, 255, .95); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cw-card-heart { transition: none; }
+  }
+</style>
+
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  ready(function () {
+    var store = window.CarbonWishlist;
+    if (!store) return;   /* leave the hearts hidden rather than inert */
+
+    /* Only reveal the hearts once we know the store loaded, so a failed asset
+       never leaves a row of buttons that do nothing when tapped. */
+    document.documentElement.classList.add('cw-ready');
+
+    function paintAll() {
+      var hearts = document.querySelectorAll('[data-cw-card]');
+      for (var i = 0; i < hearts.length; i++) {
+        var h = hearts[i];
+        var on = store.has(h.dataset.variantId);
+        h.classList.toggle('is-saved', on);
+        h.setAttribute('aria-pressed', on ? 'true' : 'false');
+        h.setAttribute('aria-label', on ? 'Remove from wishlist' : 'Add to wishlist');
+      }
+    }
+
+    /* Delegated: works for cards that appear after load. */
+    document.addEventListener('click', function (ev) {
+      var btn = ev.target.closest ? ev.target.closest('[data-cw-card]') : null;
+      if (!btn) return;
+      /* cards are wrapped in links — saving must not navigate */
+      ev.preventDefault();
+      ev.stopPropagation();
+      store.toggle({
+        v: btn.dataset.variantId,
+        p: btn.dataset.productId,
+        h: btn.dataset.handle
+      });
+    });
+
+    store.subscribe(paintAll);
+
+    /* Newly injected cards start unpainted; repaint when the grid changes. */
+    var queued = false;
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; paintAll(); });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+})();
+</script>

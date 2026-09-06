@@ -1,0 +1,16 @@
+{
+  "sections": {
+    "main": {
+      "type": "carbon-wishlist",
+      "settings": {
+        "heading": "Wishlist",
+        "columns": 4,
+        "loading_text": "Loading your wishlist…",
+        "empty_text": "You haven't saved anything yet.",
+        "empty_link": "/collections/all",
+        "empty_link_label": "Continue shopping"
+      }
+    }
+  },
+  "order": ["main"]
+}

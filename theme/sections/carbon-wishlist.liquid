@@ -1,0 +1,280 @@
+{%- comment -%}
+  Carbon wishlist page.
+
+  Renders the shopper's saved items. The list itself lives in
+  assets/carbon-wishlist.js (localStorage), so this section has no Liquid
+  product loop — it cannot, because the server does not know what this
+  particular browser has saved.
+
+  Only variant ids and handles are stored, so every card is built from live
+  Shopify data fetched at view time from /products/<handle>.js. That means
+  prices, names, images and availability are always current: a product renamed
+  or repriced yesterday shows correctly here today, and a product that has been
+  deleted is dropped from the list instead of rendering a broken card.
+
+  Add to cart posts to the theme's own cart route and then fires `cart:refresh`,
+  which is the event this theme's cart drawer listens for (assets/app.js), so
+  the drawer and the header count update exactly as they do elsewhere.
+{%- endcomment -%}
+
+<div class="carbon-wishlist-page section-spacing" data-section-id="{{ section.id }}">
+  <div class="row">
+    <div class="small-12 columns">
+      <header class="carbon-wishlist-head">
+        <h1 class="carbon-wishlist-title">{{ section.settings.heading | escape }}</h1>
+        <p class="carbon-wishlist-count" data-cw-count hidden></p>
+      </header>
+
+      {%- comment -%} Shown until the first render decides which state applies. {%- endcomment -%}
+      <div class="carbon-wishlist-loading" data-cw-loading>{{ section.settings.loading_text | escape }}</div>
+
+      <div class="carbon-wishlist-empty" data-cw-empty hidden>
+        <p>{{ section.settings.empty_text | escape }}</p>
+        {%- if section.settings.empty_link != blank -%}
+          <a class="button accent" href="{{ section.settings.empty_link }}">
+            {{ section.settings.empty_link_label | escape }}
+          </a>
+        {%- endif -%}
+      </div>
+
+      <ul class="products collection row small-up-2 medium-up-{{ section.settings.columns }} carbon-wishlist-grid"
+          data-cw-grid hidden></ul>
+    </div>
+  </div>
+</div>
+
+<style>
+  .carbon-wishlist-head { margin-bottom: 24px; }
+  .carbon-wishlist-count { margin: 4px 0 0; opacity: .65; font-size: 14px; }
+  .carbon-wishlist-loading,
+  .carbon-wishlist-empty { padding: 48px 0; text-align: center; }
+  .carbon-wishlist-empty p { margin-bottom: 20px; }
+
+  .carbon-wishlist-grid .product-card { position: relative; }
+
+  /* Remove control, pinned to the top-right of the card. It is a direct child
+     of .product-card rather than of the figure: the figure sets z-index 0 and
+     so opens a stacking context, and .product-card-info paints after it, which
+     would leave a button nested inside the figure underneath the title. */
+  .cw-remove {
+    position: absolute; top: 8px; right: 8px; z-index: 5;
+    width: 32px; height: 32px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.92);
+    border: 1px solid var(--color-border, #d9d9d9);
+    border-radius: 50%;
+    color: var(--color-body, #151515);
+    cursor: pointer; line-height: 0;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
+  .cw-remove:hover { background: #fff; border-color: var(--color-body, #151515); }
+  .cw-remove svg { display: block; }
+
+  .cw-variant { margin: 2px 0 0; font-size: 13px; opacity: .7; }
+  .cw-actions { margin-top: 10px; }
+  .cw-add { width: 100%; }
+  .cw-add[disabled] { opacity: .5; cursor: not-allowed; }
+  .cw-sold-out { display: block; margin-top: 8px; font-size: 13px; opacity: .7; }
+</style>
+
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  ready(function () {
+    var root    = document.querySelector('[data-section-id="{{ section.id }}"]');
+    var store   = window.CarbonWishlist;
+    if (!root || !store) return;
+
+    var grid    = root.querySelector('[data-cw-grid]');
+    var empty   = root.querySelector('[data-cw-empty]');
+    var loading = root.querySelector('[data-cw-loading]');
+    var countEl = root.querySelector('[data-cw-count]');
+
+    var CURRENCY = {{ cart.currency.iso_code | json }};
+    var money = function (cents) {
+      try {
+        return new Intl.NumberFormat(document.documentElement.lang || 'en', {
+          style: 'currency', currency: CURRENCY
+        }).format(cents / 100);
+      } catch (e) {
+        return '$' + (cents / 100).toFixed(2);
+      }
+    };
+
+    /* One fetch per product handle, cached for the life of the page, so a
+       wishlist holding three sizes of the same jean costs one request. */
+    var cache = Object.create(null);
+    function loadProduct(handle) {
+      if (!cache[handle]) {
+        cache[handle] = fetch('/products/' + encodeURIComponent(handle) + '.js', {
+          headers: { 'Accept': 'application/json' }
+        }).then(function (r) { return r.ok ? r.json() : null; })
+          .catch(function () { return null; });
+      }
+      return cache[handle];
+    }
+
+    function sized(url, w) {
+      if (!url) return '';
+      return url + (url.indexOf('?') > -1 ? '&' : '?') + 'width=' + w;
+    }
+
+    /* The theme's image link is `height: 0` with `padding-bottom:
+       var(--padding-bottom)`, so the card only has a picture if we supply that
+       variable. Prefer the variant's own image, so a wishlisted red shirt shows
+       the red one, and fall back through the product's media. */
+    function imageOf(product, variant) {
+      if (variant && variant.featured_image && variant.featured_image.src) return variant.featured_image;
+      var media = (product.media || []).filter(function (m) { return m && m.preview_image; })[0];
+      if (media) return media.preview_image;
+      if (product.featured_image) return { src: product.featured_image, width: 2, height: 3 };
+      return null;
+    }
+
+    function card(item, product, variant) {
+      var li = document.createElement('li');
+      li.className = 'column';
+
+      var img = imageOf(product, variant);
+      var ratio = img && img.width ? (img.height / img.width * 100) : 150;
+      var url = '/products/' + product.handle + '?variant=' + variant.id;
+
+      li.innerHTML =
+        '<div class="product-card">' +
+          '<button class="cw-remove" type="button" data-cw-rm="' + variant.id + '" aria-label="Remove from wishlist">' +
+            '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">' +
+              '<path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>' +
+            '</svg>' +
+          '</button>' +
+          '<figure class="product-featured-image">' +
+            '<a class="product-featured-image-link" href="' + url + '" style="--padding-bottom: ' + ratio.toFixed(2) + '%;">' +
+              (img ? '<img src="' + sized(img.src, 600) + '" alt="" loading="lazy">' : '') +
+            '</a>' +
+          '</figure>' +
+          '<div class="product-card-info">' +
+            '<a class="product-card-title" href="' + url + '"></a>' +
+            '<p class="cw-variant"></p>' +
+            '<span class="price"><span class="amount">' + money(variant.price) + '</span></span>' +
+            '<div class="cw-actions">' +
+              (variant.available
+                ? '<button class="button accent cw-add" type="button" data-cw-add="' + variant.id + '">Add to cart</button>'
+                : '<span class="cw-sold-out">Sold out</span>') +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      /* Titles come from Shopify and are set as text, never as HTML, so a
+         product name containing markup characters cannot inject anything. */
+      li.querySelector('.product-card-title').textContent = product.title;
+      var vt = li.querySelector('.cw-variant');
+      if (variant.title && variant.title !== 'Default Title') vt.textContent = variant.title;
+      else vt.remove();
+
+      return li;
+    }
+
+    var rendering = false;
+    function render() {
+      if (rendering) return;
+      rendering = true;
+
+      var items = store.get();
+
+      if (!items.length) {
+        loading.hidden = true;
+        grid.hidden = true;
+        empty.hidden = false;
+        countEl.hidden = true;
+        grid.innerHTML = '';
+        rendering = false;
+        return;
+      }
+
+      Promise.all(items.map(function (it) { return loadProduct(it.h); }))
+        .then(function (products) {
+          var frag = document.createDocumentFragment();
+          var shown = 0;
+
+          items.forEach(function (it, i) {
+            var product = products[i];
+            if (!product) {
+              /* product deleted or unpublished — drop it so the list stays honest */
+              store.remove(it.v);
+              return;
+            }
+            var variant = (product.variants || []).filter(function (v) {
+              return String(v.id) === String(it.v);
+            })[0];
+            if (!variant) { store.remove(it.v); return; }
+
+            frag.appendChild(card(it, product, variant));
+            shown++;
+          });
+
+          grid.innerHTML = '';
+          grid.appendChild(frag);
+
+          loading.hidden = true;
+          grid.hidden = shown === 0;
+          empty.hidden = shown !== 0;
+          countEl.hidden = shown === 0;
+          countEl.textContent = shown + (shown === 1 ? ' item' : ' items');
+          rendering = false;
+        })
+        .catch(function () {
+          loading.hidden = true;
+          rendering = false;
+        });
+    }
+
+    grid.addEventListener('click', function (ev) {
+      var rm = ev.target.closest('[data-cw-rm]');
+      if (rm) { store.remove(rm.getAttribute('data-cw-rm')); return; }
+
+      var add = ev.target.closest('[data-cw-add]');
+      if (!add) return;
+
+      add.setAttribute('disabled', 'disabled');
+      var body = new FormData();
+      body.append('id', add.getAttribute('data-cw-add'));
+      body.append('quantity', 1);
+
+      fetch('/cart/add.js', { method: 'POST', body: body, headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.status) throw new Error(res.description || 'add failed');
+          /* the event this theme's cart drawer listens for (assets/app.js) */
+          document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+          add.textContent = 'Added';
+          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+        })
+        .catch(function () {
+          add.textContent = 'Unavailable';
+          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+        });
+    });
+
+    store.subscribe(render);
+  });
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Wishlist",
+  "tag": "section",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Wishlist" },
+    { "type": "range", "id": "columns", "label": "Columns on desktop", "min": 2, "max": 5, "step": 1, "default": 4 },
+    { "type": "text", "id": "loading_text", "label": "Loading text", "default": "Loading your wishlist…" },
+    { "type": "text", "id": "empty_text", "label": "Empty wishlist message", "default": "You haven't saved anything yet." },
+    { "type": "url", "id": "empty_link", "label": "Empty state button link" },
+    { "type": "text", "id": "empty_link_label", "label": "Empty state button label", "default": "Continue shopping" }
+  ],
+  "presets": [{ "name": "Wishlist" }]
+}
+{% endschema %}

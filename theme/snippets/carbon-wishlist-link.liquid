@@ -1,0 +1,43 @@
+{%- comment -%}
+  Header wishlist link — the way shoppers find their saved items.
+
+  Mirrors the theme's own cart link (.thb-secondary-area-item with a
+  .thb-item-count bubble) so it inherits the header's spacing, icon sizing and
+  hover behaviour rather than introducing a second visual language.
+
+  The count comes from assets/carbon-wishlist.js, which is client-side, so the
+  markup ships with 0 and is filled in on load. The bubble is hidden while the
+  wishlist is empty — unlike the cart, an empty wishlist is the normal state
+  for most visitors and a permanent "0" reads as clutter.
+{%- endcomment -%}
+
+<a class="thb-secondary-area-item carbon-wishlist-link"
+   href="{{ routes.root_url }}pages/wishlist"
+   title="Wishlist">
+  <div class="thb-secondary-item-icon">
+    <svg viewBox="0 0 24 24" width="20" height="20" focusable="false" aria-hidden="true">
+      <path class="cwl-heart"
+        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+        fill="none" stroke="currentColor" stroke-width="1.6"/>
+    </svg>
+    <span class="thb-item-count" data-cw-header-count hidden>0</span>
+  </div>
+</a>
+
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+  ready(function () {
+    var badge = document.querySelector('[data-cw-header-count]');
+    var store = window.CarbonWishlist;
+    if (!badge || !store) return;
+    store.subscribe(function (items) {
+      badge.textContent = items.length > 99 ? '99+' : String(items.length);
+      badge.hidden = items.length === 0;
+    });
+  });
+})();
+</script>
