@@ -101,6 +101,20 @@
     } catch (e) {}
   }
 
+  /*
+    Fired only when a shopper deliberately saves something — never when a
+    signed-in customer's stored list is merged in on load, and never on remove.
+    UI that should react to a save (the drawer opening) listens for this rather
+    than for `change`, which fires for every mutation including those merges.
+  */
+  function emitAdded(item) {
+    try {
+      document.dispatchEvent(new CustomEvent('carbon:wishlist:added', {
+        detail: { item: item }
+      }));
+    } catch (e) {}
+  }
+
   /* ---------- public API ------------------------------------------------ */
 
   var api = {
@@ -124,6 +138,7 @@
       if (api.has(next.v)) return false;
       /* newest first, so the wishlist page reads as a recency list */
       writeStore([next].concat(items).slice(0, LIMIT));
+      emitAdded(next);
       return true;
     },
 

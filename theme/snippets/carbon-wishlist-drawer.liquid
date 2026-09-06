@@ -263,6 +263,9 @@
     }
 
     function open() {
+      /* Idempotent: a second open while already open must not steal the
+         remembered focus target or restart the slide-in. */
+      if (root.classList.contains('is-open')) return;
       lastFocus = document.activeElement;
       root.hidden = false;
       /* next frame, so the transform transition actually runs */
@@ -322,6 +325,12 @@
       ev.preventDefault();
       open();
     });
+
+    /* Saving anything, from anywhere, opens the drawer — the same way a cart
+       drawer confirms an add to cart. Driven by the store's `added` event
+       rather than wired into each button, so any control that saves an item
+       gets this for free, and removes and background syncs never trigger it. */
+    document.addEventListener('carbon:wishlist:added', function () { open(); });
 
     store.subscribe(render);
     window.CarbonWishlistDrawer = { open: open, close: close };
