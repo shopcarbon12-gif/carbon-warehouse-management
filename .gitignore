@@ -97,3 +97,6 @@ scripts/.attribute-backfills/
 
 # Title-case run snapshots (bulk before/after dumps, not source).
 scripts/.titlecase/
+
+# Product-title sync snapshots (bulk before/after dumps, not source).
+scripts/.title-sync/

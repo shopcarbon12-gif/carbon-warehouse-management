@@ -1,0 +1,81 @@
+{%- comment -%}
+  Homepage scroll reveal — sections fade and slide up as they come into view.
+
+  The theme ships almost no scroll animation: one ScrollTrigger driving a 0.8s
+  opacity fade on two link buttons, which is invisible in practice. This adds a
+  real reveal to the homepage's sections.
+
+  It uses the GSAP and ScrollTrigger the theme already loads (vendor.min.js and
+  animations.min.js), so nothing new is downloaded.
+
+  Deliberate constraints:
+
+    * The hidden state is set from JavaScript, never in CSS. If GSAP fails to
+      load or the script errors, every section is simply visible — a broken
+      animation must never mean a blank homepage.
+    * Sections already on screen at load are skipped, so the hero does not
+      flash in and the page looks settled on arrival.
+    * Honours the theme's own `animations` setting (body.animations-true) and
+      the OS "reduce motion" preference.
+    * `clearProps` removes the inline transform once each section finishes, so
+      no lingering transform is left on an ancestor — a transformed ancestor
+      breaks `position: fixed` for anything inside it.
+
+  Homepage only: the product, collection and cart pages are already signed off,
+  and this keeps the change away from them.
+{%- endcomment -%}
+
+{%- if template.name == 'index' -%}
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  ready(function () {
+    /* GSAP and ScrollTrigger load from classic script tags at the end of the
+       body, so they have run by DOMContentLoaded. If either is missing, leave
+       the page exactly as it is. */
+    if (typeof gsap === 'undefined' || typeof ScrollTrigger === 'undefined') return;
+    if (!document.body.classList.contains('animations-true')) return;
+    try {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    } catch (e) {}
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    var main = document.getElementById('main-content');
+    if (!main) return;
+
+    var sections = [].slice.call(main.querySelectorAll(':scope > .shopify-section'));
+    var fold = window.innerHeight * 0.9;
+
+    sections.forEach(function (section) {
+      /* Spacers hold no content — animating them would only delay what follows. */
+      if (section.className.indexOf('section-spacer') > -1) return;
+
+      /* Already on screen at load: leave alone so nothing flashes in. */
+      if (section.getBoundingClientRect().top < fold) return;
+
+      gsap.set(section, { opacity: 0, y: 28 });
+
+      gsap.to(section, {
+        opacity: 1,
+        y: 0,
+        duration: 0.7,
+        ease: 'power2.out',
+        scrollTrigger: {
+          trigger: section,
+          start: 'top 88%',
+          toggleActions: 'play none none none'   /* reveal once, never re-hide */
+        },
+        onComplete: function () {
+          gsap.set(section, { clearProps: 'transform,opacity' });
+        }
+      });
+    });
+  });
+})();
+</script>
+{%- endif -%}
