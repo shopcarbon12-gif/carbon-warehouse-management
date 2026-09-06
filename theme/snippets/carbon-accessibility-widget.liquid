@@ -1,0 +1,46 @@
+{% comment %}
+  Carbon Assist widget (all pages). Launcher uses true bottom-right; shifts left only when overlapping other fixed FABs.
+
+  In Shopify Admin: Online Store → Themes → Edit code → Layout → theme.liquid
+  Place these lines just before </body> (snippet `carbon-account-links-a11y` labels icon-only /account links):
+    {% render 'carbon-account-links-a11y' %}
+    {% render 'carbon-accessibility-widget' %}
+
+  If your theme uses a different layout (e.g. theme.liquid only has sections), add the same renders
+  to the main layout file that outputs </body>.
+
+  Managed scope: loads the latest saved config from the Carbon app (Publish in /accessibility updates the DB;
+  the storefront always fetches current settings). Do not use a static ?config= URL here or theme edits are
+  required for every dashboard change.
+
+  Bump `wrev` with `lib/carbon-a11y-widget-rev.ts` (CARBON_A11Y_WIDGET_WREV), then push this snippet.
+{% endcomment %}
+<script
+  src="https://app.shopcarbon.com/accessibility/widget?scope=default&wrev=135"
+  defer
+></script>
+
+<style>
+  /*
+    Mobile only: line the launcher up with the middle of the tawk.to chat
+    bubble, which sits beside it in the bottom-right corner.
+
+    The widget positions itself from JavaScript with an inline
+    `inset: <top>px auto auto <left>px`, so this has to be !important to win,
+    and it anchors to `bottom` rather than `top` because the mobile URL bar
+    changes the viewport height and a fixed top value would drift with it.
+
+    The maths: the chat bubble is 60px tall at bottom:20px, so its centre sits
+    24 + 26 = 50px above the viewport bottom. This launcher is 52px tall, so
+    bottom:24px puts its centre in the same place at any viewport height.
+
+    `left` is deliberately left alone — only the vertical position changes, so
+    the widget keeps the horizontal offset its own collision logic chose.
+  */
+  @media only screen and (max-width: 767px) {
+    #carbon-a11y-widget {
+      top: auto !important;
+      bottom: 24px !important;
+    }
+  }
+</style>
