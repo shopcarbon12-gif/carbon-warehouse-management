@@ -1,0 +1,330 @@
+{%- comment -%}
+  Wishlist side drawer — the panel that slides in from the left.
+
+  Rebuilt to match the drawer Swym used to show, measured from Swym's own
+  rendered styles before it was switched off, so the change of engine is not a
+  change of look:
+
+    side            left
+    width           500px on desktop, full width on mobile
+    backdrop        rgba(0, 0, 0, .22)
+    header          #f4f8fe, 32px/20px padding, 0 2px 2px -1px #eaeaea shadow
+    title           20px / 700 / #1c1c1c
+    close           27x27, inset 15px
+    empty heading   14px / 600 / #1c1c1c, -0.5px tracking
+    empty body      13px / 400 / #000,    -0.25px tracking
+
+  Type is inherited rather than declared: Swym picked up the theme's own
+  Archivo Narrow, so leaving font-family alone reproduces it and keeps working
+  if the theme's font is ever changed.
+
+  Swym's drawer also had a "My Lists" section for multiple named lists. That is
+  a Swym feature we do not have — there is one wishlist — so rather than show a
+  section that could never fill, the drawer goes straight to the items.
+
+  The header link keeps its href to /pages/wishlist and this script intercepts
+  the click, so the full page stays reachable and the link still works if this
+  script never runs.
+{%- endcomment -%}
+
+<div class="cw-drawer-root" data-cw-drawer hidden>
+  <div class="cw-drawer-backdrop" data-cw-close></div>
+
+  <aside class="cw-drawer" role="dialog" aria-modal="true" aria-label="My Wishlist">
+    <header class="cw-drawer-header">
+      <h2 class="cw-drawer-title">
+        <svg class="cw-drawer-heart" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+        My Wishlist
+      </h2>
+      <button type="button" class="cw-drawer-close" data-cw-close aria-label="Close wishlist">
+        <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+          <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="cw-drawer-body" data-cw-body>
+      <div class="cw-drawer-empty" data-cw-drawer-empty>
+        <svg viewBox="0 0 64 64" width="64" height="64" aria-hidden="true" class="cw-drawer-empty-art">
+          <rect x="12" y="8" width="34" height="46" rx="3" fill="#fff" stroke="#e3e3e3" stroke-width="2"/>
+          <path d="M20 20h18M20 28h18M20 36h11" stroke="#e3e3e3" stroke-width="2" stroke-linecap="round"/>
+          <path d="M43 46.6l-.9-.83c-3.2-2.9-5.3-4.83-5.3-7.2a3.45 3.45 0 0 1 3.45-3.47c1.1 0 2.15.51 2.83 1.31a3.72 3.72 0 0 1 2.82-1.31A3.45 3.45 0 0 1 49.35 38.57c0 2.37-2.13 4.3-5.36 7.24l-.99.79z" fill="#e25563"/>
+        </svg>
+        <p class="cw-drawer-empty-title">Your wishlist is empty</p>
+        <p class="cw-drawer-empty-desc">Add more items to this wishlist and see them here</p>
+      </div>
+
+      <ul class="cw-drawer-list" data-cw-drawer-list hidden></ul>
+    </div>
+  </aside>
+</div>
+
+<style>
+  .cw-drawer-root { position: fixed; inset: 0; z-index: 1000000000; }
+  .cw-drawer-root[hidden] { display: none; }
+
+  .cw-drawer-backdrop {
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, .22);
+    opacity: 0;
+    transition: opacity .28s ease;
+  }
+  .cw-drawer-root.is-open .cw-drawer-backdrop { opacity: 1; }
+
+  .cw-drawer {
+    position: absolute; top: 0; left: 0; bottom: 0;
+    width: 500px; max-width: 100%;
+    background: #fff;
+    display: flex; flex-direction: column;
+    transform: translate3d(-100%, 0, 0);
+    transition: transform .32s cubic-bezier(.4, 0, .2, 1);
+    will-change: transform;
+  }
+  .cw-drawer-root.is-open .cw-drawer { transform: translate3d(0, 0, 0); }
+
+  .cw-drawer-header {
+    position: relative;
+    flex: 0 0 auto;
+    background: #f4f8fe;
+    padding: 32px 20px;
+    box-shadow: rgb(234, 234, 234) 0 2px 2px -1px;
+  }
+  .cw-drawer-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.35;
+    color: #1c1c1c;
+    text-transform: none;
+    letter-spacing: normal;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .cw-drawer-heart { fill: #1c1c1c; flex: 0 0 auto; }
+
+  .cw-drawer-close {
+    position: absolute; top: 15px; right: 15px;
+    width: 27px; height: 27px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: none; border: 0; cursor: pointer;
+    color: #1c1c1c; line-height: 0;
+  }
+
+  .cw-drawer-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+  .cw-drawer-empty { padding: 64px 24px; text-align: center; }
+  .cw-drawer-empty-art { display: block; margin: 0 auto 18px; }
+  .cw-drawer-empty-title {
+    margin: 0 0 4px;
+    font-size: 14px; font-weight: 600; color: #1c1c1c; letter-spacing: -0.5px;
+  }
+  .cw-drawer-empty-desc {
+    margin: 0;
+    font-size: 13px; font-weight: 400; color: #000; letter-spacing: -0.25px;
+  }
+
+  .cw-drawer-list { list-style: none; margin: 0; padding: 8px 20px 24px; }
+  .cw-drawer-item {
+    display: flex; gap: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .cw-drawer-item:last-child { border-bottom: 0; }
+  .cw-drawer-thumb { flex: 0 0 72px; width: 72px; }
+  .cw-drawer-thumb img { display: block; width: 100%; height: auto; }
+  .cw-drawer-info { flex: 1 1 auto; min-width: 0; }
+  .cw-drawer-name {
+    display: block;
+    font-size: 14px; font-weight: 600; color: #1c1c1c;
+    letter-spacing: -0.25px; text-decoration: none; line-height: 1.35;
+  }
+  .cw-drawer-variant { margin: 2px 0 0; font-size: 13px; color: #767676; }
+  .cw-drawer-price { margin: 4px 0 0; font-size: 14px; color: #1c1c1c; }
+  .cw-drawer-actions { margin-top: 8px; display: flex; align-items: center; gap: 12px; }
+  .cw-drawer-add {
+    font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    background: #1c1c1c; color: #fff; border: 0; cursor: pointer;
+    padding: 8px 14px; line-height: 1;
+  }
+  .cw-drawer-add[disabled] { opacity: .5; cursor: not-allowed; }
+  .cw-drawer-remove {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font-size: 12px; color: #767676; text-decoration: underline;
+  }
+  .cw-drawer-soldout { font-size: 12px; color: #767676; }
+
+  /* Stops the page behind the drawer scrolling on iOS as well as desktop. */
+  html.cw-drawer-open, body.cw-drawer-open { overflow: hidden; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cw-drawer, .cw-drawer-backdrop { transition: none; }
+  }
+</style>
+
+<script>
+(function () {
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  ready(function () {
+    var root  = document.querySelector('[data-cw-drawer]');
+    var store = window.CarbonWishlist;
+    if (!root || !store) return;
+
+    var list     = root.querySelector('[data-cw-drawer-list]');
+    var empty    = root.querySelector('[data-cw-drawer-empty]');
+    var lastFocus = null;
+
+    var CURRENCY = {{ cart.currency.iso_code | json }};
+    function money(cents) {
+      try {
+        return new Intl.NumberFormat(document.documentElement.lang || 'en', {
+          style: 'currency', currency: CURRENCY
+        }).format(cents / 100);
+      } catch (e) { return '$' + (cents / 100).toFixed(2); }
+    }
+
+    /* One request per handle for the life of the page. */
+    var cache = Object.create(null);
+    function loadProduct(handle) {
+      if (!cache[handle]) {
+        cache[handle] = fetch('/products/' + encodeURIComponent(handle) + '.js', {
+          headers: { Accept: 'application/json' }
+        }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+      }
+      return cache[handle];
+    }
+
+    function imageOf(product, variant) {
+      if (variant && variant.featured_image && variant.featured_image.src) return variant.featured_image.src;
+      return product.featured_image || '';
+    }
+    function sized(url, w) {
+      if (!url) return '';
+      return url + (url.indexOf('?') > -1 ? '&' : '?') + 'width=' + w;
+    }
+
+    function row(product, variant) {
+      var li = document.createElement('li');
+      li.className = 'cw-drawer-item';
+      var url = '/products/' + product.handle + '?variant=' + variant.id;
+      var img = imageOf(product, variant);
+
+      li.innerHTML =
+        '<div class="cw-drawer-thumb">' +
+          (img ? '<a href="' + url + '"><img src="' + sized(img, 200) + '" alt="" loading="lazy"></a>' : '') +
+        '</div>' +
+        '<div class="cw-drawer-info">' +
+          '<a class="cw-drawer-name" href="' + url + '"></a>' +
+          '<p class="cw-drawer-variant"></p>' +
+          '<p class="cw-drawer-price">' + money(variant.price) + '</p>' +
+          '<div class="cw-drawer-actions">' +
+            (variant.available
+              ? '<button type="button" class="cw-drawer-add" data-cw-drawer-add="' + variant.id + '">Add to cart</button>'
+              : '<span class="cw-drawer-soldout">Sold out</span>') +
+            '<button type="button" class="cw-drawer-remove" data-cw-drawer-rm="' + variant.id + '">Remove</button>' +
+          '</div>' +
+        '</div>';
+
+      /* set as text, never markup, so a product name cannot inject anything */
+      li.querySelector('.cw-drawer-name').textContent = product.title;
+      var v = li.querySelector('.cw-drawer-variant');
+      if (variant.title && variant.title !== 'Default Title') v.textContent = variant.title;
+      else v.remove();
+      return li;
+    }
+
+    function render() {
+      var items = store.get();
+      if (!items.length) {
+        list.hidden = true; list.innerHTML = '';
+        empty.hidden = false;
+        return;
+      }
+      Promise.all(items.map(function (i) { return loadProduct(i.h); })).then(function (products) {
+        var frag = document.createDocumentFragment();
+        var shown = 0;
+        items.forEach(function (it, i) {
+          var p = products[i];
+          if (!p) { store.remove(it.v); return; }
+          var variant = (p.variants || []).filter(function (v) { return String(v.id) === String(it.v); })[0];
+          if (!variant) { store.remove(it.v); return; }
+          frag.appendChild(row(p, variant));
+          shown++;
+        });
+        list.innerHTML = '';
+        list.appendChild(frag);
+        list.hidden = shown === 0;
+        empty.hidden = shown !== 0;
+      });
+    }
+
+    function open() {
+      lastFocus = document.activeElement;
+      root.hidden = false;
+      /* next frame, so the transform transition actually runs */
+      requestAnimationFrame(function () {
+        root.classList.add('is-open');
+        document.documentElement.classList.add('cw-drawer-open');
+        document.body.classList.add('cw-drawer-open');
+        var close = root.querySelector('.cw-drawer-close');
+        if (close) close.focus();
+      });
+    }
+
+    function close() {
+      root.classList.remove('is-open');
+      document.documentElement.classList.remove('cw-drawer-open');
+      document.body.classList.remove('cw-drawer-open');
+      /* keep it in the DOM until the slide-out finishes */
+      setTimeout(function () { if (!root.classList.contains('is-open')) root.hidden = true; }, 340);
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    root.addEventListener('click', function (ev) {
+      if (ev.target.closest('[data-cw-close]')) { close(); return; }
+
+      var rm = ev.target.closest('[data-cw-drawer-rm]');
+      if (rm) { store.remove(rm.getAttribute('data-cw-drawer-rm')); return; }
+
+      var add = ev.target.closest('[data-cw-drawer-add]');
+      if (!add) return;
+      add.setAttribute('disabled', 'disabled');
+      var body = new FormData();
+      body.append('id', add.getAttribute('data-cw-drawer-add'));
+      body.append('quantity', 1);
+      fetch('/cart/add.js', { method: 'POST', body: body, headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (res && res.status) throw new Error('add failed');
+          /* the event this theme's cart drawer listens for (assets/app.js) */
+          document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+          add.textContent = 'Added';
+          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+        })
+        .catch(function () {
+          add.textContent = 'Unavailable';
+          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+        });
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && root.classList.contains('is-open')) close();
+    });
+
+    /* The header link keeps working as a link if this never runs. */
+    document.addEventListener('click', function (ev) {
+      var link = ev.target.closest ? ev.target.closest('.carbon-wishlist-link') : null;
+      if (!link) return;
+      ev.preventDefault();
+      open();
+    });
+
+    store.subscribe(render);
+    window.CarbonWishlistDrawer = { open: open, close: close };
+  });
+})();
+</script>

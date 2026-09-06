@@ -88,6 +88,7 @@ const OWN_FILES = [
   "snippets/carbon-wishlist-card-button.liquid",
   "snippets/carbon-wishlist-global.liquid",
   "snippets/carbon-wishlist-link.liquid",
+  "snippets/carbon-wishlist-drawer.liquid",
   "sections/carbon-wishlist.liquid",
   "templates/page.wishlist.json",
 ];
@@ -132,12 +133,18 @@ const PATCHES = [
     anchor: `<script src="{{ 'carbon-wishlist.js' | asset_url }}" defer="defer"></script>`,
     apply: (a) => `${a}\n{%- render 'carbon-wishlist-global' -%}`,
   },
+  {
+    file: "layout/theme.liquid",
+    guard: "carbon-wishlist-drawer",
+    anchor: `{%- render 'carbon-wishlist-global' -%}`,
+    apply: (a) => `${a}\n{%- render 'carbon-wishlist-drawer' -%}`,
+  },
   ...(withSync
     ? [
         {
           file: "layout/theme.liquid",
           guard: "carbon-wishlist-sync",
-          anchor: `{%- render 'carbon-wishlist-global' -%}`,
+          anchor: `{%- render 'carbon-wishlist-drawer' -%}`,
           apply: (a) => `${a}\n{%- render 'carbon-wishlist-sync' -%}`,
         },
       ]

@@ -23,9 +23,15 @@
   Requires assets/carbon-wishlist.js, loaded once in layout/theme.liquid.
 {%- endcomment -%}
 
+{%- comment -%}
+  `button outline` are the theme's own classes, the same pair Add to Cart uses.
+  They carry the black border, the 48px height, the radius and the hover wipe,
+  so this control matches the buy row exactly and keeps matching it if those
+  styles are ever retuned. The CSS below only sets geometry.
+{%- endcomment -%}
 <button
   type="button"
-  class="carbon-wishlist-btn"
+  class="carbon-wishlist-btn button outline"
   aria-label="Add to wishlist"
   aria-pressed="false"
   data-product-id="{{ product.id }}"
@@ -33,17 +39,24 @@
   data-variant-id="{{ product.selected_or_first_available_variant.id }}"
 >
   {%- comment -%}
-    The heart is shifted down-left inside a roomier viewBox so the plus badge
-    at top-right sits in clear space instead of colliding with the heart's
-    upper lobe. The badge disc is painted in the button's own background so the
-    plus reads cleanly in both the outlined and the filled state.
+    The heart is shifted down-left inside a roomier viewBox so the plus badge at
+    top-right sits in clear space. The separation is cut with a mask rather than
+    painted with an opaque disc: the theme's hover fill sweeps a dark panel
+    across the button, and a disc filled in the resting background would show up
+    as a light blob against it. A mask removes heart pixels instead of covering
+    them, so the gap is genuinely transparent on any background.
   {%- endcomment -%}
   <svg viewBox="0 0 28 28" width="23" height="23" focusable="false" aria-hidden="true">
-    <g transform="translate(0.5, 4)">
+    <defs>
+      <mask id="cwb-badge-cut">
+        <rect x="0" y="0" width="28" height="28" fill="#fff"/>
+        <circle cx="21.5" cy="6.5" r="7.4" fill="#000"/>
+      </mask>
+    </defs>
+    <g mask="url(#cwb-badge-cut)" transform="translate(0.5, 4)">
       <path class="cwb-heart"
         d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
     </g>
-    <circle class="cwb-badge" cx="21.5" cy="6.5" r="6.5"/>
     <g class="cwb-plus"><path d="M21.5 3.4v6.2M18.4 6.5h6.2"/></g>
     <g class="cwb-tick"><path d="M18.6 6.6l2 2 4-4.3"/></g>
   </svg>
@@ -55,57 +68,52 @@
   .swym-btn-container,
   button.swym-button.swym-add-to-wishlist { display: none !important; }
 
-  .add_to_cart_holder .carbon-wishlist-btn {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    align-self: stretch;          /* match the Add to Cart height exactly */
-    min-height: 48px;
+  /* Geometry only. Border colour, height, radius, transition and the hover
+     wipe all come from the theme's own .button.outline, which this element
+     also carries — the same treatment as Add to Cart and the quantity box, so
+     the three can never drift apart.
+
+     The selector includes the element type on purpose. Carrying the .button
+     class also picks up `.add_to_cart_holder .button { flex: 1 }`, which is
+     what makes Add to Cart stretch to fill the row; at equal specificity that
+     rule loads after this one and would stretch the heart into a wide slab.
+     `button.carbon-wishlist-btn` outranks it without needing !important. */
+  .add_to_cart_holder button.carbon-wishlist-btn {
+    flex: 0 0 48px;
     width: 48px;
-    margin-left: 8px;
     padding: 0;
-    background: transparent;
-    border: 1px solid var(--color-border, #d9d9d9);
-    border-radius: var(--button-border-radius, 0);
-    color: var(--color-body, #151515);
-    cursor: pointer;
-    transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+    margin-left: 8px;
     -webkit-tap-highlight-color: transparent;
   }
-  .carbon-wishlist-btn svg { display: block; overflow: visible; }
 
-  /* default: outlined heart + plus */
+  /* The theme's hover fill is a pseudo-element at z-index 5; keep the icon over it. */
+  .carbon-wishlist-btn svg {
+    display: block;
+    overflow: visible;
+    position: relative;
+    z-index: 6;
+  }
+
+  /* Outlined heart + plus, drawn in the button's own colour so it flips to
+     white on hover exactly as the Add to Cart label does. */
   .carbon-wishlist-btn .cwb-heart { fill: none; stroke: currentColor; stroke-width: 1.9; }
   .carbon-wishlist-btn .cwb-plus path,
   .carbon-wishlist-btn .cwb-tick path {
     fill: none; stroke: currentColor; stroke-width: 2.2;
     stroke-linecap: round; stroke-linejoin: round;
   }
-  /* the badge is a hole punched in the icon so the plus never touches the heart */
-  .carbon-wishlist-btn .cwb-badge { fill: #fff; }
   .carbon-wishlist-btn .cwb-tick { display: none; }
 
-  .carbon-wishlist-btn:hover { border-color: var(--color-body, #151515); }
-  .carbon-wishlist-btn:focus-visible {
-    outline: 2px solid var(--color-body, #151515);
-    outline-offset: 2px;
-  }
-
-  /* saved: solid black heart, plus becomes a tick */
+  /* Saved: solid heart, plus becomes a tick. These sit after .button.outline
+     in document order, so they win at equal specificity. */
   .carbon-wishlist-btn.is-saved {
     background: var(--color-body, #151515);
     border-color: var(--color-body, #151515);
     color: #fff;
   }
   .carbon-wishlist-btn.is-saved .cwb-heart { fill: currentColor; stroke: currentColor; }
-  .carbon-wishlist-btn.is-saved .cwb-badge { fill: var(--color-body, #151515); }
   .carbon-wishlist-btn.is-saved .cwb-plus { display: none; }
   .carbon-wishlist-btn.is-saved .cwb-tick { display: block; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .carbon-wishlist-btn { transition: none; }
-  }
 </style>
 
 <script>
