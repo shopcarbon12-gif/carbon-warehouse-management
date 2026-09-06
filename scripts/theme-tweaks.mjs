@@ -58,7 +58,11 @@ async function gql(query, variables = {}) {
 }
 
 /** Snippets we own outright, uploaded verbatim from theme/. */
-const OWN_FILES = ["snippets/carbon-scroll-reveal.liquid", "snippets/carbon-home-tweaks.liquid"];
+const OWN_FILES = [
+  "snippets/carbon-scroll-reveal.liquid",
+  "snippets/carbon-home-tweaks.liquid",
+  "snippets/carbon-widget-align.liquid",
+];
 
 const TWEAKS = [
   {
@@ -79,6 +83,61 @@ const TWEAKS = [
       const anchor = "{% render 'carbon-scroll-reveal' %}";
       if (!src.includes(anchor)) return null;
       return src.replace(anchor, anchor + "\n{% render 'carbon-home-tweaks' %}");
+    },
+  },
+  {
+    file: "layout/theme.liquid",
+    name: "render widget alignment",
+    guard: "carbon-widget-align",
+    apply(src) {
+      const anchor = "{% render 'carbon-home-tweaks' %}";
+      if (!src.includes(anchor)) return null;
+      return src.replace(anchor, anchor + "\n{% render 'carbon-widget-align' %}");
+    },
+  },
+  {
+    file: "templates/index.context.us.json",
+    name: "Women/Men subheads on POPULAR PRODUCTS, drop the Shop-<collection> links",
+    guard: '"show_view_all": false',
+    /**
+     * The two POPULAR PRODUCTS sections had no subheading while the two
+     * FEATURED PRODUCTS sections carry "Women" and "Men"; this gives them the
+     * same treatment, women first then men, using the section's own
+     * `description` setting rather than injected markup so it stays editable
+     * in the theme editor.
+     *
+     * `show_view_all` off on all four removes the "Shop T-SHIRTS (Men)" style
+     * links, which were the last place a collection name appeared.
+     *
+     * These four keys all live in the US market context template, which is
+     * what the live homepage actually renders — the parent templates/index.json
+     * still says "COLLECTION TABS" and is not what shoppers see.
+     */
+    apply(src) {
+      /* Shopify prefixes these files with an auto-generated /* *\/ banner that
+         is not valid JSON. Keep it verbatim and parse only what follows. */
+      const banner = src.match(/^\s*\/\*[\s\S]*?\*\/\s*/);
+      const body = banner ? src.slice(banner[0].length) : src;
+      const json = JSON.parse(body);
+      const subheads = {
+        "16614195534fb74bc3": "<h6>Women</h6>",   // POPULAR PRODUCTS - summer-sets
+        collection_tabs_MNkVH: "<h6>Men</h6>",    // POPULAR PRODUCTS - t-shirts
+      };
+      const viewAllOff = [
+        "16614195534fb74bc3",
+        "collection_tabs_MNkVH",
+        "166366563622039b3e",
+        "featured_collection_U8BUg",
+      ];
+      for (const [key, value] of Object.entries(subheads)) {
+        if (!json.sections[key]) return null;
+        json.sections[key].settings.description = value;
+      }
+      for (const key of viewAllOff) {
+        if (!json.sections[key]) return null;
+        json.sections[key].settings.show_view_all = false;
+      }
+      return (banner ? banner[0] : "") + JSON.stringify(json, null, 2);
     },
   },
   {

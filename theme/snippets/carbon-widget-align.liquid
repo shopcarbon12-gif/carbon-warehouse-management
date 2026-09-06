@@ -1,0 +1,84 @@
+{%- comment -%}
+  Line the back-to-top button up with the floating widgets.
+
+  The chat bubble sits in the bottom-right corner and was covering the
+  back-to-top button, which the theme also pins to bottom-right. This moves
+  back-to-top to the left of the accessibility launcher and centres it on the
+  same line, so the three read as one row: back-to-top, accessibility, chat.
+
+  Measured at runtime rather than hard-coded, because the accessibility widget
+  positions itself from JavaScript and shifts left on its own when it detects
+  another floating button — a fixed offset here would drift the moment that
+  logic picked a different spot. Reading its real box keeps the three aligned
+  whatever it decides.
+
+  Runs on every page (the button appears site-wide), on both mobile and
+  desktop, and re-runs on resize and orientation change. If either element is
+  missing the theme's own positioning is left completely untouched.
+{%- endcomment -%}
+
+<script>
+(function () {
+  var GAP = 12;   /* space between back-to-top and the accessibility launcher */
+
+  function place() {
+    var a11y = document.getElementById('carbon-a11y-widget');
+    var btt  = document.querySelector('back-to-top');
+    if (!a11y || !btt) return false;
+
+    var a = a11y.getBoundingClientRect();
+    var b = btt.getBoundingClientRect();
+    if (!a.width || !b.width) return false;
+
+    /* Anchor to the right and bottom edges: both neighbours are anchored that
+       way, and on mobile the URL bar changes the viewport height, so a value
+       measured from the top would drift as the page scrolls. */
+    var right  = window.innerWidth  - a.left + GAP;
+    var bottom = window.innerHeight - (a.top + a.height / 2) - b.height / 2;
+
+    btt.style.setProperty('right',  Math.round(right)  + 'px', 'important');
+    btt.style.setProperty('bottom', Math.round(bottom) + 'px', 'important');
+    btt.style.setProperty('left',   'auto', 'important');
+    btt.style.setProperty('top',    'auto', 'important');
+    return true;
+  }
+
+  function start() {
+    /* The accessibility widget is injected by a deferred third-party script and
+       then positions itself — sometimes more than once, since it re-runs its
+       own collision logic. Placing once on first sight is not enough: it moves
+       afterwards and back-to-top is left behind. So keep following it. */
+    var tries = 0;
+    var observing = false;
+
+    var timer = setInterval(function () {
+      var placed = place();
+
+      if (placed && !observing) {
+        var a11y = document.getElementById('carbon-a11y-widget');
+        if (a11y && window.MutationObserver) {
+          /* It positions itself through an inline `inset`, so watching the
+             style attribute catches every move it makes. */
+          new MutationObserver(place).observe(a11y, {
+            attributes: true,
+            attributeFilter: ['style', 'class'],
+          });
+          observing = true;
+        }
+      }
+
+      /* Keep re-placing for ~10s regardless, to cover a move that happens
+         without a style change (a resize of the widget's own contents). */
+      if (++tries > 40) clearInterval(timer);
+    }, 250);
+
+    var re;
+    function reflow() { clearTimeout(re); re = setTimeout(place, 150); }
+    window.addEventListener('resize', reflow);
+    window.addEventListener('orientationchange', reflow);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
