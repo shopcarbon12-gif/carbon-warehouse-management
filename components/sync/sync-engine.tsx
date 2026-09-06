@@ -191,7 +191,7 @@ export function SyncEngine() {
                         {row.sku}
                       </td>
                       <td className="max-w-xs truncate px-3 py-1.5 text-xs text-[var(--wms-fg)]">
-                        {row.description}
+                        <span className="item-name">{row.description}</span>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-xs tabular-nums text-[var(--wms-muted)]">
                         {row.lsCount}

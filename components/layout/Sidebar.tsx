@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -194,13 +194,17 @@ function NavAccordion({
   section,
   pathname,
   onNavigate,
+  isOpen,
+  onToggle,
 }: {
   section: NavSection;
   pathname: string;
   onNavigate: () => void;
+  /** Controlled by Sidebar so only one section is ever open (accordion). */
+  isOpen: boolean;
+  onToggle: () => void;
 }) {
-  const activeInSection = section.isActiveSection(pathname);
-  const [open, setOpen] = useState(activeInSection);
+  const open = isOpen;
 
   // Click handler for nav items: if the operator clicks the menu entry
   // for the page they're already on, Next's <Link> normally no-ops.
@@ -221,20 +225,13 @@ function NavAccordion({
     [pathname, onNavigate],
   );
 
-  /* Expand drawer when route enters this section (nav UX). */
-  useEffect(() => {
-    if (!activeInSection) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync accordion open state with active route
-    setOpen(true);
-  }, [activeInSection]);
-
   return (
     <div className="mb-1 border-b border-[var(--wms-border)]/60 pb-1 last:border-0">
       <button
         type="button"
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-3 text-left font-mono text-base font-semibold uppercase tracking-wide text-[var(--wms-secondary)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
       >
         {section.label}
         <ChevronDown
@@ -305,6 +302,27 @@ export function Sidebar({
   // Pinned sidebars stay open after clicking a nav item — matches the
   // POS behaviour where the pin "locks" the menu. Unpinned sidebars
   // close themselves like an overlay drawer.
+  /*
+    Accordion state lives here, not in each section, so opening one collapses
+    the rest. Seeded from the active route, so following a direct link lands
+    with the relevant section already expanded.
+  */
+  const [openSection, setOpenSection] = useState<string | null>(
+    () => sections.find((sec) => sec.isActiveSection(pathname))?.id ?? null,
+  );
+
+  /*
+    Reopening the drawer starts clean — everything collapsed, whatever was
+    expanded last time. Tracked as a closed→open transition rather than just
+    `open`, so an unrelated re-render cannot collapse a section the operator
+    just opened.
+  */
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (open && !wasOpen.current) setOpenSection(null);
+    wasOpen.current = open;
+  }, [open]);
+
   const onNavigate = useCallback(() => {
     // Unconditional: harmless at md+ when pinned (aside shows via `pinned`),
     // required below md where even a pinned sidebar renders as a drawer.
@@ -461,6 +479,10 @@ export function Sidebar({
                 section={section}
                 pathname={pathname}
                 onNavigate={onNavigate}
+                isOpen={openSection === section.id}
+                onToggle={() =>
+                  setOpenSection((cur) => (cur === section.id ? null : section.id))
+                }
               />
             ))}
           </div>

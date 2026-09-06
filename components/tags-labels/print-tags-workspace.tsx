@@ -414,7 +414,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
                       <span className="sku">{m.sku}</span>
                       <span className="mut"> · {m.color ?? "—"} · sz {m.size ?? "—"} · ${Math.trunc(Number(m.price) || 0)}</span>
                       <br />
-                      <span className="mut">UPC {m.upc ?? "—"} · {m.description ?? "—"}</span>
+                      <span className="mut">UPC {m.upc ?? "—"} · <span className="item-name">{m.description ?? "—"}</span></span>
                     </button>
                   ))}
                 </div>
@@ -422,7 +422,7 @@ export function PrintTagsWorkspace({ mode, companyPrefix }: { mode: Mode; compan
             </div>
             {selected ? (
               <div className="selected">
-                <span className="sku">{selected.sku}</span> <span className="mut">·</span> {selected.description ?? "—"}
+                <span className="sku">{selected.sku}</span> <span className="mut">·</span> <span className="item-name">{selected.description ?? "—"}</span>
                 <div className="row2">
                   {selected.color ?? "—"} · size {selected.size ?? "—"} · ${Math.trunc(Number(selected.price) || 0)} · UPC{" "}
                   {selected.upc ?? "—"} · System ID {selected.ls_system_id}

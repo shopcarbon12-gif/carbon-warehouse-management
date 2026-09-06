@@ -47,7 +47,7 @@ ${dfrLine}^PR1,1^FS
 ^RS8,1,50,1,E^FS
 ^RFW,H,1,12,E^FD${epc}^FS
 ^FO50,50^A0N,50,50^FD${sanitizeField(data.sku)}^FS
-^FO50,110^A0N,30,30^FD${sanitizeField(data.description)}^FS
+^FO50,110^A0N,30,30^FD${sanitizeField(data.description).toUpperCase()}^FS
 ^FO50,160^A0N,25,25^FDID: ${data.systemId}^FS
 ^FO50,250^BY3^BCN,150,Y,N,N^FD${data.upc}^FS
 ^FO550,500^A0N,20,20^FDCARBON WMS^FS

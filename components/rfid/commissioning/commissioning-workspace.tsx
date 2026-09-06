@@ -388,7 +388,7 @@ export function CommissioningWorkspace() {
                     <br />
                     <span className="text-[var(--wms-muted)]">LS {m.ls_system_id}</span>
                     <span className="text-[var(--wms-muted)]"> — </span>
-                    <span className="text-[var(--wms-fg)]">{m.description}</span>
+                    <span className="item-name text-[var(--wms-fg)]">{m.description}</span>
                   </button>
                 </li>
               ))}
@@ -400,7 +400,7 @@ export function CommissioningWorkspace() {
           <div className="mt-4 rounded-md border border-teal-600/35 bg-teal-50 px-3 py-2 font-mono text-xs text-teal-950 dark:border-teal-500/25 dark:bg-teal-950/25 dark:text-[var(--wms-fg)]">
             <span className="text-teal-500/90">{selected.sku}</span>
             <span className="text-[var(--wms-muted)]"> · </span>
-            {selected.description}
+            <span className="item-name">{selected.description}</span>
             <span className="mt-1 block text-[var(--wms-muted)]">
               UPC {selected.upc} · System ID {selected.ls_system_id}
             </span>

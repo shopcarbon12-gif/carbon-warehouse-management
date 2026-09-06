@@ -757,7 +757,7 @@ export function LocationsManager({
                         <tr key={r.epc} className="hover:bg-[var(--wms-surface-elevated)]/50">
                           <td className="px-3 py-1.5">{r.sku}</td>
                           <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden">{r.upc ?? "—"}</td>
-                          <td className="px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden" title={r.description}>
+                          <td className="item-name px-3 py-1.5 text-[var(--wms-muted)] max-md:hidden" title={r.description}>
                             {r.description}
                           </td>
                           <td className="px-3 py-1.5 tabular-nums">{r.serial_number}</td>

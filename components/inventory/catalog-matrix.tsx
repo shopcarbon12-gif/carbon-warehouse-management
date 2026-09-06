@@ -194,7 +194,7 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                       <td className="px-3 py-2 align-middle font-mono text-xs text-teal-400/90">
                         {m.upc}
                       </td>
-                      <td className="max-w-md truncate px-3 py-2 align-middle font-medium text-[var(--wms-fg)]">
+                      <td className="item-name max-w-md truncate px-3 py-2 align-middle font-medium text-[var(--wms-fg)]">
                         {m.description}
                       </td>
                       <td className="px-3 py-2 text-right align-middle font-mono text-xs tabular-nums text-[var(--wms-fg)]">

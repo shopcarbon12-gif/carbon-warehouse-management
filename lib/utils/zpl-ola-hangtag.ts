@@ -59,10 +59,19 @@ export function olaDescriptionLines(
   color: string | null | undefined,
   size: string | null | undefined,
 ): [string, string] {
-  let words = sanitize(description).split(" ").filter(Boolean);
+  /*
+    Uppercased for print. Item names are stored in Title Case because that is
+    what Shopify sends to Google, but a hang tag has always read in capitals —
+    before the Title Case migration these labels printed caps simply because
+    the stored value was caps. Uppercasing here restores the printed appearance
+    without touching the stored name.
+  */
+  let words = sanitize(description).toUpperCase().split(" ").filter(Boolean);
   for (const attr of [color, size]) {
     if (!attr) continue;
-    for (const w of String(attr).split(" ").filter(Boolean)) {
+    /* Compared uppercase on both sides, so a Title Case name still matches an
+       upper-case colour or size and the word is still dropped. */
+    for (const w of String(attr).toUpperCase().split(" ").filter(Boolean)) {
       words = words.filter((x) => x !== w);
     }
   }

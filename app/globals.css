@@ -687,3 +687,19 @@ html[data-theme="light"] .text-yellow-400\/80 { color: #a16207; }
 html[data-theme="light"] .text-yellow-400\/90 { color: #a16207; }
 html[data-theme="light"] .text-zinc-300 { color: #3f3f46; }
 html[data-theme="light"] .text-zinc-400 { color: #3f3f46; }
+
+/*
+  Item names are stored in Title Case because that is the casing Shopify sends
+  to Google Merchant Center. Inside the WMS they read as capitals, which is how
+  the warehouse has always seen them.
+
+  This is display-only. The DOM text, CSV exports, search, and the value pushed
+  to Shopify all keep the stored Title Case — only the rendering changes, the
+  same technique the storefront uses for product titles.
+
+  Never put this on an <input>: the field would show capitals while saving
+  something else, and the stored name would drift on the next edit.
+*/
+.item-name {
+  text-transform: uppercase;
+}

@@ -75,7 +75,8 @@ export function LabelPreviewCanvas({
 
     line("SKU", sku || "—");
     line("UPC / EAN", upc || "—");
-    line("Description", description || "—");
+    /* Uppercased to match what actually prints on the tag. */
+    line("Description", description ? description.toUpperCase() : "—");
     line("System ID", systemId || "—");
     line(
       "Encoding",

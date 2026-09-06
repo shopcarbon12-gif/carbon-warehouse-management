@@ -505,9 +505,11 @@ export function CatalogWorkspace({
 
   return (
     <div className="space-y-4">
-      {/* Phone: search and the button row are stacked blocks — give them the
-          same 12px rhythm as the rest of the toolbar (md+ spacing unchanged). */}
-      <div className="max-md:space-y-3">
+      {/* Search and the button row are stacked blocks at every width. The
+          spacing used to be phone-only, which left them flush on wider
+          screens — at laptop widths the focused search box's ring ran into
+          the buttons below it. */}
+      <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <input
               type="search"

@@ -256,7 +256,7 @@ export function AllEpcsTable({
               <tr key={r.epc + r.state}>
                 <td className={`${cellTruncate} px-3 py-2`} title={r.sku}>{r.sku}</td>
                 <td
-                  className={`${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`}
+                  className={`item-name ${cellTruncate} hidden px-3 py-2 text-[var(--wms-muted)] md:table-cell`}
                   title={r.description}
                 >
                   {r.description}
@@ -738,7 +738,7 @@ function SkuRow({
           </button>
         </td>
         <td className="px-3 py-2 text-[var(--wms-accent)]">{a.sku}</td>
-        <td className="px-3 py-2 hidden md:table-cell text-[var(--wms-muted)]">
+        <td className="item-name px-3 py-2 hidden md:table-cell text-[var(--wms-muted)]">
           {a.description}
         </td>
         <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">{a.expected}</td>
