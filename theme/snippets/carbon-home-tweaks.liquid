@@ -1,0 +1,30 @@
+{%- comment -%}
+  Homepage-only presentation tweaks.
+
+  Hides the collection-tab bar under the section heading — the row that reads
+  "SUMMER SETS WOMEN" under POPULAR PRODUCTS, and "T-SHIRTS (Men)" under the
+  second one.
+
+  Those are not labels, they are the tab buttons of the theme's collection-tabs
+  component. Both sections currently carry exactly one tab, so the bar is a
+  redundant restatement of what the products already show, and hiding it costs
+  no navigation.
+
+  The rule deliberately only matches a bar with a single tab: if a second
+  collection is ever added to one of these sections, the tabs become real
+  navigation and reappear on their own. Hiding them unconditionally would
+  silently strand shoppers on whichever collection happened to be first.
+
+  `visibility: hidden` would leave the row's height behind, so this uses
+  `display: none` to close the gap as well.
+
+  Scoped to `.template-index` so collection-tabs sections used on any other
+  page are untouched.
+{%- endcomment -%}
+
+<style>
+  .template-index .section-collection-tabs
+    .collection-tabs__list:not(:has(.collection-tabs__list-link + .collection-tabs__list-link)) {
+    display: none;
+  }
+</style>

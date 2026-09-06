@@ -58,7 +58,7 @@ async function gql(query, variables = {}) {
 }
 
 /** Snippets we own outright, uploaded verbatim from theme/. */
-const OWN_FILES = ["snippets/carbon-scroll-reveal.liquid"];
+const OWN_FILES = ["snippets/carbon-scroll-reveal.liquid", "snippets/carbon-home-tweaks.liquid"];
 
 const TWEAKS = [
   {
@@ -69,6 +69,16 @@ const TWEAKS = [
       const anchor = "{% render 'carbon-accessibility-widget' %}";
       if (!src.includes(anchor)) return null;
       return src.replace(anchor, anchor + "\n{% render 'carbon-scroll-reveal' %}");
+    },
+  },
+  {
+    file: "layout/theme.liquid",
+    name: "render homepage tweaks",
+    guard: "carbon-home-tweaks",
+    apply(src) {
+      const anchor = "{% render 'carbon-scroll-reveal' %}";
+      if (!src.includes(anchor)) return null;
+      return src.replace(anchor, anchor + "\n{% render 'carbon-home-tweaks' %}");
     },
   },
   {
