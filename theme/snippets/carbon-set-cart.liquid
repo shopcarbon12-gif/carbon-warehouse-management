@@ -1,0 +1,283 @@
+{% comment %}
+  Matching sets — buy the pieces together.
+
+  A product flagged "Set" in the WMS carries a carbon_set.partners metafield
+  listing the handles of the other pieces. This pairs them at the cart:
+
+    • picking a colour + size resolves the partner's matching variant
+    • adding to cart adds every piece in one request
+    • the cart keeps the pieces in lockstep, so a customer cannot end up
+      checking out with half an outfit
+
+  When the exact size is not available in the partner, the shopper is asked to
+  pick from the sizes that ARE available in the colour they chose, rather than
+  being blocked — a set that is missing an M should still sell as S+L if that is
+  what the customer wants.
+
+  Partner data comes from Shopify's own /products/<handle>.js, so stock and
+  variants are read live rather than from a snapshot that can go stale.
+{% endcomment %}
+
+{% assign carbon_set_partners = product.metafields.carbon_set.partners %}
+{% if carbon_set_partners != blank %}
+  <script type="application/json" data-carbon-set-config>
+    {
+      "product": {{ product.handle | json }},
+      "partners": {{ carbon_set_partners | json }}
+    }
+  </script>
+{% endif %}
+
+<style>
+  .carbon-set-pair {
+    margin: 14px 0;
+    padding: 12px 14px;
+    border: 1px solid #d7e3f4;
+    border-radius: 8px;
+    background: #f2f8ff;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .carbon-set-pair[hidden] { display: none; }
+  .carbon-set-pair__title { font-weight: 700; margin: 0 0 4px; }
+  .carbon-set-pair__row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .carbon-set-pair__row img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+  .carbon-set-pair__sizes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .carbon-set-pair__size {
+    border: 1px solid #9db8dc; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
+  }
+  .carbon-set-pair__size[aria-pressed="true"] { background: #0a58ca; border-color: #0a58ca; color: #fff; }
+  .carbon-set-pair--warn { border-color: #e6c98a; background: #fff8e8; }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  var cfgEl = document.querySelector("[data-carbon-set-config]");
+  if (!cfgEl) return;
+
+  var cfg;
+  try { cfg = JSON.parse(cfgEl.textContent); } catch (e) { return; }
+  var handles = (cfg.partners || []).filter(Boolean);
+  if (!handles.length) return;
+
+  /* Option lookup is case- and whitespace-insensitive: the same colour is
+     spelled "BLACK" on one product and "Black" on another often enough that
+     matching on the raw string loses real pairs. */
+  function norm(v) { return String(v == null ? "" : v).trim().toUpperCase(); }
+  function optOf(variant, name) {
+    var opts = variant.options || [];
+    var names = (variant.__optionNames || []);
+    for (var i = 0; i < names.length; i += 1) {
+      if (norm(names[i]) === name) return norm(opts[i]);
+    }
+    return "";
+  }
+
+  var partners = [];
+  var loaded = false;
+
+  function load() {
+    return Promise.all(handles.map(function (h) {
+      return fetch("/products/" + h + ".js", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    })).then(function (list) {
+      partners = list.filter(Boolean).map(function (p) {
+        var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
+        (p.variants || []).forEach(function (v) { v.__optionNames = names; });
+        return p;
+      });
+      loaded = true;
+    });
+  }
+
+  /* The variant the shopper currently has selected on this page. */
+  function currentVariantId() {
+    var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
+    return input ? String(input.value) : "";
+  }
+  function currentVariant() {
+    var id = currentVariantId();
+    if (!id || !window.__carbonSetProduct) return null;
+    var vs = window.__carbonSetProduct.variants || [];
+    for (var i = 0; i < vs.length; i += 1) if (String(vs[i].id) === id) return vs[i];
+    return null;
+  }
+
+  var panel = null;
+  /* Sizes the shopper has chosen for partners that had no exact match, keyed by
+     partner handle so switching size on this product re-asks rather than
+     silently keeping a stale choice. */
+  var chosen = {};
+
+  function ensurePanel() {
+    if (panel) return panel;
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (!form) return null;
+    panel = document.createElement("div");
+    panel.className = "carbon-set-pair";
+    panel.setAttribute("data-carbon-set-panel", "");
+    var btn = form.querySelector('[type="submit"], [name="add"]');
+    if (btn && btn.parentNode) btn.parentNode.insertBefore(panel, btn);
+    else form.appendChild(panel);
+    return panel;
+  }
+
+  /* What will be added alongside this product, and what the shopper still has
+     to decide. Returns one entry per partner. */
+  function resolve() {
+    var mine = currentVariant();
+    if (!mine) return [];
+    var colour = optOf(mine, "COLOR") || optOf(mine, "COLOUR");
+    var size = optOf(mine, "SIZE");
+
+    return partners.map(function (p) {
+      var avail = (p.variants || []).filter(function (v) { return v.available; });
+      var sameColour = avail.filter(function (v) {
+        var c = optOf(v, "COLOR") || optOf(v, "COLOUR");
+        return c === colour;
+      });
+      var exact = sameColour.filter(function (v) { return optOf(v, "SIZE") === size; })[0];
+      if (exact) return { partner: p, variant: exact, needsChoice: false, options: [] };
+      if (sameColour.length) {
+        var pick = chosen[p.handle];
+        var picked = pick ? sameColour.filter(function (v) { return String(v.id) === String(pick); })[0] : null;
+        return { partner: p, variant: picked || null, needsChoice: !picked, options: sameColour };
+      }
+      return { partner: p, variant: null, needsChoice: false, options: [], unavailable: true };
+    });
+  }
+
+  function render() {
+    var el = ensurePanel();
+    if (!el) return;
+    var rows = resolve();
+    if (!rows.length) { el.hidden = true; return; }
+
+    var mine = currentVariant();
+    var colour = mine ? (optOf(mine, "COLOR") || optOf(mine, "COLOUR")) : "";
+    var html = "";
+    var warn = false;
+
+    rows.forEach(function (r) {
+      var img = (r.partner.featured_image || (r.partner.images || [])[0] || "");
+      if (r.unavailable) {
+        warn = true;
+        html += '<p class="carbon-set-pair__title">Matching piece unavailable</p>' +
+          "<p>" + r.partner.title + " is not available in " + (colour || "this colour") +
+          ". This item will be added on its own.</p>";
+        return;
+      }
+      if (r.needsChoice) {
+        warn = true;
+        html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
+          "<p>" + r.partner.title + " is not available in your size, but these are in stock in " +
+          (colour || "this colour") + ":</p><div class=\\"carbon-set-pair__sizes\\">";
+        r.options.forEach(function (v) {
+          var sz = optOf(v, "SIZE") || v.title;
+          html += '<button type="button" class="carbon-set-pair__size" aria-pressed="false" ' +
+            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' + sz + "</button>";
+        });
+        html += "</div>";
+        return;
+      }
+      html += '<p class="carbon-set-pair__title">Complete set — added together</p>' +
+        '<div class="carbon-set-pair__row">' +
+        (img ? '<img src="' + img + '" alt="" />' : "") +
+        "<span><strong>" + r.partner.title + "</strong><br>" +
+        (r.variant.title || "") + " — added to your cart automatically</span></div>";
+    });
+
+    el.className = "carbon-set-pair" + (warn ? " carbon-set-pair--warn" : "");
+    el.innerHTML = html;
+    el.hidden = false;
+
+    el.querySelectorAll(".carbon-set-pair__size").forEach(function (b) {
+      b.addEventListener("click", function () {
+        chosen[b.getAttribute("data-partner")] = b.getAttribute("data-variant");
+        render();
+      });
+    });
+  }
+
+  /* Add every piece in ONE request. Shopify's /cart/add.js takes an items array,
+     so the set lands atomically — two sequential calls could leave half a set in
+     the cart if the second failed. */
+  function addAll(e) {
+    var rows = resolve();
+    var extras = rows.filter(function (r) { return r.variant; });
+    var pending = rows.filter(function (r) { return r.needsChoice; });
+
+    if (pending.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      render();
+      var el = document.querySelector("[data-carbon-set-panel]");
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    if (!extras.length) return;   /* nothing to pair — let the theme proceed */
+
+    e.preventDefault();
+    e.stopPropagation();
+    var form = e.target.closest ? e.target.closest('form[action*="/cart/add"]') : null;
+    form = form || document.querySelector('form[action*="/cart/add"]');
+    var qty = 1;
+    var qtyEl = form && form.querySelector('[name="quantity"]');
+    if (qtyEl && Number(qtyEl.value) > 0) qty = Number(qtyEl.value);
+
+    var items = [{ id: Number(currentVariantId()), quantity: qty }];
+    extras.forEach(function (r) { items.push({ id: Number(r.variant.id), quantity: qty }); });
+
+    fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ items: items }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.j && res.j.description) || "Could not add the set");
+        /* Let the theme refresh its own drawer/count if it listens for this. */
+        document.dispatchEvent(new CustomEvent("carbon:set:added"));
+        window.location.href = "/cart";
+      })
+      .catch(function () { window.location.href = "/cart"; });
+  }
+
+  function boot() {
+    /* The theme prints the product JSON for its variant picker; reuse it rather
+       than re-fetching what is already on the page. */
+    fetch("/products/" + cfg.product + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (p) {
+        if (!p) return;
+        var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
+        (p.variants || []).forEach(function (v) { v.__optionNames = names; });
+        window.__carbonSetProduct = p;
+        return load();
+      })
+      .then(function () {
+        if (!loaded) return;
+        render();
+        /* Variant pickers differ by theme, so watch the hidden id input rather
+           than any particular picker implementation. */
+        var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
+        if (input) {
+          var last = input.value;
+          setInterval(function () {
+            if (input.value !== last) { last = input.value; chosen = {}; render(); }
+          }, 300);
+        }
+        var form = document.querySelector('form[action*="/cart/add"]');
+        if (form) form.addEventListener("submit", addAll, true);
+      });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>

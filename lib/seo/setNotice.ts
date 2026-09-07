@@ -110,3 +110,39 @@ export function applySetBanner(html: string, picture: SetPicture | null): string
   const banner = buildSetBannerHtml(picture);
   return base ? `${base}${banner}` : banner;
 }
+
+/**
+ * The notice for a product that is named like a set but cannot actually be sold
+ * as one, because its partner is not listed.
+ *
+ * Without this the page is genuinely misleading: the title says "Set", so a
+ * shopper reasonably reads one price as covering both pieces. Saying plainly
+ * that this listing is a single garment is the whole point — the Complete the
+ * Look banner would promise an automatic pairing that cannot happen.
+ */
+export function buildSoloNoticeHtml(): string {
+  return (
+    `<div class="${SET_BANNER_CLASS}">` +
+    "<h3>Sold individually</h3>" +
+    "<p>Despite the name, this listing is for <strong>this piece only</strong>. " +
+    "The matching piece is <strong>not included</strong> and is <strong>not currently available</strong>. " +
+    "The price shown covers this item alone.</p>" +
+    "</div>"
+  );
+}
+
+/**
+ * Which notice a product should carry.
+ *   picture  → the set works: show the Complete the Look artwork
+ *   "solo"   → named like a set but no partner is sellable: say so in words
+ *   null     → not a set at all: no notice
+ */
+export function applySetNoticeFor(
+  html: string,
+  mode: SetPicture | "solo" | null,
+): string {
+  const base = stripSetBanner(html);
+  if (mode === null) return base;
+  const block = mode === "solo" ? buildSoloNoticeHtml() : buildSetBannerHtml(mode);
+  return base ? `${base}${block}` : block;
+}

@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import { runShopifyGraphql } from "@/lib/shopify";
 import type { ShopCtx } from "@/lib/server/shopify-write";
-import { applySetBanner, pictureForProduct, type SetPicture } from "@/lib/seo/setNotice";
+import { applySetNoticeFor, pictureForProduct, type SetPicture } from "@/lib/seo/setNotice";
 
 /**
  * Push the "Complete the Look" banner into a product's Shopify description.
@@ -26,6 +26,60 @@ export interface SetBannerResult {
 }
 
 /** What the WMS knows about a product's set status and numbering. */
+/**
+ * The other pieces of each product's set that are actually listed on Shopify.
+ *
+ * Only listed partners count: a partner that exists in the WMS but has no
+ * Shopify product cannot be added to a cart, so for storefront purposes the
+ * product is unpaired.
+ */
+async function loadPartners(pool: Pool, matrixIds: string[]) {
+  const r = await pool.query<{ id: string; partner_pid: string }>(
+    `SELECT DISTINCT m.id::text AS id, p.shopify_product_id AS partner_pid
+       FROM matrices m
+       JOIN matrices p
+         ON p.set_group_id = m.set_group_id
+        AND p.shopify_product_id IS NOT NULL
+        AND p.shopify_product_id IS DISTINCT FROM m.shopify_product_id
+      WHERE m.id = ANY($1::uuid[])
+        AND m.set_group_id IS NOT NULL`,
+    [matrixIds],
+  );
+  const out = new Map<string, string[]>();
+  for (const row of r.rows) {
+    if (!out.has(row.id)) out.set(row.id, []);
+    const list = out.get(row.id)!;
+    if (!list.includes(row.partner_pid)) list.push(row.partner_pid);
+  }
+  return out;
+}
+
+/**
+ * Shopify handles for a set of product ids.
+ *
+ * The storefront pairs by handle, because that is what /products/<handle>.js
+ * takes — and that endpoint is how the theme reads a partner's live variants and
+ * stock without needing an API key in the browser. The WMS does not store
+ * handles, so they are read here in one batch.
+ */
+async function loadHandles(ctx: ShopCtx, productIds: string[]) {
+  const out = new Map<string, string>();
+  for (let i = 0; i < productIds.length; i += 50) {
+    const batch = productIds.slice(i, i + 50);
+    const res = await runShopifyGraphql<{ nodes?: Array<{ id?: string; handle?: string } | null> }>({
+      shop: ctx.shop,
+      token: ctx.token,
+      apiVersion: ctx.apiVersion,
+      query: `query($ids:[ID!]!){ nodes(ids:$ids){ ... on Product { id handle } } }`,
+      variables: { ids: batch },
+    });
+    for (const n of res.data?.nodes || []) {
+      if (n?.id && n.handle) out.set(n.id, n.handle);
+    }
+  }
+  return out;
+}
+
 async function loadMatrixSetInfo(pool: Pool, matrixIds: string[]) {
   const r = await pool.query<{
     id: string;
@@ -72,6 +126,13 @@ export async function syncSetBanners(
 ): Promise<SetBannerResult[]> {
   if (!matrixIds.length) return [];
   const rows = await loadMatrixSetInfo(pool, matrixIds);
+  const partnerMap = await loadPartners(pool, matrixIds);
+  /* One batched lookup rather than a call per product: a set group's partners
+     repeat across its members. */
+  const handleMap = await loadHandles(
+    ctx,
+    [...new Set([...partnerMap.values()].flat())],
+  );
   const out: SetBannerResult[] = [];
 
   for (const row of rows) {
@@ -83,7 +144,25 @@ export async function syncSetBanners(
       continue;
     }
 
+    /*
+     * Which notice, and what the storefront needs to pair the product.
+     *
+     * A product named "… Set" whose partner is not listed cannot be paired, and
+     * showing it the Complete the Look artwork would promise an automatic
+     * pairing that cannot happen — so it gets the plain "sold individually"
+     * wording instead. That distinction is the difference between a helpful
+     * page and a misleading one.
+     */
+    const partnerIds = row.is_set ? (partnerMap.get(row.id) ?? []) : [];
+    const sellablePartners = partnerIds
+      .map((pid) => handleMap.get(pid))
+      .filter((h): h is string => Boolean(h));
     const picture = row.is_set ? pictureForProduct(row.skus || [], row.upc) : null;
+    const mode: SetPicture | "solo" | null = !row.is_set
+      ? null
+      : sellablePartners.length
+        ? picture
+        : "solo";
 
     try {
       const read = await runShopifyGraphql<{ product?: { descriptionHtml?: string | null } }>({
@@ -96,8 +175,28 @@ export async function syncSetBanners(
       if (!read.ok || read.errors) throw new Error("Could not read the product description");
 
       const currentHtml = String(read.data?.product?.descriptionHtml ?? "");
-      const nextHtml = applySetBanner(currentHtml, picture);
+      const nextHtml = applySetNoticeFor(currentHtml, mode);
       if (nextHtml === currentHtml) {
+        /* Description already right, but the partner list can still have moved —
+           a partner being published or unlisted changes pairing without changing
+           a word of the copy. */
+        await runShopifyGraphql({
+          shop: ctx.shop,
+          token: ctx.token,
+          apiVersion: ctx.apiVersion,
+          query: `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
+          variables: {
+            m: [
+              {
+                ownerId: productId,
+                namespace: "carbon_set",
+                key: "partners",
+                type: "list.single_line_text_field",
+                value: JSON.stringify(sellablePartners),
+              },
+            ],
+          },
+        });
         out.push({ matrixId: row.id, productId, picture, changed: false });
         continue;
       }
@@ -120,6 +219,28 @@ export async function syncSetBanners(
             "Shopify rejected the update",
         );
       }
+      /* The theme reads this to know what to pair with. Written after the
+         description so a product never advertises a partner it is not also
+         describing. An empty list is written deliberately when a product stops
+         being a set, so the theme stops pairing it. */
+      await runShopifyGraphql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>({
+        shop: ctx.shop,
+        token: ctx.token,
+        apiVersion: ctx.apiVersion,
+        query: `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
+        variables: {
+          m: [
+            {
+              ownerId: productId,
+              namespace: "carbon_set",
+              key: "partners",
+              type: "list.single_line_text_field",
+              value: JSON.stringify(sellablePartners),
+            },
+          ],
+        },
+      });
+
       out.push({ matrixId: row.id, productId, picture, changed: true });
     } catch (e) {
       /* One product failing must not abandon the rest of the set — the caller

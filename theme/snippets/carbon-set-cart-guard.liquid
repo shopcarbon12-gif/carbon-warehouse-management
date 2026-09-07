@@ -1,0 +1,162 @@
+{% comment %}
+  Keeps matching sets whole in the cart.
+
+  Pairing at add-to-cart is not enough on its own: a shopper can still open the
+  cart and delete one half, or set one piece to 2 and the other to 1, and check
+  out with an outfit that cannot be fulfilled. This watches the cart and puts it
+  back in step.
+
+  Pieces are recognised by their product's carbon_set.partners metafield, read
+  through /products/<handle>.js — the same source the product page uses, so the
+  two agree by construction.
+
+  Deliberately corrective rather than preventive: blocking the theme's own
+  quantity and remove controls would mean reimplementing them for every theme
+  update. Letting the change happen and then restoring the balance survives
+  theme changes and is invisible when nothing is wrong.
+{% endcomment %}
+
+<script>
+(function () {
+  "use strict";
+
+  var busy = false;
+  var cache = {};      /* handle -> partner handles */
+  var notice = null;
+
+  function get(url) {
+    return fetch(url, { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+
+  function partnersOf(handle) {
+    if (cache[handle]) return Promise.resolve(cache[handle]);
+    /* The .js product endpoint does not expose metafields, so the partner list
+       is read from the product page's embedded config. One fetch per distinct
+       set product in the cart, cached for the page's lifetime. */
+    return fetch("/products/" + handle, { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (html) {
+        var m = html.match(/data-carbon-set-config[^>]*>([\s\S]*?)<\/script>/);
+        var list = [];
+        if (m) {
+          try { list = (JSON.parse(m[1]).partners || []).filter(Boolean); } catch (e) { list = []; }
+        }
+        cache[handle] = list;
+        return list;
+      })
+      .catch(function () { cache[handle] = []; return []; });
+  }
+
+  function say(text) {
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.setAttribute("data-carbon-set-notice", "");
+      notice.style.cssText =
+        "margin:12px 0;padding:10px 14px;border:1px solid #d7e3f4;background:#f2f8ff;" +
+        "border-radius:8px;font-size:.9rem;line-height:1.5";
+      var host = document.querySelector("form[action*='/cart']") || document.querySelector("main") || document.body;
+      host.insertBefore(notice, host.firstChild);
+    }
+    notice.textContent = text;
+  }
+
+  function update(updates, message) {
+    busy = true;
+    return fetch("/cart/update.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ updates: updates }),
+    })
+      .then(function () {
+        if (message) say(message);
+        /* Reload so the theme's own cart markup and totals redraw — patching its
+           DOM by hand would break on any theme update. */
+        window.location.reload();
+      })
+      .catch(function () { busy = false; });
+  }
+
+  function check() {
+    if (busy) return;
+    get("/cart.js").then(function (cart) {
+      if (!cart || !cart.items || !cart.items.length) return;
+
+      var handles = {};
+      cart.items.forEach(function (i) { handles[i.handle] = true; });
+
+      Promise.all(Object.keys(handles).map(function (h) {
+        return partnersOf(h).then(function (p) { return { handle: h, partners: p }; });
+      })).then(function (info) {
+        var setOf = {};
+        info.forEach(function (x) { if (x.partners.length) setOf[x.handle] = x.partners; });
+        if (!Object.keys(setOf).length) return;
+
+        /* Total quantity per product handle, since a product can appear as more
+           than one line when sizes differ. */
+        var qty = {};
+        cart.items.forEach(function (i) { qty[i.handle] = (qty[i.handle] || 0) + i.quantity; });
+
+        var updates = {};
+        var removed = null;
+        var rebalanced = null;
+
+        Object.keys(setOf).forEach(function (h) {
+          var present = setOf[h].filter(function (p) { return qty[p] > 0; });
+          if (!present.length) {
+            /* Every partner is gone — the remaining piece cannot be sold as a
+               set, so it goes too. */
+            cart.items.forEach(function (i) { if (i.handle === h) updates[i.key] = 0; });
+            removed = h;
+            return;
+          }
+          /* Quantities out of step: bring every piece down to the smallest, so
+             the customer is never charged for more than a whole set. */
+          var counts = [qty[h]].concat(present.map(function (p) { return qty[p]; }));
+          var min = Math.min.apply(null, counts);
+          if (counts.some(function (c) { return c !== min; })) {
+            [h].concat(present).forEach(function (ph) {
+              var seen = 0;
+              cart.items.forEach(function (i) {
+                if (i.handle !== ph) return;
+                var want = Math.max(0, Math.min(i.quantity, min - seen));
+                seen += want;
+                if (want !== i.quantity) updates[i.key] = want;
+              });
+            });
+            rebalanced = true;
+          }
+        });
+
+        if (!Object.keys(updates).length) return;
+        update(
+          updates,
+          removed
+            ? "Matching sets are sold together, so the remaining piece was removed with its partner."
+            : "Matching sets are sold together, so the quantities were matched up."
+        );
+      });
+    });
+  }
+
+  /* Run on load and after the theme mutates the cart. Themes vary in what they
+     emit, so a light poll backs up the events rather than relying on any one. */
+  function boot() {
+    if (!/\/cart/.test(window.location.pathname)) return;
+    check();
+    document.addEventListener("cart:updated", check);
+    document.addEventListener("cart:refresh", check);
+    var last = "";
+    setInterval(function () {
+      var el = document.querySelector("[data-cart-count], .cart-count, .cart__count");
+      var now = el ? el.textContent : "";
+      if (now !== last) { last = now; check(); }
+    }, 1200);
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
