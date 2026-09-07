@@ -103,3 +103,4 @@ scripts/.title-sync/
 
 # Size-order run snapshots (bulk before/after dumps, not source).
 scripts/.size-order/
+scripts/.seo-bulk/

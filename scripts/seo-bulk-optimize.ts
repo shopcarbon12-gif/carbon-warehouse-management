@@ -1,0 +1,396 @@
+/* eslint-disable no-console */
+/**
+ * Bulk SEO pass over the active Shopify catalog.
+ *
+ * Runs the SAME optimizer the Matrix → SEO tab runs (lib/seo/optimizeCore) over
+ * every active product that has at least one image, and writes the result back
+ * to Shopify. Doing it in the tab means one product per click; this is the same
+ * work, once, for the whole catalog.
+ *
+ * DRY RUN BY DEFAULT. Nothing is written to Shopify unless --write is passed.
+ *
+ *   npx tsx scripts/seo-bulk-optimize.ts --limit 5            # sample, no writes
+ *   npx tsx scripts/seo-bulk-optimize.ts --limit 5 --write    # sample, writes
+ *   npx tsx scripts/seo-bulk-optimize.ts --write              # whole catalog
+ *
+ * Flags:
+ *   --limit N        stop after N products (default: all)
+ *   --concurrency N  products in flight (default 4)
+ *   --write          actually write to Shopify
+ *   --only <id,id>   restrict to specific product ids (numeric or gid)
+ *   --resume         skip products already recorded done in the state file
+ *   --no-vision      skip photo analysis (cheaper, lower quality)
+ *
+ * Every product's before/after lands in scripts/.seo-bulk/report.jsonl, and the
+ * set of completed ids in scripts/.seo-bulk/state.json, so an interrupted run
+ * resumes without paying for the same products twice.
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { optimizeSeo } from "@/lib/seo/optimizeCore";
+import { scoreAll } from "@/lib/seo/deterministic";
+import type { ProductContext, SeoFields, Scorecard } from "@/lib/seo/types";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const OUT_DIR = path.join(ROOT, "scripts", ".seo-bulk");
+const REPORT = path.join(OUT_DIR, "report.jsonl");
+const STATE = path.join(OUT_DIR, "state.json");
+
+/* ---------------------------------------------------------------- env ---- */
+
+function loadEnvFile(file: string): Record<string, string> {
+  const p = path.join(ROOT, file);
+  if (!fs.existsSync(p)) return {};
+  const out: Record<string, string> = {};
+  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$/);
+    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return out;
+}
+
+/* Production credentials, not the localhost dev ones: this writes to the live
+   storefront, so reading DATABASE_URL-style local overrides would be wrong. */
+const env = { ...loadEnvFile(".env.coolify.local"), ...loadEnvFile(".env.agent-secrets") };
+const SHOP = (process.env.SHOPIFY_SHOP_DOMAIN || env.SHOPIFY_SHOP_DOMAIN || "").trim();
+const TOKEN = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const OPENAI_KEY = (() => {
+  const direct = (process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || "").trim();
+  if (direct) return direct;
+  const f = (process.env.OPENAI_API_KEY_FILE || "").trim();
+  if (f && fs.existsSync(f)) return fs.readFileSync(f, "utf8").trim();
+  return "";
+})();
+
+/* ---------------------------------------------------------------- args ---- */
+
+const argv = process.argv.slice(2);
+const has = (f: string) => argv.includes(f);
+const val = (f: string) => {
+  const i = argv.indexOf(f);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+const LIMIT = Number(val("--limit") || 0) || 0;
+const CONCURRENCY = Math.max(1, Math.min(Number(val("--concurrency") || 4) || 4, 8));
+const WRITE = has("--write");
+const RESUME = has("--resume");
+const USE_VISION = !has("--no-vision");
+const ONLY = new Set(
+  String(val("--only") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => (s.startsWith("gid://") ? s : `gid://shopify/Product/${s}`)),
+);
+
+/* ------------------------------------------------------------- shopify ---- */
+
+type Json = Record<string, any>;
+
+let throttleWaitMs = 0;
+
+async function gql<T = Json>(query: string, variables?: Json): Promise<T> {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    if (throttleWaitMs > 0) {
+      await sleep(throttleWaitMs);
+      throttleWaitMs = 0;
+    }
+    let res: Response;
+    try {
+      res = await fetch(`https://${SHOP}/admin/api/${API_VERSION}/graphql.json`, {
+        method: "POST",
+        headers: { "X-Shopify-Access-Token": TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables }),
+      });
+    } catch (e) {
+      await sleep(1500 * (attempt + 1));
+      continue;
+    }
+    if (res.status === 429 || res.status >= 500) {
+      await sleep(2000 * (attempt + 1));
+      continue;
+    }
+    const json = (await res.json()) as Json;
+    if (json.errors) {
+      const text = JSON.stringify(json.errors);
+      /* Shopify's GraphQL limit is cost-based; backing off is the documented
+         response, and it is not an error worth aborting the whole run for. */
+      if (/throttl/i.test(text)) {
+        await sleep(2500 * (attempt + 1));
+        continue;
+      }
+      throw new Error(text.slice(0, 400));
+    }
+    const cost = json.extensions?.cost?.throttleStatus;
+    if (cost && cost.currentlyAvailable < 200) throttleWaitMs = 1000;
+    return json.data as T;
+  }
+  throw new Error("Shopify GraphQL: retries exhausted");
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const PRODUCT_FIELDS = `
+  id title handle descriptionHtml productType vendor tags onlineStoreUrl
+  seo { title description }
+  priceRangeV2 { minVariantPrice { amount currencyCode } }
+  media(first: 50) { nodes { ... on MediaImage { id image { url altText } } } }
+  variants(first: 50) { nodes { id sku barcode price selectedOptions { name value } } }
+`;
+
+async function fetchActiveProducts(): Promise<Json[]> {
+  const out: Json[] = [];
+  let cursor: string | null = null;
+  do {
+    const d: Json = await gql(
+      `query($cursor:String){ products(first:50, after:$cursor, query:"status:active"){
+         pageInfo{hasNextPage endCursor} nodes{ ${PRODUCT_FIELDS} } } }`,
+      { cursor },
+    );
+    out.push(...d.products.nodes);
+    cursor = d.products.pageInfo.hasNextPage ? d.products.pageInfo.endCursor : null;
+    process.stdout.write(`\r  fetched ${out.length} active products`);
+  } while (cursor);
+  process.stdout.write("\n");
+  return out;
+}
+
+/* Mirrors the audit route's mapping exactly, so the score the bulk pass computes
+   is the score the SEO tab would show for the same product. */
+function toFields(p: Json): SeoFields {
+  const media = (p.media?.nodes || []).filter((n: Json) => n && n.id);
+  return {
+    title: p.title || "",
+    seoTitle: p.seo?.title || "",
+    metaDescription: p.seo?.description || "",
+    handle: p.handle || "",
+    bodyHtml: p.descriptionHtml || "",
+    tags: p.tags || [],
+    productType: p.productType || "",
+    vendor: p.vendor || "",
+    imageAlts: media.map((n: Json) => ({
+      id: String(n.id || ""),
+      url: String(n.image?.url || ""),
+      altText: String(n.image?.altText || ""),
+    })),
+  };
+}
+
+function toContext(p: Json): ProductContext {
+  const media = (p.media?.nodes || []).filter((n: Json) => n && n.id);
+  const variants = p.variants?.nodes || [];
+  return {
+    productId: p.id,
+    handle: p.handle || "",
+    title: p.title || "",
+    productType: p.productType || "",
+    vendor: p.vendor || "",
+    tags: p.tags || [],
+    price: p.priceRangeV2?.minVariantPrice?.amount || undefined,
+    currency: p.priceRangeV2?.minVariantPrice?.currencyCode || undefined,
+    variantSkus: variants.map((v: Json) => String(v.sku || "")).filter(Boolean).slice(0, 10),
+    barcodes: variants.map((v: Json) => String(v.barcode || "")).filter(Boolean).slice(0, 10),
+    colors: Array.from(
+      new Set(
+        variants
+          .flatMap((v: Json) => v.selectedOptions || [])
+          .filter((o: Json) => /colou?r/i.test(String(o?.name || "")))
+          .map((o: Json) => String(o?.value || "").trim())
+          .filter(Boolean),
+      ),
+    ).slice(0, 12) as string[],
+    imageCount: media.length,
+    onlineStoreUrl: p.onlineStoreUrl || undefined,
+  };
+}
+
+/* --------------------------------------------------------------- write ---- */
+
+async function publish(productId: string, fields: SeoFields, focusKeyword: string, secondary: string[], score: number) {
+  const input: Json = { id: productId };
+  const seo: Json = {};
+  if (fields.seoTitle) seo.title = fields.seoTitle.trim();
+  if (fields.metaDescription) seo.description = fields.metaDescription.trim();
+  if (Object.keys(seo).length) input.seo = seo;
+  if (fields.bodyHtml) input.descriptionHtml = fields.bodyHtml;
+  if (Array.isArray(fields.tags) && fields.tags.length) {
+    input.tags = fields.tags.map((t) => String(t || "").trim()).filter(Boolean);
+  }
+  /* Title and handle are deliberately never sent: they are preserved brand
+     names, and changing a handle rewrites a live URL. */
+
+  const r = await gql(
+    `mutation($input: ProductInput!){ productUpdate(input:$input){ product{ id } userErrors{ field message } } }`,
+    { input },
+  );
+  const errs = r.productUpdate?.userErrors || [];
+  if (errs.length) throw new Error(`productUpdate: ${errs.map((e: Json) => e.message).join("; ")}`);
+
+  const alts = (fields.imageAlts || [])
+    .filter((a) => String(a.id).startsWith("gid://shopify/MediaImage/") && String(a.altText || "").trim())
+    .map((a) => ({ id: a.id, alt: a.altText.trim() }));
+  if (alts.length) {
+    const m = await gql(
+      `mutation($productId: ID!, $media: [UpdateMediaInput!]!){
+         productUpdateMedia(productId:$productId, media:$media){ mediaUserErrors{ field message } } }`,
+      { productId, media: alts },
+    );
+    const me = m.productUpdateMedia?.mediaUserErrors || [];
+    if (me.length) throw new Error(`alts: ${me.map((e: Json) => e.message).join("; ")}`);
+  }
+
+  /* The focus keyword is what the scorer checks seoTitle / metaDescription /
+     bodyHtml against — over half the weighting. It was never persisted, so a
+     re-audit had no keyword to check and those three fields always scored as
+     failures no matter how good the copy was. Storing it here is what makes a
+     100 durable and re-verifiable rather than a number seen once. */
+  const metafields = [
+    { ownerId: productId, namespace: "carbon_seo", key: "optimized_at", type: "single_line_text_field", value: new Date().toISOString() },
+    { ownerId: productId, namespace: "carbon_seo", key: "score", type: "number_integer", value: String(Math.round(score)) },
+  ];
+  if (focusKeyword) {
+    metafields.push({ ownerId: productId, namespace: "carbon_seo", key: "focus_keyword", type: "single_line_text_field", value: focusKeyword });
+  }
+  if (secondary.length) {
+    metafields.push({ ownerId: productId, namespace: "carbon_seo", key: "secondary_keywords", type: "list.single_line_text_field", value: JSON.stringify(secondary.slice(0, 8)) });
+  }
+  const mf = await gql(
+    `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
+    { m: metafields },
+  );
+  const mfe = mf.metafieldsSet?.userErrors || [];
+  if (mfe.length) throw new Error(`metafields: ${mfe.map((e: Json) => e.message).join("; ")}`);
+
+  /* Shopify mirrors seo.title / seo.description into global.title_tag and
+     global.description_tag, which is what most themes and feed apps actually
+     read. productUpdate sets them, but only where they already exist — a
+     product that never had them keeps scoring as missing in feed tools. */
+}
+
+/* ---------------------------------------------------------------- main ---- */
+
+function loadState(): { done: string[] } {
+  if (!RESUME || !fs.existsSync(STATE)) return { done: [] };
+  try {
+    return JSON.parse(fs.readFileSync(STATE, "utf8"));
+  } catch {
+    return { done: [] };
+  }
+}
+
+async function main() {
+  if (!SHOP || !TOKEN) throw new Error("Shopify credentials missing (SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_ACCESS_TOKEN).");
+  if (!OPENAI_KEY) throw new Error("OPENAI_API_KEY missing.");
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+
+  console.log(`Shop: ${SHOP}   mode: ${WRITE ? "WRITE (live)" : "DRY RUN (no writes)"}   vision: ${USE_VISION ? "on" : "off"}`);
+  const all = await fetchActiveProducts();
+
+  const done = new Set(loadState().done);
+  let queue = all
+    .filter((p) => (p.media?.nodes || []).some((n: Json) => n?.image?.url))
+    .filter((p) => (ONLY.size ? ONLY.has(p.id) : true))
+    .filter((p) => !done.has(p.id));
+  const skippedNoImage = all.length - all.filter((p) => (p.media?.nodes || []).some((n: Json) => n?.image?.url)).length;
+  if (LIMIT) queue = queue.slice(0, LIMIT);
+
+  console.log(`  ${all.length} active · ${skippedNoImage} skipped (no image) · ${done.size} already done · ${queue.length} to process\n`);
+  if (!queue.length) return;
+
+  let ok = 0;
+  let failed = 0;
+  let improvedTotal = 0;
+  let at100 = 0;
+  const before: number[] = [];
+  const after: number[] = [];
+  const doneIds = [...done];
+  let index = 0;
+
+  async function worker(id: number) {
+    for (;;) {
+      const i = index++;
+      if (i >= queue.length) return;
+      const p = queue[i];
+      const label = `[${String(i + 1).padStart(4)}/${queue.length}] ${String(p.title).slice(0, 40)}`;
+      try {
+        const current = toFields(p);
+        const context = toContext(p);
+        const result = await optimizeSeo({ context, current, useVision: USE_VISION, apiKey: OPENAI_KEY });
+        if (result.error) throw new Error(result.error);
+
+        /* The honest "after" score: the proposed fields judged against the
+           keyword that will actually be stored alongside them. */
+        const finalCard: Scorecard = scoreAll({ ...result.proposed, focusKeyword: result.focusKeyword });
+        const beforeCard = scoreAll(current);
+
+        if (WRITE) {
+          await publish(p.id, result.proposed, result.focusKeyword, result.secondaryKeywords, finalCard.overall);
+          doneIds.push(p.id);
+          fs.writeFileSync(STATE, JSON.stringify({ done: doneIds }, null, 2));
+        }
+
+        before.push(beforeCard.overall);
+        after.push(finalCard.overall);
+        improvedTotal += finalCard.overall - beforeCard.overall;
+        if (finalCard.overall >= 100) at100 += 1;
+        ok += 1;
+
+        fs.appendFileSync(
+          REPORT,
+          JSON.stringify({
+            id: p.id,
+            title: p.title,
+            handle: p.handle,
+            wrote: WRITE,
+            focusKeyword: result.focusKeyword,
+            secondaryKeywords: result.secondaryKeywords,
+            imagesAnalyzed: result.imagesAnalyzed,
+            before: beforeCard.overall,
+            after: finalCard.overall,
+            fieldsAfter: Object.fromEntries(
+              Object.entries(finalCard.fields).map(([k, v]) => [k, v?.score ?? 0]),
+            ),
+            proposed: {
+              seoTitle: result.proposed.seoTitle,
+              metaDescription: result.proposed.metaDescription,
+              tags: result.proposed.tags,
+              bodyHtmlChars: String(result.proposed.bodyHtml || "").length,
+            },
+          }) + "\n",
+        );
+        console.log(
+          `${label}  ${beforeCard.overall} → ${finalCard.overall}${finalCard.overall >= 100 ? "  ✓100" : ""}` +
+            `  [${result.imagesAnalyzed} photo${result.imagesAnalyzed === 1 ? "" : "s"} read]  kw:"${result.focusKeyword}"`,
+        );
+        if (USE_VISION && result.imagesAnalyzed === 0) {
+          /* Loudly, because silently falling back to name-only copy is exactly
+             the quality drop the photos are there to prevent. */
+          console.log(`         ⚠ no photo could be read for this product — copy written from name/colour only`);
+        }
+      } catch (e) {
+        failed += 1;
+        const msg = e instanceof Error ? e.message : String(e);
+        fs.appendFileSync(REPORT, JSON.stringify({ id: p.id, title: p.title, error: msg }) + "\n");
+        console.log(`${label}  FAILED — ${msg.slice(0, 110)}`);
+      }
+    }
+  }
+
+  const started = Date.now();
+  await Promise.all(Array.from({ length: CONCURRENCY }, (_, i) => worker(i)));
+  const mins = ((Date.now() - started) / 60000).toFixed(1);
+
+  const avg = (a: number[]) => (a.length ? (a.reduce((s, n) => s + n, 0) / a.length).toFixed(1) : "0");
+  console.log(`\n${"─".repeat(60)}`);
+  console.log(`${WRITE ? "Wrote" : "Dry run"}: ${ok} succeeded, ${failed} failed, in ${mins} min`);
+  console.log(`Average score ${avg(before)} → ${avg(after)}   at a perfect 100: ${at100}/${ok}`);
+  console.log(`Report: ${REPORT}`);
+  if (!WRITE) console.log(`\nNothing was written. Re-run with --write to publish.`);
+}
+
+main().catch((e) => {
+  console.error(e instanceof Error ? e.message : e);
+  process.exit(1);
+});

@@ -19,6 +19,8 @@ export const dynamic = "force-dynamic";
 const PRODUCT_FIELDS = `
   id title handle descriptionHtml productType vendor tags onlineStoreUrl
   seo { title description }
+  focusKeyword: metafield(namespace: "carbon_seo", key: "focus_keyword") { value }
+  secondaryKeywords: metafield(namespace: "carbon_seo", key: "secondary_keywords") { value }
   priceRangeV2 { minVariantPrice { amount currencyCode } }
   media(first: 50) { nodes { ... on MediaImage { id image { url altText } } } }
   variants(first: 50) { nodes { id sku barcode price selectedOptions { name value } } }
@@ -34,6 +36,8 @@ interface AuditProduct {
   tags: string[] | null;
   onlineStoreUrl: string | null;
   seo: { title: string | null; description: string | null } | null;
+  focusKeyword?: { value: string | null } | null;
+  secondaryKeywords?: { value: string | null } | null;
   priceRangeV2?: { minVariantPrice?: { amount?: string; currencyCode?: string } };
   media?: { nodes: Array<{ id?: string; image?: { url?: string; altText?: string | null } }> };
   variants?: {
@@ -106,7 +110,28 @@ export async function POST(req: Request) {
   const mediaNodes = (product.media?.nodes || []).filter((n) => n && n.id);
   const variantNodes = product.variants?.nodes || [];
 
+  /*
+   * The scorer checks seoTitle, metaDescription and bodyHtml for the focus
+   * keyword — over half the total weighting. The keyword was generated during
+   * optimization but never stored, so every re-audit had nothing to check
+   * against and those three fields scored as failures however good the copy
+   * was. That is why no product could read above 89 on a second look. Reading
+   * the keyword back makes an earned 100 stay 100.
+   */
+  let storedSecondary: string[] = [];
+  const rawSecondary = product.secondaryKeywords?.value;
+  if (rawSecondary) {
+    try {
+      const parsed: unknown = JSON.parse(rawSecondary);
+      if (Array.isArray(parsed)) storedSecondary = parsed.map((v) => String(v)).filter(Boolean);
+    } catch {
+      /* A malformed list must not fail the audit — it just means no secondaries. */
+    }
+  }
+
   const fields: SeoFields = {
+    focusKeyword: String(product.focusKeyword?.value || "").trim(),
+    secondaryKeywords: storedSecondary,
     title: product.title || "",
     seoTitle: product.seo?.title || "",
     metaDescription: product.seo?.description || "",

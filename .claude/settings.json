@@ -9,7 +9,12 @@
       "Bash(adb -s 192.168.1.183:38553 logcat -c)",
       "Bash(adb -s 192.168.1.183:38553 logcat -v brief)",
       "Bash(adb -s 192.168.1.183:38553 logcat --pid=11467 -v brief)",
-      "Edit(/.claude/skills/mobile-view-guard/**)"
+      "Edit(/.claude/skills/mobile-view-guard/**)",
+      "mcp__claude_ai_Shopify__graphql_query",
+      "mcp__claude_ai_Shopify__graphql_mutation",
+      "mcp__claude_ai_Shopify__graphql_schema",
+      "mcp__claude_ai_Shopify__run-analytics-query",
+      "mcp__claude_ai_Shopify__validate_graphql_codeblocks"
     ]
   }
 }
