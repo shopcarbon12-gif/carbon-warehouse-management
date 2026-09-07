@@ -225,6 +225,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
    * current state.
    */
   const [setSaving, setSetSaving] = useState(false);
+  /** Box ticked but no partner saved yet — reverts unless Save is clicked. */
+  const [pendingSet, setPendingSet] = useState(false);
   const [setPickerOpen, setSetPickerOpen] = useState(false);
   const [setQuery, setSetQuery] = useState("");
   const [setResults, setSetResults] = useState<
@@ -456,17 +458,51 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     [matrixId, mutate, onMutated],
   );
 
+  /* Ticking the box is a provisional state, not a saved one. A product is only
+     part of a set once a partner has been named, so the tick opens the search
+     and nothing is written until Save. Abandoning the search — unticking,
+     dismissing it, or closing the window — puts the box back as it was. */
+  const cancelPendingSet = useCallback(() => {
+    setPendingSet(false);
+    setSetPicked([]);
+    setSetQuery("");
+    setSetResults([]);
+    setSetPickerOpen(false);
+  }, []);
+
+  /* A provisional tick belongs to the product that was on screen. Following a
+     partner link swaps the product under the same modal, so the tick must not
+     ride along and appear to have marked the new one. */
+  useEffect(() => {
+    setPendingSet(false);
+    setSetPickerOpen(false);
+    setSetPicked([]);
+    setSetQuery("");
+    setSetResults([]);
+  }, [matrixId]);
+
   const toggleSet = useCallback(
     async (next: boolean) => {
-      /* Clear any half-finished picking either way: ticking opens a fresh
-         search, unticking discards partners that were never saved. */
-      setSetPicked([]);
-      setSetQuery("");
-      setSetResults([]);
-      setSetPickerOpen(next && setMembers.length === 0);
-      await patchSet({ is_set: next });
+      if (next) {
+        if (isSet) {
+          /* Already a set — the box is just reopening the picker to add a
+             piece, and there is nothing provisional about it. */
+          setSetPickerOpen(true);
+          return;
+        }
+        setPendingSet(true);
+        setSetPicked([]);
+        setSetQuery("");
+        setSetResults([]);
+        setSetPickerOpen(true);
+        return;
+      }
+      /* Unticking a saved set writes through at once: the partners go with it,
+         and leaving their UPCs on screen would misstate the current state. */
+      cancelPendingSet();
+      if (isSet) await patchSet({ is_set: false });
     },
-    [patchSet, setMembers.length],
+    [isSet, patchSet, cancelPendingSet],
   );
 
   /* Typeahead over products, not variants — the operator is picking the other
@@ -500,10 +536,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     };
   }, [setQuery, setPickerOpen, matrixId, setMembers, setPicked]);
 
+  /* The only path that actually marks a product as a set. is_set travels with
+     the partners so the flag and the membership can never land apart. */
   const saveSetMembers = useCallback(async () => {
     if (!setPicked.length) return;
-    const ok = await patchSet({ set_add_matrix_ids: setPicked.map((p) => p.id) });
+    const ok = await patchSet({
+      is_set: true,
+      set_add_matrix_ids: setPicked.map((p) => p.id),
+    });
     if (ok) {
+      setPendingSet(false);
       setSetPicked([]);
       setSetQuery("");
       setSetResults([]);
@@ -1111,7 +1153,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               <div className="flex items-center gap-2 max-md:shrink-0">
                 <label
                   className={`flex items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 ${
-                    isSet
+                    isSet || pendingSet
                       ? "border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
                       : "border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-muted)]"
                   } ${canManage && !setSaving ? "cursor-pointer hover:bg-[var(--wms-surface-elevated)]" : "cursor-not-allowed opacity-60"}`}
@@ -1125,7 +1167,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   <input
                     type="checkbox"
                     className="h-3.5 w-3.5 accent-[var(--wms-accent)]"
-                    checked={isSet}
+                    checked={isSet || pendingSet}
                     disabled={!canManage || !data || setSaving}
                     onChange={(e) => void toggleSet(e.target.checked)}
                   />
@@ -1164,7 +1206,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
                 {/* Search only exists while the box is ticked — nothing to pick
                     a partner for otherwise. */}
-                {isSet && setPickerOpen && canManage ? (
+                {(isSet || pendingSet) && setPickerOpen && canManage ? (
                   <span className="relative flex items-center gap-1 max-md:shrink-0">
                     {setPicked.map((p) => (
                       <span
@@ -1200,6 +1242,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-1.5 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Save className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelPendingSet}
+                      disabled={setSaving}
+                      title="Cancel"
+                      aria-label="Cancel set"
+                      className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-1.5 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
                     </button>
 
                     {setResults.length > 0 ? (
