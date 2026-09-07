@@ -445,6 +445,25 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         });
         const j = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(j.error ?? "Could not update the set");
+
+        /* Push the "Complete the Look" banner to Shopify for the whole group —
+           marking one half of an outfit means both halves need it, and
+           unticking means both need it gone. Reported but not fatal: the WMS
+           change is already saved, and a failed push is recoverable by pushing
+           again rather than by undoing the flag. */
+        const banner = await fetch("/api/shopify/set-banner", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matrixId }),
+        })
+          .then((r) => r.json().catch(() => ({})))
+          .catch(() => ({ error: "Banner push failed" }));
+        if (banner?.error) {
+          setErr(`Saved, but the Shopify banner did not update: ${banner.error}`);
+        } else if (typeof banner?.updated === "number" && banner.updated > 0) {
+          setOkMsg(`Set saved · banner pushed to ${banner.updated} product(s).`);
+        }
+
         await mutate();
         onMutated?.();
         return true;

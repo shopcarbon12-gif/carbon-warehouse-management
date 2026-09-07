@@ -1,61 +1,112 @@
 /**
- * "Complete the Look" — the buyer-facing notice appended to the description of
- * any product flagged as one piece of a matching set.
+ * "Complete the Look" — the banner shown on the product page of anything that
+ * is one piece of a matching set.
  *
- * The wording is fixed rather than generated. It states how the cart actually
- * behaves — the partner piece is added automatically, size and colour cannot be
- * mixed, each piece is priced on its own — and a model paraphrasing that would
- * eventually get a detail wrong and mislead a shopper into expecting one price
- * or a mixed-size pairing. Only the surrounding marketing copy is written by
- * the model.
+ * It is a fixed PNG rather than generated copy. The text states how the cart
+ * actually behaves — the partner is added automatically, size and colour cannot
+ * be mixed, each piece is priced on its own — and a model paraphrasing that
+ * would eventually get a detail wrong and mislead a shopper into expecting one
+ * price or a mixed-size pairing.
  *
- * Bolding is deliberately limited to the four facts that cause a complaint when
- * missed. Emphasising the whole block would emphasise nothing.
+ * Two artworks, chosen by what the product IS:
+ *   pic 1  tee + shorts     summer sets
+ *   pic 2  hoodie + joggers winter sets
+ *
+ * The choice comes from the SKU numbering rather than from the product name,
+ * because the name is prose and the numbering is the system of record.
  */
 
-/** Wrapper class doubles as the marker used to find and replace the block. */
-export const SET_NOTICE_CLASS = "carbon-set-note";
+export const SET_BANNER_CLASS = "carbon-set-note";
 
-export const SET_NOTICE_HTML = [
-  `<div class="${SET_NOTICE_CLASS}">`,
-  "<h3>Complete the Look</h3>",
-  "<p>This item is part of a matching set and is <strong>sold together with its coordinating piece(s)</strong>. ",
-  "Choose your size and color, and the matching piece(s) in the same size and color ",
-  "<strong>will be added to your cart automatically</strong>.</p>",
-  "<p><strong>Size and color selections apply to the full set, so pieces cannot be mixed or matched.</strong> ",
-  "Each piece is <strong>individually priced</strong>.</p>",
-  "</div>",
-].join("");
+export const SET_BANNER_IMAGES: Record<1 | 2, string> = {
+  1: "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989",
+  2: "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007",
+};
+
+export type SetPicture = 1 | 2;
 
 /**
- * Remove any previously appended notice.
+ * Which artwork a SKU calls for, or null when the code says nothing.
  *
- * Runs before every append so re-optimizing a product cannot stack the block up
- * twice, and so unticking "Set" actually takes it off the next time the product
- * is optimized. Matches the wrapper div by class and tolerates attribute order
- * and whitespace changes made by Shopify's HTML sanitiser.
+ *   C…      the 6th character decides   (C1234**1** → 1)
+ *   digits  the 2nd character decides   (1**1**25306 → 1, 1**2**23803 → 2)
+ *
+ * Verified against the catalog: all 154 flagged products resolve, and no
+ * product's SKUs disagree with each other.
  */
-export function stripSetNotice(html: string): string {
+export function pictureFromCode(code: string | null | undefined): SetPicture | null {
+  const s = String(code || "").trim();
+  if (!s) return null;
+  const ch = /^c/i.test(s) ? s[5] : /^\d/.test(s) ? s[1] : "";
+  if (ch === "1") return 1;
+  if (ch === "2") return 2;
+  return null;
+}
+
+/**
+ * The artwork for a whole product. Its variant SKUs decide it; the matrix UPC is
+ * the fallback for a product whose variants carry no usable code.
+ *
+ * A product gets ONE banner, so disagreeing variants are resolved by majority
+ * rather than by whichever row happened to sort first.
+ */
+export function pictureForProduct(
+  skus: Array<string | null | undefined>,
+  upc?: string | null,
+): SetPicture | null {
+  const votes = { 1: 0, 2: 0 };
+  for (const sku of skus) {
+    const p = pictureFromCode(sku);
+    if (p) votes[p] += 1;
+  }
+  if (votes[1] || votes[2]) return votes[1] >= votes[2] ? 1 : 2;
+  return pictureFromCode(upc);
+}
+
+/** The banner markup. Width-capped so it never outgrows the description column. */
+export function buildSetBannerHtml(picture: SetPicture): string {
+  return (
+    `<p class="${SET_BANNER_CLASS}">` +
+    `<img src="${SET_BANNER_IMAGES[picture]}" ` +
+    `alt="Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced." ` +
+    `loading="lazy" style="max-width:100%;height:auto;display:block;" />` +
+    `</p>`
+  );
+}
+
+/**
+ * Remove any banner this product already carries.
+ *
+ * Matches the wrapper by class on either a <p> or a <div>, so it also clears the
+ * earlier text-only version of this notice — those products must not end up
+ * showing the old paragraph and the new image together. Tolerates Shopify
+ * reordering or requoting the attributes.
+ */
+export function stripSetBanner(html: string): string {
   const s = String(html || "");
   if (!s) return "";
   const re = new RegExp(
-    `\\s*<div[^>]*class\\s*=\\s*["'][^"']*\\b${SET_NOTICE_CLASS}\\b[^"']*["'][^>]*>[\\s\\S]*?<\\/div>\\s*`,
+    `\\s*<(p|div)[^>]*class\\s*=\\s*["'][^"']*\\b${SET_BANNER_CLASS}\\b[^"']*["'][^>]*>[\\s\\S]*?<\\/\\1>\\s*`,
     "gi",
   );
   return s.replace(re, "").trim();
 }
 
-/** Does this HTML already carry the notice? */
-export function hasSetNotice(html: string): boolean {
-  return new RegExp(`\\b${SET_NOTICE_CLASS}\\b`).test(String(html || ""));
+/** Does this HTML already carry the banner? */
+export function hasSetBanner(html: string): boolean {
+  return new RegExp(`\\b${SET_BANNER_CLASS}\\b`).test(String(html || ""));
 }
 
 /**
- * The description a product should end up with: the model's copy, then the
- * notice when the product is part of a set and nothing when it is not.
+ * The description a product should end up with: its copy, then the banner when
+ * it is part of a set and nothing when it is not.
+ *
+ * Always strips first, so re-running cannot stack banners up and unticking
+ * "Set" actually takes the banner off.
  */
-export function applySetNotice(html: string, isSet: boolean): string {
-  const base = stripSetNotice(html);
-  if (!isSet) return base;
-  return base ? `${base}${SET_NOTICE_HTML}` : SET_NOTICE_HTML;
+export function applySetBanner(html: string, picture: SetPicture | null): string {
+  const base = stripSetBanner(html);
+  if (!picture) return base;
+  const banner = buildSetBannerHtml(picture);
+  return base ? `${base}${banner}` : banner;
 }

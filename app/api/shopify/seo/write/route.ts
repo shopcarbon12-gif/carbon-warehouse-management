@@ -5,6 +5,7 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { runShopifyGraphql, toProductGid } from "@/lib/shopify";
 import { resolveShopContext } from "@/lib/server/shopify-write";
+import { applySetBanner, pictureForProduct } from "@/lib/seo/setNotice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,7 +60,35 @@ export async function POST(req: Request) {
   if (Object.keys(seo).length) input.seo = seo;
   if (typeof fields.title === "string" && fields.title.trim()) input.title = fields.title.trim();
   if (typeof fields.handle === "string" && fields.handle.trim()) input.handle = fields.handle.trim().toLowerCase();
-  if (typeof fields.bodyHtml === "string") input.descriptionHtml = fields.bodyHtml;
+  if (typeof fields.bodyHtml === "string") {
+    /*
+     * Re-attach the "Complete the Look" banner.
+     *
+     * The optimizer strips it so the model never sees boilerplate, which means
+     * publishing the generated copy verbatim would take the banner off every set
+     * product the moment its SEO was refreshed. Rebuilding it here from the
+     * product's own SKU numbering keeps the two features from undoing each
+     * other, and costs one small query.
+     */
+    let picture: 1 | 2 | null = null;
+    try {
+      const where = matrixId ? "m.id = $1::uuid" : "m.shopify_product_id = $1";
+      const r = await pool.query<{ upc: string | null; is_set: boolean; skus: string[] | null }>(
+        `SELECT m.upc, m.is_set, array_agg(cs.sku) FILTER (WHERE cs.sku IS NOT NULL) AS skus
+           FROM matrices m
+           LEFT JOIN custom_skus cs ON cs.matrix_id = m.id
+          WHERE ${where}
+          GROUP BY m.id`,
+        [matrixId || productId],
+      );
+      const row = r.rows[0];
+      if (row?.is_set) picture = pictureForProduct(row.skus || [], row.upc);
+    } catch {
+      /* A lookup failure must not block the SEO write; the banner is restored
+         by the next set push. */
+    }
+    input.descriptionHtml = applySetBanner(fields.bodyHtml, picture);
+  }
   if (typeof fields.productType === "string") input.productType = fields.productType.trim();
   if (typeof fields.vendor === "string") input.vendor = fields.vendor.trim();
   if (Array.isArray(fields.tags)) {
