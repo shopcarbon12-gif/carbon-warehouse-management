@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Lightweight typeahead for the Non-RFID search box on Transfer Out.
  *
@@ -11,6 +13,12 @@ import { getPool } from "@/lib/db";
  *
  * GET /api/inventory/catalog/search?q=<term>
  * Returns: { rows: [{ custom_sku_id, sku, name, color, size, upc, vendor, sku_ls_system_id }] }
+ *
+ * GET /api/inventory/catalog/search?q=<term>&scope=matrix
+ * Returns one row per PRODUCT instead of per variant:
+ *   { rows: [{ matrix_id, upc, name, vendor }] }
+ * Used by the Matrix window's set picker, where the operator is choosing the
+ * other half of an outfit — a product, not a size.
  */
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -24,6 +32,12 @@ export async function GET(req: Request) {
      is_manual_only and never suggest RFID SKUs. RFID items are picked by
      scanning, not by typing in the non-RFID search box. */
   const manualOnly = searchParams.get("manualOnly") === "1";
+  const matrixScope = searchParams.get("scope") === "matrix";
+  /** Exclude a product from its own results, and anything already linked. */
+  const excludeIds = (searchParams.get("exclude") ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => UUID_RE.test(v));
   if (q.length < 1) {
     return NextResponse.json({ rows: [] });
   }
@@ -36,6 +50,32 @@ export async function GET(req: Request) {
   const like = `%${q.replace(/[\\%_]/g, (s) => `\\${s}`)}%`;
 
   try {
+    if (matrixScope) {
+      const r = await pool.query<{
+        matrix_id: string;
+        upc: string | null;
+        name: string;
+        vendor: string | null;
+      }>(
+        `SELECT DISTINCT ON (m.id)
+           m.id::text AS matrix_id, m.upc, m.description AS name, m.vendor
+           FROM matrices m
+           LEFT JOIN custom_skus cs ON cs.matrix_id = m.id
+          WHERE (m.description ILIKE $1 ESCAPE '\\'
+                 OR m.upc ILIKE $1 ESCAPE '\\'
+                 OR m.vendor ILIKE $1 ESCAPE '\\'
+                 OR cs.sku ILIKE $1 ESCAPE '\\'
+                 OR cs.upc ILIKE $1 ESCAPE '\\')
+            AND NOT (m.id = ANY($2::uuid[]))
+          ORDER BY m.id, m.description
+          LIMIT 10`,
+        [like, excludeIds],
+      );
+      /* DISTINCT ON needs its own ordering, so sort for display here. */
+      const rows = r.rows.sort((a, b) => a.name.localeCompare(b.name));
+      return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     const manualClause = manualOnly
       ? "AND COALESCE(m.is_manual_only, FALSE) = TRUE AND cs.archived = FALSE"
       : "";

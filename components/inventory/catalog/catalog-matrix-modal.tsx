@@ -21,6 +21,7 @@ import {
   Search,
   FolderTree,
   Sparkles,
+  Save,
 } from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
@@ -28,6 +29,7 @@ import { CatalogImageLightbox } from "./catalog-image-lightbox";
    here avoids recording a number the user never applied. */
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { SeoFields } from "@/lib/seo/types";
+import { useUrlParam } from "@/lib/use-url-param";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -51,6 +53,11 @@ type Matrix = {
   subcategory_1: string | null;
   upc: string | null;
   archived: boolean;
+  /** One piece of a multi-piece outfit — see migration 057. */
+  is_set?: boolean;
+  set_group_id?: string | null;
+  /** The OTHER pieces of this outfit. */
+  set_members?: Array<{ id: string; upc: string | null; description: string }>;
   shopify_product_id?: string | null;
   shopify_sync_status?: string | null;
   /** Full Shopify product gallery (ordered cdn.shopify.com URLs). */
@@ -208,6 +215,28 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // active tab scrolled into view. Desktop never renders either surface.
   const [moreOpen, setMoreOpen] = useState(false);
   const tabNavRef = useRef<HTMLElement | null>(null);
+
+  /*
+   * "Set" — this product is one piece of a multi-piece outfit.
+   *
+   * The box writes straight through rather than joining the Save Changes batch:
+   * unticking it drops the recorded partners, and showing their UPCs next to an
+   * unticked box until someone remembers to save would be a lie about the
+   * current state.
+   */
+  const [setSaving, setSetSaving] = useState(false);
+  const [setPickerOpen, setSetPickerOpen] = useState(false);
+  const [setQuery, setSetQuery] = useState("");
+  const [setResults, setSetResults] = useState<
+    Array<{ matrix_id: string; upc: string | null; name: string; vendor: string | null }>
+  >([]);
+  const [setPicked, setSetPicked] = useState<
+    Array<{ id: string; upc: string | null; name: string }>
+  >([]);
+  const [, setMatrixParam] = useUrlParam("matrix");
+
+  const isSet = Boolean(data?.matrix.is_set);
+  const setMembers = useMemo(() => data?.matrix.set_members ?? [], [data?.matrix.set_members]);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
@@ -401,6 +430,86 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     defCostN != null && defCostN > 0 && defPriceN != null
       ? ((defPriceN - defCostN) / defCostN) * 100
       : null;
+
+  const patchSet = useCallback(
+    async (body: Record<string, unknown>) => {
+      setSetSaving(true);
+      setErr(null);
+      try {
+        const res = await fetch(`/api/inventory/catalog/matrices/${matrixId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(j.error ?? "Could not update the set");
+        await mutate();
+        onMutated?.();
+        return true;
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not update the set");
+        return false;
+      } finally {
+        setSetSaving(false);
+      }
+    },
+    [matrixId, mutate, onMutated],
+  );
+
+  const toggleSet = useCallback(
+    async (next: boolean) => {
+      /* Clear any half-finished picking either way: ticking opens a fresh
+         search, unticking discards partners that were never saved. */
+      setSetPicked([]);
+      setSetQuery("");
+      setSetResults([]);
+      setSetPickerOpen(next && setMembers.length === 0);
+      await patchSet({ is_set: next });
+    },
+    [patchSet, setMembers.length],
+  );
+
+  /* Typeahead over products, not variants — the operator is picking the other
+     half of an outfit, not a size. Debounced so a fast typist does not queue a
+     request per keystroke. */
+  useEffect(() => {
+    const q = setQuery.trim();
+    if (!setPickerOpen || q.length < 1) {
+      setSetResults([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => {
+      const exclude = [matrixId, ...setMembers.map((m) => m.id), ...setPicked.map((p) => p.id)];
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/inventory/catalog/search?scope=matrix&q=${encodeURIComponent(q)}&exclude=${exclude.join(",")}`,
+            { signal: ctrl.signal },
+          );
+          const j = (await res.json().catch(() => ({}))) as { rows?: typeof setResults };
+          if (res.ok) setSetResults(j.rows ?? []);
+        } catch {
+          /* aborted or offline — leave the previous suggestions in place */
+        }
+      })();
+    }, 220);
+    return () => {
+      ctrl.abort();
+      window.clearTimeout(t);
+    };
+  }, [setQuery, setPickerOpen, matrixId, setMembers, setPicked]);
+
+  const saveSetMembers = useCallback(async () => {
+    if (!setPicked.length) return;
+    const ok = await patchSet({ set_add_matrix_ids: setPicked.map((p) => p.id) });
+    if (ok) {
+      setSetPicked([]);
+      setSetQuery("");
+      setSetResults([]);
+      setSetPickerOpen(false);
+    }
+  }, [patchSet, setPicked]);
 
   const dirty = useMemo(() => {
     if (!data || !mForm) return false;
@@ -995,6 +1104,136 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   <ChevronLeft className="h-3.5 w-3.5" /> Back
                 </button>
               ) : null}
+              {/* Marks this product as one piece of a multi-piece outfit, and
+                  lists the other pieces. Seeded from the audited UPC list and
+                  correctable here — a product can become part of a set, or stop
+                  being one, without a rename. */}
+              <div className="flex items-center gap-2 max-md:shrink-0">
+                <label
+                  className={`flex items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 ${
+                    isSet
+                      ? "border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 text-[var(--wms-fg)]"
+                      : "border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-muted)]"
+                  } ${canManage && !setSaving ? "cursor-pointer hover:bg-[var(--wms-surface-elevated)]" : "cursor-not-allowed opacity-60"}`}
+                  title={
+                    canManage
+                      ? "This product is one piece of a multi-piece set (e.g. hoodie + pants)"
+                      : "Admin scope required"
+                  }
+                >
+                  <span>Set</span>
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-[var(--wms-accent)]"
+                    checked={isSet}
+                    disabled={!canManage || !data || setSaving}
+                    onChange={(e) => void toggleSet(e.target.checked)}
+                  />
+                </label>
+
+                {/* The other pieces, each opening its own Matrix window. */}
+                {isSet && setMembers.length > 0 ? (
+                  <span className="flex items-center gap-1 font-mono text-[0.78rem] max-md:shrink-0 max-md:whitespace-nowrap">
+                    {setMembers.map((m, i) => (
+                      <span key={m.id} className="flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => setMatrixParam(m.id)}
+                          title={m.description}
+                          className="text-[var(--wms-accent)] underline decoration-dotted underline-offset-2 hover:text-[var(--wms-fg)]"
+                        >
+                          {m.upc || m.description}
+                        </button>
+                        {i < setMembers.length - 1 ? (
+                          <span className="text-[var(--wms-muted)]">,&nbsp;</span>
+                        ) : null}
+                      </span>
+                    ))}
+                    {canManage ? (
+                      <button
+                        type="button"
+                        onClick={() => setSetPickerOpen((v) => !v)}
+                        title="Add another piece to this set"
+                        className="ml-1 rounded border border-[var(--wms-border)] px-1.5 leading-none text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                      >
+                        +
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+
+                {/* Search only exists while the box is ticked — nothing to pick
+                    a partner for otherwise. */}
+                {isSet && setPickerOpen && canManage ? (
+                  <span className="relative flex items-center gap-1 max-md:shrink-0">
+                    {setPicked.map((p) => (
+                      <span
+                        key={p.id}
+                        className="flex items-center gap-1 rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/10 px-1.5 py-0.5 font-mono text-[0.72rem] text-[var(--wms-fg)]"
+                        title={p.name}
+                      >
+                        {p.upc || p.name}
+                        <button
+                          type="button"
+                          onClick={() => setSetPicked((v) => v.filter((x) => x.id !== p.id))}
+                          className="text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"
+                          aria-label={`Remove ${p.upc || p.name}`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      type="text"
+                      value={setQuery}
+                      onChange={(e) => setSetQuery(e.target.value)}
+                      placeholder="Search item…"
+                      autoFocus
+                      className="w-40 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 font-mono text-[0.76rem] text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void saveSetMembers()}
+                      disabled={!setPicked.length || setSaving}
+                      title={setPicked.length ? "Save set" : "Pick an item first"}
+                      aria-label="Save set"
+                      className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-1.5 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                    </button>
+
+                    {setResults.length > 0 ? (
+                      <span className="absolute left-0 top-full z-10 mt-1 max-h-64 w-72 overflow-y-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-xl">
+                        {setResults.map((r) => (
+                          <button
+                            key={r.matrix_id}
+                            type="button"
+                            onClick={() => {
+                              setSetPicked((v) =>
+                                v.some((x) => x.id === r.matrix_id)
+                                  ? v
+                                  : [...v, { id: r.matrix_id, upc: r.upc, name: r.name }],
+                              );
+                              /* Cleared so the next partner can be searched
+                                 straight away — sets can run to three pieces. */
+                              setSetQuery("");
+                              setSetResults([]);
+                            }}
+                            className="flex w-full flex-col items-start gap-0.5 border-b border-[var(--wms-border)] px-2 py-1.5 text-left last:border-b-0 hover:bg-[var(--wms-surface-elevated)]"
+                          >
+                            <span className="font-mono text-[0.76rem] text-[var(--wms-fg)]">
+                              {r.name}
+                            </span>
+                            <span className="font-mono text-[0.7rem] text-[var(--wms-muted)]">
+                              {r.upc || "no upc"}
+                            </span>
+                          </button>
+                        ))}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
             </div>
             {/* Phone header identity (md+ shows the product inside the body). */}
             <span
