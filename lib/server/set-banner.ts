@@ -80,6 +80,68 @@ async function loadHandles(ctx: ShopCtx, productIds: string[]) {
   return out;
 }
 
+/**
+ * Per-variant stock for every piece of the sets these products belong to,
+ * keyed COLOUR|SIZE.
+ *
+ * Needed because Shopify's storefront product JSON exposes only `available`, a
+ * boolean — the theme cannot tell 1 unit from 20, and this rule turns on the
+ * difference.
+ */
+async function loadSetStock(pool: Pool, matrixIds: string[]) {
+  const r = await pool.query<{
+    gid: string; pid: string | null; colour: string | null; size: string | null; qty: number;
+  }>(
+    `SELECT m.set_group_id::text AS gid,
+            m.shopify_product_id AS pid,
+            cs.color_code AS colour,
+            cs.size,
+            COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::int AS qty
+       FROM matrices m
+       JOIN custom_skus cs ON cs.matrix_id = m.id AND NOT cs.archived
+       LEFT JOIN items i ON i.custom_sku_id = cs.id
+      WHERE m.set_group_id IN (
+              SELECT set_group_id FROM matrices
+               WHERE id = ANY($1::uuid[]) AND set_group_id IS NOT NULL)
+      GROUP BY m.set_group_id, m.shopify_product_id, cs.color_code, cs.size`,
+    [matrixIds],
+  );
+  /* productId -> "COLOUR|SIZE" -> units */
+  const byProduct = new Map<string, Map<string, number>>();
+  for (const row of r.rows) {
+    if (!row.pid) continue;
+    const key = `${String(row.colour || "").trim().toUpperCase()}|${String(row.size || "").trim().toUpperCase()}`;
+    if (!byProduct.has(row.pid)) byProduct.set(row.pid, new Map());
+    const m = byProduct.get(row.pid)!;
+    m.set(key, (m.get(key) || 0) + row.qty);
+  }
+  return byProduct;
+}
+
+/**
+ * Which partner units can be offered as a substitute size without breaking a
+ * different set.
+ *
+ * If a shopper picks a top in M and there is no matching bottom in M, offering
+ * them the L bottom would strand the L top — one complete set destroyed to
+ * rescue another. So only SURPLUS units are offered: those a partner holds
+ * beyond what its own same-size counterpart needs. Those are genuinely
+ * individual pieces, and selling one breaks nothing.
+ */
+function surplusFor(
+  mine: Map<string, number> | undefined,
+  theirs: Map<string, number> | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!theirs) return out;
+  for (const [key, qty] of theirs) {
+    const needed = mine?.get(key) ?? 0;
+    const spare = qty - needed;
+    if (spare > 0) out[key] = spare;
+  }
+  return out;
+}
+
 async function loadMatrixSetInfo(pool: Pool, matrixIds: string[]) {
   const r = await pool.query<{
     id: string;
@@ -133,6 +195,7 @@ export async function syncSetBanners(
     ctx,
     [...new Set([...partnerMap.values()].flat())],
   );
+  const stock = await loadSetStock(pool, matrixIds);
   const out: SetBannerResult[] = [];
 
   for (const row of rows) {
@@ -157,6 +220,14 @@ export async function syncSetBanners(
     const sellablePartners = partnerIds
       .map((pid) => handleMap.get(pid))
       .filter((h): h is string => Boolean(h));
+
+    /* Partner sizes that can stand in without stranding another set. */
+    const surplus: Record<string, Record<string, number>> = {};
+    for (const pid of partnerIds) {
+      const handle = handleMap.get(pid);
+      if (!handle) continue;
+      surplus[handle] = surplusFor(stock.get(productId), stock.get(pid));
+    }
     const picture = row.is_set ? pictureForProduct(row.skus || [], row.upc) : null;
     const mode: SetPicture | "solo" | null = !row.is_set
       ? null
@@ -193,6 +264,13 @@ export async function syncSetBanners(
                 key: "partners",
                 type: "list.single_line_text_field",
                 value: JSON.stringify(sellablePartners),
+              },
+              {
+                ownerId: productId,
+                namespace: "carbon_set",
+                key: "surplus",
+                type: "json",
+                value: JSON.stringify(surplus),
               },
             ],
           },
@@ -236,6 +314,13 @@ export async function syncSetBanners(
               key: "partners",
               type: "list.single_line_text_field",
               value: JSON.stringify(sellablePartners),
+            },
+            {
+              ownerId: productId,
+              namespace: "carbon_set",
+              key: "surplus",
+              type: "json",
+              value: JSON.stringify(surplus),
             },
           ],
         },

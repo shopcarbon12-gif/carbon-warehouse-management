@@ -18,12 +18,28 @@
   variants are read live rather than from a snapshot that can go stale.
 {% endcomment %}
 
-{% assign carbon_set_partners = product.metafields.carbon_set.partners %}
+{%- comment -%}
+  Rendered from layout/theme.liquid alongside the other carbon-* snippets, so it
+  is guarded here rather than at the call site: `product` only exists on a
+  product template, and reading its metafields anywhere else is an error.
+{%- endcomment -%}
+{% assign carbon_set_partners = blank %}
+{% if template.name == 'product' and product != blank %}
+  {%- comment -%}
+    .value, not the metafield itself: a list metafield is an object and Liquid's
+    json filter refuses it ("json not allowed for this object"). .value is the
+    plain array of handles.
+  {%- endcomment -%}
+  {% assign carbon_set_partners = product.metafields.carbon_set.partners.value %}
+  {% assign carbon_set_surplus = product.metafields.carbon_set.surplus.value %}
+{% endif %}
 {% if carbon_set_partners != blank %}
   <script type="application/json" data-carbon-set-config>
     {
       "product": {{ product.handle | json }},
-      "partners": {{ carbon_set_partners | json }}
+      "partners": {{ carbon_set_partners | json }},
+      "surplus": {{ carbon_set_surplus | json }},
+      "currency": {{ cart.currency.symbol | default: '$' | json }}
     }
   </script>
 {% endif %}
@@ -62,6 +78,14 @@
   try { cfg = JSON.parse(cfgEl.textContent); } catch (e) { return; }
   var handles = (cfg.partners || []).filter(Boolean);
   if (!handles.length) return;
+  /* Partner units that are spare — not needed to complete their own same-size
+     pair. Only these may be offered as a substitute size. */
+  var surplus = cfg.surplus || {};
+  var CUR = cfg.currency || "$";
+
+  function money(cents) {
+    return CUR + (Number(cents || 0) / 100).toFixed(2);
+  }
 
   /* Option lookup is case- and whitespace-insensitive: the same colour is
      spelled "BLACK" on one product and "Black" on another often enough that
@@ -142,10 +166,18 @@
       });
       var exact = sameColour.filter(function (v) { return optOf(v, "SIZE") === size; })[0];
       if (exact) return { partner: p, variant: exact, needsChoice: false, options: [] };
-      if (sameColour.length) {
+
+      /* No exact match. Offer ONLY spare units — a size whose stock is already
+         spoken for by its own counterpart cannot be sold here without leaving
+         that counterpart unsellable as a set. */
+      var spare = surplus[p.handle] || {};
+      var offerable = sameColour.filter(function (v) {
+        return (spare[colour + "|" + optOf(v, "SIZE")] || 0) > 0;
+      });
+      if (offerable.length) {
         var pick = chosen[p.handle];
-        var picked = pick ? sameColour.filter(function (v) { return String(v.id) === String(pick); })[0] : null;
-        return { partner: p, variant: picked || null, needsChoice: !picked, options: sameColour };
+        var picked = pick ? offerable.filter(function (v) { return String(v.id) === String(pick); })[0] : null;
+        return { partner: p, variant: picked || null, needsChoice: !picked, options: offerable };
       }
       return { partner: p, variant: null, needsChoice: false, options: [], unavailable: true };
     });
@@ -166,20 +198,24 @@
       var img = (r.partner.featured_image || (r.partner.images || [])[0] || "");
       if (r.unavailable) {
         warn = true;
-        html += '<p class="carbon-set-pair__title">Matching piece unavailable</p>' +
-          "<p>" + r.partner.title + " is not available in " + (colour || "this colour") +
-          ". This item will be added on its own.</p>";
+        html += '<p class="carbon-set-pair__title">Sold as an individual item</p>' +
+          "<p>No spare " + r.partner.title + " is available in " + (colour || "this colour") +
+          " — the remaining stock is reserved to keep other sets complete. " +
+          "This piece will be added <strong>on its own</strong>, at its own price.</p>";
         return;
       }
       if (r.needsChoice) {
         warn = true;
         html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
           "<p>" + r.partner.title + " is not available in your size, but these are in stock in " +
-          (colour || "this colour") + ":</p><div class=\\"carbon-set-pair__sizes\\">";
+          (colour || 'this colour') + ', and are spare rather than reserved for another set:</p>' +
+          '<div class="carbon-set-pair__sizes">';
         r.options.forEach(function (v) {
           var sz = optOf(v, "SIZE") || v.title;
-          html += '<button type="button" class="carbon-set-pair__size" aria-pressed="false" ' +
-            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' + sz + "</button>";
+          var on = String(chosen[r.partner.handle] || "") === String(v.id);
+          html += '<button type="button" class="carbon-set-pair__size" aria-pressed="' + (on ? "true" : "false") + '" ' +
+            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' +
+            sz + ' <span style="opacity:.7">' + money(v.price) + "</span></button>";
         });
         html += "</div>";
         return;
@@ -187,13 +223,14 @@
       html += '<p class="carbon-set-pair__title">Complete set — added together</p>' +
         '<div class="carbon-set-pair__row">' +
         (img ? '<img src="' + img + '" alt="" />' : "") +
-        "<span><strong>" + r.partner.title + "</strong><br>" +
+        "<span><strong>" + r.partner.title + "</strong> — <strong>" + money(r.variant.price) + "</strong><br>" +
         (r.variant.title || "") + " — added to your cart automatically</span></div>";
     });
 
     el.className = "carbon-set-pair" + (warn ? " carbon-set-pair--warn" : "");
     el.innerHTML = html;
     el.hidden = false;
+    updateButton(rows);
 
     el.querySelectorAll(".carbon-set-pair__size").forEach(function (b) {
       b.addEventListener("click", function () {
@@ -201,6 +238,37 @@
         render();
       });
     });
+  }
+
+  /*
+   * Put the running total on the Add to Cart button.
+   *
+   * A set costs more than the price beside the title, and finding that out at
+   * checkout is exactly the surprise the notice is meant to prevent. The
+   * original label is kept so it can be restored if the pairing goes away.
+   */
+  function updateButton(rows) {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    var btn = form && form.querySelector('[type="submit"], [name="add"]');
+    if (!btn) return;
+    var label = btn.querySelector("span") || btn;
+    if (!btn.__carbonSetLabel) btn.__carbonSetLabel = label.textContent.trim() || "Add to cart";
+
+    var mine = currentVariant();
+    if (!mine) return;
+    var qtyEl = form.querySelector('[name="quantity"]');
+    var qty = qtyEl && Number(qtyEl.value) > 0 ? Number(qtyEl.value) : 1;
+
+    var total = Number(mine.price || 0);
+    var pending = false;
+    rows.forEach(function (r) {
+      if (r.needsChoice) pending = true;
+      else if (r.variant) total += Number(r.variant.price || 0);
+    });
+
+    label.textContent = pending
+      ? btn.__carbonSetLabel + " • choose a size"
+      : btn.__carbonSetLabel + " • " + money(total * qty);
   }
 
   /* Add every piece in ONE request. Shopify's /cart/add.js takes an items array,
@@ -273,7 +341,11 @@
           }, 300);
         }
         var form = document.querySelector('form[action*="/cart/add"]');
-        if (form) form.addEventListener("submit", addAll, true);
+        if (form) {
+          form.addEventListener("submit", addAll, true);
+          var q = form.querySelector('[name="quantity"]');
+          if (q) q.addEventListener("change", function () { render(); });
+        }
       });
   }
 
