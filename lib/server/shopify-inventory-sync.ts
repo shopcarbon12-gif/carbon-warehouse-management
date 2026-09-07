@@ -12,6 +12,7 @@
  *                   (the periodic auto-sync).
  */
 import type { Pool } from "pg";
+import { refreshSetSurplus } from "@/lib/server/set-banner";
 import {
   resolveShopContext,
   primaryLocationId,
@@ -108,12 +109,28 @@ export async function syncShopifyInventory(
       );
     }
   }
+  /* Stock just moved, so the spare-unit figures the storefront uses to offer a
+     substitute size are now out of date. A stale figure is the one thing that
+     could still break a set — offering a spare that has already sold. Metafields
+     only; descriptions are untouched. Never fatal: the inventory sync itself
+     succeeded either way. */
+  let surplusNote = "";
+  try {
+    const s = await refreshSetSurplus(pool, ctx);
+    if (s.updated || s.failed) {
+      surplusNote = ` Set spare-stock refreshed on ${s.updated} product(s)${s.failed ? `, ${s.failed} failed` : ""}.`;
+    }
+  } catch (e) {
+    surplusNote = " Set spare-stock refresh failed.";
+    console.error("[shopify-inventory-sync] surplus refresh:", e);
+  }
+
   return {
     ok: true,
     total: rows.length,
     pushed,
     failed,
-    message: `Synced ${pushed} variant(s) to Shopify${failed ? `, ${failed} failed` : ""}${opts.full ? "" : " (delta)"}.`,
+    message: `Synced ${pushed} variant(s) to Shopify${failed ? `, ${failed} failed` : ""}${opts.full ? "" : " (delta)"}.${surplusNote}`,
   };
 }
 

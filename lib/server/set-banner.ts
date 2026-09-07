@@ -342,3 +342,65 @@ export async function syncSetBanners(
 
   return out;
 }
+
+/**
+ * Refresh only the spare-stock figures for every set product.
+ *
+ * The surplus counts are a snapshot of WMS stock, so they drift as items sell —
+ * and a stale figure is the one thing that could still break a set, by offering
+ * a substitute whose spare unit has already gone. This rewrites the numbers
+ * without touching descriptions, so it is cheap enough to run on the back of
+ * every inventory sync: one Shopify call per set product, and nothing else on
+ * the page is disturbed.
+ */
+export async function refreshSetSurplus(
+  pool: Pool,
+  ctx: ShopCtx,
+): Promise<{ updated: number; failed: number }> {
+  const r = await pool.query<{ id: string }>(
+    `SELECT id::text AS id FROM matrices
+      WHERE is_set = true AND set_group_id IS NOT NULL AND shopify_product_id IS NOT NULL`,
+  );
+  const ids = r.rows.map((x) => x.id);
+  if (!ids.length) return { updated: 0, failed: 0 };
+
+  const rows = await loadMatrixSetInfo(pool, ids);
+  const partnerMap = await loadPartners(pool, ids);
+  const handleMap = await loadHandles(ctx, [...new Set([...partnerMap.values()].flat())]);
+  const stock = await loadSetStock(pool, ids);
+
+  let updated = 0;
+  let failed = 0;
+  for (const row of rows) {
+    const productId = row.shopify_product_id;
+    if (!productId) continue;
+    const surplus: Record<string, Record<string, number>> = {};
+    for (const pid of partnerMap.get(row.id) ?? []) {
+      const handle = handleMap.get(pid);
+      if (!handle) continue;
+      surplus[handle] = surplusFor(stock.get(productId), stock.get(pid));
+    }
+    try {
+      const res = await runShopifyGraphql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>({
+        shop: ctx.shop,
+        token: ctx.token,
+        apiVersion: ctx.apiVersion,
+        query: `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
+        variables: {
+          m: [{
+            ownerId: productId,
+            namespace: "carbon_set",
+            key: "surplus",
+            type: "json",
+            value: JSON.stringify(surplus),
+          }],
+        },
+      });
+      if (!res.ok || (res.data?.metafieldsSet?.userErrors || []).length) failed += 1;
+      else updated += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { updated, failed };
+}
