@@ -26,6 +26,11 @@ interface PublishFields {
   productType?: string;
   vendor?: string;
   imageAlts?: Array<{ id: string; altText: string }>;
+  /** The keyword the copy was written around — see the metafield block below. */
+  focusKeyword?: string;
+  secondaryKeywords?: string[];
+  /** Score of the exact field set being published, as shown to the user. */
+  score?: number;
 }
 
 export async function POST(req: Request) {
@@ -129,10 +134,65 @@ export async function POST(req: Request) {
     }
   }
 
-  // Mark optimized (Shopify metafield + WMS timestamp).
+  /*
+   * Mark optimized, and record the focus keyword.
+   *
+   * The keyword is not decoration: the scorer checks seoTitle, metaDescription
+   * and bodyHtml for it, which is over half the total weighting. It used to be
+   * generated during optimization and then thrown away at publish, so every
+   * later audit had nothing to check against and scored those three fields as
+   * failures no matter how good the copy was — a product that genuinely earned
+   * 100 read 89 the moment it was reopened, and re-running the optimizer would
+   * regenerate copy that was already correct. Persisting it here is what makes
+   * the score reproducible.
+   */
   let optimizedMarked = false;
-  if (body?.markOptimized === true) {
+  const focusKeyword = String(fields.focusKeyword || "").trim();
+  const secondaryKeywords = Array.isArray(fields.secondaryKeywords)
+    ? fields.secondaryKeywords.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 8)
+    : [];
+  const score = Number(fields.score);
+
+  if (body?.markOptimized === true || focusKeyword) {
     const stamp = new Date().toISOString();
+    const metafields: Array<Record<string, string>> = [];
+    if (body?.markOptimized === true) {
+      metafields.push({
+        ownerId: productId,
+        namespace: "carbon_seo",
+        key: "optimized_at",
+        type: "single_line_text_field",
+        value: stamp,
+      });
+    }
+    if (focusKeyword) {
+      metafields.push({
+        ownerId: productId,
+        namespace: "carbon_seo",
+        key: "focus_keyword",
+        type: "single_line_text_field",
+        value: focusKeyword,
+      });
+    }
+    if (secondaryKeywords.length) {
+      metafields.push({
+        ownerId: productId,
+        namespace: "carbon_seo",
+        key: "secondary_keywords",
+        type: "list.single_line_text_field",
+        value: JSON.stringify(secondaryKeywords),
+      });
+    }
+    if (Number.isFinite(score) && score > 0) {
+      metafields.push({
+        ownerId: productId,
+        namespace: "carbon_seo",
+        key: "score",
+        type: "number_integer",
+        value: String(Math.round(score)),
+      });
+    }
+
     const mr = await runShopifyGraphql<{ metafieldsSet?: { userErrors?: Array<{ message: string }> } }>({
       shop,
       token,
@@ -140,25 +200,17 @@ export async function POST(req: Request) {
       query: `mutation SetOptimized($m: [MetafieldsSetInput!]!) {
         metafieldsSet(metafields: $m) { userErrors { field message } }
       }`,
-      variables: {
-        m: [
-          {
-            ownerId: productId,
-            namespace: "carbon_seo",
-            key: "optimized_at",
-            type: "single_line_text_field",
-            value: stamp,
-          },
-        ],
-      },
+      variables: { m: metafields },
     });
     optimizedMarked = Boolean(mr.ok && !(mr.data?.metafieldsSet?.userErrors || []).length);
-    if (matrixId) {
+    if (matrixId && body?.markOptimized === true) {
       await pool
         .query(`UPDATE matrices SET seo_optimized_at = now() WHERE id = $1::uuid`, [matrixId])
         .catch(() => {});
     }
-    if (optimizedMarked) updatedFields.push("optimized-flag");
+    if (optimizedMarked) {
+      updatedFields.push(body?.markOptimized === true ? "optimized-flag" : "focus-keyword");
+    }
   }
 
   if (!updatedFields.length && !redirectCreated) {

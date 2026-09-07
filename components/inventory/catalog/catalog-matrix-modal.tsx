@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
+/* The scorer is isomorphic on purpose — scoring what is actually being saved
+   here avoids recording a number the user never applied. */
+import { scoreAll } from "@/lib/seo/deterministic";
+import type { SeoFields } from "@/lib/seo/types";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -771,6 +775,43 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       for (const f of ["seoTitle", "metaDescription", "bodyHtml", "tags"]) {
         if (seoAccept[f]) fields[f] = seoProposed[f];
       }
+
+      /* Alt text the optimizer wrote for images that had none. Without this the
+         generated alts were produced and then discarded at save. */
+      const proposedAlts = Array.isArray(seoProposed.imageAlts)
+        ? (seoProposed.imageAlts as Array<{ id?: string; altText?: string }>)
+        : [];
+      const currentAlts = Array.isArray(seoCurrent?.imageAlts)
+        ? (seoCurrent.imageAlts as Array<{ id?: string; altText?: string }>)
+        : [];
+      const changedAlts = proposedAlts.filter((a) => {
+        const before = currentAlts.find((c) => c.id === a.id)?.altText || "";
+        return String(a.altText || "").trim() && String(a.altText) !== before;
+      });
+      if (changedAlts.length) fields.imageAlts = changedAlts;
+
+      /* The keyword the copy was written around. The scorer checks three fields
+         against it — more than half the weighting — so dropping it here is what
+         made a published 100 read as 89 the next time the product was opened. */
+      const focusKeyword = String(seoProposed.focusKeyword || "").trim();
+      if (focusKeyword) {
+        fields.focusKeyword = focusKeyword;
+        fields.secondaryKeywords = Array.isArray(seoProposed.secondaryKeywords)
+          ? seoProposed.secondaryKeywords
+          : [];
+        /* Score the exact set being published, not the full proposal — the user
+           may have declined some fields, and storing the proposal's score would
+           record a number that was never actually applied. */
+        fields.score = scoreAll({
+          ...(seoCurrent as unknown as SeoFields),
+          ...(fields as Partial<SeoFields>),
+          imageAlts: proposedAlts.length
+            ? (proposedAlts as SeoFields["imageAlts"])
+            : ((seoCurrent?.imageAlts as SeoFields["imageAlts"]) ?? []),
+          focusKeyword,
+        }).overall;
+      }
+
       const r = await fetch("/api/shopify/seo/write", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
