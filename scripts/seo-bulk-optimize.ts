@@ -30,6 +30,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { optimizeSeo } from "@/lib/seo/optimizeCore";
+import { applySetBanner, pictureForProduct, type SetPicture } from "@/lib/seo/setNotice";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, Scorecard } from "@/lib/seo/types";
 
@@ -139,7 +140,7 @@ async function gql<T = Json>(query: string, variables?: Json): Promise<T> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const PRODUCT_FIELDS = `
-  id title handle descriptionHtml productType vendor tags onlineStoreUrl
+  id title handle status totalInventory descriptionHtml productType vendor tags onlineStoreUrl
   seo { title description }
   priceRangeV2 { minVariantPrice { amount currencyCode } }
   media(first: 50) { nodes { ... on MediaImage { id image { url altText } } } }
@@ -151,7 +152,11 @@ async function fetchActiveProducts(): Promise<Json[]> {
   let cursor: string | null = null;
   do {
     const d: Json = await gql(
-      `query($cursor:String){ products(first:50, after:$cursor, query:"status:active"){
+      /* Drafts included on purpose: a product can be unpublished and still have
+         photos worth writing SEO for, and optimizing it costs nothing extra.
+         Archived is excluded — that is the bin. Status is never written by this
+         script, so nothing here can publish a product. */
+      `query($cursor:String){ products(first:50, after:$cursor, query:"status:active OR status:draft"){
          pageInfo{hasNextPage endCursor} nodes{ ${PRODUCT_FIELDS} } } }`,
       { cursor },
     );
@@ -211,7 +216,7 @@ function toContext(p: Json): ProductContext {
     onlineStoreUrl: p.onlineStoreUrl || undefined,
     /* Drives the "Complete the Look" notice. The flag lives in the WMS, not on
        the Shopify product, so it is looked up once up front (see setFlags). */
-    isSet: SET_PRODUCT_IDS.has(String(p.id)),
+    isSet: SET_PICTURES.has(String(p.id)),
   };
 }
 
@@ -222,7 +227,7 @@ function toContext(p: Json): ProductContext {
  * rows, and a query per product would add a database round-trip to every
  * optimization for a value that cannot change mid-run.
  */
-const SET_PRODUCT_IDS = new Set<string>();
+const SET_PICTURES = new Map<string, SetPicture>();
 
 async function loadSetFlags(): Promise<number> {
   const url = (process.env.DATABASE_URL || env.DATABASE_URL || "").trim();
@@ -230,17 +235,22 @@ async function loadSetFlags(): Promise<number> {
   const client = new Client({ connectionString: url, ssl: false });
   await client.connect();
   try {
-    const r = await client.query<{ shopify_product_id: string }>(
-      `SELECT DISTINCT shopify_product_id
-         FROM matrices
-        WHERE is_set = true AND shopify_product_id IS NOT NULL`,
+    const r = await client.query<{ shopify_product_id: string; upc: string | null; skus: string[] | null }>(
+      `SELECT m.shopify_product_id, m.upc,
+              array_agg(cs.sku) FILTER (WHERE cs.sku IS NOT NULL) AS skus
+         FROM matrices m
+         LEFT JOIN custom_skus cs ON cs.matrix_id = m.id
+        WHERE m.is_set = true AND m.shopify_product_id IS NOT NULL
+        GROUP BY m.id`,
     );
     for (const row of r.rows) {
+      const picture = pictureForProduct(row.skus || [], row.upc);
+      if (!picture) continue;
       const raw = String(row.shopify_product_id);
       /* Stored ids are sometimes bare numbers and sometimes gids; hold both
          forms so the lookup cannot miss on formatting alone. */
-      SET_PRODUCT_IDS.add(raw);
-      SET_PRODUCT_IDS.add(raw.startsWith("gid://") ? raw : `gid://shopify/Product/${raw}`);
+      SET_PICTURES.set(raw, picture);
+      SET_PICTURES.set(raw.startsWith("gid://") ? raw : `gid://shopify/Product/${raw}`, picture);
     }
     return r.rows.length;
   } finally {
@@ -256,7 +266,12 @@ async function publish(productId: string, fields: SeoFields, focusKeyword: strin
   if (fields.seoTitle) seo.title = fields.seoTitle.trim();
   if (fields.metaDescription) seo.description = fields.metaDescription.trim();
   if (Object.keys(seo).length) input.seo = seo;
-  if (fields.bodyHtml) input.descriptionHtml = fields.bodyHtml;
+  if (fields.bodyHtml) {
+    /* The optimizer strips the "Complete the Look" banner so the model never
+       sees boilerplate, which means publishing its copy verbatim would tear the
+       banner off every set product this run touches. Put it back. */
+    input.descriptionHtml = applySetBanner(fields.bodyHtml, SET_PICTURES.get(productId) ?? null);
+  }
   if (Array.isArray(fields.tags) && fields.tags.length) {
     input.tags = fields.tags.map((t) => String(t || "").trim()).filter(Boolean);
   }
@@ -340,7 +355,12 @@ async function main() {
   const skippedNoImage = all.length - all.filter((p) => (p.media?.nodes || []).some((n: Json) => n?.image?.url)).length;
   if (LIMIT) queue = queue.slice(0, LIMIT);
 
-  console.log(`  ${all.length} active · ${skippedNoImage} skipped (no image) · ${done.size} already done · ${queue.length} to process\n`);
+  const byStatus = all.reduce<Record<string, number>>((acc, p) => {
+    acc[String(p.status)] = (acc[String(p.status)] || 0) + 1;
+    return acc;
+  }, {});
+  console.log(`  ${all.length} products (${Object.entries(byStatus).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ")})`);
+  console.log(`  ${skippedNoImage} skipped (no image) · ${done.size} already done · ${queue.length} to process\n`);
   if (!queue.length) return;
 
   let ok = 0;
@@ -396,7 +416,7 @@ async function main() {
             fieldsAfter: Object.fromEntries(
               Object.entries(finalCard.fields).map(([k, v]) => [k, v?.score ?? 0]),
             ),
-            setNotice: SET_PRODUCT_IDS.has(String(p.id)),
+            setBanner: SET_PICTURES.get(String(p.id)) ?? null,
             proposed: {
               seoTitle: result.proposed.seoTitle,
               metaDescription: result.proposed.metaDescription,
