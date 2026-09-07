@@ -1,6 +1,11 @@
 /* eslint-disable no-console */
 /**
- * Set products with no stock to DRAFT.
+ * Set products to DRAFT when they should not be for sale.
+ *
+ * Two reasons qualify:
+ *   • the WMS matrix is archived — archived means retired, and a retired
+ *     product must never be live no matter what its stock says
+ *   • it is out of stock in both systems
  *
  * A draft product is off every sales channel, which is what "invisible" needs to
  * mean here — hiding it from the online store alone would leave it live on
@@ -54,9 +59,17 @@ async function main() {
 
   /* WMS side: in-stock EPCs per matrix, the same definition the catalog grid
      uses so the number matches what the operator sees. */
-  const wms = await pool.query<{ pid: string; description: string; qty: number }>(
+  const wms = await pool.query<{
+    pid: string;
+    description: string;
+    qty: number;
+    archived: boolean;
+  }>(
+    /* A matrix counts as archived when every one of its variants is archived —
+       the same rule the Matrix window uses for its archived badge. */
     `SELECT m.shopify_product_id AS pid, m.description,
-            COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::int AS qty
+            COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::int AS qty,
+            COALESCE(bool_and(cs.archived), FALSE) AS archived
        FROM matrices m
        LEFT JOIN custom_skus cs ON cs.matrix_id = m.id
        LEFT JOIN items i ON i.custom_sku_id = cs.id
@@ -94,6 +107,9 @@ async function main() {
       skipped.push(`${p.title} — no WMS matrix, cannot confirm stock`);
       return false;
     }
+    /* Archived outranks stock: a retired product should not be live even if a
+       stray tag still reads as on-hand somewhere. */
+    if (w.archived) return true;
     return (p.totalInventory ?? 0) <= 0 && w.qty === 0;
   });
 
@@ -106,7 +122,8 @@ async function main() {
   for (const p of candidates) {
     const w = wmsQty.get(String(p.id));
     const imaged = (p.media?.nodes || []).length > 0;
-    console.log(`   ${String(p.title).slice(0, 40).padEnd(42)} shopify=${p.totalInventory ?? 0} wms=${w ? w.qty : "n/a"}${imaged ? " [has photos]" : ""}`);
+    const why = w?.archived ? "ARCHIVED in WMS" : "out of stock";
+    console.log(`   ${String(p.title).slice(0, 36).padEnd(38)} ${why.padEnd(16)} shopify=${p.totalInventory ?? 0} wms=${w ? w.qty : "n/a"}${imaged ? " [has photos]" : ""}`);
   }
 
   if (!WRITE) {
