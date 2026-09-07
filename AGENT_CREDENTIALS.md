@@ -29,10 +29,13 @@ The actual secret values live on this developer machine in gitignored files (see
 | `.env.local` | Production-parity local mode: same vars as `.env.coolify.local` but pointing at localhost DB |
 | `.env.coolify.local` | **Production mirror** — every credential the running WMS uses (DB, Shopify, Lightspeed, R2, Resend, Coolify, session secret, WMS device key) |
 | `apps/carbon-cdm/.env` | CDM agent **dev** env: `CARBON_CDM_TOKEN` (dev value), `CARBON_WMS_URL` |
-| `~/.git-credentials` | GitHub PAT in `https://user:TOKEN@github.com` form |
+| `~/.git-credentials` | **Empty (0 bytes).** The old `GITHUB_PAT` in `.env.agent-secrets` returns `401 Bad credentials`. HTTPS push does not work — see *Push to GitHub* below |
 | `~/.gitconfig` | Git identity (`shopcarbon12-gif`, `shopcarbon12@gmail.com`) |
-| `~/.ssh/id_ed25519` | Outbound SSH private key — used for `shopcarbon@192.168.1.219` |
-| `~/.ssh/id_ed25519.pub` | Public counterpart (the same line should be in `/home/shopcarbon/.ssh/authorized_keys` on the agent VM) |
+| `~/.ssh/config` | SSH host aliases for the repos that need their own key: `github-carbon-gen`, `github-loyalty` |
+| `~/.ssh/id_ed25519` | Outbound SSH private key — `shopcarbon@192.168.1.219` (CDM agent VM) and `root@152.53.210.171` (Coolify host). On GitHub it authenticates as the **CARBON-POS deploy key**, which is why the other repos have their own keys |
+| `~/.ssh/carbon_wms_deploy` | GitHub key for **this repo** — authenticates as the user `shopcarbon12-gif` |
+| `~/.ssh/carbon_gen_deploy` | GitHub key for **carbon-gen**, reached through the `github-carbon-gen` alias |
+| `~/.ssh/id_ed25519_loyalty` | GitHub key for the **Loyalty** repo, via the `github-loyalty` alias |
 | `192.168.1.219:/opt/carbon-cdm/.env` | **Production CDM agent env** — `CARBON_CDM_TOKEN` (prod), `CARBON_WMS_URL` |
 | `apps/carbonwms-pc/key.properties` + `apps/carbonwms-pc/keys/carbonwms-pc-release.jks` | **CarbonWMS-PC release signing key** (Android shell app, package `com.shopcarbon.wmspc`). Created 2026-08-25 by `scripts/build-release.sh`; every future APK must use it. Backup: `~/CarbonWmsPcRelease/keys-backup/`; values also mirrored in `.env.agent-secrets` |
 
@@ -78,15 +81,50 @@ npm run deploy:coolify             # POSTs COOLIFY_DEPLOY_WEBHOOK_URL with COOLI
 npm run deploy:coolify-worker      # same for the sync worker
 ```
 
+### SSH to the Coolify host (production, netcup)
+`~/.ssh/id_ed25519` reaches it as root — use it when a deploy fails for reasons
+the API will not show you (disk, memory, container state, build logs):
+```bash
+ssh -i ~/.ssh/id_ed25519 root@152.53.210.171
+df -h /                             # disk-full has taken prod down twice
+docker system df                    # build cache grows unbounded
+docker builder prune -af            # the usual recovery
+```
+
 ### Push to GitHub
-`~/.git-credentials` is preconfigured with `helper = store`; `git push` works without further setup.
+Every repo pushes over **SSH**. The `credential.helper = store` setting is a
+leftover: `~/.git-credentials` is empty and the `GITHUB_PAT` in
+`.env.agent-secrets` is dead (`401 Bad credentials`), so nothing pushes over
+HTTPS. Do not try to revive the PAT — use the keys.
+
+The keys are already loaded in the ssh-agent, so a plain `git push` works in each
+repo without extra flags:
+
+| Repo | Remote | Key |
+|---|---|---|
+| `carbon-warehouse-management` (this one) | `git@github.com:shopcarbon12-gif/carbon-warehouse-management.git` | `~/.ssh/carbon_wms_deploy` |
+| `carbon-gen` | `git@github-carbon-gen:shopcarbon12-gif/carbon-gen.git` | `~/.ssh/carbon_gen_deploy` |
+| `Loyalty` | `git@github-loyalty:…` | `~/.ssh/id_ed25519_loyalty` |
+
+`github-carbon-gen` and `github-loyalty` are **`Host` aliases in `~/.ssh/config`,
+not git remote names** — the remote in each repo is still `origin`. Passing an
+alias where a remote name belongs fails with "repository does not exist".
+
+Each repo needs its own key because a GitHub deploy key can only be attached to
+one repository; `~/.ssh/id_ed25519` was already claimed by CARBON-POS, so adding
+it elsewhere is rejected with "Key is already in use".
+
+Verify a key without pushing:
+```bash
+ssh -T git@github.com            # → Hi shopcarbon12-gif!  (or a repo name for a deploy key)
+ssh -T git@github-carbon-gen
+```
 
 ---
 
 ## What is **not** in this repo
 
 - No SSH credentials for the **Senitron CDM** VM (its IP is variable DHCP; access via warehouse LAN only).
-- No SSH credentials for the **Coolify host** (`152.53.210.171`) — only the deploy webhook + API token.
 - No production CDM agent token — that's only on `192.168.1.219:/opt/carbon-cdm/.env`.
 
 ---
