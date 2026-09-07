@@ -62,6 +62,8 @@ export interface ProductContext {
   colors?: string[];
   imageCount: number;
   onlineStoreUrl?: string;
+  /** One piece of a matching set — drives the "Complete the Look" notice. */
+  isSet?: boolean;
 }
 
 /** Human-friendly labels for each field key (used by the UI). */

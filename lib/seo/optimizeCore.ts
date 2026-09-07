@@ -4,6 +4,7 @@ import { withTimeout, parseJsonObjectFromText, asStringArray } from "@/lib/seo/a
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, SeoFieldKey, Scorecard } from "@/lib/seo/types";
 import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs } from "@/lib/remoteImage";
+import { applySetNotice, stripSetNotice } from "@/lib/seo/setNotice";
 
 /**
  * The SEO optimizer, extracted from app/api/shopify/seo/optimize so it can run
@@ -121,8 +122,18 @@ export interface OptimizeResult {
 }
 
 export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult> {
-  const { context, current, apiKey } = input;
+  const { context, apiKey } = input;
   const useVision = input.useVision !== false;
+  const isSet = Boolean(context.isSet);
+
+  /* The set notice is appended after generation, so it is stripped here first:
+     the model must not be shown boilerplate it might imitate or reword, and the
+     scorer should judge the written copy rather than a block that is always
+     identical. It goes back on at the end. */
+  const current: SeoFields = {
+    ...input.current,
+    bodyHtml: stripSetNotice(input.current.bodyHtml),
+  };
 
   const currentScores = scoreAll(current);
   const weakFields = GEN_FIELDS.filter((f) => (currentScores.fields[f]?.score ?? 0) < TARGET_SCORE);
@@ -131,13 +142,16 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
   );
 
   if (currentScores.overall >= OVERALL_TARGET && !missingAlt.length) {
+    /* Nothing to rewrite, but the set flag may have changed since the copy was
+       written — the notice still has to match it. */
+    const settled: SeoFields = { ...current, bodyHtml: applySetNotice(current.bodyHtml, isSet) };
     return {
       skipped: true,
       focusKeyword: String((current as any).focusKeyword || ""),
       secondaryKeywords: [],
       visionUsed: false,
       imagesAnalyzed: 0,
-      proposed: { ...current },
+      proposed: settled,
       currentScorecard: currentScores,
       proposedScorecard: currentScores,
       imageAltsAdded: [],
@@ -316,6 +330,11 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     }
   }
   if (clamped) proposedScorecard = scoreAll(proposed);
+
+  /* Fixed wording, appended last so nothing downstream can reword it, and only
+     for products flagged as part of a set. When the flag is off this also
+     removes a notice a product used to carry. */
+  proposed.bodyHtml = applySetNotice(proposed.bodyHtml, isSet);
 
   const altMap = new Map<string, string>(
     (Array.isArray(parsed.imageAlts) ? parsed.imageAlts : [])

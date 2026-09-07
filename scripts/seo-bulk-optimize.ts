@@ -28,6 +28,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Client } from "pg";
 import { optimizeSeo } from "@/lib/seo/optimizeCore";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, Scorecard } from "@/lib/seo/types";
@@ -50,9 +51,14 @@ function loadEnvFile(file: string): Record<string, string> {
   return out;
 }
 
-/* Production credentials, not the localhost dev ones: this writes to the live
-   storefront, so reading DATABASE_URL-style local overrides would be wrong. */
-const env = { ...loadEnvFile(".env.coolify.local"), ...loadEnvFile(".env.agent-secrets") };
+/*
+ * Production credentials. .env.coolify.local is spread LAST so it wins: this
+ * writes to the live storefront and reads the live Set flags, and
+ * .env.agent-secrets still carries a DATABASE_URL for the decommissioned
+ * Hetzner box — letting it override sends the run at a host that no longer
+ * answers.
+ */
+const env = { ...loadEnvFile(".env.agent-secrets"), ...loadEnvFile(".env.coolify.local") };
 const SHOP = (process.env.SHOPIFY_SHOP_DOMAIN || env.SHOPIFY_SHOP_DOMAIN || "").trim();
 const TOKEN = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
 const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
@@ -203,7 +209,43 @@ function toContext(p: Json): ProductContext {
     ).slice(0, 12) as string[],
     imageCount: media.length,
     onlineStoreUrl: p.onlineStoreUrl || undefined,
+    /* Drives the "Complete the Look" notice. The flag lives in the WMS, not on
+       the Shopify product, so it is looked up once up front (see setFlags). */
+    isSet: SET_PRODUCT_IDS.has(String(p.id)),
   };
+}
+
+/**
+ * Shopify product ids flagged as part of a matching set.
+ *
+ * Read once for the whole run rather than per product: this is a few hundred
+ * rows, and a query per product would add a database round-trip to every
+ * optimization for a value that cannot change mid-run.
+ */
+const SET_PRODUCT_IDS = new Set<string>();
+
+async function loadSetFlags(): Promise<number> {
+  const url = (process.env.DATABASE_URL || env.DATABASE_URL || "").trim();
+  if (!url) throw new Error("DATABASE_URL missing — cannot read the Set flags.");
+  const client = new Client({ connectionString: url, ssl: false });
+  await client.connect();
+  try {
+    const r = await client.query<{ shopify_product_id: string }>(
+      `SELECT DISTINCT shopify_product_id
+         FROM matrices
+        WHERE is_set = true AND shopify_product_id IS NOT NULL`,
+    );
+    for (const row of r.rows) {
+      const raw = String(row.shopify_product_id);
+      /* Stored ids are sometimes bare numbers and sometimes gids; hold both
+         forms so the lookup cannot miss on formatting alone. */
+      SET_PRODUCT_IDS.add(raw);
+      SET_PRODUCT_IDS.add(raw.startsWith("gid://") ? raw : `gid://shopify/Product/${raw}`);
+    }
+    return r.rows.length;
+  } finally {
+    await client.end();
+  }
 }
 
 /* --------------------------------------------------------------- write ---- */
@@ -286,6 +328,8 @@ async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
   console.log(`Shop: ${SHOP}   mode: ${WRITE ? "WRITE (live)" : "DRY RUN (no writes)"}   vision: ${USE_VISION ? "on" : "off"}`);
+  const setCount = await loadSetFlags();
+  console.log(`  ${setCount} products flagged as part of a set — these get the "Complete the Look" notice`);
   const all = await fetchActiveProducts();
 
   const done = new Set(loadState().done);
@@ -352,6 +396,7 @@ async function main() {
             fieldsAfter: Object.fromEntries(
               Object.entries(finalCard.fields).map(([k, v]) => [k, v?.score ?? 0]),
             ),
+            setNotice: SET_PRODUCT_IDS.has(String(p.id)),
             proposed: {
               seoTitle: result.proposed.seoTitle,
               metaDescription: result.proposed.metaDescription,

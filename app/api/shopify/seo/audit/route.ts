@@ -147,6 +147,26 @@ export async function POST(req: Request) {
     })),
   };
 
+  /* The set flag lives in the WMS, not on the Shopify product, so it is read
+     here and travels in the context — that is what makes the optimizer append
+     the "Complete the Look" notice. Falls back to the Shopify link when the
+     caller did not pass a matrixId. */
+  let isSet = false;
+  try {
+    const setRes = matrixId
+      ? await pool.query<{ is_set: boolean }>(
+          `SELECT is_set FROM matrices WHERE id = $1::uuid`,
+          [matrixId],
+        )
+      : await pool.query<{ is_set: boolean }>(
+          `SELECT is_set FROM matrices WHERE shopify_product_id = $1 LIMIT 1`,
+          [productId],
+        );
+    isSet = Boolean(setRes.rows[0]?.is_set);
+  } catch {
+    /* A lookup failure must not fail the audit — it only means no notice. */
+  }
+
   const context: ProductContext = {
     productId: product.id,
     handle: product.handle || "",
@@ -169,6 +189,7 @@ export async function POST(req: Request) {
     ).slice(0, 12),
     imageCount: mediaNodes.length,
     onlineStoreUrl: product.onlineStoreUrl || undefined,
+    isSet,
   };
 
   return NextResponse.json({
