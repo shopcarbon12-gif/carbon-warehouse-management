@@ -60,6 +60,10 @@
     line-height: 1.5;
   }
   .carbon-set-pair__me { font-weight: 600; }
+  /* Product names read in capitals here, matching the panel heading. Done in CSS
+     rather than by upper-casing the strings so the underlying title is untouched
+     — it still goes to the cart, and is still what a screen reader announces. */
+  .carbon-set-pair__name { text-transform: uppercase; letter-spacing: .02em; }
   .carbon-set-pair__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
   .carbon-set-pair__link:hover { text-decoration-thickness: 2px; }
   .carbon-set-pair__sub { color: #4a5568; font-size: 0.85rem; }
@@ -151,6 +155,38 @@
     var vs = window.__carbonSetProduct.variants || [];
     for (var i = 0; i < vs.length; i += 1) if (String(vs[i].id) === id) return vs[i];
     return null;
+  }
+
+  /*
+   * Open a URL in a sized window, reporting whether it worked.
+   *
+   * The caller only suppresses the normal navigation when this returns true, so
+   * a blocked popup still takes the shopper to the product rather than making
+   * the link look broken. The window is named, so a second click reuses it
+   * instead of stacking windows across the screen.
+   */
+  function openPopup(url) {
+    var sw = (window.screen && screen.availWidth) || 1200;
+    var sh = (window.screen && screen.availHeight) || 900;
+    /* Wide enough for the desktop product layout where there is room, but never
+       larger than the screen it has to fit on. */
+    var w = Math.max(420, Math.min(1040, sw - 160));
+    var h = Math.max(480, Math.min(920, sh - 120));
+    var left = Math.max(0, (sw - w) / 2) + (window.screenLeft || 0);
+    var top = Math.max(0, (sh - h) / 2) + (window.screenTop || 0);
+    var win;
+    try {
+      win = window.open(
+        url,
+        "carbonSetProduct",
+        "popup=yes,width=" + Math.round(w) + ",height=" + Math.round(h) +
+          ",left=" + Math.round(left) + ",top=" + Math.round(top) +
+          ",scrollbars=yes,resizable=yes"
+      );
+    } catch (e) { win = null; }
+    if (!win) return false;
+    try { win.focus(); } catch (e) {}
+    return true;
   }
 
   var panel = null;
@@ -253,9 +289,9 @@
       var meImg = (window.__carbonSetProduct && window.__carbonSetProduct.featured_image) || "";
       html += '<div class="carbon-set-pair__row">' +
         (meImg ? '<img src="' + meImg + '" alt="" />' : "") +
-        '<span><span class="carbon-set-pair__me">' +
+        '<span><span class="carbon-set-pair__me carbon-set-pair__name">' +
         ((window.__carbonSetProduct && window.__carbonSetProduct.title) || "This item") +
-        " — " + money(mine.price) + "</span><br>" +
+        '</span><span class="carbon-set-pair__me"> — ' + money(mine.price) + "</span><br>" +
         '<span class="carbon-set-pair__sub">' + (mine.title || "") + " — the item you are viewing</span></span></div>" +
         '<hr class="carbon-set-pair__hr" />';
     }
@@ -265,7 +301,9 @@
       if (r.unavailable) {
         warn = true;
         html += '<p class="carbon-set-pair__title">Sold as an individual item</p>' +
-          "<p>No spare " + r.partner.title + " is available in " + (colour || "this colour") +
+          '<p>No spare <a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'href="/products/' + r.partner.handle + '">' + r.partner.title +
+          "</a> is available in " + (colour || "this colour") +
           " — the remaining stock is reserved to keep other sets complete. " +
           "This piece will be added <strong>on its own</strong>, at its own price.</p>";
         return;
@@ -273,7 +311,9 @@
       if (r.needsChoice) {
         warn = true;
         html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
-          "<p>" + r.partner.title + " is not available in your size. These sizes are in stock in " +
+          '<p><a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'href="/products/' + r.partner.handle + '">' + r.partner.title +
+          "</a> is not available in your size. These sizes are in stock in " +
           (colour || "this colour") + ", or you can buy this piece on its own.</p>" +
           '<div class="carbon-set-pair__sizes">';
         r.options.forEach(function (v) {
@@ -296,8 +336,8 @@
          size that will be added. */
       var pHref = "/products/" + r.partner.handle + "?variant=" + r.variant.id;
       html += '<div class="carbon-set-pair__row">' +
-        (img ? '<a href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
-        '<span><a class="carbon-set-pair__link carbon-set-pair__me" href="' + pHref + '">' +
+        (img ? '<a class="carbon-set-pair__pop" href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
+        '<span><a class="carbon-set-pair__link carbon-set-pair__me carbon-set-pair__name carbon-set-pair__pop" href="' + pHref + '">' +
         r.partner.title + "</a> — " +
         '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
         '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
@@ -317,6 +357,19 @@
     });
     var solo = el.querySelector('[data-action="solo"]');
     if (solo) solo.addEventListener("click", addSolo);
+
+    /* The matching piece opens in its own window rather than replacing this
+       page. Looking at the partner is a glance, not a destination: navigating
+       away loses the colour and size already chosen here, and the shopper has
+       to find their way back and set them again. A window closes. */
+    el.querySelectorAll("a.carbon-set-pair__pop").forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        /* Leave the browser's own gestures alone — ctrl/cmd/shift-click and
+           middle-click mean "open it my way", and hijacking those is rude. */
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        if (openPopup(a.getAttribute("href"))) e.preventDefault();
+      });
+    });
   }
 
   /*
