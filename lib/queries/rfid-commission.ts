@@ -10,6 +10,16 @@ export type CommissionSkuMatch = {
   size: string | null;
   color: string | null;
   price: string | null;
+  /**
+   * Where this variant actually lives: the bin holding the most in-stock EPCs
+   * of the SKU, falling back to the variant's assigned "home bin"
+   * (custom_skus.assigned_bin_id, migration 056) when it has no live stock.
+   *
+   * Home bin alone is not usable here — only 3 of 7,677 variants have one set,
+   * so the column would be blank for effectively every search result. The
+   * catalog grid uses the same precedence.
+   */
+  bin_code: string | null;
 };
 
 /** Broad lookup: System ID (exact when query is all-digits), SKU, UPC/EAN, description (substring). */
@@ -33,6 +43,7 @@ export async function searchSkusForCommission(
     size: string | null;
     color: string | null;
     price: string | null;
+    bin_code: string | null;
   }>(
     `SELECT
        cs.id,
@@ -42,9 +53,21 @@ export async function searchSkusForCommission(
        m.description,
        cs.size,
        cs.color_code AS color,
-       cs.retail_price::text AS price
+       cs.retail_price::text AS price,
+       COALESCE(live_bin.code, home_bin.code) AS bin_code
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
+     LEFT JOIN bins home_bin ON home_bin.id = cs.assigned_bin_id
+     LEFT JOIN LATERAL (
+       SELECT b2.code
+         FROM items i
+         INNER JOIN bins b2 ON b2.id = i.bin_id
+        WHERE i.custom_sku_id = cs.id
+          AND i.status = 'in-stock'
+        GROUP BY b2.code
+        ORDER BY count(*) DESC, b2.code ASC
+        LIMIT 1
+     ) live_bin ON true
      WHERE
        strpos(lower(cs.sku), lower($1::text)) > 0
        OR strpos(lower(m.upc), lower($1::text)) > 0

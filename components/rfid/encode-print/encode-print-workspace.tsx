@@ -42,6 +42,8 @@ type Hit = {
   size: string | null;
   color: string | null;
   price: string | null;
+  /** Variant home bin (custom_skus.assigned_bin_id). */
+  bin_code: string | null;
 };
 /**
  * What we know about a scanned chip, from /api/rfid/encode-resolve — the same
@@ -326,6 +328,21 @@ export function EncodePrintWorkspace() {
     [seen, threshold],
   );
   const hiddenCount = seen.size - visible.length;
+
+  /**
+   * What the reading list actually renders. Picking a tag collapses the list to
+   * just that tag — with a bench antenna reading a dozen chips off the shelf
+   * behind the one in your hand, keeping the rest on screen makes it easy to
+   * lose track of which one is armed for a destructive re-encode. Clicking the
+   * selected tag again clears the selection and brings the others back.
+   */
+  const displayList = useMemo(() => {
+    if (selectedEpc && visible.some((v) => v.epc === selectedEpc)) {
+      return visible.filter((v) => v.epc === selectedEpc);
+    }
+    return visible;
+  }, [selectedEpc, visible]);
+  const collapsedCount = visible.length - displayList.length;
 
   // Effective selection (derived, no effect): the operator's click validated
   // against the live proximity list; auto-selects the single tag in range.
@@ -752,7 +769,7 @@ export function EncodePrintWorkspace() {
                       : `All ${seen.size} tag(s) are below the proximity threshold — bring one closer.`}
                   </div>
                 ) : (
-                  visible.map((s) => {
+                  displayList.map((s) => {
                     const sel = s.epc === effectiveEpc;
                     const pct =
                       s.rssi == null ? 60 : Math.max(6, Math.min(100, Math.round(((s.rssi + 90) / 70) * 100)));
@@ -761,7 +778,9 @@ export function EncodePrintWorkspace() {
                       <button
                         key={s.epc}
                         type="button"
-                        onClick={() => setSelectedEpc(s.epc)}
+                        onClick={() =>
+                          setSelectedEpc((prev) => (prev === s.epc ? null : s.epc))
+                        }
                         className={
                           "block w-full border-b border-[var(--wms-border)]/50 px-3 py-2 text-left last:border-b-0 " +
                           (sel
@@ -783,46 +802,44 @@ export function EncodePrintWorkspace() {
                             {s.rssi == null ? "—" : `${s.rssi} dBm`}
                           </span>
                         </div>
-                        {/* Same fields the Encode Items table resolves, so the
-                            operator identifies the tag without leaving this page. */}
+                        {/* Everything we know about the chip on ONE row beneath
+                            the EPC, at the EPC's own size — this is read at arm's
+                            length from a bench antenna, so the 10px sub-label it
+                            replaced was not legible in use. */}
                         {info === null ? (
-                          <div className="mt-1 font-mono text-[10px] text-[var(--wms-muted)]">
+                          <div className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
                             resolving…
                           </div>
                         ) : info.kind === "foreign" ? (
-                          <div className="mt-1 font-mono text-[10px] text-amber-300/80">
+                          <div className="mt-1 font-mono text-xs text-amber-300/90">
                             FOREIGN — not a Carbon tag
                           </div>
                         ) : info.kind === "orphan" ? (
-                          <div className="mt-1 font-mono text-[10px] text-amber-300/80">
+                          <div className="mt-1 font-mono text-xs text-amber-300/90">
                             ORPHAN — decodes, no item row
                             {info.serial != null ? ` · sn ${info.serial}` : ""}
                           </div>
                         ) : (
-                          <div className="mt-1 space-y-0.5">
-                            <div className="truncate text-[12px] text-[var(--wms-fg)]">
-                              {info.name ?? "—"}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--wms-muted)]">
-                              <span className="text-[var(--wms-fg)]/70">{info.sku ?? "—"}</span>
-                              <span>· {info.size ?? "—"}</span>
-                              <span>· {info.color ?? "—"}</span>
-                              {info.upc ? <span>· UPC {info.upc}</span> : null}
-                              {info.serial != null ? <span>· sn {info.serial}</span> : null}
-                              {info.binCode ? <span>· bin {info.binCode}</span> : null}
-                              <span
-                                className={
-                                  "rounded px-1.5 py-px " +
-                                  (info.status === "in-stock"
-                                    ? "bg-emerald-500/15 text-emerald-300"
-                                    : info.status === "sold"
-                                      ? "bg-red-500/15 text-red-300"
-                                      : "bg-white/10 text-[var(--wms-muted)]")
-                                }
-                              >
-                                {statusLabel(info.status)}
-                              </span>
-                            </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-[var(--wms-muted)]">
+                            <span className="text-[var(--wms-fg)]">{info.name ?? "—"}</span>
+                            <span className="text-[var(--wms-fg)]/75">{info.sku ?? "—"}</span>
+                            <span>· {info.size ?? "—"}</span>
+                            <span>· {info.color ?? "—"}</span>
+                            {info.upc ? <span>· UPC {info.upc}</span> : null}
+                            {info.serial != null ? <span>· sn {info.serial}</span> : null}
+                            {info.binCode ? <span>· bin {info.binCode}</span> : null}
+                            <span
+                              className={
+                                "rounded px-1.5 py-px " +
+                                (info.status === "in-stock"
+                                  ? "bg-emerald-500/15 text-emerald-300"
+                                  : info.status === "sold"
+                                    ? "bg-red-500/15 text-red-300"
+                                    : "bg-white/10 text-[var(--wms-muted)]")
+                              }
+                            >
+                              {statusLabel(info.status)}
+                            </span>
                           </div>
                         )}
                       </button>
@@ -830,8 +847,14 @@ export function EncodePrintWorkspace() {
                   })
                 )}
               </div>
+              {collapsedCount > 0 ? (
+                <p className="mt-1 font-mono text-[11px] text-[var(--wms-accent)]">
+                  {collapsedCount} other tag(s) collapsed — click the selected tag
+                  again to show them.
+                </p>
+              ) : null}
               {hiddenCount > 0 ? (
-                <p className="mt-1 font-mono text-[10px] text-[var(--wms-muted)]">
+                <p className="mt-1 font-mono text-[11px] text-[var(--wms-muted)]">
                   {hiddenCount} tag(s) hidden below the proximity threshold.
                 </p>
               ) : null}
@@ -859,11 +882,16 @@ export function EncodePrintWorkspace() {
                         onClick={() => pickHit(h)}
                         className="block w-full border-b border-[var(--wms-border)]/50 px-3 py-2 text-left last:border-b-0 hover:bg-white/[0.04]"
                       >
-                        <div className="font-mono text-xs text-[var(--wms-accent)]">
-                          {h.sku} · {h.ls_system_id}
-                        </div>
-                        <div className="text-[11px] text-[var(--wms-muted)]">
-                          {[h.description, h.color, h.size].filter(Boolean).join(" · ")}
+                        {/* One row: name, then the SKU in teal, then the rest.
+                            Lightspeed's system id is dropped — it identifies
+                            nothing the operator works with here. */}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-[var(--wms-muted)]">
+                          <span className="text-[var(--wms-fg)]">{h.description}</span>
+                          <span className="text-[var(--wms-accent)]">{h.sku}</span>
+                          {h.upc ? <span>· UPC {h.upc}</span> : null}
+                          <span>· {h.color ?? "—"}</span>
+                          <span>· {h.size ?? "—"}</span>
+                          {h.price ? <span>· ${h.price}</span> : null}
                         </div>
                       </button>
                     ))}
@@ -872,14 +900,18 @@ export function EncodePrintWorkspace() {
               </div>
               {target ? (
                 <div className="mt-3 flex items-start gap-2 rounded-md border border-[var(--wms-accent)]/40 bg-[var(--wms-accent)]/8 px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="font-mono text-sm font-semibold">
-                      {target.sku} <span className="text-[var(--wms-muted)]">· {target.ls_system_id}</span>
-                    </div>
-                    <div className="text-xs text-[var(--wms-muted)]">
-                      {[target.description, target.color, target.size].filter(Boolean).join(" · ")} · $
-                      {target.price}
-                    </div>
+                  {/* One row: name, SKU in white, then UPC / colour / size /
+                      price / bin. No Lightspeed system id. */}
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-sm text-[var(--wms-muted)]">
+                    <span className="font-semibold text-[var(--wms-fg)]">
+                      {target.description}
+                    </span>
+                    <span className="font-semibold text-white">{target.sku}</span>
+                    {target.upc ? <span>· UPC {target.upc}</span> : null}
+                    <span>· {target.color ?? "—"}</span>
+                    <span>· {target.size ?? "—"}</span>
+                    {target.price ? <span>· ${target.price}</span> : null}
+                    {target.bin_code ? <span>· bin {target.bin_code}</span> : null}
                   </div>
                   <button
                     type="button"
@@ -982,7 +1014,7 @@ export function EncodePrintWorkspace() {
                         { k: "UPC", v: target?.upc },
                         { k: "Serial", v: newSerial },
                         { k: "Price", v: target?.price ? `$${target.price}` : null },
-                        { k: "Sys ID", v: target?.ls_system_id },
+                        { k: "Bin", v: target?.bin_code },
                         {
                           k: "Status",
                           v: (
