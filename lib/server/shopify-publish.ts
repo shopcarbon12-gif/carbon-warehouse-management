@@ -11,6 +11,7 @@
  * the worker entrypoint for the `shopify_product_push` job type.
  */
 import type { Pool } from "pg";
+import { sortSizes } from "@/lib/size-order";
 import {
   resolveShopContext,
   productSet,
@@ -90,10 +91,19 @@ export async function pushMatrixToShopify(
             upc, default_cost::text AS default_cost
        FROM custom_skus
       WHERE matrix_id = $1::uuid AND archived = FALSE
-      ORDER BY size, color_code`,
+      ORDER BY color_code`,
     [matrixId],
   );
-  const variants = vr.rows;
+  /*
+   * Sort sizes in wearing order before building the Shopify product.
+   *
+   * The row order here becomes the option-value order on Shopify, and SQL's
+   * ORDER BY size is alphabetical — which turns S, M, L into L, M, S on every
+   * publish. Sorting the Shopify side separately could never hold, because the
+   * next Check & Publish would overwrite it from here. Same comparator the
+   * Matrix window uses, so the two always agree.
+   */
+  const variants = sortSizes<VariantRow>(vr.rows, (v) => String(v.size ?? ""));
 
   // ---- validate ---------------------------------------------------------
   const val = await validateMatrixForPublish(pool, matrixId, variants);

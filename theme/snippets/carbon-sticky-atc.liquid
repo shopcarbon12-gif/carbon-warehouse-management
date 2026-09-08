@@ -1,0 +1,86 @@
+{% comment %}
+  The sticky add-to-cart bar that slides in when you scroll back up.
+
+  Two problems with it as shipped:
+
+  1. It sat 30px from the bottom, in the same corner as the chat bubble and the
+     accessibility launcher — measured, it occupied 30-130px from the bottom
+     while the launcher takes 21-73 and the chat bubble roughly 20-100. The
+     product name and price were simply covered. It now clears them.
+
+  2. It stayed on screen indefinitely once shown, over the product photos. It
+     now fades out two seconds after scrolling stops, and scrolling down again
+     re-arms it, so scrolling back up shows it once more for another two
+     seconds. That keeps it useful as a prompt without leaving it parked over
+     the page.
+
+  The hide is opacity and visibility only — never display — so the theme's own
+  show/hide logic keeps working underneath and this can never fight it for
+  layout.
+{% endcomment %}
+
+<style>
+  product-add-to-cart-sticky.product-add-to-cart-sticky {
+    /* Above the floating widgets in that corner, not behind them. */
+    bottom: 120px !important;
+  }
+  product-add-to-cart-sticky.carbon-sticky-rest {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    transition: opacity .28s ease, visibility 0s linear .28s !important;
+  }
+  @media (max-width: 749px) {
+    /* Phones stack these controls tighter, and the bar is full width there. */
+    product-add-to-cart-sticky.product-add-to-cart-sticky { bottom: 96px !important; }
+  }
+</style>
+
+<script>
+(function () {
+  var IDLE_MS = 2000;
+
+  function boot() {
+    var el = document.querySelector("product-add-to-cart-sticky");
+    if (!el) return;
+
+    var timer = null;
+    var lastY = window.pageYOffset || document.documentElement.scrollTop || 0;
+
+    function rest() {
+      el.classList.add("carbon-sticky-rest");
+    }
+    function wake() {
+      el.classList.remove("carbon-sticky-rest");
+    }
+    function arm() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(rest, IDLE_MS);
+    }
+
+    window.addEventListener(
+      "scroll",
+      function () {
+        var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var goingUp = y < lastY;
+        lastY = y;
+
+        if (!goingUp) {
+          /* Scrolling down re-arms it: the bar is not wanted now, but the next
+             upward scroll should get a fresh two seconds rather than finding it
+             already timed out. */
+          if (timer) { clearTimeout(timer); timer = null; }
+          wake();
+          return;
+        }
+        wake();
+        arm();
+      },
+      { passive: true }
+    );
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>

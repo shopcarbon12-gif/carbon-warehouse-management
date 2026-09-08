@@ -21,6 +21,18 @@
 (function () {
   var GAP = 12;   /* space between back-to-top and the accessibility launcher */
 
+  /*
+   * The launcher's resting footprint.
+   *
+   * Opening the accessibility panel shrinks the launcher, which moved its left
+   * edge and dragged back-to-top along with it — the button visibly hopped
+   * sideways every time the panel was opened or closed. Its right edge does not
+   * move, so position against that plus the largest width seen, and back-to-top
+   * stays where it is whatever the panel is doing.
+   */
+  var restingW = 0;
+  var restingMidY = null;
+
   function place() {
     var a11y = document.getElementById('carbon-a11y-widget');
     var btt  = document.querySelector('back-to-top');
@@ -30,11 +42,16 @@
     var b = btt.getBoundingClientRect();
     if (!a.width || !b.width) return false;
 
+    if (a.width  > restingW) restingW = a.width;
+    /* Vertical centre of the launcher at rest. Taken once for the same reason:
+       a shrinking launcher moves its own midpoint. */
+    if (restingMidY === null || a.width >= restingW) restingMidY = a.top + a.height / 2;
+
     /* Anchor to the right and bottom edges: both neighbours are anchored that
        way, and on mobile the URL bar changes the viewport height, so a value
        measured from the top would drift as the page scrolls. */
-    var right  = window.innerWidth  - a.left + GAP;
-    var bottom = window.innerHeight - (a.top + a.height / 2) - b.height / 2;
+    var right  = window.innerWidth  - a.right + restingW + GAP;
+    var bottom = window.innerHeight - restingMidY - b.height / 2;
 
     btt.style.setProperty('right',  Math.round(right)  + 'px', 'important');
     btt.style.setProperty('bottom', Math.round(bottom) + 'px', 'important');
@@ -74,7 +91,13 @@
 
     var re;
     function reflow() { clearTimeout(re); re = setTimeout(place, 150); }
-    window.addEventListener('resize', reflow);
+    window.addEventListener('resize', function () {
+    /* A real viewport change means the resting footprint must be re-learned;
+       a panel opening must not. */
+    restingW = 0;
+    restingMidY = null;
+    reflow();
+  });
     window.addEventListener('orientationchange', reflow);
   }
 
