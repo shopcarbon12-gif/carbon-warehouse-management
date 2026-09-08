@@ -6,6 +6,7 @@ import { Radio, ScanLine, Trash2 } from "lucide-react";
 
 import { bulkStatusOptionsForUi } from "@/lib/inventory/bulk-wms-status-options";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
@@ -531,6 +532,13 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
           {scanning ? "Scanning… (click to stop)" : "Start scan"}
         </button>
         <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
+        <ReaderForceStopButton
+          readerIds={Array.from(selectedReaders)}
+          onStopped={() => {
+            stopScan();
+            clearAll();
+          }}
+        />
         <button
           type="button"
           disabled={rows.size === 0}

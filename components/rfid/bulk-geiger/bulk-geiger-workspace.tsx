@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Upload, Radio, Loader2, Plus } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 
 /**
@@ -577,6 +578,14 @@ export function BulkGeigerWorkspace() {
           {scanning ? "Scanning… (click to stop)" : "Start scan"}
         </button>
         <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
+        <ReaderForceStopButton
+          readerIds={Array.from(selectedReaders)}
+          onStopped={() => {
+            stopScan();
+            setRows([]);
+            setErr(null);
+          }}
+        />
         <label
           className="flex items-center gap-2 font-mono text-xs text-[var(--wms-muted)]"
           title="When a found tag passes the formula and has no status (or 'unknown'), flip it to LIVE and add it to inventory."

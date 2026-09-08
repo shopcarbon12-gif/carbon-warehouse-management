@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { CheckCircle2, Play, Radio, Square, Truck, XCircle } from "lucide-react";
 import { RssiProximitySlider, useRssiThreshold, passesRssi } from "@/components/shared/rssi-proximity-slider";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 
 /** Ship station reader (Office-POS / register area). */
 const READER_IP = "192.168.1.87";
@@ -159,6 +160,13 @@ export function ShipScanOutWorkspace() {
           <Radio className="h-3.5 w-3.5" />
           Ship reader .87 · {!readerOn ? "off" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
         </span>
+        <ReaderForceStopButton
+          networkAddresses={[READER_IP]}
+          onStopped={() => {
+            setReaderOn(false);
+            setSeen(new Map());
+          }}
+        />
         <div className="min-w-[300px] flex-1">
           <RssiProximitySlider value={threshold} onChange={setThreshold} hint="hold the item at the ship antenna" />
         </div>

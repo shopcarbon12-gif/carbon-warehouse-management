@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
@@ -977,6 +978,13 @@ export function EncodeItemsWorkspace() {
               physically place a tag in front of. Mirrors Cycle Counts + Hardware
               Config behavior. */}
           <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} />
+          <ReaderForceStopButton
+            readerIds={Array.from(selectedReaders)}
+            onStopped={() => {
+              setReading(false);
+              onClearSession();
+            }}
+          />
         </div>
 
         <button

@@ -25,6 +25,7 @@ import useSWR from "swr";
 import { Radio, Loader2, Search, X, Crosshair, Ruler } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   rssiBucket,
@@ -687,6 +688,13 @@ export function LocateTagWorkspace() {
           {hunting ? "Scanning… (click to stop)" : "Scan"}
         </button>
         <ReaderPicker selected={selectedReaders} onChange={setSelectedReaders} hidePosDedicated />
+        <ReaderForceStopButton
+          readerIds={Array.from(selectedReaders)}
+          onStopped={() => {
+            stopHunt();
+            setStats({});
+          }}
+        />
         <span className="ml-auto font-mono text-[10px] text-[var(--wms-muted)]">
           <strong className="text-[var(--wms-fg)]">{selectedReaders.size}</strong> reader(s) ·{" "}
           <strong className={contactCount > 0 ? "text-emerald-300" : "text-[var(--wms-muted)]"}>

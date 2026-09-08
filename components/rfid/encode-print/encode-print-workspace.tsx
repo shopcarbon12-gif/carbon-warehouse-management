@@ -23,6 +23,7 @@ import {
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
+import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
 import { LabelPreviewCanvas } from "@/components/tags-labels/label-preview-canvas";
 import { generateNonRfidTag203Batch } from "@/lib/utils/zpl-carbon-tag-203";
 import type { CarbonTagInput } from "@/lib/utils/zpl-carbon-tag";
@@ -646,6 +647,16 @@ export function EncodePrintWorkspace() {
           <Radio className="h-3.5 w-3.5" />
           Reader .87 · {readerErr ? "error" : !readerOn ? "off" : sessionActive ? "on" : readerId ? "starting…" : "not found"}
         </span>
+        <ReaderForceStopButton
+          networkAddresses={[READER_IP]}
+          onStopped={() => {
+            // reset() already wipes the reading list, the selection, the
+            // enrichment cache and the step — this only has to take the reader
+            // itself back down.
+            setReaderOn(false);
+            reset();
+          }}
+        />
         <div className="min-w-[320px] flex-1">
           <RssiProximitySlider
             value={threshold}
