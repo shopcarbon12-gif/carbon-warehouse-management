@@ -46,6 +46,11 @@
 
 <style>
   .carbon-set-pair {
+    /* Full width of the buy column, so it lines up with the option selects and
+       the Add to Cart button rather than floating at some inner width. */
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
     margin: 14px 0;
     padding: 12px 14px;
     border: 1px solid #d7e3f4;
@@ -54,6 +59,9 @@
     font-size: 0.9rem;
     line-height: 1.5;
   }
+  .carbon-set-pair__me { font-weight: 600; }
+  .carbon-set-pair__sub { color: #4a5568; font-size: 0.85rem; }
+  .carbon-set-pair__hr { border: 0; border-top: 1px solid #d7e3f4; margin: 10px 0; }
   .carbon-set-pair[hidden] { display: none; }
   .carbon-set-pair__title { font-weight: 700; margin: 0 0 4px; }
   .carbon-set-pair__row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
@@ -137,6 +145,15 @@
      silently keeping a stale choice. */
   var chosen = {};
 
+  /*
+   * Where the panel goes.
+   *
+   * Themes lay the quantity stepper and Add to Cart out as one row. Dropping the
+   * panel immediately before the button lands it INSIDE that row, which pushes
+   * the button onto its own line and breaks the layout. So walk up from the
+   * button until we find the ancestor that also contains the quantity input —
+   * that is the row — and put the panel above the whole thing.
+   */
   function ensurePanel() {
     if (panel) return panel;
     var form = document.querySelector('form[action*="/cart/add"]');
@@ -144,8 +161,17 @@
     panel = document.createElement("div");
     panel.className = "carbon-set-pair";
     panel.setAttribute("data-carbon-set-panel", "");
+
     var btn = form.querySelector('[type="submit"], [name="add"]');
-    if (btn && btn.parentNode) btn.parentNode.insertBefore(panel, btn);
+    if (!btn) { form.appendChild(panel); return panel; }
+    var qty = form.querySelector('[name="quantity"]');
+    var anchor = btn;
+    if (qty) {
+      var node = btn;
+      while (node && node !== form && !node.contains(qty)) node = node.parentNode;
+      if (node && node !== form) anchor = node;
+    }
+    if (anchor.parentNode) anchor.parentNode.insertBefore(panel, anchor);
     else form.appendChild(panel);
     return panel;
   }
@@ -194,6 +220,21 @@
     var html = "";
     var warn = false;
 
+    /* This product first, with its own price — the total on the button is the
+       sum of what is listed here, and leaving the item you are looking at out
+       of that list makes the arithmetic look wrong. */
+    if (mine) {
+      html += '<p class="carbon-set-pair__title">Complete set — added together</p>';
+      var meImg = (window.__carbonSetProduct && window.__carbonSetProduct.featured_image) || "";
+      html += '<div class="carbon-set-pair__row">' +
+        (meImg ? '<img src="' + meImg + '" alt="" />' : "") +
+        '<span><span class="carbon-set-pair__me">' +
+        ((window.__carbonSetProduct && window.__carbonSetProduct.title) || "This item") +
+        " — " + money(mine.price) + "</span><br>" +
+        '<span class="carbon-set-pair__sub">' + (mine.title || "") + " — the item you are viewing</span></span></div>" +
+        '<hr class="carbon-set-pair__hr" />';
+    }
+
     rows.forEach(function (r) {
       var img = (r.partner.featured_image || (r.partner.images || [])[0] || "");
       if (r.unavailable) {
@@ -220,11 +261,12 @@
         html += "</div>";
         return;
       }
-      html += '<p class="carbon-set-pair__title">Complete set — added together</p>' +
-        '<div class="carbon-set-pair__row">' +
+      html += '<div class="carbon-set-pair__row">' +
         (img ? '<img src="' + img + '" alt="" />' : "") +
-        "<span><strong>" + r.partner.title + "</strong> — <strong>" + money(r.variant.price) + "</strong><br>" +
-        (r.variant.title || "") + " — added to your cart automatically</span></div>";
+        '<span><span class="carbon-set-pair__me">' + r.partner.title +
+        " — " + money(r.variant.price) + "</span><br>" +
+        '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
+        " — added to your cart automatically</span></span></div>";
     });
 
     el.className = "carbon-set-pair" + (warn ? " carbon-set-pair--warn" : "");
