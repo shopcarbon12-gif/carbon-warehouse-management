@@ -48,6 +48,7 @@ const SNIPPETS = [
   "snippets/carbon-mega-menu.liquid",
   "snippets/carbon-sticky-atc.liquid",
   "snippets/carbon-buy-button-hover.liquid",
+  "snippets/carbon-size-availability.liquid",
 ];
 const RENDERS = [
   "{% render 'carbon-set-cart' %}",
@@ -55,6 +56,7 @@ const RENDERS = [
   "{% render 'carbon-mega-menu' %}",
   "{% render 'carbon-sticky-atc' %}",
   "{% render 'carbon-buy-button-hover' %}",
+  "{% render 'carbon-size-availability' %}",
 ];
 
 const files = await gql(

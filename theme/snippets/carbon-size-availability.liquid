@@ -1,0 +1,234 @@
+{% comment %}
+  Never land on a sold-out size.
+
+  Changing colour keeps whatever size was already selected. When that size does
+  not exist in the new colour, the theme resolves to the sold-out variant and
+  the page previews something the shopper cannot buy — they have to notice the
+  Sold out state and go hunting for a size that works.
+
+  This corrects the size instead: the nearest size that is actually in stock in
+  the colour they just picked, searching upward first and only then downward.
+  Upward first because a garment that runs small is the common case, and being
+  offered the next size up reads as a suggestion while the next size down reads
+  as a downgrade.
+
+  The correction happens in the change event's CAPTURE phase, before the theme's
+  own listener runs, so the theme resolves the corrected combination directly
+  and the shopper never sees the sold-out one flash past. A settle check runs
+  afterwards as well, for the case where the theme re-renders the picker from
+  the server and puts the stale size back.
+
+  Sizes are ordered by how they are worn, not alphabetically — this mirrors
+  lib/size-order.ts on the server, which does the same job for the Shopify push.
+  A size we do not recognise keeps its position rather than being moved
+  somewhere arbitrary.
+
+  Nothing happens when the selected combination is available, when the product
+  has no size option, or when no size in that colour is in stock — there is
+  nothing better to offer, and the theme's Sold out state is then correct.
+{% endcomment %}
+
+<script>
+(function () {
+  "use strict";
+
+  var LETTER = {
+    "OS": 1, "ONE SIZE": 1, "XXS": 10, "XS": 20, "XS/S": 25, "S": 30, "S/M": 35,
+    "M": 40, "M/L": 45, "L": 50, "L/XL": 55, "XL": 60, "XXL": 70, "2XL": 70,
+    "XXXL": 80, "3XL": 80, "4XL": 90, "XXXXL": 90
+  };
+  var UNRANKED = 1e6;
+
+  function norm(v) { return String(v == null ? "" : v).trim().toUpperCase(); }
+
+  function sizeRank(value) {
+    var k = norm(value);
+    if (!k) return UNRANKED;
+    if (Object.prototype.hasOwnProperty.call(LETTER, k)) return LETTER[k];
+    /* Offset so every numeric size sorts after every lettered one. In practice a
+       product uses one or the other. */
+    if (/^\d+(\.\d+)?$/.test(k)) return 1000 + parseFloat(k);
+    return UNRANKED;
+  }
+
+  var cache = {};
+
+  function productJson(handle) {
+    if (cache[handle]) return cache[handle];
+    cache[handle] = fetch("/products/" + handle + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (j) {
+        /* A rate-limited or errored response is HTML, so r.ok alone is not
+           enough — the payload has to actually look like a product. */
+        return j && j.variants ? j : null;
+      });
+    return cache[handle];
+  }
+
+  /* The picker is a set of <select name="options[...]"> inside <variant-selects>,
+     in option order. Radio inputs are handled too, for any section that uses
+     them instead. */
+  function controls(root) {
+    var out = [];
+    root.querySelectorAll("select[name^='options']").forEach(function (el) {
+      out.push({ el: el, name: el.name, get: function () { return el.value; },
+                 set: function (v) { el.value = v; } });
+    });
+    if (out.length) return out;
+
+    var groups = {};
+    root.querySelectorAll("input[type='radio'][name^='options']").forEach(function (el) {
+      (groups[el.name] = groups[el.name] || []).push(el);
+    });
+    Object.keys(groups).forEach(function (name) {
+      var els = groups[name];
+      out.push({
+        el: els[0], name: name,
+        get: function () {
+          for (var i = 0; i < els.length; i += 1) if (els[i].checked) return els[i].value;
+          return "";
+        },
+        set: function (v) {
+          els.forEach(function (e) { e.checked = norm(e.value) === norm(v); });
+        }
+      });
+    });
+    return out;
+  }
+
+  function optionLabel(name) {
+    var m = String(name || "").match(/options\[(.+)\]/);
+    return m ? m[1] : name;
+  }
+
+  function isSizeControl(c) { return /size/i.test(optionLabel(c.name)); }
+
+  function variantFor(product, values) {
+    var vs = product.variants || [];
+    for (var i = 0; i < vs.length; i += 1) {
+      var opts = vs[i].options || [];
+      if (opts.length !== values.length) continue;
+      var same = true;
+      for (var j = 0; j < opts.length; j += 1) {
+        if (norm(opts[j]) !== norm(values[j])) { same = false; break; }
+      }
+      if (same) return vs[i];
+    }
+    return null;
+  }
+
+  /*
+   * The size to move to, or null to leave things alone.
+   *
+   * Candidates are variants that match every other option exactly and are in
+   * stock. Nearest above the current size wins; if there is nothing above, the
+   * nearest below. Returning null when the current pick is already available is
+   * what stops this from fighting the theme, or itself.
+   */
+  function betterSize(product, values, sizeIndex) {
+    var current = variantFor(product, values);
+    if (current && current.available) return null;
+
+    var candidates = (product.variants || []).filter(function (v) {
+      if (!v.available) return false;
+      var opts = v.options || [];
+      if (opts.length !== values.length) return false;
+      for (var i = 0; i < opts.length; i += 1) {
+        if (i === sizeIndex) continue;
+        if (norm(opts[i]) !== norm(values[i])) return false;
+      }
+      return true;
+    });
+    if (!candidates.length) return null;
+
+    var want = sizeRank(values[sizeIndex]);
+    var up = null, down = null;
+    candidates.forEach(function (v) {
+      var r = sizeRank(v.options[sizeIndex]);
+      if (r >= want) { if (!up || r < sizeRank(up.options[sizeIndex])) up = v; }
+      else if (!down || r > sizeRank(down.options[sizeIndex])) down = v;
+    });
+    var pick = up || down;
+    return pick ? pick.options[sizeIndex] : null;
+  }
+
+  function correct(root, product, announce) {
+    var cs = controls(root);
+    if (cs.length < 2) return false;
+
+    var sizeIndex = -1;
+    for (var i = 0; i < cs.length; i += 1) if (isSizeControl(cs[i])) { sizeIndex = i; break; }
+    if (sizeIndex < 0) return false;
+
+    var values = cs.map(function (c) { return c.get(); });
+    var next = betterSize(product, values, sizeIndex);
+    if (!next || norm(next) === norm(values[sizeIndex])) return false;
+
+    cs[sizeIndex].set(next);
+    /* announce is false during the capture phase: the theme is about to read the
+       form anyway, and dispatching there would re-enter this handler. */
+    if (announce) {
+      cs[sizeIndex].el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    return true;
+  }
+
+  function rootFor(node) {
+    return (node.closest && (node.closest("variant-selects") || node.closest("variant-radios"))) || null;
+  }
+
+  function handleFor(root) {
+    var url = root.getAttribute("data-url") || window.location.pathname;
+    var m = String(url).match(/\/products\/([^/?#]+)/);
+    return m ? m[1] : null;
+  }
+
+  function boot() {
+    /* Delegated and on the document, so it survives the theme replacing the
+       picker markup after a section render. */
+    document.addEventListener("change", function (e) {
+      var root = rootFor(e.target);
+      if (!root) return;
+      var handle = handleFor(root);
+      if (!handle) return;
+
+      var cached = cache[handle] && cache[handle].__resolved;
+      /* Capture phase, so this runs before the theme's own listener: if the
+         product data is already in hand, the size is fixed here and the theme
+         resolves the corrected combination directly, with no sold-out flash. */
+      if (cached) correct(root, cached, false);
+
+      productJson(handle).then(function (p) {
+        if (!p) return;
+        cache[handle].__resolved = p;
+        /* Settle check: some themes re-render the picker from the server and put
+           the stale size back, so verify once the dust has settled. */
+        setTimeout(function () {
+          var live = document.querySelector("variant-selects, variant-radios") || root;
+          correct(live, p, true);
+        }, 350);
+      });
+    }, true);
+
+    var root = document.querySelector("variant-selects, variant-radios");
+    if (!root) return;
+    var handle = handleFor(root);
+    if (!handle) return;
+
+    productJson(handle).then(function (p) {
+      if (!p) return;
+      cache[handle].__resolved = p;
+      /* On load, only correct when the URL did not ask for a specific variant.
+         A link to an exact variant is a deliberate choice — a back-in-stock
+         email, a shared link — and overriding it would be wrong even when that
+         variant is sold out. */
+      if (/[?&]variant=/.test(window.location.search)) return;
+      correct(document.querySelector("variant-selects, variant-radios") || root, p, true);
+    });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
