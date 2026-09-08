@@ -9,10 +9,15 @@
      product name and price were simply covered. It now clears them.
 
   2. It stayed on screen indefinitely once shown, over the product photos. It
-     now fades out two seconds after scrolling stops, and scrolling down again
-     re-arms it, so scrolling back up shows it once more for another two
+     now fades out two seconds after scrolling stops, and scrolling down hides
+     it and re-arms, so scrolling back up shows it once more for another two
      seconds. That keeps it useful as a prompt without leaving it parked over
      the page.
+
+     The bar belongs to scrolling up — that is when the theme surfaces it, and
+     when a shopper heading back toward the buy button can use it. An earlier
+     version woke it on the way down too, which brought it back the moment you
+     resumed scrolling after it had timed out.
 
   The hide is opacity and visibility only — never display — so the theme's own
   show/hide logic keeps working underneath and this can never fight it for
@@ -46,6 +51,10 @@
 
     var timer = null;
     var lastY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    /* Scroll events fire for a pixel or two of drift, and on a touchpad the
+       direction flips constantly around zero. Below this the movement is not a
+       decision the shopper made. */
+    var THRESHOLD = 4;
 
     function rest() {
       el.classList.add("carbon-sticky-rest");
@@ -62,15 +71,18 @@
       "scroll",
       function () {
         var y = window.pageYOffset || document.documentElement.scrollTop || 0;
-        var goingUp = y < lastY;
+        var dy = y - lastY;
+        /* lastY is deliberately not updated below the threshold, so a run of
+           small scrolls still accumulates into a real direction. */
+        if (Math.abs(dy) < THRESHOLD) return;
         lastY = y;
 
-        if (!goingUp) {
-          /* Scrolling down re-arms it: the bar is not wanted now, but the next
-             upward scroll should get a fresh two seconds rather than finding it
-             already timed out. */
+        if (dy > 0) {
+          /* Scrolling down hides it and re-arms: the bar belongs to scrolling
+             up, and the next upward scroll should get a fresh two seconds
+             rather than finding the timer already spent. */
           if (timer) { clearTimeout(timer); timer = null; }
-          wake();
+          rest();
           return;
         }
         wake();

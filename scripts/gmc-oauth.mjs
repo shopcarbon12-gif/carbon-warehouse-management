@@ -56,13 +56,24 @@ else if (cmd === 'exchange') {
   if (!raw) { console.error('usage: exchange <code-or-full-redirect-url>'); process.exit(1); }
   let code = raw;
   if (raw.includes('code=')) { try { code = new URL(raw).searchParams.get('code'); } catch { code = decodeURIComponent(raw.split('code=')[1].split('&')[0]); } }
-  const body = new URLSearchParams({
-    code, client_id: need(e, 'GMC_OAUTH_CLIENT_ID'), client_secret: need(e, 'GMC_OAUTH_CLIENT_SECRET'),
-    redirect_uri: REDIRECT, grant_type: 'authorization_code',
-  });
-  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
-  const j = await r.json();
-  if (!j.refresh_token) { console.error('No refresh_token returned. Response:', JSON.stringify({ ...j, access_token: j.access_token ? '<redacted>' : undefined })); process.exit(1); }
+  // Google is picky about redirect_uri matching byte-for-byte; try both common forms.
+  let j = null;
+  for (const ru of [REDIRECT, REDIRECT + '/']) {
+    const body = new URLSearchParams({
+      code, client_id: need(e, 'GMC_OAUTH_CLIENT_ID'), client_secret: need(e, 'GMC_OAUTH_CLIENT_SECRET'),
+      redirect_uri: ru, grant_type: 'authorization_code',
+    });
+    const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body });
+    j = await r.json();
+    console.log(`  redirect_uri="${ru}" -> HTTP ${r.status}${j.refresh_token ? ' ✓' : ' (' + (j.error || '?') + ')'}`);
+    if (j.refresh_token) break;
+  }
+  if (!j.refresh_token) {
+    console.error('\nNo refresh_token. Last response:', JSON.stringify({ ...j, access_token: j.access_token ? '<redacted>' : undefined }));
+    console.error('invalid_grant usually means: the code was mistyped, already used, or has expired (~10 min).');
+    console.error('Get a fresh code with:  node scripts/gmc-oauth.mjs url');
+    process.exit(1);
+  }
   appendFileSync(ENVFILE, `\nGMC_OAUTH_REFRESH_TOKEN=${j.refresh_token}\n`);
   console.log(`refresh token stored in ${ENVFILE} (not printed). scope=${j.scope}`);
 }
