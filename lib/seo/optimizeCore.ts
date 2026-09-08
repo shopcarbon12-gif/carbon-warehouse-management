@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI from "openai";
+import { desiredHandle } from "./handle";
 import { withTimeout, parseJsonObjectFromText, asStringArray } from "@/lib/seo/aiText";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, SeoFieldKey, Scorecard } from "@/lib/seo/types";
+import { SEO_LIMITS } from "@/lib/seo/types";
 import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs } from "@/lib/remoteImage";
 import { stripSetBanner } from "@/lib/seo/setNotice";
 
@@ -121,6 +123,155 @@ export interface OptimizeResult {
   error?: string;
 }
 
+
+/**
+ * Guarantee the two fields Google actually shows.
+ *
+ * The model gets several passes at these and usually lands them, but "usually"
+ * is not a guarantee, and every remaining failure is mechanical: a few
+ * characters over, a few under, a missing keyword, no call to action. Those are
+ * repairs that do not need a language model, so the last word is deterministic
+ * and the score cannot come out below 100 for a reason arithmetic could fix.
+ *
+ * Nothing here invents a claim about the product. It reuses the words already
+ * in the copy, the product name, and the focus keyword.
+ */
+function cut(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const slice = t.slice(0, max + 1);
+  const at = slice.lastIndexOf(" ");
+  return (at > max * 0.6 ? slice.slice(0, at) : t.slice(0, max)).replace(/[\s,;:–—-]+$/, "");
+}
+
+function hasText(haystack: string, needle: string): boolean {
+  const n = String(needle || "").trim().toLowerCase();
+  if (!n) return true;
+  return haystack.toLowerCase().includes(n);
+}
+
+function titleCase(v: string): string {
+  return String(v || "").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Guarantee the SEO title.
+ *
+ * 30-60 characters with the focus keyword in it. Short titles are padded from
+ * facts already on the product — its name, its type, the keyword the copy was
+ * written around, the brand — rather than with adjectives, so nothing is
+ * claimed here that was not already true.
+ */
+export function finishSeoTitle(
+  value: string,
+  keyword: string,
+  productTitle: string,
+  productType = "",
+): string {
+  const min = SEO_LIMITS.seoTitleMin;
+  const max = SEO_LIMITS.seoTitleMax;
+  const kw = String(keyword || "").trim();
+  const name = String(productTitle || "").trim();
+
+  let v = String(value || "").trim();
+  if (!v) v = name || titleCase(kw);
+
+  /* Keyword first, then trim, then grow — in that order. Growing first and
+     trimming after can throw the padding straight back out, which is how a
+     rescued title ended up at 15 characters. */
+  if (kw && !hasText(v, kw)) {
+    const joined = `${v} - ${titleCase(kw)}`;
+    v = joined.length <= max ? joined : `${titleCase(kw)} - ${name}`;
+  }
+  if (v.length > max) {
+    const trimmed = cut(v, max);
+    /* Never trim the keyword back out: a shorter title beats one that no longer
+       says what the page is for. */
+    v = kw && !hasText(trimmed, kw) ? cut(`${titleCase(kw)} - ${name}`, max) : trimmed;
+  }
+
+  /* Pad from facts already on the product, most specific first, and only with a
+     part that still fits — overshooting the maximum to satisfy the minimum
+     trades one penalty for a bigger one. */
+  const parts = [
+    name,
+    titleCase(kw),
+    titleCase(productType),
+    /* Long enough to carry a very short product name over the minimum on its
+       own — "blazer" plus the brand alone still falls short — and true of every
+       live product rather than a claim about this one. */
+    "Shop Online at Carbon",
+    "Order Today",
+  ].filter(Boolean);
+  for (const part of parts) {
+    if (v.length >= min) break;
+    if (hasText(v, part)) continue;
+    const joined = `${v} - ${part}`;
+    if (joined.length <= max) v = joined;
+  }
+  return v;
+}
+
+/**
+ * Guarantee the meta description.
+ *
+ * 120-155 characters, containing the focus keyword and a call to action. Padding
+ * sentences state only what is already true of any live product — that it can be
+ * ordered, and where — so a guaranteed score never comes at the cost of a
+ * guaranteed claim.
+ */
+export function finishMetaDescription(
+  value: string,
+  keyword: string,
+  productTitle: string,
+  productType = "",
+): string {
+  const min = SEO_LIMITS.metaDescriptionMin;
+  const max = SEO_LIMITS.metaDescriptionMax;
+  const kw = String(keyword || "").trim();
+  const name = String(productTitle || "").trim();
+
+  let v = String(value || "").trim();
+  if (v && !/[.!?]$/.test(v)) v = `${v}.`;
+  if (!v) v = name ? `${name}.` : `${titleCase(kw)}.`;
+
+  if (kw && !hasText(v, kw)) v = `${titleCase(kw)}. ${v}`.trim();
+
+  const filler = [
+    kw ? `Shop ${kw} at Carbon.` : "",
+    name ? `${name} is available to order online today.` : "",
+    productType ? `Browse the full ${String(productType).toLowerCase()} range.` : "",
+    "Discover more from the Carbon collection.",
+    "Order online now.",
+  ].filter(Boolean);
+
+  for (const sentence of filler) {
+    if (v.length >= min) break;
+    if (hasText(v, sentence)) continue;
+    const joined = `${v} ${sentence}`;
+    /* Allow a sentence that lands inside the range, or that closes the gap
+       without running past the maximum. */
+    if (joined.length <= max) v = joined;
+  }
+
+  if (v.length > max) {
+    /* Leave room for the full stop the cut removes, so the result is <= max
+       rather than exactly one character over it. */
+    v = cut(v, max - 1);
+    if (!/[.!?]$/.test(v)) v = `${v}.`;
+    if (kw && !hasText(v, kw)) {
+      v = cut(`${titleCase(kw)}. ${v}`, max - 1);
+      if (!/[.!?]$/.test(v)) v = `${v}.`;
+    }
+  }
+
+  /* The scorer accepts a closing full stop OR an action word; the sentences
+     above always end in one, so this only catches a value that arrived
+     unpunctuated and long enough to need nothing else. */
+  if (!/[.!?]$/.test(v) && !/(shop|discover|buy|free|now|today|get)/i.test(v)) v = `${v}.`;
+  return v;
+}
+
 export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult> {
   const { context, apiKey } = input;
   const useVision = input.useVision !== false;
@@ -140,7 +291,13 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     (a) => /^https?:\/\//i.test(String(a.url || "")) && !String(a.altText || "").trim(),
   );
 
-  if (currentScores.overall >= OVERALL_TARGET && !missingAlt.length) {
+  /* The handle is derived, not written: the correct value is the product name
+     and a model has nothing to add to that. Computed up front so it applies on
+     the skip path too — a product whose copy is already perfect can still be
+     sitting on a slug left over from an older name. */
+  const nextHandle = desiredHandle(current.handle, current.title);
+
+  if (currentScores.overall >= OVERALL_TARGET && !missingAlt.length && !nextHandle) {
     return {
       skipped: true,
       focusKeyword: String((current as any).focusKeyword || ""),
@@ -239,7 +396,12 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     };
   }
 
-  const focusKeyword = String(parsed.focusKeyword || "").trim();
+  /* The scorer checks three fields against the focus keyword and counts an empty
+     one as a miss — deliberately, since that is what exposed the keyword never
+     being persisted. So it must never be empty: with no keyword from the model,
+     the product name is the keyword. */
+  const focusKeyword =
+    String(parsed.focusKeyword || "").trim() || String(cur.title || "").trim().toLowerCase();
   const secondaryKeywords = asStringArray(parsed.secondaryKeywords, 8);
   const rationale: Partial<Record<SeoFieldKey, string>> = {};
   if (parsed.rationale && typeof parsed.rationale === "object") {
@@ -326,6 +488,21 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     }
   }
   if (clamped) proposedScorecard = scoreAll(proposed);
+
+  /* Last word on the two fields Google shows, and on the handle. After the
+     clamp, so a repair here cannot be reverted by it. */
+  proposed.seoTitle = finishSeoTitle(proposed.seoTitle, focusKeyword, cur.title, cur.productType);
+  proposed.metaDescription = finishMetaDescription(
+    proposed.metaDescription,
+    focusKeyword,
+    cur.title,
+    cur.productType,
+  );
+  if (nextHandle) {
+    proposed.handle = nextHandle;
+    rationale.handle = `The URL should be the product name. Old links keep working: a 301 redirect from "${cur.handle}" is created when this is published.`;
+  }
+  proposedScorecard = scoreAll(proposed);
 
   const altMap = new Map<string, string>(
     (Array.isArray(parsed.imageAlts) ? parsed.imageAlts : [])

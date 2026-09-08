@@ -54,6 +54,9 @@ export async function POST(req: Request) {
   const { shop, token, apiVersion } = ctx;
 
   const input: Record<string, unknown> = { id: productId };
+  /* Filled in from the productUpdate response so the redirect can point at the
+     handle that actually exists. */
+  let assignedHandle = "";
   const seo: Record<string, string> = {};
   if (typeof fields.seoTitle === "string") seo.title = fields.seoTitle.trim();
   if (typeof fields.metaDescription === "string") seo.description = fields.metaDescription.trim();
@@ -100,7 +103,10 @@ export async function POST(req: Request) {
 
   if (hasProductUpdate) {
     const result = await runShopifyGraphql<{
-      productUpdate?: { userErrors?: Array<{ field: string[]; message: string }> };
+      productUpdate?: {
+        product?: { id: string; handle: string };
+        userErrors?: Array<{ field: string[]; message: string }>;
+      };
     }>({
       shop,
       token,
@@ -110,6 +116,7 @@ export async function POST(req: Request) {
       }`,
       variables: { input },
     });
+    assignedHandle = result.data?.productUpdate?.product?.handle || "";
     const userErrors = result.data?.productUpdate?.userErrors || [];
     if (!result.ok || result.errors || userErrors.length) {
       return NextResponse.json(
@@ -121,8 +128,14 @@ export async function POST(req: Request) {
   }
 
   // 301 redirect when the handle changed.
+  //
+  // The target is the handle Shopify actually assigned, not the one we asked
+  // for. When the clean handle is already taken Shopify silently appends a
+  // suffix, and redirecting to the handle we requested would point every old
+  // link at a 404.
   let redirectCreated = false;
-  const newHandle = typeof input.handle === "string" ? (input.handle as string) : "";
+  const assigned = String(assignedHandle || "").trim();
+  const newHandle = assigned || (typeof input.handle === "string" ? (input.handle as string) : "");
   if (newHandle && oldHandle && newHandle !== oldHandle.toLowerCase()) {
     const r = await runShopifyGraphql<{ urlRedirectCreate?: { userErrors?: Array<{ message: string }> } }>({
       shop,

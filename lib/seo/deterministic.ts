@@ -1,6 +1,7 @@
 // Deterministic, rule-based SEO scoring. Pure & isomorphic (no Node APIs) so it
 // can run in the API routes AND in the browser for instant re-scoring on edits.
 
+import { isHandleGood, slugifyHandle } from "./handle";
 import {
   type FieldScore,
   type Grade,
@@ -131,9 +132,20 @@ export function scoreHandle(fields: SeoFields): FieldScore {
     score -= 8;
     issues.push("Contains filler/stop words.");
   }
-  // The handle is a PRESERVED brand-name slug (e.g. "untimely-shirt"); it is not
-  // required to contain the descriptive focus keyword. Cleanliness is what matters.
-  return mk(score, issues, `${v.length} chars. A clean, brand-name URL slug.`);
+  // The handle must be the product name itself, hyphenated. A slug left over
+  // from an earlier name ("gifted-product" for the Gift Card) tells a shopper
+  // and a search engine two different things about the same page.
+  //
+  // A trailing "-2" is accepted: Shopify adds that when the clean handle is
+  // already taken, and treating it as wrong would rename the product on every
+  // run, collide again, and leave a trail of redirects that never converges.
+  if (!isHandleGood(v, fields.title)) {
+    score -= 20;
+    issues.push(`Does not match the product name (expected "${slugifyHandle(fields.title)}").`);
+  }
+  // The handle is not required to contain the descriptive focus keyword — the
+  // product name is the keyword that matters here.
+  return mk(score, issues, `${v.length} chars. The product name as a clean URL slug.`);
 }
 
 export function scoreTitle(fields: SeoFields): FieldScore {

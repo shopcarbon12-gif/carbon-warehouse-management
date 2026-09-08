@@ -928,7 +928,15 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         cur: Math.round(oj.currentScorecard?.overall ?? 0),
         prop: Math.round(oj.proposedScorecard?.overall ?? 0),
       });
-      setSeoAccept({ seoTitle: true, metaDescription: true, bodyHtml: true, tags: true });
+      /* The handle is only offered when it actually changes: an unchanged slug in
+         the accept list would issue a pointless write and a redirect to itself. */
+      setSeoAccept({
+        seoTitle: true,
+        metaDescription: true,
+        bodyHtml: true,
+        tags: true,
+        handle: String(oj.proposed?.handle || "") !== String(seoCurrent?.handle || ""),
+      });
       setOkMsg(oj.skipped ? "Already well-optimized." : "Review the proposal, then Save to Shopify.");
     } catch (e) {
       setOkMsg(null);
@@ -945,8 +953,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     setErr(null);
     try {
       const fields: Record<string, unknown> = {};
-      for (const f of ["seoTitle", "metaDescription", "bodyHtml", "tags"]) {
+      for (const f of ["seoTitle", "metaDescription", "bodyHtml", "tags", "handle"]) {
         if (seoAccept[f]) fields[f] = seoProposed[f];
+      }
+      /* Never write the handle it already has — that would create a 301 from the
+         product to itself. */
+      if (fields.handle && String(fields.handle) === String(seoCurrent?.handle || "")) {
+        delete fields.handle;
       }
 
       /* Alt text the optimizer wrote for images that had none. Without this the
@@ -1820,15 +1833,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       </div>
                       {seoProposed ? (
                         <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
-                          {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
+                          {(["seoTitle", "metaDescription", "handle", "bodyHtml", "tags"] as const).map((f) => {
                             const label =
                               f === "seoTitle"
                                 ? "SEO title"
                                 : f === "metaDescription"
                                   ? "Meta description"
-                                  : f === "bodyHtml"
-                                    ? "Description"
-                                    : "Tags";
+                                  : f === "handle"
+                                    ? "URL handle"
+                                    : f === "bodyHtml"
+                                      ? "Description"
+                                      : "Tags";
                             const cur = seoCurrent?.[f];
                             const prop = seoProposed?.[f];
                             const fmt = (v: unknown) =>
@@ -1876,15 +1891,17 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                             <div className="border-b border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/60 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
                               {seoBusy === "current" ? "Reading current Shopify SEO…" : "Current on Shopify"}
                             </div>
-                            {(["seoTitle", "metaDescription", "bodyHtml", "tags"] as const).map((f) => {
+                            {(["seoTitle", "metaDescription", "handle", "bodyHtml", "tags"] as const).map((f) => {
                               const label =
                                 f === "seoTitle"
                                   ? "SEO title"
                                   : f === "metaDescription"
                                     ? "Meta description"
-                                    : f === "bodyHtml"
-                                      ? "Description"
-                                      : "Tags";
+                                    : f === "handle"
+                                      ? "URL handle"
+                                      : f === "bodyHtml"
+                                        ? "Description"
+                                        : "Tags";
                               const cur = seoCurrent?.[f];
                               const fmt = (v: unknown) => (Array.isArray(v) ? v.join(", ") : String(v ?? ""));
                               const text = fmt(cur);
