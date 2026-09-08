@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
+  AlertTriangle,
   CheckCircle2,
   Loader2,
   Pencil,
@@ -121,6 +122,12 @@ export function EncodePrintWorkspace() {
 
   const [statusMsg, setStatusMsg] = useState("Press Start reader, then bring a tag to the .87 antenna.");
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  /**
+   * Non-fatal outcome: the chip WAS written but the label didn't print. Kept
+   * separate from `errMsg` so the flow still completes (the encode is real and
+   * must not be thrown away) while reading unmistakably as "not finished".
+   */
+  const [warnMsg, setWarnMsg] = useState<string | null>(null);
 
   // ── SSE: stream EPCs from .87; in verify, watch for the new EPC ──────
   useEffect(() => {
@@ -298,6 +305,7 @@ export function EncodePrintWorkspace() {
   const doEncode = useCallback(async () => {
     if (!effectiveEpc || !target || !readerId) return;
     setErrMsg(null);
+    setWarnMsg(null);
     setStep("encoding");
     setStatusMsg("Rotating DB…");
     try {
@@ -358,10 +366,34 @@ export function EncodePrintWorkspace() {
       setStatusMsg(`Printed ✓ — ${target?.sku}.`);
       setStep("done");
     } catch (e) {
-      setErrMsg(e instanceof Error ? e.message : "Printer unreachable at 192.168.1.220");
-      setStep("error");
+      // The chip is ALREADY written and the DB has already rotated by the time
+      // we get here, so a printer problem must not drop the operator into a
+      // dead "error" state — that presents finished work as a total failure and
+      // invites a pointless re-encode of a tag that is already correct.
+      //
+      // Why this fires: the printer sits on the warehouse LAN while this page
+      // is served over HTTPS, so the browser will not simply POST to it.
+      // Chrome sends a private-network preflight first, and the Zebra answers
+      // OPTIONS by closing the connection with no reply (verified against
+      // 192.168.1.220 — GET / and HEAD /pstprnt both 200 in ~20ms, OPTIONS
+      // returns an empty reply). The fetch then hangs until AbortSignal fires,
+      // surfacing Chrome's opaque DOMException "signal timed out".
+      //
+      // Print tags already treats an unreachable printer as a warning that
+      // keeps the created tags; this matches that behaviour.
+      const why =
+        e instanceof DOMException && (e.name === "TimeoutError" || e.name === "AbortError")
+          ? "no response within 10s — the browser cannot reach the LAN printer from the HTTPS site"
+          : e instanceof Error
+            ? e.message
+            : "printer fetch failed";
+      setWarnMsg(
+        `Chip written ✓${newEpc ? ` → ${newEpc}` : ""} — but the label did NOT print (${PRINTER_URL}: ${why}). ` +
+          `The tag is encoded and saved: reprint the label from Print tags. Do NOT re-encode this tag.`,
+      );
+      setStep("done");
     }
-  }, [carbonInput, target]);
+  }, [carbonInput, target, newEpc]);
 
   useEffect(() => {
     if (step === "printing" && !printStartedRef.current) {
@@ -385,6 +417,7 @@ export function EncodePrintWorkspace() {
     verifiedGuardRef.current = false;
     printStartedRef.current = false;
     setErrMsg(null);
+    setWarnMsg(null);
     setStatusMsg("Press Start reader, then bring a tag to the .87 antenna.");
     setStep("scan");
   }, []);
@@ -678,14 +711,28 @@ export function EncodePrintWorkspace() {
             {step === "encoding" || step === "printing" ? (
               <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[var(--wms-accent)]" />
             ) : step === "done" ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+              warnMsg ? (
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+              ) : (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+              )
             ) : step === "verify" ? (
               <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-amber-400" />
             ) : step === "error" ? (
               <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
             ) : null}
-            <span className={step === "error" ? "text-red-300" : step === "done" ? "text-emerald-300" : ""}>
-              {errMsg ?? statusMsg}
+            <span
+              className={
+                errMsg
+                  ? "text-red-300"
+                  : warnMsg
+                    ? "text-amber-300"
+                    : step === "done"
+                      ? "text-emerald-300"
+                      : ""
+              }
+            >
+              {errMsg ?? warnMsg ?? statusMsg}
             </span>
           </div>
 
