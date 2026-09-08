@@ -45,12 +45,10 @@ async function gql(query, variables) {
 const SNIPPETS = [
   "snippets/carbon-set-cart.liquid",
   "snippets/carbon-set-cart-guard.liquid",
-  "snippets/carbon-mega-menu.liquid",
 ];
 const RENDERS = [
   "{% render 'carbon-set-cart' %}",
   "{% render 'carbon-set-cart-guard' %}",
-  "{% render 'carbon-mega-menu' %}",
 ];
 
 const files = await gql(
