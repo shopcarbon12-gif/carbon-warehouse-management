@@ -106,6 +106,75 @@
   .carbon-set-pair__solo {
     transition: background-color .2s ease, color .2s ease;
   }
+
+  /* ---------- Quick view ----------
+     Shopify sends X-Frame-Options: DENY and frame-ancestors 'none' on
+     storefront pages, so an iframe of the product is not an option even on the
+     same origin. This is built from the product JSON the panel already fetched,
+     which also means opening it costs no extra request. */
+  .carbon-qv[hidden] { display: none; }
+  .carbon-qv {
+    position: fixed; inset: 0; z-index: 2147483000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; box-sizing: border-box;
+  }
+  .carbon-qv__scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+  .carbon-qv__box {
+    position: relative; background: #fff; border-radius: 10px;
+    width: min(880px, 100%); max-height: min(86vh, 760px);
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .carbon-qv__head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; border-bottom: 1px solid #e6e6e6; flex: 0 0 auto;
+  }
+  .carbon-qv__title {
+    margin: 0; font-size: 1rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em;
+  }
+  .carbon-qv__x {
+    margin-left: auto; border: 0; background: transparent; cursor: pointer;
+    font-size: 1.5rem; line-height: 1; padding: 4px 8px; border-radius: 4px;
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .carbon-qv__x:hover, .carbon-qv__x:focus-visible { background: #151515; color: #fff; }
+  .carbon-qv__body { display: flex; gap: 18px; padding: 16px; overflow: auto; }
+  @media (max-width: 699px) { .carbon-qv__body { flex-direction: column; } }
+  .carbon-qv__media { flex: 0 0 46%; }
+  .carbon-qv__main {
+    width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+    border-radius: 6px; background: #f4f4f4; display: block;
+  }
+  /* One row that scrolls, rather than wrapping: a second row of thumbnails sat
+     below the fold of the dialog body and was clipped. */
+  .carbon-qv__thumbs {
+    display: flex; gap: 6px; margin-top: 8px;
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;
+  }
+  .carbon-qv__thumb {
+    width: 46px; height: 46px; object-fit: cover; border-radius: 4px;
+    border: 1px solid #ddd; cursor: pointer; padding: 0; background: #fff;
+    flex: 0 0 auto;
+  }
+  .carbon-qv__thumb[aria-current="true"] { border-color: #151515; border-width: 2px; }
+  .carbon-qv__info { flex: 1 1 auto; min-width: 0; font-size: .9rem; line-height: 1.55; }
+  .carbon-qv__price { font-weight: 700; font-size: 1.05rem; margin: 0 0 2px; }
+  .carbon-qv__variant { color: #4a5568; margin: 0 0 10px; }
+  .carbon-qv__desc { color: #333; }
+  .carbon-qv__desc img { max-width: 100%; height: auto; }
+  .carbon-qv__foot {
+    padding: 12px 16px; border-top: 1px solid #e6e6e6; flex: 0 0 auto;
+    display: flex; gap: 10px; align-items: center;
+  }
+  .carbon-qv__full {
+    border: 1px solid #151515; background: #fff; color: #151515;
+    border-radius: 4px; padding: 8px 14px; font: inherit; font-size: .85rem;
+    text-decoration: none; display: inline-block;
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .carbon-qv__full:hover, .carbon-qv__full:focus-visible { background: #151515; color: #fff; }
+  .carbon-qv__note { color: #4a5568; font-size: .82rem; }
   .carbon-set-pair__solo:hover,
   .carbon-set-pair__solo:focus-visible { background: #151515; color: #fff; }
 </style>
@@ -175,34 +244,154 @@
   }
 
   /*
-   * Open a URL in a sized window, reporting whether it worked.
+   * Quick view — the matching piece, without leaving this page.
    *
-   * The caller only suppresses the normal navigation when this returns true, so
-   * a blocked popup still takes the shopper to the product rather than making
-   * the link look broken. The window is named, so a second click reuses it
-   * instead of stacking windows across the screen.
+   * An iframe was the obvious build and is not possible: Shopify serves
+   * storefront pages with X-Frame-Options: DENY and frame-ancestors 'none', so
+   * the browser refuses to embed them even from the same origin. This renders
+   * from the /products/<handle>.js payload the panel already holds, so opening
+   * it costs nothing and cannot go stale against what the panel is offering.
+   *
+   * "View full details" is kept as a real link for anything this summary does
+   * not carry — reviews, size guides, whatever the theme adds later.
    */
-  function openPopup(url) {
-    var sw = (window.screen && screen.availWidth) || 1200;
-    var sh = (window.screen && screen.availHeight) || 900;
-    /* Wide enough for the desktop product layout where there is room, but never
-       larger than the screen it has to fit on. */
-    var w = Math.max(420, Math.min(1040, sw - 160));
-    var h = Math.max(480, Math.min(920, sh - 120));
-    var left = Math.max(0, (sw - w) / 2) + (window.screenLeft || 0);
-    var top = Math.max(0, (sh - h) / 2) + (window.screenTop || 0);
-    var win;
-    try {
-      win = window.open(
-        url,
-        "carbonSetProduct",
-        "popup=yes,width=" + Math.round(w) + ",height=" + Math.round(h) +
-          ",left=" + Math.round(left) + ",top=" + Math.round(top) +
-          ",scrollbars=yes,resizable=yes"
-      );
-    } catch (e) { win = null; }
-    if (!win) return false;
-    try { win.focus(); } catch (e) {}
+  var qv = null;
+  var qvReturn = null;   /* element to hand focus back to on close */
+
+  /* The set banner is stripped out of the description here. The shopper is
+     looking at this piece from inside the set panel; telling them it belongs to
+     a set is the one thing they already know. */
+  function descriptionOf(product) {
+    var html = String(product.description || "");
+    var d = document.createElement("div");
+    d.innerHTML = html;
+    d.querySelectorAll(".carbon-set-note, script, style, iframe").forEach(function (n) {
+      n.parentNode.removeChild(n);
+    });
+    return d.innerHTML;
+  }
+
+  function buildQv() {
+    if (qv) return qv;
+    qv = document.createElement("div");
+    qv.className = "carbon-qv";
+    qv.hidden = true;
+    qv.setAttribute("role", "dialog");
+    qv.setAttribute("aria-modal", "true");
+    qv.innerHTML =
+      '<div class="carbon-qv__scrim" data-close></div>' +
+      '<div class="carbon-qv__box">' +
+        '<div class="carbon-qv__head">' +
+          '<h2 class="carbon-qv__title"></h2>' +
+          '<button type="button" class="carbon-qv__x" data-close aria-label="Close">&times;</button>' +
+        "</div>" +
+        '<div class="carbon-qv__body">' +
+          '<div class="carbon-qv__media">' +
+            '<img class="carbon-qv__main" alt="" />' +
+            '<div class="carbon-qv__thumbs"></div>' +
+          "</div>" +
+          '<div class="carbon-qv__info">' +
+            '<p class="carbon-qv__price"></p>' +
+            '<p class="carbon-qv__variant"></p>' +
+            '<div class="carbon-qv__desc"></div>' +
+          "</div>" +
+        "</div>" +
+        '<div class="carbon-qv__foot">' +
+          '<a class="carbon-qv__full" href="#">View full details</a>' +
+          '<span class="carbon-qv__note"></span>' +
+        "</div>" +
+      "</div>";
+    document.body.appendChild(qv);
+
+    qv.addEventListener("click", function (e) {
+      if (e.target.closest("[data-close]")) closeQv();
+    });
+    /* Escape closes, and the listener lives on the document so it works no
+       matter where focus has landed inside the dialog. */
+    document.addEventListener("keydown", function (e) {
+      if (!qv.hidden && (e.key === "Escape" || e.key === "Esc")) closeQv();
+    });
+    return qv;
+  }
+
+  function closeQv() {
+    if (!qv || qv.hidden) return;
+    qv.hidden = true;
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+    if (qvReturn && qvReturn.focus) { try { qvReturn.focus(); } catch (e) {} }
+    qvReturn = null;
+  }
+
+  /*
+   * Show a partner. Returns false when there is nothing to show, so the caller
+   * can let the link navigate normally rather than opening an empty dialog.
+   */
+  function openQuickView(handle, variantId, href, opener) {
+    var product = null;
+    for (var i = 0; i < partners.length; i += 1) {
+      if (partners[i].handle === handle) { product = partners[i]; break; }
+    }
+    if (!product) return false;
+
+    var variant = null;
+    if (variantId) {
+      var vs = product.variants || [];
+      for (var j = 0; j < vs.length; j += 1) {
+        if (String(vs[j].id) === String(variantId)) { variant = vs[j]; break; }
+      }
+    }
+
+    var box = buildQv();
+    qvReturn = opener || null;
+
+    var images = (product.images || []).slice(0, 8);
+    var lead = (variant && variant.featured_image && variant.featured_image.src) ||
+      product.featured_image || images[0] || "";
+
+    box.querySelector(".carbon-qv__title").textContent = product.title || "";
+    var main = box.querySelector(".carbon-qv__main");
+    main.src = lead;
+    main.alt = product.title || "";
+
+    var thumbs = box.querySelector(".carbon-qv__thumbs");
+    thumbs.innerHTML = "";
+    if (images.length > 1) {
+      images.forEach(function (src) {
+        var t = document.createElement("img");
+        t.className = "carbon-qv__thumb";
+        t.src = src;
+        t.alt = "";
+        t.setAttribute("aria-current", src === lead ? "true" : "false");
+        t.addEventListener("click", function () {
+          main.src = src;
+          thumbs.querySelectorAll(".carbon-qv__thumb").forEach(function (o) {
+            o.setAttribute("aria-current", o === t ? "true" : "false");
+          });
+        });
+        thumbs.appendChild(t);
+      });
+    }
+
+    /* The variant price, not the product's "from" price — this dialog is about
+       the exact piece that will be added to the cart. */
+    var price = variant ? variant.price : (product.price || 0);
+    box.querySelector(".carbon-qv__price").textContent = money(price);
+    box.querySelector(".carbon-qv__variant").textContent = variant
+      ? (variant.title || "") + (variant.available === false ? " — out of stock" : "")
+      : "";
+    box.querySelector(".carbon-qv__desc").innerHTML = descriptionOf(product);
+    box.querySelector(".carbon-qv__full").setAttribute("href", href);
+    box.querySelector(".carbon-qv__note").textContent = variant
+      ? "Added with your set at checkout."
+      : "";
+
+    box.hidden = false;
+    /* Stop the page behind from scrolling under the dialog. */
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    var x = box.querySelector(".carbon-qv__x");
+    if (x && x.focus) { try { x.focus(); } catch (e) {} }
     return true;
   }
 
@@ -319,6 +508,7 @@
         warn = true;
         html += '<p class="carbon-set-pair__title">Sold as an individual item</p>' +
           '<p>No spare <a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'data-qv-handle="' + r.partner.handle + '" ' +
           'href="/products/' + r.partner.handle + '">' + r.partner.title +
           "</a> is available in " + (colour || "this colour") +
           " — the remaining stock is reserved to keep other sets complete. " +
@@ -329,6 +519,7 @@
         warn = true;
         html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
           '<p><a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'data-qv-handle="' + r.partner.handle + '" ' +
           'href="/products/' + r.partner.handle + '">' + r.partner.title +
           "</a> is not available in your size. These sizes are in stock in " +
           (colour || "this colour") + ", or you can buy this piece on its own.</p>" +
@@ -353,8 +544,10 @@
          size that will be added. */
       var pHref = "/products/" + r.partner.handle + "?variant=" + r.variant.id;
       html += '<div class="carbon-set-pair__row">' +
-        (img ? '<a class="carbon-set-pair__pop" href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
-        '<span><a class="carbon-set-pair__link carbon-set-pair__me carbon-set-pair__name carbon-set-pair__pop" href="' + pHref + '">' +
+        (img ? '<a class="carbon-set-pair__pop" data-qv-handle="' + r.partner.handle +
+          '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
+        '<span><a class="carbon-set-pair__link carbon-set-pair__me carbon-set-pair__name carbon-set-pair__pop" ' +
+        'data-qv-handle="' + r.partner.handle + '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '">' +
         r.partner.title + "</a> — " +
         '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
         '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
@@ -375,16 +568,24 @@
     var solo = el.querySelector('[data-action="solo"]');
     if (solo) solo.addEventListener("click", addSolo);
 
-    /* The matching piece opens in its own window rather than replacing this
-       page. Looking at the partner is a glance, not a destination: navigating
-       away loses the colour and size already chosen here, and the shopper has
-       to find their way back and set them again. A window closes. */
+    /* The matching piece opens in a dialog on this page rather than replacing
+       it. Looking at the partner is a glance, not a destination: navigating away
+       loses the colour and size already chosen here, and the shopper has to find
+       their way back and set them again. */
     el.querySelectorAll("a.carbon-set-pair__pop").forEach(function (a) {
       a.addEventListener("click", function (e) {
         /* Leave the browser's own gestures alone — ctrl/cmd/shift-click and
            middle-click mean "open it my way", and hijacking those is rude. */
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-        if (openPopup(a.getAttribute("href"))) e.preventDefault();
+        var opened = openQuickView(
+          a.getAttribute("data-qv-handle"),
+          a.getAttribute("data-qv-variant"),
+          a.getAttribute("href"),
+          a
+        );
+        /* Only suppress the navigation if the dialog actually opened, so a
+           product we could not load still takes the shopper to its page. */
+        if (opened) e.preventDefault();
       });
     });
   }

@@ -14,12 +14,15 @@
  *   • Reader not currently managed by this supervisor → "reader_unmanaged"
  *   • Reader has an active antenna-test session → "reader_in_test_mode"
  *   • MonsoonReader binary exited non-zero → "binary_exit_<code>"
+ *   • MonsoonReader killed by a signal → "binary_segfault_enumerate" /
+ *     "binary_killed_<signal>" (see SEGFAULT_ERROR below)
  *   • MonsoonReader exceeded WRITE_TIMEOUT_MS → "write_timeout"
  *   • TCP connect failed (bridge unreachable) → "bridge_unreachable"
  *   • Tag not in field / write rejected → parsed from binary stderr
  */
 
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { log } from "./log.js";
 import type { MonsoonSupervisor } from "./monsoon-supervisor.js";
 import type { AgentEnv } from "./config.js";
@@ -45,6 +48,54 @@ const WRITE_TIMEOUT_MS = 25_000;
  * of the loop for C1/C2 targets.
  */
 const MONSOON_BINARY = "/opt/legacy-rfid/MonsoonReader";
+
+/**
+ * MR1 crashes with SIGSEGV inside its own startup radio enumeration —
+ * `SRad_EnumerateDrivers`, serradio.c:228 — every single time, at the
+ * identical instruction (0x5914e2 on this build; 666/666 of the kernel's
+ * recorded segfaults share that ip).
+ *
+ * The mechanism, read off the disassembly: after `Ser_GetSerialNumber`
+ * returns success, the binary narrows the radio's UTF-16LE serial number
+ * to ASCII with a do-while whose counter is `(len >> 1) - 1`. When the
+ * SA-2000 answers with an EMPTY serial number — success status, len 0 —
+ * that counter underflows to 0xFFFFFFFF and the loop walks a 2-byte read
+ * off the end of a 288-byte stack buffer until it reaches an unmapped
+ * page. Hence the fault addresses always sitting a few bytes past a page
+ * boundary, and hence the intermittency: whether the walk faults early or
+ * late is decided by the ASLR'd stack layout, not by the tag or the write.
+ *
+ * We cannot patch a 2016 third-party binary, so we treat it for what it
+ * is: a transient HOST-side crash that happens strictly BEFORE any Gen2
+ * traffic reaches the air. Nothing was written, so re-running is safe —
+ * and the retries below let the chip settle between attempts.
+ *
+ * Left unhandled this surfaced to the operator as the terminal, opaque
+ * "Chip-write failed: binary_exit_null — DB rotated, retry." (`code` is
+ * null on a signal death, so the old classifier stringified it into the
+ * error message), with the item's EPC already rotated in the DB.
+ */
+const SEGFAULT_ERROR = "binary_segfault_enumerate";
+/**
+ * Settle windows between segfault retries. Deliberately sized so the
+ * whole job — 4 s bridge acquire + up to four ~0.5 s crash-outs + these
+ * waits + one real write — finishes well inside the 60 s cap both encode
+ * workspaces poll the job for. A crashed run costs ~0.5 s (the binary
+ * dies during enumeration), so the wall-clock worst case is ~20 s.
+ */
+const SEGFAULT_BACKOFF_MS = [1_500, 4_000, 8_000];
+/**
+ * glibc block-buffers stdout when it is a pipe, so a SIGSEGV discards
+ * everything the binary had already printed — which is exactly why the
+ * original failures reported empty `stdout_tail`/`stderr_tail` and were
+ * undiagnosable from the DB alone. Running under `stdbuf -oL -eL` keeps
+ * the banner, the connection line and (critically) any `TAG_ACCESS`
+ * evidence even when the process dies mid-run. Verified against this
+ * binary on the agent VM: identical output, no behaviour change. stdbuf
+ * execs the target in the SAME process, so the timeout's process-group
+ * SIGKILL still reaches it.
+ */
+const STDBUF_BINARY = "/usr/bin/stdbuf";
 
 function isCPrefixTarget(epc: string): boolean {
   return /^[Cc][12]/.test(epc);
@@ -150,6 +201,33 @@ async function runOne(
       outcome = await runWriteTag(
         slot.host, slot.serialPort, job.old_epc, job.new_epc, slot.writePowerTenths, antenna,
       );
+      // MR1 segfaulted in its own startup radio enumeration (see
+      // SEGFAULT_ERROR). No Gen2 access reached the air, so re-running is
+      // safe: the target is still the OLD EPC either way. Retry on the
+      // SAME antenna — the crash says nothing about tag coupling, and
+      // advancing the antenna here would burn the reader's other ports on
+      // a host-side fault. Each settle window gives the SA-2000 time to
+      // finish answering with a real serial number.
+      for (
+        let attempt = 0;
+        !outcome.ok &&
+        outcome.error_msg === SEGFAULT_ERROR &&
+        attempt < SEGFAULT_BACKOFF_MS.length;
+        attempt++
+      ) {
+        const waitMs = SEGFAULT_BACKOFF_MS[attempt];
+        log.warn("encode-jobs: binary segfaulted in radio enumeration — settling and retrying", {
+          ...jobLogCtx,
+          antenna,
+          retry: attempt + 1,
+          of: SEGFAULT_BACKOFF_MS.length,
+          waitMs,
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+        outcome = await runWriteTag(
+          slot.host, slot.serialPort, job.old_epc, job.new_epc, slot.writePowerTenths, antenna,
+        );
+      }
       if (outcome.ok) {
         log.info("encode-jobs: write success", { ...jobLogCtx, antenna, ...outcome });
         break;
@@ -276,11 +354,19 @@ async function runWriteTag(
     let stdout = "";
     let timedOut = false;
     const binary = MONSOON_BINARY;
-    const child = spawn(binary, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      // detached so we can SIGKILL the whole process group on timeout
-      detached: true,
-    });
+    // Line-buffer the binary's output so a crash still yields its tail.
+    // Falls back to a direct spawn if coreutils' stdbuf isn't installed —
+    // losing the diagnostics is acceptable; failing the write is not.
+    const lineBuffered = existsSync(STDBUF_BINARY);
+    const child = spawn(
+      lineBuffered ? STDBUF_BINARY : binary,
+      lineBuffered ? ["-oL", "-eL", binary, ...args] : args,
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        // detached so we can SIGKILL the whole process group on timeout
+        detached: true,
+      },
+    );
     const killTimer = setTimeout(() => {
       timedOut = true;
       const pid = child.pid;
@@ -320,6 +406,7 @@ async function runWriteTag(
         signal,
         stdout_tail: stdout.slice(-400),
         stderr_tail: stderr.slice(-400),
+        line_buffered: lineBuffered,
         proxy_used: cPrefix,
         ...(proxyStats ? { proxy_stats: proxyStats } : {}),
       };
@@ -353,6 +440,29 @@ async function runWriteTag(
         /tag_access\s*:\s*cmd\s*=\s*write\s*,\s*write_bytes\s*=\s*0\b/i.test(stdout);
       if (code === 0 && committed) {
         resolve({ ok: true, meta });
+        return;
+      }
+      // Killed by a signal rather than exiting on its own. `code` is null
+      // here, which is what the classifier below used to stringify into
+      // the useless "binary_exit_null".
+      if (signal !== null) {
+        if (committed) {
+          // A TAG_ACCESS line with write_bytes > 0 is positive evidence
+          // straight off the wire: the EPC bank WAS programmed, and the
+          // process dying afterwards does not un-write it. Reporting a
+          // failure here would strand the operator with a correctly
+          // written chip marked failed. (Distinct from the 2026-05-26
+          // false-success bug, which was about inferring success from an
+          // exit code with NO TAG_ACCESS line at all.)
+          resolve({ ok: true, meta });
+          return;
+        }
+        resolve({
+          ok: false,
+          error_msg:
+            signal === "SIGSEGV" ? SEGFAULT_ERROR : `binary_killed_${signal}`,
+          meta,
+        });
         return;
       }
       let errSummary = "binary_exit_" + String(code);
