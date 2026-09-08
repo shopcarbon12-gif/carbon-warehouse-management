@@ -10,6 +10,7 @@ import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
   useRssiThreshold,
+  RSSI_NEAR_DEFAULT,
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 
@@ -237,7 +238,7 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
   const suppressedRef = useRef<Set<string>>(new Set());
 
   // RSSI proximity slider — shown ONLY when .15 is the single selected reader.
-  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.bulk-status.rssi");
+  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.bulk-status.rssi.v2", RSSI_NEAR_DEFAULT);
   const reader70Id = useMemo(() => {
     for (const loc of hcData?.locations ?? []) {
       for (const z of loc.zones ?? [])

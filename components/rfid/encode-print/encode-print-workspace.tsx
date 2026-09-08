@@ -19,6 +19,7 @@ import {
 import {
   RssiProximitySlider,
   useRssiThreshold,
+  RSSI_NEAR_DEFAULT,
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
@@ -41,8 +42,56 @@ type Hit = {
   color: string | null;
   price: string | null;
 };
-type Seen = { epc: string; rssi: number | null };
+/**
+ * What we know about a scanned chip, from /api/rfid/encode-resolve — the same
+ * endpoint (and therefore the same field set) the Encode Items table shows, so
+ * the operator sees identical information on both screens.
+ */
+type TagInfo = {
+  /** known = items row found · orphan = decodes but no row · foreign = not our prefix */
+  kind: "known" | "orphan" | "foreign";
+  sku: string | null;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  upc: string | null;
+  /** items.status — 'in-stock' renders as LIVE. Null for orphan/foreign. */
+  status: string | null;
+  binCode: string | null;
+  lastSeenAt: string | null;
+  systemId: number | null;
+  serial: number | null;
+};
+type Seen = { epc: string; rssi: number | null; info: TagInfo | null };
 type Step = "scan" | "encoding" | "verify" | "printing" | "done" | "error";
+
+type EncodeResolveResponse =
+  | {
+      ok: true;
+      status: "known" | "valid_orphan" | "foreign";
+      epc: string;
+      decoded?: { prefix: number; system_id: number; serial: number };
+      item?: {
+        id: string;
+        status: string;
+        custom_sku_id: string;
+        sku: string | null;
+        name: string | null;
+        color: string | null;
+        size: string | null;
+        upc: string | null;
+        bin_code: string | null;
+        last_seen_at: string | null;
+      };
+    }
+  | { ok: false; error?: string };
+
+/** 'in-stock' is the DB value; operators read it as LIVE everywhere in the UI. */
+function statusLabel(status: string | null | undefined): string {
+  if (!status) return "—";
+  if (status === "in-stock") return "LIVE";
+  return status.replace(/_/g, " ").toUpperCase();
+}
 
 type HcReader = { id: string; network_address: string | null };
 type HcTree = {
@@ -95,7 +144,7 @@ export function EncodePrintWorkspace() {
   useReaderWake({ active: readerOn, kind: "encode-items", networkAddresses: [READER_IP] });
   const sessionActive = readerOn && readerId !== null;
 
-  const [threshold, setThreshold] = useRssiThreshold("wms.encode-print.rssi");
+  const [threshold, setThreshold] = useRssiThreshold("wms.encode-print.rssi.v2", RSSI_NEAR_DEFAULT);
   const thresholdRef = useRef(threshold);
   useEffect(() => {
     thresholdRef.current = threshold;
@@ -112,6 +161,17 @@ export function EncodePrintWorkspace() {
   const [nextSerial, setNextSerial] = useState(0);
 
   // encode result + flow refs
+  /**
+   * Snapshot of the chip as it was BEFORE the rotation, taken at the moment the
+   * operator hits Encode. Held separately from `seen` because step 1's reading
+   * list is cleared on the way into verify — without this the Complete step
+   * could not show what the tag used to be.
+   */
+  const [oldTag, setOldTag] = useState<{ epc: string; info: TagInfo | null } | null>(null);
+  /** Serial minted for the new EPC by encode-claim. */
+  const [newSerial, setNewSerial] = useState<number | null>(null);
+  /** items.status the new row actually ended up at, per encode-finalize. */
+  const [newStatus, setNewStatus] = useState<string | null>(null);
   const [newEpc, setNewEpc] = useState<string | null>(null);
   const newEpcRef = useRef<string | null>(null);
   useEffect(() => {
@@ -128,6 +188,77 @@ export function EncodePrintWorkspace() {
    * must not be thrown away) while reading unmistakably as "not finished".
    */
   const [warnMsg, setWarnMsg] = useState<string | null>(null);
+
+  /**
+   * Resolve a scanned chip to its catalog/inventory record, once per EPC per
+   * session. Same endpoint the Encode Items table uses, so step 1 here shows
+   * the same information the operator already reads over there instead of a
+   * bare EPC they have to recognise from memory.
+   */
+  const resolvedRef = useRef<Set<string>>(new Set());
+  const enrichEpc = useCallback(async (epc: string) => {
+    if (resolvedRef.current.has(epc)) return;
+    resolvedRef.current.add(epc);
+    const apply = (info: TagInfo) =>
+      setSeen((prev) => {
+        const next = new Map(prev);
+        const cur = prev.get(epc);
+        // The caller adds the EPC in the same handler that kicks this off, so
+        // `cur` is normally present. Create the entry rather than dropping the
+        // result if the resolve somehow lands first — resolvedRef has already
+        // cached this EPC, so a dropped info would never be retried.
+        next.set(epc, cur ? { ...cur, info } : { epc, rssi: null, info });
+        return next;
+      });
+    try {
+      const r = await fetch("/api/rfid/encode-resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epc }),
+      });
+      const j = (await r.json().catch(() => null)) as EncodeResolveResponse | null;
+      if (!j || !("ok" in j) || !j.ok) {
+        // Allow a later re-read to retry rather than caching a non-answer.
+        resolvedRef.current.delete(epc);
+        return;
+      }
+      const base = {
+        sku: null,
+        name: null,
+        color: null,
+        size: null,
+        upc: null,
+        status: null,
+        binCode: null,
+        lastSeenAt: null,
+        systemId: j.decoded?.system_id ?? null,
+        serial: j.decoded?.serial ?? null,
+      };
+      if (j.status === "foreign") {
+        apply({ ...base, kind: "foreign", systemId: null, serial: null });
+        return;
+      }
+      if (j.status === "valid_orphan" || !j.item) {
+        apply({ ...base, kind: "orphan" });
+        return;
+      }
+      const it = j.item;
+      apply({
+        ...base,
+        kind: "known",
+        sku: it.sku,
+        name: it.name,
+        color: it.color,
+        size: it.size,
+        upc: it.upc,
+        status: it.status,
+        binCode: it.bin_code,
+        lastSeenAt: it.last_seen_at,
+      });
+    } catch {
+      resolvedRef.current.delete(epc);
+    }
+  }, []);
 
   // ── SSE: stream EPCs from .87; in verify, watch for the new EPC ──────
   useEffect(() => {
@@ -170,18 +301,20 @@ export function EncodePrintWorkspace() {
           const rssi = typeof rssiMap[epc] === "number" ? rssiMap[epc] : null;
           const cur = next.get(epc);
           if (!cur) {
-            next.set(epc, { epc, rssi });
+            next.set(epc, { epc, rssi, info: null });
             changed = true;
           } else if (rssi != null && (cur.rssi == null || rssi > cur.rssi)) {
-            next.set(epc, { epc, rssi });
+            next.set(epc, { ...cur, rssi });
             changed = true;
           }
         }
         return changed ? next : prev;
       });
+      // Enrich outside the setState updater — one lookup per EPC per session.
+      for (const epc of list) void enrichEpc(epc);
     };
     return () => es.close();
-  }, [sessionActive, readerId]);
+  }, [sessionActive, readerId, enrichEpc]);
 
   // Proximity-filtered, strongest-first reading list.
   const visible = useMemo(
@@ -336,6 +469,12 @@ export function EncodePrintWorkspace() {
     if (!effectiveEpc || !target || !readerId) return;
     setErrMsg(null);
     setWarnMsg(null);
+    // Capture what the chip WAS before we rotate it — the reading list is
+    // cleared on the way into verify, so this is the only surviving record of
+    // the old tag by the time the Complete step renders it.
+    setOldTag({ epc: effectiveEpc, info: seen.get(effectiveEpc)?.info ?? null });
+    setNewSerial(null);
+    setNewStatus(null);
     setStep("encoding");
     setStatusMsg("Rotating DB…");
     try {
@@ -354,6 +493,7 @@ export function EncodePrintWorkspace() {
         return;
       }
       setNewEpc(j.epc);
+      setNewSerial(j.serial);
       // Only a confirmed chip-write earns LIVE. Without a queued job nothing
       // proves the chip took the write, so the row stays 'unknown' as before.
       let live = false;
@@ -368,6 +508,7 @@ export function EncodePrintWorkspace() {
       } else {
         setStatusMsg(`DB rotated → ${j.epc} (no chip-write job queued).`);
       }
+      setNewStatus(live ? "in-stock" : "unknown");
       // Refresh the reading section and wait for the re-read.
       verifiedGuardRef.current = false;
       setSeen(new Map());
@@ -382,7 +523,7 @@ export function EncodePrintWorkspace() {
       setErrMsg(e instanceof Error ? e.message : "network error");
       setStep("error");
     }
-  }, [effectiveEpc, target, readerId, pollJob, promoteLive]);
+  }, [effectiveEpc, target, readerId, pollJob, promoteLive, seen]);
 
   // ── Print (fires when step enters "printing") ────────────────────────
   const doPrint = useCallback(async () => {
@@ -452,6 +593,10 @@ export function EncodePrintWorkspace() {
     setHits([]);
     setSearchOpen(false);
     setNewEpc(null);
+    setOldTag(null);
+    setNewSerial(null);
+    setNewStatus(null);
+    resolvedRef.current.clear();
     verifiedGuardRef.current = false;
     printStartedRef.current = false;
     setErrMsg(null);
@@ -600,25 +745,75 @@ export function EncodePrintWorkspace() {
                     const sel = s.epc === effectiveEpc;
                     const pct =
                       s.rssi == null ? 60 : Math.max(6, Math.min(100, Math.round(((s.rssi + 90) / 70) * 100)));
+                    const info = s.info;
                     return (
                       <button
                         key={s.epc}
                         type="button"
                         onClick={() => setSelectedEpc(s.epc)}
                         className={
-                          "flex w-full items-center gap-3 border-b border-[var(--wms-border)]/50 px-3 py-2 text-left last:border-b-0 " +
+                          "block w-full border-b border-[var(--wms-border)]/50 px-3 py-2 text-left last:border-b-0 " +
                           (sel
                             ? "bg-[var(--wms-accent)]/10 shadow-[inset_3px_0_0_var(--wms-accent)]"
                             : "hover:bg-white/[0.03]")
                         }
                       >
-                        <span className="font-mono text-xs font-semibold text-teal-300 max-md:min-w-0 max-md:truncate" title={s.epc}>{s.epc}</span>
-                        <span className="ml-auto h-[5px] w-[54px] overflow-hidden rounded bg-[#23304a] max-md:shrink-0">
-                          <i className="block h-full bg-[var(--wms-accent)]" style={{ width: `${pct}%` }} />
-                        </span>
-                        <span className="w-[64px] text-right font-mono text-xs text-[var(--wms-muted)]">
-                          {s.rssi == null ? "—" : `${s.rssi} dBm`}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="font-mono text-xs font-semibold text-teal-300 max-md:min-w-0 max-md:truncate"
+                            title={s.epc}
+                          >
+                            {s.epc}
+                          </span>
+                          <span className="ml-auto h-[5px] w-[54px] overflow-hidden rounded bg-[#23304a] max-md:shrink-0">
+                            <i className="block h-full bg-[var(--wms-accent)]" style={{ width: `${pct}%` }} />
+                          </span>
+                          <span className="w-[64px] shrink-0 text-right font-mono text-xs text-[var(--wms-muted)]">
+                            {s.rssi == null ? "—" : `${s.rssi} dBm`}
+                          </span>
+                        </div>
+                        {/* Same fields the Encode Items table resolves, so the
+                            operator identifies the tag without leaving this page. */}
+                        {info === null ? (
+                          <div className="mt-1 font-mono text-[10px] text-[var(--wms-muted)]">
+                            resolving…
+                          </div>
+                        ) : info.kind === "foreign" ? (
+                          <div className="mt-1 font-mono text-[10px] text-amber-300/80">
+                            FOREIGN — not a Carbon tag
+                          </div>
+                        ) : info.kind === "orphan" ? (
+                          <div className="mt-1 font-mono text-[10px] text-amber-300/80">
+                            ORPHAN — decodes, no item row
+                            {info.serial != null ? ` · sn ${info.serial}` : ""}
+                          </div>
+                        ) : (
+                          <div className="mt-1 space-y-0.5">
+                            <div className="truncate text-[12px] text-[var(--wms-fg)]">
+                              {info.name ?? "—"}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] text-[var(--wms-muted)]">
+                              <span className="text-[var(--wms-fg)]/70">{info.sku ?? "—"}</span>
+                              <span>· {info.size ?? "—"}</span>
+                              <span>· {info.color ?? "—"}</span>
+                              {info.upc ? <span>· UPC {info.upc}</span> : null}
+                              {info.serial != null ? <span>· sn {info.serial}</span> : null}
+                              {info.binCode ? <span>· bin {info.binCode}</span> : null}
+                              <span
+                                className={
+                                  "rounded px-1.5 py-px " +
+                                  (info.status === "in-stock"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : info.status === "sold"
+                                      ? "bg-red-500/15 text-red-300"
+                                      : "bg-white/10 text-[var(--wms-muted)]")
+                                }
+                              >
+                                {statusLabel(info.status)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </button>
                     );
                   })
@@ -733,6 +928,69 @@ export function EncodePrintWorkspace() {
                   </div>
                 ) : null}
 
+                {/* Complete: the full before/after record. An encode is a
+                    destructive identity swap, so show both sides rather than
+                    just the new hex string. */}
+                {step === "done" && newEpc ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <TagCard
+                      title="Old tag — replaced"
+                      tone="old"
+                      epc={oldTag?.epc ?? "—"}
+                      rows={[
+                        { k: "Item", v: oldTag?.info?.name },
+                        { k: "SKU", v: oldTag?.info?.sku },
+                        { k: "Size", v: oldTag?.info?.size },
+                        { k: "Color", v: oldTag?.info?.color },
+                        { k: "UPC", v: oldTag?.info?.upc },
+                        { k: "Serial", v: oldTag?.info?.serial ?? null },
+                        { k: "Bin", v: oldTag?.info?.binCode },
+                        {
+                          k: "Status",
+                          v: oldTag?.info
+                            ? `${statusLabel(oldTag.info.status)} (at scan)`
+                            : null,
+                        },
+                        {
+                          k: "Last seen",
+                          v: oldTag?.info?.lastSeenAt
+                            ? new Date(oldTag.info.lastSeenAt).toLocaleString()
+                            : null,
+                        },
+                      ]}
+                    />
+                    <TagCard
+                      title="New tag — written"
+                      tone="new"
+                      epc={newEpc}
+                      rows={[
+                        { k: "Item", v: target?.description },
+                        { k: "SKU", v: target?.sku },
+                        { k: "Size", v: target?.size },
+                        { k: "Color", v: target?.color },
+                        { k: "UPC", v: target?.upc },
+                        { k: "Serial", v: newSerial },
+                        { k: "Price", v: target?.price ? `$${target.price}` : null },
+                        { k: "Sys ID", v: target?.ls_system_id },
+                        {
+                          k: "Status",
+                          v: (
+                            <span
+                              className={
+                                newStatus === "in-stock"
+                                  ? "text-emerald-300"
+                                  : "text-amber-300"
+                              }
+                            >
+                              {statusLabel(newStatus)}
+                            </span>
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
+                ) : null}
+
                 {step === "verify" ? (
                   <p className="text-[var(--wms-muted)]">
                     Reading section refreshed. The label prints <b className="text-[var(--wms-fg)]">only</b>{" "}
@@ -791,6 +1049,71 @@ export function EncodePrintWorkspace() {
             <p className="text-xs text-[var(--wms-muted)]">Pick a SKU to preview its non-RFID label.</p>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** One labelled field inside a TagCard. Renders "—" for anything missing. */
+function DetailRow({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <span className="w-[68px] shrink-0 text-[10px] uppercase tracking-wider text-[var(--wms-muted)]">
+        {k}
+      </span>
+      <span className="min-w-0 flex-1 break-all font-mono text-[11px] text-[var(--wms-fg)]">
+        {v === null || v === undefined || v === "" ? "—" : v}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Full record of one chip, shown side by side on the Complete step so the
+ * operator can see exactly what the tag was and what it became — the encode is
+ * a destructive identity swap, and "new tag: <hex>" alone gave them no way to
+ * confirm the right item was rotated.
+ */
+function TagCard({
+  title,
+  tone,
+  epc,
+  rows,
+}: {
+  title: string;
+  tone: "old" | "new";
+  epc: string;
+  rows: { k: string; v: React.ReactNode }[];
+}) {
+  return (
+    <div
+      className={
+        "rounded-lg border p-3 " +
+        (tone === "new"
+          ? "border-emerald-400/40 bg-emerald-500/[0.06]"
+          : "border-[var(--wms-border)] bg-black/20")
+      }
+    >
+      <div
+        className={
+          "mb-2 text-[10px] font-semibold uppercase tracking-wider " +
+          (tone === "new" ? "text-emerald-300" : "text-[var(--wms-muted)]")
+        }
+      >
+        {title}
+      </div>
+      <div
+        className={
+          "mb-2 break-all font-mono text-xs font-semibold " +
+          (tone === "new" ? "text-emerald-300" : "text-[var(--wms-muted)] line-through")
+        }
+      >
+        {epc}
+      </div>
+      <div className="space-y-1">
+        {rows.map((r) => (
+          <DetailRow key={r.k} k={r.k} v={r.v} />
+        ))}
       </div>
     </div>
   );

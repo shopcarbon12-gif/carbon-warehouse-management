@@ -47,6 +47,7 @@ import { useReaderWake } from "@/components/shared/use-reader-wake";
 import {
   RssiProximitySlider,
   useRssiThreshold,
+  RSSI_NEAR_DEFAULT,
   passesRssi,
 } from "@/components/shared/rssi-proximity-slider";
 
@@ -204,7 +205,7 @@ export function EncodeItemsWorkspace() {
 
   // RSSI proximity slider — shown ONLY when .15 is the single selected reader.
   // (RSSI across multiple readers at different distances is meaningless.)
-  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.encode-items.rssi");
+  const [rssiThreshold, setRssiThreshold] = useRssiThreshold("wms.encode-items.rssi.v2", RSSI_NEAR_DEFAULT);
   const reader70Id = useMemo(() => {
     for (const loc of hcData?.locations ?? []) {
       for (const z of loc.zones ?? [])

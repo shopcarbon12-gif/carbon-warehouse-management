@@ -17,6 +17,18 @@ import { useCallback, useEffect, useState } from "react";
 export const RSSI_MIN = -90;
 export const RSSI_MAX = -20;
 export const RSSI_DEFAULT = -50;
+/**
+ * Tighter starting point for the one-tag-at-a-time bench workflows — Bulk
+ * status, Encode & Print, Encode Items (operator, 2026-09-08). Those screens
+ * want only the tag physically presented to the antenna, not the shelf stock
+ * behind it, so they start nearer than the general −50.
+ *
+ * NOTE: this is only the value used when nothing is stored yet. The three
+ * screens bumped their storage keys to `.v2` when adopting it, so an operator
+ * who had already dragged the slider actually receives the new default once
+ * instead of silently keeping the old saved position.
+ */
+export const RSSI_NEAR_DEFAULT = -30;
 
 /** Clamp + validate an RSSI value to the slider's range. */
 function clampRssi(n: number): number {
