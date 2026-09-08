@@ -377,11 +377,45 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     })();
   }, [rows]);
 
-  const allChecked = rows.size > 0 && checked.size === rows.size;
+  /**
+   * The rows actually on screen. Defined here (rather than next to its only
+   * other consumer, the table) because the header checkbox must be scoped to
+   * it — see toggleAll.
+   */
+  const sortedRows = useMemo(() => {
+    const arr = [...rows.values()];
+    return showRssi ? arr.filter((r) => passesRssi(r.rssi, rssiThreshold)) : arr;
+  }, [rows, showRssi, rssiThreshold]);
+  const visibleEpcs = useMemo(() => sortedRows.map((r) => r.epc), [sortedRows]);
+
+  /**
+   * Select-all operates ONLY on what the operator can see.
+   *
+   * It used to stage every scanned EPC (`rows`), ignoring the proximity slider
+   * entirely — so on a reader picking up shelf stock behind the bench, one
+   * click staged tags that were never on screen and Apply then changed their
+   * status. Scoping it to the filtered rows makes the checkbox mean what it
+   * looks like it means.
+   *
+   * Un-checking clears only the visible rows too, so a tag the operator
+   * deliberately checked before tightening the slider is not silently dropped.
+   * `checkedHiddenCount` surfaces any such rows, because Apply still acts on
+   * the full checked set.
+   */
+  const allChecked =
+    visibleEpcs.length > 0 && visibleEpcs.every((e) => checked.has(e));
   const toggleAll = () => {
-    if (allChecked) setChecked(new Set());
-    else setChecked(new Set(rows.keys()));
+    const next = new Set(checked);
+    if (allChecked) for (const e of visibleEpcs) next.delete(e);
+    else for (const e of visibleEpcs) next.add(e);
+    setChecked(next);
   };
+  const checkedHiddenCount = useMemo(() => {
+    const vis = new Set(visibleEpcs);
+    let n = 0;
+    for (const e of checked) if (!vis.has(e)) n++;
+    return n;
+  }, [checked, visibleEpcs]);
   const toggleOne = (epc: string) => {
     const next = new Set(checked);
     if (next.has(epc)) next.delete(epc);
@@ -452,10 +486,6 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
     }
   };
 
-  const sortedRows = useMemo(() => {
-    const arr = [...rows.values()];
-    return showRssi ? arr.filter((r) => passesRssi(r.rssi, rssiThreshold)) : arr;
-  }, [rows, showRssi, rssiThreshold]);
   const targetOption = options.find((o) => o.value === target);
   const applyDisabled = busy || checked.size === 0;
 
@@ -552,6 +582,15 @@ export function BulkStatusWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean })
         <span className="ml-auto font-mono text-[10px] text-[var(--wms-muted)] max-md:w-full max-md:text-right max-md:text-xs">
           <strong className="text-[var(--wms-fg)]">{rows.size}</strong> scanned ·{" "}
           <strong className="text-[var(--wms-fg)]">{checked.size}</strong> checked
+          {checkedHiddenCount > 0 ? (
+            // Apply acts on every checked EPC, so a row checked before the
+            // slider was tightened would otherwise change status off-screen.
+            <>
+              {" · "}
+              <strong className="text-amber-300">{checkedHiddenCount}</strong>{" "}
+              <span className="text-amber-300">checked but not shown</span>
+            </>
+          ) : null}
         </span>
       </div>
 

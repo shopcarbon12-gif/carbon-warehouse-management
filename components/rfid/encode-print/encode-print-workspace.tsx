@@ -859,8 +859,19 @@ export function EncodePrintWorkspace() {
                 </p>
               ) : null}
 
-              {/* SKU search */}
-              <div className="relative mt-4">
+              {/* SKU search.
+                  The instruction earns its place: this box sits directly under
+                  a list of tags, so it reads like a filter for that list. It is
+                  the opposite — it chooses the identity the selected chip gets
+                  REWRITTEN to, which is destructive and not undoable from here. */}
+              <h2 className="mb-1 mt-5 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
+                2 · Pick the SKU to encode onto the selected tag
+              </h2>
+              <p className="mb-2 font-mono text-[11px] leading-snug text-[var(--wms-muted)]">
+                Search by item name, SKU or UPC. The tag selected above is
+                rewritten to this item — it does not filter the list.
+              </p>
+              <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--wms-muted)]" />
                 <input
                   value={q}
