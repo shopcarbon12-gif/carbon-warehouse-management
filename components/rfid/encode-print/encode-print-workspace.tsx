@@ -302,6 +302,36 @@ export function EncodePrintWorkspace() {
     return false;
   }, []);
 
+  /**
+   * A CONFIRMED chip-write is the moment the new tag becomes real, so promote
+   * it out of the 'unknown' staging state `encode-claim` inserts — the operator
+   * should not have to set the status by hand after a successful encode. This
+   * is the same endpoint the handheld calls once `writeEpcTag = true`, and it
+   * also flips the encode_events audit row from 'pending' to 'ok'.
+   *
+   * `oldEpc` is deliberately NOT sent. Passing it would additionally hard-DELETE
+   * the old chip's items row — a separate decision from "mark the new tag live",
+   * so it stays opt-in rather than riding along with this change.
+   *
+   * Non-fatal: the chip is written either way. If promotion fails we say so
+   * rather than pretending, and the operator can still set the status manually.
+   */
+  const promoteLive = useCallback(async (epc: string): Promise<boolean> => {
+    try {
+      const r = await fetch("/api/rfid/encode-finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newEpc: epc, promoteNew: true }),
+      });
+      const j = (await r.json().catch(() => null)) as
+        | { ok?: true; livePromoted?: boolean }
+        | null;
+      return Boolean(j?.livePromoted);
+    } catch {
+      return false;
+    }
+  }, []);
+
   const doEncode = useCallback(async () => {
     if (!effectiveEpc || !target || !readerId) return;
     setErrMsg(null);
@@ -324,6 +354,9 @@ export function EncodePrintWorkspace() {
         return;
       }
       setNewEpc(j.epc);
+      // Only a confirmed chip-write earns LIVE. Without a queued job nothing
+      // proves the chip took the write, so the row stays 'unknown' as before.
+      let live = false;
       if (j.jobId) {
         setStatusMsg("Writing chip via .87…");
         const ok = await pollJob(j.jobId);
@@ -331,6 +364,7 @@ export function EncodePrintWorkspace() {
           setStep("error");
           return;
         }
+        live = await promoteLive(j.epc);
       } else {
         setStatusMsg(`DB rotated → ${j.epc} (no chip-write job queued).`);
       }
@@ -338,13 +372,17 @@ export function EncodePrintWorkspace() {
       verifiedGuardRef.current = false;
       setSeen(new Map());
       setSelectedEpc(null);
-      setStatusMsg(`Wrote ✓ → ${j.epc}. Bring the tag back to .87 to confirm…`);
+      setStatusMsg(
+        `Wrote ✓ → ${j.epc}${
+          j.jobId ? (live ? " · status LIVE" : " · status NOT set to LIVE — set it manually") : ""
+        }. Bring the tag back to .87 to confirm…`,
+      );
       setStep("verify");
     } catch (e) {
       setErrMsg(e instanceof Error ? e.message : "network error");
       setStep("error");
     }
-  }, [effectiveEpc, target, readerId, pollJob]);
+  }, [effectiveEpc, target, readerId, pollJob, promoteLive]);
 
   // ── Print (fires when step enters "printing") ────────────────────────
   const doPrint = useCallback(async () => {
@@ -505,6 +543,40 @@ export function EncodePrintWorkspace() {
             </div>
           );
         })}
+      </div>
+
+      {/* Status bar — full width, directly under the stepper. Deliberately NOT
+          inside the label-preview card: this is the one line that reports what
+          the flow is doing, and beside the tag artwork it sat in the easiest
+          place on the page to miss. */}
+      <div
+        className={
+          "flex items-start gap-2 rounded-lg border px-3 py-2 text-sm " +
+          (errMsg
+            ? "border-red-400/40 bg-red-500/10 text-red-200"
+            : warnMsg
+              ? "border-amber-400/40 bg-amber-500/10 text-amber-200"
+              : step === "done"
+                ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                : "border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-fg)]")
+        }
+      >
+        {step === "encoding" || step === "printing" ? (
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[var(--wms-accent)]" />
+        ) : step === "done" ? (
+          warnMsg ? (
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+          )
+        ) : step === "verify" ? (
+          <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-amber-400" />
+        ) : step === "error" ? (
+          <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+        ) : (
+          <Radio className="mt-0.5 h-4 w-4 shrink-0 text-[var(--wms-muted)]" />
+        )}
+        <span>{errMsg ?? warnMsg ?? statusMsg}</span>
       </div>
 
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1fr_380px]">
@@ -705,36 +777,8 @@ export function EncodePrintWorkspace() {
         {/* RIGHT — status + label preview */}
         <div className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4">
           <h2 className="mb-3 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
-            {target ? `Label preview · ${target.sku}` : "Status"}
+            {target ? `Label preview · ${target.sku}` : "Label preview"}
           </h2>
-          <div className="mb-3 flex items-start gap-2 text-sm">
-            {step === "encoding" || step === "printing" ? (
-              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[var(--wms-accent)]" />
-            ) : step === "done" ? (
-              warnMsg ? (
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-              ) : (
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-              )
-            ) : step === "verify" ? (
-              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-amber-400" />
-            ) : step === "error" ? (
-              <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
-            ) : null}
-            <span
-              className={
-                errMsg
-                  ? "text-red-300"
-                  : warnMsg
-                    ? "text-amber-300"
-                    : step === "done"
-                      ? "text-emerald-300"
-                      : ""
-              }
-            >
-              {errMsg ?? warnMsg ?? statusMsg}
-            </span>
-          </div>
 
           {carbonInput ? (
             <>

@@ -613,6 +613,32 @@ export function EncodeItemsWorkspace() {
     setSearchQuery("");
   }, []);
 
+  /**
+   * Promote a confirmed new tag from the 'unknown' staging state that
+   * `encode-claim` inserts to 'in-stock' — LIVE in the UI. Only ever called
+   * after the agent reports the chip-write `done`; an unconfirmed write must
+   * stay 'unknown'. Also flips the encode_events audit row to 'ok'.
+   *
+   * `oldEpc` is deliberately NOT sent: that would additionally hard-DELETE the
+   * old chip's items row, which is a separate decision from marking the new
+   * tag live. Non-fatal — the chip is written regardless.
+   */
+  const promoteLive = useCallback(async (epc: string): Promise<boolean> => {
+    try {
+      const r = await fetch("/api/rfid/encode-finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newEpc: epc, promoteNew: true }),
+      });
+      const j = (await r.json().catch(() => null)) as
+        | { ok?: true; livePromoted?: boolean }
+        | null;
+      return Boolean(j?.livePromoted);
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Poll an encode-job's status until it's terminal (done | failed) or
   // the hard cap is hit. Flips the row's Status cell to "Wrote ✓ → ..."
   // / "Write failed: ..." so the operator sees whether the chip actually
@@ -633,6 +659,10 @@ export function EncodeItemsWorkspace() {
             job: { status: string; error_msg: string | null; attempts: number };
           };
           if (j.job.status === "done") {
+            // Confirmed chip-write → promote the new tag out of the 'unknown'
+            // staging state encode-claim inserts, so the operator doesn't have
+            // to set it by hand. Same endpoint the handheld uses post-write.
+            const live = await promoteLive(newEpc);
             setRowsByEpc((prev) => {
               const next = new Map(prev);
               const row = next.get(epcKey);
@@ -640,7 +670,9 @@ export function EncodeItemsWorkspace() {
               next.set(epcKey, {
                 ...row,
                 busy: false,
-                encodeStatus: `Wrote ✓ → ${newEpc} (sn ${serial})`,
+                encodeStatus: `Wrote ✓ → ${newEpc} (sn ${serial})${
+                  live ? " · LIVE" : " · status NOT set to LIVE — set it manually"
+                }`,
               });
               return next;
             });
@@ -679,7 +711,7 @@ export function EncodeItemsWorkspace() {
         return next;
       });
     },
-    [],
+    [promoteLive],
   );
 
   // --- Encode button: rotate each checked tag's identity --------------
