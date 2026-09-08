@@ -77,6 +77,27 @@
   form[action*="/cart/add"] quantity-selector.quantity:focus-within button svg {
     /* Also covers any icon that does use currentColor. */
     color: #fff !important;
+    /* The glyphs ship at 8x8, which is legible as dark-on-light but nearly
+       disappears once the box goes black. Growing them is the difference
+       between seeing a control and hunting for it. */
+    width: 12px !important;
+    height: 12px !important;
+  }
+  form[action*="/cart/add"] quantity-selector.quantity button svg {
+    transition: width .16s ease, height .16s ease;
+  }
+
+  /* Which one you are about to press. Without this the whole box lights up and
+     the + and - are equally bright, so there is no feedback for the button
+     actually under the pointer. */
+  form[action*="/cart/add"] quantity-selector.quantity:hover button:hover:not(.disabled):not([disabled]),
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button:hover:not(.disabled):not([disabled]) {
+    background-color: rgba(255, 255, 255, .18) !important;
+    border-radius: 4px;
+  }
+  form[action*="/cart/add"] quantity-selector.quantity button:hover:not(.disabled):not([disabled]) svg {
+    width: 14px !important;
+    height: 14px !important;
   }
 
   /* A disabled minus stays visibly disabled rather than reading as an option. */
