@@ -1,18 +1,20 @@
 {% comment %}
-  Add to Cart: solid black with white text on hover, on every product page.
+  The three buy-row controls share one hover treatment: solid black with white
+  content, on every product page.
 
-  The theme already sweeps a dark panel across the button with a rotated
-  ::before, which mostly reads as black-on-hover — but it is an animation, so
-  what a shopper actually sees during the sweep depends on where the wipe has
-  reached. This states the end result outright so the button is unambiguously
-  black with white text whenever it is hovered or focused, on set and non-set
-  products alike.
+  The theme already sweeps a dark panel across Add to Cart and the wishlist
+  heart with a rotated ::before, which mostly reads as black-on-hover — but it
+  is an animation, so what a shopper sees part-way through depends on where the
+  wipe has reached. Declaring the end state makes all three land on the same
+  colour instead of three near-misses sitting side by side.
 
-  The ::before is left alone rather than disabled: it still provides the motion,
-  this just guarantees where the motion lands.
+  The ::before is left in place rather than disabled: it still provides the
+  motion, this only fixes where the motion ends up. The quantity stepper has no
+  wipe of its own, so it gets a matching fade instead.
 {% endcomment %}
 
 <style>
+  /* ---------- Add to Cart ---------- */
   form[action*="/cart/add"] [type="submit"]:hover,
   form[action*="/cart/add"] [type="submit"]:focus-visible,
   form[action*="/cart/add"] [name="add"]:hover,
@@ -26,5 +28,46 @@
   form[action*="/cart/add"] [name="add"]:hover span,
   form[action*="/cart/add"] [name="add"]:focus-visible span {
     color: #fff !important;
+  }
+
+  /* ---------- Wishlist heart ----------
+     currentColor drives the heart, so setting the button's colour turns the
+     icon white with it. The saved state is already black, so hovering it simply
+     stays black rather than flickering to something else. */
+  button.carbon-wishlist-btn:hover,
+  button.carbon-wishlist-btn:focus-visible {
+    background-color: #151515 !important;
+    border-color: #151515 !important;
+    color: #fff !important;
+  }
+
+  /* ---------- Quantity stepper ----------
+     Hover anywhere over the control, and focus-within so tabbing into the field
+     or holding the +/- buttons looks the same as pointing at it. */
+  form[action*="/cart/add"] quantity-selector.quantity {
+    transition: background-color .25s ease, border-color .25s ease;
+  }
+  form[action*="/cart/add"] quantity-selector.quantity:hover,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within {
+    background-color: #151515 !important;
+    border-color: #151515 !important;
+  }
+  /* The children must go transparent or they punch light rectangles through the
+     black, and their text has to invert with it. */
+  form[action*="/cart/add"] quantity-selector.quantity:hover .qty,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within .qty,
+  form[action*="/cart/add"] quantity-selector.quantity:hover button,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button {
+    background-color: transparent !important;
+    border-color: #151515 !important;
+    color: #fff !important;
+    -webkit-text-fill-color: #fff !important;
+  }
+  /* A disabled minus stays visibly disabled rather than reading as an option. */
+  form[action*="/cart/add"] quantity-selector.quantity:hover button.disabled,
+  form[action*="/cart/add"] quantity-selector.quantity:hover button[disabled],
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button.disabled,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button[disabled] {
+    opacity: .45 !important;
   }
 </style>
