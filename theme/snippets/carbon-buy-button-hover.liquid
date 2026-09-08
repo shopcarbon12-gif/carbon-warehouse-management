@@ -63,6 +63,22 @@
     color: #fff !important;
     -webkit-text-fill-color: #fff !important;
   }
+  /* The + and - glyphs are SVG paths with fill="var(--color-body)" baked into
+     the markup, not currentColor — so setting the button's colour never reached
+     them and they stayed black on the black box, effectively invisible. Paint
+     the fill directly. */
+  form[action*="/cart/add"] quantity-selector.quantity:hover button svg path,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button svg path,
+  form[action*="/cart/add"] quantity-selector.quantity:hover button svg rect,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button svg rect {
+    fill: #fff !important;
+  }
+  form[action*="/cart/add"] quantity-selector.quantity:hover button svg,
+  form[action*="/cart/add"] quantity-selector.quantity:focus-within button svg {
+    /* Also covers any icon that does use currentColor. */
+    color: #fff !important;
+  }
+
   /* A disabled minus stays visibly disabled rather than reading as an option. */
   form[action*="/cart/add"] quantity-selector.quantity:hover button.disabled,
   form[action*="/cart/add"] quantity-selector.quantity:hover button[disabled],
