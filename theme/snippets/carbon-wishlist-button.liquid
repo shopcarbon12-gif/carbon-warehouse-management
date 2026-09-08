@@ -106,14 +106,24 @@
 
   /* Saved: solid heart, plus becomes a tick. These sit after .button.outline
      in document order, so they win at equal specificity. */
-  .carbon-wishlist-btn.is-saved {
-    background: var(--color-body, #151515);
-    border-color: var(--color-body, #151515);
+  /*
+   * Saved state: black button, white heart.
+   *
+   * !important on the background is load-bearing, not laziness. The theme's
+   * .button.outline forces a transparent background that a plain — and even a
+   * tag-qualified — selector could not beat, so `color:#fff` applied while the
+   * background stayed white: a white heart on a white button, i.e. a control
+   * that looked empty the moment an item was saved. The colour is left normal
+   * so the theme's hover fill can still take over on hover.
+   */
+  button.carbon-wishlist-btn.is-saved {
+    background: var(--color-body, #151515) !important;
+    border-color: var(--color-body, #151515) !important;
     color: #fff;
   }
-  .carbon-wishlist-btn.is-saved .cwb-heart { fill: currentColor; stroke: currentColor; }
-  .carbon-wishlist-btn.is-saved .cwb-plus { display: none; }
-  .carbon-wishlist-btn.is-saved .cwb-tick { display: block; }
+  button.carbon-wishlist-btn.is-saved .cwb-heart { fill: currentColor; stroke: currentColor; }
+  button.carbon-wishlist-btn.is-saved .cwb-plus { display: none; }
+  button.carbon-wishlist-btn.is-saved .cwb-tick { display: block; }
 </style>
 
 <script>
