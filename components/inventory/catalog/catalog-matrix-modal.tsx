@@ -30,6 +30,7 @@ import { CatalogImageLightbox } from "./catalog-image-lightbox";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { SeoFields } from "@/lib/seo/types";
 import { useUrlParam } from "@/lib/use-url-param";
+import { sortSizes } from "@/lib/size-order";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -356,7 +357,9 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         out.push(s);
       }
     }
-    return out;
+    /* Variants arrive in SKU order, which puts sizes in an order nobody thinks
+       in — "L, M, S, XL". Show them the way they are worn. */
+    return sortSizes(out, (v) => v);
   }, [rows]);
 
   const blankRow = (color: string, size: string): RowState => ({
