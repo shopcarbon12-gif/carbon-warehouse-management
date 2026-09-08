@@ -116,67 +116,112 @@
   .carbon-qv {
     position: fixed; inset: 0; z-index: 2147483000;
     display: flex; align-items: center; justify-content: center;
-    padding: 24px; box-sizing: border-box;
+    padding: 20px; box-sizing: border-box;
   }
-  .carbon-qv__scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); }
+  .carbon-qv__scrim { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
   .carbon-qv__box {
-    position: relative; background: #fff; border-radius: 10px;
-    width: min(880px, 100%); max-height: min(86vh, 760px);
+    position: relative; background: #fff; border-radius: 12px;
+    width: min(1080px, 100%); max-height: min(92vh, 900px);
     display: flex; flex-direction: column; overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    box-shadow: 0 24px 70px rgba(0,0,0,.4);
   }
   .carbon-qv__head {
     display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px; border-bottom: 1px solid #e6e6e6; flex: 0 0 auto;
+    padding: 16px 20px; border-bottom: 1px solid #ececec; flex: 0 0 auto;
   }
   .carbon-qv__title {
-    margin: 0; font-size: 1rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .03em;
+    margin: 0; font-size: 1.05rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
   }
   .carbon-qv__x {
     margin-left: auto; border: 0; background: transparent; cursor: pointer;
-    font-size: 1.5rem; line-height: 1; padding: 4px 8px; border-radius: 4px;
+    font-size: 1.6rem; line-height: 1; padding: 4px 10px; border-radius: 6px;
     transition: background-color .2s ease, color .2s ease;
   }
   .carbon-qv__x:hover, .carbon-qv__x:focus-visible { background: #151515; color: #fff; }
-  .carbon-qv__body { display: flex; gap: 18px; padding: 16px; overflow: auto; }
-  @media (max-width: 699px) { .carbon-qv__body { flex-direction: column; } }
-  .carbon-qv__media { flex: 0 0 46%; }
-  .carbon-qv__main {
-    width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
-    border-radius: 6px; background: #f4f4f4; display: block;
+
+  /* Two columns of comparable weight: the photo is why the dialog exists, and
+     the copy needs enough width not to read as a narrow gutter beside it. */
+  .carbon-qv__body {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 28px; padding: 20px 22px 24px; overflow: auto;
   }
+  @media (max-width: 780px) {
+    .carbon-qv__body { grid-template-columns: 1fr; gap: 18px; padding: 16px; }
+  }
+
+  .carbon-qv__stage { position: relative; }
+  .carbon-qv__main {
+    /* A bounded height rather than an aspect ratio: at 4/5 the image grew with
+       the dialog and pushed the thumbnail strip past the bottom of the scroll
+       area, where it was clipped. */
+    width: 100%; height: clamp(260px, 52vh, 520px);
+    /* contain, not cover: these are full-length studio shots and cropping them
+       to a box cuts off the garment the shopper came to look at. */
+    object-fit: contain; background: #f6f6f6;
+    border-radius: 8px; display: block;
+  }
+  .carbon-qv__nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid #e0e0e0; background: rgba(255,255,255,.94);
+    cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.14);
+    transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .carbon-qv__nav:hover, .carbon-qv__nav:focus-visible {
+    background: #151515; border-color: #151515; color: #fff;
+  }
+  .carbon-qv__nav--prev { left: 10px; }
+  .carbon-qv__nav--next { right: 10px; }
+  .carbon-qv__count {
+    position: absolute; right: 10px; bottom: 10px;
+    background: rgba(0,0,0,.62); color: #fff; border-radius: 999px;
+    font-size: .72rem; padding: 3px 9px; letter-spacing: .03em;
+  }
+
   /* One row that scrolls, rather than wrapping: a second row of thumbnails sat
      below the fold of the dialog body and was clipped. */
   .carbon-qv__thumbs {
-    display: flex; gap: 6px; margin-top: 8px;
-    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px;
+    display: flex; gap: 8px; margin-top: 10px;
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
+    scrollbar-width: thin;
   }
   .carbon-qv__thumb {
-    width: 46px; height: 46px; object-fit: cover; border-radius: 4px;
-    border: 1px solid #ddd; cursor: pointer; padding: 0; background: #fff;
-    flex: 0 0 auto;
+    width: 62px; height: 78px; object-fit: cover; border-radius: 6px;
+    border: 1px solid #e2e2e2; cursor: pointer; padding: 0; background: #fff;
+    flex: 0 0 auto; transition: border-color .15s ease, opacity .15s ease;
+    opacity: .72;
   }
-  .carbon-qv__thumb[aria-current="true"] { border-color: #151515; border-width: 2px; }
-  .carbon-qv__info { flex: 1 1 auto; min-width: 0; font-size: .9rem; line-height: 1.55; }
-  .carbon-qv__price { font-weight: 700; font-size: 1.05rem; margin: 0 0 2px; }
-  .carbon-qv__variant { color: #4a5568; margin: 0 0 10px; }
-  .carbon-qv__desc { color: #333; }
+  .carbon-qv__thumb:hover { opacity: 1; border-color: #999; }
+  .carbon-qv__thumb[aria-current="true"] {
+    border-color: #151515; border-width: 2px; opacity: 1;
+  }
+
+  .carbon-qv__info { min-width: 0; font-size: .95rem; line-height: 1.65; }
+  .carbon-qv__price { font-weight: 700; font-size: 1.5rem; margin: 0 0 8px; }
+  .carbon-qv__variant {
+    display: inline-block; margin: 0 0 14px;
+    border: 1px solid #ddd; border-radius: 999px; padding: 4px 12px;
+    font-size: .82rem; letter-spacing: .04em; color: #333;
+  }
+  .carbon-qv__desc { color: #3a3a3a; }
   .carbon-qv__desc img { max-width: 100%; height: auto; }
+  .carbon-qv__desc p:first-child { margin-top: 0; }
+
   .carbon-qv__foot {
-    padding: 12px 16px; border-top: 1px solid #e6e6e6; flex: 0 0 auto;
-    display: flex; gap: 10px; align-items: center;
+    padding: 14px 22px; border-top: 1px solid #ececec; flex: 0 0 auto;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
   }
   .carbon-qv__full {
-    border: 1px solid #151515; background: #fff; color: #151515;
-    border-radius: 4px; padding: 8px 14px; font: inherit; font-size: .85rem;
-    text-decoration: none; display: inline-block;
+    border: 1px solid #151515; background: #151515; color: #fff;
+    border-radius: 6px; padding: 10px 20px; font: inherit; font-size: .88rem;
+    text-decoration: none; display: inline-block; letter-spacing: .02em;
     transition: background-color .2s ease, color .2s ease;
   }
-  .carbon-qv__full:hover, .carbon-qv__full:focus-visible { background: #151515; color: #fff; }
-  .carbon-qv__note { color: #4a5568; font-size: .82rem; }
-  .carbon-set-pair__solo:hover,
-  .carbon-set-pair__solo:focus-visible { background: #151515; color: #fff; }
+  .carbon-qv__full:hover, .carbon-qv__full:focus-visible { background: #fff; color: #151515; }
+  .carbon-qv__note { color: #5a6472; font-size: .85rem; }
 </style>
 
 <script>
@@ -257,10 +302,75 @@
    */
   var qv = null;
   var qvReturn = null;   /* element to hand focus back to on close */
+  var qvShow = null;     /* image stepper for the dialog currently open */
 
   /* The set banner is stripped out of the description here. The shopper is
      looking at this piece from inside the set panel; telling them it belongs to
      a set is the one thing they already know. */
+  /* Compare CDN URLs by filename: the same image is served with different query
+     strings (?v=…) and sometimes a size suffix depending on where it came from,
+     so a string equality test on the whole URL misses matches that are real. */
+  function imgKey(src) {
+    var s = String(src || "").split("?")[0];
+    return s.slice(s.lastIndexOf("/") + 1).replace(/_\d+x\d*(\.[a-z]+)$/i, "$1");
+  }
+
+  /*
+   * Every image the product has, with the ones for the chosen colour first.
+   *
+   * A set piece usually carries every colourway in one gallery, so opening the
+   * black variant and being shown five cream photos first is disorienting — the
+   * shopper cannot tell whether they are looking at the right thing. Nothing is
+   * dropped, it is only ordered.
+   */
+  /* Words that follow a colour when it is describing something other than the
+     garment. Without these, "paired with white sneakers" on a photo of the
+     black set counts as a white photo — and every black image in the gallery
+     says exactly that. */
+  var NOT_THE_GARMENT = [
+    "sneaker", "sneakers", "shoe", "shoes", "trainer", "trainers", "sole", "soles",
+    "background", "backdrop", "wall", "cube", "floor", "studio", "surface"
+  ];
+
+  function altDescribes(text, colour) {
+    if (!text || !colour) return false;
+    var word = String(colour).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
+    if (!word) return false;
+    var re = new RegExp("\\b" + word.replace(/\s+/g, "\\s+") + "\\b\\s*([a-z]+)?", "gi");
+    var m;
+    while ((m = re.exec(text))) {
+      if (NOT_THE_GARMENT.indexOf((m[1] || "").toLowerCase()) === -1) return true;
+    }
+    return false;
+  }
+
+  function galleryFor(product, colour) {
+    var all = (product.images || []).slice();
+    if (!colour) return all;
+
+    /* Two signals, because neither is enough alone. A variant's featured_image
+       finds at most one photo per colour — the other five black shots are not
+       attached to any variant — while the alt text names the colour on every
+       one of them, but only because the SEO pass wrote it that way. */
+    var wanted = {};
+    (product.variants || []).forEach(function (v) {
+      var c = optOf(v, "COLOR") || optOf(v, "COLOUR");
+      if (c !== colour) return;
+      var src = v.featured_image && v.featured_image.src;
+      if (src) wanted[imgKey(src)] = true;
+    });
+    (product.media || []).forEach(function (m) {
+      if (m && m.src && altDescribes(String(m.alt || ""), colour)) wanted[imgKey(m.src)] = true;
+    });
+    if (!Object.keys(wanted).length) return all;
+
+    var first = [], rest = [];
+    all.forEach(function (src) {
+      (wanted[imgKey(src)] ? first : rest).push(src);
+    });
+    return first.concat(rest);
+  }
+
   function descriptionOf(product) {
     var html = String(product.description || "");
     var d = document.createElement("div");
@@ -287,7 +397,12 @@
         "</div>" +
         '<div class="carbon-qv__body">' +
           '<div class="carbon-qv__media">' +
-            '<img class="carbon-qv__main" alt="" />' +
+            '<div class="carbon-qv__stage">' +
+              '<img class="carbon-qv__main" alt="" />' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--prev" aria-label="Previous image">&#8249;</button>' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--next" aria-label="Next image">&#8250;</button>' +
+              '<span class="carbon-qv__count"></span>' +
+            "</div>" +
             '<div class="carbon-qv__thumbs"></div>' +
           "</div>" +
           '<div class="carbon-qv__info">' +
@@ -306,17 +421,33 @@
     qv.addEventListener("click", function (e) {
       if (e.target.closest("[data-close]")) closeQv();
     });
-    /* Escape closes, and the listener lives on the document so it works no
-       matter where focus has landed inside the dialog. */
+    /* Escape closes and the arrows step through the gallery. The listener lives
+       on the document so it works wherever focus has landed in the dialog. */
     document.addEventListener("keydown", function (e) {
-      if (!qv.hidden && (e.key === "Escape" || e.key === "Esc")) closeQv();
+      if (qv.hidden) return;
+      if (e.key === "Escape" || e.key === "Esc") { closeQv(); return; }
+      if (!qvShow) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); qvShow(qvAt() - 1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); qvShow(qvAt() + 1); }
     });
     return qv;
+  }
+
+  /* The stepper closes over its own index, so read the position back off the
+     thumbnails rather than keeping a second copy that can drift out of step. */
+  function qvAt() {
+    if (!qv) return 0;
+    var all = qv.querySelectorAll(".carbon-qv__thumb");
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].getAttribute("aria-current") === "true") return i;
+    }
+    return 0;
   }
 
   function closeQv() {
     if (!qv || qv.hidden) return;
     qv.hidden = true;
+    qvShow = null;
     document.documentElement.style.overflow = "";
     document.body.style.overflow = "";
     if (qvReturn && qvReturn.focus) { try { qvReturn.focus(); } catch (e) {} }
@@ -327,7 +458,7 @@
    * Show a partner. Returns false when there is nothing to show, so the caller
    * can let the link navigate normally rather than opening an empty dialog.
    */
-  function openQuickView(handle, variantId, href, opener) {
+  function openQuickView(handle, variantId, href, opener, colourHint) {
     var product = null;
     for (var i = 0; i < partners.length; i += 1) {
       if (partners[i].handle === handle) { product = partners[i]; break; }
@@ -345,41 +476,79 @@
     var box = buildQv();
     qvReturn = opener || null;
 
-    var images = (product.images || []).slice(0, 8);
-    var lead = (variant && variant.featured_image && variant.featured_image.src) ||
-      product.featured_image || images[0] || "";
+    /* Every image, not a slice of them — an arbitrary cap meant a shopper could
+       not see photos the product actually has. */
+    var colour = variant
+      ? (optOf(variant, "COLOR") || optOf(variant, "COLOUR"))
+      : norm(colourHint);
+    var images = galleryFor(product, colour);
+    var lead = (variant && variant.featured_image && variant.featured_image.src) || "";
+    var at = 0;
+    if (lead) {
+      for (var k = 0; k < images.length; k += 1) {
+        if (imgKey(images[k]) === imgKey(lead)) { at = k; break; }
+      }
+    }
+    if (!images.length) images = [product.featured_image || ""];
 
     box.querySelector(".carbon-qv__title").textContent = product.title || "";
     var main = box.querySelector(".carbon-qv__main");
-    main.src = lead;
-    main.alt = product.title || "";
-
     var thumbs = box.querySelector(".carbon-qv__thumbs");
+    var count = box.querySelector(".carbon-qv__count");
+    var prev = box.querySelector(".carbon-qv__nav--prev");
+    var next = box.querySelector(".carbon-qv__nav--next");
+
+    main.alt = product.title || "";
     thumbs.innerHTML = "";
-    if (images.length > 1) {
-      images.forEach(function (src) {
-        var t = document.createElement("img");
-        t.className = "carbon-qv__thumb";
-        t.src = src;
-        t.alt = "";
-        t.setAttribute("aria-current", src === lead ? "true" : "false");
-        t.addEventListener("click", function () {
-          main.src = src;
-          thumbs.querySelectorAll(".carbon-qv__thumb").forEach(function (o) {
-            o.setAttribute("aria-current", o === t ? "true" : "false");
-          });
-        });
-        thumbs.appendChild(t);
+    images.forEach(function (src, i) {
+      var t = document.createElement("img");
+      t.className = "carbon-qv__thumb";
+      t.src = src;
+      t.alt = "";
+      t.setAttribute("aria-current", "false");
+      t.addEventListener("click", function () { show(i); });
+      thumbs.appendChild(t);
+    });
+
+    function show(i) {
+      /* Wrap around, so the arrows never dead-end on the first or last photo. */
+      at = (i + images.length) % images.length;
+      main.src = images[at];
+      count.textContent = (at + 1) + " / " + images.length;
+      var all = thumbs.querySelectorAll(".carbon-qv__thumb");
+      all.forEach(function (o, j) {
+        o.setAttribute("aria-current", j === at ? "true" : "false");
       });
+      var cur = all[at];
+      /* Keep the active thumbnail in view — with every image present the strip
+         scrolls, and the arrows would otherwise select something off-screen. */
+      if (cur && cur.scrollIntoView) {
+        try { cur.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+      }
     }
+
+    qvShow = show;
+    var single = images.length < 2;
+    prev.hidden = single;
+    next.hidden = single;
+    count.hidden = single;
+    thumbs.hidden = single;
+    prev.onclick = function () { show(at - 1); };
+    next.onclick = function () { show(at + 1); };
+    show(at);
 
     /* The variant price, not the product's "from" price — this dialog is about
        the exact piece that will be added to the cart. */
     var price = variant ? variant.price : (product.price || 0);
     box.querySelector(".carbon-qv__price").textContent = money(price);
-    box.querySelector(".carbon-qv__variant").textContent = variant
+    var chip = box.querySelector(".carbon-qv__variant");
+    var chipText = variant
       ? (variant.title || "") + (variant.available === false ? " — out of stock" : "")
-      : "";
+      : (colour || "");
+    chip.textContent = chipText;
+    /* An empty pill is just a stray outline, so it goes rather than sitting
+       there with nothing in it. */
+    chip.hidden = !chipText;
     box.querySelector(".carbon-qv__desc").innerHTML = descriptionOf(product);
     box.querySelector(".carbon-qv__full").setAttribute("href", href);
     box.querySelector(".carbon-qv__note").textContent = variant
@@ -508,7 +677,7 @@
         warn = true;
         html += '<p class="carbon-set-pair__title">Sold as an individual item</p>' +
           '<p>No spare <a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
-          'data-qv-handle="' + r.partner.handle + '" ' +
+          'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
           'href="/products/' + r.partner.handle + '">' + r.partner.title +
           "</a> is available in " + (colour || "this colour") +
           " — the remaining stock is reserved to keep other sets complete. " +
@@ -519,7 +688,7 @@
         warn = true;
         html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
           '<p><a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
-          'data-qv-handle="' + r.partner.handle + '" ' +
+          'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
           'href="/products/' + r.partner.handle + '">' + r.partner.title +
           "</a> is not available in your size. These sizes are in stock in " +
           (colour || "this colour") + ", or you can buy this piece on its own.</p>" +
@@ -581,7 +750,8 @@
           a.getAttribute("data-qv-handle"),
           a.getAttribute("data-qv-variant"),
           a.getAttribute("href"),
-          a
+          a,
+          a.getAttribute("data-qv-colour")
         );
         /* Only suppress the navigation if the dialog actually opened, so a
            product we could not load still takes the shopper to its page. */
