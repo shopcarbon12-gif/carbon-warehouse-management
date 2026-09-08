@@ -165,14 +165,25 @@
     var btn = form.querySelector('[type="submit"], [name="add"]');
     if (!btn) { form.appendChild(panel); return panel; }
     var qty = form.querySelector('[name="quantity"]');
-    var anchor = btn;
+    var row = btn;
     if (qty) {
-      var node = btn;
-      while (node && node !== form && !node.contains(qty)) node = node.parentNode;
-      if (node && node !== form) anchor = node;
+      while (row && row !== form && !row.contains(qty)) row = row.parentNode;
+      if (!row || row === form) row = btn;
     }
+
+    /*
+     * Insert ABOVE the row's container, not beside the row.
+     *
+     * The theme's hover fill is a rotated ::before that slides into place, and
+     * the rule driving it is position-dependent — dropping a sibling in next to
+     * .add_to_cart_holder stopped it matching, so Add to Cart and the quantity
+     * stepper lost their black hover entirely. Going one level up leaves every
+     * sibling index in that container untouched, which keeps the theme's own
+     * selectors intact while still putting the panel directly above the buy row.
+     */
+    var anchor = row.parentNode && row.parentNode !== form ? row.parentNode : row;
     if (anchor.parentNode) anchor.parentNode.insertBefore(panel, anchor);
-    else form.appendChild(panel);
+    else form.insertBefore(panel, form.firstChild);
     return panel;
   }
 
