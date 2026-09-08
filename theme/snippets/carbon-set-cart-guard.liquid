@@ -10,6 +10,11 @@
   through /products/<handle>.js — the same source the product page uses, so the
   two agree by construction.
 
+  Only true matching sets are held together. A pair the shopper had to mix —
+  size S in one piece because their size did not exist in the other — is tagged
+  when it is added and left alone here: those are two garments sold separately,
+  and removing one must not silently take the other with it.
+
   Deliberately corrective rather than preventive: blocking the theme's own
   quantity and remove controls would mean reimplementing them for every theme
   update. Letting the change happen and then restoring the balance survives
@@ -94,18 +99,30 @@
         info.forEach(function (x) { if (x.partners.length) setOf[x.handle] = x.partners; });
         if (!Object.keys(setOf).length) return;
 
-        /* Lines the shopper deliberately bought on their own are exempt: they
-           chose the piece knowing the matching one was unavailable, and pulling
-           it out of the cart would undo that choice. */
-        function isSolo(i) {
-          return !!(i.properties && i.properties._carbon_set_solo);
+        /*
+         * Two kinds of line are exempt from the lockstep.
+         *
+         * _carbon_set_solo: bought deliberately on its own, knowing the matching
+         * piece was unavailable. Pulling it out would undo that choice.
+         *
+         * _carbon_set_mixed: the pieces are different sizes, because the
+         * shopper's size did not exist in both. That is not a matching set — it
+         * is two garments that happen to go together — so removing one must not
+         * take the other with it. They are sold separately.
+         *
+         * Everything else is a true matching set and is kept whole: remove one
+         * piece and its partners go too, since half a set cannot be fulfilled.
+         */
+        function isExempt(i) {
+          var props = i.properties || {};
+          return !!(props._carbon_set_solo || props._carbon_set_mixed);
         }
 
         /* Total quantity per product handle, since a product can appear as more
            than one line when sizes differ. */
         var qty = {};
         cart.items.forEach(function (i) {
-          if (isSolo(i)) return;
+          if (isExempt(i)) return;
           qty[i.handle] = (qty[i.handle] || 0) + i.quantity;
         });
 
@@ -115,12 +132,12 @@
 
         Object.keys(setOf).forEach(function (h) {
           var present = setOf[h].filter(function (p) { return qty[p] > 0; });
-          if (!qty[h]) return;   /* only solo lines remain for this product */
+          if (!qty[h]) return;   /* only exempt lines remain for this product */
           if (!present.length) {
             /* Every partner is gone — the remaining piece cannot be sold as a
                set, so it goes too. Solo lines are left where they are. */
             cart.items.forEach(function (i) {
-              if (i.handle === h && !isSolo(i)) updates[i.key] = 0;
+              if (i.handle === h && !isExempt(i)) updates[i.key] = 0;
             });
             removed = h;
             return;
@@ -133,7 +150,7 @@
             [h].concat(present).forEach(function (ph) {
               var seen = 0;
               cart.items.forEach(function (i) {
-                if (i.handle !== ph || isSolo(i)) return;
+                if (i.handle !== ph || isExempt(i)) return;
                 var want = Math.max(0, Math.min(i.quantity, min - seen));
                 seen += want;
                 if (want !== i.quantity) updates[i.key] = want;

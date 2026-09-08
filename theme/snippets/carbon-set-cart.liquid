@@ -103,6 +103,16 @@
     padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
     margin-left: auto;
   }
+  /* Sits at the right end of the row it undoes, so it reads as belonging to
+     that choice rather than to the panel as a whole. */
+  .carbon-set-pair__change {
+    margin-left: auto; flex: 0 0 auto;
+    border: 1px solid #9db8dc; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.82rem;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  }
+  .carbon-set-pair__change:hover,
+  .carbon-set-pair__change:focus-visible { background: #151515; border-color: #151515; color: #fff; }
   .carbon-set-pair__solo {
     transition: background-color .2s ease, color .2s ease;
   }
@@ -264,11 +274,38 @@
   var partners = [];
   var loaded = false;
 
+  /*
+   * Fetch product JSON, once retried.
+   *
+   * When this fails the panel never renders and the button becomes an ordinary
+   * Add to Cart — which quietly adds half a set. A single retry covers the
+   * transient case (a 429, a dropped connection) that would otherwise cost the
+   * shopper the pairing without either of us knowing.
+   *
+   * A rate-limited response is HTML, not JSON, so r.ok is not enough on its own
+   * — parsing has to succeed too.
+   */
+  var RETRY_MS = [700, 1800, 3500];
+
+  function productJson(handle, attempt) {
+    attempt = attempt || 0;
+    return fetch("/products/" + handle + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (j) {
+        if (j && j.variants) return j;
+        if (attempt >= RETRY_MS.length) return null;
+        /* Backing off rather than hammering: the failure this is most likely to
+           meet is a rate limit, and retrying immediately extends it. */
+        return new Promise(function (done) {
+          setTimeout(function () { done(productJson(handle, attempt + 1)); }, RETRY_MS[attempt]);
+        });
+      });
+  }
+
   function load() {
     return Promise.all(handles.map(function (h) {
-      return fetch("/products/" + h + ".js", { credentials: "same-origin" })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .catch(function () { return null; });
+      return productJson(h);
     })).then(function (list) {
       partners = list.filter(Boolean).map(function (p) {
         var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
@@ -643,7 +680,13 @@
       if (offerable.length) {
         var pick = chosen[p.handle];
         var picked = pick ? offerable.filter(function (v) { return String(v.id) === String(pick); })[0] : null;
-        return { partner: p, variant: picked || null, needsChoice: !picked, options: offerable };
+        /* substituted: the shopper chose a size that is not their own, so this
+           pair is deliberately mismatched. The cart guard needs to know, and the
+           panel offers a way back out of the choice. */
+        return {
+          partner: p, variant: picked || null, needsChoice: !picked,
+          options: offerable, substituted: !!picked
+        };
       }
       return { partner: p, variant: null, needsChoice: false, options: [], unavailable: true };
     });
@@ -724,7 +767,12 @@
         r.partner.title + "</a> — " +
         '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
         '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
-        " — added to your cart automatically</span></span></div>";
+        " — added to your cart automatically</span></span>" +
+        (r.substituted
+          ? '<button type="button" class="carbon-set-pair__change" data-change="' +
+            r.partner.handle + '">Change</button>'
+          : "") +
+        "</div>";
     });
 
     el.className = "carbon-set-pair" + (warn ? " carbon-set-pair--warn" : "");
@@ -740,6 +788,16 @@
     });
     var solo = el.querySelector('[data-action="solo"]');
     if (solo) solo.addEventListener("click", addSolo);
+
+    /* Back to the chooser. Dropping the pick is all it takes — resolve() finds
+       no exact match again and re-renders the amber panel with the sizes and the
+       buy-alone option, exactly as it was before the choice. */
+    el.querySelectorAll("[data-change]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        delete chosen[b.getAttribute("data-change")];
+        render();
+      });
+    });
 
     /* The matching piece opens in a dialog on this page rather than replacing
        it. Looking at the partner is a glance, not a destination: navigating away
@@ -768,20 +826,70 @@
    * Put the running total on the Add to Cart button.
    *
    * A set costs more than the price beside the title, and finding that out at
-   * checkout is exactly the surprise the notice is meant to prevent. The
-   * original label is kept so it can be restored if the pairing goes away.
+   * checkout is exactly the surprise the notice is meant to prevent.
+   *
+   * Writing the label once is not enough. Themes re-render this button — on a
+   * variant change, after a cart update, when a section reloads — and each time
+   * they do, the total is replaced by the theme's own text. So the label we want
+   * is remembered and re-applied whenever the button changes underneath us.
    */
-  function updateButton(rows) {
+  var wantSuffix = null;   /* " • $101.00", or null to leave the theme alone */
+
+  function buyButton() {
     var form = document.querySelector('form[action*="/cart/add"]');
-    var btn = form && form.querySelector('[type="submit"], [name="add"]');
+    return form ? form.querySelector('[type="submit"], [name="add"]') : null;
+  }
+
+  function baseLabel(btn) {
+    if (btn.__carbonSetBase) return btn.__carbonSetBase;
+    var label = btn.querySelector("span") || btn;
+    var text = (label.textContent || "").trim();
+    /* Split on the separator: after a re-render we may be reading our own
+       output back, and appending to that gives "Add to cart • $101 • $101". */
+    text = text.split("\u2022")[0].trim();
+    btn.__carbonSetBase = text || "Add to cart";
+    return btn.__carbonSetBase;
+  }
+
+  function applyLabel() {
+    if (!wantSuffix) return;
+    var btn = buyButton();
     if (!btn) return;
     var label = btn.querySelector("span") || btn;
-    if (!btn.__carbonSetLabel) btn.__carbonSetLabel = label.textContent.trim() || "Add to cart";
+    var want = baseLabel(btn) + wantSuffix;
+    /* Only write when it differs, so the observer below cannot loop on its own
+       mutations. */
+    if ((label.textContent || "").trim() !== want) label.textContent = want;
+  }
+
+  /* Re-apply after the theme rewrites the button. Cheap because applyLabel is a
+     no-op when the text already matches. */
+  function watchButton() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (!form || form.__carbonSetWatched) return;
+    form.__carbonSetWatched = true;
+    if (typeof MutationObserver !== "function") return;
+    var pending = false;
+    new MutationObserver(function () {
+      if (pending) return;
+      pending = true;
+      /* Coalesce a burst of mutations into one write, after the theme has
+         finished its own. */
+      setTimeout(function () { pending = false; applyLabel(); }, 0);
+    }).observe(form, { childList: true, subtree: true, characterData: true });
+  }
+
+  function updateButton(rows) {
+    var btn = buyButton();
+    if (!btn) return;
 
     var mine = currentVariant();
-    if (!mine) return;
-    var qtyEl = form.querySelector('[name="quantity"]');
-    var qty = qtyEl && Number(qtyEl.value) > 0 ? Number(qtyEl.value) : 1;
+    if (!mine) {
+      /* Nothing resolved — leave the theme's own label rather than showing a
+         total we cannot stand behind. */
+      wantSuffix = null;
+      return;
+    }
 
     var total = Number(mine.price || 0);
     var pending = false;
@@ -790,9 +898,21 @@
       else if (r.variant) total += Number(r.variant.price || 0);
     });
 
-    label.textContent = pending
-      ? btn.__carbonSetLabel + " • choose a size"
-      : btn.__carbonSetLabel + " • " + money(total * qty);
+    wantSuffix = pending
+      ? " \u2022 choose a size"
+      : " \u2022 " + money(total * currentQty());
+    applyLabel();
+    watchButton();
+  }
+
+  /* The stepper sets the field programmatically, and a programmatic value
+     change fires no input or change event — which is why the total could sit at
+     one unit while the field said three. It is polled instead. */
+  function currentQty() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    var el = form && form.querySelector('[name="quantity"]');
+    var n = el ? Number(el.value) : 1;
+    return n > 0 ? n : 1;
   }
 
   /*
@@ -845,8 +965,20 @@
     var qtyEl = form && form.querySelector('[name="quantity"]');
     if (qtyEl && Number(qtyEl.value) > 0) qty = Number(qtyEl.value);
 
+    /*
+     * A pair the shopper had to mix — their size in one piece, a different size
+     * in the other — is not a matching set, and the cart must not police it like
+     * one. Both lines are tagged so the guard leaves them alone: these pieces
+     * are sold separately and either can be removed on its own.
+     *
+     * A set where every piece matched carries no tag, and stays in lockstep.
+     */
+    var mixed = rows.some(function (r) { return r.substituted; });
+    var props = mixed ? { _carbon_set_mixed: "1" } : null;
+
     var items = [{ id: Number(currentVariantId()), quantity: qty }];
     extras.forEach(function (r) { items.push({ id: Number(r.variant.id), quantity: qty }); });
+    if (props) items.forEach(function (it) { it.properties = props; });
 
     fetch("/cart/add.js", {
       method: "POST",
@@ -867,8 +999,7 @@
   function boot() {
     /* The theme prints the product JSON for its variant picker; reuse it rather
        than re-fetching what is already on the page. */
-    fetch("/products/" + cfg.product + ".js", { credentials: "same-origin" })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    productJson(cfg.product)
       .then(function (p) {
         if (!p) return;
         var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
@@ -882,12 +1013,24 @@
         /* Variant pickers differ by theme, so watch the hidden id input rather
            than any particular picker implementation. */
         var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
-        if (input) {
-          var last = input.value;
-          setInterval(function () {
-            if (input.value !== last) { last = input.value; chosen = {}; render(); }
-          }, 300);
-        }
+        var qtyEl = document.querySelector('form[action*="/cart/add"] [name="quantity"]');
+        var lastId = input ? input.value : "";
+        var lastQty = qtyEl ? qtyEl.value : "";
+        setInterval(function () {
+          if (input && input.value !== lastId) {
+            lastId = input.value;
+            /* A different variant means the previous size choice may no longer
+               apply, so it is dropped rather than silently carried over. */
+            chosen = {};
+            render();
+            return;
+          }
+          if (qtyEl && qtyEl.value !== lastQty) { lastQty = qtyEl.value; render(); return; }
+          /* Backstop for a theme that swaps the button without touching the form
+             we are observing. */
+          applyLabel();
+        }, 300);
+
         var form = document.querySelector('form[action*="/cart/add"]');
         if (form) {
           form.addEventListener("submit", addAll, true);
