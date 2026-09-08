@@ -81,8 +81,21 @@
   .carbon-set-pair__size {
     border: 1px solid #9db8dc; background: #fff; border-radius: 4px;
     padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  }
+  /* Same black-on-hover as every other control in the buy column, so a size
+     chip reacts to the pointer the way the buttons beside it do. */
+  .carbon-set-pair__size:hover,
+  .carbon-set-pair__size:focus-visible {
+    background: #151515; border-color: #151515; color: #fff;
   }
   .carbon-set-pair__size[aria-pressed="true"] { background: #0a58ca; border-color: #0a58ca; color: #fff; }
+  /* The chosen size stays blue when hovered. Turning it black would read as
+     "not selected any more" at the exact moment the shopper points at it. */
+  .carbon-set-pair__size[aria-pressed="true"]:hover,
+  .carbon-set-pair__size[aria-pressed="true"]:focus-visible {
+    background: #084298; border-color: #084298; color: #fff;
+  }
   .carbon-set-pair--warn { border-color: #e6c98a; background: #fff8e8; }
   /* Set apart from the size chips: it is a different decision, not another size. */
   .carbon-set-pair__solo {
@@ -90,7 +103,11 @@
     padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
     margin-left: auto;
   }
-  .carbon-set-pair__solo:hover { background: #151515; color: #fff; }
+  .carbon-set-pair__solo {
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .carbon-set-pair__solo:hover,
+  .carbon-set-pair__solo:focus-visible { background: #151515; color: #fff; }
 </style>
 
 <script>

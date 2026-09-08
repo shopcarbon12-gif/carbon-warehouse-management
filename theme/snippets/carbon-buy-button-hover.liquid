@@ -9,14 +9,18 @@
   colour instead of three near-misses sitting side by side.
 
   The ::before is left in place rather than disabled: it still provides the
-  motion, this only fixes where the motion ends up. The quantity stepper has no
-  wipe of its own, so it gets a matching fade instead.
+  motion, this only fixes where the motion ends up.
 
-  The stepper is driven by :hover alone. An earlier version also matched
-  :focus-within, which looked right until you actually pressed + or -: the
-  button keeps focus after a click, so the box stayed black long after the
-  pointer had moved away. Keyboard users are covered separately at the bottom
-  with :has(:focus-visible), which ignores focus left behind by a mouse.
+  The quantity stepper takes the effect on the number alone. Blacking out the
+  whole control swallowed the + and - with it, and those are the parts you
+  actually press — they stay on white, at their normal weight, so they remain
+  the obvious targets while the number shows the control is live.
+
+  It is driven by :hover alone. An earlier version also matched :focus-within,
+  which looked right until you actually pressed + or -: the button keeps focus
+  after a click, so the highlight stayed long after the pointer had moved away.
+  Keyboard users are covered separately at the bottom with :has(:focus-visible),
+  which ignores focus left behind by a mouse.
 {% endcomment %}
 
 <style>
@@ -47,96 +51,36 @@
     color: #fff !important;
   }
 
-  /* ---------- Quantity stepper ---------- */
-  form[action*="/cart/add"] quantity-selector.quantity {
-    transition: background-color .25s ease, border-color .25s ease;
+  /* ---------- Quantity stepper ----------
+     Hovering anywhere on the control highlights the number. The + and - keep
+     their own appearance entirely: no black box, no recolouring, no resizing. */
+  form[action*="/cart/add"] quantity-selector.quantity .qty {
+    transition: background-color .2s ease, color .2s ease;
   }
-  form[action*="/cart/add"] quantity-selector.quantity button svg {
-    transition: width .16s ease, height .16s ease;
-  }
-
-  form[action*="/cart/add"] quantity-selector.quantity:hover {
+  form[action*="/cart/add"] quantity-selector.quantity:hover .qty {
     background-color: #151515 !important;
-    border-color: #151515 !important;
-  }
-  /* The children must go transparent or they punch light rectangles through the
-     black, and their text has to invert with it. */
-  form[action*="/cart/add"] quantity-selector.quantity:hover .qty,
-  form[action*="/cart/add"] quantity-selector.quantity:hover button {
-    background-color: transparent !important;
-    border-color: #151515 !important;
+    /* -webkit-text-fill-color as well: an input's colour is overridden by it on
+       WebKit, so setting colour alone leaves the digits dark on black. */
     color: #fff !important;
     -webkit-text-fill-color: #fff !important;
-  }
-  /* The + and - glyphs are SVG paths with fill="var(--color-body)" baked into
-     the markup, not currentColor — so setting the button's colour never reached
-     them and they stayed black on the black box, effectively invisible. Paint
-     the fill directly. */
-  form[action*="/cart/add"] quantity-selector.quantity:hover button svg path,
-  form[action*="/cart/add"] quantity-selector.quantity:hover button svg rect {
-    fill: #fff !important;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity:hover button svg {
-    /* Also covers any icon that does use currentColor. */
-    color: #fff !important;
-    /* The glyphs ship at 8x8, which is legible as dark-on-light but nearly
-       disappears once the box goes black. Growing them is the difference
-       between seeing a control and hunting for it. */
-    width: 12px !important;
-    height: 12px !important;
-  }
-
-  /* Which one you are about to press. Without this the whole box lights up and
-     the + and - are equally bright, so there is no feedback for the button
-     actually under the pointer. */
-  form[action*="/cart/add"] quantity-selector.quantity:hover button:hover:not(.disabled):not([disabled]) {
-    background-color: rgba(255, 255, 255, .18) !important;
-    border-radius: 4px;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity button:hover:not(.disabled):not([disabled]) svg {
-    width: 14px !important;
-    height: 14px !important;
-  }
-
-  /* A disabled minus stays visibly disabled rather than reading as an option. */
-  form[action*="/cart/add"] quantity-selector.quantity:hover button.disabled,
-  form[action*="/cart/add"] quantity-selector.quantity:hover button[disabled] {
-    opacity: .45 !important;
+    border-radius: 3px;
   }
 
   /*
     Keyboard focus, deliberately in its own block.
 
     :has() is not universally supported, and one unrecognised selector in a
-    comma-separated list invalidates the entire list — folding these in above
-    would risk taking the pointer styling down with them on an older browser.
+    comma-separated list invalidates the entire list — folding this in above
+    would risk taking the pointer styling down with it on an older browser.
 
     :focus-visible is what makes this different from the old :focus-within:
     browsers do not set it for focus that arrived from a mouse click, so
-    pressing + or - no longer leaves the control stuck in its hover state.
+    pressing + or - no longer leaves the number stuck in its highlight.
   */
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) {
+  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) .qty {
     background-color: #151515 !important;
-    border-color: #151515 !important;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) .qty,
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button {
-    background-color: transparent !important;
-    border-color: #151515 !important;
     color: #fff !important;
     -webkit-text-fill-color: #fff !important;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button svg path,
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button svg rect {
-    fill: #fff !important;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button svg {
-    color: #fff !important;
-    width: 12px !important;
-    height: 12px !important;
-  }
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button.disabled,
-  form[action*="/cart/add"] quantity-selector.quantity:has(:focus-visible) button[disabled] {
-    opacity: .45 !important;
+    border-radius: 3px;
   }
 </style>
