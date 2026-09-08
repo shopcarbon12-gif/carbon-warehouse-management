@@ -155,7 +155,10 @@
     /* A bounded height rather than an aspect ratio: at 4/5 the image grew with
        the dialog and pushed the thumbnail strip past the bottom of the scroll
        area, where it was clipped. */
-    width: 100%; height: clamp(260px, 52vh, 520px);
+    /* 44vh, not 52: at the taller setting the second row of thumbnails fell
+       below the visible part of the dialog on a 820px-high window, which is the
+       same "there are only eight photos" impression the scrolling row gave. */
+    width: 100%; height: clamp(220px, 44vh, 460px);
     /* contain, not cover: these are full-length studio shots and cropping them
        to a box cuts off the garment the shopper came to look at. */
     object-fit: contain; background: #f6f6f6;
@@ -181,15 +184,16 @@
     font-size: .72rem; padding: 3px 9px; letter-spacing: .03em;
   }
 
-  /* One row that scrolls, rather than wrapping: a second row of thumbnails sat
-     below the fold of the dialog body and was clipped. */
+  /* Every thumbnail on screen at once. A single scrolling row hid the last few
+     off the right edge, which reads as "that is all the photos there are" —
+     the gallery wraps instead, and the image above is height-bounded so the
+     extra row has somewhere to go. */
   .carbon-qv__thumbs {
     display: flex; gap: 8px; margin-top: 10px;
-    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px;
-    scrollbar-width: thin;
+    flex-wrap: wrap; padding-bottom: 2px;
   }
   .carbon-qv__thumb {
-    width: 62px; height: 78px; object-fit: cover; border-radius: 6px;
+    width: 56px; height: 70px; object-fit: cover; border-radius: 6px;
     border: 1px solid #e2e2e2; cursor: pointer; padding: 0; background: #fff;
     flex: 0 0 auto; transition: border-color .15s ease, opacity .15s ease;
     opacity: .72;

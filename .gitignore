@@ -104,3 +104,6 @@ scripts/.title-sync/
 # Size-order run snapshots (bulk before/after dumps, not source).
 scripts/.size-order/
 scripts/.seo-bulk/
+
+# Google OAuth client secrets (never commit)
+client_secret_*.json
