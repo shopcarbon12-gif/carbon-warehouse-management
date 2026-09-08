@@ -1,0 +1,30 @@
+{% comment %}
+  Add to Cart: solid black with white text on hover, on every product page.
+
+  The theme already sweeps a dark panel across the button with a rotated
+  ::before, which mostly reads as black-on-hover — but it is an animation, so
+  what a shopper actually sees during the sweep depends on where the wipe has
+  reached. This states the end result outright so the button is unambiguously
+  black with white text whenever it is hovered or focused, on set and non-set
+  products alike.
+
+  The ::before is left alone rather than disabled: it still provides the motion,
+  this just guarantees where the motion lands.
+{% endcomment %}
+
+<style>
+  form[action*="/cart/add"] [type="submit"]:hover,
+  form[action*="/cart/add"] [type="submit"]:focus-visible,
+  form[action*="/cart/add"] [name="add"]:hover,
+  form[action*="/cart/add"] [name="add"]:focus-visible {
+    background-color: #151515 !important;
+    border-color: #151515 !important;
+    color: #fff !important;
+  }
+  form[action*="/cart/add"] [type="submit"]:hover span,
+  form[action*="/cart/add"] [type="submit"]:focus-visible span,
+  form[action*="/cart/add"] [name="add"]:hover span,
+  form[action*="/cart/add"] [name="add"]:focus-visible span {
+    color: #fff !important;
+  }
+</style>

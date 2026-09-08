@@ -60,6 +60,8 @@
     line-height: 1.5;
   }
   .carbon-set-pair__me { font-weight: 600; }
+  .carbon-set-pair__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .carbon-set-pair__link:hover { text-decoration-thickness: 2px; }
   .carbon-set-pair__sub { color: #4a5568; font-size: 0.85rem; }
   .carbon-set-pair__hr { border: 0; border-top: 1px solid #d7e3f4; margin: 10px 0; }
   .carbon-set-pair[hidden] { display: none; }
@@ -286,10 +288,18 @@
           "Buy this piece only</button></div>";
         return;
       }
+      /* The partner's name links to its own page. It is the one item in this
+         panel the shopper cannot otherwise inspect — they are already on the
+         page for the other one — and being told something will be added to the
+         cart without being able to look at it first is a fair objection. The
+         variant is carried in the URL so the link lands on the exact colour and
+         size that will be added. */
+      var pHref = "/products/" + r.partner.handle + "?variant=" + r.variant.id;
       html += '<div class="carbon-set-pair__row">' +
-        (img ? '<img src="' + img + '" alt="" />' : "") +
-        '<span><span class="carbon-set-pair__me">' + r.partner.title +
-        " — " + money(r.variant.price) + "</span><br>" +
+        (img ? '<a href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
+        '<span><a class="carbon-set-pair__link carbon-set-pair__me" href="' + pHref + '">' +
+        r.partner.title + "</a> — " +
+        '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
         '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
         " — added to your cart automatically</span></span></div>";
     });
