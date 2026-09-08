@@ -156,7 +156,7 @@
       el.setAttribute('aria-label', on ? 'Remove from wishlist' : 'Add to wishlist');
     }
 
-    el.addEventListener('click', function () {
+    el.addEventListener('click', function (e) {
       store.toggle({
         v: variantId(),
         p: el.dataset.productId,
@@ -164,6 +164,21 @@
       });
       /* no optimistic paint — the store fires a change event and we repaint
          from it, so the icon can never disagree with what is actually saved */
+
+      /*
+       * Drop focus after a pointer click.
+       *
+       * The theme styles :focus the same as :hover — white icon, because its
+       * dark fill panel is normally behind it. A button keeps focus after being
+       * clicked, so once the item was removed the icon stayed white on a button
+       * that was no longer filled: an invisible control until you clicked
+       * elsewhere.
+       *
+       * Only for pointer input. A click raised by the keyboard reports
+       * detail 0, and blurring there would throw a keyboard user out of the
+       * control they just used.
+       */
+      if (e && e.detail > 0 && typeof el.blur === 'function') el.blur();
     });
 
     store.subscribe(paint);
