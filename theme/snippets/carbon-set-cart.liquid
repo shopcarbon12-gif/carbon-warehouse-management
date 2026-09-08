@@ -63,7 +63,12 @@
   .carbon-set-pair__sub { color: #4a5568; font-size: 0.85rem; }
   .carbon-set-pair__hr { border: 0; border-top: 1px solid #d7e3f4; margin: 10px 0; }
   .carbon-set-pair[hidden] { display: none; }
-  .carbon-set-pair__title { font-weight: 700; margin: 0 0 4px; }
+  .carbon-set-pair__title {
+    font-weight: 700;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
   .carbon-set-pair__row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .carbon-set-pair__row img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
   .carbon-set-pair__sizes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -73,6 +78,13 @@
   }
   .carbon-set-pair__size[aria-pressed="true"] { background: #0a58ca; border-color: #0a58ca; color: #fff; }
   .carbon-set-pair--warn { border-color: #e6c98a; background: #fff8e8; }
+  /* Set apart from the size chips: it is a different decision, not another size. */
+  .carbon-set-pair__solo {
+    border: 1px solid #151515; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
+    margin-left: auto;
+  }
+  .carbon-set-pair__solo:hover { background: #151515; color: #fff; }
 </style>
 
 <script>
@@ -259,17 +271,19 @@
       if (r.needsChoice) {
         warn = true;
         html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
-          "<p>" + r.partner.title + " is not available in your size, but these are in stock in " +
-          (colour || 'this colour') + ', and are spare rather than reserved for another set:</p>' +
+          "<p>" + r.partner.title + " is not available in your size. These sizes are in stock in " +
+          (colour || "this colour") + ", or you can buy this piece on its own.</p>" +
           '<div class="carbon-set-pair__sizes">';
         r.options.forEach(function (v) {
           var sz = optOf(v, "SIZE") || v.title;
           var on = String(chosen[r.partner.handle] || "") === String(v.id);
+          /* Size only. The price is already on the button total and repeating it
+             on every chip turned a size picker into a price list. */
           html += '<button type="button" class="carbon-set-pair__size" aria-pressed="' + (on ? "true" : "false") + '" ' +
-            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' +
-            sz + ' <span style="opacity:.7">' + money(v.price) + "</span></button>";
+            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' + sz + "</button>";
         });
-        html += "</div>";
+        html += '<button type="button" class="carbon-set-pair__solo" data-action="solo">' +
+          "Buy this piece only</button></div>";
         return;
       }
       html += '<div class="carbon-set-pair__row">' +
@@ -291,6 +305,8 @@
         render();
       });
     });
+    var solo = el.querySelector('[data-action="solo"]');
+    if (solo) solo.addEventListener("click", addSolo);
   }
 
   /*
@@ -322,6 +338,30 @@
     label.textContent = pending
       ? btn.__carbonSetLabel + " • choose a size"
       : btn.__carbonSetLabel + " • " + money(total * qty);
+  }
+
+  /*
+   * Buy this piece on its own.
+   *
+   * Tagged with a line-item property so the cart guard leaves it alone. Without
+   * that the guard would see a set piece with no partner in the cart and remove
+   * it as an orphan — undoing a choice the shopper made deliberately. The
+   * underscore prefix keeps the property out of the customer's view at checkout.
+   */
+  function addSolo() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    var qtyEl = form && form.querySelector('[name="quantity"]');
+    var qty = qtyEl && Number(qtyEl.value) > 0 ? Number(qtyEl.value) : 1;
+    fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        items: [{ id: Number(currentVariantId()), quantity: qty, properties: { _carbon_set_solo: "1" } }],
+      }),
+    })
+      .then(function () { window.location.href = "/cart"; })
+      .catch(function () { window.location.href = "/cart"; });
   }
 
   /* Add every piece in ONE request. Shopify's /cart/add.js takes an items array,

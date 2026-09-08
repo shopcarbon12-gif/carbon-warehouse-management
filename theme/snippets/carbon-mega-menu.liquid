@@ -1,0 +1,25 @@
+{% comment %}
+  Let the mega menu be as tall as its contents.
+
+  The theme caps .mega-menu-container at a viewport-relative height with
+  overflow-y:auto, so on shorter screens the WOMEN and MEN panels grow an inner
+  scrollbar and the last few links sit below the fold of a dropdown — easy to
+  miss entirely, since nothing suggests there is more to see.
+
+  !important is deliberate: the cap is set on the same class this targets, so a
+  plain override would depend on which stylesheet loaded last. This is the one
+  place it is warranted rather than a habit.
+
+  Trade-off worth knowing: on a very short window a long panel can now run past
+  the bottom of the screen. That is the instruction — show the whole menu — and
+  it is the lesser problem, because a hidden scrollbar inside a dropdown reads
+  as "this is the whole list" when it is not.
+{% endcomment %}
+
+<style>
+  .sub-menu.mega-menu-container,
+  .mega-menu-container {
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+</style>

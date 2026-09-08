@@ -1,5 +1,5 @@
 /**
- * Deploy the matching-set cart snippets to the live theme.
+ * Deploy the Carbon storefront snippets to the live theme.
  *
  * Uploads the two snippets and renders them from layout/theme.liquid, next to
  * the other carbon-* snippets. Idempotent: re-running replaces the snippet
@@ -42,8 +42,16 @@ async function gql(query, variables) {
   return j.data;
 }
 
-const SNIPPETS = ["snippets/carbon-set-cart.liquid", "snippets/carbon-set-cart-guard.liquid"];
-const RENDERS = ["{% render 'carbon-set-cart' %}", "{% render 'carbon-set-cart-guard' %}"];
+const SNIPPETS = [
+  "snippets/carbon-set-cart.liquid",
+  "snippets/carbon-set-cart-guard.liquid",
+  "snippets/carbon-mega-menu.liquid",
+];
+const RENDERS = [
+  "{% render 'carbon-set-cart' %}",
+  "{% render 'carbon-set-cart-guard' %}",
+  "{% render 'carbon-mega-menu' %}",
+];
 
 const files = await gql(
   `query($id:ID!,$f:[String!]){ theme(id:$id){ name role files(filenames:$f, first:10){

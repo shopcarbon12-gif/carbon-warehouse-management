@@ -94,10 +94,20 @@
         info.forEach(function (x) { if (x.partners.length) setOf[x.handle] = x.partners; });
         if (!Object.keys(setOf).length) return;
 
+        /* Lines the shopper deliberately bought on their own are exempt: they
+           chose the piece knowing the matching one was unavailable, and pulling
+           it out of the cart would undo that choice. */
+        function isSolo(i) {
+          return !!(i.properties && i.properties._carbon_set_solo);
+        }
+
         /* Total quantity per product handle, since a product can appear as more
            than one line when sizes differ. */
         var qty = {};
-        cart.items.forEach(function (i) { qty[i.handle] = (qty[i.handle] || 0) + i.quantity; });
+        cart.items.forEach(function (i) {
+          if (isSolo(i)) return;
+          qty[i.handle] = (qty[i.handle] || 0) + i.quantity;
+        });
 
         var updates = {};
         var removed = null;
@@ -105,10 +115,13 @@
 
         Object.keys(setOf).forEach(function (h) {
           var present = setOf[h].filter(function (p) { return qty[p] > 0; });
+          if (!qty[h]) return;   /* only solo lines remain for this product */
           if (!present.length) {
             /* Every partner is gone — the remaining piece cannot be sold as a
-               set, so it goes too. */
-            cart.items.forEach(function (i) { if (i.handle === h) updates[i.key] = 0; });
+               set, so it goes too. Solo lines are left where they are. */
+            cart.items.forEach(function (i) {
+              if (i.handle === h && !isSolo(i)) updates[i.key] = 0;
+            });
             removed = h;
             return;
           }
@@ -120,7 +133,7 @@
             [h].concat(present).forEach(function (ph) {
               var seen = 0;
               cart.items.forEach(function (i) {
-                if (i.handle !== ph) return;
+                if (i.handle !== ph || isSolo(i)) return;
                 var want = Math.max(0, Math.min(i.quantity, min - seen));
                 seen += want;
                 if (want !== i.quantity) updates[i.key] = want;
