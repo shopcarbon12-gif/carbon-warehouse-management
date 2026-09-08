@@ -1,0 +1,24 @@
+{% comment %}
+  Raise the mega-menu height cap so the WOMEN panel fits without scrolling.
+
+  The cap stays — an unbounded panel could run off a short screen with no way to
+  reach the rest — it is just set higher. The theme's own value leaves too
+  little room: measured live, the longest panel needs 587px at a 1000px window
+  and 537px at 700px, while the theme allowed only 485px at 700px, so the last
+  few CLOTHING links sat behind a scrollbar.
+
+  100vh - 150px clears the header and announcement bar and still fits the
+  longest panel down to roughly a 700px window. Below that the content genuinely
+  cannot fit, and the cap correctly lets it scroll rather than spilling off
+  screen.
+
+  !important because the cap is declared on this same class, so a plain override
+  would depend on which stylesheet loaded last.
+{% endcomment %}
+
+<style>
+  .sub-menu.mega-menu-container,
+  .mega-menu-container {
+    max-height: calc(100vh - 150px) !important;
+  }
+</style>
