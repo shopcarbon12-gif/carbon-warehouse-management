@@ -56,15 +56,36 @@ which reads like a permissions bug and is not one.
 
 ### 3. OAuth client
 
-Google Cloud Console, not Google Ads:
+Google Cloud Console, not Google Ads. The consent screen now lives under
+**Google Auth Platform**, not the old "OAuth consent screen" page:
 
-1. Create or pick a project.
-2. APIs and Services → Library → enable **Google Ads API**.
-3. Credentials → Create credentials → OAuth client ID → **Desktop app**.
-4. Copy the client ID and client secret.
+1. Create or pick a project. Reusing an existing one is fine; enabling one more
+   API does not affect anything already in it.
+2. Enable **Google Ads API** for that project, from the API Library.
+3. Google Auth Platform → **Audience**. If publishing status is Testing, add
+   the consenting Google account under Test users.
+4. Google Auth Platform → **Clients** → Create client → **Desktop app**.
+5. Copy the client ID and client secret.
 
 Desktop-app clients accept any `http://localhost` port, so the loopback script
 below needs no redirect URI configured by hand.
+
+#### Testing status expires refresh tokens after 7 days
+
+This is the one that wastes a week. While an External app sits in **Testing**
+publishing status, every refresh token it issues stops working after seven
+days. The scripts then fail with `invalid_grant`, which reads like a revoked
+credential and is really just the clock.
+
+Fix it before minting a token worth keeping: Google Auth Platform → Audience →
+**Publish app**. Moving to In production does not require Google's
+verification review. The `adwords` scope is sensitive, so an unverified app
+shows an "unverified" interstitial that the owner clicks through once, and the
+refresh token then lives until it is explicitly revoked.
+
+Verification is only worth pursuing if people outside your organization will
+ever consent. For an internal integration, publishing unverified is the normal
+end state.
 
 ### 4. Refresh token
 
