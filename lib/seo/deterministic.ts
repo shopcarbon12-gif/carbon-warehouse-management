@@ -126,12 +126,6 @@ export function scoreHandle(fields: SeoFields): FieldScore {
     score -= 20;
     issues.push("Too short to be descriptive.");
   }
-  const words = v.split("-").filter(Boolean);
-  const stopCount = words.filter((w) => STOP_WORDS.has(w)).length;
-  if (stopCount >= 2) {
-    score -= 8;
-    issues.push("Contains filler/stop words.");
-  }
   // The handle must be the product name itself, hyphenated. A slug left over
   // from an earlier name ("gifted-product" for the Gift Card) tells a shopper
   // and a search engine two different things about the same page.
@@ -142,6 +136,16 @@ export function scoreHandle(fields: SeoFields): FieldScore {
   if (!isHandleGood(v, fields.title)) {
     score -= 20;
     issues.push(`Does not match the product name (expected "${slugifyHandle(fields.title)}").`);
+
+    // Filler words only count against a handle that is NOT the product name.
+    // "Fill In The Blank T-Shirt" genuinely contains "in" and "the", and a
+    // handle is required to be the name — penalising it for saying the name
+    // asks for two contradictory things and caps a correct handle at 92.
+    const words = v.split("-").filter(Boolean);
+    if (words.filter((w) => STOP_WORDS.has(w)).length >= 2) {
+      score -= 8;
+      issues.push("Contains filler/stop words.");
+    }
   }
   // The handle is not required to contain the descriptive focus keyword — the
   // product name is the keyword that matters here.

@@ -28,17 +28,20 @@ export function slugifyHandle(title: string): string {
 /**
  * Is the current handle already the right one?
  *
- * A trailing "-2" counts as correct. Shopify appends that itself when the clean
- * handle is taken by another product, so treating it as wrong would rename the
- * product on every run, collide again, get another suffix, and leave a trail of
- * redirects behind it — churn that never converges.
+ * A short disambiguating suffix counts as correct — "-2" or "-m". Two products
+ * can legitimately share a name (this catalog has two both called "Beaded
+ * Bracelet"), and only one of them can hold the clean slug. Treating the other
+ * as wrong would rename it on every run, collide with the first, and leave a
+ * trail of redirects behind it — churn that never converges, and in practice a
+ * hard failure, because productUpdate rejects a handle that is taken rather
+ * than quietly appending to it.
  */
 export function isHandleGood(current: string, title: string): boolean {
   const want = slugifyHandle(title);
   if (!want) return true; /* No name to derive from — leave the handle alone. */
   const have = String(current || "").trim().toLowerCase();
   if (have === want) return true;
-  return new RegExp(`^${want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-\\d+$`).test(have);
+  return new RegExp(`^${want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-(\\d+|[a-z])$`).test(have);
 }
 
 /**

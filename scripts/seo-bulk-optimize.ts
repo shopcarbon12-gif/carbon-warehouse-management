@@ -310,11 +310,34 @@ async function publish(
     input.handle = wantHandle;
   }
 
-  const r = await gql(
-    `mutation($input: ProductInput!){ productUpdate(input:$input){ product{ id handle } userErrors{ field message } } }`,
-    { input },
-  );
-  const errs = r.productUpdate?.userErrors || [];
+  const UPDATE = `mutation($input: ProductInput!){
+    productUpdate(input:$input){ product{ id handle } userErrors{ field message } } }`;
+
+  let r = await gql(UPDATE, { input });
+  let errs = r.productUpdate?.userErrors || [];
+
+  /*
+   * A taken handle is rejected, not quietly suffixed.
+   *
+   * I assumed productUpdate behaved like productCreate and appended a number.
+   * It does not — it fails the whole mutation, which meant one product's copy,
+   * alts and metafields were all lost to a handle clash. Two products may share
+   * a name legitimately, so try a suffix, and if that is no good drop the handle
+   * and publish everything else rather than losing the run over a URL.
+   */
+  if (errs.length && input.handle && errs.some((e: Json) => /handle/i.test(String(e.message)))) {
+    const base = String(input.handle);
+    for (let n = 2; n <= 5 && errs.length; n += 1) {
+      input.handle = `${base}-${n}`;
+      r = await gql(UPDATE, { input });
+      errs = r.productUpdate?.userErrors || [];
+    }
+    if (errs.length) {
+      delete input.handle;
+      r = await gql(UPDATE, { input });
+      errs = r.productUpdate?.userErrors || [];
+    }
+  }
   if (errs.length) throw new Error(`productUpdate: ${errs.map((e: Json) => e.message).join("; ")}`);
 
   /* 301 from the old URL, pointing at the handle Shopify actually assigned —
@@ -417,6 +440,10 @@ async function main() {
 
   let ok = 0;
   let failed = 0;
+  /* Handle changes are reported at the end: they rewrite live URLs and they
+     invalidate the set pairing, so they are not something to bury in a scroll of
+     per-product lines. */
+  const renamed: string[] = [];
   let improvedTotal = 0;
   let at100 = 0;
   const before: number[] = [];
@@ -442,6 +469,9 @@ async function main() {
         const beforeCard = scoreAll(current);
 
         if (WRITE) {
+          const before = String(p.handle || "");
+          const after = String(result.proposed.handle || "").trim().toLowerCase();
+          if (after && after !== before.toLowerCase()) renamed.push(`${before}  ->  ${after}`);
           await publish(
             p.id,
             result.proposed,
@@ -516,6 +546,24 @@ async function main() {
   console.log(`Average score ${avg(before)} → ${avg(after)}   at a perfect 100: ${at100}/${ok}`);
   console.log(`Report: ${REPORT}`);
   if (!WRITE) console.log(`\nNothing was written. Re-run with --write to publish.`);
+  else if (renamed.length) {
+    /*
+     * Renaming a product breaks the set pairing.
+     *
+     * carbon_set.partners stores HANDLES, because that is what the storefront
+     * fetches (/products/<handle>.js). Rename a piece and its partner's list
+     * points at a URL that no longer exists — the panel then fails silently,
+     * which is the worst way for it to fail. This run renamed products, so say
+     * so loudly rather than leaving it to be discovered on the storefront.
+     */
+    console.log(`\n${renamed.length} product${renamed.length === 1 ? "" : "s"} renamed:`);
+    for (const r of renamed) console.log(`  ${r}`);
+    console.log(
+      "\n  Set pairing stores partner HANDLES, so any renamed set piece has left\n" +
+        "  its partner pointing at a dead URL. Repair with:\n" +
+        "    npx tsx scripts/push-set-banners.ts --write",
+    );
+  }
 }
 
 main().catch((e) => {
