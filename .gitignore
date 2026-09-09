@@ -107,3 +107,6 @@ scripts/.seo-bulk/
 
 # Google OAuth client secrets (never commit)
 client_secret_*.json
+
+# GMC overlay sync log
+.gmc-overlay-sync.log
