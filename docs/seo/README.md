@@ -69,10 +69,10 @@ else in the menu was touched; all 76 remaining items verified present.
 ### A. Unpublish the 5 empty collections (2 minutes)
 
 The Shopify connector blocks `publishableUnpublish` as a safety policy, so this
-could not be done from here. All five are still published to **Online Store,
-Shop, Google & YouTube, Facebook & Instagram, Pinterest and Snapchat Ads**, which
-means they remain in `sitemap.xml` and in the Merchant Center feed even though
-they are no longer linked in the nav.
+could not be done from here. All five are still published to **seven** channels: Online Store, Shop,
+TikTok, Google & YouTube, Facebook & Instagram, Pinterest and Snapchat Ads. So
+they remain in `sitemap.xml` and in the Merchant Center feed even though they
+are no longer linked in the nav.
 
 | Collection | Handle |
 |---|---|
@@ -92,11 +92,12 @@ that exist are tagged `WOMEN >> ACCESSORIES`.
 
 ### B. The draft backlog — $251,834 of retail value, invisible
 
-212 of 771 products are DRAFT. 158 of them hold stock:
+220 of 770 products are DRAFT. 158 of them hold stock:
 
 | Metric | Value |
 |---|---|
-| Draft products with stock | 158 |
+| Draft products (authoritative count) | 220 |
+| Draft products holding stock | 158 |
 | Units sitting in them | 3,607 |
 | Retail value at min variant price | **$251,834** |
 | Of those, blocked solely by missing photos | **158 of 158 (100%)** |
