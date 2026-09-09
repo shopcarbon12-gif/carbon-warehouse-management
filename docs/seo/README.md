@@ -190,3 +190,67 @@ The catalog data is not the problem. The URL layer and the draft backlog are.
 4. Point the header JEANS links at the jeans collections instead of CMS pages.
 5. In Search Console, once 1–3 are done: Validate Fix on "Page with redirect"
    and "Crawled – currently not indexed", and resubmit `sitemap.xml`.
+
+---
+
+## Addendum — Merchant Center feed audit (2026-09-09)
+
+Triggered by a Google Ads setup attempt flagging issues. This is the **feed
+quality** layer, separate from the URL/crawl layer above. Findings verified
+against the Shopify Admin API.
+
+### Barcodes are NOT GTINs — do not map them
+
+The single most important finding. Every variant of a product carries the
+**same** 7-digit barcode, which is an internal style code:
+
+| Product | Variants | Shared barcode |
+|---|---|---|
+| Milo Jeans | 8 | `1171056` |
+| Franco Jeans | 8 | `1171067` |
+| Chaos Hoodie Set | 8 | `1222216` |
+| Alexia Top | 6 | `2541409` |
+
+A valid GTIN is 8, 12, 13 or 14 digits and must be unique per sellable item.
+These are 7 digits and duplicated across every size and colour. Mapping this
+field to GTIN in the Google & YouTube app would trigger mass disapproval on two
+counts at once: invalid GTIN, and duplicate GTIN across distinct items.
+
+**Correct setting:** leave GTIN unmapped, declare no manufacturer identifier
+(`identifier_exists: false`), and supply brand + MPN instead. The store is
+already set up for this — every product has a vendor, and unlike the barcode
+the **SKU is unique per variant**, so it maps cleanly to MPN.
+
+### Variant-level stock
+
+Merchant Center treats every size and colour as a separate item, so a zero-stock
+variant is suppressed individually while ad spend continues on the sizes that
+remain.
+
+| Metric | Value |
+|---|---|
+| Active products | 550 |
+| Total variants | 3,591 |
+| Variants at zero stock | **902 (25%)** |
+| Products fully in stock | 312 |
+| Products with at least one dead variant | 238 |
+| Products where over half the variants are dead | **83** |
+| Active products with zero sellable stock | 1 |
+
+Exports: `variants-out-of-stock.csv` (all 902 rows) and
+`products-mostly-sold-out.csv` (the 83 worst, sorted by percentage dead).
+
+Worst offenders include Carbon Classic Tee (49 of 50 variants dead, 1 unit
+left) and Classic Industry T-Shirt, Fill In The Blank T-Shirt and My Rules
+T-Shirt (14 of 15 dead each). These should be paused or restocked before any
+ad spend starts.
+
+### Store contact email
+
+`shop.contactEmail` is `marketing@carbonjeanscompany.com`, on a different domain
+from shopcarbon.com, while every policy page lists `support@shopcarbon.com`.
+Merchant Center reads off-domain contact addresses as a weaker trust signal.
+
+The Admin API exposes no mutation for this field — `shopUpdate` does not exist
+and the schema carries no shop-settings write. It must be changed by hand:
+**Settings → Store details → Contact information**.
