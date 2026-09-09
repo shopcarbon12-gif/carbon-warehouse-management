@@ -71,6 +71,17 @@ const OPENAI_KEY = (() => {
   return "";
 })();
 
+/*
+ * Products this run never touches, by handle.
+ *
+ * The Gift Card is not a garment: it has no WMS matrix, no sizes and no stock,
+ * its copy is transactional rather than descriptive, and its URL is the kind of
+ * thing that gets linked from email and help pages. Optimising it the way a
+ * product is optimised makes it worse, so it is left alone by name rather than
+ * by whoever remembers to pass a flag.
+ */
+const EXCLUDED_HANDLES = new Set(["gifted-product", "gift-card"]);
+
 /* ---------------------------------------------------------------- args ---- */
 
 const argv = process.argv.slice(2);
@@ -142,6 +153,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const PRODUCT_FIELDS = `
   id title handle status totalInventory descriptionHtml productType vendor tags onlineStoreUrl
   seo { title description }
+  focusKeyword: metafield(namespace: "carbon_seo", key: "focus_keyword") { value }
   priceRangeV2 { minVariantPrice { amount currencyCode } }
   media(first: 50) { nodes { ... on MediaImage { id image { url altText } } } }
   variants(first: 50) { nodes { id sku barcode price selectedOptions { name value } } }
@@ -172,7 +184,14 @@ async function fetchActiveProducts(): Promise<Json[]> {
    is the score the SEO tab would show for the same product. */
 function toFields(p: Json): SeoFields {
   const media = (p.media?.nodes || []).filter((n: Json) => n && n.id);
+  /* The keyword the copy was written around, read back from the metafield the
+     publish step stores. Without it the scorer has nothing to check seoTitle,
+     metaDescription and bodyHtml against and every already-optimized product
+     reads as 89 — so nothing is ever skipped and good copy is rewritten on
+     every run. The SEO tab had the same gap. */
+  const focusKeyword = String(p.focusKeyword?.value || "").trim();
   return {
+    focusKeyword,
     title: p.title || "",
     seoTitle: p.seo?.title || "",
     metaDescription: p.seo?.description || "",
@@ -260,7 +279,14 @@ async function loadSetFlags(): Promise<number> {
 
 /* --------------------------------------------------------------- write ---- */
 
-async function publish(productId: string, fields: SeoFields, focusKeyword: string, secondary: string[], score: number) {
+async function publish(
+  productId: string,
+  fields: SeoFields,
+  focusKeyword: string,
+  secondary: string[],
+  score: number,
+  oldHandle = "",
+) {
   const input: Json = { id: productId };
   const seo: Json = {};
   if (fields.seoTitle) seo.title = fields.seoTitle.trim();
@@ -275,15 +301,35 @@ async function publish(productId: string, fields: SeoFields, focusKeyword: strin
   if (Array.isArray(fields.tags) && fields.tags.length) {
     input.tags = fields.tags.map((t) => String(t || "").trim()).filter(Boolean);
   }
-  /* Title and handle are deliberately never sent: they are preserved brand
-     names, and changing a handle rewrites a live URL. */
+  /* The product title is still never sent: it is a preserved brand name.
+     The handle IS sent now — it should be the product name, hyphenated, and the
+     optimizer only proposes one when the current slug does not match. Changing
+     it rewrites a live URL, which is why the redirect below is not optional. */
+  const wantHandle = String(fields.handle || "").trim().toLowerCase();
+  if (wantHandle && wantHandle !== String(oldHandle || "").trim().toLowerCase()) {
+    input.handle = wantHandle;
+  }
 
   const r = await gql(
-    `mutation($input: ProductInput!){ productUpdate(input:$input){ product{ id } userErrors{ field message } } }`,
+    `mutation($input: ProductInput!){ productUpdate(input:$input){ product{ id handle } userErrors{ field message } } }`,
     { input },
   );
   const errs = r.productUpdate?.userErrors || [];
   if (errs.length) throw new Error(`productUpdate: ${errs.map((e: Json) => e.message).join("; ")}`);
+
+  /* 301 from the old URL, pointing at the handle Shopify actually assigned —
+     on a collision it appends a suffix, and redirecting to the handle we asked
+     for would send every old link to a 404. */
+  const assigned = String(r.productUpdate?.product?.handle || "").trim();
+  if (input.handle && oldHandle && assigned && assigned !== String(oldHandle).toLowerCase()) {
+    const rd = await gql(
+      `mutation($redirect: UrlRedirectInput!){
+         urlRedirectCreate(urlRedirect:$redirect){ userErrors{ field message } } }`,
+      { redirect: { path: `/products/${oldHandle}`, target: `/products/${assigned}` } },
+    );
+    const rde = rd.urlRedirectCreate?.userErrors || [];
+    if (rde.length) throw new Error(`redirect: ${rde.map((e: Json) => e.message).join("; ")}`);
+  }
 
   const alts = (fields.imageAlts || [])
     .filter((a) => String(a.id).startsWith("gid://shopify/MediaImage/") && String(a.altText || "").trim())
@@ -348,7 +394,9 @@ async function main() {
   const all = await fetchActiveProducts();
 
   const done = new Set(loadState().done);
+  const excluded = all.filter((p) => EXCLUDED_HANDLES.has(String(p.handle || "").toLowerCase()));
   let queue = all
+    .filter((p) => !EXCLUDED_HANDLES.has(String(p.handle || "").toLowerCase()))
     .filter((p) => (p.media?.nodes || []).some((n: Json) => n?.image?.url))
     .filter((p) => (ONLY.size ? ONLY.has(p.id) : true))
     .filter((p) => !done.has(p.id));
@@ -360,7 +408,11 @@ async function main() {
     return acc;
   }, {});
   console.log(`  ${all.length} products (${Object.entries(byStatus).map(([k, v]) => `${v} ${k.toLowerCase()}`).join(", ")})`);
-  console.log(`  ${skippedNoImage} skipped (no image) · ${done.size} already done · ${queue.length} to process\n`);
+  console.log(`  ${skippedNoImage} skipped (no image) · ${done.size} already done · ${queue.length} to process`);
+  if (excluded.length) {
+    console.log(`  excluded by name: ${excluded.map((p: Json) => p.handle).join(", ")}`);
+  }
+  console.log("");
   if (!queue.length) return;
 
   let ok = 0;
@@ -390,7 +442,14 @@ async function main() {
         const beforeCard = scoreAll(current);
 
         if (WRITE) {
-          await publish(p.id, result.proposed, result.focusKeyword, result.secondaryKeywords, finalCard.overall);
+          await publish(
+            p.id,
+            result.proposed,
+            result.focusKeyword,
+            result.secondaryKeywords,
+            finalCard.overall,
+            String(p.handle || ""),
+          );
           doneIds.push(p.id);
           fs.writeFileSync(STATE, JSON.stringify({ done: doneIds }, null, 2));
         }
@@ -427,9 +486,13 @@ async function main() {
         );
         console.log(
           `${label}  ${beforeCard.overall} → ${finalCard.overall}${finalCard.overall >= 100 ? "  ✓100" : ""}` +
-            `  [${result.imagesAnalyzed} photo${result.imagesAnalyzed === 1 ? "" : "s"} read]  kw:"${result.focusKeyword}"`,
+            (result.skipped
+              ? "  already optimized — left as it is"
+              : `  [${result.imagesAnalyzed} photo${result.imagesAnalyzed === 1 ? "" : "s"} read]  kw:"${result.focusKeyword}"`),
         );
-        if (USE_VISION && result.imagesAnalyzed === 0) {
+        /* Not on the skip path: nothing was generated there, so no photo was
+           needed and warning about it reads as a failure that did not happen. */
+        if (USE_VISION && !result.skipped && result.imagesAnalyzed === 0) {
           /* Loudly, because silently falling back to name-only copy is exactly
              the quality drop the photos are there to prevent. */
           console.log(`         ⚠ no photo could be read for this product — copy written from name/colour only`);
