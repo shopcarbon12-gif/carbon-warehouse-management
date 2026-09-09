@@ -81,6 +81,29 @@ intend to grant. Set `OAUTH_PORT` if 8787 is taken.
 The token is printed locally and never transmitted anywhere. Paste it into
 `.env.agent-secrets`, which `.gitignore` already covers via `.env*`.
 
+### Where the scripts look for credentials
+
+In this order, first hit wins:
+
+1. the real environment, so CI can override anything
+2. `.env.agent-secrets`, the documented home per `AGENT_CREDENTIALS.md`
+3. `.env.local`
+4. `.env`
+
+All four are gitignored by the `.env*` rule. A plain `.env` works, so a value
+in the wrong file is not a silent failure. Confirm with:
+
+```bash
+git check-ignore -v .env.agent-secrets
+```
+
+If that prints nothing, stop: the file is not ignored and a commit would
+publish your credentials.
+
+Never paste a developer token, client secret, or refresh token into a chat,
+an issue, or a commit message. The scripts read them from disk and no one
+needs to see the values.
+
 ### 5. Confirm
 
 ```bash

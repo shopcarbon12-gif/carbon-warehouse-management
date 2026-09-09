@@ -12,10 +12,16 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const SECRETS_FILE = resolve(process.cwd(), '.env.agent-secrets')
+/**
+ * Searched in order, first hit wins. .env.agent-secrets is the documented home
+ * per AGENT_CREDENTIALS.md, but people reasonably reach for a plain .env, so
+ * accept both rather than fail with a "missing variable" that is actually a
+ * wrong-filename error. All of these match the .env* gitignore rule.
+ */
+const SECRET_FILES = ['.env.agent-secrets', '.env.local', '.env']
 
 /** Parse a dotenv-style file. Ignores comments, tolerates quotes and `export`. */
-export function loadSecrets(file = SECRETS_FILE) {
+function parseEnvFile(file) {
   if (!existsSync(file)) return {}
   const out = {}
   for (const raw of readFileSync(file, 'utf8').split('\n')) {
@@ -36,13 +42,35 @@ export function loadSecrets(file = SECRETS_FILE) {
   return out
 }
 
+/** Merge every candidate file, earlier files winning over later ones. */
+export function loadSecrets(files = SECRET_FILES) {
+  const merged = {}
+  for (const name of files) {
+    const parsed = parseEnvFile(resolve(process.cwd(), name))
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!(key in merged)) merged[key] = value
+    }
+  }
+  return merged
+}
+
+/** Which of the candidate files actually exist, for error messages. */
+export function secretFilesFound() {
+  return SECRET_FILES.filter((name) => existsSync(resolve(process.cwd(), name)))
+}
+
 /** Env lookup: real environment wins over the file, so CI can override. */
 export function env(name, { required = false } = {}) {
   const value = process.env[name] ?? loadSecrets()[name]
   if (required && !value) {
+    const found = secretFilesFound()
+    const where = found.length
+      ? `Looked in ${found.join(', ')} and the environment.`
+      : `No ${SECRET_FILES.join(' / ')} file found in ${process.cwd()}.`
     throw new Error(
-      `Missing ${name}. Add it to .env.agent-secrets or export it. ` +
-        `See docs/google-ads-agent-access.md.`
+      `Missing ${name}. ${where}\n` +
+        `  Add it to .env.agent-secrets (or .env) or export it.\n` +
+        `  See docs/google-ads-agent-access.md.`
     )
   }
   return value
