@@ -103,6 +103,14 @@ async function liveItems() {
 const FINAL = /\bACCESSORIES\b|\bACCESORIOS\b/i, UNDER = /boxer|brief|underwear/i, GIFT = /gift ?card/i;
 const fromTitle = (t) => { const m = t.match(/([A-Za-zÀ-ÿ ]+)\s*\/\s*([A-Za-z0-9]+)\s*$/); return m ? { color: m[1].trim(), size: m[2].trim() } : {}; };
 
+/** Last-resort gender, for items with no English twin to borrow from (belts, one-off accessories). */
+const MALE_PT = /\b(MEN|HOMBRE|HOMBRES|CABALLEROS)\b/i, FEMALE_PT = /\b(WOMEN|MUJER|MUJERES|DAMAS)\b/i;
+const genderFromType = (pt) => (MALE_PT.test(pt) ? 'MALE' : FEMALE_PT.test(pt) ? 'FEMALE' : null);
+
+/** Google rejects "COLORFUL" — it is not in its colour vocabulary. Multicolor is the accepted term. */
+const NOT_A_COLOR = /^(colorful|colourful|multi|multi[- ]?color(ed)?|assorted|print(ed)?|varios|colorido)$/i;
+const normalizeColor = (c) => (c && NOT_A_COLOR.test(c.trim()) ? 'Multicolor' : null);
+
 (async () => {
   log(`--- gmc-overlay-sync start${DRY ? ' (dry run)' : ''} ---`);
   await newTok();
@@ -121,9 +129,10 @@ const fromTitle = (t) => { const m = t.match(/([A-Za-zÀ-ÿ ]+)\s*\/\s*([A-Za-z0
     if (w) attrs.shippingWeight = { value: w, unit: 'lb' };
     if (FINAL.test(it.pt) || UNDER.test(it.title) || UNDER.test(it.pt) || GIFT.test(it.title)) attrs.returnPolicyLabel = 'final-sale';
     const twin = it.k ? ref[it.k] : null;
-    if (!it.gender && twin?.gender) attrs.gender = twin.gender;
-    if (!it.ageGroup && (twin?.ageGroup || twin?.gender)) attrs.ageGroup = twin?.ageGroup || 'ADULT';
+    if (!it.gender) { const d = twin?.gender || genderFromType(it.pt); if (d) attrs.gender = d; }
+    if (!it.ageGroup && (twin?.ageGroup || twin?.gender || genderFromType(it.pt))) attrs.ageGroup = twin?.ageGroup || 'ADULT';
     if (!it.color) { const d = twin?.color || fromTitle(it.title).color; if (d) attrs.color = d; }
+    else { const fixed = normalizeColor(it.color); if (fixed) attrs.color = fixed; }
     if (!it.size) { const d = twin?.size || fromTitle(it.title).size; if (d) attrs.size = d; }
     if (Object.keys(attrs).length) rows.push({ ...it, attrs });
   }
