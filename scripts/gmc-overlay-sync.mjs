@@ -56,6 +56,46 @@ const newTok = async () => {
 };
 const H = () => ({ authorization: `Bearer ${token}`, 'content-type': 'application/json' });
 
+/**
+ * Product-level gender / age from Shopify's taxonomy metafields.
+ *
+ * CRITICAL: read these from Shopify, never from the merged Merchant Center view. The merged
+ * view already contains this overlay's own previous contribution, so a script that skips an
+ * attribute because "it is already there" writes a row without it — and productInputs:insert
+ * REPLACES the row, deleting yesterday's value. That self-erasing loop silently undid a whole
+ * gender backfill once; Shopify is the only non-circular source.
+ */
+async function shopifyGenderAge() {
+  const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`;
+  const MALE = '131973546236', FEMALE = '131978494204';   // taxonomy metaobject gids for this shop
+  const P = {}; let cursor = null, pages = 0;
+  while (pages < 40) {
+    let d = null;
+    for (let i = 0; i < 6; i++) {
+      const r = await fetch(url, { method: 'POST', headers: { 'X-Shopify-Access-Token': shop.SHOPIFY_ADMIN_ACCESS_TOKEN, 'content-type': 'application/json' },
+        body: JSON.stringify({ query: `query($c:String){ products(first:200, after:$c){ pageInfo{hasNextPage endCursor} nodes{ id productType tg: metafield(namespace:"shopify",key:"target-gender"){value} ag: metafield(namespace:"shopify",key:"age-group"){value} } } }`, variables: { c: cursor } }) });
+      const j = await r.json();
+      if (j.errors && JSON.stringify(j.errors).includes('THROTTLED')) { await new Promise(s => setTimeout(s, 2500)); continue; }
+      if (j.errors) throw new Error(JSON.stringify(j.errors).slice(0, 200));
+      d = j.data; break;
+    }
+    if (!d) break;
+    for (const p of d.products.nodes) {
+      const g = p.tg?.value || '', a = p.ag?.value || '';
+      P[p.id.split('/').pop()] = {
+        gender: g.includes(MALE) ? 'MALE' : g.includes(FEMALE) ? 'FEMALE' : null,
+        ageGroup: a ? 'ADULT' : null,
+        productType: p.productType || '',
+      };
+    }
+    pages++;
+    if (!d.products.pageInfo.hasNextPage) break;
+    cursor = d.products.pageInfo.endCursor;
+    await new Promise(s => setTimeout(s, 300));
+  }
+  return P;
+}
+
 /** Shopify variant weights — the source of truth for shipping_weight. */
 async function shopifyWeights() {
   const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`;
@@ -115,7 +155,8 @@ const normalizeColor = (c) => (c && NOT_A_COLOR.test(c.trim()) ? 'Multicolor' : 
   log(`--- gmc-overlay-sync start${DRY ? ' (dry run)' : ''} ---`);
   await newTok();
   const W = await shopifyWeights();
-  log(`shopify variant weights: ${Object.keys(W).length}`);
+  const P = await shopifyGenderAge();
+  log(`shopify: ${Object.keys(W).length} variant weights, ${Object.keys(P).length} products with gender/age`);
   const items = await liveItems();
   log(`live merchant items: ${items.length}`);
 
@@ -125,17 +166,26 @@ const normalizeColor = (c) => (c && NOT_A_COLOR.test(c.trim()) ? 'Multicolor' : 
   const rows = [];
   for (const it of items) {
     const attrs = {};
-    const w = W[(it.offerId.match(/_(\d+)$/) || [])[1]];
+    const [, productId, variantId] = it.offerId.match(/_(\d+)_(\d+)$/) || [];
+    const w = W[variantId];
     if (w) attrs.shippingWeight = { value: w, unit: 'lb' };
     if (FINAL.test(it.pt) || UNDER.test(it.title) || UNDER.test(it.pt) || GIFT.test(it.title)) attrs.returnPolicyLabel = 'final-sale';
+
+    // Gender/age are written UNCONDITIONALLY from Shopify — never gated on what the merged
+    // feed currently shows, because that view contains this overlay's own prior output.
+    const sp = productId ? P[productId] : null;
     const twin = it.k ? ref[it.k] : null;
-    if (!it.gender) { const d = twin?.gender || genderFromType(it.pt); if (d) attrs.gender = d; }
-    if (!it.ageGroup && (twin?.ageGroup || twin?.gender || genderFromType(it.pt))) attrs.ageGroup = twin?.ageGroup || 'ADULT';
+    const gender = sp?.gender || twin?.gender || genderFromType(it.pt) || genderFromType(sp?.productType || '');
+    if (gender) attrs.gender = gender;
+    const age = sp?.ageGroup || (gender ? 'ADULT' : null);
+    if (age) attrs.ageGroup = age;
+
     if (!it.color) { const d = twin?.color || fromTitle(it.title).color; if (d) attrs.color = d; }
     else { const fixed = normalizeColor(it.color); if (fixed) attrs.color = fixed; }
     if (!it.size) { const d = twin?.size || fromTitle(it.title).size; if (d) attrs.size = d; }
     if (Object.keys(attrs).length) rows.push({ ...it, attrs });
   }
+  log(`  writing gender on ${rows.filter(r => r.attrs.gender).length}, age on ${rows.filter(r => r.attrs.ageGroup).length}`);
   const needWeight = items.filter(i => !i.weight).length;
   log(`rows to write: ${rows.length}   (items currently lacking weight: ${needWeight})`);
   if (DRY) { log('dry run — nothing written'); return; }
