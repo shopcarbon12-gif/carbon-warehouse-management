@@ -254,3 +254,137 @@ Merchant Center reads off-domain contact addresses as a weaker trust signal.
 The Admin API exposes no mutation for this field — `shopUpdate` does not exist
 and the schema carries no shop-settings write. It must be changed by hand:
 **Settings → Store details → Contact information**.
+
+---
+
+# Pass 2 — 2026-09-17: Search Console status and page cleanup
+
+## How Search Console was read
+
+There is still no Search Console connector on this account, and the network
+egress policy still blocks requests to shopcarbon.com (`CONNECT tunnel failed,
+response 403`), so neither the Search Console UI nor the live pages were
+readable directly.
+
+Search Console's own alert emails are, however, delivered to the verified
+owner's inbox, and that inbox is readable. The findings below come from those
+alerts, cross-checked against the Shopify Admin API.
+
+## What Search Console is currently reporting
+
+Last alert of any kind: **2026-09-08** (August performance summary). No new
+page-indexing problem has been reported since **2026-08-09**, which is before
+the Pass 1 fixes landed. That is a quiet window, not yet a clean bill of
+health — nine days is shorter than a full recrawl cycle.
+
+Open problem alerts, newest first:
+
+| Date | Alert | Severity |
+|---|---|---|
+| 2026-08-22 | Merchant listings: **missing field `image`, +200%** | Critical |
+| 2026-08-21 | Merchant listings: missing field `description` (in `<parent_node>`) | Non-critical |
+| 2026-08-09 | Soft 404 — pages, and pages in a sitemap | Critical |
+
+Search traffic for context: 626 clicks / 27.4K impressions in August, against
+638 / 26.7K in July and 960 / 39.4K in March. Impressions are flat, clicks are
+drifting down from the March peak.
+
+## The "missing image" alert is not a catalog problem
+
+This was checked exhaustively before concluding anything, because the obvious
+reading — products without photos — is wrong.
+
+All **550 active products** were pulled in six pages and every one has a
+`featuredMedia` and a non-empty `description`. Variant-level media was sampled
+across the widest products (Chaos Hoodie Set, Carbon Classic Tee, Milo Jeans)
+and **every variant resolves to an image** as well.
+
+So no product, and no variant, is missing an image or a description in Shopify.
+The structured data Google is complaining about is being emitted by a page
+template or an injected app script, not by gaps in the catalog.
+
+**This is the one finding that cannot be closed from here.** Confirming which
+template emits the incomplete node requires fetching the rendered HTML of a
+live page, which the egress policy blocks. It is one click for a human:
+Search Console → Enhancements → Merchant listings → open the failing item →
+**Test live page**. The Rich Results Test names the emitting node directly.
+
+## Changes applied to the live store in this pass
+
+Both sets use Shopify's `seo.hidden` metafield, which makes the Online Store
+emit `<meta name="robots" content="noindex">` for that resource. The pages stay
+reachable, so internal links still pass, but they drop out of the index.
+
+This is the mechanism that replaces the unpublish step Pass 1 could not
+perform: `publishableUnpublish` is blocked by the Shopify connector's safety
+policy, and it was never the better fix anyway — unpublishing removes a page
+entirely, while `noindex` resolves the Search Console report without breaking
+anything that links to it.
+
+### The 5 empty collections — now noindexed
+
+Still published to seven sales channels at the start of this pass, still
+holding zero products, and still the most likely source of the Soft 404 report.
+
+| Collection | Handle | Products | Metafield |
+|---|---|---|---|
+| SOCKS & UNDERWEAR (men) | `socks-underwear` | 0 | `47192549851388` |
+| TIES (men) | `ties` | 0 | `47192549884156` |
+| FRAGRANCE & BEAUTY (Men) | `fragrance-beauty` | 0 | `47192549916924` |
+| BELTS (men) | `belts` | 0 | `47192549949692` |
+| SUNGLASSES (Women) | `sunglasses-women` | 0 | `47192549982460` |
+
+### The 6 HTML sitemap pages — now noindexed
+
+Thin listing pages that exist as crawl scaffolding. They are exactly the shape
+that accumulates in "Crawled, currently not indexed", and nothing is gained by
+having them in the index. Crawling is unaffected, so they still do their job.
+
+`html-sitemap`, `html-sitemap-products`, `html-sitemap-collections`,
+`html-sitemap-blogs`, `html-sitemap-articles`, `html-sitemap-pages`.
+
+All 11 metafields returned empty `userErrors` and were re-read afterwards to
+confirm `value: "1"`.
+
+## New finding — three handles exist twice
+
+Three handles resolve as **both a page and a collection**, which puts two URLs
+in front of Google for the same term:
+
+| Handle | As a collection | As a page |
+|---|---|---|
+| `men-clothing` | CLOTHING (MEN), 341 products | CLOTHING |
+| `men-new-now` | NEW & NOW Men, 46 products | NEW & NOW |
+| `men-accessories-shoes` | ACCESSORIES & SHOES (MEN), 30 products | ACCESSORIES & SHOES |
+
+`/pages/retail-store-locator` and `/pages/store-locator` are a fourth pair of
+the same kind.
+
+These are **not** fixed here. Deciding which URL is canonical needs a look at
+what the page templates actually render, and picking wrong would deindex the
+version that currently ranks. Whichever is chosen, the other should get a
+301 to it rather than a `noindex`, so its accumulated signals transfer.
+
+## Also flagged, deliberately not changed
+
+- **`all-products-chatgpt`** — a collection carrying all **771** products,
+  duplicating the entire catalog at a second URL. A textbook duplicate-canonical
+  and crawl-budget problem, and a plausible contributor to the "Duplicate,
+  Google chose different canonical" report from February. It is left alone
+  because the handle suggests it was built deliberately to feed an AI crawler,
+  and noindexing it would defeat that purpose. Worth a decision.
+- **Thin categories** — `polos`, `linen-shirts`, `jeans-women` and
+  `sunglasses` hold 1 product each; `overalls` and `fragrance-beauty-women`
+  hold 2. Real categories awaiting stock rather than dead ends, so they are
+  left indexable. They will read as thin until they are filled, and the draft
+  backlog in `draft-backlog-priority.csv` is what fills them.
+
+## Still open, unchanged from Pass 1
+
+1. **Resubmit `sitemap.xml` and run Validate Fix** in Search Console. The
+   empty collections are noindexed as of this pass, so the precondition that
+   was blocking a clean validation is now met.
+2. **Store contact email** → Settings → Store details → Contact information.
+3. **GTIN mapping** in the Google & YouTube app — declare no manufacturer
+   identifier, brand + SKU-as-MPN. Do not map the barcode field.
+4. **Photography for the draft backlog** — 158 products holding $251,834.
