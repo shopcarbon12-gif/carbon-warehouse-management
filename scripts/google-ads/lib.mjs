@@ -81,7 +81,7 @@ export function env(name, { required = false } = {}) {
  * roughly every four months. Pin it in the env rather than in code so a bump
  * never needs a commit.
  */
-export const API_VERSION = env('GOOGLE_ADS_API_VERSION') || 'v21'
+export const API_VERSION = env('GOOGLE_ADS_API_VERSION') || 'v25'
 
 /** Customer IDs travel as bare digits in the API, but humans copy them dashed. */
 export const stripDashes = (id) => String(id ?? '').replace(/\D/g, '')
