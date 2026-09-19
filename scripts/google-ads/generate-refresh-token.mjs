@@ -18,7 +18,24 @@ import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { env } from './lib.mjs'
 
-const SCOPE = 'https://www.googleapis.com/auth/adwords'
+/**
+ * One consent covers every Google surface this repo automates. Requesting them
+ * together avoids three separate browser round-trips and three refresh tokens
+ * to keep in sync.
+ *
+ * Each scope needs its API enabled in the same Cloud project and listed on the
+ * consent screen, or Google rejects the grant. If that happens, narrow the set
+ * rather than abandoning the run:
+ *
+ *   GOOGLE_OAUTH_SCOPES='https://www.googleapis.com/auth/adwords' npm run ads:auth
+ */
+const DEFAULT_SCOPES = [
+  'https://www.googleapis.com/auth/adwords', // Google Ads
+  'https://www.googleapis.com/auth/tagmanager.edit.containers', // GTM: edit tags
+  'https://www.googleapis.com/auth/tagmanager.publish', // GTM: publish versions
+  'https://www.googleapis.com/auth/content', // Merchant Center
+]
+const SCOPE = (process.env.GOOGLE_OAUTH_SCOPES || DEFAULT_SCOPES.join(' ')).trim()
 const PORT = Number(process.env.OAUTH_PORT || 8787)
 // Desktop-app OAuth clients accept any loopback port, so no console config
 // change is needed if this port is already taken.
@@ -108,7 +125,18 @@ const server = createServer(async (req, res) => {
     console.log('Add this line to .env.agent-secrets (gitignored):\n')
     console.log(`GOOGLE_ADS_REFRESH_TOKEN=${token.refresh_token}`)
     console.log('\n' + '='.repeat(64))
-    console.log('Then confirm it works:  npm run ads:verify')
+    // Google grants only what the user actually approved, which can be less
+    // than we asked for. Print it so a partial grant is obvious now rather
+    // than as a 403 from one API later.
+    const granted = (token.scope ?? '').split(' ').filter(Boolean)
+    console.log(`\nScopes granted (${granted.length}):`)
+    for (const s of granted) console.log(`  ${s.replace('https://www.googleapis.com/auth/', '')}`)
+    const missing = SCOPE.split(' ').filter((s) => !granted.includes(s))
+    if (missing.length) {
+      console.log('\nNot granted:')
+      for (const s of missing) console.log(`  ${s.replace('https://www.googleapis.com/auth/', '')}`)
+    }
+    console.log('\nThen confirm it works:  npm run ads:verify')
     console.log('Revoke any time at:     https://myaccount.google.com/permissions')
   } catch (err) {
     send(500, page('Exchange failed', 'See your terminal for details.'))
