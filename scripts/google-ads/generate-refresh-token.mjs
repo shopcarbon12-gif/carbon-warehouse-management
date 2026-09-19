@@ -8,14 +8,17 @@
  * access that Google account already has. Grant less by signing in as a
  * read-only user; grant more by signing in as an admin.
  *
- * The token is printed here and never leaves the machine. Paste it into
- * .env.agent-secrets (gitignored). Revoke any time at
- * myaccount.google.com/permissions.
+ * The token is written straight into .env.agent-secrets (gitignored) and never
+ * printed: a printed token lands in terminal scrollback and chat transcripts,
+ * which is how a client secret for this project leaked once already. Revoke
+ * any time at myaccount.google.com/permissions.
  *
  * Usage:  npm run ads:auth
  */
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { env } from './lib.mjs'
 
 /**
@@ -32,6 +35,9 @@ import { env } from './lib.mjs'
 const DEFAULT_SCOPES = [
   'https://www.googleapis.com/auth/adwords', // Google Ads
   'https://www.googleapis.com/auth/tagmanager.edit.containers', // GTM: edit tags
+  // GTM: turn a workspace into a version. Without it every edit is stranded in
+  // the workspace, because publish only accepts a version.
+  'https://www.googleapis.com/auth/tagmanager.edit.containerversions',
   'https://www.googleapis.com/auth/tagmanager.publish', // GTM: publish versions
   'https://www.googleapis.com/auth/content', // Merchant Center
 ]
@@ -82,6 +88,20 @@ async function exchange(code) {
   return json
 }
 
+const SECRETS_FILE = resolve(process.cwd(), '.env.agent-secrets')
+
+/**
+ * Replace rather than append. The loader takes the last occurrence within a
+ * file, so a stale token left above a new one is harmless today, but an edit
+ * that reorders the file would silently resurrect it.
+ */
+function storeRefreshToken(token) {
+  const text = existsSync(SECRETS_FILE) ? readFileSync(SECRETS_FILE, 'utf8') : ''
+  const kept = text.replace(/^GOOGLE_ADS_REFRESH_TOKEN=.*(\n|$)/gm, '')
+  const sep = kept && !kept.endsWith('\n') ? '\n' : ''
+  writeFileSync(SECRETS_FILE, `${kept}${sep}GOOGLE_ADS_REFRESH_TOKEN=${token}\n`, { mode: 0o600 })
+}
+
 const page = (title, body) =>
   `<!doctype html><meta charset="utf-8"><title>${title}</title>` +
   `<body style="font:16px system-ui;padding:3rem;max-width:34rem">` +
@@ -120,11 +140,12 @@ const server = createServer(async (req, res) => {
 
   try {
     const token = await exchange(code)
+    // prompt=consent should guarantee one; if Google withholds it anyway, an
+    // access token alone is useless an hour from now, so fail loudly.
+    if (!token.refresh_token) throw new Error('Google returned no refresh token. Re-run npm run ads:auth.')
+    storeRefreshToken(token.refresh_token)
     send(200, page('Done', 'Refresh token issued. Return to your terminal.'))
-    console.log('\n' + '='.repeat(64))
-    console.log('Add this line to .env.agent-secrets (gitignored):\n')
-    console.log(`GOOGLE_ADS_REFRESH_TOKEN=${token.refresh_token}`)
-    console.log('\n' + '='.repeat(64))
+    console.log(`\nRefresh token written to ${SECRETS_FILE} (not printed).`)
     // Google grants only what the user actually approved, which can be less
     // than we asked for. Print it so a partial grant is obvious now rather
     // than as a 403 from one API later.

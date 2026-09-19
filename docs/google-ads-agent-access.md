@@ -95,12 +95,16 @@ Put the client ID and secret in `.env.agent-secrets` first, then:
 npm run ads:auth
 ```
 
-It prints a URL, waits on `http://localhost:8787`, and prints the refresh token
-when you finish consenting. Sign in as the account whose access level you
-intend to grant. Set `OAUTH_PORT` if 8787 is taken.
+It prints a URL, waits on `http://localhost:8787`, and writes the refresh token
+into `.env.agent-secrets` when you finish consenting, replacing any earlier
+one. The token is never printed, so it cannot end up in scrollback or a chat
+transcript. Sign in as the account whose access level you intend to grant. Set
+`OAUTH_PORT` if 8787 is taken.
 
-The token is printed locally and never transmitted anywhere. Paste it into
-`.env.agent-secrets`, which `.gitignore` already covers via `.env*`.
+If the browser runs on a different machine, the final redirect to
+`localhost:8787` shows "site can't be reached". The code is in that URL: run
+`curl '<the full localhost URL>'` on this machine within ten minutes and the
+waiting script completes the exchange.
 
 ### Where the scripts look for credentials
 
