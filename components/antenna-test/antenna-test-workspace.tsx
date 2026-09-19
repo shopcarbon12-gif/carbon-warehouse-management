@@ -1425,45 +1425,45 @@ export function AntennaTestWorkspace() {
             <tr>
               <th className="whitespace-nowrap px-3 py-2 text-right">#</th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("distance")}
               >
                 Distance{sortIndicator("distance")}
               </th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("rssi")}
               >
                 RSSI now{sortIndicator("rssi")}
               </th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("best")}
               >
                 Best{sortIndicator("best")}
               </th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-right hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-right hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("reads")}
               >
                 Reads{sortIndicator("reads")}
               </th>
               <th className="whitespace-nowrap px-3 py-2 text-left">Sparkline (5 s)</th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("epc")}
               >
                 EPC{sortIndicator("epc")}
               </th>
               <th className="whitespace-nowrap px-3 py-2 text-right">Ant #</th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("firstPower")}
               >
                 First-read power{sortIndicator("firstPower")}
               </th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("sku")}
               >
                 Custom SKU{sortIndicator("sku")}
@@ -1471,7 +1471,7 @@ export function AntennaTestWorkspace() {
               <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">System ID</th>
               <th className="whitespace-nowrap px-3 py-2 text-left max-md:hidden">Asset ID</th>
               <th
-                className="whitespace-nowrap cursor-pointer select-none px-3 py-2 text-left hover:text-[var(--wms-fg)]"
+                className="whitespace-nowrap cursor-pointer px-3 py-2 text-left hover:text-[var(--wms-fg)]"
                 onClick={() => onHeaderClick("desc")}
               >
                 Name{sortIndicator("desc")}

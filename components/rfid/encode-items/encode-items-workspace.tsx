@@ -1247,7 +1247,7 @@ function SortableTh<K extends string>({
   return (
     <th
       className={
-        "px-3 py-2 text-left select-none cursor-pointer transition-colors " +
+        "px-3 py-2 text-left cursor-pointer transition-colors " +
         (isActive
           ? "text-[var(--wms-accent)]"
           : "hover:text-[var(--wms-fg)]") +

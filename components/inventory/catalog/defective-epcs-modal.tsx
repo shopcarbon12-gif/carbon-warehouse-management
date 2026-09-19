@@ -548,7 +548,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
                               type="button"
                               onClick={() => toggleSort(c.sortKey as SortKey)}
                               className={
-                                "inline-flex items-center gap-1 select-none hover:text-[var(--wms-fg)] " +
+                                "inline-flex items-center gap-1 hover:text-[var(--wms-fg)] " +
                                 (isActive ? "text-[var(--wms-accent)]" : "")
                               }
                               title={`Sort by ${c.label}`}

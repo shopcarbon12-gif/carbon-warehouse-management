@@ -678,7 +678,7 @@ function HardwareTreeSection(props: TreeProps) {
           reach — this tap-to-expand <details> surfaces the same text. Hidden
           at md+ so desktop stays untouched. */}
       <details className="mb-2 rounded-md border border-[var(--wms-border)]/60 bg-[var(--wms-surface-elevated)]/40 px-3 py-1 font-mono text-[var(--wms-muted)] md:hidden">
-        <summary className="flex min-h-10 cursor-pointer select-none items-center text-[0.7rem] uppercase tracking-wide">
+        <summary className="flex min-h-10 cursor-pointer items-center text-[0.7rem] uppercase tracking-wide">
           What the badges mean
         </summary>
         <dl className="mb-2 mt-1 space-y-1.5 text-[0.7rem] leading-snug">

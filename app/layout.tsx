@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { WMS_THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
+import { TextSelectionClickGuard } from "@/components/text-selection-click-guard";
 import "./globals.css";
 
 const wmsSans = Outfit({
@@ -47,7 +48,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: WMS_THEME_BOOT_SCRIPT }}
         />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <TextSelectionClickGuard />
+        {children}
+      </body>
     </html>
   );
 }

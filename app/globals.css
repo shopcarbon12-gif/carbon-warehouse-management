@@ -145,6 +145,34 @@ body {
   :is(:disabled, [aria-disabled="true"]) {
     cursor: not-allowed;
   }
+
+  /* All text is selectable and copyable, including inside buttons, links,
+     headers and clickable rows, where browsers otherwise refuse to start a
+     selection. Base layer, so a deliberate `select-none` utility (resize
+     grips, drag-to-reorder tiles) still wins. The click that ends a
+     drag-selection is swallowed by lib/text-selection-click-guard.ts. */
+  :is(
+      a,
+      button,
+      label,
+      summary,
+      th,
+      td,
+      [role="button"],
+      [role="link"],
+      [role="menuitem"],
+      [role="option"],
+      [role="tab"],
+      [role="switch"]
+    ) {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Dragging across a link selects its text instead of dragging the URL out. */
+  a[href] {
+    -webkit-user-drag: none;
+  }
 }
 
 /* Handheld settings switch — kept out of Tailwind arbitrary classes (avoids dev compile hang). */

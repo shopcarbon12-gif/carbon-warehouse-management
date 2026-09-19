@@ -109,7 +109,7 @@
 .pt-root .stepper input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .pt-root .stepper input::-webkit-outer-spin-button, .pt-root .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pt-root .stepper input:focus { outline: none; }
-.pt-root .toggle { display: flex; align-items: center; gap: 11px; cursor: pointer; user-select: none; padding: 11px 12px; border: 1px solid var(--wms-border); border-radius: 10px; background: var(--wms-surface-elevated); }
+.pt-root .toggle { display: flex; align-items: center; gap: 11px; cursor: pointer; padding: 11px 12px; border: 1px solid var(--wms-border); border-radius: 10px; background: var(--wms-surface-elevated); }
 .pt-root .switch { position: relative; width: 42px; height: 23px; border-radius: 999px; background: color-mix(in srgb, var(--wms-muted) 40%, transparent); transition: .18s; flex: 0 0 auto; }
 .pt-root .switch::after { content: ""; position: absolute; top: 2px; left: 2px; height: 19px; width: 19px; border-radius: 999px; background: #fff; transition: .18s; }
 .pt-root .toggle.on .switch { background: var(--wms-accent); }

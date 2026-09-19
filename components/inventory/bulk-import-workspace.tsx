@@ -604,7 +604,7 @@ export function BulkImportWorkspace() {
                       type="button"
                       onClick={() => toggleSort(c.key)}
                       className={
-                        "inline-flex items-center gap-1 select-none hover:text-[var(--wms-fg)] max-md:-my-2 max-md:py-2 " +
+                        "inline-flex items-center gap-1 hover:text-[var(--wms-fg)] max-md:-my-2 max-md:py-2 " +
                         (active ? "text-[var(--wms-accent)]" : "")
                       }
                       title={`Sort by ${c.label}`}
