@@ -102,10 +102,31 @@ export async function PATCH(req: Request, { params }: Ctx) {
     }
     return NextResponse.json({ ok: true, updated: r.rowCount });
   } catch (e) {
-    // 23505 = unique_violation — almost always a duplicate SKU.
+    // 23505 = unique_violation, i.e. custom_skus_sku_active_uq: only one
+    // UNARCHIVED row may hold a given SKU. Unarchiving trips it whenever another
+    // product already has that SKU live, which happens because two matrices can
+    // share a UPC and a SKU is UPC + colour code + size. Name the product holding
+    // it — otherwise the operator sees a dead end with nothing to act on.
     if ((e as { code?: string })?.code === "23505") {
+      const conflict = await pool
+        .query<{ sku: string; product: string | null }>(
+          `SELECT mine.sku, mx.description AS product
+             FROM custom_skus mine
+             JOIN custom_skus other
+               ON other.sku = mine.sku AND other.archived = FALSE AND other.id <> mine.id
+             LEFT JOIN matrices mx ON mx.id = other.matrix_id
+            WHERE mine.id = $1::uuid
+            LIMIT 1`,
+          [id],
+        )
+        .catch(() => null);
+      const hit = conflict?.rows[0];
       return NextResponse.json(
-        { error: "That SKU is already in use by another item." },
+        {
+          error: hit
+            ? `SKU ${hit.sku} is already active on "${hit.product ?? "another product"}". Both products share the same UPC, so they produce the same SKU. Archive it there first, or give this product its own UPC.`
+            : "That SKU is already in use by another item.",
+        },
         { status: 409 },
       );
     }
