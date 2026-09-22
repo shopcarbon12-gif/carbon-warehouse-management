@@ -141,6 +141,7 @@ class _SkuParts {
 class _StoredItem {
   const _StoredItem({
     required this.sku,
+    required this.matrixId,
     required this.description,
     required this.colorCode,
     required this.size,
@@ -150,6 +151,11 @@ class _StoredItem {
 
   /// Full custom SKU, e.g. `C12345678B8L`.
   final String sku;
+
+  /// The product this row belongs to. Two products can share a UPC, so the
+  /// same SKU can sit on both — every remove/restore is scoped by this or it
+  /// takes the other product's stock out of the bin as well.
+  final String matrixId;
 
   /// Matrix description (the human item name), e.g. `Slim Fit Jeans`.
   final String description;
@@ -173,6 +179,7 @@ class _StoredItem {
         : <String>[];
     return _StoredItem(
       sku: m['sku']?.toString() ?? '',
+      matrixId: m['matrix_id']?.toString() ?? '',
       description: m['description']?.toString() ?? '',
       colorCode: (m['color_code'] ?? m['color'] ?? '').toString(),
       size: (m['size'] ?? '').toString(),
@@ -226,12 +233,17 @@ class _AssignSnapshot {
     required this.binId,
     required this.skuAssigned,
     required this.itemName,
+    this.matrixId,
   });
 
   final String binCode;
   final String binId;
   final String skuAssigned;
   final String itemName;
+
+  /// The product that was assigned — reversing without it would also pull a
+  /// UPC-sharing twin out of the bin.
+  final String? matrixId;
 }
 
 /// Bin Assign — fast 2D putaway with hardware wedge, camera, or manual entry.
@@ -921,6 +933,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   Future<_AssignOutcome> _doAssign({
     required String skuScanned,
     required String scope,
+    String? matrixId,
     bool allowMoveOrAddPrompt = true,
   }) async {
     final api = context.read<WmsApiClient>();
@@ -943,6 +956,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           binCode: _currentBin,
           skuScanned: skuScanned,
           scope: scope,
+          matrixId: matrixId,
         );
         final inOtherRaw = preview['inOtherBins'];
         final inOther = inOtherRaw is List
@@ -1009,6 +1023,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       skuScanned: skuScanned,
       scope: scope,
       mode: mode,
+      matrixId: matrixId,
     );
     final updated = (res['updated'] as num?)?.toInt() ?? 0;
     return _AssignOutcome(
@@ -1250,6 +1265,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           binCode: binCode,
           skuScanned: item.sku,
           scope: 'single_color_all_sizes',
+          matrixId: item.matrixId,
         );
       }
       if (!mounted) return;
@@ -1277,6 +1293,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           binCode: _currentBin,
           skuScanned: item.sku,
           scope: 'single_color_all_sizes',
+          matrixId: item.matrixId,
         );
       }
       await _refreshContents();
@@ -1384,7 +1401,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     try {
       await context
           .read<WmsApiClient>()
-          .removeSkuFromBin(snap.binCode, snap.skuAssigned);
+          .removeSkuFromBin(snap.binCode, snap.skuAssigned,
+              matrixId: snap.matrixId);
       if (!mounted) return;
       setState(() {
         _lastAssignSnapshot = null;
@@ -1446,7 +1464,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     try {
       await context
           .read<WmsApiClient>()
-          .removeSkuFromBin(_currentBin, item.sku);
+          .removeSkuFromBin(_currentBin, item.sku, matrixId: item.matrixId);
       await _refreshContents();
       if (mounted) _checkAutoEmptyRule(_storedContents);
     } catch (e) {
@@ -1509,6 +1527,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         binCode: _currentBin,
         skuScanned: skuParts.baseColor,
         scope: 'single_color_all_sizes',
+        matrixId: matrixId,
       );
     } catch (_) {
       // Older server (no /putaway-preview endpoint) — fall through and
@@ -1538,6 +1557,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         itemName: itemName,
         binCode: _currentBin,
         binId: _currentBinId,
+        matrixId: matrixId,
       );
       if (!mounted) return;
       if (ok) {
@@ -1559,6 +1579,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       itemName: itemName,
       binCode: binCodeAtAssign,
       binId: binIdAtAssign,
+      matrixId: matrixId,
     );
     if (!mounted) return;
     if (!firstAssignOk) {
@@ -1579,6 +1600,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         await _performMultiColourAssign(
           colourSkus: picked,
           itemName: itemName,
+          matrixId: matrixId,
         );
         if (!mounted) return;
       }
@@ -1862,12 +1884,14 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     required String itemName,
     required String binCode,
     required String binId,
+    String? matrixId,
   }) async {
     setState(() => _busy = true);
     try {
       final outcome = await _doAssign(
         skuScanned: skuScanned,
         scope: 'single_color_all_sizes',
+        matrixId: matrixId,
       );
       _surfaceAssignOutcome(outcome, sku: skuScanned);
       await _refreshContents();
@@ -1879,6 +1903,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           binId: binId,
           skuAssigned: skuScanned,
           itemName: itemName,
+          matrixId: matrixId,
         );
         _undoSnapshot = [];
       });
@@ -1900,6 +1925,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   Future<bool> _performMultiColourAssign({
     required List<String> colourSkus,
     required String itemName,
+    String? matrixId,
   }) async {
     if (colourSkus.isEmpty) return false;
     setState(() => _busy = true);
@@ -1915,6 +1941,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         final outcome = await _doAssign(
           skuScanned: sku,
           scope: 'single_color_all_sizes',
+          matrixId: matrixId,
           allowMoveOrAddPrompt: false,
         );
         totalUpdated += outcome.updated;
@@ -2024,6 +2051,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         final ok = await _performMultiColourAssign(
           colourSkus: picked,
           itemName: itemName,
+          matrixId: matrixId,
         );
         if (!mounted) return;
         if (ok) {

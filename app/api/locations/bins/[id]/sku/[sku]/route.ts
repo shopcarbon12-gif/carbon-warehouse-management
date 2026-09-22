@@ -20,6 +20,10 @@ type Ctx = { params: Promise<{ id: string; sku: string }> };
  * endpoints. `:skuPrefix` is the matrix+colour prefix (e.g. 122224804) — we
  * match every size via `sku LIKE '<prefix>%'`, the same filter the assign uses.
  *
+ * `?matrixId=<uuid>` pins it to one product. Two matrices may share a UPC
+ * (migration 0092), so the prefix alone can match a second product's variants
+ * and evict them from the bin too. Optional, for older handhelds.
+ *
  * Effect: in-stock items of that SKU whose PRIMARY bin is this bin become
  * homeless (bin_id = NULL); items that merely list this bin in
  * additional_bin_ids just drop it from that array. Active-location scoped.
@@ -31,6 +35,8 @@ export async function DELETE(req: Request, ctx: Ctx) {
   const { id, sku } = await ctx.params;
   const binKey = (id ?? "").trim();
   const skuPrefix = (sku ?? "").trim();
+  const rawMatrixId = new URL(req.url).searchParams.get("matrixId")?.trim() ?? "";
+  const matrixId = /^[0-9a-f-]{36}$/i.test(rawMatrixId) ? rawMatrixId : null;
   if (!binKey) return NextResponse.json({ error: "Missing bin" }, { status: 400 });
   // Matrix/colour prefix range — same guard as the clean-bin endpoint.
   if (!/^[A-Za-z0-9]{7,32}$/.test(skuPrefix)) {
@@ -66,8 +72,10 @@ export async function DELETE(req: Request, ctx: Ctx) {
        WHERE location_id = $1::uuid
          AND status IN ('in-stock', 'pending_visibility')
          AND bin_id = $2::uuid
-         AND custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`,
-      [session.lid, binId, `${skuPrefix}%`],
+         AND custom_sku_id IN (
+           SELECT id FROM custom_skus
+            WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`,
+      [session.lid, binId, `${skuPrefix}%`, matrixId],
     );
     // 2. Items that merely list this bin as an additional (multi-bin) home.
     const secondary = await client.query(
@@ -76,8 +84,10 @@ export async function DELETE(req: Request, ctx: Ctx) {
        WHERE location_id = $1::uuid
          AND status IN ('in-stock', 'pending_visibility')
          AND $2::uuid = ANY(additional_bin_ids)
-         AND custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`,
-      [session.lid, binId, `${skuPrefix}%`],
+         AND custom_sku_id IN (
+           SELECT id FROM custom_skus
+            WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`,
+      [session.lid, binId, `${skuPrefix}%`, matrixId],
     );
     await client.query("COMMIT");
     return NextResponse.json({

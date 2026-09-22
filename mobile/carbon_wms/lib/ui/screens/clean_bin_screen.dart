@@ -35,8 +35,16 @@ const Color _kCard = Color(0xFFFFFFFF);
 const Color _kMuted = Color(0xFF8A9090);
 
 class _CleanItem {
-  const _CleanItem({required this.sku, required this.desc, required this.qty});
+  const _CleanItem(
+      {required this.sku,
+      required this.matrixId,
+      required this.desc,
+      required this.qty});
   final String sku;
+
+  /// The product. Restoring by SKU alone would also drag a UPC-sharing twin
+  /// product back into the bin.
+  final String matrixId;
   final String desc;
   final int qty;
 
@@ -49,6 +57,7 @@ class _CleanItem {
     final desc = [name, color, size].where((e) => e.trim().isNotEmpty).join(' · ').toUpperCase();
     return _CleanItem(
       sku: m['sku']?.toString() ?? '',
+      matrixId: m['matrix_id']?.toString() ?? '',
       desc: desc,
       qty: m['qty'] as int? ?? m['quantity'] as int? ?? epcCount,
     );
@@ -68,7 +77,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
   List<_CleanItem> _contents = [];
 
   bool _busy = false;
-  List<String> _undoSkus = const [];
+  List<_CleanItem> _undoSkus = const [];
   String? _status;
   bool _cleared = false;
 
@@ -228,7 +237,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final snapshot = _contents.map((c) => c.sku).toList();
+      final snapshot = List<_CleanItem>.from(_contents);
       final j = await context.read<WmsApiClient>().postCleanBinByCode(_currentBin);
       final cleared = j['cleared'];
       if (!mounted) return;
@@ -255,12 +264,13 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
     try {
       final api = context.read<WmsApiClient>();
       final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      for (final sku in _undoSkus) {
+      for (final item in _undoSkus) {
         await api.postPutawayAssign(
           deviceId: deviceId,
           binCode: _currentBin,
-          skuScanned: sku,
+          skuScanned: item.sku,
           scope: 'single_color_all_sizes',
+          matrixId: item.matrixId,
         );
       }
       await _loadContents();

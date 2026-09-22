@@ -1144,12 +1144,16 @@ class WmsApiClient {
   ///     `bin_id IS NULL`. Leaves items already in another bin alone.
   ///   - `'all'` — server moves every matching item regardless of where it
   ///     currently lives. Used by the Bin Assign "MOVE ALL HERE" choice.
+  /// `matrixId` names the PRODUCT the scan resolved to. Two products can share
+  /// a UPC, which makes the SKU prefix ambiguous — without it the server would
+  /// bin the other product's stock alongside this one.
   Future<Map<String, dynamic>> postPutawayAssign({
     required String deviceId,
     required String binCode,
     required String skuScanned,
     required String scope,
     String mode = 'homeless_only',
+    String? matrixId,
   }) async {
     final base = await resolveBaseUrl();
     final uri = Uri.parse('$base/api/inventory/putaway-assign');
@@ -1159,6 +1163,8 @@ class WmsApiClient {
       'skuScanned': skuScanned,
       'scope': scope,
       'mode': mode,
+      if (matrixId != null && matrixId.trim().isNotEmpty)
+        'matrixId': matrixId.trim(),
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -1185,6 +1191,7 @@ class WmsApiClient {
     required String binCode,
     required String skuScanned,
     required String scope,
+    String? matrixId,
   }) async {
     final base = await resolveBaseUrl();
     final uri = Uri.parse('$base/api/inventory/putaway-preview');
@@ -1193,6 +1200,8 @@ class WmsApiClient {
       'binCode': binCode,
       'skuScanned': skuScanned,
       'scope': scope,
+      if (matrixId != null && matrixId.trim().isNotEmpty)
+        'matrixId': matrixId.trim(),
     });
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -1470,12 +1479,18 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
-  /// `DELETE /api/locations/bins/:binCode/sku/:sku` — removes a SKU assignment from a bin.
-  Future<void> removeSkuFromBin(String binCode, String sku) async {
+  /// `DELETE /api/locations/bins/:binCode/sku/:sku` — removes a SKU assignment
+  /// from a bin. `matrixId` keeps it to one product: a SKU prefix can belong to
+  /// two products that share a UPC, and without it both get evicted.
+  Future<void> removeSkuFromBin(String binCode, String sku,
+      {String? matrixId}) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final encodedBin = Uri.encodeComponent(binCode.trim());
     final encodedSku = Uri.encodeComponent(sku.trim());
-    final uri = Uri.parse('$base/api/locations/bins/$encodedBin/sku/$encodedSku');
+    var uri = Uri.parse('$base/api/locations/bins/$encodedBin/sku/$encodedSku');
+    if (matrixId != null && matrixId.trim().isNotEmpty) {
+      uri = uri.replace(queryParameters: {'matrixId': matrixId.trim()});
+    }
     final res = await _http.delete(uri, headers: await sessionAuthHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);

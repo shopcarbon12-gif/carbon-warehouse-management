@@ -12,6 +12,12 @@ const bodySchema = z.object({
   binCode: z.string().min(1).max(64),
   skuScanned: z.string().min(1).max(256),
   scope: z.enum(["all_colors", "single_color_all_sizes"]),
+  /**
+   * The product the handheld resolved the scan to. Optional for older
+   * clients, but without it a SKU prefix shared by two matrices (migration
+   * 0092) sweeps both products into the bin.
+   */
+  matrixId: z.string().uuid().nullish(),
 });
 
 export async function POST(req: Request) {
@@ -43,6 +49,7 @@ export async function POST(req: Request) {
       parsed.data.binCode,
       parsed.data.skuScanned,
       parsed.data.scope,
+      parsed.data.matrixId ?? null,
     );
     return NextResponse.json({ ok: true, ...preview });
   } catch (e) {

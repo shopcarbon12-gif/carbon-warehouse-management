@@ -10,6 +10,12 @@ export type PutawayScope = "all_colors" | "single_color_all_sizes";
  * `single_color_all_sizes`, and the full custom SKU for `all_colors` is fine
  * because we resolve the matrix from any child SKU.
  *
+ * `matrixId` pins the scan to ONE product. Since migration 0092 two matrices
+ * may share a UPC, so `sku LIKE '<prefix>%'` can match a second product's
+ * variants and quietly bin them too — and for `all_colors` the matrix lookup
+ * by SKU text picked an arbitrary one of the two. The handheld knows the
+ * matrix it resolved the scan to, so it sends it. Null = legacy behaviour.
+ *
  * `mode`:
  *   - `"homeless_only"` — operator picked **ADD**. Items that have no
  *     live bin home (bin_id NULL / archived / orphan) get bin_id set to
@@ -31,6 +37,7 @@ export async function assignItemsToBinBySkuScan(
   skuScanned: string,
   scope: PutawayScope,
   mode: "homeless_only" | "all" = "homeless_only",
+  matrixId?: string | null,
 ): Promise<{ updated: number }> {
   const trimmed = skuScanned.trim();
   if (!trimmed) return { updated: 0 };
@@ -49,6 +56,7 @@ export async function assignItemsToBinBySkuScan(
     // cumulative operator-frustration cost.
     `SELECT id::text FROM bins
        WHERE location_id = $1::uuid
+         AND archived_at IS NULL
          AND regexp_replace(upper(code), '[^A-Z0-9]', '', 'g')
              = regexp_replace(upper($2), '[^A-Z0-9]', '', 'g')
        LIMIT 1`,
@@ -59,21 +67,35 @@ export async function assignItemsToBinBySkuScan(
 
   // Build the SKU filter once — single_color_all_sizes uses LIKE prefix
   // match, all_colors resolves to a matrix UUID via custom_skus.
+  const matrix = (matrixId ?? "").trim() || null;
   let skuFilter: string;
   let skuParam: string | null;
   if (scope === "single_color_all_sizes") {
-    skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`;
+    skuFilter = `custom_sku_id IN (
+      SELECT id FROM custom_skus
+       WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`;
     skuParam = `${trimmed}%`;
   } else {
-    const skuRow = await pool.query<{ matrix_id: string }>(
-      `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 LIMIT 1`,
-      [trimmed],
-    );
-    const matrixId = skuRow.rows[0]?.matrix_id;
-    if (!matrixId) return { updated: 0 };
+    let resolved = matrix;
+    if (!resolved) {
+      // Legacy client: no matrix on the wire. LIMIT 1 over a SKU that two
+      // products may share picks an arbitrary one — the caller should send
+      // matrixId instead.
+      const skuRow = await pool.query<{ matrix_id: string }>(
+        `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 ORDER BY archived ASC, id LIMIT 1`,
+        [trimmed],
+      );
+      resolved = skuRow.rows[0]?.matrix_id ?? null;
+    }
+    if (!resolved) return { updated: 0 };
     skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE matrix_id = $3::uuid)`;
-    skuParam = matrixId;
+    skuParam = resolved;
   }
+
+  // $4 only exists in the prefix filter — Postgres rejects a bind that
+  // supplies a parameter the statement never references.
+  const params: unknown[] = [binId, locationId, skuParam];
+  if (scope === "single_color_all_sizes") params.push(matrix);
 
   if (mode === "all") {
     // MOVE — pull every matching item out of wherever it lives (primary
@@ -86,7 +108,7 @@ export async function assignItemsToBinBySkuScan(
        WHERE location_id = $2::uuid
          AND status IN ('in-stock', 'pending_visibility')
          AND ${skuFilter}`,
-      [binId, locationId, skuParam],
+      params,
     );
     return { updated: r.rowCount ?? 0 };
   }
@@ -119,7 +141,7 @@ export async function assignItemsToBinBySkuScan(
          )
        )
      RETURNING id::text`,
-    [binId, locationId, skuParam],
+    params,
   );
 
   const multiBinRes = await pool.query<{ id: string }>(
@@ -137,7 +159,7 @@ export async function assignItemsToBinBySkuScan(
            AND b.archived_at IS NULL
        )
      RETURNING id::text`,
-    [binId, locationId, skuParam],
+    params,
   );
 
   return {
@@ -165,6 +187,7 @@ export async function previewPutawayAssign(
   binCode: string,
   skuScanned: string,
   scope: PutawayScope,
+  matrixId?: string | null,
 ): Promise<PutawayPreview> {
   const trimmed = skuScanned.trim();
   const empty: PutawayPreview = {
@@ -189,6 +212,7 @@ export async function previewPutawayAssign(
     // cumulative operator-frustration cost.
     `SELECT id::text FROM bins
        WHERE location_id = $1::uuid
+         AND archived_at IS NULL
          AND regexp_replace(upper(code), '[^A-Z0-9]', '', 'g')
              = regexp_replace(upper($2), '[^A-Z0-9]', '', 'g')
        LIMIT 1`,
@@ -196,20 +220,30 @@ export async function previewPutawayAssign(
   );
   const targetBinId = bin.rows[0]?.id ?? null;
 
+  // Mirrors the filter in assignItemsToBinBySkuScan — the preview has to
+  // count exactly the rows the assign will touch, or the ADD/MOVE prompt
+  // and the "0 items" messages describe a different set than the operator
+  // is about to change.
+  const matrix = (matrixId ?? "").trim() || null;
   let skuFilter: string;
-  let skuParam: string;
+  const params: unknown[] = [locationId];
   if (scope === "single_color_all_sizes") {
-    skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $2)`;
-    skuParam = `${trimmed}%`;
+    skuFilter = `custom_sku_id IN (
+      SELECT id FROM custom_skus
+       WHERE sku LIKE $2 AND ($3::uuid IS NULL OR matrix_id = $3::uuid))`;
+    params.push(`${trimmed}%`, matrix);
   } else {
-    const skuRow = await pool.query<{ matrix_id: string }>(
-      `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 LIMIT 1`,
-      [trimmed],
-    );
-    const matrixId = skuRow.rows[0]?.matrix_id;
-    if (!matrixId) return empty;
+    let resolved = matrix;
+    if (!resolved) {
+      const skuRow = await pool.query<{ matrix_id: string }>(
+        `SELECT matrix_id::text FROM custom_skus WHERE sku = $1 ORDER BY archived ASC, id LIMIT 1`,
+        [trimmed],
+      );
+      resolved = skuRow.rows[0]?.matrix_id ?? null;
+    }
+    if (!resolved) return empty;
     skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE matrix_id = $2::uuid)`;
-    skuParam = matrixId;
+    params.push(resolved);
   }
 
   // Per-item rows so we can classify by primary bin vs additional bins.
@@ -231,7 +265,7 @@ export async function previewPutawayAssign(
      WHERE i.location_id = $1::uuid
        AND i.status IN ('in-stock', 'pending_visibility')
        AND i.${skuFilter}`,
-    [locationId, skuParam],
+    params,
   );
 
   let homeless = 0;
