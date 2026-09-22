@@ -55,20 +55,28 @@ export async function validateMatrixForPublish(
     if (n > 1) errors.push(`Duplicate active SKU within this product: ${sku} (${n}×).`);
   }
 
-  // Cross-matrix active SKU collision (Shopify variant key must be unique).
+  /* The same SKU live on ANOTHER product does not block publishing.
+     Identity in this system is ls_system_id — an EPC decodes to it and
+     epc-ingress resolves the catalog row by it — and two matrices that share a
+     UPC necessarily produce the same SKU for the same color and size (migration
+     0092 scopes SKU uniqueness to one product for exactly this reason). Shopify
+     does not require variant SKUs to be unique either, and the ids it returns
+     are matched back within this product only. Worth saying out loud, so it is
+     a warning naming the twin rather than a refusal. */
   const skus = active.map((v) => (v.sku || "").trim()).filter(Boolean);
   if (skus.length) {
-    const r = await pool.query<{ sku: string }>(
-      `SELECT DISTINCT cs.sku
+    const r = await pool.query<{ sku: string; product: string | null }>(
+      `SELECT DISTINCT cs.sku, mx.description AS product
          FROM custom_skus cs
+         LEFT JOIN matrices mx ON mx.id = cs.matrix_id
         WHERE cs.archived = FALSE
           AND cs.matrix_id <> $1::uuid
           AND lower(cs.sku) = ANY($2::text[])`,
       [matrixId, skus.map((s) => s.toLowerCase())],
     );
     for (const row of r.rows) {
-      errors.push(
-        `SKU ${row.sku} is also used by another active product — resolve the duplicate before publishing.`,
+      warnings.push(
+        `SKU ${row.sku} is also live on "${row.product ?? "another product"}" — allowed, they are separate items with their own system ids.`,
       );
     }
   }
