@@ -33,11 +33,15 @@ export async function GET(req: Request) {
 
   try {
     const r = await pool.query<{
+      matrix_id: string;
       sku_prefix: string;
       name: string | null;
       color: string | null;
     }>(
+      // matrix_id rides along so "Add item to bin" can scope the assign to one
+      // product — two matrices may share a UPC, hence the same sku_prefix.
       `SELECT DISTINCT
+         m.id::text AS matrix_id,
          CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END AS sku_prefix,
          REGEXP_REPLACE(m.description, '\\s+\\S+$', '') AS name,
          cs.color_code AS color

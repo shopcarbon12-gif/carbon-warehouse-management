@@ -117,8 +117,9 @@ export async function upsertBin(
 
 /**
  * Delete a bin. NULLs out any items.bin_id pointing at it (so existing EPCs
- * stay in-stock at the location but lose their bin assignment), writes one
- * `clean_bin` audit row per moved EPC, then soft-archives the bin. The
+ * stay in-stock at the location but lose their bin assignment), strips it from
+ * any items.additional_bin_ids that list it (multi-bin), writes one
+ * `clean_bin` audit row per orphaned EPC, then soft-archives the bin. The
  * bin code is suffixed with `·arch·<rand>` so the unique constraint on
  * (location_id, code) doesn't block re-creating a bin with the same name.
  *
@@ -158,6 +159,23 @@ export async function deleteBin(
        AND b.id = $1::uuid
        AND l.tenant_id = $2::uuid
      RETURNING i.epc`,
+    [binId, tenantId],
+  );
+
+  // 1b. Multi-bin secondaries: drop this bin from `additional_bin_ids` too.
+  // Clearing only `bin_id` left the dead bin in every multi-binned item's
+  // array forever — a deleted-and-recreated bin accumulated one stale entry
+  // per generation (3F03C carried two), which nothing downstream can resolve
+  // to a code. Not audited: the EPC keeps a real home, it just stops
+  // referencing a bin that no longer exists.
+  await client.query(
+    `UPDATE items i
+        SET additional_bin_ids = array_remove(i.additional_bin_ids, b.id)
+     FROM bins b
+     INNER JOIN locations l ON l.id = b.location_id
+     WHERE b.id = $1::uuid
+       AND l.tenant_id = $2::uuid
+       AND b.id = ANY(i.additional_bin_ids)`,
     [binId, tenantId],
   );
 

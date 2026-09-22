@@ -15,6 +15,8 @@ export type BinWithCountRow = {
 /** Line items grouped by custom SKU for a bin drawer (in-stock EPCs only). */
 export type BinContentLineRow = {
   custom_sku_id: string;
+  /** The product. Two matrices can share a UPC, so `sku` alone is ambiguous. */
+  matrix_id: string;
   description: string;
   sku: string;
   color_code: string | null;
@@ -138,6 +140,7 @@ export async function listBinContentsGrouped(
 ): Promise<BinContentLineRow[]> {
   const r = await pool.query<{
     custom_sku_id: string;
+    matrix_id: string;
     description: string;
     sku: string;
     color_code: string | null;
@@ -153,6 +156,7 @@ export async function listBinContentsGrouped(
     // bins are not source of truth to anything in my solution".
     `SELECT
        cs.id AS custom_sku_id,
+       m.id::text AS matrix_id,
        m.description,
        cs.sku,
        cs.color_code,
@@ -171,6 +175,7 @@ export async function listBinContentsGrouped(
   );
   return r.rows.map((row) => ({
     custom_sku_id: row.custom_sku_id,
+    matrix_id: row.matrix_id,
     description: row.description,
     sku: row.sku,
     color_code: row.color_code,

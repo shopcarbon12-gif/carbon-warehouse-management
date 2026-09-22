@@ -4,21 +4,30 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { moveSkuPrefixToBin } from "@/lib/server/shelf-map";
+import { assignSkuGroupToBin } from "@/lib/server/shelf-map";
 
 const Body = z.object({
   /** SKU prefix to move — LEFT(cs.sku, 11) for C-prefixed, LEFT(cs.sku, 9) otherwise. */
   skuPrefix: z.string().trim().min(1).max(32),
+  /**
+   * The product. Required in practice — two matrices can share a UPC, so the
+   * prefix alone would sweep the twin product along. Optional only so older
+   * clients keep working.
+   */
+  matrixId: z.string().uuid().nullish(),
   /** UUID of the source bin, `null` = homeless, or `"any"` = anywhere. */
   sourceBinId: z.union([z.string().uuid(), z.literal("any"), z.null()]),
   /** UUID of the target bin. */
   targetBinId: z.string().uuid(),
+  /** `"move"` = this bin only (default). `"add"` = also list it here (multi-bin). */
+  mode: z.enum(["move", "add"]).optional(),
 });
 
 /**
- * Move every in-stock EPC of a (sku_prefix) group into one target bin.
- * Sweeps all sizes that share the same (matrix UPC, color_code) — that's
- * the operator's mental model: a color goes on a shelf as a unit.
+ * Put every in-stock EPC of one product's (UPC + colour) group into a bin.
+ * Sweeps all sizes of that colour — that's the operator's mental model: a
+ * colour goes on a shelf as a unit. `mode: "add"` keeps the group's existing
+ * bins and lists this one alongside them; there is no cap on bins per EPC.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -53,7 +62,7 @@ export async function POST(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await moveSkuPrefixToBin(
+    const result = await assignSkuGroupToBin(
       client,
       session.tid,
       session.lid,

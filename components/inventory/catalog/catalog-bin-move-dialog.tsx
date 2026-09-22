@@ -5,18 +5,28 @@ import useSWR from "swr";
 import { ArrowRight, Search, X } from "lucide-react";
 
 /**
- * Move popover wired from the Catalog tab.
+ * Move / add popover wired from the Catalog tab.
  *
- * Source = "any" — sweeps every in-stock EPC sharing this row's
- * (UPC, color) group, across all sizes, regardless of current bin
- * (or homeless). Target is picked from the active-location bin list.
+ * Covers every in-stock EPC of THIS product's (UPC, colour) group, across all
+ * sizes, wherever it currently sits. `matrixId` is what keeps it to this
+ * product: two matrices can share a UPC, so the SKU prefix alone would drag
+ * the twin product along.
+ *
+ * Move = this bin only. Add = also list it here, keeping the bins it has
+ * (an EPC may be in any number of bins).
  */
 
 type ShelfMapBin = {
   id: string;
   code: string;
   status: string;
-  lines: { sku_prefix: string; name: string; color: string | null; qty: number }[];
+  lines: {
+    matrix_id: string;
+    sku_prefix: string;
+    name: string;
+    color: string | null;
+    qty: number;
+  }[];
 };
 type SectionPayload = { aisle: string; section: string; bins: ShelfMapBin[] };
 type NavPayload = {
@@ -35,12 +45,14 @@ const fetcher = async (url: string) => {
 
 export function CatalogBinMoveDialog({
   skuPrefix,
+  matrixId,
   name,
   color,
   onClose,
   onDone,
 }: {
   skuPrefix: string;
+  matrixId: string;
   name: string;
   color: string | null;
   onClose: () => void;
@@ -88,7 +100,7 @@ export function CatalogBinMoveDialog({
 
   const [target, setTarget] = useState<ShelfMapBin | null>(null);
   const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"move" | "add" | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -112,12 +124,12 @@ export function CatalogBinMoveDialog({
       .slice(0, 100);
   }, [bins, q]);
 
-  const submit = async () => {
+  const submit = async (mode: "move" | "add") => {
     if (!target) {
       setErr("Pick a target bin first");
       return;
     }
-    setBusy(true);
+    setBusy(mode);
     setErr(null);
     try {
       const res = await fetch("/api/locations/bins/move", {
@@ -126,17 +138,23 @@ export function CatalogBinMoveDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skuPrefix,
+          matrixId,
           sourceBinId: "any",
           targetBinId: target.id,
+          mode,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; moved?: number };
-      if (!res.ok) throw new Error(j.error ?? "Move failed");
+      if (!res.ok) throw new Error(j.error ?? "Failed");
+      if (mode === "add" && Number(j.moved ?? 0) === 0) {
+        setErr(`${name} · ${color ?? "—"} is already in ${target.code}.`);
+        return;
+      }
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Move failed");
+      setErr(e instanceof Error ? e.message : "Failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -151,7 +169,7 @@ export function CatalogBinMoveDialog({
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
         <div className="flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
           <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-3">
-            <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Move SKU to bin</h3>
+            <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Move or add to bin</h3>
             <button
               type="button"
               onClick={onClose}
@@ -174,7 +192,13 @@ export function CatalogBinMoveDialog({
               <p className="mt-1 text-[var(--wms-muted)]">
                 Source: <span className="text-[var(--wms-fg)]">any current bin or homeless</span>
                 <ArrowRight className="mx-1 inline h-3 w-3" /> target
-                <span className="ml-2 text-[var(--wms-muted)]">— sweeps every size in this color.</span>
+                <span className="ml-2 text-[var(--wms-muted)]">— every size in this colour, this product only.</span>
+              </p>
+              <p className="mt-2 leading-relaxed text-[var(--wms-muted)]">
+                <span className="text-[var(--wms-fg)]">Add</span> keeps the bins it
+                is already in (no limit).{" "}
+                <span className="text-[var(--wms-fg)]">Move</span> leaves it in the
+                target bin only.
               </p>
             </div>
 
@@ -228,18 +252,26 @@ export function CatalogBinMoveDialog({
             <button
               type="button"
               onClick={onClose}
-              disabled={busy}
+              disabled={busy !== null}
               className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)]"
             >
               Cancel
             </button>
             <button
               type="button"
-              onClick={submit}
-              disabled={busy || !target}
+              onClick={() => void submit("move")}
+              disabled={busy !== null || !target}
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] disabled:opacity-50"
+            >
+              {busy === "move" ? "Moving…" : `Move to ${target?.code ?? "…"}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => void submit("add")}
+              disabled={busy !== null || !target}
               className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50"
             >
-              {busy ? "Moving…" : `Move to ${target?.code ?? "…"}`}
+              {busy === "add" ? "Adding…" : `Add to ${target?.code ?? "…"}`}
             </button>
           </div>
         </div>

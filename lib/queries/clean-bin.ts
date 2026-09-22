@@ -7,6 +7,12 @@ import type { Pool, PoolClient } from "pg";
  * that prefix are unassigned — used by the "remove one item group" flow on
  * /overview/locations. Prefix is 9 chars (non-legacy) or 11 chars (legacy `C*`).
  * When omitted, clears the whole bin (legacy behaviour).
+ *
+ * `matrixId` narrows that to ONE product. It matters: since migration 0092 two
+ * matrices may share a UPC and therefore produce identical SKUs, so a bin can
+ * show two lines under the same prefix. Removing one line used to clear both —
+ * that is how 35 Cole Pants GREY kept vanishing when the owner removed the 3
+ * Kyle Cargo GREY that had tagged along.
  */
 export async function cleanBinContents(
   client: PoolClient | Pool,
@@ -14,6 +20,7 @@ export async function cleanBinContents(
   binId: string,
   skuPrefix?: string,
   userId?: string | null,
+  matrixId?: string | null,
 ): Promise<{ cleared: number }> {
   const bin = await client.query<{ code: string }>(
     `SELECT b.code
@@ -31,10 +38,14 @@ export async function cleanBinContents(
   // items still showing in the bin — they "came back" after every Empty Bin
   // (operator hit this on 1A011R, had to swipe-delete each one). Clear BOTH.
   const prefixClause = skuPrefix
-    ? `AND i.custom_sku_id IN (SELECT id FROM custom_skus WHERE sku LIKE $3)`
+    ? `AND i.custom_sku_id IN (
+         SELECT id FROM custom_skus
+          WHERE sku LIKE $3
+            AND ($4::uuid IS NULL OR matrix_id = $4::uuid)
+       )`
     : ``;
   const params: unknown[] = skuPrefix
-    ? [binId, tenantId, `${skuPrefix}%`]
+    ? [binId, tenantId, `${skuPrefix}%`, matrixId ?? null]
     : [binId, tenantId];
 
   // 1. Items whose PRIMARY home is this bin → homeless.

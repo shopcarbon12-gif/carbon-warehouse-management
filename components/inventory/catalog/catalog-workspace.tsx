@@ -1485,6 +1485,7 @@ export function CatalogWorkspace({
       {movingRow ? (
         <CatalogBinMoveDialog
           skuPrefix={computeSkuPrefix(movingRow.sku)}
+          matrixId={movingRow.matrix_id}
           name={movingRow.name}
           color={movingRow.color}
           onClose={() => setMovingRow(null)}

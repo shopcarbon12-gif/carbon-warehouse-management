@@ -20,12 +20,21 @@ export async function POST(req: Request, ctx: Ctx) {
   }
 
   let skuPrefix: string | undefined;
+  // Scopes the removal to ONE product. Without it a shared UPC means the
+  // twin product's stock is cleared out of the bin too (migration 0092).
+  let matrixId: string | null = null;
   try {
-    const body = (await req.json().catch(() => ({}))) as { skuPrefix?: unknown };
+    const body = (await req.json().catch(() => ({}))) as {
+      skuPrefix?: unknown;
+      matrixId?: unknown;
+    };
     if (typeof body.skuPrefix === "string") {
       const p = body.skuPrefix.trim();
       // Accept 7–32 alphanumeric chars (matrix/color prefix range).
       if (p && /^[A-Za-z0-9]{7,32}$/.test(p)) skuPrefix = p;
+    }
+    if (typeof body.matrixId === "string" && /^[0-9a-f-]{36}$/i.test(body.matrixId.trim())) {
+      matrixId = body.matrixId.trim();
     }
   } catch {
     /* no body — clean all (legacy behaviour) */
@@ -48,7 +57,7 @@ export async function POST(req: Request, ctx: Ctx) {
   try {
     await client.query("BEGIN");
     const result = await cleanBinContents(
-        client, session.tid, id, skuPrefix, session.sub);
+        client, session.tid, id, skuPrefix, session.sub, matrixId);
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, cleared: result.cleared });
   } catch (e) {

@@ -61,6 +61,7 @@ type BinEpcRow = {
 
 type BinContentLine = {
   custom_sku_id: string;
+  matrix_id: string;
   sku: string;
   description: string;
   color_code: string | null;
@@ -68,9 +69,12 @@ type BinContentLine = {
   qty: number;
 };
 
-type CleanGroup = { skuPrefix: string; label: string; qty: number };
+type CleanGroup = { matrixId: string; skuPrefix: string; label: string; qty: number };
 
-/** Collapse a bin's contents into clean-groups using the same rule as the Items column. */
+/** Collapse a bin's contents into clean-groups using the same rule as the Items column.
+ *  Keyed by product FIRST: two matrices can share a UPC, so one bin can hold two
+ *  groups with the same SKU prefix — collapsing them together made "remove this
+ *  one item" clear the other product's stock as well. */
 function collapseForClean(rows: BinContentLine[]): CleanGroup[] {
   const map = new Map<string, CleanGroup>();
   for (const r of rows) {
@@ -79,12 +83,12 @@ function collapseForClean(rows: BinContentLine[]): CleanGroup[] {
     const skuPrefix = sku.slice(0, prefixLen);
     // Strip trailing size token from description (same regex as server Items column).
     const label = (r.description ?? "").replace(/\s+\S+$/, "").trim() || r.description;
-    const key = skuPrefix;
+    const key = `${r.matrix_id}|${skuPrefix}`;
     const existing = map.get(key);
     if (existing) {
       existing.qty += r.qty;
     } else {
-      map.set(key, { skuPrefix, label, qty: r.qty });
+      map.set(key, { matrixId: r.matrix_id, skuPrefix, label, qty: r.qty });
     }
   }
   return [...map.values()].sort((a, b) => (a.label ?? "").localeCompare(b.label ?? ""));
@@ -280,7 +284,9 @@ export function LocationsManager({
     setCleanBusy(cleanBin.id);
     setCleanNotice(null);
     try {
-      const body = cleanTarget ? { skuPrefix: cleanTarget.skuPrefix } : {};
+      const body = cleanTarget
+        ? { skuPrefix: cleanTarget.skuPrefix, matrixId: cleanTarget.matrixId }
+        : {};
       const res = await fetch(`/api/locations/bins/${cleanBin.id}/clean`, {
         method: "POST",
         credentials: "same-origin",
@@ -615,7 +621,7 @@ export function LocationsManager({
               </div>
               <ol className="px-4 py-3 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:overscroll-contain">
                 {cleanGroups.map((g, i) => (
-                  <li key={g.skuPrefix} className="py-1">
+                  <li key={`${g.matrixId}|${g.skuPrefix}`} className="py-1">
                     {i + 1}. {g.label}{" "}
                     <span className="text-xs text-[var(--wms-muted)]">({g.qty} EPC{g.qty === 1 ? "" : "s"})</span>
                   </li>
@@ -624,7 +630,7 @@ export function LocationsManager({
               <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 {cleanGroups.map((g, i) => (
                   <button
-                    key={g.skuPrefix}
+                    key={`${g.matrixId}|${g.skuPrefix}`}
                     type="button"
                     onClick={() => { setCleanTarget(g); setCleanStep("confirm"); }}
                     className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-border)] max-md:min-h-11 max-md:px-4"

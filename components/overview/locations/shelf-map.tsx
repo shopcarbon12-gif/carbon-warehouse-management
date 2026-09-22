@@ -18,18 +18,28 @@ import { useUrlParam } from "@/lib/use-url-param";
  *   ...
  *   shelf 01 ── L | C | R
  *
- * Per-line: Move (popover with target-bin picker) or ✕ Remove (clean).
+ * Per-line: Move/Add (popover with target-bin picker) or ✕ Remove (clean).
+ * Every one of those carries the line's `matrix_id`, not just its SKU prefix:
+ * two products can share a UPC, so one bin may list the same prefix twice and
+ * a prefix-only action would hit both.
  * Per-cell: status dot toggle, ✎ edit (existing drawer hooks via prop).
  * Empty cells get a "+ Add bin" link wired to the upsert API.
  * Bins not matching the `<digit><letter><2-digit><LCR>` shape land in
  * an "Unmapped" panel below the grid.
  */
 
+type ShelfMapLine = {
+  matrix_id: string;
+  sku_prefix: string;
+  name: string;
+  color: string | null;
+  qty: number;
+};
 type ShelfMapBin = {
   id: string;
   code: string;
   status: string;
-  lines: { sku_prefix: string; name: string; color: string | null; qty: number }[];
+  lines: ShelfMapLine[];
 };
 type ShelfMapNav = { aisle: string; section: string; bin_count: number };
 type UnmappedBin = { id: string; code: string; status: string; in_stock_count: number };
@@ -438,7 +448,7 @@ function CellView({
         ) : (
           bin.lines.map((line) => (
             <div
-              key={`${line.sku_prefix}|${line.color ?? ""}`}
+              key={`${line.matrix_id}|${line.sku_prefix}|${line.color ?? ""}`}
               className="group flex items-center gap-2 rounded px-1 py-1 hover:bg-[var(--wms-surface-elevated)]/60"
             >
               <span className="flex-1 truncate">
@@ -455,9 +465,9 @@ function CellView({
                   type="button"
                   onClick={() => onMove(line)}
                   className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[0.65rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 max-md:min-h-11 max-md:px-3 max-md:text-xs"
-                  title={`Move ${line.sku_prefix} · ${line.color ?? ""} to another bin`}
+                  title={`Move ${line.name} · ${line.color ?? ""} to another bin, or add it to one as well`}
                 >
-                  Move
+                  Move / Add
                 </button>
                 {canManage ? (
                   <button
@@ -564,7 +574,7 @@ function MoveDialog({
 
   const [target, setTarget] = useState<BinOption | null>(null);
   const [q, setQ] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"move" | "add" | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -584,12 +594,16 @@ function MoveDialog({
       .slice(0, 80);
   }, [bins, fromBin.id, q]);
 
-  const submit = async () => {
+  /* Two ways to put this group somewhere:
+       add  — the group gains a bin and keeps the ones it already has.
+       move — the group ends up in the target bin and nowhere else.
+     Both scope to line.matrix_id so a product sharing this UPC stays put. */
+  const submit = async (mode: "move" | "add") => {
     if (!target) {
       setErr("Pick a target bin first");
       return;
     }
-    setBusy(true);
+    setBusy(mode);
     setErr(null);
     try {
       const res = await fetch("/api/locations/bins/move", {
@@ -598,30 +612,36 @@ function MoveDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skuPrefix: line.sku_prefix,
-          sourceBinId: fromBin.id,
+          matrixId: line.matrix_id,
+          sourceBinId: mode === "add" ? "any" : fromBin.id,
           targetBinId: target.id,
+          mode,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; moved?: number };
-      if (!res.ok) throw new Error(j.error ?? "Move failed");
+      if (!res.ok) throw new Error(j.error ?? "Failed");
+      if (mode === "add" && Number(j.moved ?? 0) === 0) {
+        setErr(`${line.name} · ${line.color ?? "—"} is already in ${target.code}.`);
+        return;
+      }
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Move failed");
+      setErr(e instanceof Error ? e.message : "Failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   return (
-    <Modal title="Move to bin" onClose={onClose}>
+    <Modal title="Move or add to bin" onClose={onClose}>
       <div className="space-y-3 px-4 py-4">
         <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3 font-mono text-xs">
           <p>
-            <span className="text-[var(--wms-accent)]">{line.sku_prefix}</span>
-            <span className="text-[var(--wms-muted)]"> · </span>
             <span className="text-[var(--wms-fg)]">{line.name}</span>
             <span className="text-[var(--wms-muted)]"> · </span>
             <span className="text-[var(--wms-warn)]">{line.color ?? "—"}</span>
+            <span className="text-[var(--wms-muted)]"> · </span>
+            <span className="text-[var(--wms-accent)]">{line.sku_prefix}</span>
           </p>
           <p className="mt-1 text-[var(--wms-muted)]">
             From <span className="text-[var(--wms-fg)]">{fromBin.code}</span>
@@ -629,6 +649,15 @@ function MoveDialog({
             target —{" "}
             <span className="text-[var(--wms-fg)]">qty {line.qty}</span> EPC{line.qty === 1 ? "" : "s"} across all sizes
           </p>
+        </div>
+
+        <div className="rounded-md border border-[var(--wms-border)]/70 px-3 py-2 font-mono text-[0.7rem] leading-relaxed text-[var(--wms-muted)]">
+          <span className="text-[var(--wms-fg)]">Add</span> lists this item in the
+          target bin as well — it stays in {fromBin.code} and any other bin it is
+          in. No limit on how many bins.
+          <br />
+          <span className="text-[var(--wms-fg)]">Move</span> puts it in the target
+          bin <em>only</em> and clears every other bin it was in.
         </div>
 
         <label className="flex items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 focus-within:border-[var(--wms-accent)]/60">
@@ -681,18 +710,26 @@ function MoveDialog({
         <button
           type="button"
           onClick={onClose}
-          disabled={busy}
+          disabled={busy !== null}
           className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] max-md:min-h-11 max-md:px-4"
         >
           Cancel
         </button>
         <button
           type="button"
-          onClick={submit}
-          disabled={busy || !target}
+          onClick={() => void submit("move")}
+          disabled={busy !== null || !target}
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-4"
+        >
+          {busy === "move" ? "Moving…" : `Move to ${target?.code ?? "…"}`}
+        </button>
+        <button
+          type="button"
+          onClick={() => void submit("add")}
+          disabled={busy !== null || !target}
           className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
-          {busy ? "Moving…" : `Move to ${target?.code ?? "…"}`}
+          {busy === "add" ? "Adding…" : `Add to ${target?.code ?? "…"}`}
         </button>
       </div>
     </Modal>
@@ -722,7 +759,9 @@ function RemoveDialog({
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skuPrefix: line.sku_prefix }),
+        // matrixId is what keeps this to the line the operator clicked —
+        // a product sharing this UPC has its own line and is left alone.
+        body: JSON.stringify({ skuPrefix: line.sku_prefix, matrixId: line.matrix_id }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; cleared?: number };
       if (!res.ok) throw new Error(j.error ?? "Remove failed");
@@ -738,13 +777,16 @@ function RemoveDialog({
     <Modal title="Remove from bin" onClose={onClose}>
       <div className="px-4 py-4 font-mono text-sm text-[var(--wms-fg)]">
         Remove{" "}
-        <span className="text-[var(--wms-accent)]">{line.sku_prefix}</span>{" "}
+        <span className="text-[var(--wms-fg)]">{line.name}</span>{" "}
         ·{" "}
         <span className="text-[var(--wms-warn)]">{line.color ?? "—"}</span>{" "}
-        (qty {line.qty}) from{" "}
+        ·{" "}
+        <span className="text-[var(--wms-accent)]">{line.sku_prefix}</span>{" "}
+        ({line.qty} EPC{line.qty === 1 ? "" : "s"}) from{" "}
         <span className="text-[var(--wms-fg)]">{bin.code}</span>?
         <p className="mt-2 text-xs text-[var(--wms-muted)]">
-          Logged as clean_bin · the matching EPCs return to homeless (bin_id = NULL).
+          Only this product. Anything else sharing the SKU {line.sku_prefix} stays
+          where it is. Logged as clean_bin · these EPCs return to homeless.
         </p>
         {err ? <p className="mt-2 text-xs text-red-400">{err}</p> : null}
       </div>
@@ -772,7 +814,12 @@ function RemoveDialog({
 
 /* ===== add-item dialog (searchable SKU combo) ========================== */
 
-type SkuMatch = { sku_prefix: string; name: string | null; color: string | null };
+type SkuMatch = {
+  matrix_id: string;
+  sku_prefix: string;
+  name: string | null;
+  color: string | null;
+};
 
 function AddItemDialog({
   bin,
@@ -838,20 +885,22 @@ function AddItemDialog({
     setBusy(true);
     setErr(null);
     try {
-      // "Add to bin" = sweep ALL in-stock EPCs of this (UPC, color) group
-      // — every size, whether homeless or currently in another bin — into
-      // this bin. sourceBinId="any" mirrors the catalog "📦 Bin" button.
-      // Previously this only moved homeless EPCs (sourceBinId=null), which
-      // silently no-op'd whenever the operator picked a color that was
-      // already shelved elsewhere — the bug the operator hit.
+      // "Add to bin" now means ADD: every in-stock EPC of this ONE product's
+      // (UPC, colour) group gets this bin, and keeps whatever bins it already
+      // had. It used to be a sweep (`mode: "move"` in today's terms), which
+      // yanked the colour out of every other shelf it was on — the reason a
+      // product could never be stocked in more than one bin from here.
+      // Use the line's Move button when you do want it in one bin only.
       const res = await fetch("/api/locations/bins/move", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skuPrefix: picked.sku_prefix,
+          matrixId: picked.matrix_id,
           sourceBinId: "any",
           targetBinId: bin.id,
+          mode: "add",
         }),
       });
       const j = (await res.json().catch(() => ({}))) as {
@@ -862,7 +911,7 @@ function AddItemDialog({
       const moved = Number(j.moved ?? 0);
       if (moved === 0) {
         setErr(
-          `No in-stock EPCs found for ${picked.sku_prefix} · ${picked.color ?? "—"}. Nothing to assign.`,
+          `Nothing to add — ${picked.name ?? picked.sku_prefix} · ${picked.color ?? "—"} is either already in ${bin.code} or has no in-stock tags.`,
         );
         return;
       }
@@ -878,8 +927,10 @@ function AddItemDialog({
     <Modal title={`Add item to ${bin.code}`} onClose={onClose}>
       <div className="space-y-3 px-4 py-4 font-mono text-xs">
         <p className="leading-relaxed text-[var(--wms-muted)]">
-          Pick a SKU prefix (UPC + color). Every homeless in-stock EPC of that
-          group, across all sizes, gets assigned to this bin.
+          Pick a product and colour. Every in-stock tag of that colour, across
+          all sizes, gets listed in this bin — and stays in any bin it is
+          already in. Use a line&apos;s <span className="text-[var(--wms-fg)]">Move</span>{" "}
+          button to put it in one bin only.
         </p>
 
         {picked ? (
@@ -931,7 +982,7 @@ function AddItemDialog({
               <ul className="mt-2 max-h-60 overflow-y-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]">
                 {matches.map((m, i) => (
                   <li
-                    key={`${m.sku_prefix}-${m.color ?? ""}-${i}`}
+                    key={`${m.matrix_id}-${m.sku_prefix}-${m.color ?? ""}-${i}`}
                     onClick={() => setPicked(m)}
                     onMouseEnter={() => setActiveIdx(i)}
                     className={`cursor-pointer px-3 py-1.5 max-md:py-3 max-md:text-sm ${
@@ -975,7 +1026,7 @@ function AddItemDialog({
           disabled={busy || !picked}
           className="wms-btn-accent-soft rounded-md px-3 py-2 font-mono text-xs disabled:opacity-50 max-md:min-h-11 max-md:px-4"
         >
-          {busy ? "Assigning…" : "Assign"}
+          {busy ? "Adding…" : `Add to ${bin.code}`}
         </button>
       </div>
     </Modal>
