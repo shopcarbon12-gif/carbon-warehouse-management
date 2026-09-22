@@ -11,7 +11,7 @@
  * the worker entrypoint for the `shopify_product_push` job type.
  */
 import type { Pool } from "pg";
-import { sortSizes } from "@/lib/size-order";
+import { sortVariantRows } from "@/lib/size-order";
 import {
   resolveShopContext,
   productSet,
@@ -39,6 +39,8 @@ type MatrixRow = {
 type VariantRow = PublishVariantRow & {
   upc: string | null;
   default_cost: string | null;
+  /** Hand-placed order from the Group Items grid; NULL means use wearing order. */
+  sort_order: number | null;
 };
 
 export type PublishResult = {
@@ -88,14 +90,15 @@ export async function pushMatrixToShopify(
 
   const vr = await pool.query<VariantRow>(
     `SELECT id::text, sku, color_code, size, retail_price::text AS retail_price,
-            upc, default_cost::text AS default_cost
+            upc, default_cost::text AS default_cost, sort_order
        FROM custom_skus
       WHERE matrix_id = $1::uuid AND archived = FALSE
       ORDER BY color_code`,
     [matrixId],
   );
   /*
-   * Sort sizes in wearing order before building the Shopify product.
+   * Order variants before building the Shopify product: a hand-placed order from
+   * the Group Items grid (custom_skus.sort_order) wins, otherwise wearing order.
    *
    * The row order here becomes the option-value order on Shopify, and SQL's
    * ORDER BY size is alphabetical — which turns S, M, L into L, M, S on every
@@ -103,7 +106,7 @@ export async function pushMatrixToShopify(
    * next Check & Publish would overwrite it from here. Same comparator the
    * Matrix window uses, so the two always agree.
    */
-  const variants = sortSizes<VariantRow>(vr.rows, (v) => String(v.size ?? ""));
+  const variants = sortVariantRows<VariantRow>(vr.rows);
 
   // ---- validate ---------------------------------------------------------
   const val = await validateMatrixForPublish(pool, matrixId, variants);

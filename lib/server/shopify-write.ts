@@ -18,6 +18,8 @@ import {
   toProductGid,
 } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
+import { sortVariantRows } from "@/lib/size-order";
+import type { Pool } from "pg";
 
 export type ShopCtx = { shop: string; token: string; apiVersion: string };
 
@@ -797,4 +799,113 @@ export async function deleteProduct(
   );
   const errs = res.data?.productDelete?.userErrors || [];
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };
+}
+
+/**
+ * Push a matrix's variant order to Shopify: the Size option's values, which is
+ * what the size selector on the product page shows, and the variant positions
+ * behind it.
+ *
+ * Called when the operator saves the Group Items grid, so a drag lands on the
+ * storefront without waiting for a full re-publish. Returns a short sentence for
+ * the UI rather than throwing, because the order is already saved in the WMS by
+ * the time we get here and a Shopify hiccup must not read as a failed save.
+ */
+export async function reorderShopifyVariants(pool: Pool, matrixId: string): Promise<string> {
+  const m = await pool.query<{ shopify_product_id: string | null }>(
+    `SELECT shopify_product_id FROM matrices WHERE id = $1::uuid`,
+    [matrixId],
+  );
+  const productId = m.rows[0]?.shopify_product_id;
+  if (!productId) return "not linked to Shopify";
+
+  const ctx = await resolveShopContext();
+  if (!ctx) return "Shopify credentials unavailable";
+
+  const vr = await pool.query<{
+    sku: string | null;
+    color_code: string | null;
+    size: string | null;
+    sort_order: number | null;
+    shopify_variant_id: string | null;
+  }>(
+    `SELECT sku, color_code, size, sort_order, shopify_variant_id
+       FROM custom_skus
+      WHERE matrix_id = $1::uuid AND archived = FALSE`,
+    [matrixId],
+  );
+  const ordered = sortVariantRows(vr.rows);
+  if (ordered.length < 2) return "nothing to reorder";
+
+  const res = await gql<{
+    product?: {
+      options?: Array<{
+        id: string;
+        name: string;
+        optionValues?: Array<{ id: string; name: string }>;
+      }>;
+    };
+  }>(
+    ctx,
+    `query($id: ID!) { product(id: $id) { options { id name optionValues { id name } } } }`,
+    { id: toProductGid(productId) },
+  );
+  const options = res.data?.product?.options || [];
+  if (!options.length) return "product has no options on Shopify";
+
+  const sizeOption = options.find((o) => /^size$/i.test(o.name));
+  const notes: string[] = [];
+
+  if (sizeOption) {
+    const want = new Map<string, number>();
+    for (const v of ordered) {
+      const key = String(v.size ?? "").trim().toUpperCase();
+      if (key && !want.has(key)) want.set(key, want.size);
+    }
+    const current = sizeOption.optionValues || [];
+    // Values Shopify has that the WMS no longer lists keep their relative place
+    // at the end instead of being shuffled somewhere arbitrary.
+    const sorted = current
+      .map((v, i) => ({ v, i, rank: want.get(v.name.trim().toUpperCase()) ?? Number.MAX_SAFE_INTEGER }))
+      .sort((a, b) => a.rank - b.rank || a.i - b.i)
+      .map((x) => x.v);
+
+    if (sorted.map((v) => v.id).join("|") !== current.map((v) => v.id).join("|")) {
+      const reorder = await gql<{ productOptionsReorder?: { userErrors?: Array<{ message: string }> } }>(
+        ctx,
+        `mutation($productId: ID!, $options: [OptionReorderInput!]!) {
+          productOptionsReorder(productId: $productId, options: $options) { userErrors { field message } }
+        }`,
+        {
+          productId: toProductGid(productId),
+          // Every option goes back, Size resorted and the rest untouched, so this
+          // cannot disturb Color.
+          options: options.map((o) => ({
+            id: o.id,
+            values: (o.id === sizeOption.id ? sorted : o.optionValues || []).map((v) => ({ id: v.id })),
+          })),
+        },
+      );
+      const errs = reorder.data?.productOptionsReorder?.userErrors || [];
+      if (errs.length) return `Shopify refused the size order: ${errs[0].message}`;
+      notes.push(`sizes ${sorted.map((v) => v.name).join(" ")}`);
+    }
+  }
+
+  const positions = ordered
+    .map((v, idx) => ({ id: v.shopify_variant_id, position: idx + 1 }))
+    .filter((p): p is { id: string; position: number } => Boolean(p.id));
+  if (positions.length > 1) {
+    const bulk = await gql<{ productVariantsBulkReorder?: { userErrors?: Array<{ message: string }> } }>(
+      ctx,
+      `mutation($productId: ID!, $positions: [ProductVariantPositionInput!]!) {
+        productVariantsBulkReorder(productId: $productId, positions: $positions) { userErrors { field message } }
+      }`,
+      { productId: toProductGid(productId), positions },
+    );
+    const errs = bulk.data?.productVariantsBulkReorder?.userErrors || [];
+    if (errs.length) notes.push(`variant positions unchanged (${errs[0].message})`);
+  }
+
+  return notes.length ? `Shopify updated: ${notes.join("; ")}` : "Shopify already in this order";
 }

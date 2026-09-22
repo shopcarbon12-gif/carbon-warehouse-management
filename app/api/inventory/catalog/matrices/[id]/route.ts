@@ -4,6 +4,7 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { sortVariantRows } from "@/lib/size-order";
 
 /**
  * Matrix detail + bulk operations — powers the Lightspeed-style matrix
@@ -121,6 +122,7 @@ export async function GET(req: Request, { params }: Ctx) {
     archived: boolean;
     shopify_variant_id: string | null;
     shopify_image_url: string | null;
+    sort_order: number | null;
     active_epc_count: string;
   }>(
     `SELECT
@@ -135,6 +137,7 @@ export async function GET(req: Request, { params }: Ctx) {
        cs.archived             AS archived,
        cs.shopify_variant_id   AS shopify_variant_id,
        cs.shopify_image_url    AS shopify_image_url,
+       cs.sort_order           AS sort_order,
        (
          SELECT COUNT(*)::text
          FROM items i
@@ -193,7 +196,11 @@ export async function GET(req: Request, { params }: Ctx) {
       image_urls: Array.isArray(head.image_urls) ? head.image_urls : [],
       featured_image_url: head.featured_image_url ?? null,
     },
-    variants: v.rows.map<MatrixVariant>((r) => ({
+    /* Wearing order (XS S M L XL, 26 27 28), colors grouped — the same order the
+       product is published with, so the grid and Shopify never disagree. SQL can
+       only sort size alphabetically, which reads L, M, S. `color_code` is aliased
+       to `color` in this query. */
+    variants: sortVariantRows(v.rows.map((r) => ({ ...r, color_code: r.color }))).map<MatrixVariant>((r) => ({
       id: r.id,
       sku: r.sku,
       ls_system_id: r.ls_system_id,

@@ -62,3 +62,35 @@ export function sortSizes<T>(items: T[], getSize: (item: T) => string): T[] {
     .sort((a, b) => sizeRank(getSize(a.item)) - sizeRank(getSize(b.item)) || a.i - b.i)
     .map((x) => x.item);
 }
+
+export type OrderableVariant = {
+  color_code?: string | null;
+  size?: string | null;
+  /** Manual order from dragging rows in the matrix window; NULL = use wearing order. */
+  sort_order?: number | null;
+};
+
+/**
+ * Order a matrix's variants the way both the Group Items grid and Shopify show
+ * them: colors grouped, sizes in wearing order inside each color.
+ *
+ * A row carrying `sort_order` was placed there by hand and keeps that position
+ * ahead of the sizes we ranked ourselves — a variant added since the last save
+ * has no manual position and falls to the end of its color until the grid is
+ * saved again, which rewrites the whole matrix.
+ */
+export function sortVariantRows<T extends OrderableVariant>(rows: T[]): T[] {
+  const key = (v: T): [number, number] =>
+    v.sort_order != null ? [0, v.sort_order] : [1, sizeRank(v.size)];
+  return rows
+    .map((item, i) => ({ item, i }))
+    .sort((a, b) => {
+      const colorA = String(a.item.color_code ?? "").trim().toUpperCase();
+      const colorB = String(b.item.color_code ?? "").trim().toUpperCase();
+      if (colorA !== colorB) return colorA.localeCompare(colorB);
+      const [ga, va] = key(a.item);
+      const [gb, vb] = key(b.item);
+      return ga - gb || va - vb || a.i - b.i;
+    })
+    .map((x) => x.item);
+}

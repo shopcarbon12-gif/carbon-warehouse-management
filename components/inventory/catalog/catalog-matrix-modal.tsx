@@ -22,6 +22,7 @@ import {
   FolderTree,
   Sparkles,
   Save,
+  GripVertical,
 } from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
@@ -281,6 +282,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
   const [mForm, setMForm] = useState<MatrixForm | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
+  /* Row being dragged by its handle, and whether the order has been changed since
+     the last save. Rows arrive in wearing order (XS S M L XL) from the API; a drag
+     overrides that for this product and is pushed to Shopify on save. */
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [orderDirty, setOrderDirty] = useState(false);
   const [defPrice, setDefPrice] = useState("");
   const [defCost, setDefCost] = useState("");
   const [newColor, setNewColor] = useState("");
@@ -412,6 +418,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     if (res.ok) setOkMsg(res.message);
     else setErr(res.message);
     setPrintingId(null);
+  };
+
+  /** Move the dragged row so it sits where the row it was dropped on is now. */
+  const moveRow = (fromKey: string, toKey: string) => {
+    if (fromKey === toKey) return;
+    setRows((prev) => {
+      const from = prev.findIndex((r) => r.key === fromKey);
+      const to = prev.findIndex((r) => r.key === toKey);
+      if (from === -1 || to === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setOrderDirty(true);
   };
 
   const deleteRow = (key: string) => {
@@ -577,6 +598,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
   const dirty = useMemo(() => {
     if (!data || !mForm) return false;
+    if (orderDirty) return true;
     const m0 = matrixForm(data.matrix);
     if ((Object.keys(mForm) as (keyof MatrixForm)[]).some((k) => mForm[k] !== m0[k])) return true;
     return rows.some((r) => {
@@ -591,7 +613,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         r.sku !== r.orig.sku
       );
     });
-  }, [data, mForm, rows]);
+  }, [data, mForm, rows, orderDirty]);
 
   const save = useCallback(async () => {
     if (!canManage || !data || !mForm || !dirty) return;
@@ -630,6 +652,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         if (!res.ok) throw new Error(j.error ?? "Matrix save failed");
       }
 
+      /* New rows have no id until the server makes one, and the order we send
+         below is by id — so keep what each create returned. */
+      const createdIds = new Map<string, string>();
+
       for (const r of rows) {
         if (r.isNew) {
           const res = await fetch(`/api/inventory/catalog/matrices/${matrixId}`, {
@@ -644,8 +670,9 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               default_cost: moneyOrNull(r.default_cost),
             }),
           });
-          const j = (await res.json().catch(() => ({}))) as { error?: string };
+          const j = (await res.json().catch(() => ({}))) as { error?: string; id?: string };
           if (!res.ok) throw new Error(j.error ?? `Create "${r.sku}" failed`);
+          if (j.id) createdIds.set(r.key, j.id);
           continue;
         }
         if (r.markedDelete) {
@@ -681,15 +708,37 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         if (!res.ok) throw new Error(j.error ?? "Variant save failed");
       }
 
+      /* Only when rows were actually dragged: an untouched matrix keeps NULL
+         positions and stays on wearing order, so improving that order later
+         still reaches every product that never needed a hand-placed one. */
+      let orderNote = "";
+      if (orderDirty) {
+        const ids = rows
+          .filter((r) => !r.markedDelete)
+          .map((r) => r.id ?? createdIds.get(r.key) ?? null)
+          .filter((x): x is string => Boolean(x));
+        if (ids.length > 1) {
+          const res = await fetch(`/api/inventory/catalog/matrices/${matrixId}/variant-order`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids }),
+          });
+          const j = (await res.json().catch(() => ({}))) as { error?: string; shopify?: string };
+          if (!res.ok) throw new Error(j.error ?? "Saving the size order failed");
+          setOrderDirty(false);
+          orderNote = j.shopify ? ` Order saved — ${j.shopify}.` : " Order saved.";
+        }
+      }
+
       await mutate();
       onMutated?.();
-      setOkMsg("Saved.");
+      setOkMsg(`Saved.${orderNote}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Save failed");
     } finally {
       setBusy(null);
     }
-  }, [canManage, data, mForm, rows, dirty, matrixId, mutate, onMutated]);
+  }, [canManage, data, mForm, rows, dirty, orderDirty, matrixId, mutate, onMutated]);
 
   const archiveAll = useCallback(async () => {
     if (!canManage || !data) return;
@@ -1984,7 +2033,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   </div>
                   <div className="overflow-x-auto max-sm:hidden">
                     <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                      <div className="grid grid-cols-[92px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
                         <span />
                         <span>Color</span>
                         <span>Size</span>
@@ -1996,11 +2045,39 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       {rows.map((r) => (
                         <div
                           key={r.key}
-                          className={`grid grid-cols-[64px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
+                          onDragOver={(e) => {
+                            if (dragKey && dragKey !== r.key) e.preventDefault();
+                          }}
+                          onDrop={(e) => {
+                            if (!dragKey) return;
+                            e.preventDefault();
+                            moveRow(dragKey, r.key);
+                            setDragKey(null);
+                          }}
+                          className={`grid grid-cols-[92px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
                             r.markedDelete ? "opacity-40" : ""
-                          } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
+                          } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""} ${
+                            dragKey === r.key ? "opacity-60 ring-1 ring-[var(--wms-accent)]/60" : ""
+                          }`}
                         >
                           <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              draggable={canManage}
+                              disabled={!canManage}
+                              onDragStart={(e) => {
+                                setDragKey(r.key);
+                                e.dataTransfer.effectAllowed = "move";
+                                /* Firefox only starts a drag when data is set. */
+                                e.dataTransfer.setData("text/plain", r.key);
+                              }}
+                              onDragEnd={() => setDragKey(null)}
+                              title="Drag to change the size order. Save pushes the new order to Shopify."
+                              aria-label={`Reorder ${r.sku || "row"}`}
+                              className="flex h-6 w-6 cursor-grab items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] active:cursor-grabbing disabled:opacity-40"
+                            >
+                              <GripVertical className="h-3.5 w-3.5" />
+                            </button>
                             <button
                               type="button"
                               disabled={!canManage}
