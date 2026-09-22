@@ -1,8 +1,15 @@
 /**
  * Calls Coolify’s deploy webhook (Application → Configuration → Webhooks): POST first,
  * then GET if POST returns 401/405 (some instances expect GET).
- * Loads COOLIFY_DEPLOY_WEBHOOK_URL and COOLIFY_API_TOKEN from process env, or from
- * repo-root `.env.coolify.local` if unset (same keys only).
+ * Loads COOLIFY_DEPLOY_WEBHOOK_URL, COOLIFY_WORKER_DEPLOY_WEBHOOK_URL and
+ * COOLIFY_API_TOKEN from process env, or from repo-root `.env.coolify.local` if
+ * unset (same keys only).
+ *
+ * Deploys BOTH applications. The web app serves the UI and API; the separate
+ * `carbon-wms-sync-worker` runs the queued jobs — Shopify product pushes,
+ * inventory sync. Deploying only the web app leaves the worker on old code, and
+ * the symptom is a Check & Publish that still fails on a rule you just changed
+ * (2026-09-22). Skipped, with a warning, when the worker webhook is not set.
  * @see README.md
  */
 import fs from "fs";
@@ -23,7 +30,11 @@ function loadCoolifyLocal() {
     const i = t.indexOf("=");
     if (i <= 0) continue;
     const key = t.slice(0, i).trim();
-    if (key !== "COOLIFY_DEPLOY_WEBHOOK_URL" && key !== "COOLIFY_API_TOKEN") {
+    if (
+      key !== "COOLIFY_DEPLOY_WEBHOOK_URL" &&
+      key !== "COOLIFY_WORKER_DEPLOY_WEBHOOK_URL" &&
+      key !== "COOLIFY_API_TOKEN"
+    ) {
       continue;
     }
     if (process.env[key]) continue;
@@ -47,6 +58,12 @@ if (!url) {
   );
   process.exit(1);
 }
+const workerUrl = process.env.COOLIFY_WORKER_DEPLOY_WEBHOOK_URL?.trim();
+if (!workerUrl) {
+  console.warn(
+    "COOLIFY_WORKER_DEPLOY_WEBHOOK_URL not set — deploying the web app only. Queued jobs (Shopify publish, inventory sync) will keep running the previous code.",
+  );
+}
 
 const token = process.env.COOLIFY_API_TOKEN?.trim();
 const headers = { Accept: "application/json" };
@@ -55,25 +72,27 @@ if (token) {
 }
 
 /** Coolify accepts POST; some setups / docs use GET on the same webhook URL. */
-async function trigger(method) {
-  return fetch(url, { method, headers });
+async function trigger(target, method) {
+  return fetch(target, { method, headers });
 }
 
-let res = await trigger("POST");
-let body = await res.text();
-if (!res.ok && (res.status === 401 || res.status === 405)) {
-  const r2 = await trigger("GET");
-  const b2 = await r2.text();
-  if (r2.ok) {
-    res = r2;
-    body = b2;
-  } else if (res.status === 405) {
-    res = r2;
-    body = b2;
+async function deploy(name, target) {
+  let res = await trigger(target, "POST");
+  let body = await res.text();
+  if (!res.ok && (res.status === 401 || res.status === 405)) {
+    const r2 = await trigger(target, "GET");
+    const b2 = await r2.text();
+    if (r2.ok || res.status === 405) {
+      res = r2;
+      body = b2;
+    }
   }
+  console.log(`${name}: ${res.status} ${res.statusText} ${body ? body.slice(0, 300) : ""}`);
+  return res;
 }
 
-console.log(res.status, res.statusText, body ? body.slice(0, 300) : "");
+const res = await deploy("web app", url);
+const workerRes = workerUrl ? await deploy("sync worker", workerUrl) : null;
 if (res.status === 401) {
   if (!token) {
     console.error(
@@ -85,4 +104,4 @@ if (res.status === 401) {
     );
   }
 }
-process.exit(res.ok ? 0 : 1);
+process.exit(res.ok && (!workerRes || workerRes.ok) ? 0 : 1);
