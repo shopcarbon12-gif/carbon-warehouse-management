@@ -54,8 +54,12 @@ export async function POST(req: Request) {
       customSkuId
         ? `SELECT id::text, COALESCE(ls_on_hand_total, 0)::text AS old_v, sku
            FROM custom_skus WHERE id = $1::uuid LIMIT 1`
-        : `SELECT id::text, COALESCE(ls_on_hand_total, 0)::text AS old_v, sku
-           FROM custom_skus WHERE sku = $1 ORDER BY id LIMIT 1`,
+        : /* A SKU can sit on more than one row (an archived twin, or a second
+             product sharing the UPC — migration 0092). Prefer a live row; the
+             printed barcode carries no more than the SKU, so between two live
+             rows the oldest wins and stays stable across scans. */
+          `SELECT id::text, COALESCE(ls_on_hand_total, 0)::text AS old_v, sku
+           FROM custom_skus WHERE sku = $1 ORDER BY archived ASC, id LIMIT 1`,
       customSkuId ? [customSkuId] : [sku!.trim()],
     );
 

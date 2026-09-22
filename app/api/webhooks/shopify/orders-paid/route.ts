@@ -19,7 +19,13 @@ export const dynamic = "force-dynamic";
  * Public route (no WMS session) — authenticated by Shopify HMAC. Idempotent per
  * order id via shopify_sale_events.
  */
-type LineItem = { sku?: string | null; quantity?: number | null; title?: string | null };
+type LineItem = {
+  sku?: string | null;
+  quantity?: number | null;
+  title?: string | null;
+  /** Identifies the item exactly, which SKU alone no longer does (see below). */
+  variant_id?: number | string | null;
+};
 
 export async function POST(req: Request) {
   const raw = await req.text();
@@ -58,13 +64,24 @@ export async function POST(req: Request) {
     const qty = Math.floor(Number(li.quantity) || 0);
     if (!sku || qty <= 0) continue;
 
-    // Resolve the ACTIVE custom_sku (archived rows can share a SKU — never them).
+    /* Resolve the live custom_sku. Prefer the Shopify variant id: a SKU can be
+       live on two different products (migration 0092 — two matrices may share a
+       UPC, and a SKU is UPC + color + size), so SKU alone could decrement the
+       wrong product's stock. Fall back to SKU for line items Shopify sends
+       without a variant id, and for rows the WMS has not linked yet. */
+    // The webhook sends a bare numeric id; the WMS stores the full gid.
+    const rawVariantId = String(li.variant_id ?? "").trim();
+    const variantId = /^\d+$/.test(rawVariantId)
+      ? `gid://shopify/ProductVariant/${rawVariantId}`
+      : rawVariantId;
     const cs = await pool.query<{ id: string; manual: boolean }>(
       `SELECT cs.id::text AS id, COALESCE(m.is_manual_only, FALSE) AS manual
          FROM custom_skus cs JOIN matrices m ON m.id = cs.matrix_id
-        WHERE cs.sku = $1 AND cs.archived = FALSE
+        WHERE cs.archived = FALSE
+          AND ($2 <> '' AND cs.shopify_variant_id = $2 OR cs.sku = $1)
+        ORDER BY (cs.shopify_variant_id = $2) DESC NULLS LAST
         LIMIT 1`,
-      [sku],
+      [sku, variantId],
     );
     if (cs.rowCount === 0) {
       detail.push({ sku, qty, result: "no wms match" });
