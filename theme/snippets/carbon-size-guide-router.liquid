@@ -4,6 +4,29 @@ Create a single-line product metafield: custom.jeans_size_guide_fit
 Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
 {% endcomment %}
 {% assign carbon_fit = product.metafields.custom.jeans_size_guide_fit.value | default: product.metafields.custom.jeans_size_guide_fit %}
+{%- comment -%}
+  The size-guide popup is the one modal in this theme that needs to be wide.
+
+  The theme gives every product popup the same 800px shell. Inside it the three
+  measurement photos render at 184x138 — too small to show a shopper where the
+  tape goes, which is the entire point of them.
+
+  :has() scopes this to a modal that actually contains a Carbon size guide, so
+  no other popup in the theme is touched, and a browser without :has() simply
+  keeps the theme's own width rather than breaking.
+{%- endcomment -%}
+<style>
+  .product-popup-modal__content:has([id^="carbon-size-guide-"]) {
+    width: min(1160px, calc(100vw - 48px));
+    max-width: none;
+  }
+  @media (max-width: 749px) {
+    .product-popup-modal__content:has([id^="carbon-size-guide-"]) {
+      width: 100%;
+      max-width: 100%;
+    }
+  }
+</style>
 {% case carbon_fit %}
   {% when 'slim' %}{% render 'carbon-size-guide-slim' %}
   {% when 'skinny' %}{% render 'carbon-size-guide-skinny' %}
