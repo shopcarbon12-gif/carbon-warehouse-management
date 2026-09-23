@@ -15,7 +15,9 @@
       "mcp__claude_ai_Shopify__graphql_schema",
       "mcp__claude_ai_Shopify__run-analytics-query",
       "mcp__claude_ai_Shopify__validate_graphql_codeblocks",
-      "mcp__claude_ai_Shopify__get-shop-info"
+      "mcp__claude_ai_Shopify__get-shop-info",
+      "mcp__claude_ai_Dropbox__list_folder",
+      "mcp__claude_ai_Dropbox__create_file"
     ]
   }
 }

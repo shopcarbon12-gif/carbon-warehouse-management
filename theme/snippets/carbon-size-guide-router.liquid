@@ -1,0 +1,12 @@
+{% comment %}
+CARBON size-guide router.
+Create a single-line product metafield: custom.jeans_size_guide_fit
+Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
+{% endcomment %}
+{% assign carbon_fit = product.metafields.custom.jeans_size_guide_fit.value | default: product.metafields.custom.jeans_size_guide_fit %}
+{% case carbon_fit %}
+  {% when 'slim' %}{% render 'carbon-size-guide-slim' %}
+  {% when 'skinny' %}{% render 'carbon-size-guide-skinny' %}
+  {% when 'super-skinny-long' %}{% render 'carbon-size-guide-super-skinny-long' %}
+  {% when 'super-skinny-zipper' %}{% render 'carbon-size-guide-super-skinny-zipper' %}
+{% endcase %}
