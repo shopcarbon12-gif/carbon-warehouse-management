@@ -85,14 +85,35 @@ export async function POST(req: Request) {
     );
     const deleted = (del.rowCount ?? 0) > 0;
 
-    await client.query(
-      `INSERT INTO encode_events (
-         old_epc, new_epc, system_id, serial,
-         warehouse_id, device_id, status, encoded_at, created_by
-       )
-       VALUES ($1, $2, NULL, NULL, $3, NULL, 'rolled_back', now(), $4)`,
-      [oldEpc ?? null, newEpc, session.lid, session.sub],
+    /* Resolve the claim's own audit row instead of leaving it 'pending'
+       forever beside a second 'rolled_back' row. Before this, a correctly
+       rolled-back encode still showed as an outstanding claim: 2026-09-25
+       the table held 503 'pending' rows and only 4 of them had a
+       'rolled_back' sibling, so the Re-Encode report could not tell a
+       cancelled write from one still in flight. Flip the newest pending row
+       for this EPC; only INSERT when there was none (an old client, or a
+       repeat rollback), so each encode ends with exactly one terminal row. */
+    const resolved = await client.query(
+      `UPDATE encode_events
+          SET status = 'rolled_back', encoded_at = now()
+        WHERE ctid IN (
+          SELECT ctid FROM encode_events
+           WHERE new_epc = $1 AND status = 'pending'
+           ORDER BY created_at DESC
+           LIMIT 1
+        )`,
+      [newEpc],
     );
+    if ((resolved.rowCount ?? 0) === 0) {
+      await client.query(
+        `INSERT INTO encode_events (
+           old_epc, new_epc, system_id, serial,
+           warehouse_id, device_id, status, encoded_at, created_by
+         )
+         VALUES ($1, $2, NULL, NULL, $3, NULL, 'rolled_back', now(), $4)`,
+        [oldEpc ?? null, newEpc, session.lid, session.sub],
+      );
+    }
 
     await client.query("COMMIT");
     return NextResponse.json({ ok: true, deleted });

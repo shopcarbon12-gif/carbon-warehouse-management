@@ -488,6 +488,12 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     // beep runs until dispose.
     await _forceStopRadio();
     if (!written) {
+      // See encode_screen: claim minted a serial and staged the new EPC at
+      // 'unknown' before the write. A failed write makes that row a phantom,
+      // so hand it back instead of leaving it in catalog.
+      try {
+        await api.postEncodeRollback(oldEpc: oldEpc, newEpc: newEpc);
+      } catch (_) {/* best-effort */}
       _sounds.play(ScanCue.error);
       _fail('Chip write/verify failed — tag NOT encoded. Re-present the tag and pull again.');
       return;

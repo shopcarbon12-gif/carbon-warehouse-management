@@ -493,6 +493,16 @@ class _EncodeScreenState extends State<EncodeScreen> {
     }
     if (!written) {
       await _forceStopRadio();
+      // Integrity: encode-claim already minted a serial and INSERTed the new
+      // EPC at status='unknown'. The chip never took it, so that row is a
+      // phantom — an EPC no physical tag carries. Roll it back, exactly as
+      // Search & Encode does. Without this every failed write left an orphan
+      // row plus a permanently 'pending' audit entry and burned a serial;
+      // 2026-09-25 that had accumulated to 461 phantom rows, six of them from
+      // one tag the operator retried six times in three minutes.
+      try {
+        await api.postEncodeRollback(oldEpc: oldEpc, newEpc: newEpc);
+      } catch (_) {/* best-effort; the write failure is what the operator sees */}
       _sounds.play(ScanCue.error);
       _fail('Chip write/verify failed — tag NOT encoded. Re-present the tag and pull again.');
       return;

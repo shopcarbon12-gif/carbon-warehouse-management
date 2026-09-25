@@ -136,22 +136,29 @@ export async function POST(req: Request) {
       defectiveDeleted = (del.rowCount ?? 0) > 0;
     }
 
-    // Promote the matching 'pending' audit row to 'ok' so the Re-Encode
-    // report reflects the confirmed write. Only the newest pending row for
-    // this new EPC is touched.
-    if (newIsLive) {
-      await client.query(
-        `UPDATE encode_events
-            SET status = 'ok', encoded_at = now()
-          WHERE ctid IN (
-            SELECT ctid FROM encode_events
-             WHERE new_epc = $1 AND status = 'pending'
-             ORDER BY created_at DESC
-             LIMIT 1
-          )`,
-        [newEpc],
-      );
-    }
+    /* Promote the matching 'pending' audit row to 'ok' so the Re-Encode
+       report reflects the confirmed write. Only the newest pending row for
+       this new EPC is touched.
+
+       NOT gated on `newIsLive`: reaching finalize already means the chip
+       write was verified — that is the only thing this row records. Whether
+       the operator ALSO wanted the tag promoted to in-stock is a separate
+       decision (`promoteNew: false` leaves it 'unknown' so they can pick the
+       status themselves). Gating the two together meant a promoteNew:false
+       caller could never close out its own claim, leaving a successful
+       encode looking unconfirmed forever. The old-EPC delete above stays
+       gated on newIsLive — that one really does need the replacement live. */
+    await client.query(
+      `UPDATE encode_events
+          SET status = 'ok', encoded_at = now()
+        WHERE ctid IN (
+          SELECT ctid FROM encode_events
+           WHERE new_epc = $1 AND status = 'pending'
+           ORDER BY created_at DESC
+           LIMIT 1
+        )`,
+      [newEpc],
+    );
 
     await client.query("COMMIT");
     return NextResponse.json({
