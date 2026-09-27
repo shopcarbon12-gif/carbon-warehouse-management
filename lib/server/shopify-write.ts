@@ -12,6 +12,7 @@
  * token store. Orchestration lives in lib/server/shopify-publish.ts.
  */
 import {
+  SHOPIFY_API_VERSION,
   getShopifyAdminToken,
   normalizeShopDomain,
   runShopifyGraphql,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/shopify";
 import { getShopifyAccessToken } from "@/lib/shopifyTokenRepository";
 import { sortVariantRows } from "@/lib/size-order";
+import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 
 export type ShopCtx = { shop: string; token: string; apiVersion: string };
@@ -35,7 +37,7 @@ export async function resolveShopContext(): Promise<ShopCtx | null> {
     }
   }
   if (!token) return null;
-  const apiVersion = (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01";
+  const apiVersion = (process.env.SHOPIFY_API_VERSION || "").trim() || SHOPIFY_API_VERSION;
   return { shop, token, apiVersion };
 }
 
@@ -161,6 +163,28 @@ export async function primaryLocationId(ctx: ShopCtx): Promise<string | null> {
   return (nodes.find((n) => n.isActive) || nodes[0])?.id || null;
 }
 
+/**
+ * WMS is the source of truth for stock, so we deliberately skip Shopify's
+ * compare-and-swap guard: we always want our number to win, never to fail
+ * because Shopify's copy moved underneath us.
+ *
+ * How you say that changed in 2026-04. The old opt-out was
+ * `ignoreCompareQuantity: true` on the input; that field (and its partner
+ * `compareQuantity`) is *removed*, and the opt-out is now a per-line
+ * `changeFromQuantity: null`. The field has to be present — omitting it is not
+ * the same as passing null — so it is spelled out on every line below.
+ *
+ * `@idempotent` also became mandatory on this mutation in 2026-04. The key is
+ * minted once per call, i.e. outside `runShopifyGraphql`'s throttle-retry
+ * loop, so a retried request is recognised as the same operation and logs one
+ * adjustment rather than a second identical one.
+ */
+const INVENTORY_SET_QUANTITIES = `mutation inventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+  inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
+    userErrors { message }
+  }
+}`;
+
 /** Set on-hand for an inventory item at a location (absolute quantity). */
 export async function setInventoryQuantity(
   ctx: ShopCtx,
@@ -170,18 +194,21 @@ export async function setInventoryQuantity(
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await gql<{ inventorySetQuantities?: { userErrors?: Array<{ message: string }> } }>(
     ctx,
-    `mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
-      inventorySetQuantities(input: $input) { userErrors { message } }
-    }`,
+    INVENTORY_SET_QUANTITIES,
     {
       input: {
         name: "available",
         reason: "correction",
-        ignoreCompareQuantity: true,
         quantities: [
-          { inventoryItemId, locationId, quantity: Math.max(0, Math.trunc(quantity)) },
+          {
+            inventoryItemId,
+            locationId,
+            quantity: Math.max(0, Math.trunc(quantity)),
+            changeFromQuantity: null,
+          },
         ],
       },
+      idempotencyKey: randomUUID(),
     },
   );
   const errs = res.data?.inventorySetQuantities?.userErrors || [];
@@ -368,13 +395,15 @@ export async function setInventoryQuantitiesBulk(
       inventoryItemId: q.inventoryItemId,
       locationId: q.locationId,
       quantity: Math.max(0, Math.trunc(q.quantity)),
+      changeFromQuantity: null,
     }));
     const res = await gql<{ inventorySetQuantities?: { userErrors?: Array<{ message: string }> } }>(
       ctx,
-      `mutation inventorySetQuantities($input: InventorySetQuantitiesInput!) {
-        inventorySetQuantities(input: $input) { userErrors { message } }
-      }`,
-      { input: { name: "available", reason: "correction", ignoreCompareQuantity: true, quantities: chunk } },
+      INVENTORY_SET_QUANTITIES,
+      {
+        input: { name: "available", reason: "correction", quantities: chunk },
+        idempotencyKey: randomUUID(),
+      },
     );
     if (!res.data) errors.push("inventorySetQuantities request failed");
     const errs = res.data?.inventorySetQuantities?.userErrors || [];

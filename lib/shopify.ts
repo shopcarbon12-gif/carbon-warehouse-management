@@ -1,3 +1,19 @@
+/**
+ * The Admin API version every Shopify call in this app is pinned to.
+ *
+ * Keep this on a *supported* version. Shopify does not reject a request for a
+ * retired version — it silently serves it from the oldest version still
+ * supported and says so in the `X-Shopify-API-Version` response header. We sat
+ * on "2025-01" long after it retired, so the effective version was really
+ * 2025-10 and drifted forward on its own every quarter. That is how the
+ * `InventorySetQuantitiesInput.ignoreCompareQuantity` deprecation showed up in
+ * the app dashboard for code nobody had touched.
+ *
+ * Bumping this re-validates every GraphQL document in the repo against the new
+ * schema, so treat it as a real change, not a version-string edit.
+ */
+export const SHOPIFY_API_VERSION = "2026-07";
+
 const SHOP_DOMAIN_RE = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i;
 
 export function normalizeShopDomain(value: string) {
@@ -36,7 +52,7 @@ export function getShopifyConfig(baseUrl: string) {
     scopes: Array.from(mergedScopes).join(","),
     redirectUri:
       (process.env.SHOPIFY_REDIRECT_URI || "").trim() || `${baseUrl}/api/shopify/callback`,
-    apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || "2025-01",
+    apiVersion: (process.env.SHOPIFY_API_VERSION || "").trim() || SHOPIFY_API_VERSION,
   };
 }
 

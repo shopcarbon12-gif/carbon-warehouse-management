@@ -116,7 +116,7 @@ const isAllCaps = (s: string) => s === s.toUpperCase() && /[A-Z]/.test(s);
 
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const SHOP = env.SHOPIFY_SHOP_DOMAIN, TOKEN = env.SHOPIFY_ADMIN_ACCESS_TOKEN;
-  const API = env.SHOPIFY_API_VERSION || "2025-01";
+  const API = env.SHOPIFY_API_VERSION || "2026-07";
   for (let a = 0; a < 10; a++) {
     const res = await fetch(`https://${SHOP}/admin/api/${API}/graphql.json`, {
       method: "POST",

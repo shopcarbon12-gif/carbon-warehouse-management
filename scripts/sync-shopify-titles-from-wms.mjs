@@ -62,7 +62,7 @@ if (!DB_URL) {
 
 async function gql(query, variables = {}) {
   for (let a = 0; a < 10; a++) {
-    const res = await fetch(`https://${env.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`, {
+    const res = await fetch(`https://${env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-07/graphql.json`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

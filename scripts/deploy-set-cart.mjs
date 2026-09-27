@@ -32,7 +32,7 @@ const TOKEN = env("SHOPIFY_ADMIN_ACCESS_TOKEN");
 const GID = `gid://shopify/OnlineStoreTheme/${THEME_ID}`;
 
 async function gql(query, variables) {
-  const r = await fetch(`https://${SHOP}/admin/api/2025-01/graphql.json`, {
+  const r = await fetch(`https://${SHOP}/admin/api/2026-07/graphql.json`, {
     method: "POST",
     headers: { "X-Shopify-Access-Token": TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),

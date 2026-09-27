@@ -45,7 +45,7 @@ function loadEnv() {
 const env = loadEnv();
 const SHOP = env.SHOPIFY_SHOP_DOMAIN;
 const TOKEN = env.SHOPIFY_ADMIN_ACCESS_TOKEN;
-const API = env.SHOPIFY_API_VERSION || "2025-01";
+const API = env.SHOPIFY_API_VERSION || "2026-07";
 if (!SHOP || !TOKEN) {
   console.error("Missing SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_ACCESS_TOKEN.");
   process.exit(1);

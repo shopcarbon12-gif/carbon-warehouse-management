@@ -31,7 +31,7 @@ const TOKEN = get("SHOPIFY_ADMIN_ACCESS_TOKEN");
 
 async function gql<T = any>(query: string, variables?: any): Promise<T> {
   for (let a = 0; a < 6; a += 1) {
-    const r = await fetch(`https://${SHOP}/admin/api/2025-01/graphql.json`, {
+    const r = await fetch(`https://${SHOP}/admin/api/2026-07/graphql.json`, {
       method: "POST",
       headers: { "X-Shopify-Access-Token": TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),

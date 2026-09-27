@@ -59,7 +59,7 @@ if (!env.SHOPIFY_SHOP_DOMAIN || !env.SHOPIFY_ADMIN_ACCESS_TOKEN) {
 async function gql(query, variables = {}) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const res = await fetch(
-      `https://${env.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`,
+      `https://${env.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-07/graphql.json`,
       {
         method: "POST",
         headers: {

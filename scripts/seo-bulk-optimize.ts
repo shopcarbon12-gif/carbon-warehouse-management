@@ -62,7 +62,7 @@ function loadEnvFile(file: string): Record<string, string> {
 const env = { ...loadEnvFile(".env.agent-secrets"), ...loadEnvFile(".env.coolify.local") };
 const SHOP = (process.env.SHOPIFY_SHOP_DOMAIN || env.SHOPIFY_SHOP_DOMAIN || "").trim();
 const TOKEN = (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || env.SHOPIFY_ADMIN_ACCESS_TOKEN || "").trim();
-const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2025-01").trim();
+const API_VERSION = (process.env.SHOPIFY_API_VERSION || "2026-07").trim();
 const OPENAI_KEY = (() => {
   const direct = (process.env.OPENAI_API_KEY || env.OPENAI_API_KEY || "").trim();
   if (direct) return direct;

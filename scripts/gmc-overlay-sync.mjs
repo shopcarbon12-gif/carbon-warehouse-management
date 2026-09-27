@@ -66,7 +66,7 @@ const H = () => ({ authorization: `Bearer ${token}`, 'content-type': 'applicatio
  * gender backfill once; Shopify is the only non-circular source.
  */
 async function shopifyGenderAge() {
-  const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`;
+  const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-07/graphql.json`;
   const MALE = '131973546236', FEMALE = '131978494204';   // taxonomy metaobject gids for this shop
   const P = {}; let cursor = null, pages = 0;
   while (pages < 40) {
@@ -98,7 +98,7 @@ async function shopifyGenderAge() {
 
 /** Shopify variant weights — the source of truth for shipping_weight. */
 async function shopifyWeights() {
-  const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2025-01/graphql.json`;
+  const url = `https://${shop.SHOPIFY_SHOP_DOMAIN}/admin/api/2026-07/graphql.json`;
   const W = {}; let cursor = null, pages = 0;
   while (pages < 60) {
     let d = null;
