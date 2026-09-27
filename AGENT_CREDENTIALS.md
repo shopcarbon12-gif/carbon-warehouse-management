@@ -1,9 +1,9 @@
 # Agent credential & access index
 
-> ⚠️ **SERVER MIGRATION (2026-06-11):** Production moved from the old Hetzner box
-> `178.156.136.112` to the **Netcup server `152.53.210.171`**. **Use `152.53.210.171` only.**
-> The old Hetzner IP now just `socat`-forwards `:443`/`:80` to Netcup; its app/DB
-> containers are orphaned. Same Coolify port `:8000`, same DB ports (2040/55432).
+> **Production is the Netcup server `152.53.210.171`** — Coolify on `:8000`, DB on
+> `2040`/`55432`. That is the only production host; there is no second box to fall
+> back to. Anything still naming an older IP is stale and should be corrected, not
+> retried (verified 2026-09-26: the previous host refuses every port).
 
 This file is **committed to git** and contains **no secret values** — only paths, variable names, and access patterns. Any agent (Claude Code, Cursor, etc.) reading the project should read this file first to learn what credentials exist on the local machine and how to reach production.
 
@@ -13,7 +13,7 @@ The actual secret values live on this developer machine in gitignored files (see
 
 ## Quick start for a new agent
 
-1. **Local consolidated copy** (gitignored): `.env.agent-secrets` at repo root. One file with every credential the agent might need. If it's missing, regenerate it from the source files listed below.
+1. **Local consolidated copy** (gitignored): `.env.agent-secrets` at repo root. One file with every credential the agent might need. If it's missing, regenerate it from the source files listed below. Load it with `set -a; . ./.env.agent-secrets; set +a`. Values are single-quoted for a reason: the Coolify token contains a `|` and the deploy webhooks contain `&`, so unquoted they source as an *empty string* — silently, with no error. If you add a value, quote it and check it back with `echo ${#VAR}`.
 2. **SSH to warehouse VM** (verified working): `ssh shopcarbon@192.168.1.219` using `~/.ssh/id_ed25519` (no passphrase). User on the VM is `shopcarbon`, hostname `carboncdm`.
 3. **Fast prod facts**: WMS = `https://wms.shopcarbon.com`. CDM agent = `192.168.1.219`. Coolify = `http://152.53.210.171:8000`.
 
@@ -71,7 +71,7 @@ ssh shopcarbon@192.168.1.219 'grep CARBON_CDM_TOKEN /opt/carbon-cdm/.env | cut -
 ```
 
 ### Connect to the production database
-- **From the warehouse LAN or this dev workstation**: `DATABASE_URL` from `.env.coolify.local` against `152.53.210.171:3000` (Coolify public port). May be firewalled from arbitrary IPs.
+- **From the warehouse LAN or this dev workstation**: `DATABASE_URL` from `.env.coolify.local` against `152.53.210.171:2040` (Coolify public port). May be firewalled from arbitrary IPs.
 - **From inside the agent VM (.219)**: same URL works; the VM is on a network that reliably reaches Coolify's public port.
 - **Diagnostic helper**: `node scripts/diagnose-wms-db.mjs` (auto-loads `.env.coolify.local`).
 
