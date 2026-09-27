@@ -14,6 +14,9 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/health")) return true;
   /* Ops smoke: header secret only; disabled when WMS_OPS_SMOKE_SECRET unset (route returns 404). */
   if (pathname === "/api/internal/smoke/worker-queue") return true;
+  /* carbon-gen pushes saved models here; header secret only, and the route
+     returns 404 while WMS_MODELS_SYNC_SECRET is unset. */
+  if (pathname === "/api/internal/models-sync") return true;
   if (pathname.startsWith("/api/auth/")) return true;
   /* Lightspeed R-Series OAuth: browser hits these without WMS session. */
   if (pathname.startsWith("/api/lightspeed/auth")) return true;
