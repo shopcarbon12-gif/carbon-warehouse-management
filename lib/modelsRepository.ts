@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
+import { normalizeModelSlots, type ModelSlots } from "@/lib/modelSlots";
 
 export type ModelRecord = {
   model_id: string;
@@ -8,6 +9,8 @@ export type ModelRecord = {
   name: string;
   gender: string;
   ref_image_urls: string[];
+  /** Which photo plays which role. Empty for models saved before slots existed. */
+  ref_slots: ModelSlots;
   created_at: string | null;
 };
 
@@ -92,6 +95,9 @@ async function ensurePgReady() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_models_user_created ON models(user_id, created_at DESC)`);
+  // Mirrors carbon-gen: named reference-photo roles, pushed across by the
+  // models-sync endpoint. Additive and nullable so existing rows are untouched.
+  await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS ref_slots JSONB`);
   pgReady = true;
 }
 
@@ -102,6 +108,7 @@ function toModelRecord(row: any): ModelRecord {
     name: String(row?.name || ""),
     gender: String(row?.gender || ""),
     ref_image_urls: Array.isArray(row?.ref_image_urls) ? row.ref_image_urls.map((v: unknown) => String(v || "")) : [],
+    ref_slots: normalizeModelSlots(row?.ref_slots),
     created_at: row?.created_at ? String(row.created_at) : null,
   };
 }
@@ -115,7 +122,7 @@ export async function listModelsForUser(userId: string) {
   await ensurePgReady();
   const pool = getPgPool();
   const { rows } = await pool.query(
-    `SELECT model_id, user_id, name, gender, ref_image_urls, created_at
+    `SELECT model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at
      FROM models
      WHERE user_id = $1
      ORDER BY created_at DESC`,
@@ -151,7 +158,7 @@ export async function listAllModelsAsc() {
   await ensurePgReady();
   const pool = getPgPool();
   const { rows } = await pool.query(
-    `SELECT model_id, user_id, name, gender, ref_image_urls, created_at
+    `SELECT model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at
      FROM models
      ORDER BY created_at ASC`
   );
@@ -171,7 +178,7 @@ export async function insertModelRow(params: {
   const { rows } = await pool.query(
     `INSERT INTO models (model_id, user_id, name, gender, ref_image_urls)
      VALUES ($1, $2, $3, $4, $5::jsonb)
-     RETURNING model_id, user_id, name, gender, ref_image_urls, created_at`,
+     RETURNING model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at`,
     [params.model_id, params.user_id, params.name, params.gender, JSON.stringify(params.ref_image_urls)]
   );
   return rows[0] ? toModelRecord(rows[0]) : null;
@@ -230,4 +237,45 @@ export async function updateModelRefImageUrls(params: {
     JSON.stringify(refImageUrls),
     modelId,
   ]);
+}
+
+
+/**
+ * Upsert a model pushed from carbon-gen, where models are authored. Keyed on
+ * model_id so the same model keeps its identity on both sides — the WMS used
+ * to hold an independent COPY made in June 2026, which quietly diverged the
+ * moment anyone added or re-slotted a model in carbon-gen.
+ */
+export async function upsertSyncedModel(params: {
+  model_id: string;
+  user_id: string;
+  name: string;
+  gender: string;
+  ref_image_urls: string[];
+  ref_slots?: ModelSlots | null;
+}) {
+  resolveMode();
+  await ensurePgReady();
+  const pool = getPgPool();
+  const slots = normalizeModelSlots(params.ref_slots);
+  const hasSlots = Object.keys(slots).length > 0;
+  const { rows } = await pool.query(
+    `INSERT INTO models (model_id, user_id, name, gender, ref_image_urls, ref_slots)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+     ON CONFLICT (model_id) DO UPDATE
+        SET name = EXCLUDED.name,
+            gender = EXCLUDED.gender,
+            ref_image_urls = EXCLUDED.ref_image_urls,
+            ref_slots = EXCLUDED.ref_slots
+     RETURNING model_id, user_id, name, gender, ref_image_urls, ref_slots, created_at`,
+    [
+      params.model_id,
+      params.user_id,
+      params.name,
+      params.gender,
+      JSON.stringify(params.ref_image_urls),
+      hasSlots ? JSON.stringify(slots) : null,
+    ]
+  );
+  return rows[0] ? toModelRecord(rows[0]) : null;
 }
