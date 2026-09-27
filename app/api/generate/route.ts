@@ -5,6 +5,7 @@ import type { NextRequest } from "next/server";
 import { checkGenerateRateLimit } from "@/lib/generate-ratelimit";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
+import { recordStudioGeneration } from "@/lib/server/studio-generation-log";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -1014,6 +1015,8 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleGenerate(req: NextRequest): Promise<Response> {
+  // Wall clock for the generation log — OpenAI render time dominates it.
+  const startedAt = Date.now();
   try {
     // WMS auth: authenticated admin session (replaces carbon-gen cookie auth).
     const session = await getSessionFromRequest(req);
@@ -1054,10 +1057,24 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       typeof itemSpec === "string" && itemSpec.trim()
         ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), 2600)
         : "";
-    // A TEXT / LOGO / GRAPHIC line whose placement names the BACK: the back-facing
-    // poses must then render it (Pose 7's old "keep the back clean" wording made
-    // the generator drop the SIMPLIFY back print, 2026-08-26).
+    /* The back of a garment has THREE states, not two, and collapsing them is
+       how you get both failure modes at once: an invented back print, and a
+       real one dropped.
+         present  — the spec names a design whose placement is the back.
+         absent   — the spec explicitly observed the back and it is plain.
+         unknown  — nothing in the spec describes the back at all, because it
+                    was never photographed. "No evidence" is NOT "no design".
+       Previously only `present` existed; everything else silently became
+       "keep the back clean", which is a claim about the product that nobody
+       verified. */
     const specHasBackDesign = /^(?:TEXT|LOGO\/ICON|GRAPHIC\/PRINT)[^\n]*\bback\b/im.test(itemSpecText);
+    /* An explicit observation that the back carries nothing — the analyzer
+       writes these as NOT CLEARLY VISIBLE / plain / clean lines naming the back. */
+    const specSaysBackIsPlain =
+      /\bback\b[^\n]*\b(plain|clean|blank|no (?:print|graphic|design|text))\b/im.test(itemSpecText) ||
+      /\b(plain|clean|blank)\b[^\n]*\bback\b/im.test(itemSpecText);
+    /* Unknown: we have a spec, but it says nothing either way about the back. */
+    const specBackUnknown = Boolean(itemSpecText) && !specHasBackDesign && !specSaysBackIsPlain;
     const normalizedPanelQa = normalizePanelQa(panelQa);
     // Only the CURRENT gender's back-facing poses may be named: listing
     // "female Pose 2" on a male run turned male Pose 2 into a back view.
@@ -1187,6 +1204,11 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
                   `- BACK DESIGN PRESENT (verified on the product): the item carries a design on its BACK. Every back-facing frame (${backFacingPoseLabel}) MUST show that back design in full — same size, same position, same print effect. A clean/blank back, a shrunken version, or a version moved up to the neck is WRONG. This does NOT turn any front-facing pose into a back view: all other poses keep their defined facing.`,
                 ]
               : []),
+            ...(specBackUnknown
+              ? [
+                  `- BACK NOT PHOTOGRAPHED: the reference photos never show this item's back, so its back design is UNKNOWN. Do not invent one — no print, no graphic, no text, no logo that the references do not show. Equally, do not present the back as a verified clean surface: keep it plain in the item's own colour, fabric and construction, with nothing added. Back-facing frames (${backFacingPoseLabel}) must stay strictly to what the references prove.`,
+                ]
+              : []),
             "- SMALL TEXT LEGIBILITY: small chest / sleeve / neck text keeps its true garment size but must still be spelled letter-perfect in crisp, clean letterforms — even in full-body frames. Never render it as pseudo-letters, scribbles, or a smudge; prefer slightly bolder clean letters over illegible detail.",
           ]
         : []),
@@ -1264,9 +1286,21 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     );
     const clamped = clampLockedPrompt(prompt, serverLockBlock);
     const lockedPrompt = clamped.prompt;
+    /* Trimming throws away the MIDDLE of the instructions and generates anyway.
+       It has already cost real output once (2026-08-26: panels ignored the item
+       spec because the spec sat in the trimmed region), and the only trace was
+       a server log nobody reads. It still trims rather than failing — refusing
+       would block a product the operator needs photos for — but the overflow
+       now travels back with the image so the Studio can show it, instead of
+       silently producing a worse render. */
+    const promptOverflowBytes = clamped.trimmed
+      ? Math.max(0, promptLen(prompt) + promptLen(serverLockBlock) + 2 - MODEL_PROMPT_MAX_CHARS)
+      : 0;
     if (clamped.trimmed) {
       console.warn(
-        `[generate] prompt exceeded ${MODEL_PROMPT_MAX_CHARS} chars (client portion ${prompt.length}); trimmed client prompt to fit while preserving server locks.`
+        `[generate] PROMPT TRIMMED — over the ${MODEL_PROMPT_MAX_CHARS}-byte limit by ~${promptOverflowBytes} bytes; ` +
+          `the middle of the client prompt was dropped. Server locks and the item spec were preserved. ` +
+          `Panel ${normalizedPanelQa.panelNumber ?? "?"}, item type "${normalizedPanelQa.itemType ?? "?"}".`
       );
     }
     if (modelFilesCount < 3) {
@@ -1484,11 +1518,38 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         );
       }
     }
+    recordStudioGeneration({
+      tenantId: session?.tid,
+      locationId: session?.lid,
+      itemType: normalizedPanelQa.itemType,
+      modelName: normalizedPanelQa.modelName,
+      modelGender: normalizedPanelQa.modelGender,
+      panelNumber: normalizedPanelQa.panelNumber,
+      poseA: normalizedPanelQa.poseA,
+      poseB: normalizedPanelQa.poseB,
+      imageModel,
+      imageQuality,
+      imageSize: finalSize,
+      modelRefCount: modelFilesCount,
+      itemRefCount: itemFilesCount,
+      promptBytes: promptLen(lockedPrompt),
+      promptTrimmed: clamped.trimmed,
+      outcome: "ok",
+      durationMs: Date.now() - startedAt,
+      qaWarnings: qaWarnings.length,
+      backUnknown: specBackUnknown,
+    });
     return NextResponse.json({
       imageBase64: b64,
       ...(qaWarnings.length ? { qaWarnings } : {}),
       ...(qaWarnings.length && qaWarningsBySide ? { qaWarningsBySide } : {}),
       ...(qaNotes.length ? { qaNotes } : {}),
+      // Rides back with the image so a trimmed prompt is visible in the
+      // Studio instead of only in a server log.
+      ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
+      // The back was never photographed, so any back-facing frame here is the
+      // model's guess constrained to "add nothing" — not a verified back.
+      ...(specBackUnknown ? { backUnknown: true } : {}),
     });
   } catch (err: unknown) {
     console.error("Generate failed:", err);

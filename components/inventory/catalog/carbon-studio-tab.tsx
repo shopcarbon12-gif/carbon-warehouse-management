@@ -181,6 +181,11 @@ type PanelResponse = {
   qaWarnings?: string[];
   /** Per-frame split of qaWarnings so only the crop that is wrong gets flagged. */
   qaWarningsBySide?: { left?: string[]; right?: string[] };
+  /** True when the server dropped part of the prompt to fit the length limit. */
+  promptTrimmed?: boolean;
+  promptOverflowBytes?: number;
+  /** True when no reference photo showed the item's back. */
+  backUnknown?: boolean;
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
   qaNotes?: string[];
   error?: unknown;
@@ -316,9 +321,25 @@ async function panelResponseToCrops(
   const leftWarnings = forSide("left");
   const rightWarnings = forSide("right");
   const qaNotes = Array.isArray(json.qaNotes) && json.qaNotes.length ? json.qaNotes : undefined;
+  /* The server had to drop the MIDDLE of this panel's instructions to fit
+     OpenAI's prompt limit, and generated anyway. Rides in as a note so the
+     render is explainable instead of mysteriously ignoring a rule — it used to
+     appear only in a server log. */
+  const trimNote =
+    json.promptTrimmed === true
+      ? `Prompt was over the length limit by ~${Number(json.promptOverflowBytes || 0)} bytes — part of the instructions was dropped for this panel. Item details may be missed.`
+      : null;
+  /* No reference photo shows this item's back, so a back-facing frame is not a
+     verified back — check it before publishing rather than trusting it. */
+  const backNote =
+    json.backUnknown === true
+      ? "The item's back was never photographed, so any back-facing frame is unverified. Check it against the real garment before publishing."
+      : null;
+  const extraNotes = [trimNote, backNote].filter(Boolean) as string[];
+  const notes = extraNotes.length ? [...(qaNotes ?? []), ...extraNotes] : qaNotes;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes: notes },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes: notes },
   ];
 }
 

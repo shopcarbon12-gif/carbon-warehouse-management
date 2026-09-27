@@ -184,12 +184,35 @@ async function handleFlat(req: NextRequest): Promise<Response> {
       request.quality = imageQuality;
       request.moderation = (process.env.OPENAI_IMAGE_MODERATION || "low").trim() || "low";
     }
-    if (supportsFidelity) request.input_fidelity = "high";
+    if (supportsFidelity) {
+      request.input_fidelity = "high";
+    } else {
+      /* input_fidelity is what keeps a flat faithful to the real garment, and
+         it is the whole reason flats use it while the on-model panels do not
+         (no person here, so the face-copy regression cannot apply). gpt-image-2
+         does not accept the parameter at all, so switching to it SILENTLY
+         drops fidelity — the call still succeeds and nothing in the response
+         says the flats just got worse. Say so, loudly and to the operator. */
+      console.warn(
+        `[item-flat] ${imageModel} does not support input_fidelity — this flat is generated at DEFAULT fidelity. ` +
+          `Garment detail will be weaker than on gpt-image-1.5.`
+      );
+    }
 
     const edited: any = await withTimeout(openai.images.edit(request), imageTimeoutMs(), "Flat front/back generation");
     const b64 = text(edited?.data?.[0]?.b64_json);
     if (!b64) return NextResponse.json({ error: "OpenAI returned no image for the flat front/back generation." }, { status: 502 });
-    return NextResponse.json({ imageBase64: b64, size: request.size, model: imageModel });
+    return NextResponse.json({
+      imageBase64: b64,
+      size: request.size,
+      model: imageModel,
+      inputFidelity: supportsFidelity ? "high" : "unsupported",
+      ...(supportsFidelity
+        ? {}
+        : {
+            warning: `${imageModel} does not support input_fidelity — this flat was generated at default fidelity, so fine garment detail will be weaker.`,
+          }),
+    });
   } catch (e: any) {
     const status = Number(e?.status || e?.statusCode || 0);
     if (status === 400 && /safety|moderation|content policy/i.test(String(e?.message || ""))) {
