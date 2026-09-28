@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import {
   buildMasterPanelPrompt,
   getPanelPosePair,
@@ -396,6 +397,11 @@ export function CarbonStudioTab({
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
   /** Which reference section is highlighted for drops; and which one pasted /
    *  phone-camera photos go to (the last section the operator touched). */
+  /* Crop-in-place for an item reference. `src` must be something the browser
+     can decode, so only refs that still carry their upload preview qualify —
+     the stored R2 URL is private and would not load. */
+  const [cropping, setCropping] = useState<{ ref: ItemRef; src: string } | null>(null);
+  const [cropBusy, setCropBusy] = useState(false);
   const [dragOverView, setDragOverView] = useState<RefView | null>(null);
   const [activeView, setActiveView] = useState<RefView>("general");
   const activeViewRef = useRef<RefView>("general");
@@ -547,6 +553,37 @@ export function CarbonStudioTab({
       setBusy(null);
     }
   }, []);
+
+  /** Replace one item reference with its cropped version, keeping its view. */
+  const applyCrop = useCallback(
+    async (blob: Blob) => {
+      const target = cropping?.ref;
+      if (!target) return;
+      setCropBusy(true);
+      setErr(null);
+      try {
+        const file = new File([blob], "cropped.jpg", { type: "image/jpeg" });
+        const { blob: out, dataUrl, name } = await downscaleForUpload(file);
+        const fd = new FormData();
+        fd.append("file", out, name);
+        const r = await fetch("/api/models/upload", { method: "POST", body: fd });
+        const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);
+        // Swap in place so the photo keeps its position and its Front/Back view.
+        setItemRefs((prev) =>
+          prev.map((x) =>
+            x.url === target.url ? { url: j.url as string, preview: dataUrl, view: x.view } : x,
+          ),
+        );
+        setCropping(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Crop failed.");
+      } finally {
+        setCropBusy(false);
+      }
+    },
+    [cropping],
+  );
 
   // Paste an image from the clipboard (⌘/Ctrl+V) anywhere in Studio → item ref.
   // Guarded to image payloads only, so pasting text into inputs is untouched.
@@ -1211,6 +1248,19 @@ export function CarbonStudioTab({
                       >
                         ✕
                       </button>
+                      {ref.preview ? (
+                        <button
+                          type="button"
+                          title="Crop — cut the head out so the face stops competing with your model refs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCropping({ ref, src: ref.preview as string });
+                          }}
+                          className="absolute inset-x-0 bottom-0 rounded-b border-t border-[var(--wms-border)] bg-[var(--wms-surface)]/90 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)] hover:text-[var(--wms-accent)] max-md:py-1.5"
+                        >
+                          Crop
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                   <button
@@ -1705,6 +1755,15 @@ export function CarbonStudioTab({
             <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p>
           ) : null}
         </div>
+      ) : null}
+
+      {cropping ? (
+        <ItemRefCropDialog
+          src={cropping.src}
+          busy={cropBusy}
+          onCancel={() => !cropBusy && setCropping(null)}
+          onApply={(blob) => void applyCrop(blob)}
+        />
       ) : null}
 
       {zoom ? (
