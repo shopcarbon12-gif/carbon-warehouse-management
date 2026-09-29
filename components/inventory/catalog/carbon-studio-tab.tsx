@@ -1174,12 +1174,20 @@ export function CarbonStudioTab({
                   const dragged = e.dataTransfer.getData(REF_DRAG_TYPE);
                   if (dragged) {
                     try {
-                      const payload = JSON.parse(dragged) as { url: string; preview?: string; view?: RefView };
+                      const payload = JSON.parse(dragged) as { url: string; view?: RefView };
                       if (payload?.url) {
                         setItemRefs((prev) =>
                           prev.some((x) => sameRef(x, { url: payload.url, view: zone.view }))
                             ? prev // already labelled for this section — nothing to do
-                            : [...prev, { url: payload.url, preview: payload.preview, view: zone.view }],
+                            : [
+                                ...prev,
+                                {
+                                  url: payload.url,
+                                  // whatever preview the source copy already holds
+                                  preview: prev.find((x) => x.url === payload.url)?.preview,
+                                  view: zone.view,
+                                },
+                              ],
                         );
                       }
                     } catch {
@@ -1218,9 +1226,15 @@ export function CarbonStudioTab({
                       draggable={canManage}
                       title="Drag onto Front or Back to also label it there"
                       onDragStart={(e) => {
+                        /* Identify the photo, never carry it. A cropped
+                           reference's preview is a multi-megabyte PNG data
+                           URL, and a dataTransfer payload that large is
+                           silently dropped by the browser — after which the
+                           drop read an empty string and nothing happened. The
+                           drop looks the photo up in state instead. */
                         e.dataTransfer.setData(
                           REF_DRAG_TYPE,
-                          JSON.stringify({ url: ref.url, preview: ref.preview, view: zone.view }),
+                          JSON.stringify({ url: ref.url, view: zone.view }),
                         );
                         e.dataTransfer.effectAllowed = "copy";
                       }}
@@ -1230,6 +1244,7 @@ export function CarbonStudioTab({
                           src={ref.preview}
                           alt={`item ref (${zone.title})`}
                           title="Click to view full size"
+                          draggable={false}
                           className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
                           onClick={(e) => {
                             e.stopPropagation();
