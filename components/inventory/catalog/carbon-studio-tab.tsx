@@ -563,10 +563,18 @@ export function CarbonStudioTab({
       setCropBusy(true);
       setCropErr(null);
       try {
-        const file = new File([blob], "cropped.jpg", { type: "image/jpeg" });
-        const { blob: out, dataUrl, name } = await downscaleForUpload(file);
+        /* Upload the cropped bytes AS THEY ARE. Running them back through
+           downscaleForUpload re-encoded the crop a second time — and for
+           anything over 4MB also rescaled it — so a crop of an already-
+           compressed preview came out visibly worse than the photo it came
+           from. The crop is never larger than its source, which the upload
+           path had already bounded, so there is nothing left to downscale. */
+        const ext = blob.type === "image/png" ? "png" : "jpg";
+        const name = `cropped.${ext}`;
+        const file = new File([blob], name, { type: blob.type || "image/png" });
+        const dataUrl = await readAsDataUrl(file);
         const fd = new FormData();
-        fd.append("file", out, name);
+        fd.append("file", file, name);
         const r = await fetch("/api/models/upload", { method: "POST", body: fd });
         const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
         if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);

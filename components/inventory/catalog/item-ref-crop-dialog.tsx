@@ -36,7 +36,6 @@ export function ItemRefCropDialog({
   onApply: (blob: Blob) => void;
 }) {
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
   /* Opens with the common crop already selected — head out of frame. An empty
      selection disables Apply, and a disabled button is indistinguishable from a
      broken one. */
@@ -134,7 +133,17 @@ export function ItemRefCropDialog({
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, sw, sh);
     ctx.drawImage(el, sx, sy, sw, sh, 0, 0, sw, sh);
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.92));
+
+    /* LOSSLESS by default. A crop removes pixels; it has no business
+       degrading the ones it keeps. Encoding to JPEG here put a second
+       generation of compression on top of the upload's own JPEG pass, and the
+       artefacts were visible. PNG costs bytes, not quality — and only a very
+       large crop falls back to JPEG, at a high quality setting. */
+    let blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+    if (!blob || blob.size > 8 * 1024 * 1024) {
+      const jpeg = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.95));
+      if (jpeg && jpeg.size > 0) blob = jpeg;
+    }
     if (!blob || blob.size === 0) {
       setErr("Could not process this image — try a JPG or PNG.");
       return;
@@ -187,10 +196,15 @@ export function ItemRefCropDialog({
               </button>
             </div>
 
-            <div
-              ref={wrapRef}
-              className="relative select-none overflow-hidden rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]"
-            >
+            {/* The inner box SHRINK-WRAPS the image. Previously the <img> was
+                `w-full object-contain`, so the element box was wider than the
+                picture and the picture sat letterboxed inside it — every
+                pointer fraction was measured against the box, not the photo,
+                and the crop landed somewhere else entirely. With no `w-full`
+                the element box IS the rendered image, so screen coordinates
+                and overlay percentages both map 1:1. */}
+            <div className="flex justify-center rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1">
+            <div className="relative select-none overflow-hidden leading-none">
               <img
                 ref={imgRef}
                 src={src}
@@ -200,7 +214,7 @@ export function ItemRefCropDialog({
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
-                className="block max-h-[52vh] w-full cursor-crosshair touch-none object-contain max-md:max-h-[46dvh]"
+                className="block max-h-[52vh] max-w-full cursor-crosshair touch-none max-md:max-h-[46dvh]"
               />
               {rect && rect.w > 0 && rect.h > 0 ? (
                 <>
@@ -215,6 +229,7 @@ export function ItemRefCropDialog({
                   />
                 </>
               ) : null}
+            </div>
             </div>
 
             {err || error ? (
