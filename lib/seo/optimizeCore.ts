@@ -89,6 +89,42 @@ export function factsFromStudioSpec(lockText: string, maxBytes = VERIFIED_FACTS_
   return out.join("\n");
 }
 
+/**
+ * How much of a candidate description is lifted word-for-word from the old one.
+ *
+ * Handing the model the previous description anchors it: on a live product it
+ * read all seven photos, listed "open back with long tie detail" under
+ * observed — a detail the old copy never mentioned — and then returned that
+ * old copy verbatim anyway. Asking nicely is not a guarantee, so the overlap
+ * is measured and a lazy answer is rejected.
+ */
+export function reusedFraction(candidate: string, previous: string, n = 8): number {
+  const words = (s: string) =>
+    String(s || "")
+      .replace(/<[^>]+>/g, " ")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+  const a = words(candidate);
+  const b = words(previous);
+  if (a.length < n || b.length < n) return 0;
+  const shingles = (w: string[]) => {
+    const set = new Set<string>();
+    for (let i = 0; i + n <= w.length; i += 1) set.add(w.slice(i, i + n).join(" "));
+    return set;
+  };
+  const A = shingles(a);
+  const B = shingles(b);
+  if (!A.size) return 0;
+  let hit = 0;
+  for (const s of A) if (B.has(s)) hit += 1;
+  return hit / A.size;
+}
+
+/** Above this, the "new" description is the old one wearing a hat. */
+const MAX_REUSED_FRACTION = 0.3;
+
 /** Model-returned "observed" entries, which may arrive as objects. */
 function asObservedList(value: unknown, max = 20): string[] {
   if (!Array.isArray(value)) return [];
@@ -165,7 +201,7 @@ function buildGenInstruction(
       : []),
     ...(extras.previousDescription
       ? [
-          "  • PREVIOUS DESCRIPTION — reference, not a source of truth. It may be well written and it may describe a different garment entirely:",
+          "  • PREVIOUS DESCRIPTION — NOT something to copy. It is here only so you can rescue non-visual details from it. It may describe a different garment entirely:",
           `      "${extras.previousDescription}"`,
         ]
       : []),
@@ -177,7 +213,9 @@ function buildGenInstruction(
       ? [
           "",
           "HOW TO USE THE PREVIOUS DESCRIPTION:",
-          "  - Anything a photo CAN show (fabric look, fit, neckline, sleeves, closures, pockets, prints, logos, hardware, hem, colour) must come from the photos. Reuse the old wording only where the photos agree; drop whatever they contradict or do not show.",
+          "  - WRITE THE DESCRIPTION FRESH, from your own \"observed\" list. Do NOT reproduce the previous description, and do NOT reuse its sentences or phrases — if a draft of yours repeats a run of words from it, rewrite that part in your own words from what you can see. Returning the previous text back is a failed answer, however good it reads.",
+          "  - It is there to be CORRECTED and IMPROVED: say what the photos show that it misses, and drop what it claims that they do not show.",
+          "  - Anything a photo CAN show (fabric look, fit, neckline, sleeves, closures, pockets, prints, logos, hardware, hem, colour) must come from the photos. Never keep an old visual claim the photos do not support.",
           "  - Anything a photo can NEVER show (fibre composition, fabric weight, care instructions, country of origin, measurements, the model's height and size worn) may be carried over as-is, unless the photos contradict it — that detail is worth keeping.",
           '  - For every such carried-over detail add one entry to "observed" written as "from previous description: …" so it can be checked.',
         ]
@@ -254,6 +292,9 @@ export interface OptimizeResult {
   observed: string[];
   /** The description was written from the photos (not merely score-repaired). */
   descriptionFromPhotos: boolean;
+  /** The first draft came back as the previous text, so it was written again
+   *  with that text withheld. */
+  rewrittenFromPhotos?: boolean;
   verifiedFactsUsed: boolean;
   proposed: SeoFields;
   currentScorecard: Scorecard;
@@ -541,9 +582,14 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     verifiedFacts,
   };
 
-  async function callGenerate(fieldsToGen: SeoFieldKey[], altIds: string[], temperature: number): Promise<any> {
+  async function callGenerate(
+    fieldsToGen: SeoFieldKey[],
+    altIds: string[],
+    temperature: number,
+    extrasOverride?: GenExtras,
+  ): Promise<any> {
     const content: any[] = [
-      { type: "text", text: buildGenInstruction(ctx, fieldsToGen, visionActive, altIds, extras) },
+      { type: "text", text: buildGenInstruction(ctx, fieldsToGen, visionActive, altIds, extrasOverride ?? extras) },
       ...imageParts,
     ];
     const c: any = await withTimeout(
@@ -665,6 +711,29 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     }
   }
 
+  /* The model was shown the previous description and handed it straight back.
+     Ask again with that text withheld, so it has nothing to copy and must
+     write from the photos. One extra call, only when it actually happened. */
+  let rewrittenFromPhotos = false;
+  if (groundInPhotos && previousDescription && fieldsToGen.includes("bodyHtml")) {
+    const overlap = reusedFraction(proposed.bodyHtml, previousDescription);
+    if (overlap > MAX_REUSED_FRACTION) {
+      const claimFields = fieldsToGen.filter((f) => CLAIM_FIELDS.includes(f));
+      const rewrite = await callGenerate(claimFields, [], 0.6, { ...extras, previousDescription: "" }).catch(() => null);
+      if (rewrite?.proposed?.bodyHtml) {
+        proposed = applyGenerated(proposed, rewrite.proposed, claimFields);
+        proposedScorecard = scoreAll(proposed);
+        const fresh = asObservedList(rewrite.observed);
+        if (fresh.length) observed = fresh;
+        modelWroteBody = true;
+        rewrittenFromPhotos = true;
+        console.warn(
+          `[seo] description was ${Math.round(overlap * 100)}% the previous text; regenerated from the photos alone ` +
+            `(now ${Math.round(reusedFraction(proposed.bodyHtml, previousDescription) * 100)}%).`,
+        );
+      }
+    }
+  }
   await refineToTarget();
 
   for (let attempt = 0; attempt < MAX_REGEN && proposedScorecard.overall < OVERALL_TARGET; attempt += 1) {
@@ -748,6 +817,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     imagesAnalyzed: visionActive ? images.length : 0,
     observed,
     descriptionFromPhotos: groundInPhotos && modelWroteBody,
+    rewrittenFromPhotos,
     verifiedFactsUsed: Boolean(extras.verifiedFacts),
     proposed,
     currentScorecard,

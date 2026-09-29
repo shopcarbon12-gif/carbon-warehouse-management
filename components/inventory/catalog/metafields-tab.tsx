@@ -75,7 +75,13 @@ export const MetafieldsTab = forwardRef<MetafieldsHandle, Props>(function Metafi
       setValues((v) => ({ ...v, ...j.values }));
       setMsg("Filled from the hero image — review, then push.");
     } catch (e) {
-      if ((e as Error)?.name === "AbortError") return; // cancelled — not an error
+      if ((e as Error)?.name === "AbortError") {
+        /* Cancelled (the operator left the SEO tab, or started another run).
+           Not an error — but silence here reads as "the AI fill just doesn't
+           work any more", so say so and point at the retry. */
+        setMsg("AI fill was cancelled — press ✦ Optimize with AI to fill these from the hero image.");
+        return;
+      }
       setErr(e instanceof Error ? e.message : "AI scan failed");
     } finally {
       setBusy(null);

@@ -111,7 +111,12 @@ export const CategoryAttributesTab = forwardRef<CategoryAttributesHandle, Props>
           : `${catNote}${j.attributes && j.attributes.length ? "No attributes could be confidently determined." : "No matching Shopify category found — set one in Shopify."}`,
       );
     } catch (e) {
-      if ((e as Error)?.name === "AbortError") return; // cancelled — not an error
+      if ((e as Error)?.name === "AbortError") {
+        /* Cancelled, not failed — but saying nothing looks identical to "the
+           AI fill is broken", so name it and point at the retry. */
+        setMsg("AI fill was cancelled — press ✦ Optimize with AI to fill these.");
+        return;
+      }
       setErr(e instanceof Error ? e.message : "AI fill failed");
     } finally {
       setBusy(null);
