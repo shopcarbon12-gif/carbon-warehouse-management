@@ -44,6 +44,12 @@ function groupRefs(refs: ItemRef[]): RefViewLists {
 }
 /** Server-side image order: general → front → back (the prompt's view map counts on it). */
 const orderedRefUrls = (v: RefViewLists) => [...v.general, ...v.front, ...v.back];
+/** A ref is identified by url AND view: the same photo may be labelled in more
+ *  than one section, and removing it from Front must not remove it from General. */
+const sameRef = (a: ItemRef, b: { url: string; view?: RefView }) =>
+  a.url === b.url && (a.view ?? "general") === (b.view ?? "general");
+/** Drag payload for moving a reference between sections (copy, never move). */
+const REF_DRAG_TYPE = "application/x-carbon-item-ref";
 const refViewKey = (v: RefViewLists) => (["general", "front", "back"] as const).map((k) => `${k}:${v[k].join(",")}`).join("|");
 /** A media-manager row: an existing Shopify image or a new crop to add.
  * `color` = the variant colour this image is the MAIN pic for (all sizes). */
@@ -584,7 +590,8 @@ export function CarbonStudioTab({
         const r = await fetch("/api/models/upload", { method: "POST", body: fd });
         const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
         if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);
-        // Swap in place so the photo keeps its position and its Front/Back view.
+        /* Replace EVERY copy of this photo: the same picture may be labelled
+           in more than one section, and they should not diverge once cropped. */
         setItemRefs((prev) =>
           prev.map((x) =>
             x.url === target.url ? { url: j.url as string, preview: dataUrl, view: x.view } : x,
@@ -1214,6 +1221,25 @@ export function CarbonStudioTab({
                   setDragOverView(null);
                   if (!canManage) return;
                   selectView(zone.view);
+                  // A photo dragged from another section is ADDED here and
+                  // stays where it was — one picture can legitimately be the
+                  // general shot and the front shot at once.
+                  const dragged = e.dataTransfer.getData(REF_DRAG_TYPE);
+                  if (dragged) {
+                    try {
+                      const payload = JSON.parse(dragged) as { url: string; preview?: string; view?: RefView };
+                      if (payload?.url) {
+                        setItemRefs((prev) =>
+                          prev.some((x) => sameRef(x, { url: payload.url, view: zone.view }))
+                            ? prev // already labelled for this section — nothing to do
+                            : [...prev, { url: payload.url, preview: payload.preview, view: zone.view }],
+                        );
+                      }
+                    } catch {
+                      /* not our payload — ignore */
+                    }
+                    return;
+                  }
                   const imgs = imageFilesFromTransfer(e.dataTransfer);
                   if (imgs.length) void uploadItems(imgs, zone.view);
                 }}
@@ -1239,7 +1265,19 @@ export function CarbonStudioTab({
                 <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">{zone.hint}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   {zoneRefs.map((ref, i) => (
-                    <div key={ref.url + i} className="relative">
+                    <div
+                      key={ref.url + i}
+                      className="relative"
+                      draggable={canManage}
+                      title="Drag onto Front or Back to also label it there"
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(
+                          REF_DRAG_TYPE,
+                          JSON.stringify({ url: ref.url, preview: ref.preview, view: zone.view }),
+                        );
+                        e.dataTransfer.effectAllowed = "copy";
+                      }}
+                    >
                       {ref.preview ? (
                         <img
                           src={ref.preview}
@@ -1260,7 +1298,9 @@ export function CarbonStudioTab({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setItemRefs((p) => p.filter((x) => x.url !== ref.url));
+                          // Only this copy: the same photo may also be
+                          // labelled in another section, which stays.
+                          setItemRefs((p) => p.filter((x) => !sameRef(x, { url: ref.url, view: zone.view })));
                         }}
                         className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-status-danger-fg)]"
                       >

@@ -505,6 +505,53 @@ function normalizePanelQa(value: any): PanelQaInput {
   };
 }
 
+/**
+ * The construction details that decide whether a shot of THIS garment type is
+ * usable. The item type is not a label on the run — it names the product the
+ * photographs exist to sell, so its own details are the ones that must survive
+ * every pose, and a generic "keep the garment accurate" line does not tell the
+ * model which details those are.
+ *
+ * Deliberately short: the prompt is already close to its byte ceiling, so each
+ * entry is the handful of features a buyer actually inspects.
+ */
+function itemTypeFocusLine(itemType: string): string {
+  const t = (itemType || "").toLowerCase();
+  const has = (...words: string[]) => words.some((w) => t.includes(w));
+
+  let details: string;
+  if (has("jean", "denim", "pant", "trouser", "chino", "cargo", "short")) {
+    details =
+      "waistband height and closure (button/zip/rivets), belt loops, front rise, pocket shape and placement (front, coin, back), yoke and back-pocket stitching, wash and fade map, whiskering, distressing and rips exactly where the references show them, leg shape and opening, hem finish and length";
+  } else if (has("jacket", "coat", "blazer", "hoodie", "sweatshirt", "outerwear")) {
+    details =
+      "collar or hood shape, closure (zip teeth/buttons/snaps), shoulder seams and fit, sleeve length and cuff finish, pocket type and placement, hem and drawcords, lining or trims where visible";
+  } else if (has("tee", "t-shirt", "shirt", "top", "tank", "blouse", "polo", "sweater", "knit")) {
+    details =
+      "neckline shape and rib, shoulder seam placement and drop, sleeve length and cuff, body width and length, hem finish, and any print, text or graphic at its exact size, position and print effect";
+  } else if (has("dress", "skirt", "jumpsuit", "romper")) {
+    details =
+      "neckline and strap construction, waist seam and shaping, closure, length and hem, pleats/gathers/slits, and any print or text at its exact size and position";
+  } else if (has("swim", "bikini", "trunk")) {
+    details =
+      "cut and coverage, strap or waistband construction, seams and binding, ties or clasps, and any logo at its exact size and position";
+  } else if (has("shoe", "sneaker", "boot", "sandal")) {
+    details = "silhouette, upper panels and stitching, laces and eyelets, sole profile and colour blocking, logo placement";
+  } else if (has("bag", "belt", "hat", "cap", "accessor")) {
+    details = "shape and proportions, hardware, straps or closures, stitching, material grain, logo placement";
+  } else {
+    details =
+      "seams, closures, pockets, hardware, trims, material and texture, and any print, text or logo at its exact size and position";
+  }
+
+  return (
+    `- ITEM TYPE FOCUS — this shoot exists to sell the "${itemType || "apparel item"}". ` +
+    `It is the subject of every frame: keep it unobstructed, well lit, and rendered so a buyer can inspect it. ` +
+    `Its construction is the priority — ${details}. ` +
+    `Other pieces in the look stay exactly as the references show them, but they are context; never let styling, a pose, or another garment hide, crop or soften the ${itemType || "item"}.`
+  );
+}
+
 function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
   const modelName = panelQa.modelName || "locked model";
   const modelGender = panelQa.modelGender || "model";
@@ -527,7 +574,7 @@ function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
     "- Keep only a very faint neutral contact shadow on floor; no colored bounce light.",
     "SERVER-ENFORCED ITEM FIDELITY LOCK (NON-NEGOTIABLE):",
     `- Locked item type from section 0.5: "${lockedItemType}".`,
-    "- Prioritize garment details that match this locked item type.",
+    itemTypeFocusLine(lockedItemType),
     "- If item refs include a full look, preserve the total outfit structure (top, bottom, footwear, accessories) from that full look.",
     "- If both full-look and isolated item refs are provided, use isolated refs only to refine the locked item details while keeping non-target full-look pieces unchanged.",
     "- Garment design must match item-reference photos exactly.",
