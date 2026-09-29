@@ -16,6 +16,26 @@ export type BackView = "unknown" | "plain" | "design";
 export const LOCK_TEXT_MAX_BYTES = 3500;
 export const LOCK_TEXT_MAX_LINES = 48;
 
+export type StudioRefView = "general" | "front" | "back";
+
+/**
+ * Which photos a spec was computed for, as one comparable string.
+ *
+ * The Studio stores this next to the spec (`spec_refs_key`) and treats a
+ * mismatch as "the photos changed — re-analyze". Anything else that reads the
+ * spec must be able to ask the same question, or it will present a spec
+ * computed for a different set of photos as current fact. Shared so the two
+ * can never drift into disagreeing about what "unchanged" means.
+ */
+export function studioRefViewKey(refs: Array<{ url: string; view?: StudioRefView | null }>): string {
+  const lists: Record<StudioRefView, string[]> = { general: [], front: [], back: [] };
+  for (const r of refs || []) {
+    const view = (r?.view ?? "general") as StudioRefView;
+    (lists[view] ?? lists.general).push(String(r?.url ?? ""));
+  }
+  return (["general", "front", "back"] as const).map((k) => `${k}:${lists[k].join(",")}`).join("|");
+}
+
 const DESIGN_NOUN =
   /\b(?:print|printed|graphic|logo|text|letter|word|wordmark|artwork|embroider|patch|appliqu|emblem|illustration|motif|pattern|badge|stripe|slogan|tagline|image|photo|drawing|number)\w*/i;
 

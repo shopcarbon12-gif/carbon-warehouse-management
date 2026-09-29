@@ -275,6 +275,16 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const [seoCurrent, setSeoCurrent] = useState<Record<string, unknown> | null>(null);
   const [seoProposed, setSeoProposed] = useState<Record<string, unknown> | null>(null);
   const [seoScores, setSeoScores] = useState<{ cur: number; prop: number } | null>(null);
+  /** Where the proposed copy came from: how many photos, whether the
+   *  description was written from them, whether the Studio's verified facts
+   *  were in, and the facts the model says it saw. */
+  const [seoBasis, setSeoBasis] = useState<{
+    mode: "photos" | "weak-only";
+    photos: number;
+    fromPhotos: boolean;
+    verified: boolean;
+    observed: string[];
+  } | null>(null);
   const [seoAccept, setSeoAccept] = useState<Record<string, boolean>>({});
   // Current Shopify collection titles, shown at the top of the SEO tab. Refreshed
   // after a collections push.
@@ -930,12 +940,18 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
   // SEO tab (M3): audit current Shopify SEO, then AI-optimize. Accepts an
   // AbortSignal so an auto-run can be cancelled when the user leaves the tab.
-  const runSeo = useCallback(async (signal?: AbortSignal) => {
+  /* "photos" rewrites the description and meta description from the product
+     photos, whatever they score — what the owner presses the button for.
+     "weak-only" is the cheap pass (refresh what scores badly) used by the
+     automatic run when the tab opens, so merely looking at a product does not
+     spend a full vision rewrite. */
+  const runSeo = useCallback(async (signal?: AbortSignal, mode: "photos" | "weak-only" = "photos") => {
     const pid = data?.matrix.shopify_product_id;
     if (!pid) return;
     setSeoBusy("run");
     setErr(null);
-    setOkMsg("Reading Shopify SEO…");
+    setSeoBasis(null);
+    setOkMsg(mode === "photos" ? "Reading the product photos…" : "Reading Shopify SEO…");
     try {
       const a = await fetch("/api/shopify/seo/audit", {
         method: "POST",
@@ -961,7 +977,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       const o = await fetch("/api/shopify/seo/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ context: aj.context, current: aj.current }),
+        // matrixId lets the server pull the Studio's close-up notes.
+        body: JSON.stringify({ context: aj.context, current: aj.current, matrixId, descriptionMode: mode }),
         signal,
       });
       const oj = (await o.json().catch(() => ({}))) as {
@@ -969,10 +986,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         currentScorecard?: { overall?: number };
         proposedScorecard?: { overall?: number };
         skipped?: boolean;
+        imagesAnalyzed?: number;
+        observed?: string[];
+        descriptionFromPhotos?: boolean;
+        verifiedFactsUsed?: boolean;
         error?: string;
       };
       if (!o.ok || !oj.proposed) throw new Error(oj.error ?? "SEO optimize failed");
       setSeoProposed(oj.proposed);
+      setSeoBasis({
+        mode,
+        photos: Number(oj.imagesAnalyzed) || 0,
+        fromPhotos: oj.descriptionFromPhotos === true,
+        verified: oj.verifiedFactsUsed === true,
+        observed: Array.isArray(oj.observed) ? oj.observed.map(String) : [],
+      });
       setSeoScores({
         cur: Math.round(oj.currentScorecard?.overall ?? 0),
         prop: Math.round(oj.proposedScorecard?.overall ?? 0),
@@ -1077,14 +1105,14 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   const autoOptedRef = useRef(false);
   const [seoAllBusy, setSeoAllBusy] = useState<null | "opt" | "push">(null);
 
-  const optimizeAll = useCallback(async () => {
+  const optimizeAll = useCallback(async (mode: "photos" | "weak-only" = "photos") => {
     seoAbortRef.current?.abort();
     const ctrl = new AbortController();
     seoAbortRef.current = ctrl;
     setSeoAllBusy("opt");
     try {
       await Promise.allSettled([
-        runSeo(ctrl.signal),
+        runSeo(ctrl.signal, mode),
         metaRef.current?.aiFill(ctrl.signal) ?? Promise.resolve(),
         catAttrRef.current?.aiFill(ctrl.signal) ?? Promise.resolve(),
       ]);
@@ -1107,13 +1135,15 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [saveSeo]);
 
-  // Auto-run Optimize with AI the first time the SEO tab opens (per open). The
-  // "✦ Optimize with AI" button stays for manual re-runs / edits.
+  /* Auto-run the first time the SEO tab opens (per open), in the CHEAP mode:
+     refresh only what scores badly. Reading the product photos at full detail
+     is a real cost per product, and merely opening a tab is not a decision to
+     spend it — the "✦ Optimize with AI" button does that deliberately. */
   useEffect(() => {
     if (tab !== "seo" || !data?.matrix.shopify_product_id) return;
     if (autoOptedRef.current || seoProposed || seoAllBusy) return;
     autoOptedRef.current = true;
-    void optimizeAll();
+    void optimizeAll("weak-only");
   }, [tab, data?.matrix.shopify_product_id, seoProposed, seoAllBusy, optimizeAll]);
 
   // Load the "Current collections" list ONLY while the SEO tab is idle — never
@@ -1833,8 +1863,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                         <button
                           type="button"
                           disabled={!canManage || seoBusy !== null || seoAllBusy !== null}
-                          onClick={() => void optimizeAll()}
-                          title="Optimize SEO, fill metafields, and fill category attributes with AI — all at once"
+                          onClick={() => void optimizeAll("photos")}
+                          title="Read the product photos and rewrite the description from them, plus metafields and category attributes — all at once"
                           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
                         >
                           {seoAllBusy === "opt" ? "Optimizing…" : "✦ Optimize with AI"}
@@ -1880,6 +1910,46 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           </span>
                         )}
                       </div>
+                      {seoProposed && seoBasis ? (
+                        /* The evidence behind the proposal. A description that
+                           came from the photos says so, and lists what the AI
+                           saw — so a wrong fact is caught here, not on the
+                           storefront. */
+                        <div
+                          className={`rounded-md border px-3 py-2 font-mono text-[0.74rem] ${
+                            seoBasis.fromPhotos
+                              ? "border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/10 text-[var(--wms-fg)]"
+                              : seoBasis.mode === "weak-only"
+                                ? "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 text-[var(--wms-muted)]"
+                                : "border-amber-500/55 bg-amber-950/30 text-amber-200"
+                          }`}
+                        >
+                          {seoBasis.fromPhotos ? (
+                            <span>
+                              📷 Description written from <b>{seoBasis.photos}</b> product photo{seoBasis.photos === 1 ? "" : "s"}
+                              {seoBasis.verified ? " + the Studio's close-up notes" : ""}.
+                              {seoBasis.observed.length ? " What the AI saw:" : " The AI listed nothing it saw — read the description carefully."}
+                            </span>
+                          ) : seoBasis.mode === "weak-only" ? (
+                            <span>
+                              Quick pass — only low-scoring fields were refreshed; the photos were not read. Press{" "}
+                              <b>✦ Optimize with AI</b> to rewrite the description from this product&apos;s photos.
+                            </span>
+                          ) : (
+                            <span>
+                              ⚠ The description was NOT based on photos — this product has no readable product photos. Check every
+                              claim in it before saving.
+                            </span>
+                          )}
+                          {seoBasis.observed.length ? (
+                            <ul className="mt-1 columns-1 list-disc pl-4 text-[0.72rem] leading-snug text-[var(--wms-muted)] md:columns-2">
+                              {seoBasis.observed.map((o, i) => (
+                                <li key={i} className="break-inside-avoid">{o}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {seoProposed ? (
                         <div className="overflow-hidden rounded-md border border-[var(--wms-border)]">
                           {(["seoTitle", "metaDescription", "handle", "bodyHtml", "tags"] as const).map((f) => {

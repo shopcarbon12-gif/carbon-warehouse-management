@@ -20,6 +20,9 @@
  *   --only <id,id>   restrict to specific product ids (numeric or gid)
  *   --resume         skip products already recorded done in the state file
  *   --no-vision      skip photo analysis (cheaper, lower quality)
+ *   --from-photos    rewrite EVERY description from the photos (like the Matrix
+ *                    SEO tab), not only fields that score low; no product is
+ *                    skipped as "already optimized"
  *
  * Every product's before/after lands in scripts/.seo-bulk/report.jsonl, and the
  * set of completed ids in scripts/.seo-bulk/state.json, so an interrupted run
@@ -30,6 +33,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { optimizeSeo } from "@/lib/seo/optimizeCore";
+import { studioRefViewKey } from "@/lib/studio-item-spec";
 import { applySetBanner, pictureForProduct, type SetPicture } from "@/lib/seo/setNotice";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, Scorecard } from "@/lib/seo/types";
@@ -95,6 +99,14 @@ const CONCURRENCY = Math.max(1, Math.min(Number(val("--concurrency") || 4) || 4,
 const WRITE = has("--write");
 const RESUME = has("--resume");
 const USE_VISION = !has("--no-vision");
+/* Rewrite every description from the photos (the Matrix SEO tab's behaviour)
+   instead of only fields that score low. Off by default here: a catalog that
+   is at 100 must not be rewritten — and paid for — by accident. */
+const FROM_PHOTOS = has("--from-photos");
+if (FROM_PHOTOS && !USE_VISION) {
+  console.error("--from-photos and --no-vision contradict each other: the first means 'write the description from the photos', the second means 'do not look at them'.");
+  process.exit(1);
+}
 const ONLY = new Set(
   String(val("--only") || "")
     .split(",")
@@ -277,6 +289,49 @@ async function loadSetFlags(): Promise<number> {
   }
 }
 
+/**
+ * The Studio's close-up notes per product, for --from-photos runs.
+ *
+ * Same contract as the single-product route: a spec counts only while it still
+ * describes the photos it was computed from, and the product photos outrank it
+ * either way (see factsFromStudioSpec). Read once for the whole run.
+ */
+const STUDIO_SPECS = new Map<string, string>();
+
+async function loadStudioSpecs(): Promise<number> {
+  const url = (process.env.DATABASE_URL || env.DATABASE_URL || "").trim();
+  if (!url) return 0;
+  const client = new Client({ connectionString: url, ssl: false });
+  await client.connect();
+  try {
+    const r = await client.query<{
+      shopify_product_id: string;
+      item_spec: string | null;
+      item_refs: unknown;
+      spec_refs_key: string | null;
+    }>(
+      `SELECT m.shopify_product_id, s.item_spec, s.item_refs, s.spec_refs_key
+         FROM studio_matrix_state s
+         JOIN matrices m ON m.id = s.matrix_id
+        WHERE m.shopify_product_id IS NOT NULL AND s.item_spec IS NOT NULL`,
+    );
+    for (const row of r.rows) {
+      const spec = String(row.item_spec || "").trim();
+      const storedKey = String(row.spec_refs_key || "");
+      const refs = Array.isArray(row.item_refs) ? (row.item_refs as Array<{ url: string; view?: never }>) : [];
+      if (!spec || !storedKey || storedKey !== studioRefViewKey(refs)) continue;
+      const raw = String(row.shopify_product_id);
+      STUDIO_SPECS.set(raw, spec);
+      STUDIO_SPECS.set(raw.startsWith("gid://") ? raw : `gid://shopify/Product/${raw}`, spec);
+    }
+    return STUDIO_SPECS.size;
+  } catch {
+    return 0; // no Studio state yet — the photos alone still ground the copy
+  } finally {
+    await client.end();
+  }
+}
+
 /* --------------------------------------------------------------- write ---- */
 
 async function publish(
@@ -411,8 +466,12 @@ async function main() {
   if (!OPENAI_KEY) throw new Error("OPENAI_API_KEY missing.");
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  console.log(`Shop: ${SHOP}   mode: ${WRITE ? "WRITE (live)" : "DRY RUN (no writes)"}   vision: ${USE_VISION ? "on" : "off"}`);
+  console.log(`Shop: ${SHOP}   mode: ${WRITE ? "WRITE (live)" : "DRY RUN (no writes)"}   vision: ${USE_VISION ? "on" : "off"}   description: ${FROM_PHOTOS ? "rewritten from photos" : "weak fields only"}`);
   const setCount = await loadSetFlags();
+  if (FROM_PHOTOS) {
+    const specCount = await loadStudioSpecs();
+    console.log(`  Studio close-up notes available for ${specCount} product(s)`);
+  }
   console.log(`  ${setCount} products flagged as part of a set — these get the "Complete the Look" notice`);
   const all = await fetchActiveProducts();
 
@@ -460,7 +519,14 @@ async function main() {
       try {
         const current = toFields(p);
         const context = toContext(p);
-        const result = await optimizeSeo({ context, current, useVision: USE_VISION, apiKey: OPENAI_KEY });
+        const result = await optimizeSeo({
+          context,
+          current,
+          useVision: USE_VISION,
+          descriptionMode: FROM_PHOTOS ? "photos" : "weak-only",
+          verifiedFacts: STUDIO_SPECS.get(String(p.id)) || "",
+          apiKey: OPENAI_KEY,
+        });
         if (result.error) throw new Error(result.error);
 
         /* The honest "after" score: the proposed fields judged against the

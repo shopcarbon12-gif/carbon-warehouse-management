@@ -7,6 +7,7 @@ import { SCOPES } from "@/lib/auth/roles";
 import { checkGenerateRateLimit } from "@/lib/seo-ratelimit";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { optimizeSeo } from "@/lib/seo/optimizeCore";
+import { studioRefViewKey } from "@/lib/studio-item-spec";
 import type { ProductContext, SeoFields } from "@/lib/seo/types";
 
 export const runtime = "nodejs";
@@ -45,10 +46,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing context or current SEO fields." }, { status: 400 });
     }
 
+    /* The Studio's item spec for this product, when it has one: close-up
+       observations of the garment (printed wording, hardware, stitching, fit)
+       that the Shopify photos may not resolve. Used ONLY when it still
+       describes the photos it was computed from — the Studio itself treats a
+       key mismatch as "re-analyze", and a spec written for a different set of
+       photos is not evidence about this one. The photos always win on a
+       conflict; see factsFromStudioSpec. */
+    let verifiedFacts = "";
+    const matrixId = typeof body?.matrixId === "string" ? body.matrixId.trim() : "";
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(matrixId)) {
+      try {
+        const r = await pool.query(
+          `SELECT item_spec, item_refs, spec_refs_key FROM studio_matrix_state WHERE matrix_id = $1::uuid`,
+          [matrixId],
+        );
+        const row = r.rows[0];
+        const spec = String(row?.item_spec || "").trim();
+        const storedKey = String(row?.spec_refs_key || "");
+        const refs = Array.isArray(row?.item_refs) ? row.item_refs : [];
+        if (spec && storedKey && storedKey === studioRefViewKey(refs)) verifiedFacts = spec;
+      } catch {
+        /* no spec — the photos alone still ground the copy */
+      }
+    }
+
     const result = await optimizeSeo({
       context,
       current,
       useVision: body?.useVision !== false,
+      descriptionMode: body?.descriptionMode === "weak-only" ? "weak-only" : "photos",
+      verifiedFacts,
       apiKey,
     });
 

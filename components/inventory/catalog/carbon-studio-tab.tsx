@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
-import { parseSpecBackState, specListsBackDesign } from "@/lib/studio-item-spec";
+import { parseSpecBackState, specListsBackDesign, studioRefViewKey } from "@/lib/studio-item-spec";
 import {
   buildMasterPanelPrompt,
   getPanelPosePair,
@@ -51,7 +51,14 @@ const sameRef = (a: ItemRef, b: { url: string; view?: RefView }) =>
   a.url === b.url && (a.view ?? "general") === (b.view ?? "general");
 /** Drag payload for moving a reference between sections (copy, never move). */
 const REF_DRAG_TYPE = "application/x-carbon-item-ref";
-const refViewKey = (v: RefViewLists) => (["general", "front", "back"] as const).map((k) => `${k}:${v[k].join(",")}`).join("|");
+/* Shared with the server (lib/studio-item-spec) so "have the photos changed?"
+   cannot be answered differently in the two places that ask it. */
+const refViewKey = (v: RefViewLists) =>
+  studioRefViewKey([
+    ...v.general.map((url) => ({ url, view: "general" as const })),
+    ...v.front.map((url) => ({ url, view: "front" as const })),
+    ...v.back.map((url) => ({ url, view: "back" as const })),
+  ]);
 /** Poses that photograph the BACK of the garment (mirrors the server's list). */
 const isBackFacingPose = (gender: string, pose: number) =>
   (gender || "").toLowerCase() === "female" ? pose === 2 : pose === 4 || pose === 7;
