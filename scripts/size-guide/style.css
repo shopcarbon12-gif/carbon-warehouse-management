@@ -13,13 +13,21 @@
   --csg-display: "Oswald", "Archivo Narrow", "Arial Narrow", Helvetica, sans-serif;
   --csg-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
 
-  display: block;
+  /* One grid for the whole component. Desktop places the pieces into two
+     columns with the measurement section spanning the description and table
+     rows, so HOW TO MEASURE starts level with the description exactly as in the
+     comp. Phone collapses to one column and re-orders, rather than inheriting
+     the desktop sequence. */
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
+  column-gap: clamp(22px, 3vw, 44px);
+  align-items: start;
   font-family: var(--csg-body);
   color: var(--csg-ink);
   background: #fff;
   /* clamp() rather than a media-query ladder: this sits in a modal whose width
      is set by the theme, so the type has to scale to the box it lands in. */
-  padding: clamp(18px, 2.2vw, 30px);
+  padding: clamp(16px, 1.6vw, 22px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
   -webkit-font-smoothing: antialiased;
   text-align: left;
 }
@@ -27,16 +35,17 @@
 :scope :focus-visible { outline: 2px solid var(--csg-blue); outline-offset: 2px; border-radius: 3px; }
 
 /* ── header ─────────────────────────────────────────────────────────── */
-.csg-head {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 20px 28px; flex-wrap: wrap; margin-bottom: clamp(18px, 2vw, 26px);
-}
+.csg-top { grid-column: 1; grid-row: 1; margin-bottom: clamp(20px, 2.2vw, 30px); }
+.csg-units-cell { display: contents; }
 .csg-wordmark {
-  font-family: var(--csg-display); font-weight: 500;
-  font-size: 15px; letter-spacing: .34em; text-transform: uppercase;
-  margin: 0 0 6px; color: var(--csg-ink);
+  /* The wordmark is the brand's own letterform — a normal-width grotesque with
+     wide tracking. Setting it in the condensed headline face made it read as a
+     label rather than as the logo. */
+  font-family: var(--csg-body); font-weight: 700;
+  font-size: 14px; letter-spacing: .32em; text-transform: uppercase;
+  margin: 0 0 10px; color: var(--csg-ink);
 }
-.csg-title { margin: 0; line-height: .94; }
+.csg-title { margin: 0; line-height: .9; }
 /* The fit name carries the weight; "Size Guide" sits under it lighter and
    smaller. That contrast is the whole title treatment. */
 .csg-title-fit {
@@ -49,15 +58,17 @@
   font-size: clamp(25px, 3.6vw, 46px); letter-spacing: .005em;
   text-transform: uppercase; color: var(--csg-ink);
 }
-.csg-rule { display: block; width: 74px; height: 5px; background: var(--csg-blue); margin: 14px 0 0; }
+.csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 16px 0 0; }
 .csg-subtitle {
-  margin: 14px 0 0; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.5;
-  color: var(--csg-muted); max-width: 46ch;
+  grid-column: 1; grid-row: 2;
+  margin: 0 0 22px; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.55;
+  color: var(--csg-muted); max-width: 44ch;
 }
 
 /* unit switch, top right of the header */
 .csg-units {
-  display: inline-flex; padding: 5px; gap: 4px; flex: 0 0 auto;
+  grid-column: 2; grid-row: 1; justify-self: end; align-self: start;
+  display: inline-flex; padding: 5px; gap: 4px;
   background: #f1f3f7; border-radius: 999px; border: 1px solid var(--csg-line);
 }
 .csg-unit {
@@ -70,7 +81,7 @@
 .csg-unit[aria-pressed="true"] { background: var(--csg-blue); color: #fff; }
 
 /* ── mobile size picker (hidden on desktop, where rows are clicked) ──── */
-.csg-picker { display: none; margin: 0 0 16px; }
+.csg-picker { display: none; grid-column: 1; grid-row: 3; margin: 0 0 16px; }
 .csg-picker-label {
   display: block; font-size: 13px; color: var(--csg-muted); margin: 0 0 6px;
 }
@@ -82,10 +93,10 @@
 }
 
 /* ── two-column body ────────────────────────────────────────────────── */
-.csg-body {
-  display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
-  gap: clamp(20px, 2.4vw, 34px); align-items: start;
-}
+.csg-chart { grid-column: 1; grid-row: 4; }
+/* Spans the description and chart rows so its heading sits level with the
+   description, not below the whole header. */
+.csg-measure { grid-column: 2; grid-row: 2 / 5; }
 
 /* ── table ──────────────────────────────────────────────────────────── */
 .csg-table {
@@ -118,10 +129,10 @@
 .csg-table-foot { margin: 10px 2px 0; font-size: 12.5px; color: #6b7280; }
 
 /* ── how to measure ─────────────────────────────────────────────────── */
-.csg-measure { border: 0; }
+.csg-measure { border: 0; min-width: 0; }
 .csg-measure > summary {
   list-style: none; cursor: default; display: flex; align-items: center;
-  justify-content: space-between; gap: 12px; margin: 0 0 14px;
+  justify-content: space-between; gap: 12px; margin: 0 0 16px;
 }
 .csg-measure > summary::-webkit-details-marker { display: none; }
 .csg-h3 {
@@ -130,10 +141,10 @@
 }
 .csg-chev { display: none; flex: 0 0 auto; }
 
-.csg-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.csg-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .csg-card {
   border: 1px solid var(--csg-line); border-radius: 12px; background: #fff;
-  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  padding: 11px; display: flex; flex-direction: column; gap: 11px;
 }
 .csg-card-head { display: flex; align-items: center; gap: 9px; margin: 0; }
 .csg-badge {
@@ -145,22 +156,26 @@
   font-family: var(--csg-display); font-weight: 600; font-size: 17px;
   letter-spacing: .05em; text-transform: uppercase;
 }
-.csg-figure { margin: 0; border-radius: 9px; overflow: hidden; background: #f4f6f9; }
-/* One box for all three so the cards line up, and contain rather than cover so
-   none of them is cropped. The sources do not share a shape — waist and hip are
-   4:3, the inseam is 2:3 — and cropping either to match the other cuts off the
-   tape, which is the only thing these photos are here to show. */
+.csg-figure { margin: 0; border-radius: 9px; overflow: hidden; background: #f5f5f5; }
+/* One box for all three so the cards are identical, and contain rather than
+   cover so none is cropped — the sources do not share a shape (waist and hip
+   are 4:3, the inseam 2:3) and cropping either one cuts off the tape, which is
+   the only thing these photos exist to show.
+
+   The box colour is sampled from the photographs' own backdrop (#f6f6f6), so
+   the area a contained photo does not fill reads as more backdrop rather than
+   as a grey band around a floating image. */
 .csg-photo {
   display: block; width: 100%; height: auto;
-  aspect-ratio: 4 / 5; object-fit: contain; background: #f4f6f9;
+  aspect-ratio: 1 / 1; object-fit: contain; background: #f5f5f5;
 }
 .csg-card-text { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--csg-muted); }
 
 /* ── helpful note ───────────────────────────────────────────────────── */
 .csg-note {
-  display: flex; gap: 11px; align-items: flex-start; margin: 16px 0 0;
-  background: var(--csg-blue-soft); border-radius: 10px; padding: 14px 16px;
-  font-size: 14.5px; line-height: 1.55; color: #26324a;
+  display: flex; gap: 12px; align-items: flex-start; margin: 20px 0 0;
+  background: var(--csg-blue-soft); border-radius: 10px; padding: 17px 19px;
+  font-size: 14.5px; line-height: 1.6; color: #26324a;
 }
 .csg-note-icon {
   flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
@@ -171,11 +186,12 @@
 
 /* ── tips strip ─────────────────────────────────────────────────────── */
 .csg-tips {
+  grid-column: 1 / -1;
   /* nowrap so the tagline stays pinned right against its divider; the list of
      tips wraps inside its own track instead of pushing the tagline onto a line
      of its own. */
   display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); flex-wrap: nowrap;
-  margin: clamp(18px, 2vw, 26px) 0 0; padding: 16px clamp(14px, 1.6vw, 22px);
+  margin: clamp(22px, 2.6vw, 32px) 0 0; padding: 18px clamp(16px, 1.8vw, 24px);
   border: 1px solid var(--csg-line); border-radius: 12px;
 }
 .csg-tips-icon { flex: 0 0 auto; color: var(--csg-ink); display: grid; place-items: center; }
@@ -184,11 +200,16 @@
   font-size: 17px; letter-spacing: .05em; text-transform: uppercase;
 }
 .csg-tips-list {
-  margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap;
-  gap: 8px clamp(14px, 1.8vw, 28px); flex: 1 1 auto;
+  /* Three equal columns rather than a flex row: the three tips do not fit on one
+     line beside the title and the tagline at this width, and a flex row put two
+     on the first line and one alone on a second. A column each keeps the rhythm
+     of the comp, and only the longest tip runs to a second line. */
+  margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px clamp(12px, 1.3vw, 20px); flex: 1 1 auto;
 }
-.csg-tips-list li { display: flex; align-items: center; gap: 8px; font-size: 14.5px; color: var(--csg-muted); }
-.csg-tick { flex: 0 0 auto; color: var(--csg-blue); }
+.csg-tips-list li { display: flex; align-items: flex-start; gap: 7px; font-size: 13.5px; line-height: 1.4; color: var(--csg-muted); }
+.csg-tick { flex: 0 0 auto; color: var(--csg-blue); margin-top: 1px; }
 .csg-tagline {
   margin: 0; flex: 0 0 auto; padding-left: clamp(14px, 1.8vw, 26px);
   border-left: 1px solid var(--csg-line); font-size: 11.5px; line-height: 1.7;
@@ -197,7 +218,14 @@
 
 /* ── tablet ─────────────────────────────────────────────────────────── */
 @media (max-width: 1000px) {
-  .csg-body { grid-template-columns: 1fr; }
+  :scope { grid-template-columns: 1fr; }
+  .csg-top, .csg-units, .csg-subtitle, .csg-picker, .csg-chart, .csg-measure, .csg-tips {
+    grid-column: 1; grid-row: auto;
+  }
+  /* The comp reads name, then description, then the unit switch. */
+  .csg-top { order: 1; } .csg-subtitle { order: 2; } .csg-units { order: 3; justify-self: stretch; }
+  .csg-picker { order: 4; } .csg-chart { order: 5; } .csg-measure { order: 6; } .csg-tips { order: 7; }
+  .csg-measure { margin-top: 20px; }
   .csg-tips { flex-wrap: wrap; }
   .csg-tagline { display: none; }
 }
@@ -205,7 +233,6 @@
 /* ── phone: a different layout, not a smaller one ───────────────────── */
 @media (max-width: 680px) {
   :scope { padding: 16px; }
-  .csg-head { gap: 14px; }
   .csg-units { width: 100%; justify-content: stretch; }
   .csg-unit { flex: 1 1 0; padding: 11px 0; }
   .csg-subtitle { font-size: 13.5px; }
@@ -240,6 +267,6 @@
   .csg-card-text { grid-column: 2; font-size: 13.5px; }
 
   .csg-tips { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .csg-tips-list { flex-direction: column; gap: 8px; }
+  .csg-tips-list { grid-template-columns: 1fr; gap: 9px; }
   .csg-note { font-size: 13.5px; }
 }

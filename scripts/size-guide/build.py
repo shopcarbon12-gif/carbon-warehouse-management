@@ -146,20 +146,20 @@ TEMPLATE = r"""<!-- CARBON interactive size guide: __FIT__ (metafield key: __KEY
 __CSS__
 </style>
 
-  <header class="csg-head">
-    <div>
-      <p class="csg-wordmark">Carbon</p>
-      <h2 class="csg-title">
-        <span class="csg-title-fit">__FIT__</span><span class="csg-title-sub">Size Guide</span>
-      </h2>
-      <span class="csg-rule" aria-hidden="true"></span>
-      <p class="csg-subtitle">__SUB__</p>
-    </div>
-    <div class="csg-units" role="group" aria-label="Measurement units">
-      <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
-      <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
-    </div>
-  </header>
+  <div class="csg-top">
+    <p class="csg-wordmark">Carbon</p>
+    <h2 class="csg-title">
+      <span class="csg-title-fit">__FIT__</span><span class="csg-title-sub">Size Guide</span>
+    </h2>
+    <span class="csg-rule" aria-hidden="true"></span>
+  </div>
+
+  <div class="csg-units" role="group" aria-label="Measurement units">
+    <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
+    <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
+  </div>
+
+  <p class="csg-subtitle">__SUB__</p>
 
   <div class="csg-picker">
     <label class="csg-picker-label" for="__ROOT__-select">Select a size to highlight</label>
@@ -169,16 +169,15 @@ __CSS__
     </select>
   </div>
 
-  <div class="csg-body">
-    <section aria-label="Size chart">
+  <section class="csg-chart" aria-label="Size chart">
       <table class="csg-table">
         <thead><tr><th scope="col">Size</th>__HEADS__</tr></thead>
         <tbody data-csg-body>__ROWS__</tbody>
       </table>
       <p class="csg-table-foot">Garment measurements. Waist and hip are measured flat and doubled.</p>
-    </section>
+  </section>
 
-    <details class="csg-measure" open>
+  <details class="csg-measure" open>
       <summary><h3 class="csg-h3">How to Measure</h3>__CHEV__</summary>
       <div class="csg-cards">__CARDS__</div>
       <p class="csg-note">
@@ -188,8 +187,7 @@ __CSS__
         (&plusmn;0.75&nbsp;in)</strong>. If you&rsquo;re between sizes, compare these measurements with
         a pair of jeans you already own and love.</span>
       </p>
-    </details>
-  </div>
+  </details>
 
   <footer class="csg-tips">
     <span class="csg-tips-icon" aria-hidden="true">__TAPE__</span>

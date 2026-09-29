@@ -20,6 +20,30 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
     width: min(1160px, calc(100vw - 48px));
     max-width: none;
   }
+  /* The guide names itself. The theme's "Size Guide" bar above it repeats that
+     and costs 73px of the first screen, so the heading is dropped and the row
+     kept — the close button lives in it. */
+  .product-popup-modal__content:has([id^="carbon-size-guide-"]) .product-popup-modal__content-header {
+    justify-content: flex-end;
+    border-bottom: 0;
+    /* The theme sets an explicit height: 73px here. With the heading hidden that
+       is mostly empty space above the guide's own title, so the height is
+       released — but the row must still CONTAIN the 30px close button. Shrinking
+       it further let the button overhang into the scroll area, which then
+       intercepted the click and made the modal impossible to close. */
+    height: auto;
+    padding: 9px 14px 7px;
+    min-height: 0;
+    /* The header is sticky but the scrolling pane below it paints on top, so
+       once the row is short enough to sit beside that pane the close button
+       stops receiving clicks. A stacking order puts it back in front. */
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .product-popup-modal__content:has([id^="carbon-size-guide-"]) .product-popup-modal__content-header h5 {
+    display: none;
+  }
   @media (max-width: 749px) {
     .product-popup-modal__content:has([id^="carbon-size-guide-"]) {
       width: 100%;
