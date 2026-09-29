@@ -3,47 +3,7 @@ CARBON size-guide router.
 Create a single-line product metafield: custom.jeans_size_guide_fit
 Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
 {% endcomment %}
-{%- liquid
-  comment
-    product-information.liquid resolves the fit and passes it in, so the link and
-    the guide can never disagree about which chart this product has. The fallback
-    below is only for rendering this snippet somewhere else: metafield first,
-    then collection membership, narrowest cut first.
-  endcomment
-  assign carbon_fit = carbon_fit | default: blank
-
-  if carbon_fit == blank
-    assign carbon_fit = product.metafields.custom.jeans_size_guide_fit | downcase | strip
-  endif
-
-  if carbon_fit == blank
-    assign carbon_in_zip = false
-    assign carbon_in_ss = false
-    assign carbon_in_skinny = false
-    assign carbon_in_slim = false
-    for carbon_col in product.collections
-      case carbon_col.handle
-        when 'super-skinny-jeans-men-copy'
-          assign carbon_in_zip = true
-        when 'super-skinny-jeans-men'
-          assign carbon_in_ss = true
-        when 'skinny-jeans'
-          assign carbon_in_skinny = true
-        when 'slim-jeans-men'
-          assign carbon_in_slim = true
-      endcase
-    endfor
-    if carbon_in_zip
-      assign carbon_fit = 'super-skinny-zipper'
-    elsif carbon_in_ss
-      assign carbon_fit = 'super-skinny-long'
-    elsif carbon_in_skinny
-      assign carbon_fit = 'skinny'
-    elsif carbon_in_slim
-      assign carbon_fit = 'slim'
-    endif
-  endif
--%}
+{% assign carbon_fit = product.metafields.custom.jeans_size_guide_fit.value | default: product.metafields.custom.jeans_size_guide_fit %}
 {%- comment -%}
   The size-guide popup is the one modal in this theme that needs to be wide.
 

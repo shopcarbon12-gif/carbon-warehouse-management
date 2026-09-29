@@ -106,52 +106,7 @@
                 link only when this product actually has a guide: its own denim fit
                 chart, or the shared guide page.
               endcomment
-              comment
-                Which denim chart this product shows.
-
-                The metafield wins when it is set: it is the explicit decision,
-                and once a product has one, adding it to another collection later
-                does not move it. Everything else falls back to the collections
-                it belongs to, so a new jean gets its chart the moment it is
-                added to one — nothing to assign by hand.
-
-                Shopify iterates product.collections by collection id, which is
-                the order the COLLECTIONS were created, not the order this
-                product was added to them. There is no "first assigned" to read,
-                so a product sitting in two of these collections with no
-                metafield resolves by the order below — narrowest cut first —
-                and the metafield is how you override that.
-              endcomment
               assign carbon_fit = product.metafields.custom.jeans_size_guide_fit | downcase | strip
-
-              if carbon_fit == blank
-                assign carbon_in_zip = false
-                assign carbon_in_ss = false
-                assign carbon_in_skinny = false
-                assign carbon_in_slim = false
-                for carbon_col in product.collections
-                  case carbon_col.handle
-                    when 'super-skinny-jeans-men-copy'
-                      assign carbon_in_zip = true
-                    when 'super-skinny-jeans-men'
-                      assign carbon_in_ss = true
-                    when 'skinny-jeans'
-                      assign carbon_in_skinny = true
-                    when 'slim-jeans-men'
-                      assign carbon_in_slim = true
-                  endcase
-                endfor
-                if carbon_in_zip
-                  assign carbon_fit = 'super-skinny-zipper'
-                elsif carbon_in_ss
-                  assign carbon_fit = 'super-skinny-long'
-                elsif carbon_in_skinny
-                  assign carbon_fit = 'skinny'
-                elsif carbon_in_slim
-                  assign carbon_fit = 'slim'
-                endif
-              endif
-
               assign carbon_has_fit = false
               assign carbon_has_guide = false
               if carbon_fit == 'slim' or carbon_fit == 'skinny' or carbon_fit == 'super-skinny-long' or carbon_fit == 'super-skinny-zipper'
@@ -200,7 +155,7 @@
                             page. The page still renders underneath, for products
                             that use the shared guide instead of a denim fit.
                           {%- endcomment -%}
-                          {% render 'carbon-size-guide-router', carbon_fit: carbon_fit %}
+                          {% render 'carbon-size-guide-router' %}
                           {{ block.settings.sizing_guide_page.content }}
                         </div>
                       </scroll-shadow>
