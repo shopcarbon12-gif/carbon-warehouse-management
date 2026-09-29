@@ -402,6 +402,7 @@ export function CarbonStudioTab({
      the stored R2 URL is private and would not load. */
   const [cropping, setCropping] = useState<{ ref: ItemRef; src: string } | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
+  const [cropErr, setCropErr] = useState<string | null>(null);
   const [dragOverView, setDragOverView] = useState<RefView | null>(null);
   const [activeView, setActiveView] = useState<RefView>("general");
   const activeViewRef = useRef<RefView>("general");
@@ -560,7 +561,7 @@ export function CarbonStudioTab({
       const target = cropping?.ref;
       if (!target) return;
       setCropBusy(true);
-      setErr(null);
+      setCropErr(null);
       try {
         const file = new File([blob], "cropped.jpg", { type: "image/jpeg" });
         const { blob: out, dataUrl, name } = await downscaleForUpload(file);
@@ -577,7 +578,10 @@ export function CarbonStudioTab({
         );
         setCropping(null);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Crop failed.");
+        // Must surface in the DIALOG: the page-level error sits behind the
+        // modal, so a failure here used to look like nothing happening at all.
+        console.error("[studio] crop failed:", e);
+        setCropErr(e instanceof Error ? e.message : "Crop failed — please try again.");
       } finally {
         setCropBusy(false);
       }
@@ -1254,6 +1258,7 @@ export function CarbonStudioTab({
                           title="Crop — cut the head out so the face stops competing with your model refs"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setCropErr(null);
                             setCropping({ ref, src: ref.preview as string });
                           }}
                           className="absolute inset-x-0 bottom-0 rounded-b border-t border-[var(--wms-border)] bg-[var(--wms-surface)]/90 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)] hover:text-[var(--wms-accent)] max-md:py-1.5"
@@ -1761,7 +1766,12 @@ export function CarbonStudioTab({
         <ItemRefCropDialog
           src={cropping.src}
           busy={cropBusy}
-          onCancel={() => !cropBusy && setCropping(null)}
+          error={cropErr}
+          onCancel={() => {
+            if (cropBusy) return;
+            setCropping(null);
+            setCropErr(null);
+          }}
           onApply={(blob) => void applyCrop(blob)}
         />
       ) : null}

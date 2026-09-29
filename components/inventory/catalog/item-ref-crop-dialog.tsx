@@ -22,18 +22,25 @@ type Rect = { x: number; y: number; w: number; h: number }; // fractions, 0..1
 export function ItemRefCropDialog({
   src,
   busy,
+  error,
   onCancel,
   onApply,
 }: {
   /** Data URL or same-origin URL the browser can actually decode. */
   src: string;
   busy?: boolean;
+  /** Failure from the parent's upload step — shown HERE, not on the page
+   *  behind the modal, where it was invisible and read as "nothing happens". */
+  error?: string | null;
   onCancel: () => void;
   onApply: (blob: Blob) => void;
 }) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const [rect, setRect] = useState<Rect | null>(null);
+  /* Opens with the common crop already selected — head out of frame. An empty
+     selection disables Apply, and a disabled button is indistinguishable from a
+     broken one. */
+  const [rect, setRect] = useState<Rect | null>({ x: 0, y: 1 / 3, w: 1, h: 2 / 3 });
   const [drawing, setDrawing] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -94,7 +101,14 @@ export function ItemRefCropDialog({
   const apply = async () => {
     setErr(null);
     const el = imgRef.current;
-    if (!el || !rect) return;
+    if (!rect) {
+      setErr("Pick a crop first — use a shortcut above, or drag a box on the photo.");
+      return;
+    }
+    if (!el) {
+      setErr("The photo is still loading — try again in a moment.");
+      return;
+    }
     const nw = el.naturalWidth || 0;
     const nh = el.naturalHeight || 0;
     if (!nw || !nh) {
@@ -203,7 +217,9 @@ export function ItemRefCropDialog({
               ) : null}
             </div>
 
-            {err ? <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-status-danger-fg)]">{err}</p> : null}
+            {err || error ? (
+              <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-status-danger-fg)]">{err || error}</p>
+            ) : null}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-[var(--wms-border)] px-4 py-3 max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
