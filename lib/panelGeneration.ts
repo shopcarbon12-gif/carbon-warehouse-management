@@ -409,6 +409,28 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
   ];
 }
 
+/**
+ * The library's shared preamble — background, lighting, styling, expression —
+ * without any individual pose.
+ *
+ * The whole library used to be pasted into every prompt "for reference":
+ * 7.8 KB male / 8.6 KB female, against 958 bytes for the two poses the panel
+ * actually renders. A quarter of each prompt therefore described SIX poses
+ * that panel would never produce, carrying their own crop locks, framing rules
+ * and back-view instructions — instructions that compete with the two active
+ * ones. The active poses are injected separately as LEFT/RIGHT ACTIVE POSE, so
+ * the library added nothing but contradiction and bytes.
+ */
+export function extractGlobalRules(library: string) {
+  const lib = String(library || "");
+  // Everything before the first pose header; the header shapes are the same
+  // ones extractPoseBlock matches.
+  const cut = lib.search(/\n\s*(?:FEMALE\s*[-—]\s*)?POSE\s+\d+\s/i);
+  const head = (cut > 0 ? lib.slice(0, cut) : lib).trim();
+  // A library with no recognisable header would otherwise dump itself back in.
+  return cut > 0 ? head : "";
+}
+
 export function extractPoseBlock(library: string, poseNumber: number) {
   const lib = String(library || "");
   const n = Number.isFinite(poseNumber) ? Math.trunc(poseNumber) : poseNumber;
@@ -467,12 +489,16 @@ export function buildMasterPanelPrompt(args: {
   itemSpec?: string;
 }) {
   const poseLibrary = getPoseLibraryForGender(args.modelGender);
-  const fullPoseLibraries = [
-    String(args.modelGender || "").toLowerCase() === "female"
-      ? "FEMALE POSE LIBRARY (ORIGINAL, UNCHANGED):"
-      : "MALE POSE LIBRARY (ORIGINAL, UNCHANGED):",
-    poseLibrary,
-  ].join("\n");
+  // Shared styling rules only — never the other six poses. See extractGlobalRules.
+  const globalRules = extractGlobalRules(poseLibrary);
+  const fullPoseLibraries = globalRules
+    ? [
+        String(args.modelGender || "").toLowerCase() === "female"
+          ? "FEMALE POSE GLOBAL RULES:"
+          : "MALE POSE GLOBAL RULES:",
+        globalRules,
+      ].join("\n")
+    : "";
   const mappingText =
     String(args.modelGender || "").toLowerCase() === "female"
       ? FEMALE_PANEL_MAPPING_TEXT
@@ -583,8 +609,7 @@ export function buildMasterPanelPrompt(args: {
     "- Generate exactly ONE panel image.",
     "- Each panel is a 2-up canvas only: LEFT Pose A, RIGHT Pose B.",
     "- Never output 3+ poses in one canvas. No collage. No grids.",
-    "POSE LIBRARIES (ORIGINAL, UNCHANGED) INCLUDED BELOW FOR REFERENCE:",
-    fullPoseLibraries,
+    ...(fullPoseLibraries ? ["SHARED POSE RULES (apply to both active poses):", fullPoseLibraries] : []),
     "Generate exactly ONE 2-up panel image.",
     "Age requirement: the model must be an adult 25+ only.",
     `PANEL ${args.panelNumber} HARD AGE LOCK: the model is over 25+.`,
