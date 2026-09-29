@@ -383,6 +383,10 @@ export function CarbonStudioTab({
   const [err, setErr] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [zoom, setZoom] = useState<string | null>(null);
+  /* The item reference behind the zoomed image, when there is one — so the
+     full-size view can crop the photo you are actually looking at. Null when
+     zooming a generated crop or a Shopify image, which are not references. */
+  const [zoomRef, setZoomRef] = useState<ItemRef | null>(null);
   const [showMedia, setShowMedia] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);
@@ -673,63 +677,6 @@ export function CarbonStudioTab({
     },
     [itemType],
   );
-
-  /** FLATS (from carbon-gen): one clean front/back flat image generated from
-   *  the item references, split into two 3:4 crops and ADDED to the item
-   *  references — so analysis + panel generation work from clean views. */
-  const createFlats = useCallback(async () => {
-    if (!itemRefs.length) return setErr("Add at least one item photo first — flats are generated from your item references.");
-    setBusy("flats");
-    setErr(null);
-    setMsg(null);
-    setProgress("Creating flat front/back views from the item references…");
-    let wakeLock: WakeLockSentinel | null = null;
-    try {
-      try {
-        if (window.matchMedia("(pointer: coarse)").matches && "wakeLock" in navigator) {
-          wakeLock = await navigator.wakeLock.request("screen");
-        }
-      } catch {
-        /* unavailable */
-      }
-      const flatViews = groupRefs(itemRefs);
-      const resp = await fetch("/api/openai/item-flat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json", "x-generate-stream": "1" },
-        body: JSON.stringify({ itemRefs: orderedRefUrls(flatViews), itemRefViews: flatViews, itemType }),
-      });
-      const json = (await resp.json().catch(() => ({}))) as { imageBase64?: string; error?: string | { message?: string } };
-      if (!json.imageBase64) {
-        const e = json.error;
-        throw new Error((typeof e === "string" ? e : e?.message) || "Flat generation failed");
-      }
-      const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
-      setProgress("Adding the flats to the item references…");
-      const added: ItemRef[] = [];
-      // The front flat goes to the FRONT section and the back flat to BACK, so
-      // the view map downstream is exact.
-      for (const f of [
-        { b64: left, name: "flat-front", view: "front" as const },
-        { b64: right, name: "flat-back", view: "back" as const },
-      ]) {
-        const bytes = Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0));
-        const fd = new FormData();
-        fd.append("file", new Blob([bytes], { type: "image/png" }), `${f.name}.png`);
-        const r = await fetch("/api/models/upload", { method: "POST", body: fd });
-        const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
-        if (!r.ok || !j.url) throw new Error(j.error ?? `Flat upload failed (HTTP ${r.status})`);
-        added.push({ url: j.url, preview: `data:image/png;base64,${f.b64}`, view: f.view });
-      }
-      setItemRefs((prev) => [...prev, ...added]);
-      setMsg("Flats created: front → Front section, back → Back section.");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Flat generation failed");
-    } finally {
-      setBusy(null);
-      setProgress("");
-      void wakeLock?.release().catch(() => {});
-    }
-  }, [itemRefs, itemType]);
 
   const generate = useCallback(async () => {
     if (!model) return setErr("Pick a model first.");
@@ -1286,6 +1233,7 @@ export function CarbonStudioTab({
                           className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setZoomRef(ref);
                             setZoom(ref.preview as string);
                           }}
                         />
@@ -1359,20 +1307,6 @@ export function CarbonStudioTab({
                   >
                     📱 Phone camera
                   </button>
-                  {zone.view === "general" ? (
-                    <button
-                      type="button"
-                      disabled={!canManage || busy !== null || !itemRefs.length}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void createFlats();
-                      }}
-                      title="Generate a clean front + back flat of the item from all item references; the front flat lands in Front, the back flat in Back (carbon-gen flats)"
-                      className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
-                    >
-                      {busy === "flats" ? "… Creating flats" : "✦ Create flats"}
-                    </button>
-                  ) : null}
                 </div>
               </div>
             );
@@ -1564,7 +1498,10 @@ export function CarbonStudioTab({
                   alt={c.label}
                   className="h-48 w-36 cursor-zoom-in object-cover"
                   title="Click to view full size"
-                  onClick={() => setZoom(`data:image/png;base64,${c.b64}`)}
+                  onClick={() => {
+                    setZoomRef(null);
+                    setZoom(`data:image/png;base64,${c.b64}`);
+                  }}
                 />
                 <label
                   className="absolute left-1 top-1 flex cursor-pointer items-center rounded bg-black/60 p-1"
@@ -1701,7 +1638,10 @@ export function CarbonStudioTab({
                       src={m.url}
                       alt={m.alt}
                       className="h-32 w-24 cursor-pointer rounded border border-[var(--wms-border)] object-cover"
-                      onClick={() => setZoom(m.url)}
+                      onClick={() => {
+                        setZoomRef(null);
+                        setZoom(m.url);
+                      }}
                     />
                     {idx === 0 ? (
                       <span className="absolute left-0 top-0 rounded-br bg-[var(--wms-accent)] px-1 text-[0.62rem] font-bold text-[var(--wms-accent-fg)]">
@@ -1833,12 +1773,34 @@ export function CarbonStudioTab({
       {zoom ? (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-6"
-          onClick={() => setZoom(null)}
+          onClick={() => {
+            setZoom(null);
+            setZoomRef(null);
+          }}
         >
           <img src={zoom} alt="Full size" className="max-h-full max-w-full rounded-lg" />
+          {zoomRef && canManage ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const ref = zoomRef;
+                setZoom(null);
+                setZoomRef(null);
+                setCropErr(null);
+                setCropping({ ref, src: (ref.preview || ref.url) as string });
+              }}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-xs text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11"
+            >
+              ✂ Crop this photo
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => setZoom(null)}
+            onClick={() => {
+              setZoom(null);
+              setZoomRef(null);
+            }}
             className="absolute right-4 top-4 rounded-md bg-white/10 px-3 py-1.5 font-mono text-[0.85rem] text-white"
           >
             ✕ Close
