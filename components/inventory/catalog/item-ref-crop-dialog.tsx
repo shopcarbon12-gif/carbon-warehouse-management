@@ -19,6 +19,47 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Rect = { x: number; y: number; w: number; h: number }; // fractions, 0..1
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => rej(new Error("The browser could not decode this photo."));
+    im.src = src;
+  });
+}
+
+/**
+ * An image the canvas may read back from.
+ *
+ * Drawing a cross-origin picture TAINTS the canvas, and `toBlob` then throws a
+ * SecurityError. Item references that arrived from the catalog carry a remote
+ * preview URL (Shopify's CDN), so cropping one blew up here — invisibly, which
+ * is why "Apply" appeared to hang on "Cutting…".
+ *
+ * Fetching the bytes ourselves and handing the canvas a blob: URL sidesteps it
+ * entirely: same-origin, never tainted. A photo uploaded in this session is
+ * already a data: URL and needs none of this.
+ */
+async function croppableImage(src: string): Promise<{ img: HTMLImageElement; revoke: () => void }> {
+  if (/^(data:|blob:)/i.test(src)) return { img: await loadImage(src), revoke: () => {} };
+  let resp: Response;
+  try {
+    resp = await fetch(src, { mode: "cors", credentials: "omit" });
+  } catch {
+    throw new Error(
+      "This photo is hosted elsewhere and the browser is not allowed to read its pixels. Re-upload it to crop it.",
+    );
+  }
+  if (!resp.ok) throw new Error(`Could not read this photo (HTTP ${resp.status}).`);
+  const objUrl = URL.createObjectURL(await resp.blob());
+  try {
+    return { img: await loadImage(objUrl), revoke: () => URL.revokeObjectURL(objUrl) };
+  } catch (e) {
+    URL.revokeObjectURL(objUrl);
+    throw e;
+  }
+}
+
 export function ItemRefCropDialog({
   src,
   busy,
@@ -103,68 +144,80 @@ export function ItemRefCropDialog({
 
   const apply = async () => {
     setErr(null);
-    setStep("Reading the photo…");
     // eslint-disable-next-line no-console
     console.info("[crop] apply clicked", { rect });
-    const el = imgRef.current;
     if (!rect) {
-      setStep(null);
       setErr("Pick a crop first — use a shortcut above, or drag a box on the photo.");
       return;
     }
-    if (!el) {
-      setStep(null);
+    const shown = imgRef.current;
+    if (!shown) {
       setErr("The photo is still loading — try again in a moment.");
       return;
     }
-    const nw = el.naturalWidth || 0;
-    const nh = el.naturalHeight || 0;
-    if (!nw || !nh) {
-      setStep(null);
-      setErr("Could not read this image — try a JPG or PNG.");
-      return;
-    }
-    // Map the on-screen fractions back onto the FULL-resolution image, so the
-    // crop keeps every pixel it keeps.
-    const sx = Math.round(rect.x * nw);
-    const sy = Math.round(rect.y * nh);
-    const sw = Math.max(1, Math.round(rect.w * nw));
-    const sh = Math.max(1, Math.round(rect.h * nh));
+    /* EVERYTHING below is guarded. `toBlob` throws on a tainted canvas, and
+       that throw used to escape an unawaited promise: no error, no log, the
+       status frozen on "Cutting…". A step that can fail must be able to say so. */
+    let revoke = () => {};
+    try {
+      setStep("Reading the photo…");
+      const safe = await croppableImage(src);
+      revoke = safe.revoke;
+      const el = safe.img;
+      const nw = el.naturalWidth || 0;
+      const nh = el.naturalHeight || 0;
+      if (!nw || !nh) throw new Error("Could not read this image — try a JPG or PNG.");
 
-    const canvas = document.createElement("canvas");
-    canvas.width = sw;
-    canvas.height = sh;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      setStep(null);
-      setErr("Could not process this image — try a JPG or PNG.");
-      return;
-    }
-    setStep(`Cutting ${sw}×${sh}…`);
-    // Flatten onto white: a transparent PNG would otherwise come out black.
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, sw, sh);
-    ctx.drawImage(el, sx, sy, sw, sh, 0, 0, sw, sh);
+      // On-screen fractions back onto FULL-resolution pixels.
+      const sx = Math.round(rect.x * nw);
+      const sy = Math.round(rect.y * nh);
+      const sw = Math.max(1, Math.round(rect.w * nw));
+      const sh = Math.max(1, Math.round(rect.h * nh));
+      setStep(`Cutting ${sw}\u00d7${sh}\u2026`);
 
-    /* LOSSLESS by default. A crop removes pixels; it has no business
-       degrading the ones it keeps. Encoding to JPEG here put a second
-       generation of compression on top of the upload's own JPEG pass, and the
-       artefacts were visible. PNG costs bytes, not quality — and only a very
-       large crop falls back to JPEG, at a high quality setting. */
-    let blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
-    if (!blob || blob.size > 8 * 1024 * 1024) {
-      const jpeg = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.95));
-      if (jpeg && jpeg.size > 0) blob = jpeg;
-    }
-    if (!blob || blob.size === 0) {
+      const canvas = document.createElement("canvas");
+      canvas.width = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Could not process this image — try a JPG or PNG.");
+      // Flatten onto white: a transparent PNG would otherwise come out black.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, sw, sh);
+      ctx.drawImage(el, sx, sy, sw, sh, 0, 0, sw, sh);
+
+      /* Lossless by default — a crop removes pixels, it should not degrade the
+         ones it keeps. Only a very large crop falls back to high-quality JPEG. */
+      let blob = await new Promise<Blob | null>((res, rej) => {
+        try {
+          canvas.toBlob(res, "image/png");
+        } catch (e) {
+          rej(e);
+        }
+      });
+      if (!blob || blob.size > 8 * 1024 * 1024) {
+        const jpeg = await new Promise<Blob | null>((res, rej) => {
+          try {
+            canvas.toBlob(res, "image/jpeg", 0.95);
+          } catch (e) {
+            rej(e);
+          }
+        });
+        if (jpeg && jpeg.size > 0) blob = jpeg;
+      }
+      if (!blob || blob.size === 0) throw new Error("The browser could not encode the cropped image.");
+
+      // eslint-disable-next-line no-console
+      console.info("[crop] encoded", { type: blob.type, bytes: blob.size, sw, sh });
+      setStep(`Uploading ${(blob.size / 1024 / 1024).toFixed(1)} MB\u2026`);
+      onApply(blob);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("[crop] failed:", e);
       setStep(null);
-      setErr("The browser could not encode the cropped image.");
-      return;
+      setErr(e instanceof Error ? e.message : "Crop failed — please try again.");
+    } finally {
+      revoke();
     }
-    // eslint-disable-next-line no-console
-    console.info("[crop] encoded", { type: blob.type, bytes: blob.size, sw, sh });
-    setStep(`Uploading ${(blob.size / 1024 / 1024).toFixed(1)} MB…`);
-    onApply(blob);
   };
 
   const pct = (n: number) => `${(n * 100).toFixed(4)}%`;
