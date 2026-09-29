@@ -559,7 +559,13 @@ export function CarbonStudioTab({
   const applyCrop = useCallback(
     async (blob: Blob) => {
       const target = cropping?.ref;
-      if (!target) return;
+      if (!target) {
+        // The last silent path: this returned with no error and no log, which
+        // is indistinguishable from a dead button.
+        console.error("[studio] crop: no target reference in state");
+        setCropErr("Lost track of which photo was being cropped — close this and try again.");
+        return;
+      }
       setCropBusy(true);
       setCropErr(null);
       try {

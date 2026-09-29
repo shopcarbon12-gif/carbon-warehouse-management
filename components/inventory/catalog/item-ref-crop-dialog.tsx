@@ -43,6 +43,10 @@ export function ItemRefCropDialog({
   const [drawing, setDrawing] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /* Visible progress. Every previous report of "nothing happens" was a step
+     failing with no way to tell WHICH step, so each one now announces itself
+     before it runs. */
+  const [step, setStep] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -99,18 +103,24 @@ export function ItemRefCropDialog({
 
   const apply = async () => {
     setErr(null);
+    setStep("Reading the photo…");
+    // eslint-disable-next-line no-console
+    console.info("[crop] apply clicked", { rect });
     const el = imgRef.current;
     if (!rect) {
+      setStep(null);
       setErr("Pick a crop first — use a shortcut above, or drag a box on the photo.");
       return;
     }
     if (!el) {
+      setStep(null);
       setErr("The photo is still loading — try again in a moment.");
       return;
     }
     const nw = el.naturalWidth || 0;
     const nh = el.naturalHeight || 0;
     if (!nw || !nh) {
+      setStep(null);
       setErr("Could not read this image — try a JPG or PNG.");
       return;
     }
@@ -126,9 +136,11 @@ export function ItemRefCropDialog({
     canvas.height = sh;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
+      setStep(null);
       setErr("Could not process this image — try a JPG or PNG.");
       return;
     }
+    setStep(`Cutting ${sw}×${sh}…`);
     // Flatten onto white: a transparent PNG would otherwise come out black.
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, sw, sh);
@@ -145,9 +157,13 @@ export function ItemRefCropDialog({
       if (jpeg && jpeg.size > 0) blob = jpeg;
     }
     if (!blob || blob.size === 0) {
-      setErr("Could not process this image — try a JPG or PNG.");
+      setStep(null);
+      setErr("The browser could not encode the cropped image.");
       return;
     }
+    // eslint-disable-next-line no-console
+    console.info("[crop] encoded", { type: blob.type, bytes: blob.size, sw, sh });
+    setStep(`Uploading ${(blob.size / 1024 / 1024).toFixed(1)} MB…`);
     onApply(blob);
   };
 
@@ -234,6 +250,8 @@ export function ItemRefCropDialog({
 
             {err || error ? (
               <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-status-danger-fg)]">{err || error}</p>
+            ) : step ? (
+              <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-accent)]">{step}</p>
             ) : null}
           </div>
 
