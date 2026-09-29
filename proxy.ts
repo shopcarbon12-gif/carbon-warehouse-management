@@ -78,10 +78,13 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/mobile/status") return true;
   if (pathname === "/api/mobile/epc-visibility") return true;
   /* Carbon Studio phone-camera hand-off: the phone opens /image-upload/<id> and
-   * POSTs the captured photo — no WMS session on the phone. Gated by the
-   * unguessable session id. Desktop create/poll go through here too. */
+   * POSTs the captured photos — no WMS session on the phone. Gated by the
+   * unguessable session id. Creating a session (/api/image-handoff/session,
+   * no id) is the desktop's and stays behind the cookie: without it nobody
+   * can mint sessions or push uploads anonymously. */
   if (pathname.startsWith("/image-upload/")) return true;
-  if (pathname.startsWith("/api/image-handoff/")) return true;
+  if (/^\/api\/image-handoff\/session\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pathname)) return true;
+  if (pathname === "/api/image-handoff/image") return true;
   /* OTA: handheld downloads APK with plain GET (no cookies). Else proxy redirects to /login HTML. */
   if (pathname.startsWith("/uploads/mobile-apk/")) return true;
   return false;

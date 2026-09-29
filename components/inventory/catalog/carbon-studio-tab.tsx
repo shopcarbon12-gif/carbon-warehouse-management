@@ -426,6 +426,7 @@ export function CarbonStudioTab({
       return next;
     });
   const [qr, setQr] = useState<{ url: string; scanUrl: string; sessionId: string } | null>(null);
+  const [qrBusy, setQrBusy] = useState(false);
   /** Which reference section is highlighted for drops; and which one pasted /
    *  phone-camera photos go to (the last section the operator touched). */
   /* Crop-in-place for an item reference. `src` must be something the browser
@@ -586,44 +587,155 @@ export function CarbonStudioTab({
     [itemRefUrls, itemRefs],
   );
 
-  // Poll the phone-camera hand-off while a QR is showing.
+  /* Mirror of itemRefs for code that must dedupe synchronously (the phone
+     hand-off), without waiting for a render. */
+  const itemRefsRef = useRef<ItemRef[]>([]);
   useEffect(() => {
-    if (!qr) return;
-    let alive = true;
-    const timer = setInterval(async () => {
+    itemRefsRef.current = itemRefs;
+  }, [itemRefs]);
+
+  /* Every hand-off url this QR session has handed to the tray, whether it is
+     still there or not: a re-collect ("Check again", the drain on Done) must
+     not bring back a photo the operator removed or cropped away. */
+  const handoffSeenRef = useRef<Set<string>>(new Set());
+  /* When the server will drop the session — refreshed from every poll (each
+     phone upload extends it), so the panel's lifetime follows the phone's
+     activity instead of a fixed timer that ran out mid-upload. */
+  const sessionExpiresRef = useRef<number>(0);
+
+  /** Add photos the phone sent, deduped by url. Never gated on "is the poll
+   *  still running": a response that lands after the QR panel closed is
+   *  still a photo the operator took. (That gate, plus a 5-minute auto-close,
+   *  is how 4 of 5 photos sent at 06:55 on 2026-09-29 were stranded.) */
+  const addHandoffBatch = useCallback((images: { imageUrl: string }[]) => {
+    const view = activeViewRef.current;
+    const fresh = images.filter(
+      (im) => im.imageUrl && !handoffSeenRef.current.has(im.imageUrl) && !itemRefsRef.current.some((p) => p.url === im.imageUrl),
+    );
+    if (!fresh.length) return 0;
+    for (const im of fresh) handoffSeenRef.current.add(im.imageUrl);
+    // Displayed through the durable admin proxy (the session-scoped preview
+    // route dies with the session; the R2 object does not).
+    const batch = fresh.map((im): ItemRef => ({ url: im.imageUrl, preview: previewFor(im.imageUrl), view }));
+    itemRefsRef.current = [...itemRefsRef.current, ...batch];
+    setItemRefs((prev) => [...prev, ...batch.filter((b) => !prev.some((p) => p.url === b.url))]);
+    return fresh.length;
+  }, []);
+
+  /** Collect from the hand-off session: the photos since the last poll, or
+   *  (`all`) everything it ever received. */
+  const collectHandoff = useCallback(
+    async (sessionId: string, all: boolean): Promise<{ status: "ok" | "gone" | "error"; added: number }> => {
       try {
-        const r = await fetch(`/api/image-handoff/session/${qr.sessionId}`);
-        if (!r.ok) return;
+        const r = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}${all ? "?all=1" : ""}`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (r.status === 404) return { status: "gone", added: 0 };
+        if (!r.ok) return { status: "error", added: 0 };
         const j = (await r.json().catch(() => ({}))) as {
           ready?: boolean;
-          images?: { imageUrl: string; previewUrl?: string }[];
-          imageUrl?: string;
-          previewUrl?: string;
+          images?: { imageUrl: string }[];
+          expiresAt?: number;
         };
-        // Keep the QR open so the phone can send more; a burst of up to 6 photos
-        // all arrive in one tick via `images`.
-        if (alive && j.ready) {
-          const batch = j.images?.length
-            ? j.images.map((im) => ({ url: im.imageUrl, preview: im.previewUrl, view: activeViewRef.current }))
-            : j.imageUrl
-              ? [{ url: j.imageUrl, preview: j.previewUrl, view: activeViewRef.current }]
-              : [];
-          if (batch.length) {
-            setItemRefs((prev) => [...prev, ...batch]);
-            setMsg(`Received ${batch.length} photo${batch.length === 1 ? "" : "s"} from phone.`);
-          }
+        if (Number(j.expiresAt) > 0) sessionExpiresRef.current = Number(j.expiresAt);
+        let added = 0;
+        if (j.ready && j.images?.length) {
+          added = addHandoffBatch(j.images);
+          if (added) setMsg(`Received ${added} photo${added === 1 ? "" : "s"} from phone.`);
         }
+        return { status: "ok", added };
       } catch {
-        /* keep polling */
+        return { status: "error", added: 0 };
+      }
+    },
+    [addHandoffBatch],
+  );
+
+  /** "Done": collect everything the session received, THEN close — and only
+   *  close if that worked, so a network blip cannot discard the session. */
+  const finishPhoneCamera = useCallback(async () => {
+    const s = qr;
+    if (!s) return;
+    setQrBusy(true);
+    try {
+      const res = await collectHandoff(s.sessionId, true);
+      if (res.status === "error") {
+        setErr("Could not collect the phone photos — check the connection and press Done again.");
+        return;
+      }
+      setQr(null);
+    } finally {
+      setQrBusy(false);
+    }
+  }, [qr, collectHandoff]);
+
+  // Poll the phone-camera hand-off while the QR panel is open, for as long
+  // as the server keeps the session. When the session lapses (the phone has
+  // been quiet for 15 min) the panel drains and closes with a message —
+  // never silently, and never before a final collect.
+  useEffect(() => {
+    if (!qr) return;
+    let inFlight = false;
+    let errors = 0;
+    const timer = setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        if (sessionExpiresRef.current && Date.now() > sessionExpiresRef.current + 30_000) {
+          await collectHandoff(qr.sessionId, true);
+          setMsg("The phone session ended (no photos for 15 minutes) — everything it received is in the tray.");
+          setQr(null);
+          return;
+        }
+        const res = await collectHandoff(qr.sessionId, false);
+        if (res.status === "gone") {
+          setErr("The phone session expired — click 📱 Phone camera and scan the new code.");
+          setQr(null);
+          return;
+        }
+        errors = res.status === "error" ? errors + 1 : 0;
+        if (errors === 5) setErr("Cannot reach the server to collect phone photos — the panel stays open; photos are kept on the server.");
+      } finally {
+        inFlight = false;
       }
     }, 2000);
-    const stop = setTimeout(() => setQr(null), 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [qr, collectHandoff]);
+
+  /* Photos a phone sent for THIS product that no desktop ever collected (a
+     panel closed early, a discarded tab, a deploy in between). Counted on
+     open; added on request. */
+  const [recoverCount, setRecoverCount] = useState(0);
+  const [recoverBusy, setRecoverBusy] = useState(false);
+  useEffect(() => {
+    if (!stateLoaded) return;
+    let alive = true;
+    void fetch(`/api/studio/handoff-recover?matrixId=${encodeURIComponent(matrixId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { count?: number } | null) => {
+        if (alive && j && Number(j.count) > 0) setRecoverCount(Number(j.count));
+      })
+      .catch(() => {});
     return () => {
       alive = false;
-      clearInterval(timer);
-      clearTimeout(stop);
     };
-  }, [qr]);
+  }, [stateLoaded, matrixId]);
+  const recoverHandoff = useCallback(async () => {
+    setRecoverBusy(true);
+    try {
+      const r = await fetch(`/api/studio/handoff-recover?matrixId=${encodeURIComponent(matrixId)}&take=1`, { cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { images?: { imageUrl: string }[]; error?: string };
+      if (!r.ok) throw new Error(j.error || "Could not recover the phone photos.");
+      const n = addHandoffBatch(j.images ?? []);
+      setMsg(n ? `Added ${n} photo${n === 1 ? "" : "s"} from the earlier phone session.` : "Nothing new to add.");
+      setRecoverCount(0);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not recover the phone photos.");
+    } finally {
+      setRecoverBusy(false);
+    }
+  }, [matrixId, addHandoffBatch]);
 
   // Show only models whose gender matches the item (men→male, women→female).
   // Falls back to all models when the item's gender can't be determined.
@@ -742,19 +854,31 @@ export function CarbonStudioTab({
 
   const startPhoneCamera = useCallback(async () => {
     setErr(null);
+    // A session is already open: the click only changed the target section
+    // (activeViewRef). Minting a second session here left the phone
+    // uploading to the first one, where nothing was listening any more.
+    if (qr) return;
     try {
-      const r = await fetch("/api/image-handoff/session", { method: "POST" });
+      const r = await fetch("/api/image-handoff/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId }),
+      });
       const j = (await r.json().catch(() => ({}))) as {
         sessionId?: string;
         scanUrl?: string;
         qrCodeUrl?: string;
+        expiresAt?: number;
+        error?: string;
       };
-      if (!r.ok || !j.sessionId || !j.qrCodeUrl) throw new Error("Could not start phone camera.");
+      if (!r.ok || !j.sessionId || !j.qrCodeUrl) throw new Error(j.error || "Could not start phone camera.");
+      handoffSeenRef.current = new Set();
+      sessionExpiresRef.current = Number(j.expiresAt) || Date.now() + 15 * 60_000;
       setQr({ url: j.qrCodeUrl, scanUrl: j.scanUrl || "", sessionId: j.sessionId });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Phone camera failed");
     }
-  }, []);
+  }, [qr, matrixId]);
 
   const togglePanel = useCallback((p: number) => {
     setPanels((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p].sort()));
@@ -1298,6 +1422,22 @@ export function CarbonStudioTab({
             e.target.value = "";
           }}
         />
+        {recoverCount > 0 ? (
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-amber-500/55 bg-amber-950/25 px-3 py-2 font-mono text-[0.72rem] text-amber-200">
+            <span>
+              📱 {recoverCount} photo{recoverCount === 1 ? "" : "s"} sent from a phone for this product{" "}
+              {recoverCount === 1 ? "was" : "were"} never collected.
+            </span>
+            <button
+              type="button"
+              disabled={!canManage || recoverBusy}
+              onClick={() => void recoverHandoff()}
+              className="rounded border border-amber-400/70 bg-amber-400/15 px-2 py-1 text-amber-100 disabled:opacity-50 max-md:min-h-11"
+            >
+              {recoverBusy ? "Adding…" : `＋ Add ${recoverCount === 1 ? "it" : "them"} to ${REF_VIEWS.find((z) => z.view === activeView)?.title ?? "General"}`}
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-2 md:grid-cols-3">
           {REF_VIEWS.map((zone) => {
             const zoneRefs = itemRefs.filter((r) => (r.view ?? "general") === zone.view);
@@ -1527,15 +1667,34 @@ export function CarbonStudioTab({
           <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
             <img src={qr.url} alt="Scan with your phone" className="h-32 w-32 rounded bg-white p-1" />
             <div className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
-              Scan with your phone to take product photos. Each photo you send appears here — send as
-              many as you like, then click Done.
-              <button
-                type="button"
-                onClick={() => setQr(null)}
-                className="mt-2 block rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 text-[var(--wms-fg)]"
-              >
-                ✓ Done
-              </button>
+              Scan with your phone to take product photos. Each photo the phone sends appears above
+              within a few seconds. <b>Keep this open until the phone says every photo was sent</b>, then
+              click Done.
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={qrBusy}
+                  onClick={() => void finishPhoneCamera()}
+                  className="rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+                >
+                  {qrBusy ? "Collecting…" : "✓ Done"}
+                </button>
+                <button
+                  type="button"
+                  disabled={qrBusy}
+                  title="Ask the server for every photo this session received — for anything that did not appear"
+                  onClick={() =>
+                    void collectHandoff(qr.sessionId, true).then((res) => {
+                      if (res.status === "gone") setErr("That phone session has expired — scan a new code.");
+                      else if (res.status === "error") setErr("Could not reach the server — try again.");
+                      else if (!res.added) setMsg("Nothing new from the phone yet.");
+                    })
+                  }
+                  className="rounded border border-[var(--wms-border)] px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+                >
+                  ↻ Check again
+                </button>
+              </div>
             </div>
           </div>
         ) : null}

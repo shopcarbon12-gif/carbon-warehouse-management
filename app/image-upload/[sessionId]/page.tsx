@@ -29,6 +29,12 @@ export default function ImageUploadPage() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [cam, setCam] = useState<"starting" | "live" | "off">("starting");
   const [camInfo, setCamInfo] = useState<string>("");
+  /* What this device lets a web page do about focus: "tap" = it honours a
+     focus point (Android Chrome on most phones); "auto" = continuous
+     autofocus only, a tap changes nothing (every iPhone in Safari); "none" =
+     no focus control reported at all. The hint under the preview says which,
+     instead of promising tap-to-focus everywhere. */
+  const [focusSupport, setFocusSupport] = useState<"tap" | "auto" | "none">("none");
   const [focusRing, setFocusRing] = useState<{ x: number; y: number; key: number } | null>(null);
   const [shots, setShots] = useState<Shot[]>([]);
   const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
@@ -40,11 +46,16 @@ export default function ImageUploadPage() {
     let cancelled = false;
     void (async () => {
       try {
+        // Everything in the one request: the largest frame the device offers
+        // AND continuous autofocus. Forcing the track to its reported maximum
+        // afterwards (an earlier version did) can make Android pick a fixed-
+        // focus camera mode — a sharp preview that never focuses again.
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
             width: { ideal: 4096 },
             height: { ideal: 3072 },
+            advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
           },
           audio: false,
         });
@@ -54,16 +65,17 @@ export default function ImageUploadPage() {
         }
         streamRef.current = stream;
         const track = stream.getVideoTracks()[0];
-        // Push the track to its own maximum if it reports one (Android Chrome).
         try {
-          const caps = (track.getCapabilities?.() ?? {}) as { width?: { max?: number }; height?: { max?: number } };
-          if (caps.width?.max && caps.height?.max) {
-            await track.applyConstraints({ width: { ideal: caps.width.max }, height: { ideal: caps.height.max } });
+          const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+          const modes = caps.focusMode ?? [];
+          setFocusSupport(
+            modes.includes("single-shot") || modes.includes("manual") ? "tap" : modes.includes("continuous") ? "auto" : "none"
+          );
+          if (modes.includes("continuous")) {
+            await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => {});
           }
-          // Continuous autofocus while framing; tap-to-focus refines it.
-          await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => {});
         } catch {
-          /* constraints are best-effort */
+          /* capabilities are best-effort */
         }
         try {
           const IC = (window as unknown as { ImageCapture?: ImageCaptureCtor }).ImageCapture;
@@ -90,21 +102,32 @@ export default function ImageUploadPage() {
     };
   }, []);
 
-  /** Tap on the preview → focus there (where the camera supports it) and
-   *  show the ring where the tap landed either way. */
+  /** Tap on the preview → focus there where the camera honours a focus
+   *  point: a single-shot focus at the tap, then back to continuous a moment
+   *  later so the lens does not stay locked on that spot. The ring shows
+   *  where the tap landed either way. */
+  const refocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusAt = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - box.left) / box.width;
-    const y = (e.clientY - box.top) / box.height;
+    const x = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+    const y = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height));
     setFocusRing({ x: e.clientX - box.left, y: e.clientY - box.top, key: Date.now() });
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
     const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
     const modes = caps.focusMode ?? [];
-    const mode = modes.includes("single-shot") ? "single-shot" : modes.includes("manual") ? "manual" : modes.includes("continuous") ? "continuous" : null;
-    if (!mode) return;
-    const advanced = [{ focusMode: mode, pointsOfInterest: [{ x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)) }] }];
-    void track.applyConstraints({ advanced: advanced as unknown as MediaTrackConstraintSet[] }).catch(() => {});
+    const mode = modes.includes("single-shot") ? "single-shot" : modes.includes("manual") ? "manual" : null;
+    if (!mode) return; // continuous-only (or nothing): the camera focuses by itself
+    const advanced = [{ focusMode: mode, pointsOfInterest: [{ x, y }] }];
+    void track
+      .applyConstraints({ advanced: advanced as unknown as MediaTrackConstraintSet[] })
+      .catch(() => {});
+    if (refocusTimer.current) clearTimeout(refocusTimer.current);
+    if (modes.includes("continuous")) {
+      refocusTimer.current = setTimeout(() => {
+        void track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] }).catch(() => {});
+      }, 2500);
+    }
   }, []);
 
   useEffect(() => {
@@ -126,6 +149,10 @@ export default function ImageUploadPage() {
   const capture = useCallback(async () => {
     const v = videoRef.current;
     if (!v || shots.length >= MAX_PHOTOS || capturing) return;
+    if (!v.videoWidth && !captureRef.current) {
+      setErr("The camera is not ready yet — wait a moment, or use the camera app button.");
+      return;
+    }
     setCapturing(true);
     try {
       // Full-resolution still from the sensor when the browser offers it. Some
@@ -159,46 +186,94 @@ export default function ImageUploadPage() {
     }
   }, [shots.length, capturing, pushShot]);
 
+  /* Photos from the camera app or the gallery. Anything that is not already
+     JPEG / PNG / WebP (an iPhone's HEIC, mostly) is re-encoded to JPEG here —
+     the desktop cannot display HEIC and OpenAI rejects it, so sending it
+     "successfully" would only fail later. Safari decodes HEIC natively. */
+  const SAFE = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
   const addFromPicker = useCallback((files: FileList | null) => {
     if (!files?.length) return;
     const readOne = (f: File) =>
       new Promise<Shot | null>((res) => {
-        if (!f.type.startsWith("image/")) return res(null);
+        if (!f.type.startsWith("image/") && !/\.(heic|heif|jpe?g|png|webp)$/i.test(f.name)) return res(null);
         const r = new FileReader();
-        r.onload = () => res({ id: `${Date.now()}-${Math.round(r.result?.toString().length ?? 0)}`, dataUrl: String(r.result || ""), blob: f });
+        r.onload = () => {
+          const dataUrl = String(r.result || "");
+          if (SAFE.has((f.type || "").toLowerCase())) {
+            return res({ id: `${Date.now()}-${Math.round(dataUrl.length)}`, dataUrl, blob: f });
+          }
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || 1;
+            canvas.height = img.naturalHeight || 1;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return res(null);
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) return res(null);
+                res({ id: `${Date.now()}-${Math.round(dataUrl.length)}`, dataUrl: canvas.toDataURL("image/jpeg", 0.92), blob });
+              },
+              "image/jpeg",
+              0.95,
+            );
+          };
+          img.onerror = () => res(null);
+          img.src = dataUrl;
+        };
         r.onerror = () => res(null);
         r.readAsDataURL(f);
       });
     void (async () => {
       const list = Array.from(files).slice(0, MAX_PHOTOS);
       const read = (await Promise.all(list.map(readOne))).filter(Boolean) as Shot[];
+      const skipped = list.length - read.length;
+      if (skipped) setErr(`${skipped} photo${skipped === 1 ? "" : "s"} could not be read on this phone (unsupported format) — use JPG or take it with the camera.`);
       setShots((prev) => [...prev, ...read].slice(0, MAX_PHOTOS));
     })();
   }, []);
 
   const removeShot = (id: string) => setShots((prev) => prev.filter((s) => s.id !== id));
 
+  /* One request per photo. A single 20–30 MB multipart of six full-res stills
+     took long enough on mobile for the desktop to collect a partial batch and
+     for the operator to close the panel; now each photo is registered as it
+     lands, progress is visible, and a failure keeps the unsent ones for a
+     retry instead of losing the whole batch. */
+  const [sent, setSent] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  /* The server says whether a desktop polled in the last 10 s. "Sent" used
+     to mean only "a session row existed" — the photos were stored while no
+     computer was listening, and the operator saw nothing. */
+  const [listening, setListening] = useState<boolean | null>(null);
   const uploadAll = useCallback(async () => {
     if (!shots.length) return;
     setStatus("uploading");
     setErr("");
-    try {
-      const fd = new FormData();
-      shots.forEach((s, i) => fd.append("file", s.blob, `photo-${i + 1}.jpg`));
-      const res = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
-        method: "POST",
-        body: fd,
-      });
-      if (!res.ok) {
-        const j = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(j.error || `Upload failed (${res.status})`);
+    const total = shots.length;
+    let done = 0;
+    setSent({ done, total });
+    for (const s of shots) {
+      try {
+        const fd = new FormData();
+        fd.append("file", s.blob, `photo-${done + 1}.jpg`);
+        const res = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+          method: "POST",
+          body: fd,
+        });
+        const j = (await res.json().catch(() => ({}))) as { error?: string; listening?: boolean };
+        if (!res.ok) throw new Error(j.error || `Upload failed (${res.status})`);
+        if (typeof j.listening === "boolean") setListening(j.listening);
+        done += 1;
+        setSent({ done, total });
+        setShots((prev) => prev.filter((x) => x.id !== s.id)); // sent — leaves the tray
+      } catch (e) {
+        setStatus("error");
+        setErr(`${done} of ${total} sent. ${e instanceof Error ? e.message : "Upload failed"} — press Send again to retry the rest.`);
+        return;
       }
-      setStatus("done");
-      setShots([]);
-    } catch (e) {
-      setStatus("error");
-      setErr(e instanceof Error ? e.message : "Upload failed");
     }
+    setStatus("done");
   }, [shots, sessionId]);
 
   const box: React.CSSProperties = {
@@ -225,27 +300,25 @@ export default function ImageUploadPage() {
   };
   const btnAlt: React.CSSProperties = { ...btn, background: "#1e293b", color: "#e8eaed" };
   const full = shots.length >= MAX_PHOTOS;
+  const uploading = status === "uploading";
 
   return (
     <div style={box}>
       <h1 style={{ fontSize: 18, margin: "4px 0" }}>Carbon Studio — item photos</h1>
 
-      {status === "done" ? (
-        <>
-          <div style={{ fontSize: 44 }}>✓</div>
-          <p style={{ textAlign: "center", opacity: 0.85 }}>
-            Photos sent to Carbon Studio. Keep going or close this page and continue on your computer.
-          </p>
-          <button style={btnAlt} onClick={() => setStatus("idle")}>Take more</button>
-        </>
-      ) : (
-        <>
-          {/* Live camera */}
-          {cam !== "off" ? (
-            <div
-              style={{ width: "100%", maxWidth: 380, position: "relative", touchAction: "manipulation" }}
-              onPointerDown={cam === "live" ? focusAt : undefined}
-            >
+      {/* Live camera — stays mounted through the "sent" screen (hidden), so
+          "Take more" comes back to a live preview instead of a black box. */}
+      {cam !== "off" ? (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 380,
+            position: "relative",
+            touchAction: "manipulation",
+            display: status === "done" ? "none" : undefined,
+          }}
+          onPointerDown={cam === "live" ? focusAt : undefined}
+        >
               <video
                 ref={videoRef}
                 playsInline
@@ -259,7 +332,10 @@ export default function ImageUploadPage() {
                 </div>
               ) : (
                 <div style={{ position: "absolute", left: 0, right: 0, bottom: 8, textAlign: "center", fontSize: 12, opacity: 0.85, textShadow: "0 1px 3px #000", pointerEvents: "none" }}>
-                  Tap on screen to focus{camInfo ? ` · ${camInfo}` : ""}
+                  {focusSupport === "tap"
+                    ? "Tap on screen to focus"
+                    : "Auto-focus · for tap-to-focus use the camera app button below"}
+                  {camInfo ? ` · ${camInfo}` : ""}
                 </div>
               )}
               {focusRing ? (
@@ -278,12 +354,33 @@ export default function ImageUploadPage() {
                   }}
                 />
               ) : null}
-            </div>
+        </div>
+      ) : null}
+
+      {status === "done" ? (
+        <>
+          <div style={{ fontSize: 44 }}>{listening === false ? "⚠" : "✓"}</div>
+          {listening === false ? (
+            <p style={{ textAlign: "center", opacity: 0.9, maxWidth: 360 }}>
+              {sent.done} photo{sent.done === 1 ? "" : "s"} saved — <b>but the computer is not listening right now</b>{" "}
+              (its QR panel is closed). Nothing is lost: on the computer, open this product&apos;s Studio tab and
+              click <b>Add … photos from phone</b>.
+            </p>
           ) : (
+            <p style={{ textAlign: "center", opacity: 0.85 }}>
+              {sent.done} photo{sent.done === 1 ? "" : "s"} sent to Carbon Studio — they appear on the computer
+              within a few seconds. Keep going, or close this page.
+            </p>
+          )}
+          <button style={btnAlt} onClick={() => setStatus("idle")}>Take more</button>
+        </>
+      ) : (
+        <>
+          {cam === "off" ? (
             <p style={{ textAlign: "center", opacity: 0.75, maxWidth: 360 }}>
               Camera unavailable — use the buttons below to take or choose photos.
             </p>
-          )}
+          ) : null}
 
           {/* Thumbnails */}
           {shots.length ? (
@@ -294,7 +391,8 @@ export default function ImageUploadPage() {
                   <img src={s.dataUrl} alt="shot" style={{ width: 72, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #243040" }} />
                   <button
                     onClick={() => removeShot(s.id)}
-                    style={{ position: "absolute", top: -6, right: -6, background: "#0c0f12", color: "#f87171", border: "1px solid #243040", borderRadius: "50%", width: 22, height: 22, fontSize: 12, lineHeight: 1 }}
+                    disabled={uploading}
+                    style={{ position: "absolute", top: -6, right: -6, background: "#0c0f12", color: "#f87171", border: "1px solid #243040", borderRadius: "50%", width: 22, height: 22, fontSize: 12, lineHeight: 1, opacity: uploading ? 0.4 : 1 }}
                     aria-label="Remove"
                   >
                     ✕
@@ -325,21 +423,25 @@ export default function ImageUploadPage() {
             onChange={(e) => { addFromPicker(e.target.files); e.target.value = ""; }}
           />
           {cam === "live" ? (
-            <button style={btn} disabled={full || capturing} onClick={() => void capture()}>
+            <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
               {full ? "Max 6 reached" : capturing ? "Capturing…" : "📷 Capture photo"}
             </button>
-          ) : (
-            <button style={btn} disabled={full} onClick={() => cameraInputRef.current?.click()}>
-              {full ? "Max 6 reached" : "📷 Take photo"}
-            </button>
-          )}
-          <button style={btnAlt} disabled={full} onClick={() => galleryInputRef.current?.click()}>
+          ) : null}
+          {/* The phone's own camera app: full sensor resolution, HDR, and
+              tap-to-focus on every phone — the sharpest path where the web
+              camera cannot focus on demand (all iPhones in Safari). */}
+          <button style={cam === "live" ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
+            {full ? "Max 6 reached" : cam === "live" ? "📸 Camera app (sharpest, tap to focus there)" : "📷 Take photo"}
+          </button>
+          <button style={btnAlt} disabled={full || uploading} onClick={() => galleryInputRef.current?.click()}>
             🖼 Upload from this phone
           </button>
 
           {shots.length ? (
             <button style={{ ...btn, background: "#e8eaed" }} disabled={status === "uploading"} onClick={() => void uploadAll()}>
-              {status === "uploading" ? "Sending…" : `⤴ Send ${shots.length} to Carbon Studio`}
+              {status === "uploading"
+                ? `Sending ${Math.min(sent.done + 1, sent.total)}/${sent.total}…`
+                : `⤴ Send ${shots.length} to Carbon Studio`}
             </button>
           ) : null}
           {err ? <p style={{ color: "#f87171", fontSize: 13 }}>{err}</p> : null}
