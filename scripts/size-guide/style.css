@@ -27,7 +27,7 @@
   background: #fff;
   /* clamp() rather than a media-query ladder: this sits in a modal whose width
      is set by the theme, so the type has to scale to the box it lands in. */
-  padding: clamp(16px, 1.6vw, 22px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
+  padding: clamp(4px, 0.6vw, 10px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
   -webkit-font-smoothing: antialiased;
   text-align: left;
 }
@@ -35,7 +35,14 @@
 :scope :focus-visible { outline: 2px solid var(--csg-blue); outline-offset: 2px; border-radius: 3px; }
 
 /* ── header ─────────────────────────────────────────────────────────── */
-.csg-top { grid-column: 1; grid-row: 1; margin-bottom: clamp(20px, 2.2vw, 30px); }
+/* Spans both columns so a long fit name has the whole modal to sit on one
+   line, with room reserved on the right for the unit switch that shares the
+   row. */
+.csg-top {
+  grid-column: 1 / -1; grid-row: 1;
+  padding-right: 210px;
+  margin-bottom: clamp(16px, 1.8vw, 24px);
+}
 .csg-units-cell { display: contents; }
 .csg-wordmark {
   /* The wordmark is the brand's own letterform — a normal-width grotesque with
@@ -43,22 +50,22 @@
      label rather than as the logo. */
   font-family: var(--csg-body); font-weight: 700;
   font-size: 14px; letter-spacing: .32em; text-transform: uppercase;
-  margin: 0 0 10px; color: var(--csg-ink);
+  margin: 0 0 8px; color: var(--csg-ink);
 }
 .csg-title { margin: 0; line-height: .9; }
 /* The fit name carries the weight; "Size Guide" sits under it lighter and
    smaller. That contrast is the whole title treatment. */
 .csg-title-fit {
   display: block; font-family: var(--csg-display); font-weight: 700;
-  font-size: clamp(30px, 4.4vw, 56px); letter-spacing: -.005em;
-  text-transform: uppercase;
+  font-size: __TITLESIZE__; letter-spacing: -.005em;
+  text-transform: uppercase; white-space: nowrap;
 }
 .csg-title-sub {
   display: block; font-family: var(--csg-display); font-weight: 300;
-  font-size: clamp(25px, 3.6vw, 46px); letter-spacing: .005em;
+  font-size: clamp(21px, 3vw, 38px); letter-spacing: .005em;
   text-transform: uppercase; color: var(--csg-ink);
 }
-.csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 16px 0 0; }
+.csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 14px 0 0; }
 .csg-subtitle {
   grid-column: 1; grid-row: 2;
   margin: 0 0 22px; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.55;
@@ -223,7 +230,8 @@
     grid-column: 1; grid-row: auto;
   }
   /* The comp reads name, then description, then the unit switch. */
-  .csg-top { order: 1; } .csg-subtitle { order: 2; } .csg-units { order: 3; justify-self: stretch; }
+  .csg-top { order: 1; padding-right: 0; } .csg-subtitle { order: 2; }
+  .csg-units { order: 3; justify-self: stretch; }
   .csg-picker { order: 4; } .csg-chart { order: 5; } .csg-measure { order: 6; } .csg-tips { order: 7; }
   .csg-measure { margin-top: 20px; }
   .csg-tips { flex-wrap: wrap; }

@@ -30,28 +30,35 @@
   background: #fff;
   /* clamp() rather than a media-query ladder: this sits in a modal whose width
      is set by the theme, so the type has to scale to the box it lands in. */
-  padding: clamp(16px, 1.6vw, 22px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
+  padding: clamp(4px, 0.6vw, 10px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
   -webkit-font-smoothing: antialiased;
   text-align: left;
 }#carbon-size-guide-slim * { box-sizing: border-box; min-width: 0; }#carbon-size-guide-slim :focus-visible { outline: 2px solid var(--csg-blue); outline-offset: 2px; border-radius: 3px; }/* ── header ─────────────────────────────────────────────────────────── */
-#carbon-size-guide-slim .csg-top { grid-column: 1; grid-row: 1; margin-bottom: clamp(20px, 2.2vw, 30px); }#carbon-size-guide-slim .csg-units-cell { display: contents; }#carbon-size-guide-slim .csg-wordmark {
+/* Spans both columns so a long fit name has the whole modal to sit on one
+   line, with room reserved on the right for the unit switch that shares the
+   row. */
+#carbon-size-guide-slim .csg-top {
+  grid-column: 1 / -1; grid-row: 1;
+  padding-right: 210px;
+  margin-bottom: clamp(16px, 1.8vw, 24px);
+}#carbon-size-guide-slim .csg-units-cell { display: contents; }#carbon-size-guide-slim .csg-wordmark {
   /* The wordmark is the brand's own letterform — a normal-width grotesque with
      wide tracking. Setting it in the condensed headline face made it read as a
      label rather than as the logo. */
   font-family: var(--csg-body); font-weight: 700;
   font-size: 14px; letter-spacing: .32em; text-transform: uppercase;
-  margin: 0 0 10px; color: var(--csg-ink);
+  margin: 0 0 8px; color: var(--csg-ink);
 }#carbon-size-guide-slim .csg-title { margin: 0; line-height: .9; }/* The fit name carries the weight; "Size Guide" sits under it lighter and
    smaller. That contrast is the whole title treatment. */
 #carbon-size-guide-slim .csg-title-fit {
   display: block; font-family: var(--csg-display); font-weight: 700;
-  font-size: clamp(30px, 4.4vw, 56px); letter-spacing: -.005em;
-  text-transform: uppercase;
+  font-size: clamp(26px, 4.2vw, 56px); letter-spacing: -.005em;
+  text-transform: uppercase; white-space: nowrap;
 }#carbon-size-guide-slim .csg-title-sub {
   display: block; font-family: var(--csg-display); font-weight: 300;
-  font-size: clamp(25px, 3.6vw, 46px); letter-spacing: .005em;
+  font-size: clamp(21px, 3vw, 38px); letter-spacing: .005em;
   text-transform: uppercase; color: var(--csg-ink);
-}#carbon-size-guide-slim .csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 16px 0 0; }#carbon-size-guide-slim .csg-subtitle {
+}#carbon-size-guide-slim .csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 14px 0 0; }#carbon-size-guide-slim .csg-subtitle {
   grid-column: 1; grid-row: 2;
   margin: 0 0 22px; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.55;
   color: var(--csg-muted); max-width: 44ch;
@@ -161,7 +168,7 @@
 @media (max-width: 1000px) {#carbon-size-guide-slim { grid-template-columns: 1fr; }#carbon-size-guide-slim .csg-top, #carbon-size-guide-slim .csg-units, #carbon-size-guide-slim .csg-subtitle, #carbon-size-guide-slim .csg-picker, #carbon-size-guide-slim .csg-chart, #carbon-size-guide-slim .csg-measure, #carbon-size-guide-slim .csg-tips {
     grid-column: 1; grid-row: auto;
   }/* The comp reads name, then description, then the unit switch. */
-#carbon-size-guide-slim .csg-top { order: 1; }#carbon-size-guide-slim .csg-subtitle { order: 2; }#carbon-size-guide-slim .csg-units { order: 3; justify-self: stretch; }#carbon-size-guide-slim .csg-picker { order: 4; }#carbon-size-guide-slim .csg-chart { order: 5; }#carbon-size-guide-slim .csg-measure { order: 6; }#carbon-size-guide-slim .csg-tips { order: 7; }#carbon-size-guide-slim .csg-measure { margin-top: 20px; }#carbon-size-guide-slim .csg-tips { flex-wrap: wrap; }#carbon-size-guide-slim .csg-tagline { display: none; }
+#carbon-size-guide-slim .csg-top { order: 1; padding-right: 0; }#carbon-size-guide-slim .csg-subtitle { order: 2; }#carbon-size-guide-slim .csg-units { order: 3; justify-self: stretch; }#carbon-size-guide-slim .csg-picker { order: 4; }#carbon-size-guide-slim .csg-chart { order: 5; }#carbon-size-guide-slim .csg-measure { order: 6; }#carbon-size-guide-slim .csg-tips { order: 7; }#carbon-size-guide-slim .csg-measure { margin-top: 20px; }#carbon-size-guide-slim .csg-tips { flex-wrap: wrap; }#carbon-size-guide-slim .csg-tagline { display: none; }
 }
 
 /* ── phone: a different layout, not a smaller one ───────────────────── */
@@ -224,7 +231,7 @@
   </details>
 
   <footer class="csg-tips">
-    <span class="csg-tips-icon" aria-hidden="true"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true" focusable="false"><path d="M11 28.5a7.5 7.5 0 1 1 0-15h12a5 5 0 0 0 0-10" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="11" cy="21" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M23 3.5a5 5 0 0 0-5 5v3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
+    <span class="csg-tips-icon" aria-hidden="true"><svg width="44" height="30" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="15" cy="12.5" rx="12.5" ry="8.5"/><path d="M2.5 12.5v9.5c0 4.7 5.6 8.5 12.5 8.5s12.5-3.8 12.5-8.5v-9.5"/><ellipse cx="15" cy="12.5" rx="6" ry="4"/><path d="M18.6 11.6c-.5-1.1-1.9-1.7-3.4-1.5-1.4.2-2.4 1-2.3 1.9.1.8 1.2 1.3 2.4 1.1"/><path d="M27.5 18.4h24c2 0 3.2 1 3.2 2.6v6.6c0 1.6-1.2 2.6-3.2 2.6-3.6 0-6-1.4-9.4-1.6"/><path d="M6.5 24v4.2M11 25.4v4.8M15.5 25.8v5M20 25.4v4.8M24.5 24v4.2"/><path d="M31 20.8v4.6M36 20.8v5.6M41 20.8v4.6M46 20.8v5.6M51 20.8v4.6"/></svg></span>
     <h3 class="csg-tips-title">Tips for the best fit</h3>
     <ul class="csg-tips-list"><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Use a soft measuring tape</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Keep the tape straight (not angled)</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Compare with a pair you already own</span></li></ul>
     <p class="csg-tagline">Built different.<br>Made for everyone.</p>

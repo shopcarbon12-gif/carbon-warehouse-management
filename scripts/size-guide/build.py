@@ -37,12 +37,15 @@ TICK = ('<svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-h
         '<path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" '
         'stroke-linecap="round" stroke-linejoin="round"/></svg>')
 
-TAPE = ('<svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true" focusable="false">'
-        '<path d="M11 28.5a7.5 7.5 0 1 1 0-15h12a5 5 0 0 0 0-10" fill="none" stroke="currentColor" '
-        'stroke-width="1.9" stroke-linecap="round"/>'
-        '<circle cx="11" cy="21" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9"/>'
-        '<path d="M23 3.5a5 5 0 0 0-5 5v3" fill="none" stroke="currentColor" stroke-width="1.9" '
-        'stroke-linecap="round"/></svg>')
+TAPE = ('<svg width="44" height="30" viewBox="0 0 60 40" fill="none" stroke="currentColor" '
+        'stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<ellipse cx="15" cy="12.5" rx="12.5" ry="8.5"/>'
+        '<path d="M2.5 12.5v9.5c0 4.7 5.6 8.5 12.5 8.5s12.5-3.8 12.5-8.5v-9.5"/>'
+        '<ellipse cx="15" cy="12.5" rx="6" ry="4"/>'
+        '<path d="M18.6 11.6c-.5-1.1-1.9-1.7-3.4-1.5-1.4.2-2.4 1-2.3 1.9.1.8 1.2 1.3 2.4 1.1"/>'
+        '<path d="M27.5 18.4h24c2 0 3.2 1 3.2 2.6v6.6c0 1.6-1.2 2.6-3.2 2.6-3.6 0-6-1.4-9.4-1.6"/>'
+        '<path d="M6.5 24v4.2M11 25.4v4.8M15.5 25.8v5M20 25.4v4.8M24.5 24v4.2"/>'
+        '<path d="M31 20.8v4.6M36 20.8v5.6M41 20.8v4.6M46 20.8v5.6M51 20.8v4.6"/></svg>')
 
 CHEV = ('<svg class="csg-chev" width="16" height="10" viewBox="0 0 16 10" aria-hidden="true" focusable="false">'
         '<path d="M1 1l7 7 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>')
@@ -91,9 +94,24 @@ def scope(css: str, root: str) -> str:
     return "".join(out)
 
 
+def title_scale(name: str) -> str:
+    """
+    The headline stays on one line, so the type has to fit the longest name
+    rather than the shortest. "Super Skinny Ankle Zip Fit Jeans" is more than
+    twice the length of "Slim Fit Jeans", and one size for both either wraps the
+    long one or wastes the short one. vw keeps it fitting as the modal narrows.
+    """
+    n = len(name)
+    if n <= 18:
+        return "clamp(26px, 4.2vw, 56px)"
+    if n <= 24:
+        return "clamp(22px, 3.6vw, 48px)"
+    return "clamp(17px, 2.9vw, 42px)"
+
+
 def build(key: str, fit: dict) -> str:
     root = "carbon-size-guide-" + key
-    css = scope(CSS, root)
+    css = scope(CSS, root).replace("__TITLESIZE__", title_scale(fit["title"]))
 
     sizes = [r["size"] for r in fit["rows"]]
     options = "".join(
