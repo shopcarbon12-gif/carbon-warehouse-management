@@ -2,10 +2,10 @@
 import OpenAI, { toFile } from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { checkGenerateRateLimit } from "@/lib/generate-ratelimit";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
+import { LOCK_TEXT_MAX_BYTES, parseSpecBackState, specListsBackDesign, withCanonicalBackLine } from "@/lib/studio-item-spec";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
-import { recordStudioGeneration } from "@/lib/server/studio-generation-log";
+import { recordStudioGeneration, type StudioGenerationLog } from "@/lib/server/studio-generation-log";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -21,12 +21,6 @@ import { isValidJobId, runGenerateJob } from "@/lib/server/generate-jobs";
 
 const FALLBACK_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAFx0lEQVR42u3UwQkAIBDAMHX/nc8lBK4jUZBkn2tmdgDg53YHAH4MIAgQCBAECAQIAgQCBAECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIhD8eQ9JCmqo2AAAAAElFTkSuQmCC";
-
-function getClientKey(req: NextRequest) {
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim();
-  return ip || "unknown";
-}
 
 function extFromContentType(contentType: string) {
   const ct = String(contentType || "").toLowerCase();
@@ -150,17 +144,6 @@ function isOpenAiAuthError(err: unknown) {
   return /incorrect api key|invalid api key|api key provided/i.test(message);
 }
 
-function isOpenAiImagesEditModelError(err: unknown) {
-  const status = Number((err as any)?.status || (err as any)?.statusCode || 0);
-  const message = String((err as any)?.message || "");
-  if (status !== 400) return false;
-  return (
-    /value must be ['"]dall-e-2['"]/i.test(message) ||
-    /invalid value.*model/i.test(message) ||
-    /invalid model/i.test(message)
-  );
-}
-
 // Modern image models (gpt-image-2 and similar) reject prompts longer than
 // this many characters with a 400 "string too long" error. We keep a small
 // safety margin under the documented 32000 ceiling.
@@ -250,47 +233,22 @@ function enforcePromptLength(prompt: string, maxLen = MODEL_PROMPT_MAX_CHARS) {
 }
 
 
-function compactPromptForDalle2(prompt: string, maxLen = 1000) {
-  const normalized = String(prompt || "").replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLen) return normalized;
-  // Keep a small suffix from the original prompt where hard locks are often appended.
-  const suffixLen = Math.min(320, Math.max(120, Math.floor(maxLen * 0.32)));
-  const prefixLen = maxLen - suffixLen - 3;
-  const prefix = normalized.slice(0, Math.max(0, prefixLen)).trim();
-  const suffix = normalized.slice(Math.max(0, normalized.length - suffixLen)).trim();
-  const merged = `${prefix}...${suffix}`;
-  return merged.length <= maxLen ? merged : merged.slice(0, maxLen);
-}
-
-// Always-on server ceiling: no nudity, and the exact max exposure the brand
-// allows. Appended to every generation regardless of item type.
-function buildNudityCeilingLock() {
-  // Minimal, always-on brand-safety line. Swimwear vs non-swimwear coverage
-  // specifics are added conditionally in serverLockBlock, so this stays free of
-  // terms that would raise the prompt's moderation score on normal apparel.
-  return "BRAND SAFETY (SERVER): professional fashion ecommerce catalog; adult model 25+; keep the model appropriately dressed with storefront-safe, non-suggestive styling.";
-}
-
-function buildNonSwimwearCoverageLock(itemType: string) {
+/**
+ * Brand safety, once. The only place the prompt says "adult, 25+" and the only
+ * place it says what coverage means for this item type. It used to be said in
+ * eleven places across client and server, in eleven wordings.
+ */
+function buildBrandSafetyLock(itemType: string) {
+  const swim = isSwimwearItemType(itemType);
   const category = inferItemTypeCategory(itemType);
-  const lines: string[] = [
-    "NON-SWIMWEAR COVERAGE LOCK (SERVER):",
-    "- This request is non-swimwear ecommerce apparel.",
-    "- Never render revealing/underwear-like or shirtless styling unless explicitly present in both model and item refs.",
-    "- Keep styling strictly product-catalog neutral and fully clothed.",
-    "- Preserve non-target outfit parts from references unless item refs explicitly replace them.",
-  ];
-  if (category === "bottom") {
-    lines.push(
-      "- Locked item type is BOTTOM (e.g., jeans/pants/shorts): keep a normal opaque top on the model; shirtless torso is forbidden."
-    );
-  }
-  if (category === "top") {
-    lines.push(
-      "- Locked item type is TOP: keep appropriate bottoms on the model from refs; no underwear-style substitution."
-    );
-  }
-  return lines.join("\n");
+  const coverage = swim
+    ? "This item is swimwear: standard commercial swimwear coverage only (a regular bikini or one-piece for women, swim shorts / trunks for men), neutral posture, mainstream retail catalog presentation."
+    : category === "bottom"
+      ? "The model is fully clothed in normal opaque garments — a normal opaque top stays on; no shirtless torso, no underwear-style styling."
+      : category === "top"
+        ? "The model is fully clothed in normal opaque garments — appropriate bottoms from the references stay on; no underwear-style substitution."
+        : "The model is fully clothed in normal opaque garments; no shirtless or underwear-style styling.";
+  return `BRAND SAFETY: professional fashion ecommerce catalog; the model is an adult, 25 or older; storefront-safe, non-suggestive composition and neutral camera angle. ${coverage}`;
 }
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -347,7 +305,9 @@ function isBackFacingPose(gender: string, pose: number | null) {
 function inferItemTypeCategory(itemTypeValue: string) {
   const t = String(itemTypeValue || "").trim().toLowerCase();
   if (!t) return "item";
-  const has = (...keywords: string[]) => keywords.some((kw) => t.includes(kw));
+  // Word-start matches (mirrors lib/panelGeneration.ts): plain substrings made
+  // "sunset tee" a full look and "overshirt" a top.
+  const has = (...keywords: string[]) => keywords.some((kw) => new RegExp(`\\b${kw}`).test(t));
   if (
     has(
       "full look",
@@ -517,79 +477,100 @@ function normalizePanelQa(value: any): PanelQaInput {
  */
 function itemTypeFocusLine(itemType: string): string {
   const t = (itemType || "").toLowerCase();
-  const has = (...words: string[]) => words.some((w) => t.includes(w));
+  // Word-start matches, most specific category first. Substring matching in
+  // bottoms-first order sent "swim shorts" and "short sleeve shirt" down the
+  // jeans branch (both contain "short"), so a tee was told to keep its
+  // whiskering and front rise.
+  const has = (...words: string[]) => words.some((w) => new RegExp(`\\b${w}`, "i").test(t));
 
   let details: string;
-  if (has("jean", "denim", "pant", "trouser", "chino", "cargo", "short")) {
+  if (has("swim", "bikini", "trunk", "boardshort")) {
     details =
-      "waistband height and closure (button/zip/rivets), belt loops, front rise, pocket shape and placement (front, coin, back), yoke and back-pocket stitching, wash and fade map, whiskering, distressing and rips exactly where the references show them, leg shape and opening, hem finish and length";
-  } else if (has("jacket", "coat", "blazer", "hoodie", "sweatshirt", "outerwear")) {
+      "cut and coverage, strap or waistband construction, seams and binding, ties or clasps, and any logo at its exact size and position";
+  } else if (has("shoe", "sneaker", "boots?\\b", "sandal", "loafer", "heel", "flip.?flop")) {
+    details = "silhouette, upper panels and stitching, laces and eyelets, sole profile and colour blocking, logo placement";
+  } else if (has("bag", "belt", "hat", "caps?\\b", "accessor", "scarf", "sock")) {
+    details = "shape and proportions, hardware, straps or closures, stitching, material grain, logo placement";
+  } else if (has("jacket", "coat", "blazer", "hoodie", "sweatshirt", "outerwear", "puffer", "overshirt", "windbreaker")) {
     details =
-      "collar or hood shape, closure (zip teeth/buttons/snaps), shoulder seams and fit, sleeve length and cuff finish, pocket type and placement, hem and drawcords, lining or trims where visible";
-  } else if (has("tee", "t-shirt", "shirt", "top", "tank", "blouse", "polo", "sweater", "knit")) {
-    details =
-      "neckline shape and rib, shoulder seam placement and drop, sleeve length and cuff, body width and length, hem finish, and any print, text or graphic at its exact size, position and print effect";
+      "collar or hood shape, closure (zip teeth/buttons/snaps), shoulder seams and fit, sleeve length and cuff finish, pocket type and placement, hem and drawcords, lining or trims where visible, and any print, text or graphic (chest, back, sleeve) at its exact size, position and print effect";
   } else if (has("dress", "skirt", "jumpsuit", "romper")) {
     details =
       "neckline and strap construction, waist seam and shaping, closure, length and hem, pleats/gathers/slits, and any print or text at its exact size and position";
-  } else if (has("swim", "bikini", "trunk")) {
+  } else if (has("tee", "t-shirt", "tshirt", "shirt", "top", "tank", "blouse", "polo", "sweater", "knit", "crewneck", "jersey")) {
     details =
-      "cut and coverage, strap or waistband construction, seams and binding, ties or clasps, and any logo at its exact size and position";
-  } else if (has("shoe", "sneaker", "boot", "sandal")) {
-    details = "silhouette, upper panels and stitching, laces and eyelets, sole profile and colour blocking, logo placement";
-  } else if (has("bag", "belt", "hat", "cap", "accessor")) {
-    details = "shape and proportions, hardware, straps or closures, stitching, material grain, logo placement";
+      "neckline shape and rib, shoulder seam placement and drop, sleeve length and cuff, body width and length, hem finish, and any print, text or graphic at its exact size, position and print effect";
+  } else if (has("jean", "denim", "pant", "trouser", "chino", "cargo", "shorts", "jogger", "legging", "sweatpant")) {
+    details =
+      "waistband height and closure (button/zip/rivets), belt loops, front rise, pocket shape and placement (front, coin, back), yoke and back-pocket stitching, wash and fade map, whiskering, distressing and rips exactly where the references show them, leg shape and opening, hem finish and length";
   } else {
     details =
       "seams, closures, pockets, hardware, trims, material and texture, and any print, text or logo at its exact size and position";
   }
 
   return (
-    `- ITEM TYPE FOCUS — this shoot exists to sell the "${itemType || "apparel item"}". ` +
+    `ITEM FOCUS — this shoot exists to sell the "${itemType || "apparel item"}". ` +
     `It is the subject of every frame: keep it unobstructed, well lit, and rendered so a buyer can inspect it. ` +
     `Its construction is the priority — ${details}. ` +
     `Other pieces in the look stay exactly as the references show them, but they are context; never let styling, a pose, or another garment hide, crop or soften the ${itemType || "item"}.`
   );
 }
 
-function buildServerIdentityLockPrompt(panelQa: PanelQaInput) {
-  const modelName = panelQa.modelName || "locked model";
+/** The garment's back, resolved for this run — see lib/studio-item-spec.ts.
+ *  `photo`: a Back photo is attached but the analysis never described it (it
+ *  failed to load there, or the spec predates the BACK line) — the photo is
+ *  the authority, not a guess either way. */
+type BackState = "present" | "absent" | "unknown" | "photo";
+
+/** "RIGHT Pose 4" / "LEFT Pose 7 and RIGHT Pose 2" — the back-facing frames of
+ *  THIS panel, by side, so the back rule can never be read as "turn a
+ *  front-facing pose around". */
+function backFacingFramesLabel(panelQa: PanelQaInput): string {
+  const parts: string[] = [];
+  if (isBackFacingPose(panelQa.modelGender, panelQa.poseA)) parts.push(`LEFT Pose ${panelQa.poseA}`);
+  if (isBackFacingPose(panelQa.modelGender, panelQa.poseB)) parts.push(`RIGHT Pose ${panelQa.poseB}`);
+  return parts.join(" and ");
+}
+
+/**
+ * Everything the server states exactly once, ahead of the view map and spec:
+ * who the person is (by attached image index, not by description), the
+ * background, and which details of this item type decide the shot.
+ */
+function buildServerLockPrompt(panelQa: PanelQaInput, modelCount: number) {
+  const modelName = panelQa.modelName || "the locked model";
   const modelGender = panelQa.modelGender || "model";
   const lockedItemType = panelQa.itemType || "apparel item";
-  const backLockActive =
-    isBackFacingPose(panelQa.modelGender, panelQa.poseA) ||
-    isBackFacingPose(panelQa.modelGender, panelQa.poseB);
+  const modelRange = modelCount === 1 ? "image 1" : `images 1–${modelCount}`;
   return [
-    "SERVER-ENFORCED IDENTITY LOCK (NON-NEGOTIABLE):",
-    `- Use ONLY MODEL reference images for person identity (${modelName}, ${modelGender}).`,
-    "- Keep the same exact facial geometry from model refs: eye shape/spacing, nose bridge/tip, lip contour, jawline, cheek structure, brow shape, and hairline.",
-    "- Keep the same exact skin tone and undertone from model refs.",
-    "- Never lighten, darken, recolor, tan, bleach, or stylize skin tone away from model refs.",
-    "- Never blend identity traits from item-reference humans or any unrelated person.",
-    "- If identity fidelity conflicts with style, prioritize identity fidelity.",
-    "SERVER-ENFORCED BACKGROUND LOCK (NON-NEGOTIABLE):",
-    "- Use seamless pure white studio background only (#FFFFFF).",
-    "- No pink tint, warm tint, cream cast, gray cast, gradient, vignette, texture, or wrinkles.",
-    "- Keep the exact same white background tone and lighting across all generated panels.",
-    "- Keep only a very faint neutral contact shadow on floor; no colored bounce light.",
-    "SERVER-ENFORCED ITEM FIDELITY LOCK (NON-NEGOTIABLE):",
-    `- Locked item type from section 0.5: "${lockedItemType}".`,
+    `IDENTITY: the person in every frame is ${modelName} (${modelGender}) — exactly the person in attached ${modelRange}, the MODEL references: same face geometry (eye shape and spacing, nose, lips, jawline, cheeks, brows), same skin tone and undertone (never lightened, darkened or tanned), same hair colour, length, texture and style, same age and body proportions — in both frames and in every panel of this run. If identity and styling conflict, identity wins.`,
+    "BACKGROUND: seamless pure white studio (#FFFFFF), high-key even light, only a very faint neutral contact shadow on the floor — no tint, cast, gradient, vignette, texture, wrinkle or horizon; the same white and the same light in every panel.",
     itemTypeFocusLine(lockedItemType),
-    "- If item refs include a full look, preserve the total outfit structure (top, bottom, footwear, accessories) from that full look.",
-    "- If both full-look and isolated item refs are provided, use isolated refs only to refine the locked item details while keeping non-target full-look pieces unchanged.",
-    "- Garment design must match item-reference photos exactly.",
-    "- Never invent, replace, remove, recolor, or restyle logos/graphics/prints/embroidery/patches.",
-    "- If an item ref shows a back graphic/print, preserve that exact back design (position, scale, colors, and style).",
-    "- If refs do not show a clear back graphic, keep back surface solid/clean in item color only.",
-    "- GLOBAL BACK-DESIGN HARD LOCK (ALL GENDERS, ALL PANELS, ALL POSES): never invent or redesign back graphics.",
-    ...(backLockActive
-      ? [
-          "BACK-VIEW STRICT LOCK ACTIVE:",
-          "- At least one active pose is back-facing in this panel.",
-          "- Back-facing frame must reflect the exact back design from refs; no substitutions.",
-        ]
-      : []),
   ].join("\n");
+}
+
+/** The back rule for this panel, from the verified state — one line, or none. */
+function buildBackStateLine(backState: BackState, panelQa: PanelQaInput): string[] {
+  const frames = backFacingFramesLabel(panelQa);
+  if (!frames) return [];
+  if (backState === "present") {
+    return [
+      `- BACK DESIGN (verified on the product): the back carries the design listed above. ${frames} shows it in full — same artwork, size, position, colours and print effect. A clean back, a shrunken version, or one moved up to the neck is WRONG. Every other pose keeps its own facing and shows only the front.`,
+    ];
+  }
+  if (backState === "absent") {
+    return [
+      `- BACK IS PLAIN (verified): the back carries no print, text, graphic, logo or patch. ${frames} shows a plain back in the item's own colour, fabric and construction — add nothing.`,
+    ];
+  }
+  if (backState === "photo") {
+    return [
+      `- BACK FROM PHOTO: the BACK reference image(s) show this item's back. ${frames} reproduces exactly what they show — every print, text, graphic, logo, patch, seam and pocket at the same size and position, and nothing they do not show.`,
+    ];
+  }
+  return [
+    `- BACK NOT PHOTOGRAPHED: no reference shows this item's back. ${frames} must add nothing — no print, graphic, text or logo — and keep the back plain in the item's own colour and construction.`,
+  ];
 }
 
 function extractOpenAiOutputText(result: any) {
@@ -729,22 +710,53 @@ const QA_MIN_CONFIDENCE = 0.75;
 const normalizeForCompare = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
 
 /**
+ * A "reason" that is actually a confirmation ("text matches the reference",
+ * "logo present and correctly placed"). The judge lists these under reasons
+ * when asked for structured output, and each one used to be shown to the
+ * operator as a red failure. A line that also names a defect is not one.
+ */
+function looksLikeConfirmation(detail: string, observed: string): boolean {
+  const t = `${detail} ${observed}`.toLowerCase();
+  if (!t.trim()) return false;
+  // Open-ended stems (differ|ent|s, invent|ed, relocat|ed …) and the contrast
+  // words that introduce a defect after a compliment ("logo is correct, BUT…").
+  // A first version anchored whole words and dropped 11 of 12 real defects.
+  const defect =
+    /\b(?:missing|absent|not (?:present|visible|shown|rendered|match\w*)|wrong|differ\w*|mismatch\w*|misspel\w*|garbled|merged|invent\w*|extra|added|moved|relocat\w*|resiz\w*|shrunk|shrink\w*|swap\w*|chang\w*|alter\w*|redesign\w*|simplif\w*|recolou?r\w*|duplicat\w*|omit\w*|lack\w*|remov\w*|barefoot|full standing|older|younger|incorrect\w*|instead of|should be|does not|doesn't|isn't|is not|are not|aren't|however|although|except|whereas|but\b)|;/;
+  if (defect.test(t)) return false;
+  return /\b(?:matches|match(?:ing|ed)?|correct(?:ly)?|consistent|as expected|identical|same as|accurate|present and|confirmed|no (?:issue|mismatch|difference|problem)|looks (?:right|good|fine)|preserved|intact|faithful)\b/.test(
+    t
+  );
+}
+
+/**
  * Structured judge verdicts → operator-facing reasons. The judge has produced
  * "misspelled as '<the expected string>'" and "full standing body" on an
  * upper-body crop, so each reason carries expected/observed/confidence and:
  * - expected == observed (after normalisation) is a self-contradiction → dropped;
- * - confidence < QA_MIN_CONFIDENCE → demoted to a note;
+ * - a confirmation phrased as a reason → dropped;
+ * - confidence missing or < QA_MIN_CONFIDENCE → demoted to a note (a reason
+ *   with no confidence is the judge not committing, not the judge being sure);
  * - the frame lets the Studio flag only the crop that is actually wrong.
  * Legacy string reasons are kept as-is on both frames.
  */
-function parseQaReasons(value: unknown): { kept: QaReason[]; demoted: string[] } {
+function parseQaReasons(value: unknown): { kept: QaReason[]; demoted: string[]; dropped: number } {
   const kept: QaReason[] = [];
   const demoted: string[] = [];
-  if (!Array.isArray(value)) return { kept, demoted };
-  for (const v of value.slice(0, 10)) {
+  let dropped = 0;
+  if (!Array.isArray(value)) return { kept, demoted, dropped };
+  for (const v of value.slice(0, 12)) {
     if (typeof v === "string") {
       const t = v.trim();
-      if (t) kept.push({ frame: "both", text: t });
+      if (!t) continue;
+      if (looksLikeConfirmation(t, "")) {
+        // Never silently discard what the judge attached to a verdict: a
+        // "confirmation" still reaches the operator, as a note.
+        demoted.push(`${t} (reads as a confirmation)`);
+        dropped += 1;
+        continue;
+      }
+      kept.push({ frame: "both", text: t });
       continue;
     }
     if (!v || typeof v !== "object") continue;
@@ -759,14 +771,22 @@ function parseQaReasons(value: unknown): { kept: QaReason[]; demoted: string[] }
     const body = detail || (expected || observed ? `expected "${expected}", saw "${observed}"` : "");
     const text = [cls ? `${cls}:` : "", body].filter(Boolean).join(" ").trim().slice(0, 240);
     if (!text) continue;
-    if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) continue;
-    if (Number.isFinite(confidence) && confidence < QA_MIN_CONFIDENCE) {
-      demoted.push(`${text} (low confidence)`);
+    if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) {
+      dropped += 1;
+      continue;
+    }
+    if (looksLikeConfirmation(detail, observed)) {
+      demoted.push(`${text} (reads as a confirmation)`);
+      dropped += 1;
+      continue;
+    }
+    if (!Number.isFinite(confidence) || confidence < QA_MIN_CONFIDENCE) {
+      demoted.push(`${text} (${Number.isFinite(confidence) ? "low" : "no"} confidence)`);
       continue;
     }
     kept.push({ frame, text });
   }
-  return { kept: kept.slice(0, 8), demoted: demoted.slice(0, 6) };
+  return { kept: kept.slice(0, 8), demoted: demoted.slice(0, 6), dropped };
 }
 
 async function runPanelComplianceCheck(args: {
@@ -780,7 +800,7 @@ async function runPanelComplianceCheck(args: {
   /** Verified item spec (pre-generation analysis) so the judge can check text
    *  letter by letter and graphic placement side by side. */
   itemSpec?: string;
-  specHasBackDesign?: boolean;
+  backState: BackState;
   timeoutMs: number;
 }) {
   // gpt-4o (not -mini): the verdict is now shown to the operator per crop, so
@@ -832,9 +852,14 @@ async function runPanelComplianceCheck(args: {
           : []),
         ...(hasBackFacingActivePose
           ? [
-              "- Back-view strict lock active for this panel.",
-              "- Any back-facing frame must keep the exact back design from item refs (no invented/changed back graphics).",
-              "- If item refs do not clearly show a back design, any added back graphic should fail.",
+              "- Back-view lock active for this panel: the back-facing frame must show exactly the back the item refs / spec establish.",
+              args.backState === "present"
+                ? "- The spec lists a design on the BACK. The back-facing frame must show it in full; a clean back, or a shrunken / relocated version, is a FAIL."
+                : args.backState === "absent"
+                  ? "- The back is verified PLAIN. Any print, text, graphic, logo or patch on the back-facing frame is a FAIL."
+                  : args.backState === "photo"
+                    ? "- The BACK reference image(s) show the back. Compare the back-facing frame with them: anything they show that is missing, changed or moved, or anything added that they do not show, is a FAIL."
+                    : "- The back was not photographed. Any print, text, graphic, logo or patch on the back-facing frame is a FAIL.",
             ]
           : []),
         ...(legsCropActive
@@ -842,11 +867,6 @@ async function runPanelComplianceCheck(args: {
               upperBodyItem
                 ? `- Crop lock: Pose ${legsCropPose} is an UPPER-BODY product crop of the top (neckline to hem, head out of frame). A legs/shorts crop or a full standing body in that frame is a FAIL.`
                 : `- Crop lock: Pose ${legsCropPose} is a LEGS-ONLY crop (waist to feet). A full standing body in that frame is a FAIL.`,
-            ]
-          : []),
-        ...(args.specHasBackDesign
-          ? [
-              "- Back design: the verified spec lists a design on the BACK of the item. Any back-facing frame must show it in full; a clean back, or a shrunken / relocated version, is a FAIL.",
             ]
           : []),
         "- Identity: the person must be the same individual as the MODEL refs.",
@@ -864,7 +884,7 @@ async function runPanelComplianceCheck(args: {
         ]
       : []),
     { type: "input_text", text: "MODEL reference images (identity lock):" },
-    ...args.modelRefs.slice(0, 4).map((url) => ({ type: "input_image", image_url: url })),
+    ...args.modelRefs.slice(0, 6).map((url) => ({ type: "input_image", image_url: url })),
     ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
     { type: "input_text", text: "Generated panel to audit:" },
     { type: "input_image", image_url: `data:image/png;base64,${args.imageBase64}` },
@@ -877,8 +897,8 @@ async function runPanelComplianceCheck(args: {
         '  "reasons": [ { "frame": "left" | "right" | "both", "class": "PRODUCT" | "POSE" | "IDENTITY" | "COVERAGE", "expected": string, "observed": string, "detail": string, "confidence": number 0-1 } ],',
         '  "notes": string[]',
         "}",
-        "Set pass=false ONLY for the four failure classes below. Each reason names the frame it applies to, what was expected (from the refs / spec / pose lock), what you actually observe, and your confidence (anything under 0.75 is treated as a note, not a failure).",
-        "SCALE RULE: in a FULL-BODY frame small text (taglines, chest / back small lines) is only a few pixels tall — do NOT judge its spelling, legibility, or print effect there, and do not fail for it being faint; judge small text only in torso-crop and close-up frames. Large graphics in full-body frames are judged for presence, side and rough placement only.",
+        "Set pass=false ONLY for the four failure classes below. List ONLY defects under \"reasons\" — never confirmations (\"text matches\", \"logo correct\"); those go in \"notes\" or nowhere. Each reason names the frame it applies to, what was expected (from the refs / spec / pose lock), what you actually observe, and your confidence (anything under 0.75, or a missing confidence, is treated as a note, not a failure).",
+        "SCALE RULE: in a FULL-BODY frame small text (taglines, chest / back small lines) is only a few pixels tall — do NOT judge its spelling, legibility, or print effect there, and do not fail for it being faint; judge small text only in torso-crop and close-up frames. Large graphics, logos and prints are judged in EVERY frame by comparing them with the item reference photos: same artwork, same size relative to the garment, same position, same colours. A redesigned, simplified, resized, relocated or recoloured graphic is a PRODUCT failure even in a full-body frame.",
         "MISSPELLING RULE: before reporting a misspelling, transcribe the letters you actually see into \"observed\". If they equal \"expected\", it is NOT a failure — omit it.",
         "CROP RULE: an upper-body crop shows the garment from neckline to hem with the head cut off; a torso crop shows mid-thigh to head; a legs crop shows waist to feet. \"Full standing body\" means the head AND both feet are visible in that frame — report it only when both are.",
         "1. PRODUCT: any text is misspelled, garbled, merged, missing, duplicated, or on the wrong side/placement versus the item refs / spec; a logo or graphic is missing, invented, moved, resized, or its print effect changed; the garment colour, fit/silhouette, or construction clearly differs from the refs; a back-facing frame lacks the back design the refs / spec show, or shows a back design the refs do not.",
@@ -902,7 +922,9 @@ async function runPanelComplianceCheck(args: {
         args.openai.responses.create({
           model: qaModel,
           temperature: 0,
-          max_output_tokens: 420,
+          // 420 truncated the JSON on any verdict with more than two reasons;
+          // the unparsable remainder then became a fail-open pass.
+          max_output_tokens: 1400,
           input: [
             {
               role: "system",
@@ -963,10 +985,10 @@ async function runPanelComplianceCheck(args: {
       raw,
     };
   }
-  const { kept, demoted } = parseQaReasons(parsed.reasons);
+  const { kept, demoted, dropped } = parseQaReasons(parsed.reasons);
   // A judge "fail" whose every reason was filtered out (self-contradiction /
-  // low confidence) is a pass; a judge "pass" that still lists reasons keeps
-  // them as notes only.
+  // confirmation / low confidence) is a pass; a judge "pass" that still lists
+  // reasons keeps them as notes only.
   const failing = passFlag === false ? kept : [];
   const notes = [
     ...normalizeReasons(parsed.notes),
@@ -978,6 +1000,8 @@ async function runPanelComplianceCheck(args: {
     decisive: true,
     pass,
     unavailable: false,
+    judgeSaidPass: passFlag,
+    droppedReasons: dropped,
     reasons: pass ? [] : failing.map((r) => r.text),
     reasonsBySide: {
       left: failing.filter((r) => r.frame !== "right").map((r) => r.text),
@@ -1064,6 +1088,8 @@ export async function POST(req: NextRequest) {
 async function handleGenerate(req: NextRequest): Promise<Response> {
   // Wall clock for the generation log — OpenAI render time dominates it.
   const startedAt = Date.now();
+  // Set once the request is parsed, so the outer catch can log what was asked for.
+  let logCtx: (() => Omit<StudioGenerationLog, "outcome">) | null = null;
   try {
     // WMS auth: authenticated admin session (replaces carbon-gen cookie auth).
     const session = await getSessionFromRequest(req);
@@ -1073,68 +1099,112 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const denied = await requireSessionScopes(authPool, session, [SCOPES.ADMIN]);
     if (denied) return denied;
 
-    const key = getClientKey(req);
-    const rate: any = await checkGenerateRateLimit(key);
-    if (!rate.success) {
-      if (rate.error) {
-        return NextResponse.json({ error: rate.error }, { status: 500 });
-      }
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        {
-          status: 429,
-          headers:
-            typeof rate.reset === "number"
-              ? { "RateLimit-Reset": String(rate.reset) }
-              : undefined,
-        }
-      );
-    }
-
-    const { prompt, size, modelRefs, itemRefs, itemRefViews, panelQa, variationStrength, variationSeed, itemSpec } =
-      await req.json();
+    const {
+      prompt,
+      size,
+      modelRefs,
+      itemRefs,
+      itemRefViews,
+      panelQa,
+      variationStrength,
+      variationSeed,
+      itemSpec,
+      matrixId,
+      backIsPlain,
+      specConfirmed,
+    } = await req.json();
     // Item refs sorted by view (Studio: General / Front / Back sections). The
     // image order sent to OpenAI is general → front → back so the prompt can
     // say which attached images are the front and which are the back.
     const viewLists = parseItemRefViews(itemRefViews, itemRefs);
-    // Pre-generation item analysis (client → /api/openai/item-spec). Appended
-    // INSIDE the server lock block so prompt trimming can never drop it, and
-    // capped so it can never push the prompt over the model limit.
-    const itemSpecText =
+    // Pre-generation item analysis (client → /api/openai/item-spec, possibly
+    // edited by the operator). Appended INSIDE the server lock block and capped
+    // so it can never push the prompt over the model limit.
+    const itemSpecRaw =
       typeof itemSpec === "string" && itemSpec.trim()
-        ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), 2600)
+        ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), LOCK_TEXT_MAX_BYTES + 100)
         : "";
     /* The back of a garment has THREE states, not two, and collapsing them is
        how you get both failure modes at once: an invented back print, and a
        real one dropped.
-         present  — the spec names a design whose placement is the back.
-         absent   — the spec explicitly observed the back and it is plain.
-         unknown  — nothing in the spec describes the back at all, because it
-                    was never photographed. "No evidence" is NOT "no design".
-       Previously only `present` existed; everything else silently became
-       "keep the back clean", which is a claim about the product that nobody
-       verified. */
-    const specHasBackDesign = /^(?:TEXT|LOGO\/ICON|GRAPHIC\/PRINT)[^\n]*\bback\b/im.test(itemSpecText);
-    /* An explicit observation that the back carries nothing — the analyzer
-       writes these as NOT CLEARLY VISIBLE / plain / clean lines naming the back. */
-    const specSaysBackIsPlain =
-      /\bback\b[^\n]*\b(plain|clean|blank|no (?:print|graphic|design|text))\b/im.test(itemSpecText) ||
-      /\b(plain|clean|blank)\b[^\n]*\bback\b/im.test(itemSpecText);
-    /* Unknown: we have a spec, but it says nothing either way about the back. */
-    const specBackUnknown = Boolean(itemSpecText) && !specHasBackDesign && !specSaysBackIsPlain;
+         present — a reference shows a design on the back (the spec's BACK line
+                   says so, or a TEXT / LOGO / GRAPHIC line is placed there).
+         absent  — the back was seen and is plain: the spec's BACK line says
+                   plain, the operator ticked "the back is plain" after
+                   checking the real garment, or a photo was sorted into the
+                   Back section and the spec found nothing on it.
+         unknown — nothing shows the back. "No evidence" is NOT "no design".
+       Until 2026-09-29 the "present" detector never fired (it anchored on an
+       unnumbered line the spec never produces), so every run was told to
+       keep the back clean — including runs whose references showed a back
+       print. */
+    const specBack = parseSpecBackState(itemSpecRaw);
+    const backPhotographed = viewLists.back.length > 0;
+    const backState: BackState =
+      specBack === "design" || specListsBackDesign(itemSpecRaw)
+        ? "present"
+        : specBack === "plain" || backIsPlain === true
+          ? "absent"
+          : backPhotographed
+            ? "photo" // attached, but the analysis never described it — the photo rules, not a guess
+            : "unknown";
+    /* The spec's own BACK line is replaced with the resolved state, so the
+       prompt (and the judge) can never carry "not photographed" next to "the
+       back carries the design listed above". */
+    const itemSpecText = itemSpecRaw ? withCanonicalBackLine(itemSpecRaw, backState) : "";
     const normalizedPanelQa = normalizePanelQa(panelQa);
-    // Only the CURRENT gender's back-facing poses may be named: listing
-    // "female Pose 2" on a male run turned male Pose 2 into a back view.
-    const backFacingPoseLabel =
-      String(normalizedPanelQa.modelGender || "").trim().toLowerCase() === "female"
-        ? "female Pose 2 only"
-        : "male Pose 4 and Pose 7 only";
+    const backLockActive =
+      isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA) ||
+      isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB);
     // Pose/expression variation: rotate by a per-generation seed so consecutive
     // shots never collapse to the same default pose/face. Falls back to a
     // time-derived seed when the client doesn't send one (older builders).
     const resolvedVariationSeed = Number.isFinite(Number(variationSeed))
       ? Math.floor(Number(variationSeed))
       : Math.floor(Date.now() / 1000);
+
+    type ImageSize = "1024x1024" | "1536x1024" | "1024x1536";
+    const allowedSizes = new Set<ImageSize>(["1024x1024", "1536x1024", "1024x1536"]);
+    const finalSize =
+      typeof size === "string" && allowedSizes.has(size as ImageSize)
+        ? (size as ImageSize)
+        : ("1536x1024" as ImageSize);
+    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
+    // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
+    // high; env-overridable without a redeploy.
+    const imageQuality = (process.env.OPENAI_IMAGE_QUALITY || "high").trim() || "high";
+    // Content-moderation strictness for gpt-image-* edits ("auto" | "low"). "low"
+    // is less restrictive — legitimate fashion reference photos (skin/swimwear)
+    // otherwise get false-positive "blocked by safety" refusals. Env-overridable.
+    const imageModeration = (process.env.OPENAI_IMAGE_MODERATION || "low").trim() || "low";
+
+    // Every exit from here on is written to studio_generations — failures and
+    // blocks included, which is the only way "how often does it fail, and why"
+    // stops being a guess. (Before, only successes were logged.)
+    const logBase = (): Omit<StudioGenerationLog, "outcome"> => ({
+      tenantId: session?.tid,
+      locationId: session?.lid,
+      matrixId: typeof matrixId === "string" ? matrixId : null,
+      itemType: normalizedPanelQa.itemType,
+      modelName: normalizedPanelQa.modelName,
+      modelGender: normalizedPanelQa.modelGender,
+      panelNumber: normalizedPanelQa.panelNumber,
+      poseA: normalizedPanelQa.poseA,
+      poseB: normalizedPanelQa.poseB,
+      imageModel,
+      imageQuality,
+      imageSize: finalSize,
+      backState,
+      backUnknown: backState === "unknown",
+      specConfirmed: specConfirmed === true,
+      specBytes: promptLen(itemSpecText),
+      durationMs: Date.now() - startedAt,
+    });
+    logCtx = logBase;
+    const logged = <T,>(entry: Partial<StudioGenerationLog> & { outcome: StudioGenerationLog["outcome"] }, response: T): T => {
+      recordStudioGeneration({ ...logBase(), ...entry });
+      return response;
+    };
 
     if (!prompt || typeof prompt !== "string") {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
@@ -1200,76 +1270,63 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         { status: 400 }
       );
     }
-
-    type ImageSize = "1024x1024" | "1536x1024" | "1024x1536";
-    const allowedSizes = new Set<ImageSize>(["1024x1024", "1536x1024", "1024x1536"]);
-    const finalSize =
-      typeof size === "string" && allowedSizes.has(size as ImageSize)
-        ? (size as ImageSize)
-        : ("1536x1024" as ImageSize);
+    /* A back-facing frame of a back nobody has seen is a guess the operator
+       pays for and then has to check against the real garment. Refuse it
+       before any reference is downloaded: add a Back photo, or tick "the back
+       is plain" after looking at the garment. */
+    if (backLockActive && backState === "unknown") {
+      const frames = backFacingFramesLabel(normalizedPanelQa);
+      return logged(
+        { outcome: "blocked", errorCode: "back_unverified" },
+        NextResponse.json(
+          {
+            error: {
+              type: "back_unverified",
+              code: "back_unverified",
+              message: `${frames} shows the BACK of the item, but no reference photo shows the back. Add a photo to the Back section, or tick "The back is plain" after checking the real garment, then generate again.`,
+            },
+          },
+          { status: 400 }
+        )
+      );
+    }
 
     const apiKey = getOpenAiApiKey();
     if (!apiKey) {
-      return fallbackGenerateResponse("OPENAI_API_KEY is not set. Returned local fallback image.");
+      return logged(
+        { outcome: "failed", errorCode: "no_api_key" },
+        fallbackGenerateResponse("OPENAI_API_KEY is not set. Returned local fallback image.")
+      );
     }
 
     const openai = new OpenAI({ apiKey });
     const imageTimeoutMs = getImageTimeoutMs();
-    const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
-    // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
-    // high; env-overridable without a redeploy.
-    const imageQuality = (process.env.OPENAI_IMAGE_QUALITY || "high").trim() || "high";
-    // Content-moderation strictness for gpt-image-* edits ("auto" | "low"). "low"
-    // is less restrictive — legitimate fashion reference photos (skin/swimwear)
-    // otherwise get false-positive "blocked by safety" refusals. Env-overridable.
-    const imageModeration = (process.env.OPENAI_IMAGE_MODERATION || "low").trim() || "low";
-    const swimwearActive = isSwimwearItemType(normalizedPanelQa.itemType);
-    const serverIdentityLockPrompt = buildServerIdentityLockPrompt(normalizedPanelQa);
     const poseVariationDirective = buildPoseVariationDirective({
       modelGender: normalizedPanelQa.modelGender,
       poseA: normalizedPanelQa.poseA,
       poseB: normalizedPanelQa.poseB,
       strength: normalizeStrength(variationStrength),
       seed: resolvedVariationSeed,
+      itemType: normalizedPanelQa.itemType,
     });
     // NOTE: the server lock block is assembled AFTER the reference downloads
-    // below, because its ITEM VIEW MAP must describe the images that actually
-    // reached OpenAI (a failed download shifts every index after it).
-    const buildServerLockBlock = (itemViewMapLines: string[]) => [
-      serverIdentityLockPrompt,
+    // below, because its ITEM VIEW MAP and the identity line must describe the
+    // images that actually reached OpenAI (a failed download shifts every
+    // index after it).
+    const buildServerLockBlock = (modelCount: number, itemViewMapLines: string[]) => [
+      buildServerLockPrompt(normalizedPanelQa, modelCount),
       ...itemViewMapLines,
       ...(itemSpecText
         ? [
-            "VERIFIED ITEM SPEC HARD LOCK (SERVER — pre-generation analysis of the actual item photos; every line was observed on the product and MUST appear exactly as stated in every panel and frame; this overrides any generic styling):",
+            "VERIFIED ITEM SPEC (observed on the actual item photos — every line MUST appear exactly as stated, in every frame and every panel; it overrides any generic styling):",
             itemSpecText,
-            "- Every TEXT line is rendered letter-perfect (same words, spelling, case, letterforms, colour, size, placement). Every TEXT / LOGO / GRAPHIC appears ONLY at its listed placement and side (front vs back vs sleeve): never duplicate a back print onto the front or vice versa, never merge or swap words between placements, never invent extra text.",
-            "- Print EFFECTS are part of the design: a blurred / ghosted / faded / gradient / halftone / cracked print must be rendered with that exact effect, never as a crisp clean version.",
-            "- The FIT / SILHOUETTE line is absolute: an oversized / boxy / drop-shoulder / relaxed fit must read as clearly oversized on the model (dropped shoulder seams, wide body, longer sleeves), never slim or regular; a slim fit must never become loose.",
-            "- HARDWARE / STITCHING / POCKET / MATERIAL lines must match in kind, count, colour, finish and position. Anything listed as NOT CLEARLY VISIBLE stays plain/neutral — never invented.",
-            ...(specHasBackDesign
-              ? [
-                  `- BACK DESIGN PRESENT (verified on the product): the item carries a design on its BACK. Every back-facing frame (${backFacingPoseLabel}) MUST show that back design in full — same size, same position, same print effect. A clean/blank back, a shrunken version, or a version moved up to the neck is WRONG. This does NOT turn any front-facing pose into a back view: all other poses keep their defined facing.`,
-                ]
-              : []),
-            ...(specBackUnknown
-              ? [
-                  `- BACK NOT PHOTOGRAPHED: the reference photos never show this item's back, so its back design is UNKNOWN. Do not invent one — no print, no graphic, no text, no logo that the references do not show. Equally, do not present the back as a verified clean surface: keep it plain in the item's own colour, fabric and construction, with nothing added. Back-facing frames (${backFacingPoseLabel}) must stay strictly to what the references prove.`,
-                ]
-              : []),
-            "- SMALL TEXT LEGIBILITY: small chest / sleeve / neck text keeps its true garment size but must still be spelled letter-perfect in crisp, clean letterforms — even in full-body frames. Never render it as pseudo-letters, scribbles, or a smudge; prefer slightly bolder clean letters over illegible detail.",
+            "- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position. Anything NOT CLEARLY VISIBLE stays plain — never invented.",
+            "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",
+            ...buildBackStateLine(backState, normalizedPanelQa),
           ]
-        : []),
-      buildNudityCeilingLock(),
+        : buildBackStateLine(backState, normalizedPanelQa)),
+      buildBrandSafetyLock(normalizedPanelQa.itemType),
       ...(poseVariationDirective ? [poseVariationDirective] : []),
-      ...(swimwearActive
-        ? [
-            "SWIMWEAR SAFETY LOCK (SERVER):",
-            "Professional ecommerce swimwear catalog image only.",
-            "Adult model (25+), neutral posture, non-suggestive composition.",
-            "Standard commercial swimwear coverage only (regular bikini/one-piece for women; swim trunks for men); keep it consistent with a mainstream retail catalog.",
-            "Focus on garment fit, color, material, and product details.",
-          ]
-        : [buildNonSwimwearCoverageLock(normalizedPanelQa.itemType)]),
     ].join("\n");
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
@@ -1318,17 +1375,21 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         modelAnchorCount: modelAnchors.length,
         itemAnchorCount: itemAnchors.length,
       });
-      return NextResponse.json(
-        {
-          error: "Unable to download required reference images.",
-          details: summary.details,
-          failedIndexes: summary.failedIndexes,
-        },
-        { status: 400 }
+      return logged(
+        { outcome: "failed", errorCode: "ref_download", errorMessage: summary.details, modelRefCount: modelFilesCount, itemRefCount: itemFilesCount },
+        NextResponse.json(
+          {
+            error: "Unable to download required reference images.",
+            details: summary.details,
+            failedIndexes: summary.failedIndexes,
+          },
+          { status: 400 }
+        )
       );
     }
 
     const serverLockBlock = buildServerLockBlock(
+      modelFilesCount,
       buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa })
     );
     const clamped = clampLockedPrompt(prompt, serverLockBlock);
@@ -1351,92 +1412,53 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       );
     }
     if (modelFilesCount < 3) {
-      return NextResponse.json(
-        {
-          error:
-            "Locked model is under-specified after download. At least 3 model references must be successfully readable.",
-        },
-        { status: 400 }
+      return logged(
+        { outcome: "failed", errorCode: "ref_download_model", modelRefCount: modelFilesCount, itemRefCount: itemFilesCount },
+        NextResponse.json(
+          {
+            error:
+              "Locked model is under-specified after download. At least 3 model references must be successfully readable.",
+          },
+          { status: 400 }
+        )
       );
     }
 
     let b64: string | null = null;
-    // Only the configured model — never silently substitute a different (paid)
-    // model. If it can't generate, we surface an error rather than charge for and
-    // return an image the operator didn't ask for.
-    const modelCandidates = [imageModel];
-    async function runImageEditWithFallback(params: {
-      prompt: string;
-      inputFidelity?: "high";
-      timeoutLabel: string;
-    }) {
-      let lastErr: any = null;
-      for (const modelName of modelCandidates) {
-        try {
-          const request: any = {
-            model: modelName,
-            // OpenAI edits for dall-e-2 expects a single file (not an array).
-            image: modelName === "dall-e-2" ? referenceFiles[0] : referenceFiles,
-            prompt:
-              modelName === "dall-e-2"
-                ? compactPromptForDalle2(params.prompt, 1000)
-                : enforcePromptLength(params.prompt),
-            // dall-e-2 supports square edit sizes only.
-            size: modelName === "dall-e-2" ? "1024x1024" : finalSize,
-          };
-          // input_fidelity is supported by gpt-image-1 / gpt-image-1.5 only.
-          // dall-e-2 and gpt-image-2 hard-fail (400) if it's sent, so gate it.
-          const supportsInputFidelity =
-            modelName !== "dall-e-2" && !modelName.startsWith("gpt-image-2");
-          if (params.inputFidelity && supportsInputFidelity) {
-            request.input_fidelity = params.inputFidelity;
-          }
-          // gpt-image-* supports an explicit render quality + moderation level;
-          // dall-e-2 supports neither.
-          if (modelName !== "dall-e-2") {
-            request.quality = imageQuality;
-            request.moderation = imageModeration;
-          }
-          const edited = await withTimeout(
-            openai.images.edit(request),
-            imageTimeoutMs,
-            params.timeoutLabel
-          );
-          return edited;
-        } catch (err: any) {
-          lastErr = err;
-          const canFallbackToDalle2 =
-            modelName !== "dall-e-2" &&
-            modelCandidates.includes("dall-e-2") &&
-            isOpenAiImagesEditModelError(err);
-          if (canFallbackToDalle2) continue;
-          throw err;
-        }
-      }
-      throw lastErr || new Error("OpenAI image generation failed");
-    }
+    const logRefs = { modelRefCount: modelFilesCount, itemRefCount: itemFilesCount, promptBytes: promptLen(lockedPrompt), promptTrimmed: clamped.trimmed };
     try {
-      // IMPORTANT: do NOT set input_fidelity here. On gpt-image edits it forces
-      // faithful reproduction of the faces in ALL input images — including any
-      // person wearing the garment in the ITEM references — which overrides the
-      // prompt's "item refs are product-only" rule and makes the output copy the
-      // wrong person. Identity is held by the prompt's model-ref identity locks.
-      const edited = await runImageEditWithFallback({
-        prompt: lockedPrompt,
-        timeoutLabel: "OpenAI image generation",
-      });
+      // Only the configured model — never silently substitute a different
+      // (paid) model. No input_fidelity: on gpt-image edits it forces faithful
+      // reproduction of the faces in ALL input images — including any person
+      // wearing the garment in the ITEM references — and gpt-image-2 rejects
+      // the parameter outright. Identity is held by the prompt's model-ref line.
+      const edited = await withTimeout(
+        openai.images.edit({
+          model: imageModel,
+          image: referenceFiles,
+          prompt: enforcePromptLength(lockedPrompt),
+          size: finalSize,
+          quality: imageQuality as any,
+          moderation: imageModeration as any,
+        } as any),
+        imageTimeoutMs,
+        "OpenAI image generation"
+      );
       b64 = edited.data?.[0]?.b64_json ?? null;
     } catch (err: any) {
       const code = String(err?.code || "");
       const type = String(err?.type || "");
       const message = String(err?.message || "");
       if (isOpenAiAuthError(err)) {
-        return NextResponse.json(
-          {
-            error:
-              "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
-          },
-          { status: 500 }
+        return logged(
+          { ...logRefs, outcome: "failed", errorCode: "openai_auth", errorMessage: message },
+          NextResponse.json(
+            {
+              error:
+                "OpenAI authentication failed on server. Update OPENAI_API_KEY in production env and redeploy.",
+            },
+            { status: 500 }
+          )
         );
       }
       const looksLikeSexualBlock =
@@ -1449,45 +1471,53 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       // a different model — either would charge OpenAI for an image the operator
       // did not ask for. Return a clear error; nothing was generated.
       if (looksLikeSexualBlock) {
-        return NextResponse.json(
+        return logged(
+          { ...logRefs, outcome: "blocked", errorCode: code || "moderation_blocked", errorMessage: message },
+          NextResponse.json(
+            {
+              error: {
+                type: "policy_refusal",
+                code: code || "moderation_blocked",
+                message:
+                  "Blocked by safety moderation for this reference set — nothing was generated. Adjust the crop / reference mix, or use neutral front/back product shots, and try again.",
+                requestId,
+              },
+            },
+            { status: 403 }
+          )
+        );
+      }
+      return logged(
+        { ...logRefs, outcome: "failed", errorCode: code || type || "unknown", errorMessage: message },
+        NextResponse.json(
           {
             error: {
-              type: "policy_refusal",
-              code: code || "moderation_blocked",
+              type: "generation_failed",
+              code: code || type || "unknown",
               message:
-                "Blocked by safety moderation for this reference set — nothing was generated. Adjust the crop / reference mix, or use neutral front/back product shots, and try again.",
+                (err instanceof Error ? err.message : "OpenAI image generation failed") +
+                " — nothing usable was generated.",
               requestId,
             },
           },
-          { status: 403 }
-        );
-      }
-      return NextResponse.json(
-        {
-          error: {
-            type: "generation_failed",
-            code: code || type || "unknown",
-            message:
-              (err instanceof Error ? err.message : "OpenAI image generation failed") +
-              " — nothing usable was generated.",
-            requestId,
-          },
-        },
-        { status: 502 }
+          { status: 502 }
+        )
       );
     }
 
-
     if (!b64) {
-      return NextResponse.json(
-        {
-          error: {
-            type: "generation_failed",
-            code: "no_image",
-            message: "The provider returned no image. Nothing usable was generated.",
+      return logged(
+        { ...logRefs, outcome: "failed", errorCode: "no_image" },
+        NextResponse.json(
+          {
+            error: {
+              type: "generation_failed",
+              code: "no_image",
+              message: "The provider returned no image. Nothing usable was generated.",
+            },
           },
-        },
-        { status: 502 }
+          { status: 502 }
+        )
       );
     }
 
@@ -1501,8 +1531,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     let qaWarnings: string[] = [];
     let qaWarningsBySide: { left: string[]; right: string[] } | null = null;
     let qaNotes: string[] = [];
+    let qa: any = null;
     if (strictLocksEnabled) {
-      let qa: any;
       try {
         qa = await runPanelComplianceCheck({
           openai,
@@ -1512,7 +1542,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
           panelQa: normalizedPanelQa,
           itemSpec: itemSpecText,
-          specHasBackDesign,
+          backState,
           timeoutMs: imageTimeoutMs,
         });
       } catch (qaErr: any) {
@@ -1544,18 +1574,27 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       if (!qa.decisive && !qaFailOpen) {
         // Strict mode: block when QA could not confidently clear the image.
         const unavailable = qa.unavailable === true;
-        return NextResponse.json(
+        return logged(
           {
-            error: {
-              type: "lock_violation",
-              code: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
-              message: unavailable
-                ? "Generated output was blocked because lock QA was unavailable. Please retry this panel."
-                : "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
-              reasons: qa.reasons,
-            },
+            ...logRefs,
+            outcome: "blocked",
+            errorCode: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
+            qaDecisive: false,
+            qaReasons: qa.reasons,
           },
-          { status: unavailable ? 503 : 422 }
+          NextResponse.json(
+            {
+              error: {
+                type: "lock_violation",
+                code: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
+                message: unavailable
+                  ? "Generated output was blocked because lock QA was unavailable. Please retry this panel."
+                  : "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
+                reasons: qa.reasons,
+              },
+            },
+            { status: unavailable ? 503 : 422 }
+          )
         );
       }
       if (!qa.decisive) {
@@ -1565,41 +1604,42 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         );
       }
     }
-    recordStudioGeneration({
-      tenantId: session?.tid,
-      locationId: session?.lid,
-      itemType: normalizedPanelQa.itemType,
-      modelName: normalizedPanelQa.modelName,
-      modelGender: normalizedPanelQa.modelGender,
-      panelNumber: normalizedPanelQa.panelNumber,
-      poseA: normalizedPanelQa.poseA,
-      poseB: normalizedPanelQa.poseB,
-      imageModel,
-      imageQuality,
-      imageSize: finalSize,
-      modelRefCount: modelFilesCount,
-      itemRefCount: itemFilesCount,
-      promptBytes: promptLen(lockedPrompt),
-      promptTrimmed: clamped.trimmed,
-      outcome: "ok",
-      durationMs: Date.now() - startedAt,
-      qaWarnings: qaWarnings.length,
-      backUnknown: specBackUnknown,
-    });
-    return NextResponse.json({
-      imageBase64: b64,
-      ...(qaWarnings.length ? { qaWarnings } : {}),
-      ...(qaWarnings.length && qaWarningsBySide ? { qaWarningsBySide } : {}),
-      ...(qaNotes.length ? { qaNotes } : {}),
-      // Rides back with the image so a trimmed prompt is visible in the
-      // Studio instead of only in a server log.
-      ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
-      // The back was never photographed, so any back-facing frame here is the
-      // model's guess constrained to "add nothing" — not a verified back.
-      ...(specBackUnknown ? { backUnknown: true } : {}),
-    });
+    return logged(
+      {
+        ...logRefs,
+        outcome: "ok",
+        qaDecisive: qa ? qa.decisive === true : null,
+        // The judge's own verdict, before our filters: a "fail" whose reasons
+        // were all confirmations is logged as pass=false/warnings=0 so the
+        // filter's effect stays visible.
+        qaPass: qa?.decisive ? qa.judgeSaidPass === true : null,
+        qaWarnings: qaWarnings.length,
+        qaReasons: qa?.decisive ? qaWarnings : Array.isArray(qa?.reasons) ? qa.reasons.map(String) : [],
+        qaNotes,
+        qaDropped: qa?.droppedReasons ?? 0,
+      },
+      NextResponse.json({
+        imageBase64: b64,
+        ...(qaWarnings.length ? { qaWarnings } : {}),
+        ...(qaWarnings.length && qaWarningsBySide ? { qaWarningsBySide } : {}),
+        ...(qaNotes.length ? { qaNotes } : {}),
+        // Rides back with the image so a trimmed prompt is visible in the
+        // Studio instead of only in a server log.
+        ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
+        backState,
+      })
+    );
   } catch (err: unknown) {
     console.error("Generate failed:", err);
+    const reason = err instanceof Error ? err.message : "Generate failed";
+    if (logCtx) {
+      recordStudioGeneration({
+        ...logCtx(),
+        outcome: "failed",
+        errorCode: isOpenAiAuthError(err) ? "openai_auth" : "exception",
+        errorMessage: reason,
+      });
+    }
     if (isOpenAiAuthError(err)) {
       return NextResponse.json(
         {
@@ -1609,7 +1649,6 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         { status: 500 }
       );
     }
-    const reason = err instanceof Error ? err.message : "Generate failed";
     return fallbackGenerateResponse(reason);
   }
 }

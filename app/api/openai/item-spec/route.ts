@@ -30,8 +30,13 @@ import {
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
+import { LOCK_TEXT_MAX_BYTES, LOCK_TEXT_MAX_LINES, classifyBackView } from "@/lib/studio-item-spec";
 
-const MAX_REFS = 6;
+/* Every photo the operator sorted is analysed. The old cap of 6 silently dropped
+   the tail of the list — which, with the general → front → back order, was the
+   BACK photos: the spec then said nothing about the back, and the generator
+   invented one. Twelve high-detail images is ~13k input tokens on gpt-4o. */
+const MAX_REFS = 12;
 const TIMEOUT_MS = 90_000;
 
 function text(v: unknown) {
@@ -94,7 +99,12 @@ function applied(g: { technique?: string; finish?: string }): string {
   return parts.length ? ` — applied as ${parts.join(", ")}` : "";
 }
 
-/** Deterministic, prompt-ready numbered lock list built from the JSON spec. */
+/** Deterministic, prompt-ready numbered lock list built from the JSON spec.
+ *
+ *  Order matters because the list is byte-capped from the END: the lines
+ *  that keep the generator from redesigning the garment — what it is, its
+ *  FIT, what the BACK shows, and what must NOT be invented — come first, so
+ *  a long hardware inventory can never push them off. */
 function buildLockText(spec: any): string {
   const lines: string[] = [];
   const push = (s: string) => {
@@ -104,6 +114,18 @@ function buildLockText(spec: any): string {
   const g = text(spec?.garment_type);
   const cw = text(spec?.colorway);
   if (g || cw) push(`Garment: ${[g, cw].filter(Boolean).join(" — ")}.`);
+  const fit = text(spec?.fit_silhouette);
+  if (fit) push(`FIT/SILHOUETTE: ${fit}.`);
+  const back = classifyBackView(spec?.back_view, spec?.back_state);
+  if (back.state === "unknown") {
+    push("BACK: not photographed — the back is UNKNOWN. Do not invent a back design; keep the back plain in the item's own colour, fabric and construction with nothing added.");
+  } else if (back.state === "plain") {
+    push("BACK: plain — no print, text, graphic, logo or patch on the back.");
+  } else {
+    push(`BACK: ${back.text || "carries a design (see the lines placed on the back below)"}.`);
+  }
+  const unc = list(spec?.uncertain);
+  if (unc.length) push(`NOT CLEARLY VISIBLE (do not invent): ${unc.join("; ")}.`);
   for (const t of (Array.isArray(spec?.text) ? spec.text : []) as TextItem[]) {
     const w = text(t?.text);
     if (!w) continue;
@@ -139,19 +161,15 @@ function buildLockText(spec: any): string {
   if (sp) push(`SEAMS/PANELS: ${sp}.`);
   const tr = text(spec?.trims_hems_cuffs_collar);
   if (tr) push(`TRIMS/HEMS/CUFFS/COLLAR: ${tr}.`);
-  const fit = text(spec?.fit_silhouette);
-  if (fit) push(`FIT/SILHOUETTE: ${fit}.`);
   for (const s of list(spec?.other_details)) push(`DETAIL: ${s}.`);
-  const unc = list(spec?.uncertain);
-  if (unc.length) push(`NOT CLEARLY VISIBLE (do not invent): ${unc.join("; ")}.`);
   // Hard cap so the spec can never push the image prompt over the model limit
-  // (the generate route appends it inside its protected lock block, ≤2600 B).
+  // (the generate route appends it inside its server block and caps it too).
   const out: string[] = [];
   let bytes = 0;
-  for (const [i, l] of lines.slice(0, 40).entries()) {
+  for (const [i, l] of lines.slice(0, LOCK_TEXT_MAX_LINES).entries()) {
     const line = `${i + 1}. ${l}`;
     bytes += Buffer.byteLength(line, "utf8") + 1;
-    if (bytes > 2500) break;
+    if (bytes > LOCK_TEXT_MAX_BYTES) break;
     out.push(line);
   }
   return out.join("\n");
@@ -178,11 +196,14 @@ export async function POST(req: NextRequest) {
     if (!viewLists.general.length && !viewLists.front.length && !viewLists.back.length) {
       viewLists.general = listOf(body?.itemRefs);
     }
+    // Back first: it is the side the generator most often invents, and the one
+    // a cap (MAX_REFS, or the model's own attention) would otherwise lose.
     const entries = [
-      ...viewLists.general.map((url) => ({ url, view: "general" as const })),
-      ...viewLists.front.map((url) => ({ url, view: "front" as const })),
       ...viewLists.back.map((url) => ({ url, view: "back" as const })),
+      ...viewLists.front.map((url) => ({ url, view: "front" as const })),
+      ...viewLists.general.map((url) => ({ url, view: "general" as const })),
     ].slice(0, MAX_REFS);
+    const droppedRefs = viewLists.back.length + viewLists.front.length + viewLists.general.length - entries.length;
     const refs = entries.map((e) => e.url);
     const sortedViews = entries.some((e) => e.view !== "general");
     const itemType = text(body?.itemType) || "apparel item";
@@ -200,6 +221,12 @@ export async function POST(req: NextRequest) {
     if (!images.length) {
       return NextResponse.json({ error: "None of the item reference images could be loaded." }, { status: 400 });
     }
+    // A photo that failed to load is a photo the analysis never saw. Silent
+    // before — the BACK photo could fail, the spec said "not photographed",
+    // and the generator then treated the attached back as a verified blank.
+    const failedViews = resolved
+      .map((r, i) => (r.status === "rejected" ? entries[i].view : null))
+      .filter((v): v is "general" | "front" | "back" => v !== null);
 
     const model = (process.env.ITEM_SPEC_MODEL || "gpt-4o").trim() || "gpt-4o";
     const instruction = [
@@ -213,7 +240,9 @@ export async function POST(req: NextRequest) {
       '  "logos_icons": [{ "description": string, "placement": string, "size": string, "colors": string, "technique": string, "finish": string }] — every brand mark, symbol, icon, emblem, monogram, artwork or illustration,',
       '  "graphics_prints": [{ "description": string, "placement": string, "colors": string, "technique": string, "finish": string }] — prints, patterns, artwork, embroidery, appliqués,',
       '  "labels_patches": string[] (woven/printed labels, leather/jacron patches, hang tags visible, with text and placement),',
-      '  "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[] }',
+      '  "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[],',
+      '  "back_state": "not_photographed" | "plain" | "design" — not_photographed when NO image shows the back of the garment; plain when a back view (a BACK-labelled image, or an unmistakable back view) shows the back carries no print, text, graphic, logo or patch; design when a back view shows something on the back,',
+      '  "back_view": string — for "design": a short description of everything on the back (each element must also appear in text / logos_icons / graphics_prints with placement "back, …"); for "plain": "plain"; for "not_photographed": "not photographed" }',
       'PLACEMENT must always name the SIDE and zone: e.g. "front, right shoulder near collar", "back, lower centre", "left sleeve". Text that appears on more than one side gets one entry per side. STYLE must describe the print EFFECT when present: motion-blur / ghosted edges, faded, gradient, halftone, cracked / distressed, outline, 3D / shadowed, italic / bold / condensed, letter-spacing.',
       'FIT_SILHOUETTE must be specific: oversized / boxy / drop-shoulder / relaxed / regular / slim / cropped / longline, sleeve length and shape, body length, hem shape, neckline (crew / V / ribbed collar width).',
       'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
@@ -230,7 +259,7 @@ export async function POST(req: NextRequest) {
       back: "BACK reference image(s) — this is the BACK of the garment; everything visible here is on the back:",
     };
     const imageContent: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
-    for (const view of ["general", "front", "back"] as const) {
+    for (const view of ["back", "front", "general"] as const) {
       const urls = loaded.filter((e) => e.view === view).map((e) => e.url);
       if (!urls.length) continue;
       if (sortedViews) imageContent.push({ type: "text", text: viewHeading[view] });
@@ -284,7 +313,16 @@ export async function POST(req: NextRequest) {
     }
     const lockText = buildLockText(spec);
     if (!lockText) return NextResponse.json({ error: "Item analysis found nothing to lock. Add clearer item photos." }, { status: 422 });
-    return NextResponse.json({ spec, lockText, imagesAnalyzed: images.length, model });
+    return NextResponse.json({
+      spec,
+      lockText,
+      backView: classifyBackView(spec?.back_view, spec?.back_state).state,
+      imagesAnalyzed: images.length,
+      imagesDropped: droppedRefs,
+      imagesFailed: failedViews.length,
+      failedViews,
+      model,
+    });
   } catch (e: any) {
     const msg = e?.name === "AbortError" ? "Item analysis timed out." : e?.message || "Item analysis failed.";
     return NextResponse.json({ error: msg }, { status: 500 });

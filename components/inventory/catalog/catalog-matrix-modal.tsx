@@ -2012,6 +2012,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 ) : tab === "studio" ? (
                 /* Carbon Studio (M2) — the OpenAI V2 generator, product-scoped. */
                 <CarbonStudioTab
+                  key={matrixId}
                   matrixId={matrixId}
                   shopifyProductId={data.matrix.shopify_product_id ?? null}
                   itemRefUrls={data.matrix.image_urls ?? []}

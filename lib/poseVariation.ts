@@ -239,8 +239,12 @@ export function buildPoseVariationDirective(args: {
   poseB: number | null;
   strength?: VariationStrength;
   seed?: number;
+  /** Named in the "do not change" list so "vary the pose" is never read as
+   *  licence to restyle the product. */
+  itemType?: string;
 }): string {
   const strength = normalizeStrength(args.strength);
+  const itemLabel = String(args.itemType || "").trim() || "garment";
   // A finite seed must be supplied for deterministic anti-repeat rotation; if it
   // is missing we fall back to 0 (still better than a frozen prompt because the
   // directive language itself differs from the base prompt).
@@ -252,15 +256,12 @@ export function buildPoseVariationDirective(args: {
 
   const editorial = strength === "editorial";
   const lines = [
-    "POSE & EXPRESSION VARIATION DIRECTIVE (this generation only):",
-    "- Keep the EXACT same locked model identity and the EXACT locked garment — this overrides nothing in the identity/item hard locks.",
-    "- Within that lock, apply the natural micro-variation below so the shot reads candid and real, NOT a stiff repeated default pose:",
+    "POSE VARIATION (this generation only — a fresh moment of the same person in the same product):",
     left,
     right,
-    "- Vary ONLY expression, gaze direction, head angle, and subtle stance/weight. Do NOT change face geometry, eye/nose/lip shape, skin tone, undertone, hairline, hairstyle, age, body proportions, framing, crop, or garment.",
-    "- This must still look unmistakably like the same person across the set — same face, fresh moment.",
+    `- Vary ONLY expression, gaze direction, head angle and subtle stance/weight — never the identity, the framing or crop, or the ${itemLabel} and the rest of the outfit.`,
     editorial
-      ? "- Editorial energy: capture an in-between, natural moment (not posed-stiff), while staying storefront-clean and non-sexual."
+      ? "- Editorial energy: an in-between, natural moment (not posed-stiff), still storefront-clean."
       : "- Keep it premium, calm, and storefront-clean.",
   ].filter(Boolean);
 

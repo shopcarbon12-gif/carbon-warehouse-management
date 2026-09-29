@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
+import { parseSpecBackState, specListsBackDesign } from "@/lib/studio-item-spec";
 import {
   buildMasterPanelPrompt,
   getPanelPosePair,
@@ -51,6 +52,23 @@ const sameRef = (a: ItemRef, b: { url: string; view?: RefView }) =>
 /** Drag payload for moving a reference between sections (copy, never move). */
 const REF_DRAG_TYPE = "application/x-carbon-item-ref";
 const refViewKey = (v: RefViewLists) => (["general", "front", "back"] as const).map((k) => `${k}:${v[k].join(",")}`).join("|");
+/** Poses that photograph the BACK of the garment (mirrors the server's list). */
+const isBackFacingPose = (gender: string, pose: number) =>
+  (gender || "").toLowerCase() === "female" ? pose === 2 : pose === 4 || pose === 7;
+/** A stored reference restored from the server has no data-URL preview; R2
+ *  objects are not browser-loadable, so they display through the proxy. */
+const previewFor = (url: string) =>
+  /r2\.cloudflarestorage\.com/i.test(url) ? `/api/studio/ref-image?u=${encodeURIComponent(url)}` : url;
+/** What /api/studio/state keeps per product between sessions. */
+type StudioState = {
+  itemRefs: { url: string; view: RefView }[];
+  itemType: string;
+  instruction: string;
+  itemSpec: string;
+  specRefsKey: string;
+  specConfirmed: boolean;
+  backIsPlain: boolean;
+};
 /** A media-manager row: an existing Shopify image or a new crop to add.
  * `color` = the variant colour this image is the MAIN pic for (all sizes). */
 type MediaItem = {
@@ -191,8 +209,8 @@ type PanelResponse = {
   /** True when the server dropped part of the prompt to fit the length limit. */
   promptTrimmed?: boolean;
   promptOverflowBytes?: number;
-  /** True when no reference photo showed the item's back. */
-  backUnknown?: boolean;
+  /** What the server established about the garment's back for this run. */
+  backState?: "present" | "absent" | "unknown" | "photo";
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
   qaNotes?: string[];
   error?: unknown;
@@ -336,13 +354,7 @@ async function panelResponseToCrops(
     json.promptTrimmed === true
       ? `Prompt was over the length limit by ~${Number(json.promptOverflowBytes || 0)} bytes — part of the instructions was dropped for this panel. Item details may be missed.`
       : null;
-  /* No reference photo shows this item's back, so a back-facing frame is not a
-     verified back — check it before publishing rather than trusting it. */
-  const backNote =
-    json.backUnknown === true
-      ? "The item's back was never photographed, so any back-facing frame is unverified. Check it against the real garment before publishing."
-      : null;
-  const extraNotes = [trimNote, backNote].filter(Boolean) as string[];
+  const extraNotes = [trimNote].filter(Boolean) as string[];
   const notes = extraNotes.length ? [...(qaNotes ?? []), ...extraNotes] : qaNotes;
   return [
     { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes: notes },
@@ -366,19 +378,28 @@ export function CarbonStudioTab({
   const [itemType, setItemType] = useState<string>(defaultItemType);
   const [instruction, setInstruction] = useState<string>("");
   const [panels, setPanels] = useState<number[]>([...PANELS]);
-  const [itemRefs, setItemRefs] = useState<ItemRef[]>(
-    (itemRefUrls || []).map((u) => ({ url: u, preview: u })),
-  );
+  /* Starts EMPTY. It used to start with the product's catalog images — which
+     are the previous AI renders — so every regeneration was quietly shown its
+     own last output as the garment reference, and drifted from it. Real
+     photos are restored from /api/studio/state; catalog images are a button. */
+  const [itemRefs, setItemRefs] = useState<ItemRef[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>("");
-  // Pre-generation item analysis (owner requirement): the item reference photos
-  // are inspected at high detail — every word, graphic, material, button,
-  // stitch — and the findings are locked into the prompt BEFORE rendering.
-  // `itemSpec` is operator-editable; `specRefsKey` remembers which refs it was
-  // computed for so a changed photo set re-analyzes automatically.
-  // Invisible by owner choice: it runs inside Generate; no control, no preview.
+  // Pre-generation item analysis: the item reference photos are inspected at
+  // high detail — every word, graphic, material, button, stitch — and the
+  // findings are locked into the prompt BEFORE rendering. The spec is shown
+  // and editable, because a wrong line here is a wrong garment in four paid
+  // panels. `specRefsKey` remembers which photos it was computed for.
   const [itemSpec, setItemSpec] = useState<string>("");
   const [specRefsKey, setSpecRefsKey] = useState<string>("");
+  const [specConfirmed, setSpecConfirmed] = useState(false);
+  const [specBusy, setSpecBusy] = useState(false);
+  /* The operator looked at the real garment: the back carries nothing. Needed
+     (or a Back photo) before any back-facing pose is rendered. */
+  const [backIsPlain, setBackIsPlain] = useState(false);
+  /* Persisted state has been read for this product — saves are gated on it so
+     the empty initial render never overwrites what was stored. */
+  const [stateLoaded, setStateLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -474,6 +495,96 @@ export function CarbonStudioTab({
   useEffect(() => {
     if (!color && colors[0]) setColor(colors[0].color);
   }, [colors, color]);
+
+  // Restore this product's photos, sorting, spec and back check.
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const r = await fetch(`/api/studio/state?matrixId=${encodeURIComponent(matrixId)}`, { cache: "no-store" });
+        const j = (await r.json().catch(() => ({}))) as { state?: StudioState | null; error?: string };
+        if (!alive) return;
+        if (!r.ok) {
+          // Saving stays OFF: an empty page must never overwrite what is stored.
+          setErr(`Could not load this product's saved Studio state (${j.error || `HTTP ${r.status}`}) — changes will not be saved until the page is reopened.`);
+          return;
+        }
+        const s = j.state;
+        if (s) {
+          const restored = s.itemRefs.map((x): ItemRef => ({ url: x.url, view: x.view, preview: previewFor(x.url) }));
+          // Merge, never replace: a photo pasted or uploaded before this
+          // answer arrived must not vanish.
+          setItemRefs((prev) => [...restored, ...prev.filter((p) => !restored.some((r0) => sameRef(r0, p)))]);
+          if (s.itemType) setItemType(s.itemType);
+          setInstruction(s.instruction || "");
+          setItemSpec(s.itemSpec || "");
+          setSpecRefsKey(s.specRefsKey || "");
+          setSpecConfirmed(s.specConfirmed === true);
+          setBackIsPlain(s.backIsPlain === true);
+        }
+        setStateLoaded(true);
+      } catch {
+        if (alive) setErr("Could not reach the server to load this product's saved Studio state — changes will not be saved until the page is reopened.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [matrixId]);
+
+  // Save it back, debounced, on every change after the restore. The pending
+  // body lives in a ref so it can also be flushed on unmount / page hide —
+  // otherwise the last tick or keystroke before closing the modal was lost.
+  const pendingSaveRef = useRef<string | null>(null);
+  const flushSave = useCallback(() => {
+    const body = pendingSaveRef.current;
+    if (!body) return;
+    pendingSaveRef.current = null;
+    void fetch("/api/studio/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!stateLoaded || !canManage) return;
+    const body: StudioState & { matrixId: string } = {
+      matrixId,
+      itemRefs: itemRefs.map((r) => ({ url: r.url, view: r.view ?? "general" })),
+      itemType,
+      instruction,
+      itemSpec,
+      specRefsKey,
+      specConfirmed,
+      backIsPlain,
+    };
+    pendingSaveRef.current = JSON.stringify(body);
+    const t = setTimeout(flushSave, 800);
+    return () => clearTimeout(t);
+  }, [stateLoaded, canManage, matrixId, itemRefs, itemType, instruction, itemSpec, specRefsKey, specConfirmed, backIsPlain, flushSave]);
+  useEffect(() => {
+    window.addEventListener("pagehide", flushSave);
+    return () => {
+      window.removeEventListener("pagehide", flushSave);
+      flushSave();
+    };
+  }, [flushSave]);
+
+  const refViews = useMemo(() => groupRefs(itemRefs), [itemRefs]);
+  const refsKey = useMemo(() => refViewKey(refViews), [refViews]);
+  /** No spec yet, or the photos changed since it was computed (an operator
+   *  edit counts as covering the current photos — see the textarea). */
+  const specStale = !itemSpec.trim() || specRefsKey !== refsKey;
+  /** What the spec itself says about the back — the server applies the same
+   *  rule, so the client gate and the render can never disagree. */
+  const specBack = useMemo(() => parseSpecBackState(itemSpec), [itemSpec]);
+  const specSaysBackDesign = useMemo(() => specBack === "design" || specListsBackDesign(itemSpec), [specBack, itemSpec]);
+  /** Catalog images not yet added as references. */
+  const catalogPhotosLeft = useMemo(
+    () => (itemRefUrls || []).filter((u) => !itemRefs.some((r) => r.url === u)),
+    [itemRefUrls, itemRefs],
+  );
 
   // Poll the phone-camera hand-off while a QR is showing.
   useEffect(() => {
@@ -652,27 +763,48 @@ export function CarbonStudioTab({
   /** High-detail vision pass over the item reference photos → numbered lock
    *  list (see /api/openai/item-spec). Stores the spec + the refs it covers. */
   const analyzeItem = useCallback(
-    async (views: RefViewLists): Promise<string | null> => {
+    async (views: RefViewLists): Promise<{ lockText: string; dropped: number } | null> => {
       const refUrls = orderedRefUrls(views);
       if (!refUrls.length) {
         setErr("Add at least one item photo before analyzing.");
         return null;
       }
+      setSpecBusy(true);
       try {
         const r = await fetch("/api/openai/item-spec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ itemRefs: refUrls, itemRefViews: views, itemType }),
         });
-        const j = (await r.json().catch(() => ({}))) as { lockText?: string; error?: string; imagesAnalyzed?: number };
+        const j = (await r.json().catch(() => ({}))) as {
+          lockText?: string;
+          error?: string;
+          imagesAnalyzed?: number;
+          imagesDropped?: number;
+          imagesFailed?: number;
+          failedViews?: RefView[];
+        };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
         setSpecRefsKey(refViewKey(views));
-        setErr(null);
-        return j.lockText;
+        // Raw analyzer output — no human has corrected it (yet).
+        setSpecConfirmed(false);
+        const failed = Number(j.imagesFailed) || 0;
+        // A photo the analysis could not open is a photo the spec knows nothing
+        // about — say so, loudly, instead of letting the spec look complete.
+        setErr(
+          failed
+            ? `${failed} photo${failed === 1 ? "" : "s"} (${(j.failedViews ?? []).join(", ") || "unknown section"}) could not be opened by the analysis — the spec does not cover ${failed === 1 ? "it" : "them"}. Re-upload and re-analyze, or check the spec by hand.`
+            : null,
+        );
+        const dropped = Number(j.imagesDropped) || 0;
+        if (dropped) setMsg(`Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).`);
+        return { lockText: j.lockText, dropped };
       } catch (e) {
         setErr(e instanceof Error ? e.message : "Item analysis failed");
         return null;
+      } finally {
+        setSpecBusy(false);
       }
     },
     [itemType],
@@ -682,27 +814,43 @@ export function CarbonStudioTab({
     if (!model) return setErr("Pick a model first.");
     if (!itemRefs.length) return setErr("Add at least one item photo (upload or phone camera).");
     if (!panels.length) return setErr("Select at least one panel.");
-    const refViews = groupRefs(itemRefs);
     const refUrls = orderedRefUrls(refViews);
-    setBusy("generate");
-    setNativeBusy(true);
+    /* A back-facing pose of a back nobody has seen is a guess the operator
+       pays for. Ask for a Back photo — or the operator's word that the back
+       is plain — before spending anything. The server enforces the same. */
+    const backPanels = panels.filter((p) => getPanelPosePair(model.gender, p).some((pose) => isBackFacingPose(model.gender, pose)));
+    // Same rule as the server: a Back photo, the operator's word, or a spec
+    // that itself establishes the back (a design, or "plain").
+    const backKnown = refViews.back.length > 0 || backIsPlain || specSaysBackDesign || specBack === "plain";
+    if (backPanels.length && !backKnown) {
+      return setErr(
+        `Panel ${backPanels.join(" and ")} shows the BACK of the item. Add a photo to the Back section, or tick "The back is plain" after checking the real garment.`,
+      );
+    }
     setErr(null);
     setMsg(null);
-    // Analyze the item references FIRST (unless switched off, or the current
-    // spec already covers exactly these photos): every word, graphic, material,
-    // hardware piece and stitch is inventoried and locked into the prompt.
-    let specForRun = itemSpec.trim();
-    if (!specForRun || specRefsKey !== refViewKey(refViews)) {
+    /* Step 1 of a new product: analyze the photos and STOP, so the spec can be
+       read and corrected before four panels are paid for. Once the spec exists
+       for exactly these photos, Generate goes straight through. */
+    if (specStale) {
+      setBusy("analyze");
       setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
-      const analyzed = await analyzeItem(refViews);
-      if (!analyzed) {
+      try {
+        const analyzed = await analyzeItem(refViews);
+        if (analyzed) {
+          setMsg(
+            `Item spec ready${analyzed.dropped ? ` (${analyzed.dropped} photos over the limit were skipped)` : ""} — read it below and fix anything wrong (especially the BACK line), then press Generate.`,
+          );
+        }
+      } finally {
         setBusy(null);
-        setNativeBusy(false);
         setProgress("");
-        return; // analyzeItem already surfaced the error
       }
-      specForRun = analyzed;
+      return;
     }
+    const specForRun = itemSpec.trim();
+    setBusy("generate");
+    setNativeBusy(true);
     // Regenerate flow (carbon-gen): keep the crops you selected, append fresh
     // ones below; unselected old crops are dropped. runTag keeps ids unique.
     const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
@@ -780,6 +928,10 @@ export function CarbonStudioTab({
             itemRefViews: refViews,
             panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
             itemSpec: specForRun || undefined,
+            matrixId,
+            backIsPlain,
+            // true = a human edited the spec text; false = raw analyzer output.
+            specConfirmed,
           }),
         });
         const parsed = (await resp.json().catch(() => null)) as PanelResponse | null;
@@ -819,7 +971,7 @@ export function CarbonStudioTab({
       setProgress("");
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, panels, itemType, instruction, crops, matrixId, itemSpec, specRefsKey, analyzeItem]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -1218,6 +1370,31 @@ export function CarbonStudioTab({
                   ) : null}
                 </div>
                 <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">{zone.hint}</p>
+                {zone.view === "back" ? (
+                  /* The alternative to a back photo: the operator's word,
+                     after looking at the garment. Required before any
+                     back-facing pose renders. */
+                  <label
+                    className="mb-2 flex cursor-pointer items-start gap-1.5 font-mono text-[0.66rem] leading-snug text-[var(--wms-fg)] max-md:py-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                      checked={backIsPlain}
+                      disabled={!canManage}
+                      onChange={(e) => setBackIsPlain(e.target.checked)}
+                    />
+                    <span>
+                      The back is <b>plain</b> — no print, text, logo or graphic (I checked the real garment)
+                      {backIsPlain && specSaysBackDesign ? (
+                        <span className="mt-0.5 block text-amber-300">
+                          ⚠ The item spec says the back HAS a design — the spec wins. Untick this, or fix the BACK line in the spec.
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-2">
                   {zoneRefs.map((ref, i) => (
                     <div
@@ -1322,6 +1499,25 @@ export function CarbonStudioTab({
                   >
                     📱 Phone camera
                   </button>
+                  {zone.view === "general" && catalogPhotosLeft.length ? (
+                    /* Explicit, never automatic: the catalog images are usually
+                       the previous renders. Only real product photos belong here. */
+                    <button
+                      type="button"
+                      disabled={!canManage}
+                      title="The product's current catalog images — usually earlier renders. Add them only if they are real photos of the garment."
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setItemRefs((prev) => [
+                          ...prev,
+                          ...catalogPhotosLeft.map((u): ItemRef => ({ url: u, preview: u, view: "general" })),
+                        ]);
+                      }}
+                      className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] hover:text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
+                    >
+                      ＋ Catalog images ({catalogPhotosLeft.length})
+                    </button>
+                  ) : null}
                 </div>
               </div>
             );
@@ -1343,6 +1539,66 @@ export function CarbonStudioTab({
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Item spec — what the render is locked to. Visible and editable:
+          a wrong line here is a wrong garment in every paid panel. */}
+      <div
+        className={`rounded-md border p-3 ${
+          itemRefs.length && specStale
+            ? "border-amber-500/55 bg-amber-950/20"
+            : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
+        }`}
+      >
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <span className={`${label} mb-0`}>Item spec — what the AI is locked to</span>
+          <span
+            className={`font-mono text-[0.62rem] uppercase tracking-wide ${
+              !itemRefs.length
+                ? "text-[var(--wms-muted)]"
+                : specStale
+                  ? "text-amber-300"
+                  : "text-[var(--wms-status-success-fg)]"
+            }`}
+          >
+            {!itemRefs.length
+              ? "add photos first"
+              : !itemSpec.trim()
+                ? "not analyzed yet"
+                : specStale
+                  ? "photos changed — re-analyze"
+                  : `ready · ${itemSpec.split("\n").filter(Boolean).length} lines`}
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            disabled={!canManage || !itemRefs.length || specBusy || busy !== null}
+            onClick={() => void analyzeItem(refViews)}
+            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
+          >
+            {specBusy ? "Analyzing…" : itemSpec.trim() ? "↻ Re-analyze photos" : "🔍 Analyze photos"}
+          </button>
+        </div>
+        <p className="mb-2 font-mono text-[0.66rem] leading-snug text-[var(--wms-muted)]">
+          Every line below is enforced on the render. Read it before generating and fix anything wrong —
+          fit, colour, where each print sits, and the <b>BACK</b> line. Your edits are kept for this product
+          and used as-is; only <b>Re-analyze</b> replaces them.
+        </p>
+        <textarea
+          className={`${field} min-h-[7rem] max-md:text-base`}
+          rows={itemSpec.trim() ? Math.min(14, Math.max(5, itemSpec.split("\n").length + 1)) : 3}
+          placeholder="Press Analyze photos (or Generate) — the numbered spec of the garment appears here. You can also type one."
+          value={itemSpec}
+          disabled={!canManage}
+          onChange={(e) => {
+            setItemSpec(e.target.value);
+            // A human edit covers the photos on screen: Generate must not
+            // re-analyze and throw the correction away, and a spec typed
+            // after a failed analysis must be usable.
+            setSpecRefsKey(refsKey);
+            setSpecConfirmed(true);
+          }}
+        />
       </div>
 
       {/* Options */}
@@ -1469,9 +1725,13 @@ export function CarbonStudioTab({
         >
           {busy === "generate"
             ? "Generating…"
-            : crops.length
-              ? `↻ Regenerate ${panels.length}`
-              : `✦ Generate ${panels.length} panel(s)`}
+            : busy === "analyze"
+              ? "Analyzing item…"
+              : itemRefs.length && specStale
+                ? "1 · Analyze item first"
+                : crops.length
+                  ? `↻ Regenerate ${panels.length}`
+                  : `✦ Generate ${panels.length} panel(s)`}
         </button>
         <button
           type="button"
