@@ -1135,15 +1135,22 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [saveSeo]);
 
-  /* Auto-run the first time the SEO tab opens (per open), in the CHEAP mode:
-     refresh only what scores badly. Reading the product photos at full detail
-     is a real cost per product, and merely opening a tab is not a decision to
-     spend it — the "✦ Optimize with AI" button does that deliberately. */
+  /* Auto-run the first time the SEO tab opens (per open), reading the product's
+     current Shopify photos at full detail — the same work the "✦ Optimize with
+     AI" button does, including the metafield panel and the category attributes.
+
+     This used to run the cheap mode instead, refreshing only the fields that
+     scored badly, on the reasoning that opening a tab is not a decision to
+     spend a photo read. The owner asked for the opposite: opening the tab
+     should scan whatever is on Shopify now and propose the best copy from it,
+     because photos get replaced and copy written against the old ones is
+     quietly wrong. Nothing is written to Shopify either way — this fills the
+     proposal, and "⤴ Push to Shopify" is still the decision to publish it. */
   useEffect(() => {
     if (tab !== "seo" || !data?.matrix.shopify_product_id) return;
     if (autoOptedRef.current || seoProposed || seoAllBusy) return;
     autoOptedRef.current = true;
-    void optimizeAll("weak-only");
+    void optimizeAll("photos");
   }, [tab, data?.matrix.shopify_product_id, seoProposed, seoAllBusy, optimizeAll]);
 
   // Load the "Current collections" list ONLY while the SEO tab is idle — never

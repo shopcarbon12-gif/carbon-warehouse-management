@@ -8,6 +8,16 @@ import { SCOPES } from "@/lib/auth/roles";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs } from "@/lib/remoteImage";
 import { resolveShopContext, listProductMedia } from "@/lib/server/shopify-write";
+import {
+  AGE_GROUPS,
+  CONDITIONS,
+  DEFAULT_AGE_GROUP,
+  DEFAULT_CONDITION,
+  GENDERS,
+  buildDescriptionInstruction,
+  genderFromProductType,
+  pickAllowed,
+} from "@/lib/seo/retailMetafields";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +26,18 @@ export const maxDuration = 120;
 /**
  * Scan the product's hero image and suggest metafield values (Meta tab AI-fill).
  * Body: { matrixId } → { values: { fullDescription, gender, ageGroup, condition } }
+ *
+ * The photo is asked for the description and nothing else.
+ *
+ * This route used to ask it for gender too, in the same JSON. Given an image
+ * and a question about who a garment is cut for, gpt-4o answers with EMPTY
+ * content and finish_reason "stop" — no refusal, no error, nothing to catch —
+ * so the parse produced {} and the panel filled with blanks. That is why
+ * "Optimize with AI" appeared to skip the Metafields section entirely.
+ *
+ * Gender comes from matrices.category instead, which is already MEN / WOMEN /
+ * UNISEX for the whole catalogue, and age group and condition are constants:
+ * Carbon has no kids line and no resale.
  */
 export async function POST(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -69,15 +91,11 @@ export async function POST(req: Request) {
           content: [
             {
               type: "text",
-              text: [
-                `Product name: "${m.description || ""}"${m.category ? `, category: ${m.category}` : ""}.`,
-                "From the photo + name, return STRICT JSON only:",
-                `{"fullDescription": string (2-3 sentence marketing description of the visible garment),`,
-                ` "gender": "male" | "female" | "unisex",`,
-                ` "ageGroup": "adult" | "kids" | "toddler" | "infant" | "newborn",`,
-                ` "condition": "new"}`,
-                "Base gender/age on the garment style; condition is 'new' unless clearly otherwise.",
-              ].join("\n"),
+              text: buildDescriptionInstruction({
+                title: m.description || "",
+                productType: m.category || "",
+                askGender: false,
+              }),
             },
             { type: "image_url", image_url: { url: dataUrl, detail: "auto" } },
           ],
@@ -85,16 +103,21 @@ export async function POST(req: Request) {
       ],
     });
     const parsed = JSON.parse(c?.choices?.[0]?.message?.content || "{}");
-    const pick = (v: unknown, allowed: string[], dflt: string) => {
-      const s = String(v || "").trim().toLowerCase();
-      return allowed.includes(s) ? s : dflt;
-    };
+    const fullDescription = String(parsed.fullDescription || "").trim();
+    /* An empty answer is a failure, not an empty field. Returning 200 with
+       blanks is what made this look like a panel that quietly does nothing. */
+    if (!fullDescription) {
+      return NextResponse.json(
+        { error: "The photo scan came back empty — try again, or write the description by hand." },
+        { status: 502 },
+      );
+    }
     return NextResponse.json({
       values: {
-        fullDescription: String(parsed.fullDescription || "").trim(),
-        gender: pick(parsed.gender, ["male", "female", "unisex"], ""),
-        ageGroup: pick(parsed.ageGroup, ["adult", "kids", "toddler", "infant", "newborn"], "adult"),
-        condition: pick(parsed.condition, ["new", "used", "refurbished"], "new"),
+        fullDescription,
+        gender: pickAllowed(genderFromProductType(m.category || ""), GENDERS),
+        ageGroup: pickAllowed(DEFAULT_AGE_GROUP, AGE_GROUPS, DEFAULT_AGE_GROUP),
+        condition: pickAllowed(DEFAULT_CONDITION, CONDITIONS, DEFAULT_CONDITION),
       },
     });
   } catch (e: any) {
