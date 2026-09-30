@@ -53,6 +53,7 @@ import {
   RETAIL_METAFIELDS,
   buildDescriptionInstruction,
   buildRetailMetafieldInputs,
+  genderFromCollections,
   genderFromProductType,
   missingRetailFields,
   pickAllowed,
@@ -164,7 +165,8 @@ const EXCLUDED_HANDLES = new Set(["gifted-product", "gift-card"]);
 const PRODUCT_FIELDS = `
   id handle title productType status
   featuredImage { url }
-  media(first: 5) { nodes { ... on MediaImage { image { url } } } }
+  media(first: 8) { nodes { ... on MediaImage { image { url } } } }
+  collections(first: 20) { nodes { handle } }
   fd: metafield(namespace: "custom", key: "short_descriptions_") { value }
   variants(first: 100) {
     nodes {
@@ -181,7 +183,8 @@ interface Target {
   handle: string;
   title: string;
   productType: string;
-  image: string;
+  collections: string[];
+  images: string[];
   variantIds: string[];
   has: { fullDescription: boolean; gender: boolean; ageGroup: boolean; condition: boolean };
 }
@@ -207,7 +210,15 @@ async function fetchActive(): Promise<Target[]> {
         handle: p.handle,
         title: p.title || "",
         productType: p.productType || "",
-        image: p.featuredImage?.url || p.media?.nodes?.[0]?.image?.url || "",
+        collections: (p.collections?.nodes || []).map((c: Json) => String(c?.handle || "")).filter(Boolean),
+        /* Several, not one. The media list can hold videos and 3D models,
+           which come back as empty objects through the MediaImage fragment, and
+           one frame can also simply be a detail shot the model has nothing to
+           say about. Keeping the alternatives lets a retry use a different
+           picture instead of giving up on the product. */
+        images: [p.featuredImage?.url, ...(p.media?.nodes || []).map((m: Json) => m?.image?.url)]
+          .filter((u: unknown): u is string => typeof u === "string" && !!u)
+          .filter((u: string, i: number, a: string[]) => a.indexOf(u) === i),
         variantIds: variants.map((v: Json) => v.id).filter(Boolean),
         has: {
           fullDescription: Boolean(String(p.fd?.value || "").trim()),
@@ -226,9 +237,22 @@ async function fetchActive(): Promise<Target[]> {
 
 /* ---------------------------------------------------------------- ai ----- */
 
-async function askPhoto(t: Target, askGender: boolean): Promise<{ fullDescription: string; gender: string }> {
+async function askPhoto(t: Target): Promise<{ fullDescription: string }> {
   if (!OPENAI_KEY) throw new Error("OPENAI_API_KEY missing.");
-  if (!t.image) throw new Error("no product image");
+  if (!t.images.length) throw new Error("no product image");
+  let last = "";
+  for (const url of t.images.slice(0, 3)) {
+    const a = await askPhotoOnce(t, url);
+    if (a.fullDescription) return a;
+    last = "the model returned no description for this image";
+  }
+  /* An empty answer used to be written off as success, which is how fifteen
+     products came out of a "0 failures" run with an empty Description tab.
+     It is a failure, and it is reported as one. */
+  throw new Error(last || "no description produced");
+}
+
+async function askPhotoOnce(t: Target, imageUrl: string): Promise<{ fullDescription: string }> {
   const body = {
     model: MODEL,
     temperature: 0.3,
@@ -241,8 +265,8 @@ async function askPhoto(t: Target, askGender: boolean): Promise<{ fullDescriptio
       {
         role: "user" as const,
         content: [
-          { type: "text" as const, text: buildDescriptionInstruction({ title: t.title, productType: t.productType, askGender }) },
-          { type: "image_url" as const, image_url: { url: t.image, detail: "auto" as const } },
+          { type: "text" as const, text: buildDescriptionInstruction({ title: t.title, productType: t.productType, askGender: false }) },
+          { type: "image_url" as const, image_url: { url: imageUrl, detail: "auto" as const } },
         ],
       },
     ],
@@ -260,10 +284,7 @@ async function askPhoto(t: Target, askGender: boolean): Promise<{ fullDescriptio
     const text = await res.text();
     if (!res.ok) throw new Error(`OpenAI ${res.status}: ${text.slice(0, 200)}`);
     const parsed = JSON.parse(JSON.parse(text)?.choices?.[0]?.message?.content || "{}");
-    return {
-      fullDescription: String(parsed.fullDescription || "").trim(),
-      gender: pickAllowed(parsed.gender, GENDERS),
-    };
+    return { fullDescription: String(parsed.fullDescription || "").trim() };
   }
   throw new Error("OpenAI: retries exhausted");
 }
@@ -332,11 +353,13 @@ async function main() {
   targets = targets.filter((t) => !done.has(t.id));
   if (LIMIT) targets = targets.slice(0, LIMIT);
 
-  const noImage = targets.filter((t) => !t.image).length;
-  const needGenderAsk = targets.filter((t) => !genderFromProductType(t.productType)).length;
+  const noImage = targets.filter((t) => !t.images.length).length;
+  const needGenderAsk = targets.filter(
+    (t) => !genderFromProductType(t.productType) && !genderFromCollections(t.collections),
+  ).length;
   console.log(`  ${all.length} active · gift card skipped: ${skippedGiftCard}`);
   console.log(`  ${targets.length} to process`);
-  console.log(`  gender from product type: ${targets.length - needGenderAsk}, needs the photo: ${needGenderAsk}`);
+  console.log(`  gender from product type or collections: ${targets.length - needGenderAsk}, unresolved: ${needGenderAsk}`);
   console.log(`  without a usable image: ${noImage}\n`);
   if (!targets.length) {
     console.log("  nothing to do.\n");
@@ -363,6 +386,7 @@ async function main() {
   const doneIds: string[] = [...done];
   let ok = 0;
   let failed = 0;
+  let partial = 0;
   let written = 0;
   let idx = 0;
 
@@ -373,34 +397,52 @@ async function main() {
       const t = targets[i];
       const missing = missingRetailFields(t.has);
       try {
-        const typeGender = genderFromProductType(t.productType);
+        const typeGender = genderFromProductType(t.productType) || genderFromCollections(t.collections);
         const needDesc = FORCE || !t.has.fullDescription;
         const needGender = FORCE || !t.has.gender;
-        const askPhotoFor = !NO_VISION && t.image && (needDesc || (needGender && !typeGender));
-
-        let aiDesc = "";
-        let aiGender = "";
-        if (askPhotoFor) {
-          const a = await askPhoto(t, needGender && !typeGender);
-          aiDesc = a.fullDescription;
-          aiGender = a.gender;
-        }
+        /* The photo is asked for the description only. Asking the same call
+           to judge gender made gpt-4o return empty content with no error, which
+           lost the description too — the store's own collections answer it
+           without a guess. */
+        const askPhotoFor = !NO_VISION && t.images.length > 0 && needDesc;
+        const aiDesc = askPhotoFor ? (await askPhoto(t)).fullDescription : "";
 
         const values: RetailMetafieldValues = {};
         if (needDesc && aiDesc) values.fullDescription = aiDesc;
         if (needGender) {
-          const g = typeGender || aiGender;
-          if (g) values.gender = pickAllowed(g, GENDERS);
+          if (typeGender) values.gender = pickAllowed(typeGender, GENDERS);
         }
         if (FORCE || !t.has.ageGroup) values.ageGroup = pickAllowed(DEFAULT_AGE_GROUP, AGE_GROUPS, DEFAULT_AGE_GROUP);
         if (FORCE || !t.has.condition) values.condition = pickAllowed(DEFAULT_CONDITION, CONDITIONS, DEFAULT_CONDITION);
 
+        /* Write what there is before judging the result. A product with no
+           photo can still take its gender, age group and condition; throwing
+           first discarded three good fields over the one that could not be
+           produced. */
         let pushed = 0;
         if (WRITE) {
           pushed = await push(t, values);
           await persist(db, handleToMatrix, t, values);
-          doneIds.push(t.id);
         }
+
+        /* Counted against what the product still needs, not against whether the
+           calls returned without throwing — an empty answer used to be written
+           off as success, which is how fifteen products came out of a
+           "0 failures" run with an empty Description tab. */
+        const stillMissing = missing.filter((f) => !String((values as Json)[f] || "").trim());
+        if (stillMissing.length) {
+          partial += 1;
+          fs.appendFileSync(
+            REPORT,
+            JSON.stringify({ handle: t.handle, partial: stillMissing, pushed, at: new Date().toISOString() }) + "\n",
+          );
+          console.log(
+            `  ${String(ok + failed + partial).padStart(4)}/${targets.length}  ${t.handle.padEnd(34).slice(0, 34)} ` +
+              `PARTIAL — wrote ${pushed}, still missing: ${stillMissing.join(", ")}`,
+          );
+          continue;
+        }
+        if (WRITE) doneIds.push(t.id);
         written += pushed;
         ok += 1;
         fs.appendFileSync(
@@ -410,7 +452,11 @@ async function main() {
             productType: t.productType,
             missing,
             values,
-            genderSource: values.gender ? (typeGender ? "product-type" : "photo") : null,
+            genderSource: values.gender
+              ? genderFromProductType(t.productType)
+                ? "product-type"
+                : "collections"
+              : null,
             pushed,
             write: WRITE,
             at: new Date().toISOString(),
@@ -435,7 +481,7 @@ async function main() {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
   if (db) await db.end();
 
-  console.log(`\n  done: ${ok}   failed: ${failed}   metafields written: ${written}`);
+  console.log(`\n  done: ${ok}   partial: ${partial}   failed: ${failed}   metafields written: ${written}`);
   console.log(`  report: ${path.relative(ROOT, REPORT)}`);
   if (!WRITE) console.log(`\n  DRY RUN — nothing was written. Re-run with --write.\n`);
   else console.log("");

@@ -65,6 +65,28 @@ export function genderFromProductType(productType: string): "male" | "female" | 
   return null;
 }
 
+/**
+ * Gender from collection membership.
+ *
+ * The second source, for the handful of product types that do not state it
+ * ("JEANS", "SHORTS", "SWEATPANTS"). Those products still sit in the store's
+ * own "men" or "women" collection, which is a fact someone entered rather than
+ * something inferred from a picture.
+ *
+ * This replaced asking the photo model. Given an image and a question about who
+ * a garment is cut for, gpt-4o returns empty content with finish_reason "stop"
+ * — no refusal, no error — which silently took the description down with it.
+ */
+export function genderFromCollections(handles: string[]): "male" | "female" | "unisex" | null {
+  const set = new Set(handles.map((h) => String(h || "").trim().toLowerCase()));
+  const women = set.has("women") || set.has("womens") || set.has("women-clothing");
+  const men = set.has("men") || set.has("mens") || set.has("men-clothing");
+  if (women && men) return "unisex";
+  if (women) return "female";
+  if (men) return "male";
+  return null;
+}
+
 /** Everything Carbon sells is adult and new; there is no kids or resale line. */
 export const DEFAULT_AGE_GROUP = "adult";
 export const DEFAULT_CONDITION = "new";
