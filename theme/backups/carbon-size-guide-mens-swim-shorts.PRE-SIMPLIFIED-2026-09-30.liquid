@@ -1,6 +1,4 @@
-<!-- CARBON interactive size guide: Men's Swim Shorts
-     (custom.size_guide_type = mens-swim-shorts). Three retail measurements
-     only; the source spreadsheet's factory points are deliberately absent. -->
+<!-- CARBON interactive size guide: Men's Swim Shorts (custom.size_guide_type = mens-swim-shorts) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap">
 <div id="carbon-size-guide-mens-swim-shorts" class="carbon-size-guide" data-fit="mens-swim-shorts">
 <style>
@@ -54,7 +52,7 @@
    smaller. That contrast is the whole title treatment. */
 #carbon-size-guide-mens-swim-shorts .csg-title-fit {
   display: block; font-family: var(--csg-display); font-weight: 700;
-  font-size: clamp(22px, 3.6vw, 48px); letter-spacing: -.005em;
+  font-size: clamp(26px, 4.2vw, 56px); letter-spacing: -.005em;
   text-transform: uppercase; white-space: nowrap;
 }#carbon-size-guide-mens-swim-shorts .csg-title-sub {
   display: block; font-family: var(--csg-display); font-weight: 300;
@@ -185,80 +183,38 @@
      flat-lays fill their square. The inseam keeps contain — cropping the one
      photo whose whole job is crotch-to-hem would defeat it. */
 #carbon-size-guide-mens-swim-shorts .csg-photo { aspect-ratio: 1 / 1; object-fit: cover; }#carbon-size-guide-mens-swim-shorts .csg-photo-inseam { object-fit: contain; }#carbon-size-guide-mens-swim-shorts .csg-card-head { grid-column: 2; }#carbon-size-guide-mens-swim-shorts .csg-card-text { grid-column: 2; font-size: 13.5px; }#carbon-size-guide-mens-swim-shorts .csg-tips { flex-direction: column; align-items: flex-start; gap: 10px; }#carbon-size-guide-mens-swim-shorts .csg-tips-list { grid-template-columns: 1fr; gap: 9px; }#carbon-size-guide-mens-swim-shorts .csg-note { font-size: 13.5px; }
-}/* ── Desktop placement ───────────────────────────────────────────────────
-   The jeans tables run to ten rows, so in those guides the left column is
-   taller than the How-to-Measure column beside it. Five swim sizes are much
-   shorter, and with the description and the table sitting in separate grid
-   rows the taller right-hand column stretched the row between them, opening
-   a gap under the description. Wrapping the two in one cell lets the slack
-   fall below the table where it belongs. On one column the wrapper dissolves
-   so the shared ordering still applies. */
-#carbon-size-guide-mens-swim-shorts .csg-left { grid-column: 1; grid-row: 2 / 4; display: flex; flex-direction: column; }#carbon-size-guide-mens-swim-shorts .csg-measure { grid-row: 2 / 4; }/* Five sizes make a short table, so the left column ran out well before the
-   How-to-Measure column beside it. The supplied overview drawing fills that
-   space with something worth reading: all three measurements on one garment,
-   far larger than they appear on the three narrow cards. It is the optional
-   asset, used where it earns its place rather than added on top. */
-/* Capped rather than left at its natural height. The grid row is sized by
-   whichever column is taller, so an uncapped drawing made the left column
-   overrun the How-to-Measure column by 200px and put the white space on the
-   right instead of removing it. At this height the two columns end within
-   about the same margin the jeans guides already run to. */
-#carbon-size-guide-mens-swim-shorts .csg-overview { margin: 18px 0 0; flex: 1 1 auto; display: grid; place-items: center; }#carbon-size-guide-mens-swim-shorts .csg-overview img { display: block; max-width: 100%; max-height: 215px; width: auto; height: auto; }/* ── Swim shorts ─────────────────────────────────────────────────────────
-   The three supplied graphics are 4:3 line diagrams with their own labels
-   drawn inside them, so they are contained rather than cropped — the jeans
-   guides' square cover crop would cut the arrow ends and the labels off, and
-   the inseam diagram in particular has to keep the whole crotch-to-hem run
-   visible. The box is white because the artwork's own ground is white. */
-#carbon-size-guide-mens-swim-shorts .csg-photo { aspect-ratio: 4 / 3; object-fit: contain; background: #fff; }/* Four numbered steps in the bottom strip rather than the jeans' three ticks:
-   these are a sequence, and the numbering is the only thing that says so.
-   Two columns, not four: these steps are full sentences, and four narrow
-   tracks stacked each of them five lines deep and trebled the strip's height. */
-#carbon-size-guide-mens-swim-shorts .csg-tips-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }#carbon-size-guide-mens-swim-shorts .csg-step {
-  flex: 0 0 auto; width: 21px; height: 21px; border-radius: 50%;
-  background: var(--csg-blue); color: #fff; display: grid; place-items: center;
-  font-family: var(--csg-display); font-weight: 600; font-size: 12.5px; margin-top: 1px;
-}#carbon-size-guide-mens-swim-shorts .csg-tips-icon img { display: block; width: 40px; height: auto; }/* ── phone: size buttons and the selected size's own three figures ─────── */
-#carbon-size-guide-mens-swim-shorts .csg-mob { display: none; }#carbon-size-guide-mens-swim-shorts .csg-mob-label {
-  margin: 0 0 8px; font-family: var(--csg-display); font-weight: 600;
-  font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
-}#carbon-size-guide-mens-swim-shorts .csg-sizes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin: 0 0 16px; }#carbon-size-guide-mens-swim-shorts .csg-size {
+}/* ── Swim shorts only ────────────────────────────────────────────────────
+   Ten measurements will not fit one readable row, so the five people compare
+   most often stay in the table and the rest appear for the selected size. With
+   no swim measurement photographs in the theme, that panel takes the column the
+   How-to-Measure cards occupy in the denim guides. */
+#carbon-size-guide-mens-swim-shorts .csg-more { border: 1px solid var(--csg-line); border-radius: 12px; padding: 16px 18px; }#carbon-size-guide-mens-swim-shorts .csg-more-h { margin: 0 0 4px; font-family: var(--csg-display); font-weight: 600;
+  font-size: clamp(17px, 1.5vw, 21px); letter-spacing: .04em; text-transform: uppercase; }#carbon-size-guide-mens-swim-shorts .csg-more-sub { margin: 0 0 14px; font-size: 13px; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 18px; }#carbon-size-guide-mens-swim-shorts .csg-kv > div { min-width: 0; }#carbon-size-guide-mens-swim-shorts .csg-k { display: block; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-v { display: block; font-family: var(--csg-display); font-weight: 600; font-size: 20px; margin-top: 2px; }#carbon-size-guide-mens-swim-shorts .csg-basis { margin: 14px 2px 0; font-size: 12.5px; line-height: 1.5; color: #6b7280; max-width: 64ch; }/* ── Desktop placement ───────────────────────────────────────────────────
+   The denim guides fill the right-hand column with measurement photographs
+   and the shared grid arranges everything else around that block. There is no
+   swim-short photography, and dropping hip, thigh and inseam left both the
+   table and this panel shorter still, so each panel is placed by hand rather
+   than left to auto placement, which stranded the note beside empty space. */
+#carbon-size-guide-mens-swim-shorts .csg-subtitle { grid-column: 1 / -1; grid-row: 2; max-width: 78ch; }#carbon-size-guide-mens-swim-shorts .csg-chart { grid-column: 1;      grid-row: 3 / span 2; }#carbon-size-guide-mens-swim-shorts .csg-more { grid-column: 2;      grid-row: 3; align-self: start; }#carbon-size-guide-mens-swim-shorts .csg-note-wrap { grid-column: 2;      grid-row: 4; align-self: start; }/* phone: size buttons then every measurement, hidden on desktop */
+#carbon-size-guide-mens-swim-shorts .csg-mob { display: none; }#carbon-size-guide-mens-swim-shorts .csg-sizes { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }#carbon-size-guide-mens-swim-shorts .csg-size {
   appearance: none; cursor: pointer; background: #fff; color: var(--csg-ink);
-  border: 1px solid var(--csg-line); border-radius: 10px; padding: 13px 2px; min-width: 0;
-  font-family: var(--csg-display); font-weight: 600; font-size: 17px;
+  border: 1px solid var(--csg-line); border-radius: 10px; padding: 12px 0; min-width: 60px;
+  font-family: var(--csg-display); font-weight: 600; font-size: 17px; flex: 1 0 60px;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
-}#carbon-size-guide-mens-swim-shorts .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-swim-shorts .csg-sel { border: 1px solid var(--csg-line); border-radius: 12px; overflow: hidden; }#carbon-size-guide-mens-swim-shorts .csg-sel-h {
-  margin: 0; padding: 11px 14px; background: var(--csg-blue-soft);
-  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
-  letter-spacing: .07em; text-transform: uppercase;
-}#carbon-size-guide-mens-swim-shorts .csg-sel-row {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
-  padding: 13px 14px; border-top: 1px solid var(--csg-line);
-}#carbon-size-guide-mens-swim-shorts .csg-sel-k { font-size: 12.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-sel-v { font-family: var(--csg-display); font-weight: 600; font-size: 21px; color: var(--csg-blue); }#carbon-size-guide-mens-swim-shorts .csg-sel-u { font-size: 13px; font-weight: 400; color: var(--csg-muted); margin-left: 3px; }
+}#carbon-size-guide-mens-swim-shorts .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-swim-shorts .csg-mob-h { margin: 0 0 12px; font-family: var(--csg-display); font-weight: 700;
+  font-size: 20px; letter-spacing: .04em; text-transform: uppercase; }
 
-@media (max-width: 1000px) {
-  /* One column. The wrapper dissolves, and the rows this file pinned for the
-     desktop composition have to be released here too — these rules come after
-     the shared media block, so a leftover grid-row would still win and drag
-     How to Measure to the top of the page. */
-  #carbon-size-guide-mens-swim-shorts .csg-left { display: contents; }
-  #carbon-size-guide-mens-swim-shorts .csg-measure { grid-column: 1; grid-row: auto; }
-  #carbon-size-guide-mens-swim-shorts .csg-mob { grid-column: 1; grid-row: auto; order: 4; }
-  #carbon-size-guide-mens-swim-shorts .csg-tips-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 680px) {
-  /* The table gives way to the size buttons and that size's own three figures.
-     Shrinking a four-column table onto a 360px screen is what this replaces. */
-  #carbon-size-guide-mens-swim-shorts .csg-chart, #carbon-size-guide-mens-swim-shorts .csg-overview { display: none; }
-  #carbon-size-guide-mens-swim-shorts .csg-mob { display: block; }
-  #carbon-size-guide-mens-swim-shorts .csg-tips-list { grid-template-columns: 1fr; }
-  /* Each diagram keeps a full-width panel instead of the jeans' 62px thumbnail:
-     these drawings carry their own labels, which are unreadable at that size. */
-  #carbon-size-guide-mens-swim-shorts .csg-card {
-    display: flex; flex-direction: column; gap: 10px;
-    border: 1px solid var(--csg-line); border-radius: 12px; padding: 11px;
-  }
-  #carbon-size-guide-mens-swim-shorts .csg-card:first-child { padding-top: 11px; }
-  #carbon-size-guide-mens-swim-shorts .csg-photo { aspect-ratio: 4 / 3; object-fit: contain; }
+  /* One column, so the hand-placed desktop rows above have to be released. */
+  #carbon-size-guide-mens-swim-shorts .csg-chart, #carbon-size-guide-mens-swim-shorts .csg-more { display: none; }
+  #carbon-size-guide-mens-swim-shorts .csg-subtitle { grid-row: auto; }
+  #carbon-size-guide-mens-swim-shorts .csg-mob { display: block; order: 5; grid-column: 1; grid-row: auto; }
+  #carbon-size-guide-mens-swim-shorts .csg-note-wrap { order: 6; grid-column: 1; grid-row: auto; }
+  #carbon-size-guide-mens-swim-shorts .csg-tips { order: 7; }
+}
+@media (max-width: 380px) {
+  /* Two columns of label + value stop fitting; one keeps every figure whole. */
+  #carbon-size-guide-mens-swim-shorts .csg-kv { grid-template-columns: 1fr; }
 }
 
 </style>
@@ -276,125 +232,138 @@
     <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
   </div>
 
-  <div class="csg-left">
-    <p class="csg-subtitle">All measurements are taken with the garment laid flat.</p>
+  <p class="csg-subtitle">Garment measurements for our men&rsquo;s swim shorts.</p>
 
-    <section class="csg-chart" aria-label="Size chart">
-      <table class="csg-table">
-        <thead><tr><th scope="col">Size</th><th scope="col"><span>Waist Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Hip Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Inseam</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
-        <tbody><tr data-csg-row="S" data-cm-waist="35" data-cm-hip="54" data-cm-inseam="12" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="M" data-cm-waist="37" data-cm-hip="56" data-cm-inseam="12" aria-selected="true" tabindex="0"><th scope="row">M</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="L" data-cm-waist="39" data-cm-hip="58" data-cm-inseam="12" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="XL" data-cm-waist="41" data-cm-hip="60" data-cm-inseam="13" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="XXL" data-cm-waist="43" data-cm-hip="62" data-cm-inseam="13" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr></tbody>
-      </table>
-    </section>
+  <section class="csg-chart" aria-label="Size chart">
+    <table class="csg-table">
+      <thead><tr><th scope="col">Size</th><th scope="col"><span>Waist</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Front Rise</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>E &mdash; Trotter</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Side Length</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th></tr></thead>
+      <tbody><tr data-csg-row="S" data-cm-waist="35" data-cm-belt="4" data-cm-frontrise="27" data-cm-backrise="35.5" data-cm-trotter="28" data-cm-pocket="14.5" data-cm-side="36" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="waist">35</td><td data-csg-cell="frontrise">27</td><td data-csg-cell="trotter">28</td><td data-csg-cell="side">36</td></tr><tr data-csg-row="M" data-cm-waist="37" data-cm-belt="4" data-cm-frontrise="28" data-cm-backrise="36.5" data-cm-trotter="29" data-cm-pocket="14.5" data-cm-side="37" aria-selected="false" tabindex="0"><th scope="row">M</th><td data-csg-cell="waist">37</td><td data-csg-cell="frontrise">28</td><td data-csg-cell="trotter">29</td><td data-csg-cell="side">37</td></tr><tr data-csg-row="L" data-cm-waist="39" data-cm-belt="4" data-cm-frontrise="29" data-cm-backrise="37.5" data-cm-trotter="30" data-cm-pocket="15.5" data-cm-side="38" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="waist">39</td><td data-csg-cell="frontrise">29</td><td data-csg-cell="trotter">30</td><td data-csg-cell="side">38</td></tr><tr data-csg-row="XL" data-cm-waist="41" data-cm-belt="4" data-cm-frontrise="30" data-cm-backrise="38.5" data-cm-trotter="31" data-cm-pocket="15.5" data-cm-side="39" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="waist">41</td><td data-csg-cell="frontrise">30</td><td data-csg-cell="trotter">31</td><td data-csg-cell="side">39</td></tr><tr data-csg-row="XXL" data-cm-waist="43" data-cm-belt="4" data-cm-frontrise="31" data-cm-backrise="39.5" data-cm-trotter="32" data-cm-pocket="15.5" data-cm-side="40" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="waist">43</td><td data-csg-cell="frontrise">31</td><td data-csg-cell="trotter">32</td><td data-csg-cell="side">40</td></tr></tbody>
+    </table>
+    <p class="csg-basis">
+      These are measurements of the garment, not body measurements. Select a size to see the
+      remaining measurements for it.
+    </p>
+  </section>
 
-    <figure class="csg-overview">
-      <img src="{{ 'carbon-swim-measurement-overview.webp' | asset_url }}"
-           alt="Swim shorts shown flat with all three measurements marked: waist width across the top of the waistband, hip width across the widest part, and the inseam from the crotch seam down the inner leg to the hem" width="1300" height="980" loading="lazy" decoding="async">
-    </figure>
+  <div class="csg-more">
+    <h3 class="csg-more-h">Additional garment measurements</h3>
+    <p class="csg-more-sub">Size <span data-csg-more-size>M</span></p>
+    <div class="csg-kv"><div><span class="csg-k">Waistband Height</span><span class="csg-v" data-csg-more="belt">&mdash;</span></div><div><span class="csg-k">Back Rise</span><span class="csg-v" data-csg-more="backrise">&mdash;</span></div><div><span class="csg-k">Front Pocket</span><span class="csg-v" data-csg-more="pocket">&mdash;</span></div></div>
   </div>
 
   <div class="csg-mob">
-    <p class="csg-mob-label" id="carbon-size-guide-mens-swim-shorts-sizes">Select a size</p>
-    <div class="csg-sizes" role="group" aria-labelledby="carbon-size-guide-mens-swim-shorts-sizes"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
-    <div class="csg-sel">
-      <p class="csg-sel-h">Size <span data-csg-sel-size>M</span> measurements</p>
-      <div class="csg-sel-row"><span class="csg-sel-k">Waist Width</span><span class="csg-sel-v" data-csg-sel="waist">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">Hip Width</span><span class="csg-sel-v" data-csg-sel="hip">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">Inseam</span><span class="csg-sel-v" data-csg-sel="inseam">&mdash;</span></div>
-    </div>
+    <div class="csg-sizes" role="group" aria-label="Choose a size"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
+    <h3 class="csg-mob-h">Size <span data-csg-all-size>M</span></h3>
+    <div class="csg-kv"><div><span class="csg-k">Waist</span><span class="csg-v" data-csg-all="waist">&mdash;</span></div><div><span class="csg-k">Waistband Height</span><span class="csg-v" data-csg-all="belt">&mdash;</span></div><div><span class="csg-k">Front Rise</span><span class="csg-v" data-csg-all="frontrise">&mdash;</span></div><div><span class="csg-k">Back Rise</span><span class="csg-v" data-csg-all="backrise">&mdash;</span></div><div><span class="csg-k">E &mdash; Trotter</span><span class="csg-v" data-csg-all="trotter">&mdash;</span></div><div><span class="csg-k">Front Pocket</span><span class="csg-v" data-csg-all="pocket">&mdash;</span></div><div><span class="csg-k">Side Length</span><span class="csg-v" data-csg-all="side">&mdash;</span></div></div>
+    <p class="csg-basis">These are measurements of the garment, not body measurements.</p>
   </div>
 
-  <details class="csg-measure" open>
-    <summary>
-      <h3 class="csg-h3">How to measure</h3>
-      <svg class="csg-chev" width="18" height="11" viewBox="0 0 18 11" aria-hidden="true" focusable="false"><path d="M1.5 1.5L9 9l7.5-7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </summary>
-    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">Waist Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-waist.webp' | asset_url }}" alt="Swim shorts shown flat from the front with a horizontal arrow across the top of the waistband" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the swim shorts flat. Measure straight across the top of the waistband from edge to edge. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">Hip Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-hip.webp' | asset_url }}" alt="Swim shorts shown flat with a horizontal arrow across the widest part of the shorts" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the swim shorts flat. Measure straight across the widest part of the shorts. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">Inseam</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-inseam.webp' | asset_url }}" alt="Swim shorts shown flat with a vertical arrow running from the crotch seam down the inner leg to the hem" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the crotch seam straight down the inner leg to the hem.</p></article></div>
+  <div class="csg-note-wrap">
     <p class="csg-note">
       <span class="csg-note-icon" aria-hidden="true">i</span>
-      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal production and finishing. For the most accurate comparison, measure a pair of swim shorts you already own while they are laid flat.</span>
+      <span><strong>Helpful note:</strong> Garment measurements can vary slightly from pair to pair
+      due to normal production and finishing. Please allow approximately <strong>&plusmn;2&nbsp;cm
+      (&plusmn;0.75&nbsp;in)</strong>. If you&rsquo;re between sizes, compare these measurements with
+      a pair of swim shorts you already own and love.</span>
     </p>
-  </details>
+  </div>
 
   <footer class="csg-tips">
-    <span class="csg-tips-icon" aria-hidden="true">
-      <img src="{{ 'carbon-size-guide-tape-icon.png' | asset_url }}" alt="" width="68" height="69" loading="lazy" decoding="async">
-    </span>
+    <span class="csg-tips-icon" aria-hidden="true"><svg width="44" height="30" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="15" cy="12.5" rx="12.5" ry="8.5"/><path d="M2.5 12.5v9.5c0 4.7 5.6 8.5 12.5 8.5s12.5-3.8 12.5-8.5v-9.5"/><ellipse cx="15" cy="12.5" rx="6" ry="4"/><path d="M18.6 11.6c-.5-1.1-1.9-1.7-3.4-1.5-1.4.2-2.4 1-2.3 1.9.1.8 1.2 1.3 2.4 1.1"/><path d="M27.5 18.4h24c2 0 3.2 1 3.2 2.6v6.6c0 1.6-1.2 2.6-3.2 2.6-3.6 0-6-1.4-9.4-1.6"/><path d="M6.5 24v4.2M11 25.4v4.8M15.5 25.8v5M20 25.4v4.8M24.5 24v4.2"/><path d="M31 20.8v4.6M36 20.8v5.6M41 20.8v4.6M46 20.8v5.6M51 20.8v4.6"/></svg></span>
     <h3 class="csg-tips-title">Tips for the best fit</h3>
-    <ul class="csg-tips-list"><li><span class="csg-step" aria-hidden="true">1</span><span>Choose a pair of swim shorts you already own that fits you well.</span></li><li><span class="csg-step" aria-hidden="true">2</span><span>Lay them flat and smooth out wrinkles.</span></li><li><span class="csg-step" aria-hidden="true">3</span><span>Measure Waist, Hip and Inseam as shown.</span></li><li><span class="csg-step" aria-hidden="true">4</span><span>Compare those measurements with the CARBON size chart.</span></li></ul>
+    <ul class="csg-tips-list"><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Use a soft measuring tape</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Compare with swim shorts that already fit you</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Between sizes? Size up for a looser fit</span></li></ul>
     <p class="csg-tagline">Built different.<br>Made for everyone.</p>
   </footer>
-
 </div>
+
 <script>
 (function () {
+  "use strict";
   var root = document.getElementById("carbon-size-guide-mens-swim-shorts");
   if (!root || root.dataset.csgReady) return;
   root.dataset.csgReady = "1";
 
-  var KEYS = ["waist", "hip", "inseam"];
+  var KEYS = ["waist","belt","frontrise","backrise","trotter","pocket","side"];
   var unit = "in";
   var selected = "M";
   var rows = [].slice.call(root.querySelectorAll("[data-csg-row]"));
   var buttons = [].slice.call(root.querySelectorAll("[data-csg-size]"));
-  var units = [].slice.call(root.querySelectorAll("[data-csg-unit]"));
 
-  /* Centimetres are the only stored figures; inches are derived here so the two
-     cannot disagree. One decimal, and 22.0 keeps its zero so the column lines up. */
+  /*
+   * Published exactly as supplied — nothing is doubled. The denim guides hold
+   * half-garment figures and double them; doing that here would turn a 35 cm
+   * waist into 70 cm. Centimetres are the only stored values and inches are
+   * derived, so there is one set of numbers, not two that can drift.
+   */
   function show(cm) {
-    if (cm == null || cm === "") return "\u2014";
-    if (unit === "cm") return String(parseFloat(cm));
-    return (parseFloat(cm) / 2.54).toFixed(1);
-  }
-
-  function rowFor(size) {
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].getAttribute("data-csg-row") === size) return rows[i];
-    }
-    return null;
+    if (cm == null) return "\u2014";
+    var n = parseFloat(cm);
+    /* Inches keep one decimal even when it is a zero: 22.0 reads as a
+       measurement, 22 reads as a rounded-off guess. */
+    return unit === "cm" ? String(n) : (n / 2.54).toFixed(1);
   }
 
   function paint() {
-    rows.forEach(function (tr) {
+    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
+      el.textContent = unit === "in" ? "(in)" : "(cm)";
+    });
+    rows.forEach(function (r) {
       KEYS.forEach(function (k) {
-        var td = tr.querySelector('[data-csg-cell="' + k + '"]');
-        if (td) td.textContent = show(tr.getAttribute("data-cm-" + k));
+        var cell = r.querySelector('[data-csg-cell="' + k + '"]');
+        if (cell) cell.textContent = show(r.getAttribute("data-cm-" + k));
       });
-      tr.setAttribute("aria-selected", tr.getAttribute("data-csg-row") === selected ? "true" : "false");
+    });
+    root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
+    });
+    paintDetail();
+  }
+
+  function paintDetail() {
+    /* Both panels read the same row, so the desktop column and the phone list
+       cannot disagree. */
+    var row = rows.filter(function (r) { return r.getAttribute("data-csg-row") === selected; })[0];
+    var suffix = unit === "in" ? " in" : " cm";
+    root.querySelectorAll("[data-csg-more-size], [data-csg-all-size]").forEach(function (el) {
+      el.textContent = selected || "\u2014";
+    });
+    ["more", "all"].forEach(function (scope) {
+      root.querySelectorAll("[data-csg-" + scope + "]").forEach(function (el) {
+        var k = el.getAttribute("data-csg-" + scope);
+        var cm = row ? row.getAttribute("data-cm-" + k) : null;
+        el.textContent = cm ? show(cm) + suffix : "\u2014";
+      });
+    });
+  }
+
+  function select(size) {
+    selected = size;
+    rows.forEach(function (r) {
+      r.setAttribute("aria-selected", r.getAttribute("data-csg-row") === selected ? "true" : "false");
     });
     buttons.forEach(function (b) {
       b.setAttribute("aria-pressed", b.getAttribute("data-csg-size") === selected ? "true" : "false");
     });
-    units.forEach(function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
-    });
-    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
-      el.textContent = "(" + unit + ")";
-    });
-    var tr = rowFor(selected);
-    var label = root.querySelector("[data-csg-sel-size]");
-    if (label) label.textContent = selected;
-    KEYS.forEach(function (k) {
-      var el = root.querySelector('[data-csg-sel="' + k + '"]');
-      if (!el) return;
-      el.innerHTML = tr
-        ? show(tr.getAttribute("data-cm-" + k)) + '<span class="csg-sel-u">' + unit + "</span>"
-        : "\u2014";
-    });
+    paintDetail();
   }
 
-  function select(size) { selected = size; paint(); }
-
-  rows.forEach(function (tr) {
-    tr.addEventListener("click", function () { select(tr.getAttribute("data-csg-row")); });
-    tr.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(tr.getAttribute("data-csg-row")); }
+  root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      unit = b.getAttribute("data-csg-unit");
+      paint();                       /* the chosen size survives a unit change */
+    });
+  });
+  rows.forEach(function (r) {
+    r.addEventListener("click", function () { select(r.getAttribute("data-csg-row")); });
+    r.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(r.getAttribute("data-csg-row")); }
     });
   });
   buttons.forEach(function (b) {
     b.addEventListener("click", function () { select(b.getAttribute("data-csg-size")); });
   });
-  units.forEach(function (b) {
-    b.addEventListener("click", function () { unit = b.getAttribute("data-csg-unit"); paint(); });
-  });
 
   paint();
+  select("M");
 })();
 </script>
