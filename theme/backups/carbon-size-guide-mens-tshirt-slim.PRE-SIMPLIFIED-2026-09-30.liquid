@@ -1,8 +1,6 @@
-<!-- CARBON interactive size guide: Men's Slim Fit T-Shirts
-     (custom.size_guide_type = mens-tshirt-slim). Four customer measurements
-     only; the source spreadsheet's factory points are deliberately absent. -->
+<!-- CARBON interactive size guide: Men's Swim Shorts (custom.size_guide_type = mens-swim-shorts) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap">
-<div id="carbon-size-guide-mens-tshirt-slim" class="carbon-size-guide" data-fit="mens-tshirt-slim">
+<div id="carbon-size-guide-mens-tshirt-slim" class="carbon-size-guide" data-fit="mens-swim-shorts">
 <style>
 /* Every selector is prefixed with the component's own id at build time, so this
    file is written unprefixed and stays readable. Nothing here can reach the rest
@@ -185,84 +183,40 @@
      flat-lays fill their square. The inseam keeps contain — cropping the one
      photo whose whole job is crotch-to-hem would defeat it. */
 #carbon-size-guide-mens-tshirt-slim .csg-photo { aspect-ratio: 1 / 1; object-fit: cover; }#carbon-size-guide-mens-tshirt-slim .csg-photo-inseam { object-fit: contain; }#carbon-size-guide-mens-tshirt-slim .csg-card-head { grid-column: 2; }#carbon-size-guide-mens-tshirt-slim .csg-card-text { grid-column: 2; font-size: 13.5px; }#carbon-size-guide-mens-tshirt-slim .csg-tips { flex-direction: column; align-items: flex-start; gap: 10px; }#carbon-size-guide-mens-tshirt-slim .csg-tips-list { grid-template-columns: 1fr; gap: 9px; }#carbon-size-guide-mens-tshirt-slim .csg-note { font-size: 13.5px; }
-}/* ── Desktop placement ───────────────────────────────────────────────────
-   The jeans guides fill the right-hand column with three measurement photos
-   and run their table down the left. This guide has only four measurements,
-   so the overview diagram takes that column beside the table and the four
-   How-to-Measure cards run full width underneath, matching the approved
-   T-shirt composition. Every panel is placed explicitly — the shared grid
-   reserves the right column for .csg-measure, and anything left to auto
-   placement lands in the hole that leaves. */
-#carbon-size-guide-mens-tshirt-slim .csg-overview { grid-column: 2; grid-row: 2 / 4; margin: 0; align-self: center; }#carbon-size-guide-mens-tshirt-slim .csg-chart { grid-column: 1; grid-row: 3; }#carbon-size-guide-mens-tshirt-slim .csg-measure { grid-column: 1 / -1; grid-row: 4; margin-top: clamp(22px, 2.6vw, 32px); }#carbon-size-guide-mens-tshirt-slim .csg-note-wrap { grid-column: 1; grid-row: 5; }#carbon-size-guide-mens-tshirt-slim .csg-tips-card { grid-column: 2; grid-row: 5; }/* The diagram is portrait and the table is six short rows; at the column's
-   full width it would tower over the chart, so it is capped and centred. */
-#carbon-size-guide-mens-tshirt-slim .csg-overview img {
-  display: block; margin: 0 auto; max-width: 100%; max-height: 430px;
-  width: auto; height: auto;
-}#carbon-size-guide-mens-tshirt-slim .csg-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }/* The supplied photographs are landscape and already cropped to their subject,
-   so they keep their own shape rather than being forced into the jeans guides'
-   square box, which would crop the ends off the measurement arrows. */
-#carbon-size-guide-mens-tshirt-slim .csg-photo { aspect-ratio: 1200 / 624; object-fit: cover; background: #fff; }/* ── helpful note + tips, side by side along the bottom ─────────────────── */
-#carbon-size-guide-mens-tshirt-slim .csg-note { margin: 0; height: 100%; }#carbon-size-guide-mens-tshirt-slim .csg-tips-card {
-  border: 1px solid var(--csg-line); border-radius: 12px;
-  padding: 17px clamp(16px, 1.8vw, 22px); margin: 20px 0 0;
-}#carbon-size-guide-mens-tshirt-slim .csg-note-wrap { margin: 20px 0 0; }#carbon-size-guide-mens-tshirt-slim .csg-tips-head { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; }#carbon-size-guide-mens-tshirt-slim .csg-tips-icon { flex: 0 0 auto; display: grid; place-items: center; }#carbon-size-guide-mens-tshirt-slim .csg-tips-icon img { display: block; width: 34px; height: auto; }#carbon-size-guide-mens-tshirt-slim .csg-tips-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; counter-reset: csgstep; }#carbon-size-guide-mens-tshirt-slim .csg-tips-steps li {
-  display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px;
-  align-items: start; font-size: 13.5px; line-height: 1.45; color: var(--csg-muted);
-}#carbon-size-guide-mens-tshirt-slim .csg-tips-steps li::before {
-  counter-increment: csgstep; content: counter(csgstep);
-  width: 22px; height: 22px; border-radius: 50%; background: var(--csg-blue); color: #fff;
-  display: grid; place-items: center; font-family: var(--csg-display);
-  font-weight: 600; font-size: 13px; margin-top: -1px;
-}/* ── phone: size buttons and the selected size's four figures ──────────── */
-#carbon-size-guide-mens-tshirt-slim .csg-mob { display: none; }#carbon-size-guide-mens-tshirt-slim .csg-mob-label {
-  margin: 0 0 8px; font-family: var(--csg-display); font-weight: 600;
-  font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
-}/* Six equal columns rather than a wrapping flex row: at 360px the sixth button
-   wrapped onto a line of its own and stretched the full width. */
-#carbon-size-guide-mens-tshirt-slim .csg-sizes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; margin: 0 0 16px; }#carbon-size-guide-mens-tshirt-slim .csg-size {
+}/* ── Swim shorts only ────────────────────────────────────────────────────
+   Ten measurements will not fit one readable row, so the five people compare
+   most often stay in the table and the rest appear for the selected size. With
+   no swim measurement photographs in the theme, that panel takes the column the
+   How-to-Measure cards occupy in the denim guides. */
+#carbon-size-guide-mens-tshirt-slim .csg-more { border: 1px solid var(--csg-line); border-radius: 12px; padding: 16px 18px; }#carbon-size-guide-mens-tshirt-slim .csg-more-h { margin: 0 0 4px; font-family: var(--csg-display); font-weight: 600;
+  font-size: clamp(17px, 1.5vw, 21px); letter-spacing: .04em; text-transform: uppercase; }#carbon-size-guide-mens-tshirt-slim .csg-more-sub { margin: 0 0 14px; font-size: 13px; color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-slim .csg-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 18px; }#carbon-size-guide-mens-tshirt-slim .csg-kv > div { min-width: 0; }#carbon-size-guide-mens-tshirt-slim .csg-k { display: block; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-slim .csg-v { display: block; font-family: var(--csg-display); font-weight: 600; font-size: 20px; margin-top: 2px; }#carbon-size-guide-mens-tshirt-slim .csg-how { border: 1px solid var(--csg-line); border-radius: 12px; padding: 16px 18px; }#carbon-size-guide-mens-tshirt-slim .csg-how-list { margin: 0; display: grid; gap: 11px; }#carbon-size-guide-mens-tshirt-slim .csg-how-list > div { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 10px; }#carbon-size-guide-mens-tshirt-slim .csg-how-list dt { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--csg-ink); font-weight: 600; }#carbon-size-guide-mens-tshirt-slim .csg-how-list dd { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--csg-muted); }
+@media (max-width: 560px) {#carbon-size-guide-mens-tshirt-slim .csg-how-list > div { grid-template-columns: 1fr; gap: 2px; } }#carbon-size-guide-mens-tshirt-slim .csg-basis { margin: 14px 2px 0; font-size: 12.5px; line-height: 1.5; color: #6b7280; max-width: 64ch; }/* ── Desktop placement ───────────────────────────────────────────────────
+   The denim guides fill the right-hand column with measurement photographs,
+   and the shared grid places everything else around that block. There is no
+   T-shirt photography, so every panel here is placed by hand — left to auto
+   placement they scatter and leave the photo column standing empty. Seven
+   columns also read better across the full width than squeezed into one. */
+#carbon-size-guide-mens-tshirt-slim .csg-subtitle { grid-column: 1 / -1; grid-row: 2; max-width: 78ch; }#carbon-size-guide-mens-tshirt-slim .csg-chart { grid-column: 1 / -1; grid-row: 3; }#carbon-size-guide-mens-tshirt-slim .csg-how { grid-column: 1;      grid-row: 4; }#carbon-size-guide-mens-tshirt-slim .csg-more { grid-column: 2;      grid-row: 4; }#carbon-size-guide-mens-tshirt-slim .csg-note-wrap { grid-column: 1 / -1; grid-row: 5; }/* phone: size buttons then every measurement, hidden on desktop */
+#carbon-size-guide-mens-tshirt-slim .csg-mob { display: none; }#carbon-size-guide-mens-tshirt-slim .csg-sizes { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }#carbon-size-guide-mens-tshirt-slim .csg-size {
   appearance: none; cursor: pointer; background: #fff; color: var(--csg-ink);
-  border: 1px solid var(--csg-line); border-radius: 10px; padding: 12px 2px; min-width: 0;
-  font-family: var(--csg-display); font-weight: 600; font-size: 16px;
+  border: 1px solid var(--csg-line); border-radius: 10px; padding: 12px 0; min-width: 60px;
+  font-family: var(--csg-display); font-weight: 600; font-size: 17px; flex: 1 0 60px;
   transition: background-color .15s ease, border-color .15s ease, color .15s ease;
-}#carbon-size-guide-mens-tshirt-slim .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-tshirt-slim .csg-sel { border: 1px solid var(--csg-line); border-radius: 12px; overflow: hidden; }#carbon-size-guide-mens-tshirt-slim .csg-sel-h {
-  margin: 0; padding: 11px 14px; background: var(--csg-blue-soft);
-  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
-  letter-spacing: .07em; text-transform: uppercase;
-}#carbon-size-guide-mens-tshirt-slim .csg-sel-grid { display: grid; grid-template-columns: 1fr 1fr; }#carbon-size-guide-mens-tshirt-slim .csg-sel-grid > div { padding: 13px 14px; border-top: 1px solid var(--csg-line); }#carbon-size-guide-mens-tshirt-slim .csg-sel-grid > div:nth-child(odd) { border-right: 1px solid var(--csg-line); }#carbon-size-guide-mens-tshirt-slim .csg-sel-k { display: block; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-slim .csg-sel-v { display: block; font-family: var(--csg-display); font-weight: 600; font-size: 22px; color: var(--csg-blue); margin-top: 2px; }#carbon-size-guide-mens-tshirt-slim .csg-sel-u { font-size: 13px; font-weight: 400; color: var(--csg-muted); margin-left: 3px; }
+}#carbon-size-guide-mens-tshirt-slim .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-tshirt-slim .csg-mob-h { margin: 0 0 12px; font-family: var(--csg-display); font-weight: 700;
+  font-size: 20px; letter-spacing: .04em; text-transform: uppercase; }
 
-@media (max-width: 1000px) {
-  /* One column. Every row this file pinned for the desktop composition has to be
-     released here, including the ones the shared sheet also lists — this file's
-     rules come after the shared media block, so they would otherwise still win
-     and leave How to Measure sitting above the size selector. */
-  #carbon-size-guide-mens-tshirt-slim .csg-overview, #carbon-size-guide-mens-tshirt-slim .csg-chart, #carbon-size-guide-mens-tshirt-slim .csg-measure,
-  #carbon-size-guide-mens-tshirt-slim .csg-note-wrap, #carbon-size-guide-mens-tshirt-slim .csg-tips-card, #carbon-size-guide-mens-tshirt-slim .csg-mob {
-    grid-column: 1; grid-row: auto;
-  }
-  /* Reading order: title, note, units, then size, then how to measure. */
-  #carbon-size-guide-mens-tshirt-slim .csg-overview { order: 4; align-self: start; margin: 0 0 4px; }
-  #carbon-size-guide-mens-tshirt-slim .csg-mob { order: 4; }
-  #carbon-size-guide-mens-tshirt-slim .csg-chart { order: 5; }
-  #carbon-size-guide-mens-tshirt-slim .csg-measure { order: 6; margin-top: 20px; }
-  #carbon-size-guide-mens-tshirt-slim .csg-note-wrap { order: 7; }
-  #carbon-size-guide-mens-tshirt-slim .csg-tips-card { order: 8; }
-  #carbon-size-guide-mens-tshirt-slim .csg-note { height: auto; }
-}
 @media (max-width: 680px) {
-  /* The full table is not usable on a phone: the size buttons and the selected
-     size's own four figures replace it, exactly as in the approved comp. */
-  #carbon-size-guide-mens-tshirt-slim .csg-chart, #carbon-size-guide-mens-tshirt-slim .csg-overview { display: none; }
-  #carbon-size-guide-mens-tshirt-slim .csg-mob { display: block; }
-  #carbon-size-guide-mens-tshirt-slim .csg-measure { margin-top: 18px; }
-  #carbon-size-guide-mens-tshirt-slim .csg-cards { grid-template-columns: 1fr; }
-  /* Back to the family's thumbnail row, but landscape so the arrow still reads. */
-  #carbon-size-guide-mens-tshirt-slim .csg-card { grid-template-columns: 96px minmax(0, 1fr); }
-  #carbon-size-guide-mens-tshirt-slim .csg-photo { aspect-ratio: 1200 / 624; object-fit: cover; }
-  #carbon-size-guide-mens-tshirt-slim .csg-tips-card { padding: 15px 16px; }
+  /* One column, so the hand-placed desktop rows above have to be released. */
+  #carbon-size-guide-mens-tshirt-slim .csg-chart, #carbon-size-guide-mens-tshirt-slim .csg-more { display: none; }
+  #carbon-size-guide-mens-tshirt-slim .csg-subtitle { grid-row: auto; }
+  #carbon-size-guide-mens-tshirt-slim .csg-how { order: 6; grid-column: 1; grid-row: auto; margin-top: 18px; }
+  #carbon-size-guide-mens-tshirt-slim .csg-mob { display: block; order: 5; grid-column: 1; grid-row: auto; }
+  #carbon-size-guide-mens-tshirt-slim .csg-note-wrap { order: 6; grid-column: 1; grid-row: auto; }
+  #carbon-size-guide-mens-tshirt-slim .csg-tips { order: 7; }
 }
 @media (max-width: 380px) {
-  #carbon-size-guide-mens-tshirt-slim .csg-size { font-size: 14.5px; padding: 11px 1px; }
-  #carbon-size-guide-mens-tshirt-slim .csg-sizes { gap: 6px; }
+  /* Two columns of label + value stop fitting; one keeps every figure whole. */
+  #carbon-size-guide-mens-tshirt-slim .csg-kv { grid-template-columns: 1fr; }
 }
 
 </style>
@@ -280,128 +234,150 @@
     <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
   </div>
 
-  <p class="csg-subtitle">All measurements are taken with the garment laid flat.</p>
-
-  <figure class="csg-overview">
-    <img src="{{ 'carbon-tshirt-measure-overview.webp' | asset_url }}" alt="A T-shirt laid flat, labelled with all four measurements: shoulder width, chest width, sleeve length and body length"
-         width="1020" height="1203" loading="lazy" decoding="async">
-  </figure>
+  <p class="csg-subtitle">Flat garment measurements for our men&rsquo;s slim fit T-shirts. For the most accurate comparison, lay a T-shirt you already own flat and measure it the same way.</p>
 
   <section class="csg-chart" aria-label="Size chart">
     <table class="csg-table">
-      <thead><tr><th scope="col">Size</th><th scope="col"><span>Chest Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Shoulder Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Sleeve Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Body Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
-      <tbody><tr data-csg-row="S" data-cm-chest="50" data-cm-shoulder="43" data-cm-sleeve="21.5" data-cm-length="70" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="M" data-cm-chest="52" data-cm-shoulder="45" data-cm-sleeve="22.5" data-cm-length="71" aria-selected="true" tabindex="0"><th scope="row">M</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="L" data-cm-chest="54" data-cm-shoulder="47" data-cm-sleeve="23.5" data-cm-length="73" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XL" data-cm-chest="56" data-cm-shoulder="49" data-cm-sleeve="24.5" data-cm-length="74.5" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XXL" data-cm-chest="58" data-cm-shoulder="51" data-cm-sleeve="25.5" data-cm-length="76" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XXXL" data-cm-chest="60" data-cm-shoulder="53" data-cm-sleeve="26.5" data-cm-length="77.5" aria-selected="false" tabindex="0"><th scope="row">XXXL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr></tbody>
+      <thead><tr><th scope="col">Size</th><th scope="col"><span>Chest Width</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Waist Width</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Hem Width</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Shoulder Width</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Sleeve Length</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Body Length</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th></tr></thead>
+      <tbody><tr data-csg-row="S" data-cm-chest="50" data-cm-waist="46" data-cm-hem="48" data-cm-neck="18" data-cm-fnd="10" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="21" data-cm-sleeve="21.5" data-cm-insleeve="8.5" data-cm-slwidth="17" data-cm-slhem="15" data-cm-shoulder="43" data-cm-slope="5" data-cm-length="70" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="chest">50</td><td data-csg-cell="waist">46</td><td data-csg-cell="hem">48</td><td data-csg-cell="shoulder">43</td><td data-csg-cell="sleeve">21.5</td><td data-csg-cell="length">70</td></tr><tr data-csg-row="M" data-cm-chest="52" data-cm-waist="48" data-cm-hem="50" data-cm-neck="19" data-cm-fnd="10.5" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="21.5" data-cm-sleeve="22.5" data-cm-insleeve="9" data-cm-slwidth="17.5" data-cm-slhem="15.5" data-cm-shoulder="45" data-cm-slope="5" data-cm-length="71" aria-selected="false" tabindex="0"><th scope="row">M</th><td data-csg-cell="chest">52</td><td data-csg-cell="waist">48</td><td data-csg-cell="hem">50</td><td data-csg-cell="shoulder">45</td><td data-csg-cell="sleeve">22.5</td><td data-csg-cell="length">71</td></tr><tr data-csg-row="L" data-cm-chest="54" data-cm-waist="50" data-cm-hem="52" data-cm-neck="19" data-cm-fnd="11" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="22" data-cm-sleeve="23.5" data-cm-insleeve="9.5" data-cm-slwidth="18" data-cm-slhem="16" data-cm-shoulder="47" data-cm-slope="5" data-cm-length="73" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="chest">54</td><td data-csg-cell="waist">50</td><td data-csg-cell="hem">52</td><td data-csg-cell="shoulder">47</td><td data-csg-cell="sleeve">23.5</td><td data-csg-cell="length">73</td></tr><tr data-csg-row="XL" data-cm-chest="56" data-cm-waist="52" data-cm-hem="54" data-cm-neck="20" data-cm-fnd="11.5" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="22.5" data-cm-sleeve="24.5" data-cm-insleeve="10" data-cm-slwidth="18.5" data-cm-slhem="16.5" data-cm-shoulder="49" data-cm-slope="5" data-cm-length="74.5" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="chest">56</td><td data-csg-cell="waist">52</td><td data-csg-cell="hem">54</td><td data-csg-cell="shoulder">49</td><td data-csg-cell="sleeve">24.5</td><td data-csg-cell="length">74.5</td></tr><tr data-csg-row="XXL" data-cm-chest="58" data-cm-waist="54" data-cm-hem="56" data-cm-neck="20" data-cm-fnd="12" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="23" data-cm-sleeve="25.5" data-cm-insleeve="10.5" data-cm-slwidth="19" data-cm-slhem="17" data-cm-shoulder="51" data-cm-slope="5" data-cm-length="76" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="chest">58</td><td data-csg-cell="waist">54</td><td data-csg-cell="hem">56</td><td data-csg-cell="shoulder">51</td><td data-csg-cell="sleeve">25.5</td><td data-csg-cell="length">76</td></tr><tr data-csg-row="XXXL" data-cm-chest="60" data-cm-waist="56" data-cm-hem="58" data-cm-neck="20" data-cm-fnd="12.5" data-cm-bnd="2" data-cm-collar="0.7" data-cm-armhole="23.5" data-cm-sleeve="26.5" data-cm-insleeve="11" data-cm-slwidth="20" data-cm-slhem="17.5" data-cm-shoulder="53" data-cm-slope="5" data-cm-length="77.5" aria-selected="false" tabindex="0"><th scope="row">XXXL</th><td data-csg-cell="chest">60</td><td data-csg-cell="waist">56</td><td data-csg-cell="hem">58</td><td data-csg-cell="shoulder">53</td><td data-csg-cell="sleeve">26.5</td><td data-csg-cell="length">77.5</td></tr></tbody>
     </table>
+    <p class="csg-basis">
+      Flat garment measurements, not body measurements. Select a size to see the rest of its
+      specification.
+    </p>
   </section>
 
-  <div class="csg-mob">
-    <p class="csg-mob-label" id="carbon-size-guide-mens-tshirt-slim-sizes">Select a size</p>
-    <div class="csg-sizes" role="group" aria-labelledby="carbon-size-guide-mens-tshirt-slim-sizes"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button><button type="button" class="csg-size" data-csg-size="XXXL" aria-pressed="false">XXXL</button></div>
-    <div class="csg-sel">
-      <p class="csg-sel-h">Size <span data-csg-sel-size>M</span> measurements</p>
-      <div class="csg-sel-grid"><div><span class="csg-sel-k">Chest Width</span><span class="csg-sel-v" data-csg-sel="chest">&mdash;</span></div><div><span class="csg-sel-k">Shoulder Width</span><span class="csg-sel-v" data-csg-sel="shoulder">&mdash;</span></div><div><span class="csg-sel-k">Sleeve Length</span><span class="csg-sel-v" data-csg-sel="sleeve">&mdash;</span></div><div><span class="csg-sel-k">Body Length</span><span class="csg-sel-v" data-csg-sel="length">&mdash;</span></div></div>
-    </div>
+  <div class="csg-how">
+    <h3 class="csg-more-h">How to measure</h3>
+    <p class="csg-more-sub">Lay the T-shirt completely flat and measure across. Do not double the number.</p>
+    <dl class="csg-how-list">
+      <div><dt>Chest Width</dt><dd>Straight across, about 1&nbsp;cm below the armhole points.</dd></div>
+      <div><dt>Waist Width</dt><dd>Straight across, halfway between the armhole and the bottom hem.</dd></div>
+      <div><dt>Hem Width</dt><dd>Straight across the bottom of the shirt.</dd></div>
+      <div><dt>Shoulder Width</dt><dd>From one shoulder seam to the other.</dd></div>
+      <div><dt>Sleeve Length</dt><dd>From the shoulder seam to the end of the sleeve.</dd></div>
+      <div><dt>Body Length</dt><dd>From the high point of the shoulder (HPS) down to the bottom hem.</dd></div>
+    </dl>
   </div>
 
-  <details class="csg-measure" open>
-    <summary>
-      <h3 class="csg-h3">How to measure</h3>
-      <svg class="csg-chev" width="18" height="11" viewBox="0 0 18 11" aria-hidden="true" focusable="false"><path d="M1.5 1.5L9 9l7.5-7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </summary>
-    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">Chest Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-chest.webp' | asset_url }}" alt="A T-shirt laid flat with an arrow running straight across the chest from one armhole to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the T-shirt flat. Measure straight across from armpit to armpit just below the armholes. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">Shoulder Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-shoulder.webp' | asset_url }}" alt="The top of a T-shirt laid flat with an arrow running from one shoulder seam to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure straight across from one shoulder seam to the other shoulder seam.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">Sleeve Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-sleeve.webp' | asset_url }}" alt="A T-shirt sleeve with an arrow running from the shoulder seam down to the sleeve opening" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the shoulder seam to the end of the sleeve.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">4</span><span class="csg-card-name">Body Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-body-length.webp' | asset_url }}" alt="A T-shirt laid flat with a vertical arrow from the high point of the shoulder down to the bottom hem" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the high point of shoulder (HPS) straight down to the bottom hem.</p></article></div>
-  </details>
+  <div class="csg-more">
+    <h3 class="csg-more-h">Additional garment measurements</h3>
+    <p class="csg-more-sub">Size <span data-csg-more-size>M</span></p>
+    <div class="csg-kv"><div><span class="csg-k">Neck Opening</span><span class="csg-v" data-csg-more="neck">&mdash;</span></div><div><span class="csg-k">Front Neck Drop</span><span class="csg-v" data-csg-more="fnd">&mdash;</span></div><div><span class="csg-k">Back Neck Drop</span><span class="csg-v" data-csg-more="bnd">&mdash;</span></div><div><span class="csg-k">Collar Height</span><span class="csg-v" data-csg-more="collar">&mdash;</span></div><div><span class="csg-k">Armhole Depth</span><span class="csg-v" data-csg-more="armhole">&mdash;</span></div><div><span class="csg-k">Inside Sleeve Length</span><span class="csg-v" data-csg-more="insleeve">&mdash;</span></div><div><span class="csg-k">Sleeve Width</span><span class="csg-v" data-csg-more="slwidth">&mdash;</span></div><div><span class="csg-k">Sleeve Hem Width</span><span class="csg-v" data-csg-more="slhem">&mdash;</span></div><div><span class="csg-k">Shoulder Slope</span><span class="csg-v" data-csg-more="slope">&mdash;</span></div></div>
+  </div>
+
+  <div class="csg-mob">
+    <div class="csg-sizes" role="group" aria-label="Choose a size"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button><button type="button" class="csg-size" data-csg-size="XXXL" aria-pressed="false">XXXL</button></div>
+    <h3 class="csg-mob-h">Size <span data-csg-all-size>M</span></h3>
+    <div class="csg-kv"><div><span class="csg-k">Chest Width</span><span class="csg-v" data-csg-all="chest">&mdash;</span></div><div><span class="csg-k">Waist Width</span><span class="csg-v" data-csg-all="waist">&mdash;</span></div><div><span class="csg-k">Hem Width</span><span class="csg-v" data-csg-all="hem">&mdash;</span></div><div><span class="csg-k">Neck Opening</span><span class="csg-v" data-csg-all="neck">&mdash;</span></div><div><span class="csg-k">Front Neck Drop</span><span class="csg-v" data-csg-all="fnd">&mdash;</span></div><div><span class="csg-k">Back Neck Drop</span><span class="csg-v" data-csg-all="bnd">&mdash;</span></div><div><span class="csg-k">Collar Height</span><span class="csg-v" data-csg-all="collar">&mdash;</span></div><div><span class="csg-k">Armhole Depth</span><span class="csg-v" data-csg-all="armhole">&mdash;</span></div><div><span class="csg-k">Sleeve Length</span><span class="csg-v" data-csg-all="sleeve">&mdash;</span></div><div><span class="csg-k">Inside Sleeve Length</span><span class="csg-v" data-csg-all="insleeve">&mdash;</span></div><div><span class="csg-k">Sleeve Width</span><span class="csg-v" data-csg-all="slwidth">&mdash;</span></div><div><span class="csg-k">Sleeve Hem Width</span><span class="csg-v" data-csg-all="slhem">&mdash;</span></div><div><span class="csg-k">Shoulder Width</span><span class="csg-v" data-csg-all="shoulder">&mdash;</span></div><div><span class="csg-k">Shoulder Slope</span><span class="csg-v" data-csg-all="slope">&mdash;</span></div><div><span class="csg-k">Body Length</span><span class="csg-v" data-csg-all="length">&mdash;</span></div></div>
+    <p class="csg-basis">Flat garment measurements, not body measurements.</p>
+  </div>
 
   <div class="csg-note-wrap">
     <p class="csg-note">
       <span class="csg-note-icon" aria-hidden="true">i</span>
-      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal production and finishing. For the most accurate fit comparison, measure a T-shirt you already own while it is laid flat.</span>
+      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal
+      production and finishing &mdash; small production variations are normal. For the most accurate
+      fit comparison, measure a T-shirt you already own while it is laid flat.</span>
     </p>
   </div>
 
-  <section class="csg-tips-card" aria-label="Tips for the best fit">
-    <div class="csg-tips-head">
-      <span class="csg-tips-icon" aria-hidden="true">
-        <img src="{{ 'carbon-size-guide-tape-icon.png' | asset_url }}" alt="" width="68" height="69" loading="lazy" decoding="async">
-      </span>
-      <h3 class="csg-h3">Tips for the best fit</h3>
-    </div>
-    <ol class="csg-tips-steps"><li><span>Choose a T-shirt you already own that fits you well.</span></li><li><span>Lay it flat on a clean surface and smooth out wrinkles.</span></li><li><span>Measure Chest, Shoulder, Sleeve and Body Length as shown.</span></li><li><span>Compare those measurements with the CARBON size chart.</span></li></ol>
-  </section>
-
+  <footer class="csg-tips">
+    <span class="csg-tips-icon" aria-hidden="true"><svg width="44" height="30" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="15" cy="12.5" rx="12.5" ry="8.5"/><path d="M2.5 12.5v9.5c0 4.7 5.6 8.5 12.5 8.5s12.5-3.8 12.5-8.5v-9.5"/><ellipse cx="15" cy="12.5" rx="6" ry="4"/><path d="M18.6 11.6c-.5-1.1-1.9-1.7-3.4-1.5-1.4.2-2.4 1-2.3 1.9.1.8 1.2 1.3 2.4 1.1"/><path d="M27.5 18.4h24c2 0 3.2 1 3.2 2.6v6.6c0 1.6-1.2 2.6-3.2 2.6-3.6 0-6-1.4-9.4-1.6"/><path d="M6.5 24v4.2M11 25.4v4.8M15.5 25.8v5M20 25.4v4.8M24.5 24v4.2"/><path d="M31 20.8v4.6M36 20.8v5.6M41 20.8v4.6M46 20.8v5.6M51 20.8v4.6"/></svg></span>
+    <h3 class="csg-tips-title">Tips for the best fit</h3>
+    <ul class="csg-tips-list"><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Lay the T-shirt completely flat</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Measure across, and do not double the number</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Compare with a T-shirt that already fits you</span></li></ul>
+    <p class="csg-tagline">Built different.<br>Made for everyone.</p>
+  </footer>
 </div>
+
 <script>
 (function () {
+  "use strict";
   var root = document.getElementById("carbon-size-guide-mens-tshirt-slim");
   if (!root || root.dataset.csgReady) return;
   root.dataset.csgReady = "1";
 
-  var KEYS = ["chest", "shoulder", "sleeve", "length"];
+  var KEYS = ["chest","waist","hem","neck","fnd","bnd","collar","armhole","sleeve","insleeve","slwidth","slhem","shoulder","slope","length"];
   var unit = "in";
   var selected = "M";
   var rows = [].slice.call(root.querySelectorAll("[data-csg-row]"));
   var buttons = [].slice.call(root.querySelectorAll("[data-csg-size]"));
-  var units = [].slice.call(root.querySelectorAll("[data-csg-unit]"));
 
-  /* Centimetres are the only stored figures; inches are derived here so the two
-     can never disagree. One decimal, and 28.0 keeps its zero so the column of
-     numbers stays aligned. */
+  /*
+   * Published exactly as supplied — nothing is doubled. The denim guides hold
+   * half-garment figures and double them; doing that here would turn a 35 cm
+   * waist into 70 cm. Centimetres are the only stored values and inches are
+   * derived, so there is one set of numbers, not two that can drift.
+   */
   function show(cm) {
-    if (cm == null || cm === "") return "\u2014";
-    if (unit === "cm") return String(parseFloat(cm));
-    return (parseFloat(cm) / 2.54).toFixed(1);
-  }
-
-  function rowFor(size) {
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].getAttribute("data-csg-row") === size) return rows[i];
-    }
-    return null;
+    if (cm == null) return "\u2014";
+    var n = parseFloat(cm);
+    /* Inches keep one decimal even when it is a zero: 22.0 reads as a
+       measurement, 22 reads as a rounded-off guess. */
+    return unit === "cm" ? String(n) : (n / 2.54).toFixed(1);
   }
 
   function paint() {
-    rows.forEach(function (tr) {
+    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
+      el.textContent = unit === "in" ? "(in)" : "(cm)";
+    });
+    rows.forEach(function (r) {
       KEYS.forEach(function (k) {
-        var td = tr.querySelector('[data-csg-cell="' + k + '"]');
-        if (td) td.textContent = show(tr.getAttribute("data-cm-" + k));
+        var cell = r.querySelector('[data-csg-cell="' + k + '"]');
+        if (cell) cell.textContent = show(r.getAttribute("data-cm-" + k));
       });
-      tr.setAttribute("aria-selected", tr.getAttribute("data-csg-row") === selected ? "true" : "false");
+    });
+    root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
+    });
+    paintDetail();
+  }
+
+  function paintDetail() {
+    /* Both panels read the same row, so the desktop column and the phone list
+       cannot disagree. */
+    var row = rows.filter(function (r) { return r.getAttribute("data-csg-row") === selected; })[0];
+    var suffix = unit === "in" ? " in" : " cm";
+    root.querySelectorAll("[data-csg-more-size], [data-csg-all-size]").forEach(function (el) {
+      el.textContent = selected || "\u2014";
+    });
+    ["more", "all"].forEach(function (scope) {
+      root.querySelectorAll("[data-csg-" + scope + "]").forEach(function (el) {
+        var k = el.getAttribute("data-csg-" + scope);
+        var cm = row ? row.getAttribute("data-cm-" + k) : null;
+        el.textContent = cm ? show(cm) + suffix : "\u2014";
+      });
+    });
+  }
+
+  function select(size) {
+    selected = size;
+    rows.forEach(function (r) {
+      r.setAttribute("aria-selected", r.getAttribute("data-csg-row") === selected ? "true" : "false");
     });
     buttons.forEach(function (b) {
       b.setAttribute("aria-pressed", b.getAttribute("data-csg-size") === selected ? "true" : "false");
     });
-    units.forEach(function (b) {
-      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
-    });
-    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
-      el.textContent = "(" + unit + ")";
-    });
-    var tr = rowFor(selected);
-    var label = root.querySelector("[data-csg-sel-size]");
-    if (label) label.textContent = selected;
-    KEYS.forEach(function (k) {
-      var el = root.querySelector('[data-csg-sel="' + k + '"]');
-      if (!el) return;
-      el.innerHTML = tr
-        ? show(tr.getAttribute("data-cm-" + k)) + '<span class="csg-sel-u">' + unit + "</span>"
-        : "\u2014";
-    });
+    paintDetail();
   }
 
-  function select(size) { selected = size; paint(); }
-
-  rows.forEach(function (tr) {
-    tr.addEventListener("click", function () { select(tr.getAttribute("data-csg-row")); });
-    tr.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(tr.getAttribute("data-csg-row")); }
+  root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      unit = b.getAttribute("data-csg-unit");
+      paint();                       /* the chosen size survives a unit change */
+    });
+  });
+  rows.forEach(function (r) {
+    r.addEventListener("click", function () { select(r.getAttribute("data-csg-row")); });
+    r.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(r.getAttribute("data-csg-row")); }
     });
   });
   buttons.forEach(function (b) {
     b.addEventListener("click", function () { select(b.getAttribute("data-csg-size")); });
   });
-  units.forEach(function (b) {
-    b.addEventListener("click", function () { unit = b.getAttribute("data-csg-unit"); paint(); });
-  });
 
   paint();
+  select("M");
 })();
 </script>

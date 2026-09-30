@@ -511,13 +511,16 @@ export function CatalogWorkspace({
           screens — at laptop widths the focused search box's ring ran into
           the buttons below it. */}
       <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Search and its scan button share one row at every width — no wrap,
+              and the input shrinks rather than pushing the icon to a line of
+              its own on a phone. */}
+          <div className="flex items-center gap-2">
             <input
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, SKU, UPC, system ID…"
-              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-[calc(theme(maxWidth.lg)-5rem)] max-md:text-base"
+              className="w-full min-w-0 max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg max-md:text-base"
             />
             {/* Scan a hang tag instead of typing it. The scanned text goes into
                 the same search box, so it matches on SKU, UPC or system id

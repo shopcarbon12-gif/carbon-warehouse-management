@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ScanBarcode } from "lucide-react";
 
 /**
  * Scan a barcode with the phone camera and hand the text back.
@@ -162,30 +163,31 @@ export function BarcodeScanButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => void start()}
-        disabled={busy}
-        title={title}
-        aria-label={title}
-        className={
-          className ??
-          "flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-semibold text-[var(--wms-accent)] hover:bg-[var(--wms-surface)] disabled:opacity-50 max-md:min-h-11"
-        }
-      >
-        {/* Viewfinder + bars: reads as "scan" without needing a label on a phone. */}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-          <path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" />
-          <path d="M7 8v8M11 8v8M15 8v8M18 8v8" strokeWidth="1.5" />
-        </svg>
-        {busy ? "Scanning…" : "Scan"}
-      </button>
-
-      {err ? (
-        <span className="font-mono text-[0.7rem] text-[var(--wms-status-danger-fg)]" role="status">
-          {err}
-        </span>
-      ) : null}
+      {/* Icon only, and `relative` so a failure message can hang beneath it
+          instead of widening the search row it shares. */}
+      <span className="relative inline-flex shrink-0">
+        <button
+          type="button"
+          onClick={() => void start()}
+          disabled={busy}
+          title={title}
+          aria-label={title}
+          className={
+            className ??
+            "inline-flex items-center justify-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2.5 py-2 text-[var(--wms-accent)] hover:bg-[var(--wms-surface)] disabled:opacity-50 max-md:min-h-11 max-md:min-w-11"
+          }
+        >
+          <ScanBarcode className={`h-[18px] w-[18px] ${busy ? "animate-pulse" : ""}`} aria-hidden="true" />
+        </button>
+        {err ? (
+          <span
+            role="status"
+            className="absolute left-0 top-full z-20 mt-1 w-56 rounded-md border border-[var(--wms-status-danger-fg)]/40 bg-[var(--wms-surface)] px-2 py-1 font-mono text-[0.7rem] leading-snug text-[var(--wms-status-danger-fg)] shadow-md"
+          >
+            {err}
+          </span>
+        ) : null}
+      </span>
 
       {open ? (
         <div className="fixed inset-0 z-[130] flex flex-col items-center justify-center bg-black/90 p-4" role="dialog" aria-modal="true" aria-label="Scan a barcode">
