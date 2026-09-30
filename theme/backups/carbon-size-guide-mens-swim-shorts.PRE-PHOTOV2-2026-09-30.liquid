@@ -193,12 +193,7 @@
    a gap under the description. Wrapping the two in one cell lets the slack
    fall below the table where it belongs. On one column the wrapper dissolves
    so the shared ordering still applies. */
-#carbon-size-guide-mens-swim-shorts .csg-left { grid-column: 1; grid-row: 2 / 4; display: flex; flex-direction: column; }#carbon-size-guide-mens-swim-shorts .csg-measure { grid-row: 2 / 4; }/* The shared grid splits 0.82fr / 1fr, which suits a jeans table of eight to
-   ten sizes. This one has four columns and five rows and reads comfortably in
-   less, so the width goes to the measurement column instead: it turns three
-   154px photographs into three 207px ones, which is the difference between a
-   thumbnail and something a shopper can actually read the tape from. */
-#carbon-size-guide-mens-swim-shorts { grid-template-columns: minmax(0, 0.62fr) minmax(0, 1fr); }/* ── Swim shorts ─────────────────────────────────────────────────────────
+#carbon-size-guide-mens-swim-shorts .csg-left { grid-column: 1; grid-row: 2 / 4; display: flex; flex-direction: column; }#carbon-size-guide-mens-swim-shorts .csg-measure { grid-row: 2 / 4; }/* ── Swim shorts ─────────────────────────────────────────────────────────
    Real product photographs, 4:3, the treatment the jeans guides give their own
    measurement shots. Contained rather than cropped: the inseam frame runs its
    arrow to the bottom edge, and a crop would cut off the end of the one
@@ -236,12 +231,10 @@
 }#carbon-size-guide-mens-swim-shorts .csg-sel-k { font-size: 12.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-sel-v { font-family: var(--csg-display); font-weight: 600; font-size: 21px; color: var(--csg-blue); }#carbon-size-guide-mens-swim-shorts .csg-sel-u { font-size: 13px; font-weight: 400; color: var(--csg-muted); margin-left: 3px; }
 
 @media (max-width: 1000px) {
-  /* One column. The wrapper dissolves, and everything this file pinned for the
-     desktop composition has to be released here too — these rules come after
-     the shared media block, so a leftover grid-row would still win and drag How
-     to Measure to the top of the page, and the leftover two-column track would
-     squeeze the measurement photographs down to 75px thumbnails. */
-  #carbon-size-guide-mens-swim-shorts { grid-template-columns: 1fr; }
+  /* One column. The wrapper dissolves, and the rows this file pinned for the
+     desktop composition have to be released here too — these rules come after
+     the shared media block, so a leftover grid-row would still win and drag
+     How to Measure to the top of the page. */
   #carbon-size-guide-mens-swim-shorts .csg-left { display: contents; }
   #carbon-size-guide-mens-swim-shorts .csg-measure { grid-column: 1; grid-row: auto; }
   #carbon-size-guide-mens-swim-shorts .csg-mob { grid-column: 1; grid-row: auto; order: 4; }
