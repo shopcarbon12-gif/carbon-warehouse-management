@@ -105,8 +105,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
 </style>
 {%- if carbon_guide_type == 'mens-swim-shorts' -%}
   {% render 'carbon-size-guide-mens-swim-shorts' %}
-{%- elsif carbon_guide_type == 'mens-tshirt-slim' -%}
-  {% render 'carbon-size-guide-mens-tshirt-slim' %}
 {%- else -%}
 {% case carbon_fit %}
   {% when 'slim' %}{% render 'carbon-size-guide-slim' %}
