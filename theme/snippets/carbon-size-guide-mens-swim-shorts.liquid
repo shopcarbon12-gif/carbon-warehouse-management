@@ -1,0 +1,361 @@
+<!-- CARBON interactive size guide: Men's Swim Shorts (custom.size_guide_type = mens-swim-shorts) -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap">
+<div id="carbon-size-guide-mens-swim-shorts" class="carbon-size-guide" data-fit="mens-swim-shorts">
+<style>
+/* Every selector is prefixed with the component's own id at build time, so this
+   file is written unprefixed and stays readable. Nothing here can reach the rest
+   of the product page. */
+#carbon-size-guide-mens-swim-shorts {
+  --csg-ink: #0f172a;
+  --csg-navy: #16233a;
+  --csg-blue: #1d4ed8;
+  --csg-blue-soft: #eff6ff;
+  --csg-line: #e5e7eb;
+  --csg-zebra: #f8fafc;
+  --csg-muted: #4b5563;
+  --csg-display: "Oswald", "Archivo Narrow", "Arial Narrow", Helvetica, sans-serif;
+  --csg-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* One grid for the whole component. Desktop places the pieces into two
+     columns with the measurement section spanning the description and table
+     rows, so HOW TO MEASURE starts level with the description exactly as in the
+     comp. Phone collapses to one column and re-orders, rather than inheriting
+     the desktop sequence. */
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
+  column-gap: clamp(22px, 3vw, 44px);
+  align-items: start;
+  font-family: var(--csg-body);
+  color: var(--csg-ink);
+  background: #fff;
+  /* clamp() rather than a media-query ladder: this sits in a modal whose width
+     is set by the theme, so the type has to scale to the box it lands in. */
+  padding: clamp(4px, 0.6vw, 10px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+}#carbon-size-guide-mens-swim-shorts * { box-sizing: border-box; min-width: 0; }#carbon-size-guide-mens-swim-shorts :focus-visible { outline: 2px solid var(--csg-blue); outline-offset: 2px; border-radius: 3px; }/* ── header ─────────────────────────────────────────────────────────── */
+/* Spans both columns so a long fit name has the whole modal to sit on one
+   line, with room reserved on the right for the unit switch that shares the
+   row. */
+#carbon-size-guide-mens-swim-shorts .csg-top {
+  grid-column: 1 / -1; grid-row: 1;
+  padding-right: 210px;
+  margin-bottom: clamp(16px, 1.8vw, 24px);
+}#carbon-size-guide-mens-swim-shorts .csg-units-cell { display: contents; }#carbon-size-guide-mens-swim-shorts .csg-wordmark {
+  /* The wordmark is the brand's own letterform — a normal-width grotesque with
+     wide tracking. Setting it in the condensed headline face made it read as a
+     label rather than as the logo. */
+  font-family: var(--csg-body); font-weight: 700;
+  font-size: 14px; letter-spacing: .32em; text-transform: uppercase;
+  margin: 0 0 8px; color: var(--csg-ink);
+}#carbon-size-guide-mens-swim-shorts .csg-title { margin: 0; line-height: .9; }/* The fit name carries the weight; "Size Guide" sits under it lighter and
+   smaller. That contrast is the whole title treatment. */
+#carbon-size-guide-mens-swim-shorts .csg-title-fit {
+  display: block; font-family: var(--csg-display); font-weight: 700;
+  font-size: clamp(26px, 4.2vw, 56px); letter-spacing: -.005em;
+  text-transform: uppercase; white-space: nowrap;
+}#carbon-size-guide-mens-swim-shorts .csg-title-sub {
+  display: block; font-family: var(--csg-display); font-weight: 300;
+  font-size: clamp(21px, 3vw, 38px); letter-spacing: .005em;
+  text-transform: uppercase; color: var(--csg-ink);
+}#carbon-size-guide-mens-swim-shorts .csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 14px 0 0; }#carbon-size-guide-mens-swim-shorts .csg-subtitle {
+  grid-column: 1; grid-row: 2;
+  margin: 0 0 22px; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.55;
+  color: var(--csg-muted); max-width: 44ch;
+}/* unit switch, top right of the header */
+#carbon-size-guide-mens-swim-shorts .csg-units {
+  grid-column: 2; grid-row: 1; justify-self: end; align-self: start;
+  display: inline-flex; padding: 5px; gap: 4px;
+  background: #f1f3f7; border-radius: 999px; border: 1px solid var(--csg-line);
+}#carbon-size-guide-mens-swim-shorts .csg-unit {
+  appearance: none; border: 0; cursor: pointer; background: transparent;
+  font-family: var(--csg-display); font-weight: 600; font-size: 15px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--csg-muted);
+  padding: 9px 26px; border-radius: 999px;
+  transition: background-color .18s ease, color .18s ease;
+}#carbon-size-guide-mens-swim-shorts .csg-unit[aria-pressed="true"] { background: var(--csg-blue); color: #fff; }/* ── mobile size picker (hidden on desktop, where rows are clicked) ──── */
+#carbon-size-guide-mens-swim-shorts .csg-picker { display: none; grid-column: 1; grid-row: 3; margin: 0 0 16px; }#carbon-size-guide-mens-swim-shorts .csg-picker-label {
+  display: block; font-size: 13px; color: var(--csg-muted); margin: 0 0 6px;
+}#carbon-size-guide-mens-swim-shorts .csg-select {
+  width: 100%; appearance: none; background: #fff url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center;
+  border: 1px solid var(--csg-line); border-radius: 10px;
+  padding: 13px 40px 13px 14px; font-family: var(--csg-display); font-weight: 600;
+  font-size: 19px; color: var(--csg-ink);
+}/* ── two-column body ────────────────────────────────────────────────── */
+#carbon-size-guide-mens-swim-shorts .csg-chart { grid-column: 1; grid-row: 4; }/* Spans the description and chart rows so its heading sits level with the
+   description, not below the whole header. */
+#carbon-size-guide-mens-swim-shorts .csg-measure { grid-column: 2; grid-row: 2 / 5; }/* ── table ──────────────────────────────────────────────────────────── */
+#carbon-size-guide-mens-swim-shorts .csg-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  border: 1px solid var(--csg-line); border-radius: 10px; overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}#carbon-size-guide-mens-swim-shorts .csg-table thead th {
+  background: var(--csg-navy); color: #fff; text-align: center;
+  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
+  letter-spacing: .07em; text-transform: uppercase; padding: 13px 8px;
+  line-height: 1.2;
+}/* Two lines, as in the comp: the measurement, then its unit underneath. */
+#carbon-size-guide-mens-swim-shorts .csg-th-unit { display: block; font-weight: 400; font-size: 12.5px; opacity: .85; }#carbon-size-guide-mens-swim-shorts .csg-table tbody th, #carbon-size-guide-mens-swim-shorts .csg-table tbody td {
+  text-align: center; padding: 13px 8px; font-size: 16px;
+  border-top: 1px solid var(--csg-line); color: var(--csg-ink);
+}#carbon-size-guide-mens-swim-shorts .csg-table tbody th { font-weight: 700; }#carbon-size-guide-mens-swim-shorts .csg-table tbody td { color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-table tbody tr:nth-child(even) th, #carbon-size-guide-mens-swim-shorts .csg-table tbody tr:nth-child(even) td { background: var(--csg-zebra); }#carbon-size-guide-mens-swim-shorts .csg-table tbody tr { cursor: pointer; }#carbon-size-guide-mens-swim-shorts .csg-table tbody tr:hover th, #carbon-size-guide-mens-swim-shorts .csg-table tbody tr:hover td { background: var(--csg-blue-soft); }/* Solid blue with white text — a tint was not readable enough as "chosen". */
+#carbon-size-guide-mens-swim-shorts .csg-table tbody tr[aria-selected="true"] th, #carbon-size-guide-mens-swim-shorts .csg-table tbody tr[aria-selected="true"] td {
+  background: var(--csg-blue); color: #fff; font-weight: 700;
+}#carbon-size-guide-mens-swim-shorts .csg-table-foot { margin: 10px 2px 0; font-size: 12.5px; color: #6b7280; }/* ── how to measure ─────────────────────────────────────────────────── */
+#carbon-size-guide-mens-swim-shorts .csg-measure { border: 0; min-width: 0; }#carbon-size-guide-mens-swim-shorts .csg-measure > summary {
+  list-style: none; cursor: default; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; margin: 0 0 16px;
+}#carbon-size-guide-mens-swim-shorts .csg-measure > summary::-webkit-details-marker { display: none; }#carbon-size-guide-mens-swim-shorts .csg-h3 {
+  margin: 0; font-family: var(--csg-display); font-weight: 600;
+  font-size: clamp(20px, 1.9vw, 27px); letter-spacing: .02em; text-transform: uppercase;
+}#carbon-size-guide-mens-swim-shorts .csg-chev { display: none; flex: 0 0 auto; }#carbon-size-guide-mens-swim-shorts .csg-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }#carbon-size-guide-mens-swim-shorts .csg-card {
+  border: 1px solid var(--csg-line); border-radius: 12px; background: #fff;
+  padding: 11px; display: flex; flex-direction: column; gap: 11px;
+}#carbon-size-guide-mens-swim-shorts .csg-card-head { display: flex; align-items: center; gap: 9px; margin: 0; }#carbon-size-guide-mens-swim-shorts .csg-badge {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--csg-blue); color: #fff; display: inline-grid; place-items: center;
+  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
+}#carbon-size-guide-mens-swim-shorts .csg-card-name {
+  font-family: var(--csg-display); font-weight: 600; font-size: 17px;
+  letter-spacing: .05em; text-transform: uppercase;
+}#carbon-size-guide-mens-swim-shorts .csg-figure { margin: 0; border-radius: 9px; overflow: hidden; background: #f5f5f5; }/* One box for all three so the cards are identical, and contain rather than
+   cover so none is cropped — the sources do not share a shape (waist and hip
+   are 4:3, the inseam 2:3) and cropping either one cuts off the tape, which is
+   the only thing these photos exist to show.
+
+   The box colour is sampled from the photographs' own backdrop (#f6f6f6), so
+   the area a contained photo does not fill reads as more backdrop rather than
+   as a grey band around a floating image. */
+#carbon-size-guide-mens-swim-shorts .csg-photo {
+  display: block; width: 100%; height: auto;
+  aspect-ratio: 1 / 1; object-fit: contain; background: #f5f5f5;
+}#carbon-size-guide-mens-swim-shorts .csg-card-text { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--csg-muted); }/* ── helpful note ───────────────────────────────────────────────────── */
+#carbon-size-guide-mens-swim-shorts .csg-note {
+  display: flex; gap: 12px; align-items: flex-start; margin: 20px 0 0;
+  background: var(--csg-blue-soft); border-radius: 10px; padding: 17px 19px;
+  font-size: 14.5px; line-height: 1.6; color: #26324a;
+}#carbon-size-guide-mens-swim-shorts .csg-note-icon {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--csg-blue); color: #fff; display: inline-grid; place-items: center;
+  font-size: 13px; font-weight: 700; font-style: italic; font-family: var(--csg-body);
+}#carbon-size-guide-mens-swim-shorts .csg-note b, #carbon-size-guide-mens-swim-shorts .csg-note strong { color: var(--csg-blue); }/* ── tips strip ─────────────────────────────────────────────────────── */
+#carbon-size-guide-mens-swim-shorts .csg-tips {
+  grid-column: 1 / -1;
+  /* nowrap so the tagline stays pinned right against its divider; the list of
+     tips wraps inside its own track instead of pushing the tagline onto a line
+     of its own. */
+  display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); flex-wrap: nowrap;
+  margin: clamp(22px, 2.6vw, 32px) 0 0; padding: 18px clamp(16px, 1.8vw, 24px);
+  border: 1px solid var(--csg-line); border-radius: 12px;
+}#carbon-size-guide-mens-swim-shorts .csg-tips-icon { flex: 0 0 auto; color: var(--csg-ink); display: grid; place-items: center; }#carbon-size-guide-mens-swim-shorts .csg-tips-title {
+  margin: 0; flex: 0 0 auto; font-family: var(--csg-display); font-weight: 600;
+  font-size: 17px; letter-spacing: .05em; text-transform: uppercase;
+}#carbon-size-guide-mens-swim-shorts .csg-tips-list {
+  /* Three equal columns rather than a flex row: the three tips do not fit on one
+     line beside the title and the tagline at this width, and a flex row put two
+     on the first line and one alone on a second. A column each keeps the rhythm
+     of the comp, and only the longest tip runs to a second line. */
+  margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px clamp(12px, 1.3vw, 20px); flex: 1 1 auto;
+}#carbon-size-guide-mens-swim-shorts .csg-tips-list li { display: flex; align-items: flex-start; gap: 7px; font-size: 13.5px; line-height: 1.4; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-tick { flex: 0 0 auto; color: var(--csg-blue); margin-top: 1px; }#carbon-size-guide-mens-swim-shorts .csg-tagline {
+  margin: 0; flex: 0 0 auto; padding-left: clamp(14px, 1.8vw, 26px);
+  border-left: 1px solid var(--csg-line); font-size: 11.5px; line-height: 1.7;
+  letter-spacing: .16em; text-transform: uppercase; color: #9aa3b2; text-align: right;
+}
+
+/* ── tablet ─────────────────────────────────────────────────────────── */
+@media (max-width: 1000px) {#carbon-size-guide-mens-swim-shorts { grid-template-columns: 1fr; }#carbon-size-guide-mens-swim-shorts .csg-top, #carbon-size-guide-mens-swim-shorts .csg-units, #carbon-size-guide-mens-swim-shorts .csg-subtitle, #carbon-size-guide-mens-swim-shorts .csg-picker, #carbon-size-guide-mens-swim-shorts .csg-chart, #carbon-size-guide-mens-swim-shorts .csg-measure, #carbon-size-guide-mens-swim-shorts .csg-tips {
+    grid-column: 1; grid-row: auto;
+  }/* The comp reads name, then description, then the unit switch. */
+#carbon-size-guide-mens-swim-shorts .csg-top { order: 1; padding-right: 0; }#carbon-size-guide-mens-swim-shorts .csg-subtitle { order: 2; }#carbon-size-guide-mens-swim-shorts .csg-units { order: 3; justify-self: stretch; }#carbon-size-guide-mens-swim-shorts .csg-picker { order: 4; }#carbon-size-guide-mens-swim-shorts .csg-chart { order: 5; }#carbon-size-guide-mens-swim-shorts .csg-measure { order: 6; }#carbon-size-guide-mens-swim-shorts .csg-tips { order: 7; }#carbon-size-guide-mens-swim-shorts .csg-measure { margin-top: 20px; }#carbon-size-guide-mens-swim-shorts .csg-tips { flex-wrap: wrap; }#carbon-size-guide-mens-swim-shorts .csg-tagline { display: none; }
+}
+
+/* ── phone: a different layout, not a smaller one ───────────────────── */
+@media (max-width: 680px) {#carbon-size-guide-mens-swim-shorts { padding: 16px; }#carbon-size-guide-mens-swim-shorts .csg-units { width: 100%; justify-content: stretch; }#carbon-size-guide-mens-swim-shorts .csg-unit { flex: 1 1 0; padding: 11px 0; }#carbon-size-guide-mens-swim-shorts .csg-subtitle { font-size: 13.5px; }#carbon-size-guide-mens-swim-shorts .csg-picker { display: block; }#carbon-size-guide-mens-swim-shorts .csg-table thead th { font-size: 11.5px; padding: 9px 4px; letter-spacing: .04em; }#carbon-size-guide-mens-swim-shorts .csg-th-unit { font-size: 10.5px; }#carbon-size-guide-mens-swim-shorts .csg-table tbody th, #carbon-size-guide-mens-swim-shorts .csg-table tbody td { font-size: 14px; padding: 10px 4px; }/* The measure section becomes a real accordion, and each card becomes a row
+     with a thumbnail — three tall photo cards in a column is a lot of scrolling
+     for something read once. */
+#carbon-size-guide-mens-swim-shorts .csg-measure { border: 1px solid var(--csg-line); border-radius: 12px; padding: 14px; margin-top: 18px; }#carbon-size-guide-mens-swim-shorts .csg-measure > summary { cursor: pointer; margin-bottom: 0; }#carbon-size-guide-mens-swim-shorts .csg-measure[open] > summary { margin-bottom: 14px; }#carbon-size-guide-mens-swim-shorts .csg-chev { display: block; transition: transform .2s ease; }#carbon-size-guide-mens-swim-shorts .csg-measure[open] .csg-chev { transform: rotate(180deg); }#carbon-size-guide-mens-swim-shorts .csg-cards { grid-template-columns: 1fr; gap: 12px; }#carbon-size-guide-mens-swim-shorts .csg-card {
+    display: grid; grid-template-columns: 62px minmax(0, 1fr);
+    grid-template-rows: auto auto; column-gap: 12px; row-gap: 4px;
+    border: 0; border-top: 1px solid var(--csg-line); border-radius: 0; padding: 12px 0 0;
+  }#carbon-size-guide-mens-swim-shorts .csg-card:first-child { border-top: 0; padding-top: 0; }#carbon-size-guide-mens-swim-shorts .csg-figure { grid-row: 1 / span 2; }/* At thumbnail size a letterboxed photo is mostly empty grey, so the two
+     flat-lays fill their square. The inseam keeps contain — cropping the one
+     photo whose whole job is crotch-to-hem would defeat it. */
+#carbon-size-guide-mens-swim-shorts .csg-photo { aspect-ratio: 1 / 1; object-fit: cover; }#carbon-size-guide-mens-swim-shorts .csg-photo-inseam { object-fit: contain; }#carbon-size-guide-mens-swim-shorts .csg-card-head { grid-column: 2; }#carbon-size-guide-mens-swim-shorts .csg-card-text { grid-column: 2; font-size: 13.5px; }#carbon-size-guide-mens-swim-shorts .csg-tips { flex-direction: column; align-items: flex-start; gap: 10px; }#carbon-size-guide-mens-swim-shorts .csg-tips-list { grid-template-columns: 1fr; gap: 9px; }#carbon-size-guide-mens-swim-shorts .csg-note { font-size: 13.5px; }
+}/* ── Swim shorts only ────────────────────────────────────────────────────
+   Ten measurements will not fit one readable row, so the five people compare
+   most often stay in the table and the rest appear for the selected size. With
+   no swim measurement photographs in the theme, that panel takes the column the
+   How-to-Measure cards occupy in the denim guides. */
+#carbon-size-guide-mens-swim-shorts .csg-more { border: 1px solid var(--csg-line); border-radius: 12px; padding: 16px 18px; }#carbon-size-guide-mens-swim-shorts .csg-more-h { margin: 0 0 4px; font-family: var(--csg-display); font-weight: 600;
+  font-size: clamp(17px, 1.5vw, 21px); letter-spacing: .04em; text-transform: uppercase; }#carbon-size-guide-mens-swim-shorts .csg-more-sub { margin: 0 0 14px; font-size: 13px; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 13px 18px; }#carbon-size-guide-mens-swim-shorts .csg-kv > div { min-width: 0; }#carbon-size-guide-mens-swim-shorts .csg-k { display: block; font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-swim-shorts .csg-v { display: block; font-family: var(--csg-display); font-weight: 600; font-size: 20px; margin-top: 2px; }#carbon-size-guide-mens-swim-shorts .csg-basis { margin: 14px 2px 0; font-size: 12.5px; line-height: 1.5; color: #6b7280; max-width: 64ch; }/* phone: size buttons then every measurement, hidden on desktop */
+#carbon-size-guide-mens-swim-shorts .csg-mob { display: none; }#carbon-size-guide-mens-swim-shorts .csg-sizes { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }#carbon-size-guide-mens-swim-shorts .csg-size {
+  appearance: none; cursor: pointer; background: #fff; color: var(--csg-ink);
+  border: 1px solid var(--csg-line); border-radius: 10px; padding: 12px 0; min-width: 60px;
+  font-family: var(--csg-display); font-weight: 600; font-size: 17px; flex: 1 0 60px;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}#carbon-size-guide-mens-swim-shorts .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-swim-shorts .csg-mob-h { margin: 0 0 12px; font-family: var(--csg-display); font-weight: 700;
+  font-size: 20px; letter-spacing: .04em; text-transform: uppercase; }
+
+@media (max-width: 680px) {
+  #carbon-size-guide-mens-swim-shorts .csg-chart, #carbon-size-guide-mens-swim-shorts .csg-more { display: none; }
+  #carbon-size-guide-mens-swim-shorts .csg-mob { display: block; order: 5; grid-column: 1; }
+  #carbon-size-guide-mens-swim-shorts .csg-note-wrap { order: 6; grid-column: 1; }
+  #carbon-size-guide-mens-swim-shorts .csg-tips { order: 7; }
+}
+@media (max-width: 380px) {
+  /* Two columns of label + value stop fitting; one keeps every figure whole. */
+  #carbon-size-guide-mens-swim-shorts .csg-kv { grid-template-columns: 1fr; }
+}
+
+</style>
+
+  <div class="csg-top">
+    <p class="csg-wordmark">Carbon</p>
+    <h2 class="csg-title">
+      <span class="csg-title-fit">Men&rsquo;s Swim Shorts</span><span class="csg-title-sub">Size Guide</span>
+    </h2>
+    <span class="csg-rule" aria-hidden="true"></span>
+  </div>
+
+  <div class="csg-units" role="group" aria-label="Measurement units">
+    <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
+    <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
+  </div>
+
+  <p class="csg-subtitle">Garment measurements for our men&rsquo;s swim shorts.</p>
+
+  <section class="csg-chart" aria-label="Size chart">
+    <table class="csg-table">
+      <thead><tr><th scope="col">Size</th><th scope="col"><span>Waist</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Hip</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Thigh</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Inseam</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th><th scope="col"><span>Side Length</span><span class="csg-th-unit" data-csg-unitlabel>(cm)</span></th></tr></thead>
+      <tbody><tr data-csg-row="S" data-cm-waist="35" data-cm-belt="4" data-cm-hip="54" data-cm-thigh="32" data-cm-frontrise="27" data-cm-backrise="35.5" data-cm-inseam="12" data-cm-trotter="28" data-cm-pocket="14.5" data-cm-side="36" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="waist">35</td><td data-csg-cell="hip">54</td><td data-csg-cell="thigh">32</td><td data-csg-cell="inseam">12</td><td data-csg-cell="side">36</td></tr><tr data-csg-row="M" data-cm-waist="37" data-cm-belt="4" data-cm-hip="56" data-cm-thigh="33" data-cm-frontrise="28" data-cm-backrise="36.5" data-cm-inseam="12" data-cm-trotter="29" data-cm-pocket="14.5" data-cm-side="37" aria-selected="false" tabindex="0"><th scope="row">M</th><td data-csg-cell="waist">37</td><td data-csg-cell="hip">56</td><td data-csg-cell="thigh">33</td><td data-csg-cell="inseam">12</td><td data-csg-cell="side">37</td></tr><tr data-csg-row="L" data-cm-waist="39" data-cm-belt="4" data-cm-hip="58" data-cm-thigh="34" data-cm-frontrise="29" data-cm-backrise="37.5" data-cm-inseam="12" data-cm-trotter="30" data-cm-pocket="15.5" data-cm-side="38" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="waist">39</td><td data-csg-cell="hip">58</td><td data-csg-cell="thigh">34</td><td data-csg-cell="inseam">12</td><td data-csg-cell="side">38</td></tr><tr data-csg-row="XL" data-cm-waist="41" data-cm-belt="4" data-cm-hip="60" data-cm-thigh="35" data-cm-frontrise="30" data-cm-backrise="38.5" data-cm-inseam="13" data-cm-trotter="31" data-cm-pocket="15.5" data-cm-side="39" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="waist">41</td><td data-csg-cell="hip">60</td><td data-csg-cell="thigh">35</td><td data-csg-cell="inseam">13</td><td data-csg-cell="side">39</td></tr><tr data-csg-row="XXL" data-cm-waist="43" data-cm-belt="4" data-cm-hip="62" data-cm-thigh="36" data-cm-frontrise="31" data-cm-backrise="39.5" data-cm-inseam="13" data-cm-trotter="32" data-cm-pocket="15.5" data-cm-side="40" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="waist">43</td><td data-csg-cell="hip">62</td><td data-csg-cell="thigh">36</td><td data-csg-cell="inseam">13</td><td data-csg-cell="side">40</td></tr></tbody>
+    </table>
+    <p class="csg-basis">
+      These are measurements of the garment, not body measurements. Select a size to see the
+      remaining measurements for it.
+    </p>
+  </section>
+
+  <div class="csg-more">
+    <h3 class="csg-more-h">Additional garment measurements</h3>
+    <p class="csg-more-sub">Size <span data-csg-more-size>M</span></p>
+    <div class="csg-kv"><div><span class="csg-k">Waistband Height</span><span class="csg-v" data-csg-more="belt">&mdash;</span></div><div><span class="csg-k">Front Rise</span><span class="csg-v" data-csg-more="frontrise">&mdash;</span></div><div><span class="csg-k">Back Rise</span><span class="csg-v" data-csg-more="backrise">&mdash;</span></div><div><span class="csg-k">E &mdash; Trotter</span><span class="csg-v" data-csg-more="trotter">&mdash;</span></div><div><span class="csg-k">Front Pocket</span><span class="csg-v" data-csg-more="pocket">&mdash;</span></div></div>
+  </div>
+
+  <div class="csg-mob">
+    <div class="csg-sizes" role="group" aria-label="Choose a size"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
+    <h3 class="csg-mob-h">Size <span data-csg-all-size>M</span></h3>
+    <div class="csg-kv"><div><span class="csg-k">Waist</span><span class="csg-v" data-csg-all="waist">&mdash;</span></div><div><span class="csg-k">Waistband Height</span><span class="csg-v" data-csg-all="belt">&mdash;</span></div><div><span class="csg-k">Hip</span><span class="csg-v" data-csg-all="hip">&mdash;</span></div><div><span class="csg-k">Thigh</span><span class="csg-v" data-csg-all="thigh">&mdash;</span></div><div><span class="csg-k">Front Rise</span><span class="csg-v" data-csg-all="frontrise">&mdash;</span></div><div><span class="csg-k">Back Rise</span><span class="csg-v" data-csg-all="backrise">&mdash;</span></div><div><span class="csg-k">Inseam</span><span class="csg-v" data-csg-all="inseam">&mdash;</span></div><div><span class="csg-k">E &mdash; Trotter</span><span class="csg-v" data-csg-all="trotter">&mdash;</span></div><div><span class="csg-k">Front Pocket</span><span class="csg-v" data-csg-all="pocket">&mdash;</span></div><div><span class="csg-k">Side Length</span><span class="csg-v" data-csg-all="side">&mdash;</span></div></div>
+    <p class="csg-basis">These are measurements of the garment, not body measurements.</p>
+  </div>
+
+  <div class="csg-note-wrap">
+    <p class="csg-note">
+      <span class="csg-note-icon" aria-hidden="true">i</span>
+      <span><strong>Helpful note:</strong> Garment measurements can vary slightly from pair to pair
+      due to normal production and finishing. Please allow approximately <strong>&plusmn;2&nbsp;cm
+      (&plusmn;0.75&nbsp;in)</strong>. If you&rsquo;re between sizes, compare these measurements with
+      a pair of swim shorts you already own and love.</span>
+    </p>
+  </div>
+
+  <footer class="csg-tips">
+    <span class="csg-tips-icon" aria-hidden="true"><svg width="44" height="30" viewBox="0 0 60 40" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><ellipse cx="15" cy="12.5" rx="12.5" ry="8.5"/><path d="M2.5 12.5v9.5c0 4.7 5.6 8.5 12.5 8.5s12.5-3.8 12.5-8.5v-9.5"/><ellipse cx="15" cy="12.5" rx="6" ry="4"/><path d="M18.6 11.6c-.5-1.1-1.9-1.7-3.4-1.5-1.4.2-2.4 1-2.3 1.9.1.8 1.2 1.3 2.4 1.1"/><path d="M27.5 18.4h24c2 0 3.2 1 3.2 2.6v6.6c0 1.6-1.2 2.6-3.2 2.6-3.6 0-6-1.4-9.4-1.6"/><path d="M6.5 24v4.2M11 25.4v4.8M15.5 25.8v5M20 25.4v4.8M24.5 24v4.2"/><path d="M31 20.8v4.6M36 20.8v5.6M41 20.8v4.6M46 20.8v5.6M51 20.8v4.6"/></svg></span>
+    <h3 class="csg-tips-title">Tips for the best fit</h3>
+    <ul class="csg-tips-list"><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Use a soft measuring tape</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Compare with swim shorts that already fit you</span></li><li><svg class="csg-tick" width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" focusable="false"><circle cx="8.5" cy="8.5" r="8.5" fill="currentColor"/><path d="M4.6 8.7l2.6 2.6 5.2-5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Between sizes? Size up for a looser fit</span></li></ul>
+    <p class="csg-tagline">Built different.<br>Made for everyone.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.getElementById("carbon-size-guide-mens-swim-shorts");
+  if (!root || root.dataset.csgReady) return;
+  root.dataset.csgReady = "1";
+
+  var KEYS = ["waist","belt","hip","thigh","frontrise","backrise","inseam","trotter","pocket","side"];
+  var unit = "in";
+  var selected = "M";
+  var rows = [].slice.call(root.querySelectorAll("[data-csg-row]"));
+  var buttons = [].slice.call(root.querySelectorAll("[data-csg-size]"));
+
+  /*
+   * Published exactly as supplied — nothing is doubled. The denim guides hold
+   * half-garment figures and double them; doing that here would turn a 35 cm
+   * waist into 70 cm. Centimetres are the only stored values and inches are
+   * derived, so there is one set of numbers, not two that can drift.
+   */
+  function show(cm) {
+    if (cm == null) return "\u2014";
+    var n = parseFloat(cm);
+    /* Inches keep one decimal even when it is a zero: 22.0 reads as a
+       measurement, 22 reads as a rounded-off guess. */
+    return unit === "cm" ? String(n) : (n / 2.54).toFixed(1);
+  }
+
+  function paint() {
+    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
+      el.textContent = unit === "in" ? "(in)" : "(cm)";
+    });
+    rows.forEach(function (r) {
+      KEYS.forEach(function (k) {
+        var cell = r.querySelector('[data-csg-cell="' + k + '"]');
+        if (cell) cell.textContent = show(r.getAttribute("data-cm-" + k));
+      });
+    });
+    root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
+    });
+    paintDetail();
+  }
+
+  function paintDetail() {
+    /* Both panels read the same row, so the desktop column and the phone list
+       cannot disagree. */
+    var row = rows.filter(function (r) { return r.getAttribute("data-csg-row") === selected; })[0];
+    var suffix = unit === "in" ? " in" : " cm";
+    root.querySelectorAll("[data-csg-more-size], [data-csg-all-size]").forEach(function (el) {
+      el.textContent = selected || "\u2014";
+    });
+    ["more", "all"].forEach(function (scope) {
+      root.querySelectorAll("[data-csg-" + scope + "]").forEach(function (el) {
+        var k = el.getAttribute("data-csg-" + scope);
+        var cm = row ? row.getAttribute("data-cm-" + k) : null;
+        el.textContent = cm ? show(cm) + suffix : "\u2014";
+      });
+    });
+  }
+
+  function select(size) {
+    selected = size;
+    rows.forEach(function (r) {
+      r.setAttribute("aria-selected", r.getAttribute("data-csg-row") === selected ? "true" : "false");
+    });
+    buttons.forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-size") === selected ? "true" : "false");
+    });
+    paintDetail();
+  }
+
+  root.querySelectorAll("[data-csg-unit]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      unit = b.getAttribute("data-csg-unit");
+      paint();                       /* the chosen size survives a unit change */
+    });
+  });
+  rows.forEach(function (r) {
+    r.addEventListener("click", function () { select(r.getAttribute("data-csg-row")); });
+    r.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(r.getAttribute("data-csg-row")); }
+    });
+  });
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { select(b.getAttribute("data-csg-size")); });
+  });
+
+  paint();
+  select("M");
+})();
+</script>

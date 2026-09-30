@@ -122,13 +122,6 @@
                 metafield resolves by the order below — narrowest cut first —
                 and the metafield is how you override that.
               endcomment
-              comment
-                Products outside the denim fits use the generic field. It counts
-                as a real guide, so the sizing link shows for them — without
-                loosening the rule that a product with no guide shows no link.
-              endcomment
-              assign carbon_guide_type = product.metafields.custom.size_guide_type | downcase | strip
-
               assign carbon_fit = product.metafields.custom.jeans_size_guide_fit | downcase | strip
 
               if carbon_fit == blank
@@ -167,10 +160,6 @@
               assign carbon_has_fit = false
               assign carbon_has_guide = false
               if carbon_fit == 'slim' or carbon_fit == 'skinny' or carbon_fit == 'super-skinny-long' or carbon_fit == 'super-skinny-zipper' or carbon_fit == 'baggy'
-                assign carbon_has_fit = true
-                assign carbon_has_guide = true
-              endif
-              if carbon_guide_type == 'mens-swim-shorts'
                 assign carbon_has_fit = true
                 assign carbon_has_guide = true
               endif

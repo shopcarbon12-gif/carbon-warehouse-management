@@ -5,13 +5,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
 {% endcomment %}
 {%- liquid
   comment
-    A product outside the denim fits carries custom.size_guide_type instead.
-    It is checked first and returns on its own, so nothing here can disturb the
-    jeans resolution that follows.
-  endcomment
-  assign carbon_guide_type = product.metafields.custom.size_guide_type | downcase | strip
-
-  comment
     product-information.liquid resolves the fit and passes it in, so the link and
     the guide can never disagree about which chart this product has. The fallback
     below is only for rendering this snippet somewhere else: metafield first,
@@ -103,9 +96,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
     }
   }
 </style>
-{%- if carbon_guide_type == 'mens-swim-shorts' -%}
-  {% render 'carbon-size-guide-mens-swim-shorts' %}
-{%- else -%}
 {% case carbon_fit %}
   {% when 'slim' %}{% render 'carbon-size-guide-slim' %}
   {% when 'skinny' %}{% render 'carbon-size-guide-skinny' %}
@@ -113,4 +103,3 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
   {% when 'super-skinny-zipper' %}{% render 'carbon-size-guide-super-skinny-zipper' %}
   {% when 'baggy' %}{% render 'carbon-size-guide-baggy' %}
 {% endcase %}
-{%- endif -%}
