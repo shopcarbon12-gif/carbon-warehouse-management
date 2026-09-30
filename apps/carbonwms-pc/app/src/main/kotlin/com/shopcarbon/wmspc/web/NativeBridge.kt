@@ -78,6 +78,21 @@ class NativeBridge(private val a: MainActivity, private val webProvider: () -> W
         a.runOnUiThread { GenerationService.setBusy(a, label.ifBlank { "Working…" }, busy) }
     }
 
+    /**
+     * Camera barcode scan for the catalog's scan button. Resolves the page's
+     * promise with the decoded text in `message`; a cancel comes back as
+     * ok=false with an empty message so the page stays quiet about it.
+     */
+    @JavascriptInterface
+    fun scanBarcode(requestId: String) {
+        a.runOnUiThread {
+            BarcodeScanner.scan(a) { ok, text ->
+                val js = "window.__cwmsResolve && window.__cwmsResolve(${JSONObject.quote(requestId)}, $ok, ${JSONObject.quote(text)})"
+                a.runOnUiThread { webProvider().evaluateJavascript(js, null) }
+            }
+        }
+    }
+
     @JavascriptInterface
     fun log(msg: String) {
         Diag.log("page: $msg")

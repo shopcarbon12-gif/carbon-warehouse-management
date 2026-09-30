@@ -64,6 +64,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Ask Play services to fetch the barcode-scanner module up front, so the
+             first Scan in the catalog opens the camera instead of downloading. -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
+
         <!-- Camera capture target for the file chooser -->
         <provider
             android:name="androidx.core.content.FileProvider"

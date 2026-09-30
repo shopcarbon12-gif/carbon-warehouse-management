@@ -517,6 +517,78 @@ export function CarbonStudioTab({
   }, []);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /** A photo dropped on another section is ADDED there and stays where it was —
+   *  one picture can legitimately be the general shot and the front shot at
+   *  once. Shared by the desktop HTML5 drop and the touch drag below. */
+  const copyRefToView = useCallback(
+    (url: string, view: RefView) => {
+      if (!canManage || !url) return;
+      selectView(view);
+      setItemRefs((prev) =>
+        prev.some((x) => sameRef(x, { url, view }))
+          ? prev // already labelled for this section — nothing to do
+          : [...prev, { url, preview: prev.find((x) => x.url === url)?.preview, view }],
+      );
+    },
+    [canManage, selectView],
+  );
+
+  /* Touch drag between the sections.
+     HTML5 drag-and-drop does not exist on a touch screen, so on a phone the
+     photos could not be moved between General / Front / Back at all. Pointer
+     events cover touch and pen with one implementation; a mouse still takes
+     the native HTML5 path, so desktop behaviour is untouched. A short
+     press-and-hold starts the drag, which leaves a quick swipe free to scroll
+     the page. */
+  const [touchDrag, setTouchDrag] = useState<{ preview?: string; x: number; y: number } | null>(null);
+  const touchDragRef = useRef<{
+    url: string;
+    preview?: string;
+    from: RefView;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    active: boolean;
+  } | null>(null);
+  /** The zone under the finger, mirrored so a handler never reads a stale render. */
+  const hoverViewRef = useRef<RefView | null>(null);
+  /** A drag must not also fire the thumbnail's "open full size" click. */
+  const suppressClickRef = useRef(0);
+  const photosRef = useRef<HTMLDivElement | null>(null);
+
+  const setHoverView = useCallback((v: RefView | null) => {
+    hoverViewRef.current = v;
+    setDragOverView(v);
+  }, []);
+
+  const endTouchDrag = useCallback(
+    (drop: boolean) => {
+      const d = touchDragRef.current;
+      const over = hoverViewRef.current;
+      touchDragRef.current = null;
+      setTouchDrag(null);
+      setHoverView(null);
+      if (!d?.active) return;
+      suppressClickRef.current = Date.now();
+      if (drop && over && over !== d.from) copyRefToView(d.url, over);
+    },
+    [copyRefToView, setHoverView],
+  );
+
+  /* While a touch drag is live the page must not scroll under it. touch-action
+     cannot be changed mid-gesture, so the move is cancelled here instead — a
+     non-passive listener is the only thing a browser honours for this. */
+  useEffect(() => {
+    const el = photosRef.current;
+    if (!el) return;
+    const stop = (ev: TouchEvent) => {
+      if (touchDragRef.current?.active) ev.preventDefault();
+    };
+    el.addEventListener("touchmove", stop, { passive: false });
+    return () => el.removeEventListener("touchmove", stop);
+  }, []);
+
   const colors = useMemo(() => {
     // All colours (independent of link status); prefer a linked variant when one
     // exists so the push has a target, but never hide colours from generation.
@@ -1576,7 +1648,7 @@ export function CarbonStudioTab({
             </button>
           </div>
         ) : null}
-        <div className="grid gap-2 md:grid-cols-3">
+        <div ref={photosRef} className="grid gap-2 md:grid-cols-3">
           {REF_VIEWS.map((zone) => {
             const zoneRefs = itemRefs.filter((r) => (r.view ?? "general") === zone.view);
             const isActive = activeView === zone.view;
@@ -1584,6 +1656,8 @@ export function CarbonStudioTab({
             return (
               <div
                 key={zone.view}
+                // Hit target for the touch drag (document.elementFromPoint).
+                data-ref-zone={zone.view}
                 onClick={() => selectView(zone.view)}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -1605,21 +1679,7 @@ export function CarbonStudioTab({
                   if (dragged) {
                     try {
                       const payload = JSON.parse(dragged) as { url: string; view?: RefView };
-                      if (payload?.url) {
-                        setItemRefs((prev) =>
-                          prev.some((x) => sameRef(x, { url: payload.url, view: zone.view }))
-                            ? prev // already labelled for this section — nothing to do
-                            : [
-                                ...prev,
-                                {
-                                  url: payload.url,
-                                  // whatever preview the source copy already holds
-                                  preview: prev.find((x) => x.url === payload.url)?.preview,
-                                  view: zone.view,
-                                },
-                              ],
-                        );
-                      }
+                      if (payload?.url) copyRefToView(payload.url, zone.view);
                     } catch {
                       /* not our payload — ignore */
                     }
@@ -1679,7 +1739,72 @@ export function CarbonStudioTab({
                       key={ref.url + i}
                       className="relative"
                       draggable={canManage}
-                      title="Drag onto Front or Back to also label it there"
+                      title="Drag onto Front or Back to also label it there (on a phone: press and hold, then drag)"
+                      style={touchDrag ? { touchAction: "none" } : undefined}
+                      onPointerDown={(e) => {
+                        // The mouse keeps the native HTML5 drag; this is for fingers.
+                        if (!canManage || e.pointerType === "mouse") return;
+                        const el = e.currentTarget;
+                        const p = {
+                          url: ref.url,
+                          preview: ref.preview,
+                          from: zone.view,
+                          pointerId: e.pointerId,
+                          startX: e.clientX,
+                          startY: e.clientY,
+                          timer: null as ReturnType<typeof setTimeout> | null,
+                          active: false,
+                        };
+                        touchDragRef.current = p;
+                        p.timer = setTimeout(() => {
+                          if (touchDragRef.current !== p) return;
+                          p.active = true;
+                          // Capture, or the moves stop arriving the moment the
+                          // finger leaves this thumbnail.
+                          try {
+                            el.setPointerCapture(p.pointerId);
+                          } catch {
+                            /* capture unsupported — the drag still tracks while over the tray */
+                          }
+                          setTouchDrag({ preview: p.preview, x: p.startX, y: p.startY });
+                          setHoverView(zone.view);
+                          try {
+                            navigator.vibrate?.(15);
+                          } catch {
+                            /* no haptics — nothing depends on it */
+                          }
+                        }, 220);
+                      }}
+                      onPointerMove={(e) => {
+                        const p = touchDragRef.current;
+                        if (!p || p.pointerId !== e.pointerId) return;
+                        if (!p.active) {
+                          /* Moved before the hold completed — that is a scroll,
+                             not a drag. */
+                          if (Math.hypot(e.clientX - p.startX, e.clientY - p.startY) > 12) {
+                            if (p.timer) clearTimeout(p.timer);
+                            touchDragRef.current = null;
+                          }
+                          return;
+                        }
+                        setTouchDrag({ preview: p.preview, x: e.clientX, y: e.clientY });
+                        const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+                        const target = under?.closest?.("[data-ref-zone]")?.getAttribute("data-ref-zone");
+                        setHoverView(
+                          target === "general" || target === "front" || target === "back" ? (target as RefView) : null,
+                        );
+                      }}
+                      onPointerUp={(e) => {
+                        const p = touchDragRef.current;
+                        if (!p || p.pointerId !== e.pointerId) return;
+                        if (p.timer) clearTimeout(p.timer);
+                        endTouchDrag(true);
+                      }}
+                      onPointerCancel={() => {
+                        const p = touchDragRef.current;
+                        if (p?.timer) clearTimeout(p.timer);
+                        endTouchDrag(false);
+                      }}
                       onDragStart={(e) => {
                         /* Identify the photo, never carry it. A cropped
                            reference's preview is a multi-megabyte PNG data
@@ -1703,6 +1828,8 @@ export function CarbonStudioTab({
                           className="h-28 w-24 cursor-zoom-in rounded border border-[var(--wms-border)] object-cover"
                           onClick={(e) => {
                             e.stopPropagation();
+                            // A finished touch drag must not also open the viewer.
+                            if (Date.now() - suppressClickRef.current < 400) return;
                             setZoomRef(ref);
                             setZoom(ref.preview as string);
                           }}
@@ -2337,6 +2464,25 @@ export function CarbonStudioTab({
           ) : msg ? (
             <p className="mt-2 font-mono text-[0.74rem] text-[var(--wms-status-success-fg)]">{msg}</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* What the finger is carrying, and where it will land. */}
+      {touchDrag ? (
+        <div
+          className="pointer-events-none fixed z-[140]"
+          style={{ left: touchDrag.x - 32, top: touchDrag.y - 40 }}
+          aria-hidden="true"
+        >
+          {touchDrag.preview ? (
+            <img
+              src={touchDrag.preview}
+              alt=""
+              className="h-20 w-16 rounded border-2 border-[var(--wms-accent)] object-cover opacity-90 shadow-lg"
+            />
+          ) : (
+            <div className="h-20 w-16 rounded border-2 border-[var(--wms-accent)] bg-[var(--wms-surface)] opacity-90 shadow-lg" />
+          )}
         </div>
       ) : null}
 

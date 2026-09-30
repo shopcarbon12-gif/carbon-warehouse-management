@@ -5,7 +5,7 @@ package com.shopcarbon.wmspc.web
  *  - window.print()            → native print dialog (WebView has no window.print)
  *  - <a download href="blob:"> → bytes handed to native → Downloads (WebView cannot download blob: URLs)
  *  - <a download href="http…"> → DownloadManager with session cookie
- *  - window.CarbonWMSPC        → promise-based bridge (printZpl over TCP 9100, saveBlob, version, device)
+ *  - window.CarbonWMSPC        → promise-based bridge (printZpl over TCP 9100, saveBlob, scanBarcode, version, device)
  *  - html.wms-native-app       → optional CSS hook for the web app (unused today)
  * Kotlin raw string: no `$` inside the JS on purpose.
  */
@@ -53,6 +53,14 @@ object JsShims {
       });
     },
     setBusy: function (label, busy) { try { N.setBusy(String(label || 'Working…'), !!busy); } catch (e) {} },
+    scanBarcode: function () {
+      return new Promise(function (res) {
+        if (!N.scanBarcode) { res({ ok: false, message: 'Update the CarbonWMS app to scan barcodes.' }); return; }
+        var id = 's' + (++seq);
+        pending[id] = res;
+        N.scanBarcode(id);
+      });
+    },
     log: function (m) { N.log(String(m)); }
   };
 

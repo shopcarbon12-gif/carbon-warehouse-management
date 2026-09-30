@@ -12,6 +12,7 @@ import { DefectiveEpcsModal } from "@/components/inventory/catalog/defective-epc
 import { ManualItemsModal } from "@/components/inventory/catalog/manual-items-modal";
 import { ItemHistoryModal } from "@/components/inventory/catalog/item-history-modal";
 import { CatalogItemDetailsModal } from "@/components/inventory/catalog/catalog-item-details-modal";
+import { BarcodeScanButton } from "@/components/inventory/catalog/barcode-scan-button";
 import { CatalogMatrixModal } from "@/components/inventory/catalog/catalog-matrix-modal";
 import { CatalogImageLightbox } from "@/components/inventory/catalog/catalog-image-lightbox";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
@@ -516,8 +517,12 @@ export function CatalogWorkspace({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search name, SKU, UPC, system ID…"
-              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-lg max-md:text-base"
+              className="w-full max-w-md rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-sm text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] md:max-w-[calc(theme(maxWidth.lg)-5rem)] max-md:text-base"
             />
+            {/* Scan a hang tag instead of typing it. The scanned text goes into
+                the same search box, so it matches on SKU, UPC or system id
+                exactly as a typed query does. */}
+            <BarcodeScanButton onScan={(text) => setSearch(text)} title="Scan a barcode to search the catalog" />
           </div>
 
           <div
