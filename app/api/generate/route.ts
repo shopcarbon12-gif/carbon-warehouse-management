@@ -5,7 +5,12 @@ import type { NextRequest } from "next/server";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { LOCK_TEXT_MAX_BYTES, parseSpecBackState, specListsBackDesign, withCanonicalBackLine } from "@/lib/studio-item-spec";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
-import { recordStudioGeneration, type StudioGenerationLog } from "@/lib/server/studio-generation-log";
+import {
+  recordStudioGeneration,
+  updateStudioGenerationQa,
+  type StudioGenerationLog,
+} from "@/lib/server/studio-generation-log";
+import { isValidQaId, runPanelQa } from "@/lib/server/panel-qa-store";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -1533,6 +1538,70 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     let qaWarningsBySide: { left: string[]; right: string[] } | null = null;
     let qaNotes: string[] = [];
     let qa: any = null;
+
+    /* The judge is a second vision call. Waiting for it before answering kept
+       the operator staring at nothing for another 10-20 s per panel, for a
+       verdict that only decorates an image they have already paid for. When the
+       client supplies `x-panel-qa`, the image goes back now and the judge runs
+       on; the Studio collects the flags from /api/generate/qa and applies them
+       to the crops in place. Only valid in fail-open mode — blocking on an
+       inconclusive verdict requires having it first. */
+    const deferredQaId = req.headers.get("x-panel-qa")?.trim() ?? "";
+    const imageB64: string = b64;
+    if (strictLocksEnabled && qaFailOpen && isValidQaId(deferredQaId)) {
+      const judge = () =>
+        runPanelComplianceCheck({
+          openai,
+          imageBase64: imageB64,
+          modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
+          itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
+          itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
+          panelQa: normalizedPanelQa,
+          itemSpec: itemSpecText,
+          backState,
+          timeoutMs: imageTimeoutMs,
+        });
+      /* The row is written now, with the verdict attached when it lands — the
+         log exists to answer "what did the judge say", so it must not record
+         "QA never ran" for every panel. */
+      const logId = crypto.randomUUID();
+      const inserted = recordStudioGeneration({ ...logBase(), ...logRefs, id: logId, outcome: "ok" });
+      void runPanelQa(deferredQaId, async () => {
+        let v: any;
+        try {
+          v = await judge();
+        } catch (e: any) {
+          v = { decisive: false, pass: true, unavailable: true, reasons: [`Compliance check threw: ${e?.message || "unknown error"}`] };
+        }
+        const warnings: string[] =
+          v.decisive && !v.pass ? (Array.isArray(v.reasons) ? v.reasons.map(String).filter(Boolean) : []) : [];
+        const side = v.reasonsBySide;
+        const bySide =
+          warnings.length && side && Array.isArray(side.left) && Array.isArray(side.right)
+            ? { left: side.left.map(String), right: side.right.map(String) }
+            : null;
+        const notes: string[] = v.decisive ? (Array.isArray(v.notes) ? v.notes.map(String).filter(Boolean) : []) : [];
+        if (warnings.length) console.warn(`[generate] Panel QA FAILED (deferred) — ${warnings.join(" | ")}`);
+        await inserted.catch(() => {});
+        updateStudioGenerationQa(logId, {
+          qaDecisive: v.decisive === true,
+          qaPass: v.decisive ? v.judgeSaidPass === true : null,
+          qaWarnings: warnings.length,
+          qaReasons: v.decisive ? warnings : Array.isArray(v.reasons) ? v.reasons.map(String) : [],
+          qaNotes: notes,
+          qaDropped: v.droppedReasons ?? 0,
+        });
+        return { qaWarnings: warnings, qaWarningsBySide: bySide, qaNotes: notes, unavailable: v.decisive !== true };
+      });
+      return NextResponse.json({
+        imageBase64: imageB64,
+        qaId: deferredQaId,
+        qaPending: true,
+        ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
+        backState,
+      });
+    }
+
     if (strictLocksEnabled) {
       try {
         qa = await runPanelComplianceCheck({

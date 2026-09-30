@@ -23,7 +23,20 @@ type StudioVariant = { id: string; color: string | null; shopify_variant_id?: st
 /** qaWarnings = the server's post-generation lock QA found mismatches (text,
  * graphics, fit, identity, background…). The crop is still delivered — flagged
  * and unselected — so the operator sees the render AND the reasons and decides. */
-type Crop = { id: string; b64: string; label: string; selected: boolean; qaWarnings?: string[]; qaNotes?: string[] };
+type Crop = {
+  id: string;
+  b64: string;
+  label: string;
+  selected: boolean;
+  qaWarnings?: string[];
+  qaNotes?: string[];
+  /** Which half this crop is, so a verdict that arrives later lands on the right frame. */
+  side?: "left" | "right";
+  /** The judge is still running for this panel (its image is already here). */
+  qaPending?: boolean;
+  /** Collect the verdict from /api/generate/qa under this id. */
+  qaId?: string;
+};
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 /** Item-reference sections (owner, 2026-08-26): General = exactly the old
@@ -216,6 +229,9 @@ type PanelResponse = {
   /** True when the server dropped part of the prompt to fit the length limit. */
   promptTrimmed?: boolean;
   promptOverflowBytes?: number;
+  /** The judge is running after the fact; collect its verdict under this id. */
+  qaPending?: boolean;
+  qaId?: string;
   /** What the server established about the garment's back for this run. */
   backState?: "present" | "absent" | "unknown" | "photo";
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
@@ -363,10 +379,42 @@ async function panelResponseToCrops(
       : null;
   const extraNotes = [trimNote].filter(Boolean) as string[];
   const notes = extraNotes.length ? [...(qaNotes ?? []), ...extraNotes] : qaNotes;
+  /* The image is here but the judge is still working (deferred QA). The crops
+     show now — selected, with a "checking" badge — and the flags land later. */
+  const qaPending = json.qaPending === true && typeof json.qaId === "string" ? json.qaId : null;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes: notes },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes: notes },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes: notes, side: "left", qaPending: Boolean(qaPending), qaId: qaPending ?? undefined },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes: notes, side: "right", qaPending: Boolean(qaPending), qaId: qaPending ?? undefined },
   ];
+}
+
+/** Poll the deferred compliance verdict and fold it into the crops it belongs to. */
+async function collectPanelQa(
+  qaId: string,
+  apply: (v: { qaWarnings: string[]; qaWarningsBySide: { left: string[]; right: string[] } | null; qaNotes: string[]; unavailable: boolean } | null) => void,
+): Promise<void> {
+  const deadline = Date.now() + 2 * 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch(`/api/generate/qa?id=${encodeURIComponent(qaId)}`, { cache: "no-store" });
+      if (r.status === 404) return apply(null); // expired / server restarted — no verdict, not a pass
+      if (r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { status?: string } & Record<string, unknown>;
+        if (j.status === "done") {
+          return apply({
+            qaWarnings: Array.isArray(j.qaWarnings) ? (j.qaWarnings as string[]).map(String) : [],
+            qaWarningsBySide: (j.qaWarningsBySide as { left: string[]; right: string[] } | null) ?? null,
+            qaNotes: Array.isArray(j.qaNotes) ? (j.qaNotes as string[]).map(String) : [],
+            unavailable: j.unavailable === true,
+          });
+        }
+      }
+    } catch {
+      /* transient — keep polling until the deadline */
+    }
+    await sleep(2000);
+  }
+  apply(null);
 }
 
 export function CarbonStudioTab({
@@ -392,6 +440,23 @@ export function CarbonStudioTab({
   const [itemRefs, setItemRefs] = useState<ItemRef[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>("");
+  /* Stopwatch for a run: starts on Generate, stops when the last panel lands,
+     and the final time stays on screen. Regenerate starts it from zero. It is
+     there to answer "how long did that actually take" without reading a log. */
+  const [clock, setClock] = useState<{ startedAt: number; endedAt: number | null } | null>(null);
+  const [clockNow, setClockNow] = useState<number>(0);
+  useEffect(() => {
+    if (!clock || clock.endedAt !== null) return;
+    setClockNow(Date.now());
+    const t = setInterval(() => setClockNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, [clock]);
+  const clockText = useMemo(() => {
+    if (!clock) return "";
+    const ms = Math.max(0, (clock.endedAt ?? clockNow) - clock.startedAt);
+    const total = Math.floor(ms / 1000);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }, [clock, clockNow]);
   // Pre-generation item analysis: the item reference photos are inspected at
   // high detail — every word, graphic, material, button, stitch — and the
   // findings are locked into the prompt BEFORE rendering. The spec is shown
@@ -963,6 +1028,8 @@ export function CarbonStudioTab({
     /* Step 1 of a new product: analyze the photos and STOP, so the spec can be
        read and corrected before four panels are paid for. Once the spec exists
        for exactly these photos, Generate goes straight through. */
+    // The stopwatch runs from this click, whichever branch the press takes.
+    setClock({ startedAt: Date.now(), endedAt: null });
     if (specStale) {
       setBusy("analyze");
       setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
@@ -976,6 +1043,7 @@ export function CarbonStudioTab({
       } finally {
         setBusy(null);
         setProgress("");
+        setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       }
       return;
     }
@@ -1050,6 +1118,9 @@ export function CarbonStudioTab({
             Accept: "application/json",
             "x-generate-stream": "1",
             "x-generate-job": jobId,
+            // Return the image as soon as it exists; the judge runs after and
+            // its verdict is collected from /api/generate/qa under this id.
+            "x-panel-qa": `${jobId}-qa`,
           },
           body: JSON.stringify({
             prompt,
@@ -1078,20 +1149,78 @@ export function CarbonStudioTab({
     };
 
     try {
-      // Fire every selected panel AT ONCE (like carbon-gen), not one at a time.
-      const settled = await Promise.allSettled(chosen.map((p) => genOnePanel(p)));
-      const all: Crop[] = [];
-      settled.forEach((s, i) => {
-        if (s.status === "fulfilled") all.push(...s.value);
-        else
-          all.push({
-            id: `p${chosen[i]}-fail-${runTag}`,
-            b64: "",
-            label: `Panel ${chosen[i]}: ${s.reason instanceof Error ? s.reason.message : "failed"}`,
-            selected: false,
-          });
-      });
-      setCrops([...kept, ...all]);
+      /* Every panel starts AT ONCE, and each one's crops appear the moment it
+         lands instead of after the slowest. Panels differ by 30-90 s, so
+         waiting for all four meant staring at an empty gallery for the whole
+         run. Results are kept in panel order so the grid fills in place
+         rather than shuffling as they arrive. */
+      setCrops(kept);
+      /* `byPanel` is the authority while the run is in flight: each re-render
+         rebuilds the gallery from it, so a QA verdict must be written here too
+         — a verdict applied only to React state would be wiped by the next
+         panel's re-render. Once the run is over there are no more rebuilds and
+         late verdicts go straight to state, which also protects any selection
+         the operator has since toggled. */
+      const byPanel = new Map<number, Crop[]>();
+      let runActive = true;
+      const render = () => {
+        const ordered = chosen.filter((p) => byPanel.has(p)).flatMap((p) => byPanel.get(p)!);
+        setCrops([...kept, ...ordered]);
+      };
+      await Promise.all(
+        chosen.map(async (panel) => {
+          try {
+            byPanel.set(panel, await genOnePanel(panel));
+          } catch (e) {
+            byPanel.set(panel, [
+              {
+                id: `p${panel}-fail-${runTag}`,
+                b64: "",
+                label: `Panel ${panel}: ${e instanceof Error ? e.message : "failed"}`,
+                selected: false,
+              },
+            ]);
+          }
+          render();
+          const done = byPanel.size;
+          const got = [...byPanel.values()].flat().filter((c) => c.b64).length;
+          setProgress(
+            done < chosen.length
+              ? `Panel ${done} of ${chosen.length} done — ${got} crop(s) ready, still rendering…`
+              : "",
+          );
+          /* The judge is still working on this panel; fold its verdict in when
+             it lands so the flags catch up without holding the images back. */
+          const qaId = (byPanel.get(panel) ?? []).find((c) => c.qaId)?.qaId;
+          if (qaId) {
+            const ids = new Set((byPanel.get(panel) ?? []).map((c) => c.id));
+            void collectPanelQa(qaId, (v) => {
+              const applyVerdict = (c: Crop): Crop => {
+                if (!v) {
+                  return { ...c, qaPending: false, qaNotes: [...(c.qaNotes ?? []), "Compliance check did not report back — review this crop yourself."] };
+                }
+                const mine = v.qaWarningsBySide && c.side ? v.qaWarningsBySide[c.side] : v.qaWarnings;
+                const warnings = mine && mine.length ? mine : undefined;
+                const notes = [...(c.qaNotes ?? []), ...v.qaNotes, ...(v.unavailable ? ["Compliance check was inconclusive — this crop was not verified."] : [])];
+                return {
+                  ...c,
+                  qaPending: false,
+                  qaWarnings: warnings,
+                  qaNotes: notes.length ? notes : undefined,
+                  // A flagged crop must not stay selected for publishing.
+                  selected: warnings ? false : c.selected,
+                };
+              };
+              const cur = byPanel.get(panel);
+              if (cur) byPanel.set(panel, cur.map(applyVerdict));
+              if (runActive) render();
+              else setCrops((prev) => prev.map((c) => (ids.has(c.id) ? applyVerdict(c) : c)));
+            });
+          }
+        }),
+      );
+      runActive = false;
+      const all = [...byPanel.values()].flat();
       setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
@@ -1100,6 +1229,8 @@ export function CarbonStudioTab({
       setNativeBusy(false);
       setBusy(null);
       setProgress("");
+      // Stop the stopwatch — the last panel is in.
+      setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
   }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem]);
@@ -1908,6 +2039,17 @@ export function CarbonStudioTab({
         >
           {mediaBusy === "load" ? "Loading…" : "🖼 Manage & publish images"}
         </button>
+        {clock ? (
+          <span
+            title={clock.endedAt === null ? "Time since you pressed Generate" : "How long that run took"}
+            className={`font-mono text-[0.9rem] font-semibold tabular-nums ${
+              clock.endedAt === null ? "text-[var(--wms-accent)]" : "text-[var(--wms-fg)]"
+            }`}
+          >
+            ⏱ {clockText}
+            {clock.endedAt === null ? "" : " total"}
+          </span>
+        ) : null}
         {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
         {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
         {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
@@ -1971,6 +2113,7 @@ export function CarbonStudioTab({
                 </button>
                 <span className="block px-1 py-0.5 text-center font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
+                  {c.qaPending ? <span className="ml-1 text-[var(--wms-accent)]" title="The compliance check is still running for this panel">· checking…</span> : null}
                 </span>
                 {c.qaWarnings?.length ? (
                   <div

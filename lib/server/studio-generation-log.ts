@@ -13,6 +13,8 @@ import { getPool } from "@/lib/db";
  * answerable while only successes were recorded and the verdict was dropped.
  */
 export type StudioGenerationLog = {
+  /** Supply one when the QA verdict will be attached later (deferred judge). */
+  id?: string | null;
   tenantId?: string | null;
   locationId?: string | null;
   matrixId?: string | null;
@@ -59,14 +61,19 @@ const str = (v: unknown, max = 200) =>
 const strList = (v: unknown, max = 12) =>
   Array.isArray(v) ? v.map((x) => String(x ?? "").trim()).filter(Boolean).slice(0, max) : [];
 
-export function recordStudioGeneration(entry: StudioGenerationLog): void {
-  // Fire and forget — never block the response, never throw into it.
-  void (async () => {
+/**
+ * Write the row. Fire-and-forget by design — callers normally ignore the
+ * returned promise — but it IS returned so the deferred-QA path can wait for
+ * the INSERT before updating the same row.
+ */
+export function recordStudioGeneration(entry: StudioGenerationLog): Promise<void> {
+  return (async () => {
     try {
       const pool = getPool();
       if (!pool) return;
       await pool.query(
         `INSERT INTO studio_generations (
+           id,
            tenant_id, location_id, matrix_id, item_type, model_name, model_gender,
            panel_number, pose_a, pose_b,
            image_model, image_quality, image_size,
@@ -74,6 +81,7 @@ export function recordStudioGeneration(entry: StudioGenerationLog): void {
            outcome, duration_ms, qa_decisive, qa_pass, qa_warnings, back_unknown, error_code,
            qa_reasons, qa_notes, qa_dropped, back_state, spec_confirmed, spec_bytes, error_message
          ) VALUES (
+           COALESCE($31::uuid, gen_random_uuid()),
            $1::uuid, $2::uuid, $3::uuid, $4, $5, $6,
            $7, $8, $9,
            $10, $11, $12,
@@ -112,10 +120,47 @@ export function recordStudioGeneration(entry: StudioGenerationLog): void {
           entry.specConfirmed === true,
           int(entry.specBytes),
           str(entry.errorMessage, 600),
+          uuid(entry.id),
         ]
       );
     } catch (e) {
       console.warn("[studio-generation-log] not recorded:", (e as Error)?.message || e);
+    }
+  })();
+}
+
+/**
+ * Attach the judge's verdict to a row written earlier.
+ *
+ * The judge now runs AFTER the image is served, so the row exists before the
+ * verdict does. Without this the log would say "QA never ran" for every panel
+ * and the measurements the log exists for would be worthless.
+ */
+export function updateStudioGenerationQa(
+  id: string,
+  qa: Pick<StudioGenerationLog, "qaDecisive" | "qaPass" | "qaWarnings" | "qaReasons" | "qaNotes" | "qaDropped">,
+): void {
+  void (async () => {
+    try {
+      const pool = getPool();
+      if (!pool || !uuid(id)) return;
+      await pool.query(
+        `UPDATE studio_generations
+            SET qa_decisive = $2, qa_pass = $3, qa_warnings = $4,
+                qa_reasons = $5::jsonb, qa_notes = $6::jsonb, qa_dropped = $7
+          WHERE id = $1::uuid`,
+        [
+          id,
+          qa.qaDecisive ?? null,
+          qa.qaPass ?? null,
+          int(qa.qaWarnings) ?? 0,
+          JSON.stringify(strList(qa.qaReasons)),
+          JSON.stringify(strList(qa.qaNotes)),
+          int(qa.qaDropped) ?? 0,
+        ]
+      );
+    } catch (e) {
+      console.warn("[studio-generation-log] QA not attached:", (e as Error)?.message || e);
     }
   })();
 }

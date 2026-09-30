@@ -136,14 +136,72 @@ export default function ImageUploadPage() {
     return () => clearTimeout(t);
   }, [focusRing]);
 
-  const pushShot = useCallback((blob: Blob) => {
-    const r = new FileReader();
-    r.onload = () =>
-      setShots((prev) =>
-        prev.length >= MAX_PHOTOS ? prev : [...prev, { id: `${Date.now()}-${prev.length}`, dataUrl: String(r.result || ""), blob }],
-      );
-    r.readAsDataURL(blob);
+  /**
+   * Shrink a captured photo for transport.
+   *
+   * The camera is still asked for its highest resolution — that is what makes
+   * the shot sharp and correctly focused — but a 4-5 MB full-sensor still then
+   * has to cross a phone's uplink, land in R2, and be uploaded again to OpenAI
+   * once per panel (four times a run). At 2048 px on the long edge the same
+   * photo is ~0.5-1 MB with nothing a garment reference needs thrown away.
+   * Anything the browser cannot decode is passed through untouched rather than
+   * lost.
+   */
+  const shrinkForUpload = useCallback(async (blob: Blob, maxDim = 2048, quality = 0.9): Promise<Blob> => {
+    try {
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || ""));
+        r.onerror = () => rej(new Error("read"));
+        r.readAsDataURL(blob);
+      });
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const im = new Image();
+        im.onload = () => res(im);
+        im.onerror = () => rej(new Error("decode"));
+        im.src = dataUrl;
+      });
+      const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+      const safeType = /^image\/(jpeg|jpg|png|webp)$/i.test(blob.type);
+      if (longest <= maxDim && safeType && blob.size <= 1.5 * 1024 * 1024) return blob;
+      const scale = Math.min(1, maxDim / longest);
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return blob;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", quality));
+      return out && out.size > 0 ? out : blob;
+    } catch {
+      return blob; // undecodable here — let the server decide
+    }
   }, []);
+
+  /** Shrink, then add to the tray. false = this phone cannot read the format. */
+  const pushShot = useCallback(
+    async (raw: Blob): Promise<boolean> => {
+      const blob = await shrinkForUpload(raw);
+      // The server only accepts jpeg/png/webp; an undecodable HEIC would be
+      // "sent successfully" and then fail everywhere downstream.
+      if (!/^image\/(jpeg|jpg|png|webp)$/i.test(blob.type)) return false;
+      const dataUrl = await new Promise<string>((res) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result || ""));
+        r.onerror = () => res("");
+        r.readAsDataURL(blob);
+      });
+      setShots((prev) =>
+        prev.length >= MAX_PHOTOS ? prev : [...prev, { id: `${Date.now()}-${prev.length}`, dataUrl, blob }],
+      );
+      return true;
+    },
+    [shrinkForUpload],
+  );
 
   const [capturing, setCapturing] = useState(false);
   const capture = useCallback(async () => {
@@ -167,7 +225,7 @@ export default function ImageUploadPage() {
           .catch(() => null);
         const blob = await Promise.race([still, timeout]);
         if (blob && blob.size > 0) {
-          pushShot(blob);
+          await pushShot(blob);
           return;
         }
       }
@@ -180,7 +238,7 @@ export default function ImageUploadPage() {
       if (!ctx) return;
       ctx.drawImage(v, 0, 0, w, h);
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.95));
-      if (blob) pushShot(blob);
+      if (blob) await pushShot(blob);
     } finally {
       setCapturing(false);
     }
@@ -190,49 +248,29 @@ export default function ImageUploadPage() {
      JPEG / PNG / WebP (an iPhone's HEIC, mostly) is re-encoded to JPEG here —
      the desktop cannot display HEIC and OpenAI rejects it, so sending it
      "successfully" would only fail later. Safari decodes HEIC natively. */
-  const SAFE = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
-  const addFromPicker = useCallback((files: FileList | null) => {
-    if (!files?.length) return;
-    const readOne = (f: File) =>
-      new Promise<Shot | null>((res) => {
-        if (!f.type.startsWith("image/") && !/\.(heic|heif|jpe?g|png|webp)$/i.test(f.name)) return res(null);
-        const r = new FileReader();
-        r.onload = () => {
-          const dataUrl = String(r.result || "");
-          if (SAFE.has((f.type || "").toLowerCase())) {
-            return res({ id: `${Date.now()}-${Math.round(dataUrl.length)}`, dataUrl, blob: f });
-          }
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = img.naturalWidth || 1;
-            canvas.height = img.naturalHeight || 1;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return res(null);
-            ctx.drawImage(img, 0, 0);
-            canvas.toBlob(
-              (blob) => {
-                if (!blob) return res(null);
-                res({ id: `${Date.now()}-${Math.round(dataUrl.length)}`, dataUrl: canvas.toDataURL("image/jpeg", 0.92), blob });
-              },
-              "image/jpeg",
-              0.95,
-            );
-          };
-          img.onerror = () => res(null);
-          img.src = dataUrl;
-        };
-        r.onerror = () => res(null);
-        r.readAsDataURL(f);
-      });
-    void (async () => {
-      const list = Array.from(files).slice(0, MAX_PHOTOS);
-      const read = (await Promise.all(list.map(readOne))).filter(Boolean) as Shot[];
-      const skipped = list.length - read.length;
-      if (skipped) setErr(`${skipped} photo${skipped === 1 ? "" : "s"} could not be read on this phone (unsupported format) — use JPG or take it with the camera.`);
-      setShots((prev) => [...prev, ...read].slice(0, MAX_PHOTOS));
-    })();
-  }, []);
+  /* Camera-app shots and gallery picks go through the same shrink+validate path
+     as a live capture, so an iPhone HEIC is re-encoded here (Safari can decode
+     it) and one that cannot be decoded is refused up front instead of being
+     "sent" and failing downstream. */
+  const addFromPicker = useCallback(
+    (files: FileList | null) => {
+      if (!files?.length) return;
+      void (async () => {
+        const list = Array.from(files).slice(0, MAX_PHOTOS);
+        let skipped = 0;
+        for (const f of list) {
+          const looksImage = f.type.startsWith("image/") || /\.(heic|heif|jpe?g|png|webp)$/i.test(f.name);
+          if (!looksImage || !(await pushShot(f))) skipped += 1;
+        }
+        if (skipped) {
+          setErr(
+            `${skipped} photo${skipped === 1 ? "" : "s"} could not be read on this phone (unsupported format) — use JPG, or take it with the camera.`,
+          );
+        }
+      })();
+    },
+    [pushShot],
+  );
 
   const removeShot = (id: string) => setShots((prev) => prev.filter((s) => s.id !== id));
 
