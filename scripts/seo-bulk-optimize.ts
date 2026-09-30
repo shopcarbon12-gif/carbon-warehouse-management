@@ -37,6 +37,12 @@ import { studioRefViewKey } from "@/lib/studio-item-spec";
 import { applySetBanner, pictureForProduct, type SetPicture } from "@/lib/seo/setNotice";
 import { scoreAll } from "@/lib/seo/deterministic";
 import type { ProductContext, SeoFields, Scorecard } from "@/lib/seo/types";
+import {
+  DEFAULT_AGE_GROUP,
+  DEFAULT_CONDITION,
+  buildRetailMetafieldInputs,
+  genderFromProductType,
+} from "@/lib/seo/retailMetafields";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "scripts", ".seo-bulk");
@@ -341,6 +347,8 @@ async function publish(
   secondary: string[],
   score: number,
   oldHandle = "",
+  productType = "",
+  variantIds: string[] = [],
 ) {
   const input: Json = { id: productId };
   const seo: Json = {};
@@ -444,6 +452,35 @@ async function publish(
   const mfe = mf.metafieldsSet?.userErrors || [];
   if (mfe.length) throw new Error(`metafields: ${mfe.map((e: Json) => e.message).join("; ")}`);
 
+  /* The Google-feed tiers, alongside the SEO copy.
+   *
+   * This pass used to write none of them, so every product it optimised came
+   * out with a perfect title and an empty gender/age_group/condition — the
+   * fields Shopping actually filters on. They cost nothing to derive: the
+   * product type states the gender ("WOMEN >> TOPS"), and Carbon has no kids
+   * line and no resale, so age group and condition are constants. They go on
+   * every variant because that is the level Google reads them at.
+   *
+   * custom.short_descriptions_ is deliberately NOT written here. It is the
+   * PDP's Description tab and needs a look at the product photo, which is a
+   * second vision call per product; scripts/seo-bulk-metafields.ts does that
+   * one on its own schedule.
+   */
+  const gender = genderFromProductType(productType);
+  const retail = buildRetailMetafieldInputs({
+    productId,
+    variantIds,
+    values: { gender: gender || "", ageGroup: DEFAULT_AGE_GROUP, condition: DEFAULT_CONDITION },
+  });
+  for (let i = 0; i < retail.length; i += 25) {
+    const rf = await gql(
+      `mutation($m:[MetafieldsSetInput!]!){ metafieldsSet(metafields:$m){ userErrors{ field message } } }`,
+      { m: retail.slice(i, i + 25) },
+    );
+    const rfe = rf.metafieldsSet?.userErrors || [];
+    if (rfe.length) throw new Error(`google feed metafields: ${rfe.map((e: Json) => e.message).join("; ")}`);
+  }
+
   /* Shopify mirrors seo.title / seo.description into global.title_tag and
      global.description_tag, which is what most themes and feed apps actually
      read. productUpdate sets them, but only where they already exist — a
@@ -545,6 +582,8 @@ async function main() {
             result.secondaryKeywords,
             finalCard.overall,
             String(p.handle || ""),
+            String(p.productType || ""),
+            (p.variants?.nodes || []).map((v: Json) => String(v?.id || "")).filter(Boolean),
           );
           doneIds.push(p.id);
           fs.writeFileSync(STATE, JSON.stringify({ done: doneIds }, null, 2));
