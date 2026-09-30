@@ -129,7 +129,6 @@
                 assign carbon_in_ss = false
                 assign carbon_in_skinny = false
                 assign carbon_in_slim = false
-                assign carbon_in_baggy = false
                 for carbon_col in product.collections
                   case carbon_col.handle
                     when 'super-skinny-jeans-men-copy'
@@ -140,8 +139,6 @@
                       assign carbon_in_skinny = true
                     when 'slim-jeans-men'
                       assign carbon_in_slim = true
-                    when 'baggy-men'
-                      assign carbon_in_baggy = true
                   endcase
                 endfor
                 if carbon_in_zip
@@ -152,14 +149,12 @@
                   assign carbon_fit = 'skinny'
                 elsif carbon_in_slim
                   assign carbon_fit = 'slim'
-                elsif carbon_in_baggy
-                  assign carbon_fit = 'baggy'
                 endif
               endif
 
               assign carbon_has_fit = false
               assign carbon_has_guide = false
-              if carbon_fit == 'slim' or carbon_fit == 'skinny' or carbon_fit == 'super-skinny-long' or carbon_fit == 'super-skinny-zipper' or carbon_fit == 'baggy'
+              if carbon_fit == 'slim' or carbon_fit == 'skinny' or carbon_fit == 'super-skinny-long' or carbon_fit == 'super-skinny-zipper'
                 assign carbon_has_fit = true
                 assign carbon_has_guide = true
               endif

@@ -21,7 +21,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
     assign carbon_in_ss = false
     assign carbon_in_skinny = false
     assign carbon_in_slim = false
-    assign carbon_in_baggy = false
     for carbon_col in product.collections
       case carbon_col.handle
         when 'super-skinny-jeans-men-copy'
@@ -32,8 +31,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
           assign carbon_in_skinny = true
         when 'slim-jeans-men'
           assign carbon_in_slim = true
-        when 'baggy-men'
-          assign carbon_in_baggy = true
       endcase
     endfor
     if carbon_in_zip
@@ -44,8 +41,6 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
       assign carbon_fit = 'skinny'
     elsif carbon_in_slim
       assign carbon_fit = 'slim'
-    elsif carbon_in_baggy
-      assign carbon_fit = 'baggy'
     endif
   endif
 -%}
@@ -101,5 +96,4 @@ Allowed values: slim, skinny, super-skinny-long, super-skinny-zipper
   {% when 'skinny' %}{% render 'carbon-size-guide-skinny' %}
   {% when 'super-skinny-long' %}{% render 'carbon-size-guide-super-skinny-long' %}
   {% when 'super-skinny-zipper' %}{% render 'carbon-size-guide-super-skinny-zipper' %}
-  {% when 'baggy' %}{% render 'carbon-size-guide-baggy' %}
 {% endcase %}
