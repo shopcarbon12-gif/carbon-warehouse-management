@@ -1,0 +1,442 @@
+/**
+ * Flat-lay T-shirt measurement from a photo.
+ *
+ * Pure functions over an RGBA pixel buffer — no DOM, no canvas — so the same
+ * code runs in the browser and in node test scripts.
+ *
+ * Assumptions (the operator guide on the page tells staff to follow them):
+ *   - The shirt lies flat, front up, collar at the TOP of the photo.
+ *   - The background is plain and contrasts with the shirt.
+ *   - The photo is taken straight from above.
+ *
+ * Pipeline:
+ *   1. Background model = a colour plane (per channel, a + b·x + c·y) fitted to
+ *      the photo's outer border ring, so a lighting gradient across the table
+ *      doesn't read as "shirt".
+ *   2. Foreground = pixels whose colour is far enough from the modelled
+ *      background at that spot.
+ *   3. Clean-up (close → open), keep the largest blob (the shirt — a smaller
+ *      reference card or ruler is dropped), fill holes (prints that happen to
+ *      match the background).
+ *   4. Points of measure, read row by row from the mask:
+ *        - Body length:  top of shirt (HPS / collar) → bottom of hem.
+ *        - Armpit:       scanning up from the hem, the first row where the run
+ *                        through the body centre suddenly widens (the sleeves
+ *                        join the body there).
+ *        - Chest width:  body width 2.5 cm (1") below the armpit, flat.
+ *        - Hem width:    body width just above the bottom edge, flat.
+ */
+
+export type Point = { x: number; y: number };
+export type Segment = { a: Point; b: Point };
+
+export type ShirtMask = {
+  width: number;
+  height: number;
+  /** 1 = shirt, 0 = background. */
+  data: Uint8Array;
+  /** Number of shirt pixels. */
+  area: number;
+};
+
+export type ShirtMeasurementsPx = {
+  /** Flat chest width (pit-to-pit, 1" below armpit), pixels. */
+  chest: number;
+  /** HPS / top → hem, pixels. */
+  length: number;
+  /** Flat hem width, pixels. */
+  hem: number;
+  lines: { chest: Segment; length: Segment; hem: Segment };
+  armpitY: number;
+};
+
+export type MeasureResult =
+  | { ok: true; mask: ShirtMask; px: ShirtMeasurementsPx }
+  | { ok: false; error: string; mask?: ShirtMask };
+
+/** Distance (RGB, 0–441) a pixel must be from the background to count as shirt. */
+export const DEFAULT_THRESHOLD = 48;
+
+export function segmentShirt(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  threshold = DEFAULT_THRESHOLD,
+): ShirtMask {
+  const bg = fitBackground(rgba, width, height);
+  const n = width * height;
+  let fg: Uint8Array = new Uint8Array(n);
+  const t2 = threshold * threshold;
+  for (let y = 0, i = 0; y < height; y++) {
+    for (let x = 0; x < width; x++, i++) {
+      const p = i * 4;
+      const dr = rgba[p] - (bg[0][0] + bg[0][1] * x + bg[0][2] * y);
+      const dg = rgba[p + 1] - (bg[1][0] + bg[1][1] * x + bg[1][2] * y);
+      const db = rgba[p + 2] - (bg[2][0] + bg[2][1] * x + bg[2][2] * y);
+      fg[i] = dr * dr + dg * dg + db * db > t2 ? 1 : 0;
+    }
+  }
+  const r = Math.max(1, Math.round(Math.min(width, height) / 300));
+  fg = erode(dilate(fg, width, height, r), width, height, r); // close: seal seams/creases
+  fg = dilate(erode(fg, width, height, r), width, height, r); // open: drop speckle
+  fg = largestComponent(fg, width, height);
+  fg = fillHoles(fg, width, height);
+  let area = 0;
+  for (let i = 0; i < n; i++) area += fg[i];
+  return { width, height, data: fg, area };
+}
+
+export function measureMask(mask: ShirtMask, pxPerCm: number): MeasureResult {
+  const { width, height, data } = mask;
+  if (mask.area < width * height * 0.03) {
+    return { ok: false, error: "No shirt found. Use a plain background that contrasts with the shirt.", mask };
+  }
+
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    let any = false;
+    for (let x = 0; x < width; x++) {
+      if (data[row + x]) {
+        any = true;
+        break;
+      }
+    }
+    if (any) {
+      if (top < 0) top = y;
+      bottom = y;
+    }
+  }
+  const shirtH = bottom - top;
+  if (top < 0 || shirtH < 20) return { ok: false, error: "Shirt too small in the photo.", mask };
+  if (top <= 1 || bottom >= height - 2) {
+    return { ok: false, error: "Shirt touches the photo edge — step back so the whole shirt is in frame.", mask };
+  }
+
+  // Body centre: average midpoint of the rows in the bottom quarter (below the sleeves).
+  let sumMid = 0;
+  let cnt = 0;
+  for (let y = bottom - Math.round(shirtH * 0.25); y <= bottom - Math.round(shirtH * 0.03); y++) {
+    const ext = rowExtent(data, width, y);
+    if (ext) {
+      sumMid += (ext[0] + ext[1]) / 2;
+      cnt++;
+    }
+  }
+  if (!cnt) return { ok: false, error: "Could not find the shirt body.", mask };
+  const cx = Math.round(sumMid / cnt);
+
+  const runAt = (y: number) => centerRun(data, width, y, cx);
+  const medianRun = (y: number, span: number) => {
+    const ws: { w: number; run: [number, number] }[] = [];
+    for (let yy = y - span; yy <= y + span; yy++) {
+      if (yy < top || yy > bottom) continue;
+      const run = runAt(yy);
+      if (run) ws.push({ w: run[1] - run[0] + 1, run });
+    }
+    if (!ws.length) return null;
+    ws.sort((a, b) => a.w - b.w);
+    return ws[ws.length >> 1];
+  };
+
+  // Hem: just above the bottom edge (avoid the rounded/folded last rows).
+  const hemY = bottom - Math.max(2, Math.round(shirtH * 0.02));
+  const hem = medianRun(hemY, 2);
+  if (!hem) return { ok: false, error: "Could not read the hem.", mask };
+
+  // Armpit: walk up from the hem; the body run widens sharply where sleeves join.
+  const recent: number[] = [];
+  let armpitY = -1;
+  const startY = bottom - Math.round(shirtH * 0.05);
+  const stopY = top + Math.round(shirtH * 0.1);
+  for (let y = startY; y >= stopY; y--) {
+    const run = runAt(y);
+    if (!run) continue;
+    const w = run[1] - run[0] + 1;
+    if (recent.length >= 5) {
+      const sorted = [...recent].sort((a, b) => a - b);
+      const bodyW = sorted[sorted.length >> 1];
+      if (w > bodyW * 1.2) {
+        // Require it to stay wide for a few rows (ignore a single noisy row).
+        let wide = 0;
+        for (let k = 1; k <= 3; k++) {
+          const r2 = runAt(y - k);
+          if (r2 && r2[1] - r2[0] + 1 > bodyW * 1.2) wide++;
+        }
+        if (wide >= 2) {
+          armpitY = y + 1;
+          break;
+        }
+      }
+    }
+    recent.push(w);
+    if (recent.length > 15) recent.shift();
+  }
+  if (armpitY < 0) {
+    return { ok: false, error: "Could not find the armpits — lay the sleeves out flat, away from the body.", mask };
+  }
+
+  const chestY = Math.min(bottom, armpitY + Math.max(1, Math.round(2.54 * pxPerCm)));
+  const chest = medianRun(chestY, 1);
+  if (!chest) return { ok: false, error: "Could not read the chest.", mask };
+
+  return {
+    ok: true,
+    mask,
+    px: {
+      chest: chest.w,
+      length: shirtH + 1,
+      hem: hem.w,
+      armpitY,
+      lines: {
+        chest: { a: { x: chest.run[0], y: chestY }, b: { x: chest.run[1], y: chestY } },
+        hem: { a: { x: hem.run[0], y: hemY }, b: { x: hem.run[1], y: hemY } },
+        length: { a: { x: cx, y: top }, b: { x: cx, y: bottom } },
+      },
+    },
+  };
+}
+
+export function measureShirt(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  pxPerCm: number,
+  threshold = DEFAULT_THRESHOLD,
+): MeasureResult {
+  return measureMask(segmentShirt(rgba, width, height, threshold), pxPerCm);
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+type Plane = [number, number, number];
+
+/**
+ * Per-channel least-squares plane through the border ring. Refit once after
+ * dropping the worst 20% of samples, so a sleeve or ruler touching the edge
+ * doesn't drag the model.
+ */
+function fitBackground(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number): [Plane, Plane, Plane] {
+  const ring = Math.max(2, Math.round(Math.min(w, h) * 0.02));
+  const step = Math.max(1, Math.round((w + h) / 800));
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let d = 0; d < ring; d++) {
+    for (let x = 0; x < w; x += step) {
+      xs.push(x, x);
+      ys.push(d, h - 1 - d);
+    }
+    for (let y = 0; y < h; y += step) {
+      xs.push(d, w - 1 - d);
+      ys.push(y, y);
+    }
+  }
+  const val = (k: number, c: number) => rgba[(ys[k] * w + xs[k]) * 4 + c];
+  const fit = (idx: number[]): [Plane, Plane, Plane] =>
+    [0, 1, 2].map((c) => solvePlane(idx, xs, ys, (k) => val(k, c))) as [Plane, Plane, Plane];
+
+  let idx = xs.map((_, k) => k);
+  let planes = fit(idx);
+  const resid = (k: number) => {
+    let r = 0;
+    for (let c = 0; c < 3; c++) {
+      const [a, b, cc] = planes[c];
+      const d = val(k, c) - (a + b * xs[k] + cc * ys[k]);
+      r += d * d;
+    }
+    return r;
+  };
+  idx = idx
+    .map((k) => ({ k, r: resid(k) }))
+    .sort((p, q) => p.r - q.r)
+    .slice(0, Math.max(3, Math.floor(idx.length * 0.8)))
+    .map((e) => e.k);
+  planes = fit(idx);
+  return planes;
+}
+
+function solvePlane(idx: number[], xs: number[], ys: number[], v: (k: number) => number): Plane {
+  // Normal equations for v ≈ a + b·x + c·y.
+  let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, sv = 0, sxv = 0, syv = 0;
+  for (const k of idx) {
+    const x = xs[k];
+    const y = ys[k];
+    const z = v(k);
+    n++;
+    sx += x;
+    sy += y;
+    sxx += x * x;
+    syy += y * y;
+    sxy += x * y;
+    sv += z;
+    sxv += x * z;
+    syv += y * z;
+  }
+  const m = [
+    [n, sx, sy, sv],
+    [sx, sxx, sxy, sxv],
+    [sy, sxy, syy, syv],
+  ];
+  for (let i = 0; i < 3; i++) {
+    let piv = i;
+    for (let r = i + 1; r < 3; r++) if (Math.abs(m[r][i]) > Math.abs(m[piv][i])) piv = r;
+    [m[i], m[piv]] = [m[piv], m[i]];
+    if (Math.abs(m[i][i]) < 1e-9) return [n ? sv / n : 0, 0, 0];
+    for (let r = 0; r < 3; r++) {
+      if (r === i) continue;
+      const f = m[r][i] / m[i][i];
+      for (let c = i; c < 4; c++) m[r][c] -= f * m[i][c];
+    }
+  }
+  return [m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]];
+}
+
+/** Square-window max filter (separable). */
+function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  return morph(src, w, h, r, 1);
+}
+/** Square-window min filter (separable). */
+function erode(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  return morph(src, w, h, r, 0);
+}
+function morph(src: Uint8Array, w: number, h: number, r: number, hit: 0 | 1): Uint8Array {
+  const tmp = new Uint8Array(w * h);
+  const out = new Uint8Array(w * h);
+  const miss = hit ? 0 : 1;
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    for (let x = 0; x < w; x++) {
+      let v = miss;
+      for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r); k++) {
+        if (src[row + k] === hit) {
+          v = hit;
+          break;
+        }
+      }
+      tmp[row + x] = v;
+    }
+  }
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) {
+      let v = miss;
+      for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r); k++) {
+        if (tmp[k * w + x] === hit) {
+          v = hit;
+          break;
+        }
+      }
+      out[y * w + x] = v;
+    }
+  }
+  return out;
+}
+
+function largestComponent(src: Uint8Array, w: number, h: number): Uint8Array {
+  const labels = new Int32Array(w * h);
+  const stack = new Int32Array(w * h);
+  let best = 0;
+  let bestSize = 0;
+  let label = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (!src[i] || labels[i]) continue;
+    label++;
+    let size = 0;
+    let sp = 0;
+    stack[sp++] = i;
+    labels[i] = label;
+    while (sp) {
+      const p = stack[--sp];
+      size++;
+      const visit = (q: number) => {
+        if (src[q] && !labels[q]) {
+          labels[q] = label;
+          stack[sp++] = q;
+        }
+      };
+      const x = p % w;
+      if (x > 0) visit(p - 1);
+      if (x < w - 1) visit(p + 1);
+      if (p >= w) visit(p - w);
+      if (p < w * (h - 1)) visit(p + w);
+    }
+    if (size > bestSize) {
+      bestSize = size;
+      best = label;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  if (best) for (let i = 0; i < w * h; i++) out[i] = labels[i] === best ? 1 : 0;
+  return out;
+}
+
+/** Background reachable from the border stays background; enclosed holes become shirt. */
+function fillHoles(src: Uint8Array, w: number, h: number): Uint8Array {
+  const outside = new Uint8Array(w * h);
+  const stack = new Int32Array(w * h);
+  let sp = 0;
+  const seed = (p: number) => {
+    if (!src[p] && !outside[p]) {
+      outside[p] = 1;
+      stack[sp++] = p;
+    }
+  };
+  for (let x = 0; x < w; x++) {
+    seed(x);
+    seed((h - 1) * w + x);
+  }
+  for (let y = 0; y < h; y++) {
+    seed(y * w);
+    seed(y * w + w - 1);
+  }
+  while (sp) {
+    const p = stack[--sp];
+    const x = p % w;
+    if (x > 0) seed(p - 1);
+    if (x < w - 1) seed(p + 1);
+    if (p >= w) seed(p - w);
+    if (p < w * (h - 1)) seed(p + w);
+  }
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = outside[i] ? 0 : 1;
+  return out;
+}
+
+function rowExtent(data: Uint8Array, w: number, y: number): [number, number] | null {
+  const row = y * w;
+  let l = -1;
+  let r = -1;
+  for (let x = 0; x < w; x++) {
+    if (data[row + x]) {
+      if (l < 0) l = x;
+      r = x;
+    }
+  }
+  return l < 0 ? null : [l, r];
+}
+
+/** The contiguous run of shirt pixels on row y containing (or nearest to) column cx. */
+function centerRun(data: Uint8Array, w: number, y: number, cx: number): [number, number] | null {
+  const row = y * w;
+  let x = cx;
+  if (!data[row + x]) {
+    let found = -1;
+    for (let d = 1; d < w; d++) {
+      if (x - d >= 0 && data[row + x - d]) {
+        found = x - d;
+        break;
+      }
+      if (x + d < w && data[row + x + d]) {
+        found = x + d;
+        break;
+      }
+    }
+    if (found < 0) return null;
+    x = found;
+  }
+  let l = x;
+  let r = x;
+  while (l > 0 && data[row + l - 1]) l--;
+  while (r < w - 1 && data[row + r + 1]) r++;
+  return [l, r];
+}

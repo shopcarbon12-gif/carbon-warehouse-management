@@ -55,6 +55,8 @@ export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   // regrouped under /inventory; preserve floor access.
   if (pathname.startsWith("/inventory/locations")) return true;
   if (pathname.startsWith("/inventory/cycle-counts")) return true;
+  // Size Grading: on-device photo measurement, no API calls.
+  if (pathname.startsWith("/inventory/size-grading")) return true;
   if (pathname.startsWith("/handheld")) return true;
   if (pathname.startsWith("/reports")) return true;
 

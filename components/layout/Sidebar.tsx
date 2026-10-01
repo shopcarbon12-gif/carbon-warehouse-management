@@ -45,6 +45,7 @@ import {
   Webhook,
   Star,
   Share2,
+  Shirt,
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -75,7 +76,8 @@ const sections: NavSection[] = [
       p.startsWith("/inventory/bulk-import") ||
       p.startsWith("/inventory/locations") ||
       p.startsWith("/inventory/cycle-counts") ||
-      p.startsWith("/inventory/transfers"),
+      p.startsWith("/inventory/transfers") ||
+      p.startsWith("/inventory/size-grading"),
     items: [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/inventory/categories", label: "Categories", icon: Layers },
@@ -84,6 +86,7 @@ const sections: NavSection[] = [
       { href: "/inventory/transfers/out", label: "Transfer Out", icon: ArrowRightLeft },
       { href: "/inventory/transfers/in", label: "Transfer In", icon: FolderInput },
       { href: "/inventory/bulk-import", label: "Bulk Import", icon: PackagePlus },
+      { href: "/inventory/size-grading", label: "Size Grading", icon: Shirt },
     ],
   },
   {
