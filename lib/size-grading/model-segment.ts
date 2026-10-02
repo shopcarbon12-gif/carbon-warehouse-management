@@ -28,6 +28,10 @@
  * and the weights are served from this origin and cached by the browser, so the
  * ~17 MB is paid once.
  *
+ * The sessions live in garment-finder.worker.ts, off the main thread; this
+ * file is the pure pre- and post-processing both it and the tests share. See
+ * find-garment.ts for the second model, used when this one picks the table.
+ *
  * It is a PROPOSAL, never the answer. Whatever comes back is drawn as movable
  * measurement lines the operator can correct, and if the model fails to load or
  * run, the caller falls back to the colour-model segmentation. Nothing here is
@@ -48,51 +52,6 @@ const MODEL = {
 
 /** The square the model expects its input resized to. */
 export const MODEL_INPUT_SIZE = MODEL.size;
-
-type Ort = typeof import("onnxruntime-web/wasm");
-let sessionPromise: Promise<{ ort: Ort; session: import("onnxruntime-web/wasm").InferenceSession }> | null = null;
-
-/**
- * Load the runtime and the weights once, and keep them.
- *
- * Deliberately not loaded with the page: it is ~17 MB that only matters once a
- * photo exists, and the Size Grading page is also opened to look things up.
- */
-function getSession() {
-  if (sessionPromise) return sessionPromise;
-  sessionPromise = (async () => {
-    /* The wasm-only entry, not the default. The default bundle loads the
-       WebGPU-capable runtime — 27 MB — and requests different file names, so a
-       server holding the plain runtime answers 404 and every photo silently
-       falls back to the colour model while looking as though it worked. This
-       entry is 13 MB and asks for exactly the files the build puts in /ort/. */
-    const ort = await import("onnxruntime-web/wasm");
-    /* Served from our own origin so the warehouse does not depend on a CDN, and
-       single-threaded on purpose: threaded wasm needs cross-origin isolation
-       (COOP/COEP) which would have to be set for the whole app, and the gain is
-       not worth making every other page pay for it. */
-    ort.env.wasm.wasmPaths = "/ort/";
-    ort.env.wasm.numThreads = 1;
-    const session = await ort.InferenceSession.create(MODEL.url, {
-      executionProviders: ["wasm"],
-      graphOptimizationLevel: "all",
-    });
-    return { ort, session };
-  })().catch((e) => {
-    // Let a later photo try again rather than failing for the rest of the session.
-    sessionPromise = null;
-    throw e;
-  });
-  return sessionPromise;
-}
-
-/** Start fetching the model before it is needed, if the browser is idle. */
-export function warmUpSegmenter() {
-  if (typeof window === "undefined") return;
-  void getSession().catch(() => {
-    /* the caller will fall back; nothing to say here */
-  });
-}
 
 export type ModelSegmentOptions = {
   /** Regions that cannot be garment — the calibration target. */
@@ -191,28 +150,6 @@ export function finishMask(
   return { data: mask, width, height, area };
 }
 
-/**
- * Run the model on a photo and return its raw mask at the photo's size.
- *
- * Give it the PHOTO, not the squared-up image. Squaring up fills everything
- * outside the original frame with white, and on that canvas the whole photo is a
- * dark shape on white — so the model selected the entire picture, table and
- * all, which is exactly what the operator kept seeing. On the photo itself it
- * picks out the garment. Warp the result afterwards (see the workspace).
- */
-export async function maskFromModel(
-  rgba: Uint8ClampedArray | Uint8Array,
-  width: number,
-  height: number,
-): Promise<Uint8Array> {
-  const { ort, session } = await getSession();
-  const S = MODEL.size;
-  const out = await session.run({
-    [session.inputNames[0]]: new ort.Tensor("float32", modelInput(rgba, width, height), [1, 3, S, S]),
-  });
-  return modelOutputToMask(out[session.outputNames[0]].data as Float32Array, width, height);
-}
-
 export function largestComponent(src: Uint8Array, width: number, height: number): Uint8Array {
   const n = width * height;
   const seen = new Uint8Array(n);
@@ -238,6 +175,18 @@ export function largestComponent(src: Uint8Array, width: number, height: number)
   }
   for (const p of best) out[p] = 1;
   return out;
+}
+
+/** Clear the target's sheet out of a mask in a frame's pixels, in place. */
+export function cutSheet(mask: Uint8Array, width: number, height: number, frame: RectFrame) {
+  const sheet = targetSheet(frame);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const q of sheet) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+  for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(height - 1, Math.ceil(y1)); y++) {
+    for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(width - 1, Math.ceil(x1)); x++) {
+      if (insideQuad(sheet, x, y)) mask[y * width + x] = 0;
+    }
+  }
 }
 
 /**
@@ -266,14 +215,7 @@ export function maskForMeasuring(
        ring is part of what the model selects, so the cut is the ring plus a few
        centimetres — as a quad, because the frame follows the photo and the
        sheet usually lies at an angle to it. */
-    const sheet = targetSheet(squared.frame);
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const q of sheet) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
-    for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(out.height - 1, Math.ceil(y1)); y++) {
-      for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(out.width - 1, Math.ceil(x1)); x++) {
-        if (insideQuad(sheet, x, y)) inSpace[y * out.width + x] = 0;
-      }
-    }
+    cutSheet(inSpace, out.width, out.height, squared.frame);
   } else {
     inSpace = new Uint8Array(out.width * out.height);
     for (let y = 0; y < out.height; y++) {

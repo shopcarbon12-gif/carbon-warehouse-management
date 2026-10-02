@@ -26,7 +26,8 @@ import { GuidePanel } from "./guide-panel";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
-import { maskForMeasuring, maskFromModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
+import { findGarmentOffThread, warmUpFinder } from "@/lib/size-grading/garment-finder";
+import type { Stage as FindStage } from "@/lib/size-grading/find-garment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import {
@@ -166,6 +167,8 @@ export function SizeGradingWorkspace() {
      photo is never left unmeasurable because a download failed. */
   const [modelMask, setModelMask] = useState<ShirtMask | null>(null);
   const [finding, setFinding] = useState(false);
+  /** Which pass the finder is on — the second one is slow, and says so. */
+  const [findStage, setFindStage] = useState<FindStage>("salience");
   /** Why the finder gave up on this photo, in words — shown, not swallowed. */
   const [modelFailed, setModelFailed] = useState<string | null>(null);
   const [selectedPom, setSelectedPom] = useState<string | null>(null);
@@ -349,44 +352,40 @@ export function SizeGradingWorkspace() {
      screen is never empty while it runs, and when it finishes the lines move to
      the better answer — except any the operator has already corrected. */
   useEffect(() => {
-    if (!image) {
-      setModelMask(null);
+    setModelMask(null);
+    setModelFailed(null);
+    const src = srcRef.current;
+    const quad = target?.quad;
+    /* No target, no scale: nothing can be measured, so there is nothing to
+       find either. The scale message says what to do. */
+    if (!image || !src || !rectFrame || !quad) {
       setFinding(false);
       return;
     }
     let alive = true;
     setFinding(true);
-    setModelFailed(null);
-    const src = srcRef.current;
-    const quad = target?.quad;
+    setFindStage("salience");
     const started = performance.now();
-    void (async () => {
-      if (!src) throw new Error("no photo");
-      /* The model looks at the PHOTO, never the squared-up image: squaring up
-         fills everything outside the frame with white, and on white the whole
-         photo is one dark object — which is how it kept selecting the table. */
-      const raw = await maskFromModel(src.data, src.width, src.height);
-      return maskForMeasuring(
-        raw,
-        src,
-        image,
-        rectFrame && quad ? { quad, frame: rectFrame } : undefined,
-      );
-    })()
-      .then((m) => {
+    findGarmentOffThread(
+      { src: { data: src.data, width: src.width, height: src.height }, picture: image.data, quad, frame: rectFrame },
+      (stage) => {
+        if (alive) setFindStage(stage);
+      },
+    )
+      .then((r) => {
         if (!alive) return;
-        // A mask covering almost nothing, or almost everything, is not a
-        // garment — keep what the colour model found rather than trust it.
-        const share = m.area / (image.width * image.height);
         const secs = ((performance.now() - started) / 1000).toFixed(1);
-        console.info(`[size-grading] finder: ${(share * 100).toFixed(1)}% of the frame in ${secs}s`);
-        if (share > 0.01 && share < 0.6) setModelMask(m);
-        else setModelFailed(`it selected ${(share * 100).toFixed(0)}% of the photo, which is not a garment`);
+        if (r.mask) {
+          console.info(`[size-grading] garment ${Math.round(r.cm2)} cm² by ${r.by} in ${secs}s`, r.firstTry ?? "");
+          setModelMask(r.mask);
+        } else {
+          console.warn(`[size-grading] no garment after ${secs}s:`, r.why);
+          setModelFailed(r.why);
+        }
       })
       .catch((e: unknown) => {
-        const why = e instanceof Error ? e.message : String(e);
         console.error("[size-grading] finder failed:", e);
-        if (alive) setModelFailed(why || "unknown error");
+        if (alive) setModelFailed(e instanceof Error ? e.message || "unknown error" : String(e));
       })
       .finally(() => {
         if (alive) setFinding(false);
@@ -399,7 +398,7 @@ export function SizeGradingWorkspace() {
   /* Fetch the model while the operator is still picking the item, so the first
      photo does not wait for a 17 MB download that could have happened already. */
   useEffect(() => {
-    warmUpSegmenter();
+    warmUpFinder();
   }, []);
 
   const cmOf = useCallback(
@@ -1286,10 +1285,15 @@ export function SizeGradingWorkspace() {
             <p className="mb-2 flex items-center gap-2 text-xs" role="status">
               {finding && !modelMask ? (
                 <span className="flex items-center gap-2 text-[var(--wms-muted)]">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Removing the background and finding the garment…
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  {findStage === "segments"
+                    ? "The first look picked out the table, not the garment — looking closer. This takes up to a minute on a phone…"
+                    : "Removing the background and finding the garment…"}
                 </span>
               ) : modelMask ? (
-                <span className="text-[var(--wms-status-success-fg)]">Background removed — garment found.</span>
+                <span className="text-[var(--wms-status-success-fg)]">
+                  Background removed — garment found ({Math.round(modelMask.area / (pxPerCm ?? 1) ** 2).toLocaleString()} cm²).
+                </span>
               ) : modelFailed ? (
                 <span className="text-[var(--wms-status-warning-fg)]">Background remover failed: {modelFailed}</span>
               ) : null}
@@ -1343,7 +1347,8 @@ export function SizeGradingWorkspace() {
               </p>
             ) : finding && !modelMask ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
-                <Loader2 className="h-4 w-4 animate-spin" /> Removing the background…
+                <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                {findStage === "segments" ? "Looking closer for the garment…" : "Removing the background…"}
               </p>
             ) : busy ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">

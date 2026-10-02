@@ -25,10 +25,18 @@ import { pathToFileURL } from "node:url";
 const { PNG } = require("pngjs") as { PNG: { sync: { read(b: Buffer): { width: number; height: number; data: Buffer } } } };
 
 import { detectTarget, frameToSource, rectify } from "@/lib/size-grading/target";
-import { MODEL_INPUT_SIZE, maskForMeasuring, modelInput, modelOutputToMask } from "@/lib/size-grading/model-segment";
+import { findGarment, type Runner } from "@/lib/size-grading/find-garment";
 import { measureGarment, pomsFor, POM_SOURCE } from "@/lib/size-grading/garment";
 
-const FIXTURE = "scripts/fixtures/size-grading/leggings-dark-table.png";
+/* Two photos of the SAME pair of leggings on the same dark table. On the first
+   the quick model finds the leggings; on the second it found the table — which
+   is the photo that made the second, segment-anything pass necessary. The
+   second fixture is cropped from a screenshot of the app, so its own measuring
+   lines are burned in; replace it with the original photo when there is one. */
+const FIXTURES = [
+  { file: "scripts/fixtures/size-grading/leggings-dark-table.png", by: "salience" },
+  { file: "scripts/fixtures/size-grading/leggings-dark-table-2-screenshot.png", by: "segments" },
+] as const;
 
 /** Plausible ranges for a women's size S legging, flat. Replace with tape values. */
 const TAPE: Record<string, [number, number]> = {
@@ -42,23 +50,49 @@ const TAPE: Record<string, [number, number]> = {
 
 let failed = 0;
 const check = (name: string, ok: boolean, detail = "") => {
-  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name.padEnd(44)} ${detail}`);
+  console.log(`  ${ok ? "PASS" : "FAIL"}  ${name.padEnd(46)} ${detail}`);
   if (!ok) failed++;
 };
 
-async function main() {
-  const png = PNG.sync.read(fs.readFileSync(FIXTURE));
+async function nodeRunner(): Promise<Runner> {
+  const ort = await import("onnxruntime-web/wasm");
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.wasmPaths = pathToFileURL(path.resolve("node_modules/onnxruntime-web/dist") + "/").href;
+  const load = (f: string) =>
+    ort.InferenceSession.create(new Uint8Array(fs.readFileSync(`public/size-grading/model/${f}`)), { executionProviders: ["wasm"] });
+  const [u2, enc, dec] = await Promise.all([load("u2netp.onnx"), load("slimsam-encoder.onnx"), load("slimsam-decoder.onnx")]);
+  return {
+    async salience(input) {
+      const out = await u2.run({ [u2.inputNames[0]]: new ort.Tensor("float32", input, [1, 3, 320, 320]) });
+      return out[u2.outputNames[0]].data as Float32Array;
+    },
+    samEncode: (pixels) => enc.run({ pixel_values: new ort.Tensor("float32", pixels, [1, 3, 1024, 1024]) }),
+    async samDecode(embedding, points, n) {
+      const e = embedding as Record<string, import("onnxruntime-web/wasm").Tensor>;
+      const out = await dec.run({
+        input_points: new ort.Tensor("float32", points, [1, n, 1, 2]),
+        input_labels: new ort.Tensor("int64", new BigInt64Array(n).fill(BigInt(1)), [1, n, 1]),
+        image_embeddings: e.image_embeddings,
+        image_positional_embeddings: e.image_positional_embeddings,
+      });
+      return { iou: out.iou_scores.data as Float32Array, masks: out.pred_masks.data as Float32Array };
+    },
+  };
+}
+
+async function photo(run: Runner, fx: (typeof FIXTURES)[number]): Promise<Record<string, number>> {
+  console.log(`\n${path.basename(fx.file)}`);
+  const png = PNG.sync.read(fs.readFileSync(fx.file));
   const src = { data: new Uint8ClampedArray(png.data), width: png.width, height: png.height };
 
   // 1. The target, printed grey on a dark table.
   const det = detectTarget(src.data, src.width, src.height);
   check("the printed target is found", !!det, det ? `confidence ${det.confidence.toFixed(2)}` : "");
-  if (!det) return;
+  if (!det) return {};
 
   // Exactly the call the workspace makes.
   const rect = rectify(src.data, src.width, src.height, det.quad, { maxPx: 1400, upright: true });
-  if (!rect) return check("the photo squares up", false);
-  // By construction the target is now exactly 18 x 24 cm; this guards the maths.
+  if (!rect) { check("the photo squares up", false); return {}; }
   check("photo squared up", rect.pxPerCm > 3, `${rect.pxPerCm.toFixed(2)} px/cm`);
 
   /* What the owner sees. Squaring up to the target's own axes showed a photo
@@ -78,30 +112,20 @@ async function main() {
   const err = Math.hypot(back.x - det.quad[2].x, back.y - det.quad[2].y);
   check("a tap on the picture maps back onto the photo", err < 0.5, `${err.toFixed(3)} px`);
 
-  // 2. The model, on the PHOTO, through the browser's own runtime.
-  const ort = await import("onnxruntime-web/wasm");
-  ort.env.wasm.numThreads = 1;
-  ort.env.wasm.wasmPaths = pathToFileURL(path.resolve("node_modules/onnxruntime-web/dist") + "/").href;
-  const session = await ort.InferenceSession.create(
-    new Uint8Array(fs.readFileSync("public/size-grading/model/u2netp.onnx")),
-    { executionProviders: ["wasm"] },
-  );
-  const S = MODEL_INPUT_SIZE;
-  const out = await session.run({
-    [session.inputNames[0]]: new ort.Tensor("float32", modelInput(src.data, src.width, src.height), [1, 3, S, S]),
-  });
-  const raw = modelOutputToMask(out[session.outputNames[0]].data as Float32Array, src.width, src.height);
-  const mask = maskForMeasuring(raw, src, rect, { quad: det.quad, frame: rect.frame });
-
-  /* The failure this is guarding: the model selecting the table, which is most
-     of the frame. Leggings are a few thousand square centimetres. */
+  // 2. Find the garment, through the same function the browser worker runs.
+  const started = Date.now();
+  const found = await findGarment(run, { src, picture: rect.data, quad: det.quad, frame: rect.frame });
+  const secs = ((Date.now() - started) / 1000).toFixed(1);
+  if (!found.mask) { check("the garment is found", false, found.why); return {}; }
+  const mask = found.mask;
+  check(`found by the ${fx.by === "salience" ? "quick model" : "segment pass"}`, found.by === fx.by,
+    `${found.by} in ${secs}s${found.firstTry ? ` — quick model rejected: ${found.firstTry}` : ""}`);
   const cm2 = mask.area / rect.pxPerCm ** 2;
   check("the garment, not the table, is selected", cm2 > 1200 && cm2 < 4500, `${cm2.toFixed(0)} cm²`);
-
   // 3. Measure — the catalogue says these are leggings.
   const res = measureGarment(mask, rect.pxPerCm, "trousers");
   check("the leggings measure", res.ok, res.ok ? "" : res.error);
-  if (!res.ok) return;
+  if (!res.ok) return {};
 
   const camera = pomsFor("trousers", "front").filter((k) => POM_SOURCE[k] === "camera");
   const missing = camera.filter((k) => !res.points[k]);
@@ -126,15 +150,34 @@ async function main() {
     if (!p) continue;
     const mx = Math.round((p.line.a.x + p.line.b.x) / 2);
     const my = Math.round((p.line.a.y + p.line.b.y) / 2);
-    // Allow a couple of pixels: a line along an edge sits on the boundary.
+    /* Within a centimetre: a waist line runs along the top edge, and on the
+       second fixture that edge is where the app's own burned-in line sits. A
+       line drawn across the table misses by far more than that. */
+    const r = Math.ceil(rect.pxPerCm);
     let hit = false;
-    for (let dy = -3; dy <= 3 && !hit; dy++) for (let dx = -3; dx <= 3 && !hit; dx++) {
+    for (let dy = -r; dy <= r && !hit; dy++) for (let dx = -r; dx <= r && !hit; dx++) {
       const x = mx + dx, y = my + dy;
       if (x >= 0 && y >= 0 && x < mask.width && y < mask.height && mask.data[y * mask.width + x]) hit = true;
     }
     if (!hit) off.push(k);
   }
   check("every line lies on the garment", !off.length, off.length ? `off: ${off.join(", ")}` : "");
+  return Object.fromEntries(Object.entries(res.points).map(([k, p]) => [k, p!.cm]));
+}
+
+async function main() {
+  const run = await nodeRunner();
+  const results = [];
+  for (const fx of FIXTURES) results.push(await photo(run, fx));
+  /* The same garment, photographed twice: the two readings must agree. This
+     is the closest thing to ground truth until it is measured with a tape. */
+  console.log("\nthe two photos of the same leggings");
+  const [a, b] = results;
+  for (const k of ["waist", "hip", "thigh", "outseam", "inseam", "legOpening"]) {
+    const d = Math.abs((a[k] ?? NaN) - (b[k] ?? NaN));
+    const tol = k === "outseam" || k === "inseam" ? 4 : 2.5;
+    check(`${k} agrees (±${tol} cm)`, d <= tol, `${a[k]?.toFixed(1)} vs ${b[k]?.toFixed(1)}`);
+  }
 }
 
 main()
