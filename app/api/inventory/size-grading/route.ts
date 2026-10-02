@@ -141,6 +141,21 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  try {
+    return await savePost(req);
+  } catch (e) {
+    /* Anything thrown here used to become a bare 500 with an empty body, which
+       the page could only report as "Could not save" — true, useless, and
+       indistinguishable from a network blip. The reason goes to the server log
+       AND back to the operator, because a save that fails silently is how a
+       whole afternoon's measuring gets lost without anyone noticing. */
+    const reason = e instanceof Error ? e.message : String(e);
+    console.error("[size-grading] save failed:", reason);
+    return NextResponse.json({ error: `Could not save — ${reason}` }, { status: 500 });
+  }
+}
+
+async function savePost(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -163,14 +178,23 @@ export async function POST(req: Request) {
   if (!picked) return NextResponse.json({ error: "That size no longer exists." }, { status: 404 });
 
   /* Every colour of this size on this product. A null size matches only itself
-     — a SKU with no size recorded cannot be grouped with anything safely. */
+     — a SKU with no size recorded cannot be grouped with anything safely.
+   *
+   * The two branches number their own parameters from $1. They used to share a
+   * single argument list in which the sized branch referenced $2 and $3 while
+   * $1 went unused, and Postgres refuses a statement whose parameter it cannot
+   * type: "could not determine data type of parameter $1", error 42P18. It
+   * threw here, before the insert, so EVERY save failed with a bare 500 and the
+   * page could only say "Could not save". Nothing was ever written. If these
+   * branches diverge again, keep each one's placeholders and its arguments
+   * counted from one. */
   const targets = await pool.query<{ id: string; color_code: string | null }>(
     picked.size === null
       ? `SELECT id, color_code FROM custom_skus WHERE id = $1::uuid`
       : `SELECT id, color_code FROM custom_skus
-          WHERE matrix_id = $2::uuid AND archived = false
-            AND size IS NOT DISTINCT FROM $3`,
-    picked.size === null ? [picked.id] : [picked.id, picked.matrix_id, picked.size],
+          WHERE matrix_id = $1::uuid AND archived = false
+            AND size IS NOT DISTINCT FROM $2`,
+    picked.size === null ? [picked.id] : [picked.matrix_id, picked.size],
   );
 
   /* Appended, never updated: a garment remeasured after a production change is
