@@ -18,10 +18,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload } from "lucide-react";
+import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Sparkles, Upload, X } from "lucide-react";
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 import { MeasurePoints, type HandleMap } from "./measure-points";
+import { GarmentSketch, sketchFor } from "./garment-sketch";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
@@ -37,6 +38,8 @@ import {
   type GarmentType,
   type PomKey,
 } from "@/lib/size-grading/garment";
+import { colorForPom, pomOnSide } from "@/lib/size-grading/pom-guide";
+import { refineLine } from "@/lib/size-grading/ai-refine";
 import {
   POMS,
   POM_LABELS,
@@ -138,17 +141,6 @@ function maskBounds(mask: ShirtMask) {
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
-const POM_COLOR: Record<string, string> = {
-  chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
-  hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
-  sleeveInseam: "#fb923c", bicep: "#fbbf24", cuff: "#f472b6", armhole: "#c084fc",
-  inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#ec4899", rise: "#a855f7",
-  thigh: "#2dd4bf", knee: "#38bdf8", calf: "#818cf8",
-  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#a5b4fc",
-  shoulderSlope: "#fcd34d", waistbandHeight: "#f9a8d4",
-  frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5", backPocketLength: "#f87171",
-};
-const colorForPom = (key: string) => POM_COLOR[key] ?? "#38bdf8";
 
 const fmt = (cm: number) => `${cm.toFixed(1)} cm`;
 const fmtIn = (cm: number) => `${(cm / 2.54).toFixed(1)}"`;
@@ -222,6 +214,30 @@ export function SizeGradingWorkspace() {
   const [labeledSize, setLabeledSize] = useState("");
   const [chartOpen, setChartOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* What the last save did, shown beside the button that did it — an error
+     reported at the top of a long page is an error nobody reads. */
+  const [saveNote, setSaveNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /* Points the operator switched on or off by hand. Anything not in here
+     follows the defaults: off when it is not on this side of the garment, or
+     when the vision model could not see it in this photo. */
+  const [toggles, setToggles] = useState<Record<string, "on" | "off">>({});
+  /** The vision model's reading of this photo. */
+  const [ai, setAi] = useState<{
+    status: "idle" | "running" | "done" | "error";
+    message?: string;
+    model?: string;
+    type?: GarmentType;
+    detectedView?: "front" | "back" | "unsure";
+    hidden?: string[];
+    placed?: number;
+  }>({ status: "idle" });
+  /** Re-ask the model for the same photo. */
+  const [aiNonce, setAiNonce] = useState(0);
+  /** Lines the operator has dragged — a late AI answer never moves these. */
+  const touchedRef = useRef<Set<string>>(new Set());
+  /** Which sketch a top gets. */
+  const [longSleeve, setLongSleeve] = useState(false);
 
   useEffect(() => {
     setChart(parseChart(readLocal(CHART_KEY)));
@@ -264,9 +280,137 @@ export function SizeGradingWorkspace() {
     return () => window.clearTimeout(id);
   }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm]);
 
-  /** Every point this family is measured on, whatever the photo managed. */
-  const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
+  /** Every point this family is measured on, whatever the photo managed.
+   *  The catalogue (or the operator) first, then the vision model, then the
+   *  silhouette — in order of how often each is right. */
+  const activeType: GarmentType = (typeOverride ||
+    (ai.status === "done" ? ai.type : null) ||
+    (result?.ok ? result.type : null) ||
+    "top") as GarmentType;
   const pomKeys = useMemo(() => [...POMS_FOR[activeType]], [activeType]);
+
+  const isOff = useCallback(
+    (key: string) => {
+      const t = toggles[key];
+      if (t) return t === "off";
+      return !pomOnSide(key, view) || Boolean(ai.hidden?.includes(key));
+    },
+    [toggles, view, ai.hidden],
+  );
+  const onKeys = useMemo(() => pomKeys.filter((k) => !isOff(k)), [pomKeys, isOff]);
+  const offSet = useMemo(() => new Set<string>(pomKeys.filter((k) => isOff(k))), [pomKeys, isOff]);
+  const togglePom = useCallback(
+    (key: string) => {
+      setToggles((t) => ({ ...t, [key]: isOff(key) ? "on" : "off" }));
+      setSavedAt(null);
+    },
+    [isOff],
+  );
+
+  /**
+   * Ask the vision model where every line goes, as soon as there is a photo.
+   *
+   * This is what takes the operator out of the loop: the photo comes in, the
+   * lines appear on the garment, and the operator only touches the ones that
+   * landed in the wrong place. The model answers in fractions of the image;
+   * each end is then pulled onto the garment's real edge where the silhouette
+   * finds one close by (lib/size-grading/ai-refine.ts).
+   */
+  useEffect(() => {
+    if (!image) {
+      setAi({ status: "idle" });
+      return;
+    }
+    let alive = true;
+    setAi({ status: "running" });
+    void (async () => {
+      try {
+        const off = document.createElement("canvas");
+        off.width = image.width;
+        off.height = image.height;
+        off.getContext("2d")?.putImageData(image, 0, 0);
+        const dataUrl = off.toDataURL("image/jpeg", 0.88);
+        const r = await fetch("/api/inventory/size-grading/ai-measure", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image: dataUrl,
+            view,
+            garmentType: typeOverride || undefined,
+            itemName: pickedItem?.name ?? undefined,
+            category: [pickedItem?.category, pickedItem?.subcategory].filter(Boolean).join(" / ") || undefined,
+          }),
+        });
+        const j = (await r.json().catch(() => ({}))) as {
+          garmentType?: GarmentType;
+          detectedView?: "front" | "back" | "unsure";
+          points?: Array<{ key: string; visible: boolean; a: Point; b: Point }>;
+          notes?: string;
+          model?: string;
+          error?: string;
+        };
+        if (!alive) return;
+        if (!r.ok || !j.points) throw new Error(j.error ?? `AI placement failed (${r.status})`);
+
+        /* The model's points are fractions of the image. The garment it
+           describes is grown from the middle of its widest line, which is
+           somewhere certainly on the fabric — far better than the centre of
+           the frame, which on a round table is often the table. */
+        const toPx = (p: Point): Point => ({ x: p.x * image.width, y: p.y * image.height });
+        const visible = j.points.filter((p) => p.visible);
+        const anchorKey = ["hip", "chest", "waist", "thigh", "hem"].find((k) => visible.some((p) => p.key === k));
+        const anchor = visible.find((p) => p.key === anchorKey);
+        let refineMask: ShirtMask | null = null;
+        if (anchor) {
+          const a = toPx(anchor.a);
+          const b = toPx(anchor.b);
+          const centre = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          const exclude = rectPxPerCm
+            ? [{
+                x: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+                y: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+                w: Math.round(TARGET.outerWCm * rectPxPerCm),
+                h: Math.round(TARGET.outerHCm * rectPxPerCm),
+              }]
+            : undefined;
+          refineMask = segmentGarment(image.data, image.width, image.height, centre, { bias: 0, exclude });
+          setSeed(centre);
+        }
+        const maxPx = pxPerCm ? 1.5 * pxPerCm : Math.max(image.width, image.height) * 0.015;
+
+        setHandles((prev) => {
+          const next = { ...prev };
+          for (const p of visible) {
+            if (touchedRef.current.has(p.key)) continue;
+            const line = refineLine(p.key, refineMask, toPx(p.a), toPx(p.b), maxPx);
+            next[p.key] = { a: line.a, b: line.b, set: true };
+          }
+          return next;
+        });
+        setAi({
+          status: "done",
+          model: j.model,
+          type: j.garmentType,
+          detectedView: j.detectedView,
+          hidden: j.points.filter((p) => !p.visible).map((p) => p.key),
+          placed: visible.length,
+          message: j.notes || undefined,
+        });
+      } catch (e) {
+        if (!alive) return;
+        setAi({
+          status: "error",
+          message: e instanceof Error ? e.message : "AI placement failed",
+        });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // Re-asked for a new photo, a different garment family, or on request —
+    // not when the scale or the side changes, which do not move a line.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, typeOverride, aiNonce]);
 
   /* Seed the ends from what the photo found, and give everything else a
      sensible place to be dragged from. A point with no proposal — a neck
@@ -316,10 +460,10 @@ export function SizeGradingWorkspace() {
   /** What will be saved: every point whose ends have been settled. */
   const readings = useMemo(
     () =>
-      pomKeys
+      onKeys
         .map((key) => ({ key, cm: handles[key]?.set ? cmOf(key) : null }))
         .filter((r): r is { key: PomKey; cm: number } => typeof r.cm === "number" && r.cm > 0),
-    [pomKeys, handles, cmOf],
+    [onKeys, handles, cmOf],
   );
 
   /* The size chart is a tee chart, so grading only applies to a top. Everything
@@ -626,8 +770,13 @@ export function SizeGradingWorkspace() {
       setCornerTaps([]);
       setTappingCorners(false);
       setSavedAt(null);
+      setSaveNote(null);
       setFocus(null);
       setAllowSoft(false);
+      /* A new photo is a new garment on the table: lines from the last one
+         would be lines on nothing. */
+      setHandles({});
+      touchedRef.current = new Set();
       applySource(src);
     } catch {
       setError("Could not read that image.");
@@ -842,10 +991,13 @@ export function SizeGradingWorkspace() {
     for (const r of readings) pointsCm[r.key] = Number(r.cm.toFixed(2));
     setSaving(true);
     setError(null);
+    setSaveNote(null);
     try {
+      const adjusted = [...touchedRef.current].filter((k) => k in pointsCm).length;
       const r = await fetch("/api/inventory/size-grading", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify({
           customSkuId: pickedSize.customSkuId,
           garmentType: activeType,
@@ -853,17 +1005,49 @@ export function SizeGradingWorkspace() {
           pxPerCm: pxPerCm ?? undefined,
           typeOverridden: Boolean(typeOverride),
           view,
+          note: ai.status === "done" && ai.model
+            ? `lines placed by ${ai.model}; ${adjusted} adjusted by hand`
+            : undefined,
         }),
       });
-      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; measuredAt?: string; error?: string };
-      if (!r.ok || !j.ok) throw new Error(j.error ?? "Could not save");
+      const j = (await r.json().catch(() => ({}))) as {
+        ok?: boolean;
+        measuredAt?: string;
+        error?: string;
+        appliedTo?: number;
+        size?: string | null;
+        colors?: string[];
+      };
+      if (!r.ok || !j.ok) throw new Error(j.error ?? `Could not save (HTTP ${r.status})`);
+
+      /* Read it back the way the item card does. "Saved" on this page has to
+         mean the card will show it — the owner checked once, found nothing,
+         and a success message that was not true is worse than an error. */
+      const check = await fetch(
+        `/api/inventory/size-grading?customSkuId=${encodeURIComponent(pickedSize.customSkuId)}`,
+        { cache: "no-store" },
+      );
+      const back = (await check.json().catch(() => ({}))) as Record<string, { points_cm?: Record<string, number> } | null>;
+      const stored = back?.[view]?.points_cm ?? {};
+      const missing = Object.keys(pointsCm).filter((k) => typeof stored[k] !== "number");
+      if (!check.ok || missing.length) {
+        throw new Error(
+          `The server accepted the save but the item does not show it (${missing.length || "all"} missing). Try again.`,
+        );
+      }
       setSavedAt(j.measuredAt ?? new Date().toISOString());
+      const colours = j.colors?.length ? ` · ${j.colors.length} colour${j.colors.length === 1 ? "" : "s"}` : "";
+      setSaveNote({
+        ok: true,
+        text: `Saved ${Object.keys(pointsCm).length} ${view} measurements to size ${j.size ?? pickedSize.size ?? pickedSize.sku}${colours} — on the item card now.`,
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save");
+      const msg = e instanceof Error ? e.message : "Could not save";
+      setSaveNote({ ok: false, text: msg });
     } finally {
       setSaving(false);
     }
-  }, [pickedSize, readings, activeType, pxPerCm, typeOverride, view]);
+  }, [pickedSize, readings, activeType, pxPerCm, typeOverride, view, ai.status, ai.model]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!image) return;
@@ -1238,13 +1422,17 @@ export function SizeGradingWorkspace() {
             <MeasurePoints
               image={image}
               pxPerCm={pxPerCm}
-              keys={pomKeys}
+              keys={onKeys}
               labelFor={(k) => pomLabel(k, view)}
               colorFor={colorForPom}
               handles={handles}
-              selected={selectedPom}
+              selected={selectedPom && onKeys.includes(selectedPom as PomKey) ? selectedPom : null}
               onSelect={setSelectedPom}
-              onChange={(key, next) => setHandles((h) => ({ ...h, [key]: next }))}
+              onChange={(key, next) => {
+                touchedRef.current.add(key);
+                setSavedAt(null);
+                setHandles((h) => ({ ...h, [key]: next }));
+              }}
             />
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--wms-muted)]">
@@ -1270,21 +1458,13 @@ export function SizeGradingWorkspace() {
             <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Result</h2>
             {!image ? (
               <p className="mt-1 text-sm text-[var(--wms-muted)]">Take or upload a photo to start.</p>
-            ) : !calibRatio ? (
-              <p className="mt-1 text-sm text-[var(--wms-muted)]">Calibrate first (tap Calibrate).</p>
-            ) : busy ? (
-              <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
-                <Loader2 className="h-4 w-4 animate-spin" /> Measuring…
-              </p>
-            ) : result && !result.ok ? (
-              <p className="mt-1 text-sm text-[var(--wms-status-danger-fg)]">{result.error}</p>
-            ) : result?.ok ? (
+            ) : (
               <>
                 {/* What it thinks this is, always correctable. A guess shown as
                     a fact is how a wrong measurement reaches the size chart. */}
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <select
-                    value={typeOverride || result.type}
+                    value={activeType}
                     onChange={(e) => setTypeOverride(e.target.value as GarmentType)}
                     className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-medium text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
                   >
@@ -1304,48 +1484,121 @@ export function SizeGradingWorkspace() {
                         className="font-mono text-xs text-[var(--wms-accent)] underline"
                         onClick={() => setTypeOverride("")}
                       >
-                        use the photo instead
+                        detect from the photo
                       </button>
                     </span>
-                  ) : (
+                  ) : ai.status === "done" && ai.type ? (
+                    <span className="font-mono text-xs text-[var(--wms-muted)]">recognised by AI</span>
+                  ) : result?.ok ? (
                     <span className="font-mono text-xs text-[var(--wms-muted)]">
                       detected · {result.classification.why}
                     </span>
-                  )}
+                  ) : null}
                 </div>
-                {!typeOverride && result.classification.confidence < 0.6 ? (
+
+                {/* The vision model's pass over the photo. Running, it says so;
+                    done, it says how many lines it placed; failed, the
+                    silhouette proposals stand and the reason is shown. */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-xs">
+                  {ai.status === "running" ? (
+                    <span className="flex items-center gap-1.5 text-[var(--wms-accent)]">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI is finding the garment and placing the lines…
+                    </span>
+                  ) : ai.status === "done" ? (
+                    <span className="flex items-center gap-1.5 text-[var(--wms-status-success-fg)]">
+                      <Sparkles className="h-3.5 w-3.5" /> AI placed {ai.placed} line{ai.placed === 1 ? "" : "s"} — drag
+                      any that are off.
+                    </span>
+                  ) : ai.status === "error" ? (
+                    <span className="text-[var(--wms-status-warning-fg)]">
+                      {ai.message} — showing the outline-based proposals instead.
+                    </span>
+                  ) : null}
+                  {ai.status !== "running" ? (
+                    <button
+                      type="button"
+                      className="text-[var(--wms-accent)] underline"
+                      onClick={() => {
+                        touchedRef.current = new Set();
+                        setAiNonce((n) => n + 1);
+                      }}
+                    >
+                      {ai.status === "idle" ? "place lines with AI" : "redo with AI"}
+                    </button>
+                  ) : null}
+                </div>
+                {ai.status === "done" && ai.message ? (
+                  <p className="mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]">{ai.message}</p>
+                ) : null}
+                {ai.status === "done" && ai.detectedView && ai.detectedView !== "unsure" && ai.detectedView !== view ? (
                   <p className="mt-1 text-xs text-[var(--wms-status-warning-fg)]">
-                    Not certain of the type — check it above before trusting the numbers.
+                    This looks like the {ai.detectedView} of the garment, but Side is set to {view}.{" "}
+                    <button
+                      type="button"
+                      className="font-mono text-[var(--wms-accent)] underline"
+                      onClick={() => setView(ai.detectedView as "front" | "back")}
+                    >
+                      switch to {ai.detectedView}
+                    </button>
                   </p>
                 ) : null}
 
-                {/* Every point of this family, whether the photo found it or
-                    not. Tap one to work on it; its line lights up on the photo
-                    with a grab handle at each end. A point with no number yet
-                    is not a failure, it is the next thing to place. */}
+                {!pxPerCm ? (
+                  <p className="mt-2 text-xs text-[var(--wms-status-warning-fg)]">
+                    No scale yet — the lines can be placed, but there are no centimetres until the target is in the
+                    photo (or you calibrate by hand).
+                  </p>
+                ) : busy ? (
+                  <p className="mt-2 flex items-center gap-2 font-mono text-xs text-[var(--wms-muted)]">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading the outline…
+                  </p>
+                ) : null}
+
+                {/* Every point of this family. Tap a row to work on its line;
+                    the X takes a point out — not on this side, not on this
+                    garment, or just not wanted — and it is neither drawn nor
+                    saved. Taken-out points stay listed so they can come back. */}
                 <ul className="mt-3 divide-y divide-[var(--wms-border)]">
                   {pomKeys.map((key) => {
+                    const off = offSet.has(key);
                     const h = handles[key];
-                    const cm = h?.set ? cmOf(key) : null;
-                    const active = selectedPom === key;
+                    const cm = !off && h?.set ? cmOf(key) : null;
+                    const active = !off && selectedPom === key;
                     return (
-                      <li key={key}>
+                      <li key={key} className="flex items-center gap-1">
                         <button
                           type="button"
+                          disabled={off}
                           onClick={() => setSelectedPom(key)}
-                          className={`flex w-full items-center gap-2 py-1.5 text-left text-sm max-md:min-h-11 ${
+                          className={`flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-sm max-md:min-h-11 ${
                             active ? "bg-[var(--wms-surface-elevated)]" : ""
                           }`}
                         >
                           <span
                             aria-hidden
                             className="h-3 w-3 shrink-0 rounded-full"
-                            style={{ background: colorForPom(key), opacity: cm ? 1 : 0.3 }}
+                            style={{ background: colorForPom(key), opacity: off ? 0.2 : cm ? 1 : 0.3 }}
                           />
-                          <span className={`min-w-0 flex-1 truncate ${active ? "font-semibold text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"}`}>
+                          <span
+                            className={`min-w-0 flex-1 truncate ${
+                              off
+                                ? "text-[var(--wms-muted)] line-through opacity-60"
+                                : active
+                                  ? "font-semibold text-[var(--wms-fg)]"
+                                  : "text-[var(--wms-muted)]"
+                            }`}
+                          >
                             {pomLabel(key, view)}
                           </span>
-                          {cm ? (
+                          {off ? (
+                            <span className="font-mono text-xs text-[var(--wms-muted)]">
+                              {toggles[key] === "off"
+                                ? "removed"
+                                : !pomOnSide(key, view)
+                                  ? `${view === "front" ? "back" : "front"} only`
+                                  : "not in photo"}
+                            </span>
+                          ) : cm ? (
                             <>
                               <span className="font-mono text-[var(--wms-fg)]">{fmtIn(cm)}</span>
                               <span className="w-16 text-right font-mono text-xs text-[var(--wms-muted)]">{fmt(cm)}</span>
@@ -1356,13 +1609,22 @@ export function SizeGradingWorkspace() {
                             <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">place it</span>
                           )}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => togglePom(key)}
+                          aria-label={off ? `Measure ${pomLabel(key, view)}` : `Don't measure ${pomLabel(key, view)}`}
+                          title={off ? "Measure this" : "Don't measure this"}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)] max-md:h-11 max-md:w-11"
+                        >
+                          {off ? <RotateCcw className="h-3.5 w-3.5" /> : <X className="h-4 w-4" />}
+                        </button>
                       </li>
                     );
                   })}
                 </ul>
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Drag either end of the highlighted line on the photo. The number follows as you drag, and a
-                  magnifier shows what is under your finger.
+                  magnifier shows what is under your finger. ✕ removes a point you don&apos;t need.
                 </p>
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Flat measurements, taken across the garment as it lies — not doubled.
@@ -1386,10 +1648,6 @@ export function SizeGradingWorkspace() {
                   ) : null}
                 </p>
 
-                {/* A blurred photo measures wrong in the one way nobody
-                    notices: the number still looks like a number. Saying so
-                    here, and refusing the save until it is acknowledged, is
-                    cheaper than finding it in the size chart later. */}
                 {focus?.verdict === "soft" ? (
                   <div className="mt-3 rounded border border-[var(--wms-status-danger-fg)]/50 bg-[var(--wms-status-danger-fg)]/10 p-2">
                     <p className="text-sm font-medium text-[var(--wms-status-danger-fg)]">
@@ -1407,7 +1665,9 @@ export function SizeGradingWorkspace() {
                   <button
                     type="button"
                     className="wms-btn-primary max-md:min-h-11"
-                    disabled={!pickedSize || saving || !readings.length || (focus?.verdict === "soft" && !allowSoft)}
+                    disabled={
+                      !pickedSize || saving || !readings.length || (focus?.verdict === "soft" && !allowSoft)
+                    }
                     onClick={() => void saveToItem()}
                     title={pickedSize ? undefined : "Choose the item and size first"}
                   >
@@ -1423,23 +1683,35 @@ export function SizeGradingWorkspace() {
                       save it anyway
                     </button>
                   ) : !pickedItem ? (
-                    <span className="font-mono text-xs text-[var(--wms-muted)]">
+                    <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">
                       Search or scan an item above to save against it.
                     </span>
                   ) : !pickedSize ? (
                     <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">Choose a size first.</span>
-                  ) : savedAt ? (
-                    <span className="font-mono text-xs text-[var(--wms-status-success-fg)]">
-                      Saved to {pickedItem.upc} · {pickedSize.size ?? pickedSize.sku}
+                  ) : !readings.length ? (
+                    <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">
+                      {pxPerCm ? "No measurements placed yet." : "No scale — nothing to save in centimetres yet."}
                     </span>
-                  ) : (
+                  ) : savedAt ? null : (
                     <span className="font-mono text-xs text-[var(--wms-muted)]">
-                      → {pickedItem.upc} · {pickedSize.size ?? pickedSize.sku}
+                      {readings.length} → {pickedItem.upc} · {pickedSize.size ?? pickedSize.sku}
                     </span>
                   )}
                 </div>
+                {saveNote ? (
+                  <p
+                    role="status"
+                    className={`mt-2 rounded border p-2 text-xs ${
+                      saveNote.ok
+                        ? "border-[var(--wms-status-success-fg)]/40 bg-[var(--wms-status-success-fg)]/10 text-[var(--wms-status-success-fg)]"
+                        : "border-[var(--wms-status-danger-fg)]/50 bg-[var(--wms-status-danger-fg)]/10 text-[var(--wms-status-danger-fg)]"
+                    }`}
+                  >
+                    {saveNote.text}
+                  </p>
+                ) : null}
               </>
-            ) : null}
+            )}
             {result?.ok && measured && grade?.best ? (
               <div className="mt-4 border-t border-[var(--wms-border)] pt-3">
                 <div className="flex items-baseline gap-3">
@@ -1512,19 +1784,48 @@ export function SizeGradingWorkspace() {
             ) : null}
           </div>
 
-          {image ? (
-            <div className="flex flex-col gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
-              <p>
-                <strong>The app proposes each line; you have the last word.</strong> Nothing is measured from a mask
-                you have to supervise — drag an end if a line is in the wrong place, and leave it alone if it is not.
-              </p>
-              <p className="text-xs text-[var(--wms-muted)]">
-                The proposals land much closer when the garment is on a plain surface that contrasts with it — a roll
-                of white or black paper, or a felt mat, is the cheapest accuracy you can buy on this whole page. On a
-                patterned table expect to place more of them by hand.
-              </p>
+          {/* Where each line goes on this kind of garment, in the same colours
+              as the photo. Tapping a line here selects it there. */}
+          <div className="flex flex-col gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--wms-fg)]">How to measure · {GARMENT_LABELS[activeType]}</h2>
+              <a
+                href="/inventory/size-grading/guide"
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-xs text-[var(--wms-accent)] underline"
+              >
+                all garments
+              </a>
             </div>
-          ) : null}
+            {activeType === "top" ? (
+              <div className="inline-flex self-start overflow-hidden rounded border border-[var(--wms-border)]">
+                {[false, true].map((long) => (
+                  <button
+                    key={String(long)}
+                    type="button"
+                    onClick={() => setLongSleeve(long)}
+                    className={`px-2 py-0.5 font-mono text-[0.7rem] max-md:min-h-9 ${
+                      longSleeve === long
+                        ? "bg-[var(--wms-accent)] font-semibold text-[var(--wms-on-accent,#0c0f12)]"
+                        : "text-[var(--wms-fg)]"
+                    }`}
+                  >
+                    {long ? "long sleeve" : "short sleeve"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <GarmentSketch
+              sketch={sketchFor(activeType, longSleeve)}
+              type={activeType}
+              view={view}
+              keys={pomKeys}
+              excluded={offSet}
+              highlight={image ? selectedPom : null}
+              onPick={image ? (k) => !offSet.has(k) && setSelectedPom(k) : undefined}
+            />
+          </div>
         </div>
       </div>
 

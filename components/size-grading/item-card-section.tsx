@@ -105,7 +105,7 @@ export function SizeGradingSection({
     setLoading(true);
     void (async () => {
       try {
-        const r = await fetch(`/api/inventory/size-grading?customSkuId=${customSkuId}`);
+        const r = await fetch(`/api/inventory/size-grading?customSkuId=${customSkuId}`, { cache: "no-store" });
         const j = (await r.json().catch(() => ({}))) as {
           front?: Measurement | null;
           back?: Measurement | null;
