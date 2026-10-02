@@ -266,6 +266,29 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   }
 }
 
+/**
+ * A network fault that says nothing about the request, so repeating it is
+ * reasonable. "terminated" is undici's message when a response socket closes
+ * mid-flight, and it arrives as a bare TypeError with the real cause nested.
+ *
+ * Our own timeout is deliberately NOT transient: the budget expired, and
+ * spending it again helps nobody.
+ */
+const TRANSIENT_NETWORK_ERROR =
+  /(terminated|econnreset|socket hang up|other side closed|epipe|etimedout|econnrefused|enotfound|eai_again|fetch failed|network error|premature close|connection error)/i;
+
+function isTransientNetworkError(e: any): boolean {
+  if (!e) return false;
+  if (/timed out after \d+ms/i.test(String(e?.message ?? ""))) return false;
+  const seen: string[] = [];
+  let node: any = e;
+  for (let depth = 0; node && depth < 4; depth += 1) {
+    seen.push(String(node?.message ?? ""), String(node?.code ?? ""), String(node?.errno ?? ""));
+    node = node.cause;
+  }
+  return seen.some((s) => s && TRANSIENT_NETWORK_ERROR.test(s));
+}
+
 function getImageTimeoutMs() {
   const rawText = (process.env.OPENAI_IMAGE_TIMEOUT_MS || "").trim();
   if (!rawText) return 120000;
@@ -1108,19 +1131,63 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       // reproduction of the faces in ALL input images — including any person
       // wearing the garment in the ITEM references — and gpt-image-2 rejects
       // the parameter outright. Identity is held by the prompt's model-ref line.
-      const edited = await withTimeout(
-        openai.images.edit({
-          model: imageModel,
-          image: referenceFiles,
-          prompt: enforcePromptLength(lockedPrompt),
-          size: finalSize,
-          quality: imageQuality as any,
-          moderation: imageModeration as any,
-        } as any),
-        imageTimeoutMs,
-        "OpenAI image generation"
-      );
-      b64 = edited.data?.[0]?.b64_json ?? null;
+      /*
+       * A dropped connection is not a failed generation.
+       *
+       * Panels 2 and 3 of a four-panel run came back "terminated" at ~100 s,
+       * which is undici's wording for a response socket closed mid-flight. The
+       * other two panels of the same run, same prompt size, same moment,
+       * finished normally. Nothing was wrong with the request: the connection
+       * died while the finished image was coming back, and the operator lost
+       * half the run and had to pay for all of it again.
+       *
+       * The OpenAI SDK retries request-level failures, but a failure while
+       * reading the response body surfaces as a bare TypeError and escapes it,
+       * so transient network faults are retried here. Deterministic failures —
+       * a moderation block, a bad key, our own timeout — are never retried:
+       * they would fail the same way and burn another 90 s of the operator's
+       * five-minute window.
+       */
+      const attemptsAllowed = Math.max(1, Math.min(3, Number(process.env.OPENAI_IMAGE_ATTEMPTS) || 2));
+      /* The browser stops polling at five minutes; stay inside that or a retry
+         produces an image nobody is still waiting for. */
+      const overallDeadline = Date.now() + Math.min(imageTimeoutMs + 60_000, 285_000);
+      let imageErr: any = null;
+      for (let attempt = 1; attempt <= attemptsAllowed; attempt += 1) {
+        const remaining = overallDeadline - Date.now();
+        try {
+          const edited = await withTimeout(
+            openai.images.edit({
+              model: imageModel,
+              image: referenceFiles,
+              prompt: enforcePromptLength(lockedPrompt),
+              size: finalSize,
+              quality: imageQuality as any,
+              moderation: imageModeration as any,
+            } as any),
+            Math.max(30_000, Math.min(imageTimeoutMs, remaining)),
+            "OpenAI image generation"
+          );
+          b64 = edited.data?.[0]?.b64_json ?? null;
+          imageErr = null;
+          break;
+        } catch (e: any) {
+          imageErr = e;
+          const left = overallDeadline - Date.now();
+          /* A generation takes ~90 s; retrying with less than that left just
+             swaps one failure for a slower one. */
+          if (attempt >= attemptsAllowed || !isTransientNetworkError(e) || left < 95_000) break;
+          console.warn(
+            `[generate] panel ${normalizedPanelQa.panelNumber ?? "?"}: ${String(
+              e?.message || e,
+            )} — connection fault on attempt ${attempt}/${attemptsAllowed}, ${Math.round(
+              left / 1000,
+            )}s left, retrying.`,
+          );
+          await new Promise((r) => setTimeout(r, 1500 * attempt));
+        }
+      }
+      if (imageErr) throw imageErr;
     } catch (err: any) {
       const code = String(err?.code || "");
       const type = String(err?.type || "");
