@@ -10,6 +10,7 @@ import {
   type StudioGenerationLog,
 } from "@/lib/server/studio-generation-log";
 import { isValidRunId, stashRunPanel } from "@/lib/server/run-qa-store";
+import { ACCESSORY_KINDS, type AccessoryKind } from "@/lib/accessoryShots";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -306,6 +307,9 @@ type PanelQaInput = {
   modelName: string;
   modelGender: string;
   itemType: string;
+  /** Set when the Studio is shooting an accessory (lib/accessoryShots.ts): the
+   *  two frames are SHOTS, not poses, so every pose-keyed rule stands down. */
+  accessoryKind: string;
 };
 
 function isBackFacingPose(gender: string, pose: number | null) {
@@ -444,6 +448,9 @@ function normalizePanelQa(value: any): PanelQaInput {
     modelName: sanitizeText(value?.modelName, 120),
     modelGender: sanitizeText(value?.modelGender, 32).toLowerCase(),
     itemType: sanitizeText(value?.itemType, 120),
+    accessoryKind: ACCESSORY_KINDS.includes(String(value?.accessoryKind || "") as AccessoryKind)
+      ? String(value.accessoryKind)
+      : "",
   };
 }
 
@@ -471,7 +478,12 @@ function itemTypeFocusLine(itemType: string): string {
       "cut and coverage, strap or waistband construction, seams and binding, ties or clasps, and any logo at its exact size and position";
   } else if (has("shoe", "sneaker", "boots?\\b", "sandal", "loafer", "heel", "flip.?flop")) {
     details = "silhouette, upper panels and stitching, laces and eyelets, sole profile and colour blocking, logo placement";
-  } else if (has("bag", "belt", "hat", "caps?\\b", "accessor", "scarf", "sock")) {
+  } else if (has("bracelet", "anklet", "necklace", "pendant", "choker", "earring", "rings?\\b", "bangle", "watch", "jewel")) {
+    details =
+      "every bead, link, charm, stone and setting with the same count, size and spacing, the metal tone and finish, the chain or band style, and the clasp and extender";
+  } else if (has("sunglass", "eyewear", "glasses")) {
+    details = "frame shape and thickness, lens colour and tint, bridge, hinges and temple arms, and any logo at its exact size and position";
+  } else if (has("bag", "belt", "hat", "caps?\\b", "beanie", "bow ?tie", "accessor", "scarf", "sock")) {
     details = "shape and proportions, hardware, straps or closures, stitching, material grain, logo placement";
   } else if (has("jacket", "coat", "blazer", "hoodie", "sweatshirt", "outerwear", "puffer", "overshirt", "windbreaker")) {
     details =
@@ -524,6 +536,13 @@ function buildServerLockPrompt(panelQa: PanelQaInput, modelCount: number) {
   const modelGender = panelQa.modelGender || "model";
   const lockedItemType = panelQa.itemType || "apparel item";
   const modelRange = modelCount === 1 ? "image 1" : `images 1–${modelCount}`;
+  if (panelQa.accessoryKind) {
+    return [
+      `IDENTITY: in every shot that shows a person, it is ${modelName} (${modelGender}) — exactly the person in attached ${modelRange}, the MODEL references: same skin tone and undertone (never lightened, darkened or tanned), same hands, same build, and where the face or hair is in frame the same face and hair. Product-only shots contain no person and no hands at all.`,
+      "BACKGROUND: seamless pure white studio (#FFFFFF), high-key even light, only a very faint neutral contact shadow — the same white in every shot. The one exception is an editorial flat-lay shot, which is shot straight down on a light neutral linen surface.",
+      itemTypeFocusLine(lockedItemType),
+    ].join("\n");
+  }
   return [
     `IDENTITY: the person in every frame is ${modelName} (${modelGender}) — exactly the person in attached ${modelRange}, the MODEL references: same face geometry (eye shape and spacing, nose, lips, jawline, cheeks, brows), same skin tone and undertone (never lightened, darkened or tanned), same hair colour, length, texture and style, same age and body proportions — in both frames and in every panel of this run. If identity and styling conflict, identity wins.`,
     "BACKGROUND: seamless pure white studio (#FFFFFF), high-key even light, only a very faint neutral contact shadow on the floor — no tint, cast, gradient, vignette, texture, wrinkle or horizon; the same white and the same light in every panel.",
@@ -812,9 +831,15 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
        back carries the design listed above". */
     const itemSpecText = itemSpecRaw ? withCanonicalBackLine(itemSpecRaw, backState) : "";
     const normalizedPanelQa = normalizePanelQa(panelQa);
+    /* Accessory shots are numbered 1-8 like poses but are not poses: Shot 4 is
+       a clasp close-up, not "Pose 4, the back view". Every rule keyed on a
+       pose number — the back lock, the side mapping, the pose variation —
+       stands down for them. */
+    const accessoryMode = Boolean(normalizedPanelQa.accessoryKind);
     const backLockActive =
-      isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA) ||
-      isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB);
+      !accessoryMode &&
+      (isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA) ||
+        isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB));
     // Pose/expression variation: rotate by a per-generation seed so consecutive
     // shots never collapse to the same default pose/face. Falls back to a
     // time-derived seed when the client doesn't send one (older builders).
@@ -960,7 +985,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
 
     const openai = new OpenAI({ apiKey });
     const imageTimeoutMs = getImageTimeoutMs();
-    const poseVariationDirective = buildPoseVariationDirective({
+    const poseVariationDirective = accessoryMode ? "" : buildPoseVariationDirective({
       modelGender: normalizedPanelQa.modelGender,
       poseA: normalizedPanelQa.poseA,
       poseB: normalizedPanelQa.poseB,
@@ -1037,7 +1062,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       }
       return null;
     })();
-    const wearerSideFrameLines = /the wearer's (left|right)/i.test(itemSpecText)
+    const wearerSideFrameLines = !accessoryMode && /the wearer's (left|right)/i.test(itemSpecText)
       ? [
           "- WHICH SIDE OF THE PICTURE TO DRAW ON. Every \"the wearer's left\" and \"the wearer's right\" above has already been converted for you, per frame, below. Use these lines literally and do not work it out again. In particular do NOT read the word \"left\" as the left of the picture — read the mapping:",
           frameSideLine(normalizedPanelQa.poseA ?? null, "LEFT"),
@@ -1062,7 +1087,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       : [];
 
     const sideWordSource = `${itemSpecText}\n${typeof prompt === "string" ? prompt : ""}`;
-    const sidePlacementLines = /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible|left|right)\b/i.test(
+    const sidePlacementLines = !accessoryMode && /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible|left|right)\b/i.test(
       sideWordSource,
     )
       ? [
@@ -1083,9 +1108,9 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
             "- A PIECE OF HARDWARE KEEPS THE FORM ITS LINE GIVES IT, AT THE SIZE ITS LINE GIVES IT, IN EVERY FRAME THAT SHOWS IT — full-body frames included. A button described with a diameter, a hole count and a size against its waistband is drawn that big with those holes, not shrunk into the small plain disc these garments usually have; the same goes for the way a waistband fastens, a tab that reaches past the fly, the shape of a zip pull and the links of a chain. Far away it may be less sharp. It is never a simpler object.",
             "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",
             "- A ZONE line is a complete account of that part of the garment: build it exactly as written and add nothing else there. Where a ZONE line says a zone is flat, plain or has none, that zone STAYS empty — no crease, no pleat, no pocket, no stripe, no topstitch that the line does not name.",
-            ...buildBackStateLine(backState, normalizedPanelQa),
+            ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa)),
           ]
-        : buildBackStateLine(backState, normalizedPanelQa)),
+        : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
       ...(colorRun
         ? [

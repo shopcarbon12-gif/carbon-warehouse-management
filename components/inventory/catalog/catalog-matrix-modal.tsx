@@ -2095,6 +2095,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   itemRefUrls={data.matrix.image_urls ?? []}
                   defaultItemType={data.matrix.subcategory_1 || data.matrix.category || ""}
                   category={data.matrix.category ?? ""}
+                  productName={data.matrix.description ?? ""}
                   variants={data.variants.map((v) => ({
                     id: v.id,
                     color: v.color,

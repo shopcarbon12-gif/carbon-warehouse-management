@@ -5,6 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import { parseSpecBackState, specListsBackDesign, studioRefViewKey } from "@/lib/studio-item-spec";
 import {
+  accessoryPanelLabel,
+  accessoryShotPair,
+  accessoryTypeWord,
+  buildAccessoryPanelPrompt,
+  buildAccessoryStylingLock,
+  getAccessoryKind,
+} from "@/lib/accessoryShots";
+import {
   buildStylingLock,
   parseOutfitFromSpec,
   buildMasterPanelPrompt,
@@ -207,6 +215,9 @@ type Props = {
   defaultItemType: string;
   /** Merchandise category (e.g. "WOMEN" / "MEN") — used to filter models by gender. */
   category?: string;
+  /** The product name ("Beaded Bracelet A"). For products filed under
+   *  ACCESSORIES it is what says which accessory this is. */
+  productName?: string;
   variants: StudioVariant[];
   canManage: boolean;
 };
@@ -276,6 +287,8 @@ type PendingRun = {
   matrixId: string;
   runTag: string;
   gender: string;
+  /** Accessory runs number their frames as shots, not poses. */
+  accessory?: boolean;
   startedAt: number;
   jobs: { panel: number; jobId: string }[];
 };
@@ -358,6 +371,7 @@ async function panelResponseToCrops(
   poseA: number,
   poseB: number,
   runTag: string,
+  unit: "Pose" | "Shot" = "Pose",
 ): Promise<Crop[]> {
   if (!json || json.degraded || !json.imageBase64) {
     const e = json?.error;
@@ -385,8 +399,8 @@ async function panelResponseToCrops(
      panel. */
   const qaPending = json.runQaPending === true;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true, qaNotes: notes, side: "left", panel, qaPending },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true, qaNotes: notes, side: "right", panel, qaPending },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · ${unit} ${poseA}`, selected: true, qaNotes: notes, side: "left", panel, qaPending },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · ${unit} ${poseB}`, selected: true, qaNotes: notes, side: "right", panel, qaPending },
   ];
 }
 
@@ -461,6 +475,7 @@ export function CarbonStudioTab({
   itemRefUrls,
   defaultItemType,
   category,
+  productName = "",
   variants,
   canManage,
 }: Props) {
@@ -468,7 +483,16 @@ export function CarbonStudioTab({
   const [modelId, setModelId] = useState<string>("");
   /** Phone pose-plan banner's "Change model" jumps here. */
   const modelSelectRef = useRef<HTMLSelectElement | null>(null);
-  const [itemType, setItemType] = useState<string>(defaultItemType);
+  const [itemType, setItemType] = useState<string>(() =>
+    /accessor/i.test(defaultItemType) ? accessoryTypeWord(productName) || defaultItemType : defaultItemType,
+  );
+  /* Accessory mode: the eight frames become a product shot list instead of
+     garment poses (lib/accessoryShots.ts). Decided by the Item type field,
+     and for products filed under ACCESSORIES by the product name. */
+  const accessoryKind = useMemo(
+    () => getAccessoryKind(itemType, productName, defaultItemType),
+    [itemType, productName, defaultItemType],
+  );
   const [instruction, setInstruction] = useState<string>("");
   const [panels, setPanels] = useState<number[]>([...PANELS]);
   /* Starts EMPTY. It used to start with the product's catalog images — which
@@ -1276,7 +1300,9 @@ export function CarbonStudioTab({
     /* A back-facing pose of a back nobody has seen is a guess the operator
        pays for. Ask for a Back photo — or the operator's word that the back
        is plain — before spending anything. The server enforces the same. */
-    const backPanels = panels.filter((p) => getPanelPosePair(model.gender, p).some((pose) => isBackFacingPose(model.gender, pose)));
+    const backPanels = accessoryKind
+      ? []
+      : panels.filter((p) => getPanelPosePair(model.gender, p).some((pose) => isBackFacingPose(model.gender, pose)));
     // Same rule as the server: a Back photo, the operator's word, or a spec
     // that itself establishes the back (a design, or "plain").
     const backKnown = refViews.back.length > 0 || backIsPlain || specSaysBackDesign || specBack === "plain";
@@ -1333,10 +1359,16 @@ export function CarbonStudioTab({
        not show. The defaults pick their colour against the product's, which is
        the colourway being rendered when there is one. */
     const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(specForRun)?.[1] ?? "";
-    const stylingLock = buildStylingLock(itemType, model.gender, {
-      outfit: parseOutfitFromSpec(specForRun),
-      itemColour: activeColorRun?.colorName || garmentColour || color,
-    });
+    const itemColour = activeColorRun?.colorName || garmentColour || color;
+    /* An accessory pins this for the whole run, like the colourway: switching
+       the item type mid-run must not mix shots and poses in one set. */
+    const runAccessory = accessoryKind;
+    const stylingLock = runAccessory
+      ? buildAccessoryStylingLock(runAccessory, model.gender, itemColour, parseOutfitFromSpec(specForRun))
+      : buildStylingLock(itemType, model.gender, {
+          outfit: parseOutfitFromSpec(specForRun),
+          itemColour,
+        });
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
     // Touch devices only: keep the screen awake while the panels generate — a
     // locked phone suspends the page and aborts the in-flight fetches, which
@@ -1358,15 +1390,28 @@ export function CarbonStudioTab({
       matrixId,
       runTag,
       gender: model.gender,
+      accessory: Boolean(runAccessory),
       startedAt: Date.now(),
       jobs: chosen.map((p) => ({ panel: p, jobId: jobIds.get(p)! })),
     });
 
     const genOnePanel = async (panel: number): Promise<Crop[]> => {
       const jobId = jobIds.get(panel)!;
-      const [poseA, poseB] = getPanelPosePair(model.gender, panel);
-      const panelLabel = getPanelButtonLabel(model.gender, panel);
-      const prompt = buildMasterPanelPrompt({
+      const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
+      const panelLabel = runAccessory ? accessoryPanelLabel(panel) : getPanelButtonLabel(model.gender, panel);
+      const prompt = runAccessory
+        ? buildAccessoryPanelPrompt({
+            kind: runAccessory,
+            panelNumber: panel,
+            modelName: model.name,
+            modelGender: model.gender,
+            itemType,
+            itemColour,
+            itemStyleInstructions: instruction,
+            expressionDirective,
+            stylingLock,
+          })
+        : buildMasterPanelPrompt({
         panelNumber: panel,
         panelLabel,
         poseA,
@@ -1408,7 +1453,7 @@ export function CarbonStudioTab({
             modelRefs: model.ref_image_urls,
             itemRefs: refUrls,
             itemRefViews: refViews,
-            panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType },
+            panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType, accessoryKind: runAccessory ?? "" },
             itemSpec: specForRun || undefined,
             matrixId,
             backIsPlain,
@@ -1443,7 +1488,7 @@ export function CarbonStudioTab({
       }
       if (!json) json = await claimPanelJob(jobId, deadline);
       else releasePanelJob(jobId);
-      return panelResponseToCrops(json, panel, poseA, poseB, runTag);
+      return panelResponseToCrops(json, panel, poseA, poseB, runTag, runAccessory ? "Shot" : "Pose");
     };
 
     try {
@@ -1546,7 +1591,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun, color]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun, color, accessoryKind]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -1568,9 +1613,9 @@ export function CarbonStudioTab({
         const deadline = Math.min(Date.now() + JOB_POLL_TIMEOUT_MS, run.startedAt + JOB_MAX_AGE_MS);
         const settled = await Promise.allSettled(
           run.jobs.map(async ({ panel, jobId }) => {
-            const [poseA, poseB] = getPanelPosePair(run.gender, panel);
+            const [poseA, poseB] = run.accessory ? accessoryShotPair(panel) : getPanelPosePair(run.gender, panel);
             const json = await claimPanelJob(jobId, deadline);
-            return panelResponseToCrops(json, panel, poseA, poseB, run.runTag);
+            return panelResponseToCrops(json, panel, poseA, poseB, run.runTag, run.accessory ? "Shot" : "Pose");
           }),
         );
         if (cancelled) return;
@@ -1687,11 +1732,16 @@ export function CarbonStudioTab({
       //    (1,3,7,6,2,4,5,8) — that was a bug against its own spec.
       const picked = crops.filter((c) => c.selected && c.b64);
       const poseNum = (c: Crop) => {
-        const m = c.label.match(/Pose (\d+)/);
+        const m = c.label.match(/(?:Pose|Shot) (\d+)/);
         return m ? Number(m[1]) : 0;
       };
+      /* Accessory sets are pushed in shot order: Shot 1, the hero, becomes the
+         main image, and the gender rules for garment poses do not apply. */
+      const isShotSet = picked.some((c) => / · Shot \d+/.test(c.label));
       const isMale = (model?.gender || "").toLowerCase() === "male";
-      const rank = isMale
+      const rank = isShotSet
+        ? () => 0
+        : isMale
         ? (c: Crop) => (poseNum(c) === 4 ? 2 : poseNum(c) === 7 ? 1 : 0)
         : (c: Crop) => (poseNum(c) === 2 ? 1 : 0);
       const ordered = [...picked].sort((a, b) => rank(a) - rank(b) || poseNum(a) - poseNum(b));
@@ -2467,7 +2517,7 @@ export function CarbonStudioTab({
                 checked={panels.includes(p)}
                 onChange={() => togglePanel(p)}
               />
-              {model ? getPanelButtonLabel(model.gender, p) : `Panel ${p}`}
+              {accessoryKind ? accessoryPanelLabel(p) : model ? getPanelButtonLabel(model.gender, p) : `Panel ${p}`}
             </label>
           ))}
           <button
@@ -2503,7 +2553,7 @@ export function CarbonStudioTab({
             </div>
             <div className={mismatch ? "text-amber-200/80" : "text-[var(--wms-muted)]"}>
               {panels.length
-                ? panels.map((p) => `P${p}: pose ${getPanelPosePair(model.gender, p).join("+")}`).join(" · ")
+                ? panels.map((p) => (accessoryKind ? `P${p}: shot ${accessoryShotPair(p).join("+")}` : `P${p}: pose ${getPanelPosePair(model.gender, p).join("+")}`)).join(" · ")
                 : "No panels selected"}
             </div>
             <button
