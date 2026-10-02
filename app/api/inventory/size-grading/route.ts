@@ -1,0 +1,154 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
+import { getPool } from "@/lib/db";
+
+/**
+ * Size Grading: the sizes a product comes in, and the measurements taken on one.
+ *
+ * GET  ?matrixId=<uuid>   → { item: { matrixId, upc, name, vendor }, sizes: [...] }
+ *      ?upc=<code>        → the same, found by UPC (what a scan gives us)
+ *      ?customSkuId=<uuid> → { measurement } — the latest reading for one size,
+ *                            which is what the item card shows and edits
+ * POST { customSkuId, garmentType, pointsCm, pxPerCm, typeOverridden, note }
+ *      → saves one measurement against that exact SKU.
+ *
+ * Deliberately NOT admin-only. Measuring a garment is floor work, and the whole
+ * point of the page is that whoever is holding the garment can do it. It reads
+ * the catalogue and appends a measurement; it cannot change an item, a price or
+ * stock, so an operator's session is enough.
+ */
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function GET(req: Request) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const pool = getPool();
+  if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+
+  const { searchParams } = new URL(req.url);
+  const customSkuId = (searchParams.get("customSkuId") ?? "").trim();
+  if (customSkuId) {
+    if (!UUID_RE.test(customSkuId)) {
+      return NextResponse.json({ error: "customSkuId must be a uuid" }, { status: 400 });
+    }
+    const latest = await pool.query<{
+      id: string;
+      garment_type: string;
+      points_cm: Record<string, number>;
+      measured_at: string;
+      note: string | null;
+    }>(
+      `SELECT id, garment_type, points_cm, measured_at, note
+         FROM size_grading_measurements
+        WHERE custom_sku_id = $1::uuid
+        ORDER BY measured_at DESC
+        LIMIT 1`,
+      [customSkuId],
+    );
+    return NextResponse.json({ measurement: latest.rows[0] ?? null });
+  }
+
+  const matrixId = (searchParams.get("matrixId") ?? "").trim();
+  const upc = (searchParams.get("upc") ?? "").trim();
+  if (!matrixId && !upc) {
+    return NextResponse.json({ error: "matrixId or upc required" }, { status: 400 });
+  }
+  if (matrixId && !UUID_RE.test(matrixId)) {
+    return NextResponse.json({ error: "matrixId must be a uuid" }, { status: 400 });
+  }
+
+  /* By UPC, a code can land on either level: the matrix carries one and so does
+     every SKU. Both are accepted because a scan does not know the difference —
+     the operator just pointed the camera at a label. */
+  const found = await pool.query<{ id: string; upc: string | null; description: string | null; vendor: string | null }>(
+    matrixId
+      ? `SELECT id, upc, description, vendor FROM matrices WHERE id = $1::uuid`
+      : `SELECT m.id, m.upc, m.description, m.vendor
+           FROM matrices m
+          WHERE m.upc = $1
+             OR EXISTS (SELECT 1 FROM custom_skus cs
+                         WHERE cs.matrix_id = m.id AND cs.archived = false AND cs.upc = $1)
+          ORDER BY (m.upc = $1) DESC
+          LIMIT 1`,
+    [matrixId || upc],
+  );
+  const item = found.rows[0];
+  if (!item) return NextResponse.json({ error: "No item with that code." }, { status: 404 });
+
+  const sizes = await pool.query<{
+    custom_sku_id: string;
+    sku: string;
+    size: string | null;
+    color_code: string | null;
+    upc: string | null;
+    sort_order: number | null;
+    last_measured_at: string | null;
+  }>(
+    `SELECT cs.id AS custom_sku_id, cs.sku, cs.size, cs.color_code, cs.upc, cs.sort_order,
+            (SELECT max(measured_at) FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id)
+              AS last_measured_at
+       FROM custom_skus cs
+      WHERE cs.matrix_id = $1::uuid AND cs.archived = false
+      ORDER BY cs.sort_order NULLS LAST, cs.size, cs.sku`,
+    [item.id],
+  );
+
+  return NextResponse.json({
+    item: { matrixId: item.id, upc: item.upc, name: item.description, vendor: item.vendor },
+    sizes: sizes.rows,
+  });
+}
+
+const Body = z.object({
+  customSkuId: z.string().regex(UUID_RE),
+  garmentType: z.string().min(1).max(32),
+  /** Point of measure → centimetres. */
+  pointsCm: z.record(z.string(), z.number().finite().positive()),
+  pxPerCm: z.number().finite().positive().optional(),
+  typeOverridden: z.boolean().optional(),
+  note: z.string().max(500).optional(),
+});
+
+export async function POST(req: Request) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const pool = getPool();
+  if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+
+  const parsed = Body.safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid body" }, { status: 400 });
+  }
+  const b = parsed.data;
+  if (!Object.keys(b.pointsCm).length) {
+    return NextResponse.json({ error: "No measurements to save." }, { status: 400 });
+  }
+
+  const sku = await pool.query<{ id: string }>(
+    `SELECT id FROM custom_skus WHERE id = $1::uuid AND archived = false`,
+    [b.customSkuId],
+  );
+  if (!sku.rows[0]) return NextResponse.json({ error: "That size no longer exists." }, { status: 404 });
+
+  /* Appended, never updated: a garment remeasured after a production change is
+     a new fact about a new garment, not a correction of the old reading. */
+  const saved = await pool.query<{ id: string; measured_at: string }>(
+    `INSERT INTO size_grading_measurements
+       (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note)
+     VALUES ($1::uuid, $2, $3::jsonb, $4, $5, $6, $7)
+     RETURNING id, measured_at`,
+    [
+      b.customSkuId,
+      b.garmentType,
+      JSON.stringify(b.pointsCm),
+      b.pxPerCm ?? null,
+      b.typeOverridden ?? false,
+      session.sub ?? null,
+      b.note ?? null,
+    ],
+  );
+
+  return NextResponse.json({ ok: true, id: saved.rows[0].id, measuredAt: saved.rows[0].measured_at });
+}

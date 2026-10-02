@@ -55,7 +55,10 @@ export function isWarehouseFloorAllowedPath(pathname: string): boolean {
   // regrouped under /inventory; preserve floor access.
   if (pathname.startsWith("/inventory/locations")) return true;
   if (pathname.startsWith("/inventory/cycle-counts")) return true;
-  // Size Grading: on-device photo measurement, no API calls.
+  /* Size Grading: floor work by design — whoever is holding the garment does
+     the measuring. The measurement itself still runs on the device; the page
+     now also reads the catalogue to find the item and appends a measurement
+     against it, neither of which can change an item, a price or stock. */
   if (pathname.startsWith("/inventory/size-grading")) return true;
   if (pathname.startsWith("/handheld")) return true;
   if (pathname.startsWith("/reports")) return true;

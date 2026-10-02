@@ -7,6 +7,7 @@ import { CatalogMatrixModal } from "./catalog-matrix-modal";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
 import { ItemSalesTab, ItemCustomersTab, ItemHistoryTab } from "./item-report-tabs";
 import { printRfidLabel, printNonRfidLabel } from "./print-label";
+import { SizeGradingSection } from "@/components/size-grading/item-card-section";
 
 /**
  * Lightspeed-style item-details popup. Opens when the operator clicks
@@ -525,6 +526,11 @@ function DetailsTab({
             onChange={(v) => patch({ size: v })}
             editable={editable}
           />
+        </Section>
+
+        {/* Measurements sit with the size they were taken on. */}
+        <Section title="Size Grading">
+          <SizeGradingSection customSkuId={row.custom_sku_id} editable={editable} />
         </Section>
 
         <Section title="IDs">

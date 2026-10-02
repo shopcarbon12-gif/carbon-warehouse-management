@@ -16,7 +16,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Upload } from "lucide-react";
+import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Upload } from "lucide-react";
+
+import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
 import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import {
@@ -112,6 +114,10 @@ export function SizeGradingWorkspace() {
   const [calibPts, setCalibPts] = useState<Point[]>([]);
   const [refLengthCm, setRefLengthCm] = useState("27.94");
   const [calibPreset, setCalibPreset] = useState("letter-long");
+  const [pickedItem, setPickedItem] = useState<PickedItem | null>(null);
+  const [pickedSize, setPickedSize] = useState<PickedSize | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   /** Null until the stream is open; false when the device gives us no focus control. */
   const [canFocus, setCanFocus] = useState<boolean | null>(null);
@@ -369,6 +375,7 @@ export function SizeGradingWorkspace() {
       setAutoT(autoSeedTolerance(data.data, w, h, centre));
       setThreshold(null);
       setCalibPts([]);
+      setSavedAt(null);
     } catch {
       setError("Could not read that image.");
     }
@@ -405,6 +412,36 @@ export function SizeGradingWorkspace() {
     closeCamera();
     if (blob) await loadFile(new File([blob], "capture.jpg", { type: "image/jpeg" }));
   }, [closeCamera, loadFile, focusAt]);
+
+  const saveToItem = useCallback(async () => {
+    if (!pickedSize || !result?.ok) return;
+    const pointsCm: Record<string, number> = {};
+    for (const [k, v] of Object.entries(result.points)) {
+      if (v) pointsCm[k] = Number(v.cm.toFixed(2));
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const r = await fetch("/api/inventory/size-grading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customSkuId: pickedSize.customSkuId,
+          garmentType: result.type,
+          pointsCm,
+          pxPerCm: pxPerCm ?? undefined,
+          typeOverridden: Boolean(typeOverride),
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { ok?: boolean; measuredAt?: string; error?: string };
+      if (!r.ok || !j.ok) throw new Error(j.error ?? "Could not save");
+      setSavedAt(j.measuredAt ?? new Date().toISOString());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  }, [pickedSize, result, pxPerCm, typeOverride]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!image) return;
@@ -445,6 +482,8 @@ export function SizeGradingWorkspace() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      <ItemPicker item={pickedItem} size={pickedSize} onPick={setPickedItem} onPickSize={setPickedSize} />
+
       <input
         ref={cameraInputRef}
         type="file"
@@ -677,6 +716,34 @@ export function SizeGradingWorkspace() {
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Flat measurements, taken across the garment as it lies — not doubled.
                 </p>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="wms-btn-primary max-md:min-h-11"
+                    disabled={!pickedSize || saving}
+                    onClick={() => void saveToItem()}
+                    title={pickedSize ? undefined : "Choose the item and size first"}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    {saving ? "Saving…" : "Save to item"}
+                  </button>
+                  {!pickedItem ? (
+                    <span className="font-mono text-xs text-[var(--wms-muted)]">
+                      Search or scan an item above to save against it.
+                    </span>
+                  ) : !pickedSize ? (
+                    <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">Choose a size first.</span>
+                  ) : savedAt ? (
+                    <span className="font-mono text-xs text-[var(--wms-status-success-fg)]">
+                      Saved to {pickedItem.upc} · {pickedSize.size ?? pickedSize.sku}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-xs text-[var(--wms-muted)]">
+                      → {pickedItem.upc} · {pickedSize.size ?? pickedSize.sku}
+                    </span>
+                  )}
+                </div>
               </>
             ) : null}
             {result?.ok && measured && grade?.best ? (
