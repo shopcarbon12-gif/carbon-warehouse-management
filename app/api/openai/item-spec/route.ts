@@ -31,7 +31,7 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { classifyBackView } from "@/lib/studio-item-spec";
-import { buildLockText, buildSpecInstruction, text } from "@/lib/server/item-spec-build";
+import { buildLockText, buildSpecInstruction, isAccessoryItemType, text } from "@/lib/server/item-spec-build";
 
 /* Every photo the operator sorted is analysed. The old cap of 6 silently dropped
    the tail of the list — which, with the general → front → back order, was the
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     if (!spec || typeof spec !== "object") {
       return NextResponse.json({ error: "Item analysis returned no usable result. Please retry." }, { status: 502 });
     }
-    const lockText = buildLockText(spec);
+    const lockText = buildLockText(spec, { accessory: isAccessoryItemType(itemType) });
     if (!lockText) return NextResponse.json({ error: "Item analysis found nothing to lock. Add clearer item photos." }, { status: 422 });
     return NextResponse.json({
       spec,

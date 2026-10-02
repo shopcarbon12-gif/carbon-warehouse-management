@@ -1,6 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { LOCK_TEXT_MAX_BYTES, LOCK_TEXT_MAX_LINES, classifyBackView } from "@/lib/studio-item-spec";
+import { getAccessoryKind } from "@/lib/accessoryShots";
+
+/** An item type that puts the Studio in accessory mode (lib/accessoryShots.ts). */
+export function isAccessoryItemType(itemType: string): boolean {
+  return getAccessoryKind(itemType, "", itemType) !== null;
+}
 
 /**
  * The item-spec prompt and the numbered lock list it becomes.
@@ -86,7 +92,12 @@ function applied(g: { technique?: string; finish?: string }): string {
  *  that keep the generator from redesigning the garment — what it is, its
  *  FIT, what the BACK shows, and what must NOT be invented — come first, so
  *  a long hardware inventory can never push them off. */
-export function buildLockText(spec: any): string {
+export function buildLockText(spec: any, opts?: { accessory?: boolean }): string {
+  /* A bracelet has no fabric to distress, no seams and no wash. Those keys are
+     written for garments, and on jewellery they came back as "DISTRESSING:
+     none — clean, undistressed fabric everywhere; do not add rips" — lines the
+     generator is told to enforce, about cloth that is not there. */
+  const fabricOnly = opts?.accessory === true;
   const lines: string[] = [];
   const push = (s: string) => {
     const t = resolveWearerSide(s.replace(/\s+/g, " ").trim());
@@ -137,21 +148,21 @@ export function buildLockText(spec: any): string {
   for (const s of list(spec?.labels_patches)) push(`LABEL/PATCH: ${s}.`);
   for (const s of list(spec?.hardware)) push(`HARDWARE: ${s}.`);
   const st = text(spec?.stitching);
-  if (st) push(`STITCHING: ${st}.`);
+  if (st && !(fabricOnly && NONE.test(st))) push(`STITCHING: ${st}.`);
   for (const s of list(spec?.pockets)) push(`POCKET: ${s}.`);
   const cl = text(spec?.closures);
   if (cl) push(`CLOSURE: ${cl}.`);
   const mt = text(spec?.materials_texture);
   if (mt) push(`MATERIAL/TEXTURE: ${mt}.`);
   const wf = text(spec?.wash_finish);
-  if (wf) push(`WASH/FINISH: ${wf}.`);
+  if (wf && !(fabricOnly && NONE.test(wf))) push(`WASH/FINISH: ${wf}.`);
   const ds = text(spec?.distressing);
   if (ds && !NONE.test(ds)) push(`DISTRESSING: ${ds} — exact placement and extent, no more, no less.`);
-  else if (ds) push("DISTRESSING: none — clean, undistressed fabric everywhere; do not add rips, fading, or whiskering.");
+  else if (ds && !fabricOnly) push("DISTRESSING: none — clean, undistressed fabric everywhere; do not add rips, fading, or whiskering.");
   const sp = text(spec?.seams_panels);
-  if (sp) push(`SEAMS/PANELS: ${sp}.`);
+  if (sp && !(fabricOnly && NONE.test(sp))) push(`SEAMS/PANELS: ${sp}.`);
   const tr = text(spec?.trims_hems_cuffs_collar);
-  if (tr) push(`TRIMS/HEMS/CUFFS/COLLAR: ${tr}.`);
+  if (tr && !(fabricOnly && NONE.test(tr))) push(`TRIMS/HEMS/CUFFS/COLLAR: ${tr}.`);
   for (const s of list(spec?.other_details)) push(`DETAIL: ${s}.`);
   /* The rest of the outfit in the photos. Last on purpose: the list is capped
      from the end, and the product's own lines must never be the ones dropped.
@@ -183,8 +194,21 @@ export function buildLockText(spec: any): string {
   return out.join("\n");
 }
 
+const ACCESSORY_BRIEF = [
+  "THIS IS AN ACCESSORY, NOT A GARMENT. The fabric keys (wash_finish, distressing, seams_panels, stitching, trims_hems_cuffs_collar) get \"none\" unless the piece genuinely has them.",
+  "Describe it so a jeweller could rebuild it from your words alone:",
+  "- the chain, cord or band by its trade name — ball chain, cable, curb, rope, snake, box, figaro, leather cord, elastic — and how fine or heavy it is;",
+  "- every bead, stone or link: COUNT them, give their shape (round, faceted, rondelle, cube), size and colour, and the GROUPING exactly as it repeats, e.g. \"six clusters of three black faceted beads, each cluster separated by one tiny gold spacer bead\". Never write \"evenly spaced\" unless they really are single beads at equal intervals — the render follows your words, and a pattern described as even comes back even;",
+  "- each charm or pendant: its motif, shape, size compared with the beads, finish, and where it hangs;",
+  "- the metal tone and finish: yellow gold, rose gold, silver; polished, matte, brushed;",
+  "- the clasp — lobster, spring ring, toggle, magnetic, sliding knot — and any extender chain with the bead or charm at its end;",
+  "- for sunglasses, hats, belts and bags: the frame or body shape, hardware, logos, straps and fastenings in the same detail.",
+  "Do not estimate a length unless something in the photo shows the scale: a guessed length becomes a wrong size in the render.",
+].join("\n");
+
 export function buildSpecInstruction(itemType: string, sortedViews: boolean): string {
   return [
+    ...(isAccessoryItemType(itemType) ? [ACCESSORY_BRIEF] : []),
     `You are a garment technologist documenting a "${itemType}" for an exact-reproduction photo shoot. Inspect EVERY reference image at maximum detail and record ONLY what is clearly visible. Never guess; list unclear items under "uncertain".`,
     "Return STRICT JSON with these keys:",
     '{ "garment_type": string, "colorway": string, "materials_texture": string, "wash_finish": string, "distressing": string,',
@@ -192,7 +216,7 @@ export function buildSpecInstruction(itemType: string, sortedViews: boolean): st
     '  "stitching": string (thread colour(s), single/double/triple topstitch, bar tacks, decorative stitching, where),',
     '  "pockets": string[] (type, count, placement, details), "closures": string, "seams_panels": string,',
     '  "outfit_seen": { "worn": boolean, "pieces": [{ "slot": "top" | "top_under" | "bottom" | "outerwear" | "footwear" | "accessories", "description": string }] } — the OTHER clothes in the photos, the ones that are not the product. worn=true when a photo shows the product worn by a person or styled together with other garments; then describe each other piece precisely enough to dress the model in it again: colour, cut, fit, length, rise, fabric look, how it is worn (tucked, cuffed, open). Use slot top_under for what is worn under a jacket or coat. Describe only what is clearly visible; a piece cut out of the frame is simply not listed. Never describe the person. worn=false and pieces=[] when the photos show the product alone (flat lay, hanger, ghost mannequin, product shot).',
-    '  "construction_zones": [{ "zone": string, "detail": string }] — the design-bearing areas of THIS garment, each described well enough to rebuild it. For bottoms cover: waistband (height, flat or elasticated, pleats or none), closure/fly, belt loops (count or none), front pockets, back pockets, front of leg, back of leg, side seam, hem/cuff. THE CLOSURE IS THE MOST LOOKED-AT PART OF A WAISTBAND and "zip fly with button closure" is not enough to draw: say how the waistband actually fastens — a plain button on the band, or an extended or squared tab that reaches past the fly — which side laps over which, how far it reaches, how many buttons, and how large the button is against the band. For tops cover: neckline/collar, shoulder seam, chest, sleeve and cuff, side seam, hem, back yoke. For outerwear also: lapel/hood, front closure, pocket flaps, vents.',
+    '  "construction_zones": [{ "zone": string, "detail": string }] — the design-bearing areas of THIS garment, each described well enough to rebuild it. For bottoms cover: waistband (height, flat or elasticated, pleats or none), closure/fly, belt loops (count or none), front pockets, back pockets, front of leg, back of leg, side seam, hem/cuff. THE CLOSURE IS THE MOST LOOKED-AT PART OF A WAISTBAND and "zip fly with button closure" is not enough to draw: say how the waistband actually fastens — a plain button on the band, or an extended or squared tab that reaches past the fly — which side laps over which, how far it reaches, how many buttons, and how large the button is against the band. For tops cover: neckline/collar, shoulder seam, chest, sleeve and cuff, side seam, hem, back yoke. For outerwear also: lapel/hood, front closure, pocket flaps, vents. For jewellery and accessories cover instead: chain, cord or band; beads or stones and how they are grouped; charm or pendant; clasp; extender — or for sunglasses, hats, belts and bags their frame or body, hardware, logo and fastening.',
     '  "text": [{ "text": exact characters as printed (keep case, punctuation, spacing), "placement": string, "style": string, "color": string, "technique": string }] — include EVERY word, number, logo wordmark, label text, embroidery and print lettering; transcribe letter-by-letter,',
     '  "logos_icons": [{ "description": string, "placement": string, "size": string, "colors": string, "technique": string, "finish": string }] — every brand mark, symbol, icon, emblem, monogram, artwork or illustration,',
     '  "graphics_prints": [{ "description": string, "placement": string, "colors": string, "technique": string, "finish": string }] — prints, patterns, artwork, embroidery, appliqués,',

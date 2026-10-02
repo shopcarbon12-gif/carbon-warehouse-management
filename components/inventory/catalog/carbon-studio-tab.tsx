@@ -224,6 +224,24 @@ type Props = {
 
 const PANELS = [1, 2, 3, 4];
 
+/** The accessory types the Studio shoots, each mapped to its own shot list. */
+const ACCESSORY_TYPE_OPTIONS = [
+  "BRACELET",
+  "ANKLET",
+  "NECKLACE",
+  "RING",
+  "EARRINGS",
+  "WATCH",
+  "SUNGLASSES",
+  "HAT",
+  "CAP",
+  "BEANIE",
+  "BELT",
+  "BAG",
+  "SOCKS",
+  "BOW TIE",
+];
+
 /** Derive the item's gender from its category/type text. Women-first because
  * "WOMEN" contains "MEN". Returns null when it can't be determined (show all). */
 function deriveGender(...text: (string | undefined)[]): "male" | "female" | null {
@@ -747,7 +765,13 @@ export function CarbonStudioTab({
           // Merge, never replace: a photo pasted or uploaded before this
           // answer arrived must not vanish.
           setItemRefs((prev) => [...restored, ...prev.filter((p) => !restored.some((r0) => sameRef(r0, p)))]);
-          if (s.itemType) setItemType(s.itemType);
+          /* A product saved before accessory mode existed has "ACCESSORIES" on
+             file, which says nothing about what to shoot; its own type word
+             ("Anklet A" → ANKLET) is the better starting point. */
+          if (s.itemType) {
+            const generic = /^\s*accessor\w*\s*$/i.test(s.itemType);
+            setItemType(generic ? accessoryTypeWord(productName) || s.itemType : s.itemType);
+          }
           setInstruction(s.instruction || "");
           setItemSpec(s.itemSpec || "");
           setSpecRefsKey(s.specRefsKey || "");
@@ -762,7 +786,7 @@ export function CarbonStudioTab({
     return () => {
       alive = false;
     };
-  }, [matrixId]);
+  }, [matrixId, productName]);
 
   // Save it back, debounced, on every change after the restore. The pending
   // body lives in a ref so it can also be flushed on unmount / page hide —
@@ -2376,8 +2400,26 @@ export function CarbonStudioTab({
           </select>
         </div>
         <div>
-          <span className={label}>Item type</span>
-          <input className={field} value={itemType} onChange={(e) => setItemType(e.target.value)} />
+          <span className={label}>{accessoryKind ? "Accessory type" : "Item type"}</span>
+          {accessoryKind ? (
+            /* Accessory mode picks its shot list and outfit from this, so it is a
+               choice, not free text: a typo would quietly fall back to the
+               generic shots. */
+            <select
+              className={`${field} max-md:text-base`}
+              value={ACCESSORY_TYPE_OPTIONS.includes(itemType.trim().toUpperCase()) ? itemType.trim().toUpperCase() : ""}
+              onChange={(e) => setItemType(e.target.value)}
+            >
+              <option value="">{itemType.trim() ? `${itemType.trim()} — choose a type` : "Choose a type"}</option>
+              {ACCESSORY_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input className={field} value={itemType} onChange={(e) => setItemType(e.target.value)} />
+          )}
         </div>
         <div>
           <span className={label}>Colour</span>
