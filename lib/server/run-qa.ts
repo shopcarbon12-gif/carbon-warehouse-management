@@ -128,6 +128,147 @@ function frameRoster(panels: RunPanelImage[]): string {
   return panels.map((p) => `P${p.panel}L, P${p.panel}R`).join(", ");
 }
 
+/** Details the spec puts on one side of the body: [{ what: "chain", side: "left" }]. */
+export function extractSidedDetails(spec: string): { what: string; side: "left" | "right" }[] {
+  const out: { what: string; side: "left" | "right" }[] = [];
+  for (const line of String(spec || "").split("\n")) {
+    const m = /^\s*\d+\.\s*[A-Z/ ]+:\s*([^,.\n]+)[^\n]*?the wearer's (left|right)/i.exec(line);
+    if (!m) continue;
+    const what = m[1].trim().toLowerCase().replace(/\s+×\s*\d+$/, "").slice(0, 40);
+    if (what && !out.some((o) => o.what === what)) {
+      out.push({ what, side: m[2].toLowerCase() as "left" | "right" });
+    }
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+/**
+ * Which hip is the chain on? Asked the way a camera can answer it.
+ *
+ * Told in prose that a detail must stay on the same side of the BODY, the
+ * consistency judge missed a panel mirrored end to end — the same render
+ * flipped, chain on the opposite hip, nothing else changed. That is the third
+ * time a vision model has been asked to invert left and right and got it wrong;
+ * the analyser and the generator both needed the same treatment.
+ *
+ * So it is no longer asked. Each frame answers two things it can simply SEE —
+ * which side of the PICTURE the detail is on, and whether the model faces the
+ * camera or is turned away — and the mirror is applied here:
+ *
+ *     facing away  → picture side IS the body side
+ *     facing camera→ picture side is the body side REVERSED
+ *
+ * A three-quarter turn makes the mirror ambiguous, so that frame does not vote.
+ */
+function wearerSideFromPicture(
+  pictureSide: "left" | "right",
+  facing: "camera" | "away",
+): "left" | "right" {
+  if (facing === "away") return pictureSide;
+  return pictureSide === "left" ? "right" : "left";
+}
+
+async function runSideAudit(args: {
+  openai: OpenAI;
+  model: string;
+  panels: RunPanelImage[];
+  details: { what: string; side: "left" | "right" }[];
+  timeoutMs: number;
+}): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
+  const names = args.details.map((d) => `"${d.what}"`).join(", ");
+  const content: any[] = [
+    {
+      type: "input_text",
+      text: [
+        `For every frame below, report only what you can SEE. Do not work out which side of the body anything is on — that is done for you afterwards, and every attempt to do it here has come out backwards.`,
+        "",
+        `For each frame answer:`,
+        `- facing: is the model turned TOWARDS the camera ("camera"), away from it so you see their back ("away"), or side-on / three-quarter so you cannot tell ("unclear")?`,
+        `- for each of these details — ${names} — which side of the PICTURE is it on: "left", "right", or "absent" if that frame does not show it?`,
+        "",
+        `"left" and "right" here mean the left and right of the photograph as you look at it. Nothing else. A detail that has swung or hangs at an angle still sits on one side of the picture; say which. If a frame is a close-up with no body in it, use facing "unclear".`,
+        "",
+        "Return JSON only:",
+        '{ "frames": [ { "frame": "P1L", "facing": "camera"|"away"|"unclear", "details": [ { "what": string, "picture_side": "left"|"right"|"absent" } ] } ] }',
+        `The frames are: ${frameRoster(args.panels)}. Include every one.`,
+      ].join("\n"),
+    },
+    ...buildPanelContent(args.panels),
+  ];
+
+  const { parsed, error } = await callJudge(
+    args.openai,
+    args.model,
+    "You report what is visible in a photograph. You never infer anatomy or left/right of a body. Return JSON only.",
+    content,
+    args.timeoutMs,
+    "Studio side audit",
+  );
+  if (!parsed || error) return { findings: [], notes: [], ok: false };
+
+  type Seen = { panel: number; frame: "left" | "right"; what: string; side: "left" | "right" };
+  const seen: Seen[] = [];
+  for (const row of Array.isArray(parsed.frames) ? parsed.frames : []) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const token = parseFrameToken(r.frame);
+    if (!token || token.frame === "both") continue;
+    const facing = String(r.facing ?? "").toLowerCase();
+    if (facing !== "camera" && facing !== "away") continue; // unclear → no vote
+    for (const d of Array.isArray(r.details) ? r.details : []) {
+      if (!d || typeof d !== "object") continue;
+      const dd = d as Record<string, unknown>;
+      const what = String(dd.what ?? "").trim().toLowerCase();
+      const pic = String(dd.picture_side ?? "").toLowerCase();
+      if (!what || (pic !== "left" && pic !== "right")) continue;
+      seen.push({
+        panel: token.panel,
+        frame: token.frame,
+        what,
+        side: wearerSideFromPicture(pic, facing),
+      });
+    }
+  }
+
+  const findings: RunQaFinding[] = [];
+  const notes: string[] = [];
+  for (const detail of args.details) {
+    const votes = seen.filter((s) => s.what.includes(detail.what) || detail.what.includes(s.what));
+    if (votes.length < 2) continue; // one sighting settles nothing
+    /* The spec names the true side, so the odd frames are measured against it
+       rather than against a majority that could itself be wrong. */
+    const wrong = votes.filter((v) => v.side !== detail.side);
+    if (!wrong.length) continue;
+    if (wrong.length === votes.length) {
+      // Every frame agrees with itself and disagrees with the spec: that is an
+      // accuracy problem for the whole run, not an odd frame.
+      notes.push(
+        `Every frame puts the ${detail.what} on the wearer's ${wrong[0].side}; the spec says the wearer's ${detail.side}. Check the spec line before regenerating.`,
+      );
+      continue;
+    }
+    /* A NOTE, not a failure — on purpose.
+       Computing the mirror in code fixed the blindness: the audit now sees a
+       mirrored panel where prose never did. What it did NOT fix is perception.
+       On a verified-correct frame (chain plainly on the picture's right, model
+       facing the camera, spec says the wearer's left) it still reported the
+       wrong hip, and only two of four frames produced a usable sighting at all.
+       A check that wrong this often must not unselect a crop the operator would
+       have kept — that is the exact failure this whole QA rewrite existed to
+       end. So it points, and the operator looks. Promote it to a finding only
+       once it has been measured against real runs and earns it. */
+    for (const w of wrong) {
+      notes.push(
+        `Worth a look: in P${w.panel}${w.frame === "left" ? "L" : "R"} the ${detail.what} may be on the wearer's ${
+          w.side
+        }, where the spec says the wearer's ${detail.side}. This check misreads a frame often enough that it only points.`,
+      );
+    }
+  }
+  return { findings, notes, ok: true };
+}
+
 async function callJudge(
   openai: OpenAI,
   model: string,
@@ -209,8 +350,12 @@ async function runConsistencyCheck(args: {
         "- Camera angle, distance, zoom, crop, which body parts are in shot, or how much of the garment is visible.",
         "- Lighting, shadow, colour temperature, background tint, centring.",
         "- Pose, stance, expression, hand position, which way the model faces.",
-        "- A hanging part — a chain, drawcord, strap or tie — swinging, hanging differently, or being seen from another side. Same object seen differently is the same object.",
+        "- A hanging part — a chain, drawcord, strap or tie — swinging, lying at a different angle, or catching the light differently. Same object, different moment, is the same object.",
         "- A part of the garment being seen from the front in one frame and from the back in another.",
+        "",
+        "BUT A DETAIL THAT CHANGES WHICH SIDE OF THE BODY IT IS ON *IS* AN INCONSISTENCY, AND IT IS THE ONE PEOPLE NOTICE MOST.",
+        "A chain hangs from one hip. A pocket, a logo, a vent, a buckle sits on one side. Across the run it must stay on that same side of the BODY. Work out which side of the body it is on in each frame before you compare: in a frame where the model FACES the camera, the model's left is on the RIGHT of the picture; in a frame shot from BEHIND, the model's left is on the LEFT of the picture. A detail that is on the model's left hip in one frame and the model's right hip in another is a real fault — report it, under the attribute \"side\", and list the frames that are in the minority.",
+        "Swinging is not switching: judge which HIP it hangs from, not where the loose end has swung to.",
         "",
         "A FRAME THAT DOES NOT SHOW AN ATTRIBUTE SIMPLY DOES NOT VOTE ON IT.",
         "If the feet are out of shot, that frame says nothing about footwear — it does not disagree with anything.",
@@ -289,6 +434,8 @@ async function runAccuracyCheck(args: {
   modelRefs: string[];
   itemSpec?: string;
   itemType: string;
+  /** Operator-confirmed colourway for this run, when one is active. */
+  colorName?: string;
   timeoutMs: number;
 }): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
   const spec = String(args.itemSpec || "").trim();
@@ -303,7 +450,15 @@ async function runAccuracyCheck(args: {
         "Compare the GARMENT SURFACE in the rendered frames against the item reference photographs:",
         "- TEXT: wording and spelling, letter by letter, and which side it sits on.",
         "- ARTWORK: logo, print or graphic — same artwork, same size relative to the garment, same position, same colours.",
-        "- COLOUR of the garment itself.",
+        /* Colour is the one thing a photograph does NOT carry reliably: the same
+           black cloth reads charcoal under room light and blue-black in shade.
+           Judging shade from the references produced a failure on all eight
+           frames of a run ("the photographs show very dark black, this frame
+           shows lighter black") — a complaint about the lighting in the
+           reference photo, charged to the render. */
+        args.colorName
+          ? `- COLOUR: this run renders the colourway "${args.colorName}", which the operator confirmed. Judge the cloth against THAT description, not against the reference photographs — they may show a different colourway entirely. Report only a clearly different colour (navy drawn red, black drawn white). Never report a shade: lighter, darker, warmer, cooler, more or less saturated are NOT failures.`
+          : "- COLOUR: report only a clearly different colour family from the photographs (navy drawn red, black drawn white). A photograph does not carry colour reliably — the same cloth reads lighter under one light and darker under another — so never report a shade difference. Lighter, darker, warmer, cooler, more or less saturated are NOT failures.",
         "- CONSTRUCTION: seams, panels, pockets, waistband, closure, belt loops, hems, cuffs, collar.",
         "- HARDWARE the photographs show: buttons, zips, rivets, eyelets, chains, drawcords.",
         "",
@@ -409,13 +564,18 @@ export async function runRunQa(args: {
   modelRefs: string[];
   itemSpec?: string;
   itemType: string;
+  colorName?: string;
   timeoutMs: number;
 }): Promise<RunQaVerdict> {
   const model = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
   const frameCount = args.panels.length * 2;
   const wantConsistency = frameCount >= 3;
 
-  const [consistency, accuracy] = await Promise.all([
+  /* The side audit only has something to check when the spec actually puts a
+     detail on one side of the body. */
+  const sidedDetails = extractSidedDetails(args.itemSpec ?? "");
+
+  const [consistency, accuracy, sides] = await Promise.all([
     wantConsistency
       ? runConsistencyCheck({
           openai: args.openai,
@@ -434,11 +594,21 @@ export async function runRunQa(args: {
       modelRefs: args.modelRefs,
       itemSpec: args.itemSpec,
       itemType: args.itemType,
+      colorName: args.colorName,
       timeoutMs: args.timeoutMs,
     }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false })),
+    sidedDetails.length && args.panels.length
+      ? runSideAudit({
+          openai: args.openai,
+          model,
+          panels: args.panels,
+          details: sidedDetails,
+          timeoutMs: args.timeoutMs,
+        }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false }))
+      : Promise.resolve({ findings: [] as RunQaFinding[], notes: [] as string[], ok: true }),
   ]);
 
-  const notes = [...consistency.notes, ...accuracy.notes].slice(0, MAX_NOTES);
+  const notes = [...consistency.notes, ...accuracy.notes, ...sides.notes].slice(0, MAX_NOTES);
   if (!consistency.ok && !accuracy.ok) {
     return { findings: [], notes, unavailable: true };
   }
@@ -451,7 +621,7 @@ export async function runRunQa(args: {
   // Same text on the same crop from both judges collapses to one flag.
   const seen = new Set<string>();
   const findings: RunQaFinding[] = [];
-  for (const f of [...consistency.findings, ...accuracy.findings]) {
+  for (const f of [...sides.findings, ...consistency.findings, ...accuracy.findings]) {
     const key = `${f.panel}|${f.frame}|${normalizeForCompare(f.text)}`;
     if (seen.has(key)) continue;
     seen.add(key);

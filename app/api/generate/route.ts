@@ -1061,7 +1061,6 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     )
       ? [
           "- SIDE WORDS ARE GEOMETRY, NOT VISIBILITY. INNER / INSIDE / MEDIAL / INSEAM means the side of that limb which FACES THE OTHER LIMB, on the OUTER SURFACE of the fabric, fully visible in the picture. With both legs in frame, two inner details are the pair CLOSEST TOGETHER — one each side of the gap between the legs, mirroring each other across it. The far edge of each leg, the edge nearest the edge of the picture, carries NOTHING. Check it before you finish: if the two details sit far apart, one near each outside edge of the frame, they are on the wrong sides and must be mirrored inward. OUTER / LATERAL means that far edge, and a line saying INNER never puts anything there.",
-          ...wearerSideFrameLines,
           "- CONCEALED / HIDDEN / INVISIBLE describes a FINISH, never a reason to leave something out or move it. A concealed zip is present and visible as a slim closed seam with its small pull, simply with no exposed teeth. Draw it where its line says, at the size its line says.",
           "- Where this garment places a detail differently from how such garments are usually made, THIS garment wins. An ankle zip on the outer leg, a crease down the front, a pocket where there is none: the convention is not evidence, and copying it is an invention.",
         ]
@@ -1101,6 +1100,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         : []),
       ...sidePlacementLines,
       ...(poseVariationDirective ? [poseVariationDirective] : []),
+      /* LAST, deliberately. The pose-variation directive just above carries its
+         own "hip shift slightly left" / "toe-out right foot" wording, and a
+         diffusion model weights what it read most recently. Panel 1 came back
+         with the chain on opposite hips in its two frames while this mapping
+         sat above all that; it now has the last word. */
+      ...wearerSideFrameLines,
     ].join("\n");
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
@@ -1380,6 +1385,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
           itemSpec: itemSpecText,
           itemType: String(normalizedPanelQa.itemType || ""),
+          colorName: colorRun?.name ?? "",
         },
       );
     }

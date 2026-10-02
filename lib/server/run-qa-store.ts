@@ -50,6 +50,10 @@ export type RunQaContext = {
   modelRefs: string[];
   itemSpec: string;
   itemType: string;
+  /** Operator-confirmed colourway, when this run renders one. Colour is the one
+   *  attribute the reference photographs do NOT settle — the same black cloth
+   *  reads charcoal under room light — so the judge is given the name instead. */
+  colorName: string;
 };
 
 type RunEntry = {
