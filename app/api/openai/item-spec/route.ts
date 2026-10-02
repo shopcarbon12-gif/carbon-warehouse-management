@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
       `You are a garment technologist documenting a "${itemType}" for an exact-reproduction photo shoot. Inspect EVERY reference image at maximum detail and record ONLY what is clearly visible. Never guess; list unclear items under "uncertain".`,
       "Return STRICT JSON with these keys:",
       '{ "garment_type": string, "colorway": string, "materials_texture": string, "wash_finish": string, "distressing": string,',
-      '  "hardware": string[] (each: item, count, finish/colour, exact location — buttons, rivets, zips, eyelets, snaps, buckles, D-rings),',
+      '  "hardware": string[] (each: item, count, finish/colour, exact location, AND its form in enough detail to redraw it — a chain needs its link shape, strand count, length and both attachment points; a zip needs tooth colour, pull shape and whether it sits inside or outside; buttons need size and material — buttons, rivets, zips, eyelets, snaps, buckles, D-rings, chains),',
       '  "stitching": string (thread colour(s), single/double/triple topstitch, bar tacks, decorative stitching, where),',
       '  "pockets": string[] (type, count, placement, details), "closures": string, "seams_panels": string,',
       '  "text": [{ "text": exact characters as printed (keep case, punctuation, spacing), "placement": string, "style": string, "color": string, "technique": string }] — include EVERY word, number, logo wordmark, label text, embroidery and print lettering; transcribe letter-by-letter,',

@@ -913,7 +913,7 @@ async function runPanelComplianceCheck(args: {
         "3. IDENTITY: the person is clearly a DIFFERENT individual from the MODEL refs (different face structure, ethnicity, hair colour/length, or apparent age). Minor angle, expression, or lighting differences are NOT a failure.",
         swimwearActive
           ? "4. COVERAGE: nudity or partial nudity, or exposure beyond a regular bikini / one-piece (women) or swim trunks (men). Uncovered feet are allowed for swimwear."
-          : "4. COVERAGE: nudity or partial nudity; a non-swimwear item shown without a proper top or with a bare torso; or a full-body frame where the model is plainly barefoot. FOOTWEAR EVIDENCE: before reporting barefoot, write what you actually see on the feet into \"observed\". Feet cropped out of frame, in shadow, or in dark shoes against a dark hem are NOT barefoot — if you cannot see them clearly, leave it out.",
+          : "4. COVERAGE: nudity or partial nudity — bare skin where a garment belongs. ONLY report this when you can SEE the bare skin. A crop that leaves the torso out of frame is not a bare torso; a crop that leaves the feet out of frame is not barefoot. \"Footwear not visible\", \"cannot tell\", \"the torso is not shown\" and \"appears cropped\" are NEVER failures — a crop pose is supposed to cut the body somewhere, and that somewhere is not nudity. Report barefoot only when you can see an actual naked foot, and say so in \"observed\" first.",
         "NEVER fail for background tint, gradient, shadow, vignette, slight off-centre framing, lighting or colour temperature, expression, or hand position. Put such observations in \"notes\" (short, optional) — not in \"reasons\".",
         "If uncertain about a failure, set pass=true and put the doubt in notes.",
       ].join("\n"),
@@ -1325,7 +1325,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       ...itemViewMapLines,
       ...(itemSpecText
         ? [
-            "VERIFIED ITEM SPEC (observed on the actual item photos — every line MUST appear exactly as stated, in every frame and every panel; it overrides any generic styling):",
+            "VERIFIED ITEM SPEC (read off the item photos — every line MUST appear exactly as stated, in every frame and every panel. It overrides generic styling, but NOT the ITEM INSTRUCTION above: that was written by the person holding the garment, so where the two disagree about a placement, finish or fit, the instruction wins and this line yields):",
             itemSpecText,
             "- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position — and a placement the spec calls INNER, INSIDE, HIDDEN or CONCEALED stays out of sight on BOTH sides of the body, never surfacing on the outside of the garment in any frame. Anything NOT CLEARLY VISIBLE stays plain — never invented.",
             "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",

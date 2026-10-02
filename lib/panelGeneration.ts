@@ -317,6 +317,11 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     ? `- The close-up shows the "${normalizedItemType}" only — the most detailed part of this exact item (if several items are present, the most detailed one that is still this item type).`
     : "- The close-up shows the locked item type only, at its most detailed part.";
   const closeUpCategoryRule = getCloseUpCategoryRule(lockedItemType);
+  /* A tight crop is where an under-described detail gets redesigned: the chain
+     comes back with different links, a different length, a different hanging
+     point. Copy it, do not draw it. */
+  const closeUpHardwareLine =
+    "- The close-up copies the hardware EXACTLY as the item photos show it — the same chain (same link shape, same number of strands, same length, same attachment points), the same zip pulls, the same buttons and rivets. Never a restyled, longer, shorter or differently-linked version, and never a piece of hardware the photos do not contain.";
   const legsCropLine = (pose: number) =>
     upperBodyItem
       ? upperBodyCropLockLine(pose)
@@ -345,6 +350,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
         "- RIGHT Pose 5: one close-up of this same look, ON the model — fabric on the body, never a product-only still.",
         closeUpSubjectLine,
         closeUpCategoryRule,
+        closeUpHardwareLine,
       ];
     }
     return [
@@ -376,6 +382,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       "- RIGHT Pose 6: one close-up detail of this same item, ON the model — fabric on the body, never a product-only still.",
       closeUpSubjectLine,
       closeUpCategoryRule,
+      closeUpHardwareLine,
     ];
   }
   return [
@@ -560,7 +567,10 @@ export function buildMasterPanelPrompt(args: {
     "WORN BY THE MODEL: every frame shows the garment ON the living model from the MODEL references — the model's own body inside the clothes, their legs in the trousers, their skin at the ankle and wrist. A cropped frame still contains their body. Never a flat lay, never a ghost mannequin, never an empty garment floating on the background, never a frame with no person in it.",
     `GARMENT FIDELITY: the ${itemLabel} is the exact product in the item photos — identical cut and fit (a slim fit stays slim, an oversized fit stays oversized; never lengthen, shorten, loosen or tighten it), identical colour, wash, material and texture, identical seams, stitching, pockets, hardware, closures, hems and cuffs, identical distressing in the same places, and every logo, text, print and graphic at the same size, position, colours and print effect. Never redesign, simplify, recolour, move, resize, mirror or add anything. It stays identical in both frames and across every panel of this run.`,
     ...(styleInstructions
-      ? ["STYLING INSTRUCTIONS (apply while keeping the product identical):", styleInstructions]
+      ? [
+          "ITEM INSTRUCTION — written by the person holding this garment, and therefore the highest authority on it. Where it names a placement, a finish or a fit that the VERIFIED ITEM SPEC below describes differently, THIS line wins and the spec's version of that detail is ignored:",
+          styleInstructions,
+        ]
       : []),
     swimwearActive
       ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
