@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 
+import { focusReading, sampleForFocus, type FocusVerdict } from "@/lib/size-grading/sharpness";
+
 /**
  * Carbon Studio phone-camera capture page (public, opened via QR on a phone).
  * The rear camera opens immediately at the highest resolution it offers; tap
@@ -12,7 +14,7 @@ import { useParams, useSearchParams } from "next/navigation";
  * unavailable/denied.
  */
 const MAX_PHOTOS = 6;
-type Shot = { id: string; dataUrl: string; blob: Blob };
+type Shot = { id: string; dataUrl: string; blob: Blob; focus: FocusVerdict | null };
 
 /* ImageCapture (Chrome / Android) takes a full-sensor still, which is sharper
    than a frame grabbed off the preview stream. Not in every TS lib. */
@@ -146,6 +148,37 @@ export default function ImageUploadPage() {
   }, [focusRing]);
 
   /**
+   * Live focus readout.
+   *
+   * Phones disagree about what a web page may do with the lens — Android often
+   * honours a focus point, every iPhone in Safari ignores it — so promising
+   * tap-to-focus everywhere is not something this page can keep. What it CAN
+   * do on every device is read the preview and say how sharp it is right now,
+   * which turns focus from something you hope happened into something you can
+   * watch. Sampled four times a second off the middle of the frame, where the
+   * garment is; the corners are table and floor.
+   */
+  const [liveFocus, setLiveFocus] = useState<FocusVerdict | null>(null);
+  useEffect(() => {
+    if (cam !== "live") {
+      setLiveFocus(null);
+      return;
+    }
+    let alive = true;
+    const id = setInterval(() => {
+      const v = videoRef.current;
+      if (!alive || !v?.videoWidth) return;
+      const sample = sampleForFocus(v, v.videoWidth, v.videoHeight);
+      if (!sample) return;
+      setLiveFocus(focusReading(sample.data, sample.width, sample.height).verdict);
+    }, 250);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [cam]);
+
+  /**
    * Shrink a captured photo for transport.
    *
    * The camera is still asked for its highest resolution — that is what makes
@@ -204,8 +237,23 @@ export default function ImageUploadPage() {
         r.onerror = () => res("");
         r.readAsDataURL(blob);
       });
+      /* Judge the photo that will actually be sent, not the preview it came
+         from — the shrink above is part of what the computer will measure. */
+      let focus: FocusVerdict | null = null;
+      try {
+        const img = await new Promise<HTMLImageElement>((res, rej) => {
+          const im = new Image();
+          im.onload = () => res(im);
+          im.onerror = () => rej(new Error("decode"));
+          im.src = dataUrl;
+        });
+        const sample = sampleForFocus(img, img.naturalWidth, img.naturalHeight);
+        if (sample) focus = focusReading(sample.data, sample.width, sample.height).verdict;
+      } catch {
+        /* cannot judge it here — the computer will say so when it measures */
+      }
       setShots((prev) =>
-        prev.length >= MAX_PHOTOS ? prev : [...prev, { id: `${Date.now()}-${prev.length}`, dataUrl, blob }],
+        prev.length >= MAX_PHOTOS ? prev : [...prev, { id: `${Date.now()}-${prev.length}`, dataUrl, blob, focus }],
       );
       return true;
     },
@@ -213,6 +261,36 @@ export default function ImageUploadPage() {
   );
 
   const [capturing, setCapturing] = useState(false);
+
+  /**
+   * Give the lens a moment to find the garment before the shutter.
+   *
+   * Firing takePhoto() the instant the button is pressed captures whatever the
+   * lens happened to be on, which on a phone held over a table is usually the
+   * table edge or the far wall — and a soft photo measures wrong without ever
+   * looking wrong. Where the device honours a focus point we ask for a
+   * single-shot focus at the middle (where the garment is) and wait for it;
+   * where it does not, the wait alone still lets continuous autofocus settle.
+   */
+  const settleFocus = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const caps = (track.getCapabilities?.() ?? {}) as { focusMode?: string[] };
+      const modes = caps.focusMode ?? [];
+      if (modes.includes("single-shot")) {
+        await track
+          .applyConstraints({
+            advanced: [{ focusMode: "single-shot", pointsOfInterest: [{ x: 0.5, y: 0.5 }] }] as unknown as MediaTrackConstraintSet[],
+          })
+          .catch(() => {});
+      }
+    } catch {
+      /* best effort — the wait below is the part that always helps */
+    }
+    await new Promise((r) => setTimeout(r, 900));
+  }, []);
+
   const capture = useCallback(async () => {
     const v = videoRef.current;
     if (!v || shots.length >= MAX_PHOTOS || capturing) return;
@@ -222,6 +300,7 @@ export default function ImageUploadPage() {
     }
     setCapturing(true);
     try {
+      await settleFocus();
       // Full-resolution still from the sensor when the browser offers it. Some
       // Android builds never settle takePhoto(), so it races a 4 s timeout and
       // the frame grab below takes over.
@@ -251,7 +330,7 @@ export default function ImageUploadPage() {
     } finally {
       setCapturing(false);
     }
-  }, [shots.length, capturing, pushShot]);
+  }, [shots.length, capturing, pushShot, settleFocus]);
 
   /* Photos from the camera app or the gallery. Anything that is not already
      JPEG / PNG / WebP (an iPhone's HEIC, mostly) is re-encoded to JPEG here —
@@ -348,6 +427,10 @@ export default function ImageUploadPage() {
   const btnAlt: React.CSSProperties = { ...btn, background: "#1e293b", color: "#e8eaed" };
   const full = shots.length >= MAX_PHOTOS;
   const uploading = status === "uploading";
+  /* For a measurement, lead with the phone's camera app. The in-page preview
+     cannot focus on demand on an iPhone at all, and a soft photo is not a
+     slightly worse measurement — it is a wrong one. */
+  const appFirst = purpose === "size-grading";
   /* Size Grading keeps only the session it is actively waiting on, so there is
      no Studio-style "collect them later" — if nobody is listening, the photo
      has to be sent again from a fresh code. Saying otherwise would send the
@@ -399,12 +482,46 @@ export default function ImageUploadPage() {
                   Opening camera…
                 </div>
               ) : (
-                <div style={{ position: "absolute", left: 0, right: 0, bottom: 8, textAlign: "center", fontSize: 12, opacity: 0.85, textShadow: "0 1px 3px #000", pointerEvents: "none" }}>
-                  {focusSupport === "tap"
-                    ? "Tap on screen to focus"
-                    : "Auto-focus · for tap-to-focus use the camera app button below"}
-                  {camInfo ? ` · ${camInfo}` : ""}
-                </div>
+                <>
+                  {/* Focus, as a fact rather than a hope. The operator can
+                      watch this go green before taking the photo instead of
+                      finding out on the computer that it was soft. */}
+                  {liveFocus ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        left: 8,
+                        padding: "4px 10px",
+                        borderRadius: 999,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        pointerEvents: "none",
+                        background:
+                          liveFocus === "sharp" ? "#16a34a" : liveFocus === "usable" ? "#ca8a04" : liveFocus === "flat" ? "#334155" : "#dc2626",
+                        color: "#fff",
+                      }}
+                    >
+                      {liveFocus === "sharp"
+                        ? "✓ in focus"
+                        : liveFocus === "usable"
+                          ? "nearly — hold still"
+                          : liveFocus === "flat"
+                            ? "too plain to tell"
+                            : "✗ out of focus"}
+                    </div>
+                  ) : null}
+                  <div style={{ position: "absolute", left: 0, right: 0, bottom: 8, textAlign: "center", fontSize: 12, opacity: 0.85, textShadow: "0 1px 3px #000", pointerEvents: "none" }}>
+                    {liveFocus === "soft"
+                      ? focusSupport === "tap"
+                        ? "Tap the garment to focus, wait for green"
+                        : "Move the phone back a little, then hold still"
+                      : focusSupport === "tap"
+                        ? "Tap on screen to focus"
+                        : "Auto-focus · for tap-to-focus use the camera app button below"}
+                    {camInfo ? ` · ${camInfo}` : ""}
+                  </div>
+                </>
               )}
               {focusRing ? (
                 <div
@@ -455,7 +572,38 @@ export default function ImageUploadPage() {
               {shots.map((s) => (
                 <div key={s.id} style={{ position: "relative" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={s.dataUrl} alt="shot" style={{ width: 72, height: 96, objectFit: "cover", borderRadius: 8, border: "1px solid #243040" }} />
+                  <img
+                    src={s.dataUrl}
+                    alt="shot"
+                    style={{
+                      width: 72,
+                      height: 96,
+                      objectFit: "cover",
+                      borderRadius: 8,
+                      // A soft photo is worth spotting here, where retaking it
+                      // costs one tap, rather than on the computer.
+                      border: s.focus === "soft" ? "2px solid #dc2626" : "1px solid #243040",
+                    }}
+                  />
+                  {s.focus === "soft" ? (
+                    <span
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: "#dc2626",
+                        color: "#fff",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textAlign: "center",
+                        borderRadius: "0 0 8px 8px",
+                        padding: "1px 0",
+                      }}
+                    >
+                      blurry
+                    </span>
+                  ) : null}
                   <button
                     onClick={() => removeShot(s.id)}
                     disabled={uploading}
@@ -469,6 +617,13 @@ export default function ImageUploadPage() {
             </div>
           ) : null}
           <p style={{ fontSize: 12, opacity: 0.7 }}>{shots.length}/{MAX_PHOTOS} photos</p>
+          {shots.some((s) => s.focus === "soft") ? (
+            <p style={{ fontSize: 12, color: "#f87171", textAlign: "center", maxWidth: 360, margin: 0 }}>
+              {purpose === "size-grading"
+                ? "A blurry photo cannot be measured — the outline smears and the hem reads a centimetre out. Remove it (✕) and take it again."
+                : "One photo is blurry. Remove it (✕) and take it again."}
+            </p>
+          ) : null}
 
           {/* Capture / pick. Two inputs: with `capture` the OS opens the camera
               app; without it, the gallery / file chooser. */}
@@ -489,17 +644,30 @@ export default function ImageUploadPage() {
             style={{ display: "none" }}
             onChange={(e) => { addFromPicker(e.target.files); e.target.value = ""; }}
           />
-          {cam === "live" ? (
-            <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
-              {full ? "Max 6 reached" : capturing ? "Capturing…" : "📷 Capture photo"}
-            </button>
-          ) : null}
           {/* The phone's own camera app: full sensor resolution, HDR, and
               tap-to-focus on every phone — the sharpest path where the web
-              camera cannot focus on demand (all iPhones in Safari). */}
-          <button style={cam === "live" ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
-            {full ? "Max 6 reached" : cam === "live" ? "📸 Camera app (sharpest, tap to focus there)" : "📷 Take photo"}
+              camera cannot focus on demand (all iPhones in Safari). For a
+              measurement it is the DEFAULT, not the fallback: sharpness is the
+              whole job, and this is the path that reliably delivers it. */}
+          {cam === "live" && !appFirst ? (
+            <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
+              {full ? "Max 6 reached" : capturing ? "Focusing…" : "📷 Capture photo"}
+            </button>
+          ) : null}
+          <button style={cam === "live" && !appFirst ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
+            {full
+              ? "Max 6 reached"
+              : appFirst
+                ? "📸 Take photo with the camera app"
+                : cam === "live"
+                  ? "📸 Camera app (sharpest, tap to focus there)"
+                  : "📷 Take photo"}
           </button>
+          {cam === "live" && appFirst ? (
+            <button style={btnAlt} disabled={full || capturing || uploading} onClick={() => void capture()}>
+              {full ? "Max 6 reached" : capturing ? "Focusing…" : "📷 Capture from this preview"}
+            </button>
+          ) : null}
           <button style={btnAlt} disabled={full || uploading} onClick={() => galleryInputRef.current?.click()}>
             🖼 Upload from this phone
           </button>

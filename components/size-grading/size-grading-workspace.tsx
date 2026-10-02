@@ -23,6 +23,7 @@ import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
 import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import { focusReading, type FocusReading } from "@/lib/size-grading/sharpness";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -110,6 +111,25 @@ async function canShootHere(): Promise<boolean> {
   return true;
 }
 
+/** The box the mask occupies — where focus actually has to be good. */
+function maskBounds(mask: ShirtMask) {
+  let minX = mask.width;
+  let minY = mask.height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < mask.height; y++) {
+    for (let x = 0; x < mask.width; x++) {
+      if (!mask.data[y * mask.width + x]) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
 const fmt = (cm: number) => `${cm.toFixed(1)} cm`;
 const fmtIn = (cm: number) => `${(cm / 2.54).toFixed(1)}"`;
 const signed = (cm: number) => `${cm >= 0 ? "+" : "−"}${Math.abs(cm).toFixed(1)}`;
@@ -132,6 +152,10 @@ export function SizeGradingWorkspace() {
   const [tapped, setTapped] = useState(false);
   const [result, setResult] = useState<GarmentResult | null>(null);
   const [mask, setMask] = useState<ShirtMask | null>(null);
+  /** How sharp the garment is in this photo, and whether it can be trusted. */
+  const [focus, setFocus] = useState<FocusReading | null>(null);
+  /** The operator has seen the softness warning and wants to save regardless. */
+  const [allowSoft, setAllowSoft] = useState(false);
   /** Operator's override of the detected garment, when the shape fooled it. */
   const [typeOverride, setTypeOverride] = useState<GarmentType | "">("");
   const [busy, setBusy] = useState(false);
@@ -180,6 +204,10 @@ export function SizeGradingWorkspace() {
       const m = segmentFromSeed(image.data, image.width, image.height, seed, t);
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
+      /* Focus is judged over the garment, not the frame: a sharp table behind a
+         blurred garment is still a measurement of a blur. */
+      const box = maskBounds(m);
+      setFocus(focusReading(image.data, image.width, image.height, box ?? undefined));
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
@@ -409,6 +437,8 @@ export function SizeGradingWorkspace() {
       setThreshold(null);
       setCalibPts([]);
       setSavedAt(null);
+      setFocus(null);
+      setAllowSoft(false);
     } catch {
       setError("Could not read that image.");
     }
@@ -914,20 +944,63 @@ export function SizeGradingWorkspace() {
                 </table>
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Flat measurements, taken across the garment as it lies — not doubled.
+                  {focus && focus.verdict !== "soft" ? (
+                    <>
+                      {" · "}
+                      <span
+                        className={
+                          focus.verdict === "sharp"
+                            ? "text-[var(--wms-status-success-fg)]"
+                            : "text-[var(--wms-status-warning-fg)]"
+                        }
+                      >
+                        {focus.verdict === "sharp"
+                          ? "focus sharp"
+                          : focus.verdict === "usable"
+                            ? "focus adequate"
+                            : "too plain to judge focus"}
+                      </span>
+                    </>
+                  ) : null}
                 </p>
+
+                {/* A blurred photo measures wrong in the one way nobody
+                    notices: the number still looks like a number. Saying so
+                    here, and refusing the save until it is acknowledged, is
+                    cheaper than finding it in the size chart later. */}
+                {focus?.verdict === "soft" ? (
+                  <div className="mt-3 rounded border border-[var(--wms-status-danger-fg)]/50 bg-[var(--wms-status-danger-fg)]/10 p-2">
+                    <p className="text-sm font-medium text-[var(--wms-status-danger-fg)]">
+                      This photo is out of focus — these numbers are not reliable.
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--wms-muted)]">
+                      A soft edge spreads the garment&apos;s outline over several pixels, so a hem can read a centimetre
+                      out either way. Take it again: tap the garment on the phone to focus, wait for the preview to
+                      sharpen, then shoot. The phone&apos;s own camera app focuses most reliably.
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     className="wms-btn-primary max-md:min-h-11"
-                    disabled={!pickedSize || saving}
+                    disabled={!pickedSize || saving || (focus?.verdict === "soft" && !allowSoft)}
                     onClick={() => void saveToItem()}
                     title={pickedSize ? undefined : "Choose the item and size first"}
                   >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                     {saving ? "Saving…" : "Save to item"}
                   </button>
-                  {!pickedItem ? (
+                  {focus?.verdict === "soft" && !allowSoft ? (
+                    <button
+                      type="button"
+                      className="font-mono text-xs text-[var(--wms-accent)] underline"
+                      onClick={() => setAllowSoft(true)}
+                    >
+                      save it anyway
+                    </button>
+                  ) : !pickedItem ? (
                     <span className="font-mono text-xs text-[var(--wms-muted)]">
                       Search or scan an item above to save against it.
                     </span>
