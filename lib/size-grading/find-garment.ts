@@ -50,10 +50,12 @@ export type FindInput = {
   picture: Uint8ClampedArray;
   quad: Quad;
   frame: RectFrame;
+  /** Stop after the quick model, even if its answer fails the checks — the AI will judge. */
+  quickOnly?: boolean;
 };
 
 export type FindResult =
-  | { mask: ShirtMask; by: "salience" | "segments"; cm2: number; firstTry?: string }
+  | { mask: ShirtMask; by: "salience" | "segments"; cm2: number; firstTry?: string; rejected?: string }
   | { mask: null; why: string };
 
 export type Stage = "salience" | "segments";
@@ -299,7 +301,9 @@ export async function findGarment(run: Runner, a: FindInput, onStage?: (s: Stage
   const probs = await run.salience(modelInput(src.data, src.width, src.height));
   const first = maskForMeasuring(modelOutputToMask(probs.subarray(0, S * S), src.width, src.height), src, out, { quad, frame });
   const firstWhy = notAGarment(maskShape(first, frame.pxPerCm), ring, cover);
-  if (!firstWhy) return { mask: first, by: "salience", cm2: first.area / frame.pxPerCm ** 2 };
+  if (!firstWhy || a.quickOnly) {
+    return { mask: first, by: "salience", cm2: first.area / frame.pxPerCm ** 2, ...(firstWhy ? { rejected: firstWhy } : {}) };
+  }
 
   // 2. It picked something that is not a garment: outline everything, choose.
   onStage?.("segments");

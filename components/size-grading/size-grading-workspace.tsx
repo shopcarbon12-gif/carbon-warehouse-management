@@ -27,7 +27,8 @@ import { GuidePanel } from "./guide-panel";
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
 import { findGarmentOffThread, warmUpFinder } from "@/lib/size-grading/garment-finder";
-import type { Stage as FindStage } from "@/lib/size-grading/find-garment";
+import { aiKeysFor, chooseWithAi, mergeLines, readWithAi } from "@/lib/size-grading/ai-client";
+import type { Segment } from "@/lib/size-grading/measure";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import {
@@ -167,8 +168,13 @@ export function SizeGradingWorkspace() {
      photo is never left unmeasurable because a download failed. */
   const [modelMask, setModelMask] = useState<ShirtMask | null>(null);
   const [finding, setFinding] = useState(false);
-  /** Which pass the finder is on — the second one is slow, and says so. */
-  const [findStage, setFindStage] = useState<FindStage>("salience");
+  /** Which pass the finder is on — the slow ones say so. */
+  const [findStage, setFindStage] = useState<"ai" | "salience" | "segments">("ai");
+  /* The AI's reading of this photo: its lines (snapped onto the picture), the
+     garment it saw, and how the cut-out was chosen — in words, for the status. */
+  const [aiLines, setAiLines] = useState<Partial<Record<PomKey, Segment>> | null>(null);
+  const [aiType, setAiType] = useState<GarmentType | null>(null);
+  const [findHow, setFindHow] = useState<string | null>(null);
   /** Why the finder gave up on this photo, in words — shown, not swallowed. */
   const [modelFailed, setModelFailed] = useState<string | null>(null);
   const [selectedPom, setSelectedPom] = useState<string | null>(null);
@@ -180,6 +186,10 @@ export function SizeGradingWorkspace() {
   const [typeOverride, setTypeOverride] = useState<GarmentType | "">("");
   /** What the catalogue says this product is — better than reading the shape. */
   const [catalogueType, setCatalogueType] = useState<GarmentType | null>(null);
+  const typeRef = useRef<GarmentType | null>(null);
+  useEffect(() => {
+    typeRef.current = typeOverride || catalogueType || null;
+  }, [typeOverride, catalogueType]);
   const [busy, setBusy] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibPts, setCalibPts] = useState<Point[]>([]);
@@ -198,6 +208,12 @@ export function SizeGradingWorkspace() {
      shoots one, saves it, flips the garment and shoots the other; the side is
      stored with the reading so a back rise is never filed as a front rise. */
   const [view, setView] = useState<"front" | "back">("front");
+  /* Read when a photo is sent to the AI, not watched: changing the side or the
+     type afterwards must not send the same photo again. */
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
   const [pickedItem, setPickedItem] = useState<PickedItem | null>(null);
   const [pickedSize, setPickedSize] = useState<PickedSize | null>(null);
   const [saving, setSaving] = useState(false);
@@ -256,7 +272,7 @@ export function SizeGradingWorkspace() {
          guess on a dark garment on a dark table is the table, and on a phone
          the finder takes long enough that its wrong lines were what got
          photographed and reported as the result. */
-      if (!modelMask && finding) {
+      if (!modelMask && (finding || aiLines)) {
         setMask(null);
         setResult(null);
         setFocus(null);
@@ -265,7 +281,7 @@ export function SizeGradingWorkspace() {
       }
       const m = modelMask ?? segmentGarment(image.data, image.width, image.height, seed, { bias, exclude });
       setMask(m);
-      setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
+      setResult(measureGarment(m, pxPerCm, typeOverride || aiType || undefined));
       /* Focus is judged over the garment, not the frame: a sharp table behind a
          blurred garment is still a measurement of a blur. */
       const box = maskBounds(m);
@@ -273,10 +289,10 @@ export function SizeGradingWorkspace() {
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, bias, seed, typeOverride, rectFrame, modelMask, finding]);
+  }, [image, pxPerCm, bias, seed, typeOverride, rectFrame, modelMask, finding, aiLines, aiType]);
 
   /** Every point this family is measured on, whatever the photo managed. */
-  const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
+  const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || aiType || "top") as GarmentType;
   /* Points the operator has crossed off — "I don't measure the collar on
      these". Remembered per garment family and side, so dropping the back pocket
      on jeans once means it stays dropped for every pair after. */
@@ -317,6 +333,7 @@ export function SizeGradingWorkspace() {
       setSelectedPom(null);
       return;
     }
+    const merged = mergeLines(result?.ok ? result.points : null, aiLines);
     setHandles((prev) => {
       const next: HandleMap = {};
       pomKeys.forEach((key, i) => {
@@ -328,7 +345,8 @@ export function SizeGradingWorkspace() {
           next[key] = kept;
           return;
         }
-        const line = result?.ok ? result.points[key]?.line : undefined;
+        // Each point from whichever line is reliable for it — see mergeLines.
+        const line = merged[key];
         if (line) {
           next[key] = { a: { ...line.a }, b: { ...line.b }, set: true };
           return;
@@ -344,7 +362,7 @@ export function SizeGradingWorkspace() {
       return next;
     });
     setSelectedPom((cur) => (cur && pomKeys.includes(cur as PomKey) ? cur : (pomKeys[0] ?? null)));
-  }, [image, result, pomKeys]);
+  }, [image, result, pomKeys, aiLines]);
 
   /* Find the garment the moment a photo exists. Nothing is asked of the
      operator: no tap, no sensitivity, no second button. The colour model has
@@ -364,24 +382,48 @@ export function SizeGradingWorkspace() {
     }
     let alive = true;
     setFinding(true);
-    setFindStage("salience");
+    setFindStage("ai");
+    setAiLines(null);
+    setAiType(null);
+    setFindHow(null);
     const started = performance.now();
-    findGarmentOffThread(
-      { src: { data: src.data, width: src.width, height: src.height }, picture: image.data, quad, frame: rectFrame },
-      (stage) => {
-        if (alive) setFindStage(stage);
-      },
-    )
-      .then((r) => {
+    const secs = () => ((performance.now() - started) / 1000).toFixed(1);
+    const input = { src: { data: src.data, width: src.width, height: src.height }, picture: image.data, quad, frame: rectFrame };
+    const type = typeRef.current, side = viewRef.current;
+    /* Both at once: the AI reads the photo (~10 s) while the quick model cuts
+       out its best guess (~3–6 s). The AI then judges that guess, and cuts the
+       garment out itself when the guess is the table. */
+    const quick = findGarmentOffThread({ ...input, quickOnly: true });
+    const ai = readWithAi(image, type, side, aiKeysFor(type, side, pomsFor(type ?? "top", side)));
+    void Promise.allSettled([quick, ai])
+      .then(async ([q, a]) => {
         if (!alive) return;
-        const secs = ((performance.now() - started) / 1000).toFixed(1);
-        if (r.mask) {
-          console.info(`[size-grading] garment ${Math.round(r.cm2)} cm² by ${r.by} in ${secs}s`, r.firstTry ?? "");
-          setModelMask(r.mask);
-        } else {
-          console.warn(`[size-grading] no garment after ${secs}s:`, r.why);
-          setModelFailed(r.why);
+        const quickMask = q.status === "fulfilled" && q.value.mask ? q.value.mask : null;
+        if (a.status === "fulfilled") {
+          const chosen = chooseWithAi(a.value, quickMask, image, rectFrame, src, quad);
+          const t = a.value.garment as GarmentType;
+          setAiType(["top", "trousers", "shorts", "dress", "skirt", "onepiece"].includes(t) ? t : null);
+          setAiLines(chosen.lines);
+          setFindHow(chosen.how);
+          console.info(`[size-grading] AI read "${a.value.description ?? a.value.garment}" in ${secs()}s — ${chosen.how}`);
+          if (chosen.mask) setModelMask(chosen.mask);
+          return;
         }
+        // No AI (offline, no key, timed out): the on-device finder alone, as before.
+        const why = a.reason instanceof Error ? a.reason.message : String(a.reason);
+        console.warn("[size-grading] AI unavailable:", why);
+        if (q.status === "fulfilled" && q.value.mask && !q.value.rejected) {
+          setFindHow(`the AI was unavailable (${why}); the on-device finder's cut-out passed its checks`);
+          setModelMask(q.value.mask);
+          return;
+        }
+        setFindStage("segments");
+        const r = await findGarmentOffThread(input);
+        if (!alive) return;
+        if (r.mask) {
+          setFindHow(`the AI was unavailable (${why}); found by the on-device closer look`);
+          setModelMask(r.mask);
+        } else setModelFailed(`${r.why}; and the AI was unavailable (${why})`);
       })
       .catch((e: unknown) => {
         console.error("[size-grading] finder failed:", e);
@@ -1287,12 +1329,18 @@ export function SizeGradingWorkspace() {
                 <span className="flex items-center gap-2 text-[var(--wms-muted)]">
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                   {findStage === "segments"
-                    ? "The first look picked out the table, not the garment — looking closer. This takes up to a minute on a phone…"
-                    : "Removing the background and finding the garment…"}
+                    ? "Looking closer for the garment on this device — this takes up to a minute on a phone…"
+                    : "The AI is reading the photo and finding the garment…"}
                 </span>
               ) : modelMask ? (
                 <span className="text-[var(--wms-status-success-fg)]">
-                  Background removed — garment found ({Math.round(modelMask.area / (pxPerCm ?? 1) ** 2).toLocaleString()} cm²).
+                  Garment found ({Math.round(modelMask.area / (pxPerCm ?? 1) ** 2).toLocaleString()} cm²)
+                  {findHow ? ` — ${findHow}` : ""}. Check each line and drag any that is off.
+                </span>
+              ) : aiLines ? (
+                <span className="text-[var(--wms-status-warning-fg)]">
+                  The AI placed the lines; {findHow ?? "the garment could not be cut out cleanly"}. Check each line
+                  before saving.
                 </span>
               ) : modelFailed ? (
                 <span className="text-[var(--wms-status-warning-fg)]">Background remover failed: {modelFailed}</span>
@@ -1348,7 +1396,7 @@ export function SizeGradingWorkspace() {
             ) : finding && !modelMask ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                {findStage === "segments" ? "Looking closer for the garment…" : "Removing the background…"}
+                {findStage === "segments" ? "Looking closer for the garment…" : "The AI is reading the photo…"}
               </p>
             ) : busy ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
