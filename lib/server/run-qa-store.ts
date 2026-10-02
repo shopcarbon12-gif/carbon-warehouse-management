@@ -33,6 +33,9 @@ export type RunQaFinding = {
 
 export type RunQaVerdict = {
   findings: RunQaFinding[];
+  /** Per-crop observations shown as notes: they point at a frame but never
+   *  unselect it, for checks not reliable enough to cost the operator a crop. */
+  advisories: RunQaFinding[];
   notes: string[];
   /** Neither judge committed — no verdict, not a pass. */
   unavailable: boolean;
@@ -153,7 +156,7 @@ export function startRunQa(id: string, work: () => Promise<RunQaVerdict>): Promi
   const entry: VerdictEntry = { createdAt: now, finishedAt: null, verdict: null };
   verdicts.set(id, entry);
   return work()
-    .catch((): RunQaVerdict => ({ findings: [], notes: [], unavailable: true }))
+    .catch((): RunQaVerdict => ({ findings: [], advisories: [], notes: [], unavailable: true }))
     .then((verdict) => {
       entry.verdict = verdict;
       entry.finishedAt = Date.now();

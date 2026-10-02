@@ -390,7 +390,7 @@ async function panelResponseToCrops(
 }
 
 type RunQaFinding = { panel: number; frame: "left" | "right" | "both"; text: string };
-type RunQaVerdict = { findings: RunQaFinding[]; notes: string[]; unavailable: boolean };
+type RunQaVerdict = { findings: RunQaFinding[]; advisories: RunQaFinding[]; notes: string[]; unavailable: boolean };
 
 /**
  * Start the run-level judges and wait for their verdict.
@@ -419,7 +419,19 @@ async function collectRunQa(runId: string, apply: (v: RunQaVerdict | null) => vo
         const j = (await r.json().catch(() => ({}))) as { status?: string } & Record<string, unknown>;
         if (j.status === "done") {
           const rows = Array.isArray(j.findings) ? (j.findings as unknown[]) : [];
+          const adv = Array.isArray(j.advisories) ? (j.advisories as unknown[]) : [];
+          const toFinding = (row: unknown): RunQaFinding | null => {
+            const r = row as Record<string, unknown>;
+            if (!r || typeof r !== "object") return null;
+            const f: RunQaFinding = {
+              panel: Number(r.panel) || 0,
+              frame: r.frame === "left" ? "left" : r.frame === "right" ? "right" : "both",
+              text: String(r.text ?? "").trim(),
+            };
+            return f.text && f.panel > 0 ? f : null;
+          };
           return apply({
+            advisories: adv.map(toFinding).filter((f): f is RunQaFinding => f !== null),
             findings: rows
               .map((row) => row as Record<string, unknown>)
               .filter((row) => row && typeof row === "object")
@@ -1489,8 +1501,12 @@ export function CarbonStudioTab({
                 .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
                 .map((f) => f.text);
               const warnings = mine.length ? mine : undefined;
+              const advice = v.advisories
+                .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
+                .map((f) => f.text);
               const notes = [
                 ...(c.qaNotes ?? []),
+                ...advice,
                 ...v.notes,
                 ...(v.unavailable ? ["The checks were inconclusive — this crop was not verified."] : []),
               ];
@@ -1576,8 +1592,12 @@ export function CarbonStudioTab({
                   .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
                   .map((f) => f.text);
                 const warnings = mine.length ? mine : undefined;
+                const advice = v.advisories
+                  .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
+                  .map((f) => f.text);
                 const notes = [
                   ...(c.qaNotes ?? []),
+                  ...advice,
                   ...v.notes,
                   ...(v.unavailable ? ["The checks were inconclusive — this crop was not verified."] : []),
                 ];

@@ -259,11 +259,14 @@ async function runSideAudit(args: {
        end. So it points, and the operator looks. Promote it to a finding only
        once it has been measured against real runs and earns it. */
     for (const w of wrong) {
-      notes.push(
-        `Worth a look: in P${w.panel}${w.frame === "left" ? "L" : "R"} the ${detail.what} may be on the wearer's ${
-          w.side
-        }, where the spec says the wearer's ${detail.side}. This check misreads a frame often enough that it only points.`,
-      );
+      findings.push({
+        panel: w.panel,
+        frame: w.frame,
+        text: `Worth a look: the ${detail.what} may be on the wearer's ${w.side} here, where the spec says the wearer's ${detail.side}.`.slice(
+          0,
+          240,
+        ),
+      });
     }
   }
   return { findings, notes, ok: true };
@@ -352,10 +355,7 @@ async function runConsistencyCheck(args: {
         "- Pose, stance, expression, hand position, which way the model faces.",
         "- A hanging part — a chain, drawcord, strap or tie — swinging, lying at a different angle, or catching the light differently. Same object, different moment, is the same object.",
         "- A part of the garment being seen from the front in one frame and from the back in another.",
-        "",
-        "BUT A DETAIL THAT CHANGES WHICH SIDE OF THE BODY IT IS ON *IS* AN INCONSISTENCY, AND IT IS THE ONE PEOPLE NOTICE MOST.",
-        "A chain hangs from one hip. A pocket, a logo, a vent, a buckle sits on one side. Across the run it must stay on that same side of the BODY. Work out which side of the body it is on in each frame before you compare: in a frame where the model FACES the camera, the model's left is on the RIGHT of the picture; in a frame shot from BEHIND, the model's left is on the LEFT of the picture. A detail that is on the model's left hip in one frame and the model's right hip in another is a real fault — report it, under the attribute \"side\", and list the frames that are in the minority.",
-        "Swinging is not switching: judge which HIP it hangs from, not where the loose end has swung to.",
+        "- WHICH SIDE OF THE BODY ANYTHING IS ON. Say nothing about left or right, ever. A chain, pocket, logo or vent that looks like it moved sides is NOT yours to report: a frame shot from behind reverses everything, and working that out from a picture is a separate check that does the arithmetic properly. Report colour, shape, style and presence. Never side.",
         "",
         "A FRAME THAT DOES NOT SHOW AN ATTRIBUTE SIMPLY DOES NOT VOTE ON IT.",
         "If the feet are out of shot, that frame says nothing about footwear — it does not disagree with anything.",
@@ -610,7 +610,7 @@ export async function runRunQa(args: {
 
   const notes = [...consistency.notes, ...accuracy.notes, ...sides.notes].slice(0, MAX_NOTES);
   if (!consistency.ok && !accuracy.ok) {
-    return { findings: [], notes, unavailable: true };
+    return { findings: [], advisories: [], notes, unavailable: true };
   }
   if (!consistency.ok && wantConsistency) {
     notes.unshift("The consistency check did not report back — these crops were compared against the references only.");
@@ -621,11 +621,22 @@ export async function runRunQa(args: {
   // Same text on the same crop from both judges collapses to one flag.
   const seen = new Set<string>();
   const findings: RunQaFinding[] = [];
-  for (const f of [...sides.findings, ...consistency.findings, ...accuracy.findings]) {
+  /* Side is owned by the side audit alone, which asks only what a camera can
+     answer and mirrors in code. A back-facing frame reverses everything, and
+     the consistency judge read Pose 4 — deliberately a back view — as the chain
+     having swapped hips, and failed a correct crop for it. Anything it says
+     about sides is dropped here even when it ignores being told not to. */
+  const SIDE_TALK = /\b(side|left|right|hip)\b/i;
+  for (const f of [...consistency.findings.filter((f) => !SIDE_TALK.test(f.text)), ...accuracy.findings]) {
     const key = `${f.panel}|${f.frame}|${normalizeForCompare(f.text)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     findings.push(f);
   }
-  return { findings, notes: notes.slice(0, MAX_NOTES), unavailable: false };
+  return {
+    findings,
+    advisories: sides.findings.slice(0, MAX_FINDINGS),
+    notes: notes.slice(0, MAX_NOTES),
+    unavailable: false,
+  };
 }
