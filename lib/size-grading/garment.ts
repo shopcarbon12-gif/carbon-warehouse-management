@@ -128,7 +128,7 @@ export const POMS_FOR: Record<GarmentType, PomKey[]> = {
   ],
   shorts: [
     "waist", "hip", "thigh", "legOpening", "inseam", "outseam", "rise",
-    "waistbandHeight", "frontPocketOpening",
+    "waistbandHeight", "frontPocketOpening", "backPocketWidth", "backPocketLength",
   ],
   dress: [
     "chest", "waist", "hip", "hem", "length", "shoulder", "armhole",
@@ -143,6 +143,24 @@ export const POMS_FOR: Record<GarmentType, PomKey[]> = {
     "inseam", "thigh", "legOpening", "rise", "neck", "neckDrop",
   ],
 };
+
+/* Points that exist on only one side. A front pocket is not on the back of a
+   pair of jeans, and offering it there — which is what happened — asks the
+   operator to measure something they cannot see. */
+const FRONT_ONLY: ReadonlySet<string> = new Set(["frontPocketOpening"]);
+const BACK_ONLY: ReadonlySet<string> = new Set(["backPocketWidth", "backPocketLength"]);
+
+/**
+ * The points for one side of one garment, in guide order.
+ *
+ * The order is a contract with the pictures in public/size-grading/guide/: the
+ * Nth point here is the circle numbered N on that garment's picture for that
+ * side. Change this order and the guide stops matching the screen, so change the
+ * pictures with it.
+ */
+export function pomsFor(type: GarmentType, view: "front" | "back"): PomKey[] {
+  return POMS_FOR[type].filter((k) => (view === "front" ? !BACK_ONLY.has(k) : !FRONT_ONLY.has(k)));
+}
 
 export type Classification = {
   type: GarmentType;

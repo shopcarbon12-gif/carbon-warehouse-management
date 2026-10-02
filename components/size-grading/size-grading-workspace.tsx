@@ -22,6 +22,7 @@ import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload 
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 import { MeasurePoints, type HandleMap } from "./measure-points";
+import { GuidePanel } from "./guide-panel";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
@@ -32,6 +33,7 @@ import { TARGET, detectTarget, rectify, type Quad, type TargetDetection } from "
 import {
   GARMENT_LABELS,
   POMS_FOR,
+  pomsFor,
   pomLabel,
   measureGarment,
   type GarmentResult,
@@ -139,15 +141,16 @@ function maskBounds(mask: ShirtMask) {
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+/* The exact colours the guide pictures were drawn in, so a line on the photo is
+   the same colour as the same line on the "how to measure" picture beside it. */
 const POM_COLOR: Record<string, string> = {
-  chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
-  hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
-  sleeveInseam: "#fb923c", bicep: "#fbbf24", cuff: "#f472b6", armhole: "#c084fc",
-  inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#ec4899", rise: "#a855f7",
-  thigh: "#2dd4bf", knee: "#38bdf8", calf: "#818cf8",
-  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#a5b4fc",
-  shoulderSlope: "#fcd34d", waistbandHeight: "#f9a8d4",
-  frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5", backPocketLength: "#f87171",
+  chest: "#facc15", waist: "#a855f7", hip: "#22d3ee", length: "#3b82f6", hem: "#f43f5e",
+  shoulder: "#22c55e", sleeve: "#8b5cf6", sleeveInseam: "#fb923c", bicep: "#f59e0b",
+  cuff: "#f472b6", armhole: "#f97316", inseam: "#22c55e", outseam: "#3b82f6",
+  legOpening: "#f43f5e", rise: "#f472b6", thigh: "#06b6d4", knee: "#a78bfa", calf: "#818cf8",
+  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#bfdbfe", shoulderSlope: "#fde047",
+  waistbandHeight: "#f9a8d4", frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5",
+  backPocketLength: "#ef4444",
 };
 const colorForPom = (key: string) => POM_COLOR[key] ?? "#38bdf8";
 
@@ -273,7 +276,35 @@ export function SizeGradingWorkspace() {
 
   /** Every point this family is measured on, whatever the photo managed. */
   const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
-  const pomKeys = useMemo(() => [...POMS_FOR[activeType]], [activeType]);
+  /* Points the operator has crossed off — "I don't measure the collar on
+     these". Remembered per garment family and side, so dropping the back pocket
+     on jeans once means it stays dropped for every pair after. */
+  const dropKey = `wms.sizeGrading.dropped.${activeType}.${view}`;
+  const [dropped, setDropped] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(dropKey);
+      setDropped(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      setDropped([]);
+    }
+  }, [dropKey]);
+  const setDroppedSaved = useCallback(
+    (next: string[]) => {
+      setDropped(next);
+      try {
+        window.localStorage.setItem(dropKey, JSON.stringify(next));
+      } catch {
+        /* storage blocked — the choice holds for this session only */
+      }
+    },
+    [dropKey],
+  );
+
+  /** This side's points, in guide order — the Nth one is circle N on the picture. */
+  const sidePoms = useMemo(() => pomsFor(activeType, view), [activeType, view]);
+  const pomKeys = useMemo(() => sidePoms.filter((k) => !dropped.includes(k)), [sidePoms, dropped]);
+  const guideNumber = useCallback((key: string) => sidePoms.indexOf(key as PomKey) + 1, [sidePoms]);
 
   /* Seed the ends from what the photo found, and give everything else a
      sensible place to be dragged from. A point with no proposal — a neck
@@ -1387,19 +1418,23 @@ export function SizeGradingWorkspace() {
                     const cm = h?.set ? cmOf(key) : null;
                     const active = selectedPom === key;
                     return (
-                      <li key={key}>
+                      <li key={key} className="flex items-center">
                         <button
                           type="button"
                           onClick={() => setSelectedPom(key)}
-                          className={`flex w-full items-center gap-2 py-1.5 text-left text-sm max-md:min-h-11 ${
+                          className={`flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left text-sm max-md:min-h-11 ${
                             active ? "bg-[var(--wms-surface-elevated)]" : ""
                           }`}
                         >
+                          {/* The same number, in the same colour, as on the
+                              guide picture for this garment and side. */}
                           <span
                             aria-hidden
-                            className="h-3 w-3 shrink-0 rounded-full"
-                            style={{ background: colorForPom(key), opacity: cm ? 1 : 0.3 }}
-                          />
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[0.62rem] font-bold text-black"
+                            style={{ background: colorForPom(key), opacity: cm ? 1 : 0.45 }}
+                          >
+                            {guideNumber(key)}
+                          </span>
                           <span className={`min-w-0 flex-1 truncate ${active ? "font-semibold text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"}`}>
                             {pomLabel(key, view)}
                           </span>
@@ -1414,14 +1449,43 @@ export function SizeGradingWorkspace() {
                             <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">place it</span>
                           )}
                         </button>
+                        <button
+                          type="button"
+                          aria-label={`Don't measure ${pomLabel(key, view)}`}
+                          title="Don't measure this point"
+                          onClick={() => {
+                            setDroppedSaved([...dropped, key]);
+                            if (selectedPom === key) setSelectedPom(null);
+                          }}
+                          className="shrink-0 px-2 text-[var(--wms-muted)] hover:text-[var(--wms-status-danger-fg)] max-md:min-h-11"
+                        >
+                          ✕
+                        </button>
                       </li>
                     );
                   })}
                 </ul>
+                {dropped.length ? (
+                  <p className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+                    Not measuring:
+                    {dropped.map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setDroppedSaved(dropped.filter((k) => k !== key))}
+                        className="rounded border border-[var(--wms-border)] px-1.5 py-0.5 text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
+                        title="Measure this again"
+                      >
+                        + {pomLabel(key, view)}
+                      </button>
+                    ))}
+                  </p>
+                ) : null}
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Drag either end of the highlighted line on the photo. The number follows as you drag, and a
-                  magnifier shows what is under your finger.
+                  magnifier shows what is under your finger. ✕ drops a point you don&apos;t measure.
                 </p>
+                <GuidePanel type={activeType} view={view} category={pickedItem?.subcategory ?? pickedItem?.category} />
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Flat measurements, taken across the garment as it lies — not doubled.
                   {focus && focus.verdict !== "soft" ? (

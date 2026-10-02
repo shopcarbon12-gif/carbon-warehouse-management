@@ -29,7 +29,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
-import { GARMENT_LABELS, POMS_FOR, POM_SOURCE, pomLabel, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
+import { GARMENT_LABELS, POM_SOURCE, pomLabel, pomsFor, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 
 type Measurement = {
@@ -136,13 +136,11 @@ export function SizeGradingSection({
       : fromCatalogue?.kind === "garment"
         ? fromCatalogue.type
         : "top";
-  /* The family's own points, plus anything already stored that is not in that
-     list — so a reading taken before a family changed is still shown and still
-     editable, rather than silently dropped. */
-  const keys: string[] = [
-    ...POMS_FOR[type],
-    ...Object.keys(draft).filter((k) => !(POMS_FOR[type] as string[]).includes(k)),
-  ];
+  /* This side's points only — the back of a pair of jeans has no front pocket.
+     Anything already stored that is not in the list is still shown, so a
+     reading taken under an older list is never silently dropped. */
+  const sideKeys = pomsFor(type, side) as string[];
+  const keys: string[] = [...sideKeys, ...Object.keys(draft).filter((k) => !sideKeys.includes(k))];
 
   /* Switching side swaps which reading is being edited. Done here rather than
      in the click handler so an unsaved edit on one side cannot leak onto the
