@@ -919,11 +919,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         )
         .join("\n");
     const sideWordSource = `${itemSpecText}\n${typeof prompt === "string" ? prompt : ""}`;
-    const sidePlacementLines = /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible)\b/i.test(
+    const sidePlacementLines = /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible|left|right)\b/i.test(
       sideWordSource,
     )
       ? [
           "- SIDE WORDS ARE GEOMETRY, NOT VISIBILITY. INNER / INSIDE / MEDIAL / INSEAM means the side of that limb which FACES THE OTHER LIMB, on the OUTER SURFACE of the fabric, fully visible in the picture. With both legs in frame, two inner details are the pair CLOSEST TOGETHER — one each side of the gap between the legs, mirroring each other across it. The far edge of each leg, the edge nearest the edge of the picture, carries NOTHING. Check it before you finish: if the two details sit far apart, one near each outside edge of the frame, they are on the wrong sides and must be mirrored inward. OUTER / LATERAL means that far edge, and a line saying INNER never puts anything there.",
+          "- LEFT AND RIGHT BELONG TO THE MODEL, NEVER TO THE CAMERA. \"Wearer's left\", or a bare \"left\" in any line above, means the side of the model's own body — their left hand, their left hip. In a frame where the model FACES the camera this appears on the RIGHT of the picture, and the model's right appears on the LEFT of the picture; in a frame shot from BEHIND the two agree. So a chain on the wearer's left hip hangs on the right-hand side of a front-facing frame and on the left-hand side of a back-facing frame, and it stays on that same hip in every frame of the run. Never mirror a detail from one frame to the next.",
           "- CONCEALED / HIDDEN / INVISIBLE describes a FINISH, never a reason to leave something out or move it. A concealed zip is present and visible as a slim closed seam with its small pull, simply with no exposed teeth. Draw it where its line says, at the size its line says.",
           "- Where this garment places a detail differently from how such garments are usually made, THIS garment wins. An ankle zip on the outer leg, a crease down the front, a pocket where there is none: the convention is not evidence, and copying it is an invention.",
         ]

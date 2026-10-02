@@ -43,6 +43,35 @@ const NONE = /^(none|no\b|n\/a|nothing|not (visible|applicable|present|apparent)
 type TextItem = { text?: string; placement?: string; style?: string; color?: string; technique?: string };
 type GraphicItem = { description?: string; placement?: string; colors?: string; technique?: string; finish?: string; size?: string };
 
+/**
+ * Turn the side of the PHOTOGRAPH into the side of the BODY.
+ *
+ * A front view is a mirror: the wearer's right hip is on the left of the
+ * picture. Asked to make that conversion itself, the vision model got it
+ * backwards even when handed this exact case as a worked example — it read the
+ * chain on the right of a front photo and called it the wearer's right hip,
+ * when the photo shows it on the wearer's LEFT. So the model is now asked only
+ * for what it can see ("image-left" / "image-right") and the mirror is applied
+ * here, where it is arithmetic rather than spatial reasoning.
+ *
+ * The view comes from whichever of front/back appears FIRST in the line, since
+ * every placement is written as "front, …" or "back, …"; a line that names
+ * neither is treated as a front view, which is what the overwhelming majority
+ * of placements are.
+ */
+export function resolveWearerSide(line: string): string {
+  if (!/\bimage-(left|right)\b/i.test(line)) return line;
+  const front = line.search(/\bfront\b/i);
+  const back = line.search(/\bback\b/i);
+  const isBack = back >= 0 && (front < 0 || back < front);
+  return line.replace(/\bimage-(left|right)\b/gi, (_m, side: string) => {
+    const left = side.toLowerCase() === "left";
+    // Back view: picture and body agree. Front view: they are mirrored.
+    const wearer = isBack ? (left ? "left" : "right") : left ? "right" : "left";
+    return `the wearer's ${wearer}`;
+  });
+}
+
 /** "technique / finish" suffix for graphic-type lines (omits unknowns). */
 function applied(g: { technique?: string; finish?: string }): string {
   const t = text(g?.technique);
@@ -60,7 +89,7 @@ function applied(g: { technique?: string; finish?: string }): string {
 export function buildLockText(spec: any): string {
   const lines: string[] = [];
   const push = (s: string) => {
-    const t = s.replace(/\s+/g, " ").trim();
+    const t = resolveWearerSide(s.replace(/\s+/g, " ").trim());
     if (t) lines.push(t.length > 220 ? `${t.slice(0, 217)}…` : t);
   };
   const g = text(spec?.garment_type);
@@ -153,7 +182,8 @@ export function buildSpecInstruction(itemType: string, sortedViews: boolean): st
     '  "trims_hems_cuffs_collar": string, "fit_silhouette": string, "other_details": string[], "uncertain": string[],',
     '  "back_state": "not_photographed" | "plain" | "design" — not_photographed when NO image shows the back of the garment; plain when a back view (a BACK-labelled image, or an unmistakable back view) shows the back carries no print, text, graphic, logo or patch; design when a back view shows something on the back,',
     '  "back_view": string — for "design": a short description of everything on the back (each element must also appear in text / logos_icons / graphics_prints with placement "back, …"); for "plain": "plain"; for "not_photographed": "not photographed" }',
-    'PLACEMENT must always name the SIDE and zone: e.g. "front, right shoulder near collar", "back, lower centre", "left sleeve". Text that appears on more than one side gets one entry per side. STYLE must describe the print EFFECT when present: motion-blur / ghosted edges, faded, gradient, halftone, cracked / distressed, outline, 3D / shadowed, italic / bold / condensed, letter-spacing.',
+    'PLACEMENT must always name the SIDE and zone: e.g. "front, image-right shoulder near collar", "back, lower centre", "front, image-left sleeve". Every placement starts with "front, " or "back, " so the mirror can be resolved. Text that appears on more than one side gets one entry per side. STYLE must describe the print EFFECT when present: motion-blur / ghosted edges, faded, gradient, halftone, cracked / distressed, outline, 3D / shadowed, italic / bold / condensed, letter-spacing.',
+    'NEVER WRITE A BARE "LEFT" OR "RIGHT", AND NEVER WORK OUT WHICH SIDE OF THE BODY A DETAIL IS ON. Report only what you can see: write "image-left" or "image-right", meaning the side of the PHOTOGRAPH the detail appears on, e.g. "front, image-right near the waistband". Converting that to the wearer\'s left or right is a mirror, it is done for you afterwards in code, and every attempt to do it here has come out backwards and put the detail on the wrong hip in every picture generated from it. Describe the picture; leave the mirror alone. (Centre, upper, lower, hem, cuff, collar and so on stay exactly as they are — only the words left and right are affected.)',
     'FIT_SILHOUETTE must be specific: oversized / boxy / drop-shoulder / relaxed / regular / slim / cropped / longline, sleeve length and shape, body length, hem shape, neckline (crew / V / ribbed collar width).',
     'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
     'A PLAIN ZONE MUST STILL BE DESCRIBED. Write "flat, no pressed crease, no pleat" or "plain, no stripe or tape" or "none" rather than leaving the zone out. A zone you do not mention is a zone the image generator will fill in with whatever that kind of garment usually has — a crease down a trouser leg, a chest pocket on a shirt — so saying a zone is empty is as valuable as describing a busy one. Never write a zone you cannot see; put that under "uncertain" instead.',
