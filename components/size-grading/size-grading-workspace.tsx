@@ -1092,7 +1092,7 @@ export function SizeGradingWorkspace() {
                 No calibration target in this photo.{" "}
                 {calibRatio
                   ? "Falling back to the calibration saved on this device — the scale is only right if the camera is the same distance away as when you calibrated, and any tilt is uncorrected."
-                  : "Nothing can be measured until there is either a target in frame or a calibration."}
+                  : "You can still place the measurement lines, but there is no way to turn them into centimetres: a photo carries no sense of size, so the printed target has to be in the frame. Put it beside the garment and shoot again, or tap its four corners below if it IS in the photo and was missed."}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
@@ -1232,7 +1232,7 @@ export function SizeGradingWorkspace() {
               onClick={onCanvasClick}
               className="block h-auto w-full cursor-crosshair"
             />
-          ) : image && pxPerCm ? (
+          ) : image ? (
             /* The measurement is the thing on screen now — no mask, no
                sensitivity. Drag either end of a line and the number follows. */
             <MeasurePoints
@@ -1246,8 +1246,6 @@ export function SizeGradingWorkspace() {
               onSelect={setSelectedPom}
               onChange={(key, next) => setHandles((h) => ({ ...h, [key]: next }))}
             />
-          ) : image ? (
-            <canvas ref={canvasRef} className="block h-auto w-full" />
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--wms-muted)]">
               <Camera className="h-8 w-8" />
@@ -1352,6 +1350,8 @@ export function SizeGradingWorkspace() {
                               <span className="font-mono text-[var(--wms-fg)]">{fmtIn(cm)}</span>
                               <span className="w-16 text-right font-mono text-xs text-[var(--wms-muted)]">{fmt(cm)}</span>
                             </>
+                          ) : h?.set && !pxPerCm ? (
+                            <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">needs scale</span>
                           ) : (
                             <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">place it</span>
                           )}

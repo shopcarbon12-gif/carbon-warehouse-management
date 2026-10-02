@@ -57,7 +57,8 @@ export function MeasurePoints({
   onChange,
 }: {
   image: ImageData;
-  pxPerCm: number;
+  /** null until the target is found or a calibration exists. */
+  pxPerCm: number | null;
   keys: string[];
   labelFor: (key: string) => string;
   colorFor: (key: string) => string;
@@ -138,10 +139,14 @@ export function MeasurePoints({
       }
 
       // The number, where it cannot sit under the finger.
-      const cm = Math.hypot(hv.b.x - hv.a.x, hv.b.y - hv.a.y) / pxPerCm;
-      // The name as well as the number: with fourteen points on a tee, "52.0 cm"
-      // alone does not say which one you are looking at.
-      const text = `${labelFor(selected)}   ${(cm / 2.54).toFixed(1)}"  ·  ${cm.toFixed(1)} cm`;
+      /* Points can always be placed; turning them into centimetres needs a
+         scale. Without one the line still works and says so, rather than the
+         whole editor refusing to appear — which is what it used to do, and it
+         left an untouchable photo on screen with no explanation. */
+      const px = Math.hypot(hv.b.x - hv.a.x, hv.b.y - hv.a.y);
+      const text = pxPerCm
+        ? `${labelFor(selected)}   ${(px / pxPerCm / 2.54).toFixed(1)}"  ·  ${(px / pxPerCm).toFixed(1)} cm`
+        : `${labelFor(selected)}   no scale yet`;
       const mx = (hv.a.x + hv.b.x) / 2;
       const my = (hv.a.y + hv.b.y) / 2;
       const tw = ctx.measureText(text).width;
