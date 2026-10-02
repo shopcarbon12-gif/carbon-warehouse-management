@@ -40,17 +40,24 @@ import {
 
 /**
  * References whose size is fixed by standard, so staff do not have to measure
- * the thing they calibrate with. A bank card is the one everybody has on them;
- * ISO/IEC 7810 ID-1 fixes it at 85.60 × 53.98 mm and every card follows it.
+ * the thing they calibrate with.
  *
- * Bigger is more accurate: the same one-pixel slip in a tap is a smaller share
- * of a long edge. That is why the card's long edge is offered and the short
- * edge is a last resort, and why A4 is still here for a fixed photo station.
+ * US Letter first, because that is the paper in the building — 8.5 × 11 in,
+ * exactly 21.59 × 27.94 cm. A4 is not offered: it is not what a Florida
+ * warehouse has to hand, and a sheet assumed to be A4 that is actually Letter
+ * reads 6% long and quietly inflates every measurement taken afterwards.
+ *
+ * The bank card stays as the no-paper fallback — ISO/IEC 7810 ID-1 fixes every
+ * credit and debit card at 85.60 × 53.98 mm.
+ *
+ * Ordered by accuracy: the same one-pixel slip when tapping is a smaller share
+ * of a longer edge, so the long edge of a sheet beats the short edge of a card
+ * by a wide margin.
  */
 const CALIB_PRESETS: Array<{ id: string; label: string; cm: number; note: string }> = [
-  { id: "card-long", label: "Bank card — long edge", cm: 8.56, note: "any credit/debit card" },
-  { id: "a4-long", label: "A4 sheet — long edge", cm: 29.7, note: "most accurate" },
-  { id: "a4-short", label: "A4 sheet — short edge", cm: 21.0, note: "" },
+  { id: "letter-long", label: "US Letter — long edge (11 in)", cm: 27.94, note: "most accurate" },
+  { id: "letter-short", label: "US Letter — short edge (8.5 in)", cm: 21.59, note: "" },
+  { id: "card-long", label: "Bank card — long edge", cm: 8.56, note: "no paper to hand" },
   { id: "card-short", label: "Bank card — short edge", cm: 5.4, note: "least accurate" },
   { id: "custom", label: "Something else…", cm: 0, note: "type the length" },
 ];
@@ -96,8 +103,8 @@ export function SizeGradingWorkspace() {
   const [busy, setBusy] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibPts, setCalibPts] = useState<Point[]>([]);
-  const [refLengthCm, setRefLengthCm] = useState("8.56");
-  const [calibPreset, setCalibPreset] = useState("card-long");
+  const [refLengthCm, setRefLengthCm] = useState("27.94");
+  const [calibPreset, setCalibPreset] = useState("letter-long");
   const [cameraOpen, setCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -497,7 +504,10 @@ export function SizeGradingWorkspace() {
                 Shoot straight down with the whole garment in frame. Sleeves out away from the body; trousers and
                 shorts with a clear gap between the legs.
               </p>
-              <p>To calibrate, put a bank card flat beside the garment and tap its two long-edge corners.</p>
+              <p>
+                To calibrate, lay a sheet of US Letter paper flat beside the garment and tap the two ends of its long
+                (11 in) edge. A bank card works when there is no paper, but is less accurate.
+              </p>
             </div>
           )}
         </div>
