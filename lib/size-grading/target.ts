@@ -130,6 +130,8 @@ export function detectTarget(
   rgba: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
+  /** Collects every sizeable candidate and the reason it was kept or rejected. */
+  trace?: TargetCandidate[],
 ): TargetDetection | null {
   /* Work at up to 1200 px on the long edge. The app's own working image is
      1000 px, so in practice there is no downscale at all and no precision is
@@ -178,15 +180,30 @@ export function detectTarget(
    * on the wrong side of the line. Sweeping a handful of thresholds and keeping
    * whichever produces the best-scoring ring costs a few passes over a small
    * image and removes a whole class of "it just doesn't find it". */
-  const thresholds = candidateThresholds(small);
   let best: { det: TargetDetection; score: number } | null = null;
-  for (const t of thresholds) {
-    const found = detectAtThreshold(small, w, h, t, scale);
+  const consider = (found: { det: TargetDetection; score: number } | null) => {
     if (found && (!best || found.score > best.score)) best = found;
-    // A confident find is not going to be beaten by another threshold.
-    if (best && best.score > 0.88) break;
+  };
+  const long = Math.max(w, h);
+  /* Adaptive first — it is the cut that survives a grey print and a dark table.
+     Two window sizes, because the window has to be wider than the ring is thick
+     and the ring's size in pixels depends on how far away the phone was. The
+     trace threshold is reported as negative so a diagnosis can tell them apart. */
+  for (const win of [Math.round(long / 12), Math.round(long / 24)]) {
+    for (const offset of [12, 24]) {
+      consider(detectAtThreshold(small, w, h, -win, scale, trace, adaptiveInk(small, w, h, win, offset)));
+      if (best && (best as { score: number }).score > 0.88 && !trace) return (best as { det: TargetDetection }).det;
+    }
   }
-  return best?.det ?? null;
+  /* Then global cuts: a fixed ladder across the mid-tones — so a threshold
+     between a grey ring and white paper is always tried, whatever the rest of
+     the picture looks like — plus the picture's own Otsu and percentiles. */
+  const ladder = [60, 90, 120, 150, 180];
+  for (const t of [...new Set([...ladder, ...candidateThresholds(small)])].sort((a, b) => a - b)) {
+    consider(detectAtThreshold(small, w, h, t, scale, trace));
+    if (best && (best as { score: number }).score > 0.88 && !trace) break;
+  }
+  return (best as { det: TargetDetection; score: number } | null)?.det ?? null;
 }
 
 /** Otsu, plus a spread of percentile cuts around it. */
@@ -207,21 +224,112 @@ function candidateThresholds(gray: Uint8Array): number[] {
   return [...out].filter((t) => t > 4 && t < 250).sort((a, b) => a - b);
 }
 
+/** One candidate the detector looked at, and what it decided — for diagnosis. */
+export type TargetCandidate = {
+  threshold: number;
+  box: { x: number; y: number; w: number; h: number };
+  fill: number;
+  holeFraction?: number;
+  aspectErr?: number;
+  verdict: string;
+};
+
+/** Dilate then erode with a square of radius r — bridges gaps narrower than 2r. */
+function closeMask(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const pass = (a: Uint8Array, keep: 0 | 1): Uint8Array => {
+    // Separable: rows then columns. keep=1 dilates (any set), keep=0 erodes (all set).
+    const tmp = new Uint8Array(a.length);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let v = keep === 1 ? 0 : 1;
+        for (let d = -r; d <= r; d++) {
+          const xx = x + d;
+          const on = xx >= 0 && xx < w ? a[y * w + xx] : keep === 1 ? 0 : 1;
+          if (keep === 1 ? on : !on) { v = keep; break; }
+        }
+        tmp[y * w + x] = v;
+      }
+    }
+    const out = new Uint8Array(a.length);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let v = keep === 1 ? 0 : 1;
+        for (let d = -r; d <= r; d++) {
+          const yy = y + d;
+          const on = yy >= 0 && yy < h ? tmp[yy * w + x] : keep === 1 ? 0 : 1;
+          if (keep === 1 ? on : !on) { v = keep; break; }
+        }
+        out[y * w + x] = v;
+      }
+    }
+    return out;
+  };
+  return pass(pass(src, 1), 0);
+}
+
+/** A global cut: every pixel darker than t is ink. */
+function globalInk(small: Uint8Array, t: number): Uint8Array {
+  const dark = new Uint8Array(small.length);
+  for (let i = 0; i < small.length; i++) if (small[i] < t) dark[i] = 1;
+  return dark;
+}
+
+/**
+ * An adaptive cut: a pixel is ink when it is darker than its own neighbourhood.
+ *
+ * This is the one that finds a badly printed target. The operator's printer put
+ * the "black" ring down as grey 118, on a table photographed at 23 — and a
+ * global threshold chosen from the whole picture's brightness lands below 115
+ * every time, because the table is most of the picture, so the ring never once
+ * counted as ink. Judged against its surroundings instead, a grey ring on white
+ * paper is plainly darker than what is around it, while a large uniformly dark
+ * table is not darker than itself and drops out entirely. That is exactly the
+ * separation wanted, and it is why printed-marker detectors work this way.
+ */
+function adaptiveInk(small: Uint8Array, w: number, h: number, win: number, offset: number): Uint8Array {
+  // Integral image, so every neighbourhood mean costs four lookups.
+  const ii = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += small[y * w + x];
+      ii[(y + 1) * (w + 1) + (x + 1)] = ii[y * (w + 1) + (x + 1)] + row;
+    }
+  }
+  const r = Math.max(2, Math.round(win / 2));
+  const dark = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(h, y + r + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(w, x + r + 1);
+      const sum = ii[y1 * (w + 1) + x1] - ii[y0 * (w + 1) + x1] - ii[y1 * (w + 1) + x0] + ii[y0 * (w + 1) + x0];
+      const mean = sum / ((x1 - x0) * (y1 - y0));
+      if (small[y * w + x] < mean - offset) dark[y * w + x] = 1;
+    }
+  }
+  return dark;
+}
+
 function detectAtThreshold(
   small: Uint8Array,
   w: number,
   h: number,
   t: number,
   scale: number,
+  trace?: TargetCandidate[],
+  ink?: Uint8Array,
 ): { det: TargetDetection; score: number } | null {
-  const dark = new Uint8Array(w * h);
+  /* Close thin gaps before asking whether the ring is closed. A cable lying
+     across the sheet, a crease shadow or a streak of glare cuts a line through
+     the ring, and an unbroken ring is the one thing every check below needs.
+     The radius is small next to the paper margin outside the ring and the space
+     inside it, so it bridges a gap without welding the ring to the table or to
+     the dot. */
+  const dark = closeMask(ink ?? globalInk(small, t), w, h, Math.max(1, Math.round(Math.max(w, h) / 400)));
   let darkN = 0;
-  for (let i = 0; i < dark.length; i++) {
-    if (small[i] < t) {
-      dark[i] = 1;
-      darkN++;
-    }
-  }
+  for (let i = 0; i < dark.length; i++) darkN += dark[i];
   // Nothing useful at the extremes, and labelling them is the expensive part.
   if (darkN < w * h * 0.002 || darkN > w * h * 0.7) return null;
 
@@ -260,6 +368,18 @@ function detectAtThreshold(
     const bh = c.maxY - c.minY + 1;
     const area = bw * bh;
     // Big enough to measure from, small enough not to be the whole photo.
+    const meta: Partial<TargetCandidate> = {};
+    const note = (verdict: string) => {
+      if (trace && area >= frameArea * 0.004) {
+        trace.push({
+          threshold: t,
+          box: { x: Math.round(c.minX / scale), y: Math.round(c.minY / scale), w: Math.round(bw / scale), h: Math.round(bh / scale) },
+          fill: +(c.pixels / area).toFixed(3),
+          ...meta,
+          verdict,
+        });
+      }
+    };
     if (area < frameArea * 0.004 || area > frameArea * 0.75) continue;
     if (bw < 12 || bh < 12) continue;
 
@@ -272,17 +392,18 @@ function detectAtThreshold(
      * picking some other dark shape with a gap in it. Loose bounds here cost
      * two of the blurred test cases 13 cm. */
     const fill = c.pixels / area;
-    if (fill < 0.16 || fill > 0.6) continue;
+    if (fill < 0.16 || fill > 0.6) { note("fill out of range"); continue; }
     const holePixels = enclosedHoleArea(labels, w, c);
     const holeFraction = holePixels / area;
-    if (holeFraction < 0.3) continue;
+    meta.holeFraction = +holeFraction.toFixed(3);
+    if (holeFraction < 0.3) { note("hole too small"); continue; }
     const EXPECTED_FILL = 1 - ((TARGET.outerWCm - 2 * TARGET.borderCm) * (TARGET.outerHCm - 2 * TARGET.borderCm)) /
       (TARGET.outerWCm * TARGET.outerHCm);
     const fillErr = Math.abs(fill - EXPECTED_FILL) / EXPECTED_FILL;
-    if (fillErr > 0.75) continue;
+    if (fillErr > 0.75) { note("ink/hole ratio wrong"); continue; }
 
     const found = quadCorners(labels, w, c);
-    if (!found) continue;
+    if (!found) { note("no quad corners"); continue; }
     /* Two refinements, in order of authority.
      *
      * The binary one fits lines to the thresholded boundary, which is good but
@@ -300,7 +421,7 @@ function detectAtThreshold(
        the table, and the check fails — which is the correct answer, because
        saying "no target" sends the operator to the four-corner tap, while
        accepting it silently measured 13 cm wrong. */
-    if (!looksLikeTarget(small, w, h, refined)) continue;
+    if (!looksLikeTarget(small, w, h, refined)) { note("failed pattern check"); continue; }
     const quad = refined.map((p) => ({ x: p.x / scale, y: p.y / scale })) as Quad;
 
     const side = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -308,7 +429,7 @@ function detectAtThreshold(
     const bottom = side(quad[3], quad[2]);
     const left = side(quad[0], quad[3]);
     const right = side(quad[1], quad[2]);
-    if (top < 8 || bottom < 8 || left < 8 || right < 8) continue;
+    if (top < 8 || bottom < 8 || left < 8 || right < 8) { note("sides too short"); continue; }
 
     /* Opposite sides of a rectangle are equal; perspective makes the near one
        longer. The worst of the two disagreements is how far off square-on the
@@ -321,7 +442,8 @@ function detectAtThreshold(
     const aspect = ((top + bottom) / 2) / ((left + right) / 2);
     const want = TARGET.outerWCm / TARGET.outerHCm;
     const aspectErr = Math.min(Math.abs(aspect / want - 1), Math.abs(aspect / (1 / want) - 1));
-    if (aspectErr > 0.45) continue;
+    meta.aspectErr = +aspectErr.toFixed(3);
+    if (aspectErr > 0.45) { note("aspect wrong"); continue; }
 
     /* Prefer, in order: the right proportions of ink to hole, the printed
        aspect ratio, a square-on shot, and size. The first two are what identify
@@ -331,6 +453,7 @@ function detectAtThreshold(
       + (1 - Math.min(1, tilt / 60)) * 0.15
       + Math.min(1, area / (frameArea * 0.25)) * 0.1;
     const confidence = Math.max(0, Math.min(1, score));
+    note(`ACCEPTED score ${score.toFixed(2)}`);
     if (!best || score > best.score) best = { det: { quad, confidence, tiltPercent: tilt }, score };
   }
 
@@ -768,6 +891,25 @@ function enclosedHoleArea(labels: Int32Array, w: number, c: Component): number {
     }
   }
   return hole;
+}
+
+/**
+ * Four tapped corners, in whatever order they were tapped, as a quad in the
+ * order the homography expects.
+ *
+ * Asking an operator to tap "clockwise from the top-left" is asking for a twisted
+ * quad the first time someone starts at another corner — and a twisted quad
+ * gives a confidently wrong scale with no error. So the order is ignored: the
+ * points are wound around their centre and started on a short side, exactly as
+ * detected corners are.
+ */
+export function orderQuad(points: Point[]): Quad {
+  const cx = points.reduce((a, p) => a + p.x, 0) / points.length;
+  const cy = points.reduce((a, p) => a + p.y, 0) / points.length;
+  const four = [...points].sort((p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx));
+  const side = (i: number) => Math.hypot(four[(i + 1) % 4].x - four[i].x, four[(i + 1) % 4].y - four[i].y);
+  const start = side(0) + side(2) <= side(1) + side(3) ? 0 : 1;
+  return [four[start % 4], four[(start + 1) % 4], four[(start + 2) % 4], four[(start + 3) % 4]];
 }
 
 /* ─────────────────────────────── homography ─────────────────────────────── */

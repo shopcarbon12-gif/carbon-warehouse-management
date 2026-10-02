@@ -103,7 +103,10 @@ export function MeasurePoints({
     // Everything not being edited, faint — context without clutter.
     for (const key of keys) {
       const hv = handles[key];
-      if (!hv || key === selected) continue;
+      /* A line nobody has placed is not drawn: a stack of placeholder lines
+         across the garment is clutter that looks like measurements. It appears
+         when it is selected, ready to be dragged into place. */
+      if (!hv || key === selected || !hv.set) continue;
       ctx.strokeStyle = colorFor(key);
       ctx.globalAlpha = hv.set ? 0.42 : 0.18;
       ctx.lineWidth = lw;
@@ -146,9 +149,13 @@ export function MeasurePoints({
          whole editor refusing to appear — which is what it used to do, and it
          left an untouchable photo on screen with no explanation. */
       const px = Math.hypot(hv.b.x - hv.a.x, hv.b.y - hv.a.y);
-      const text = pxPerCm
-        ? `${labelFor(selected)}   ${(px / pxPerCm / 2.54).toFixed(1)}"  ·  ${(px / pxPerCm).toFixed(1)} cm`
-        : `${labelFor(selected)}   no scale yet`;
+      /* An unplaced line has no measurement, so it does not show one — it used
+         to read "Inseam 12.0"" while sitting nowhere near the inseam. */
+      const text = !hv.set
+        ? `${labelFor(selected)} — drag both ends onto the garment`
+        : pxPerCm
+          ? `${labelFor(selected)}   ${(px / pxPerCm / 2.54).toFixed(1)}"  ·  ${(px / pxPerCm).toFixed(1)} cm`
+          : `${labelFor(selected)}   no scale yet`;
       const mx = (hv.a.x + hv.b.x) / 2;
       const my = (hv.a.y + hv.b.y) / 2;
       const tw = ctx.measureText(text).width;

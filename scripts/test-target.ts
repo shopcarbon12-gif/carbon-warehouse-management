@@ -56,13 +56,22 @@ function cameraMatrix(tiltDeg: number, rollDeg: number, distanceCm: number) {
   };
 }
 
-function drawScene(tiltDeg: number, rollDeg: number, distanceCm: number): Scene {
+/** How the scene is lit and printed. Defaults are a good print on a pale floor. */
+type Look = { ink: number; paper: number; floor: number; grain: number; margin: number };
+const GOOD_PRINT: Look = { ink: 20, paper: 246, floor: 168, grain: 10, margin: 0 };
+/* The operator's real photo, measured: the printer put the "black" ring down as
+   grey 118 on paper at 219, lying on a dark wood table at about 23 with visible
+   grain. A global threshold chosen from that picture's brightness never got
+   above 115, so the ring never once counted as ink. */
+const GREY_PRINT_DARK_TABLE: Look = { ink: 118, paper: 219, floor: 26, grain: 22, margin: 1.6 };
+
+function drawScene(tiltDeg: number, rollDeg: number, distanceCm: number, look: Look = GOOD_PRINT): Scene {
   const buf = new Uint8ClampedArray(IMG_W * IMG_H * 4);
   // A warehouse floor, not a studio sweep: mid-grey with texture.
   let seed = 99;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5) * 2;
   for (let i = 0; i < IMG_W * IMG_H; i++) {
-    const v = 168 + Math.round(rnd() * 10);
+    const v = look.floor + Math.round(rnd() * look.grain);
     buf[i * 4] = v;
     buf[i * 4 + 1] = v;
     buf[i * 4 + 2] = v - 3;
@@ -99,15 +108,20 @@ function drawScene(tiltDeg: number, rollDeg: number, distanceCm: number): Scene 
   const H = TARGET.outerHCm;
   const b = TARGET.borderCm;
   // The ring, drawn as four bars so the middle stays paper-white.
-  fillWorldRect(0, 0, W, b, [20, 20, 20], 90);
-  fillWorldRect(0, H - b, W, H, [20, 20, 20], 90);
-  fillWorldRect(0, 0, b, H, [20, 20, 20], 90);
-  fillWorldRect(W - b, 0, W, H, [20, 20, 20], 90);
+  if (look.margin > 0) {
+    // The sheet the ring is printed on, with its white border.
+    fillWorldRect(-look.margin, -look.margin, W + look.margin, H + look.margin, [look.paper, look.paper, look.paper], 40);
+  }
+  const ink: [number, number, number] = [look.ink, look.ink, look.ink];
+  fillWorldRect(0, 0, W, b, ink, 90);
+  fillWorldRect(0, H - b, W, H, ink, 90);
+  fillWorldRect(0, 0, b, H, ink, 90);
+  fillWorldRect(W - b, 0, W, H, ink, 90);
   // The paper inside the ring.
-  fillWorldRect(b, b, W - b, H - b, [246, 246, 244], 90);
+  fillWorldRect(b, b, W - b, H - b, [look.paper, look.paper, look.paper - 2], 90);
   // Orientation dot.
   fillWorldRect(b + TARGET.dotInsetCm, b + TARGET.dotInsetCm,
-                b + TARGET.dotInsetCm + TARGET.dotCm, b + TARGET.dotInsetCm + TARGET.dotCm, [20, 20, 20], 90);
+                b + TARGET.dotInsetCm + TARGET.dotCm, b + TARGET.dotInsetCm + TARGET.dotCm, ink, 90);
 
   // The garment: a dark rectangle of known size, to the right of the target.
   const gx = W + 6;
@@ -170,7 +184,7 @@ function measureGarmentBlock(data: Uint8ClampedArray, w: number, h: number, pxPe
   return { wCm: (maxX - minX + 1) / pxPerCm, hCm: (maxY - minY + 1) / pxPerCm };
 }
 
-type Case = { label: string; tilt: number; roll: number; distance: number; blur: number };
+type Case = { label: string; tilt: number; roll: number; distance: number; blur: number; look?: Look };
 
 const CASES: Case[] = [
   { label: "straight down, 95 cm", tilt: 0, roll: 0, distance: 95, blur: 0 },
@@ -181,6 +195,8 @@ const CASES: Case[] = [
   { label: "tilt 15° + roll 25°", tilt: 15, roll: 25, distance: 115, blur: 0 },
   { label: "tilt 15°, slight blur", tilt: 15, roll: 0, distance: 105, blur: 1 },
   { label: "tilt 20°, roll 40°, blur", tilt: 20, roll: 40, distance: 120, blur: 1 },
+  { label: "GREY print, dark table", tilt: 8, roll: 6, distance: 110, blur: 0, look: GREY_PRINT_DARK_TABLE },
+  { label: "GREY print, dark, tilt 18°", tilt: 18, roll: 15, distance: 115, blur: 1, look: GREY_PRINT_DARK_TABLE },
 ];
 
 let fail = 0;
@@ -191,7 +207,7 @@ console.log(`Target ${TARGET.outerWCm} × ${TARGET.outerHCm} cm, ${TARGET.border
 console.log("  case                        found  tilt%   width cm   height cm   worst err");
 
 for (const c of CASES) {
-  const scene = drawScene(c.tilt, c.roll, c.distance);
+  const scene = drawScene(c.tilt, c.roll, c.distance, c.look);
   const img = blur(scene.buf, IMG_W, IMG_H, c.blur);
 
   const det = detectTarget(img, IMG_W, IMG_H);

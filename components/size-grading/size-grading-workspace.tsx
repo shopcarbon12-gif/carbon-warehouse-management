@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload } from "lucide-react";
+import { Camera, Crosshair, Loader2, RotateCcw, Save, Smartphone, Upload } from "lucide-react";
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 import { MeasurePoints, type HandleMap } from "./measure-points";
@@ -29,7 +29,7 @@ import { segmentGarment } from "@/lib/size-grading/segment";
 import { segmentWithModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
-import { TARGET, detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
+import { TARGET, detectTarget, orderQuad, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -49,30 +49,6 @@ import {
   type Measured,
   type SizeChart,
 } from "@/lib/size-grading/size-chart";
-
-/**
- * References whose size is fixed by standard, so staff do not have to measure
- * the thing they calibrate with.
- *
- * US Letter first, because that is the paper in the building — 8.5 × 11 in,
- * exactly 21.59 × 27.94 cm. A4 is not offered: it is not what a Florida
- * warehouse has to hand, and a sheet assumed to be A4 that is actually Letter
- * reads 6% long and quietly inflates every measurement taken afterwards.
- *
- * The bank card stays as the no-paper fallback — ISO/IEC 7810 ID-1 fixes every
- * credit and debit card at 85.60 × 53.98 mm.
- *
- * Ordered by accuracy: the same one-pixel slip when tapping is a smaller share
- * of a longer edge, so the long edge of a sheet beats the short edge of a card
- * by a wide margin.
- */
-const CALIB_PRESETS: Array<{ id: string; label: string; cm: number; note: string }> = [
-  { id: "letter-long", label: "US Letter — long edge (11 in)", cm: 27.94, note: "most accurate" },
-  { id: "letter-short", label: "US Letter — short edge (8.5 in)", cm: 21.59, note: "" },
-  { id: "card-long", label: "Bank card — long edge", cm: 8.56, note: "no paper to hand" },
-  { id: "card-short", label: "Bank card — short edge", cm: 5.4, note: "least accurate" },
-  { id: "custom", label: "Something else…", cm: 0, note: "type the length" },
-];
 
 /** The rectified image is rendered with this much room around the target. */
 const TARGET_MARGIN_CM = 60;
@@ -198,11 +174,10 @@ export function SizeGradingWorkspace() {
   const [busy, setBusy] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibPts, setCalibPts] = useState<Point[]>([]);
-  const [refLengthCm, setRefLengthCm] = useState("27.94");
-  const [calibPreset, setCalibPreset] = useState("letter-long");
   /* The printed target, found in this photo. When it is there, it supplies the
      scale AND squares the photo up, so no calibration is involved at all. */
   const [target, setTarget] = useState<TargetDetection | null>(null);
+  const [targetSource, setTargetSource] = useState<"detected" | "tapped" | null>(null);
   /** Exact px-per-cm of the un-warped image, by construction. */
   const [rectPxPerCm, setRectPxPerCm] = useState<number | null>(null);
   /** Corners the operator tapped, when detection missed. */
@@ -241,7 +216,12 @@ export function SizeGradingWorkspace() {
 
   /* An un-warped image's scale is exact by construction, so it always wins over
      a calibration someone tapped in once on a different photo. */
-  const pxPerCm = rectPxPerCm ?? (image && calibRatio ? calibRatio * image.width : null);
+  /* Only a target gives a scale. A two-tap calibration saved on the device
+     used to be the fallback, and it is how a pair of leggings came out with an
+     88.8 cm hip: it holds only at the distance it was taken from, and a
+     hand-held photo is never at that distance twice. No scale is an honest
+     answer; a confident wrong one is not. */
+  const pxPerCm = rectPxPerCm;
 
   // Measure whenever the photo, calibration or sensitivity changes.
   useEffect(() => {
@@ -434,7 +414,7 @@ export function SizeGradingWorkspace() {
     ctx.putImageData(image, 0, 0);
     const lw = Math.max(2, Math.round(image.width / 250));
 
-    if (mask) {
+    if (mask && !tappingCorners) {
       const { width, height, data } = mask;
       const tint = ctx.getImageData(0, 0, width, height);
       for (let i = 0; i < data.length; i++) {
@@ -446,7 +426,7 @@ export function SizeGradingWorkspace() {
       }
       ctx.putImageData(tint, 0, 0);
     }
-    if (result?.ok) {
+    if (result?.ok && !tappingCorners) {
       const colors: Partial<Record<PomKey, string>> = {
         chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
         hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
@@ -657,6 +637,7 @@ export function SizeGradingWorkspace() {
         setImage(data);
         setRectPxPerCm(rect.pxPerCm);
         setTarget(det ?? { quad: useQuad, confidence: 1, tiltPercent: 0 });
+        setTargetSource(quad ? "tapped" : "detected");
         const centre = { x: rect.width / 2, y: rect.height / 2 };
         setSeed(centre);
         return;
@@ -685,6 +666,7 @@ export function SizeGradingWorkspace() {
     setImage(data);
     setRectPxPerCm(null);
     setTarget(null);
+    setTargetSource(null);
     const centre = { x: data.width / 2, y: data.height / 2 };
     setSeed(centre);
   }, []);
@@ -974,7 +956,8 @@ export function SizeGradingWorkspace() {
         /* Taps are in working-image coordinates; the source is bigger. */
         const kx = src.width / image.width;
         const ky = src.height / image.height;
-        const quad = next.map((q) => ({ x: q.x * kx, y: q.y * ky })) as Quad;
+        // Any tap order works — see orderQuad.
+        const quad = orderQuad(next.map((q) => ({ x: q.x * kx, y: q.y * ky })));
         setTappingCorners(false);
         applySource(src, quad);
       }
@@ -989,16 +972,6 @@ export function SizeGradingWorkspace() {
     setSeed(p);
   };
 
-  const saveCalibration = () => {
-    const cm = Number(refLengthCm.replace(",", "."));
-    if (!image || calibPts.length !== 2 || !(cm > 0)) return;
-    const px = Math.hypot(calibPts[1].x - calibPts[0].x, calibPts[1].y - calibPts[0].y);
-    const ratio = px / cm / image.width;
-    setCalibRatio(ratio);
-    writeLocal(CALIB_KEY, String(ratio));
-    setCalibrating(false);
-    setCalibPts([]);
-  };
 
   const updateChart = (next: SizeChart) => {
     setChart(next);
@@ -1078,78 +1051,35 @@ export function SizeGradingWorkspace() {
         <button type="button" className="wms-btn-accent-soft inline-flex items-center gap-1.5 max-md:min-h-11" onClick={() => fileInputRef.current?.click()}>
           <Upload className="h-4 w-4" /> Upload
         </button>
+        {/* One way to set the scale, not two. There used to be a two-tap
+            "calibrate by hand" next to a four-corner tap, and the operator —
+            reasonably — pressed the wrong one, tapped twice, pressed Save, and
+            saw the same "no target" message as before. Four corners give the
+            scale AND correct the tilt, so they are the only manual method. */}
         <button
           type="button"
           className="wms-btn-accent-soft inline-flex items-center gap-1.5 max-md:min-h-11"
           disabled={!image}
           onClick={() => {
-            setCalibrating((c) => !c);
-            setCalibPts([]);
+            setTappingCorners((v) => !v);
+            setCornerTaps([]);
           }}
         >
-          <Crosshair className="h-4 w-4" /> {calibrating ? "Cancel calibration" : "Calibrate by hand"}
+          <Crosshair className="h-4 w-4" />{" "}
+          {tappingCorners ? `Cancel (${cornerTaps.length}/4 tapped)` : "Tap the target's 4 corners"}
         </button>
         <span className="font-mono text-xs text-[var(--wms-muted)]">
           {rectPxPerCm
-            ? "Target found — scale exact, tilt corrected"
-            : calibRatio
-              ? "No target in this photo — using the saved calibration"
-              : "No target, not calibrated"}
+            ? targetSource === "tapped"
+              ? "Scale set from your 4 taps — tilt corrected"
+              : "Target found — scale exact, tilt corrected"
+            : "No scale yet — the target must be in the photo"}
         </span>
         <a href="/inventory/size-grading/target" className="wms-btn wms-btn-sm max-md:min-h-11" target="_blank" rel="noreferrer">
           Print target
         </a>
       </div>
 
-      {calibrating ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
-          <Ruler className="h-4 w-4 shrink-0 text-[var(--wms-accent)]" />
-          <span>Tap both ends of the reference in the photo ({calibPts.length}/2):</span>
-          <select
-            value={calibPreset}
-            onChange={(e) => {
-              const id = e.target.value;
-              setCalibPreset(id);
-              const preset = CALIB_PRESETS.find((p) => p.id === id);
-              if (preset && preset.cm > 0) setRefLengthCm(String(preset.cm));
-            }}
-            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
-          >
-            {CALIB_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-                {p.cm > 0 ? ` — ${p.cm} cm` : ""}
-              </option>
-            ))}
-          </select>
-          {calibPreset === "custom" ? (
-            <>
-              <input
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                enterKeyHint="done"
-                value={refLengthCm}
-                onChange={(e) => setRefLengthCm(e.target.value)}
-                className="w-20 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[var(--wms-fg)] max-md:text-base"
-              />
-              <span className="font-mono text-xs text-[var(--wms-muted)]">cm</span>
-            </>
-          ) : (
-            <span className="font-mono text-xs text-[var(--wms-muted)]">
-              {CALIB_PRESETS.find((p) => p.id === calibPreset)?.note}
-            </span>
-          )}
-          <button
-            type="button"
-            className="wms-btn-primary wms-btn-sm max-md:min-h-11"
-            disabled={calibPts.length !== 2}
-            onClick={saveCalibration}
-          >
-            Save
-          </button>
-        </div>
-      ) : null}
 
       {error ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{error}</p> : null}
 
@@ -1178,10 +1108,9 @@ export function SizeGradingWorkspace() {
           ) : (
             <>
               <p className="text-[var(--wms-fg)]">
-                No calibration target in this photo.{" "}
-                {calibRatio
-                  ? "Falling back to the calibration saved on this device — the scale is only right if the camera is the same distance away as when you calibrated, and any tilt is uncorrected."
-                  : "You can still place the measurement lines, but there is no way to turn them into centimetres: a photo carries no sense of size, so the printed target has to be in the frame. Put it beside the garment and shoot again, or tap its four corners below if it IS in the photo and was missed."}
+                <strong>The target wasn&apos;t found in this photo.</strong> Without it there is no way to turn the
+                lines into centimetres — a photo carries no sense of size. If the target IS in the photo, tap its 4
+                outer corners. If it isn&apos;t, lay it beside the garment and shoot again.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
@@ -1206,7 +1135,7 @@ export function SizeGradingWorkspace() {
               </div>
               {tappingCorners ? (
                 <p className="mt-1 text-xs text-[var(--wms-muted)]">
-                  Tap the four outer corners of the black frame, clockwise, starting at its top-left.{" "}
+                  Tap the four outer corners of the frame, in any order.{" "}
                   {cornerTaps.length}/4 tapped.
                 </p>
               ) : null}
@@ -1647,7 +1576,7 @@ export function SizeGradingWorkspace() {
                   </>
                 ) : modelMask ? (
                   <span className="text-[var(--wms-status-success-fg)]">
-                    Garment found automatically — check the lines, drag anything that is off.
+                    Lines proposed from the photo — check each one and drag anything that is off.
                   </span>
                 ) : modelFailed ? (
                   <span className="text-[var(--wms-status-warning-fg)]">
