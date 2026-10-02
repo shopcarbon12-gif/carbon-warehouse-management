@@ -439,23 +439,87 @@ export function buildAbsentFeatureGuard(itemTypeValue: string): string {
  * It never overrides the item photos: it supplies only the pieces they do not
  * show.
  */
-export function buildStylingLock(itemTypeValue: string, gender: string): string {
+export type OutfitSlot = "top" | "top_under" | "bottom" | "outerwear" | "footwear" | "accessories";
+
+/** The OUTFIT lines the analyser wrote: the clothes the product was photographed WITH. */
+export function parseOutfitFromSpec(spec: string): Partial<Record<OutfitSlot, string>> {
+  const out: Partial<Record<OutfitSlot, string>> = {};
+  for (const raw of String(spec || "").split("\n")) {
+    const m = /^\s*(?:\d+\.\s*)?OUTFIT\s*[—-]\s*([A-Z _]+):\s*(.+?)\.?\s*$/i.exec(raw);
+    if (!m) continue;
+    const slot = m[1].trim().toLowerCase().replace(/\s+/g, "_") as OutfitSlot;
+    if (["top", "top_under", "bottom", "outerwear", "footwear", "accessories"].includes(slot) && !out[slot]) {
+      out[slot] = m[2].trim();
+    }
+  }
+  return out;
+}
+
+/** Light cloth wants a dark partner and the other way round. */
+function isLightColour(colour: string): boolean {
+  return /\b(white|off.?white|cream|ivory|ecru|beige|sand|stone|bone|light|pale|pastel|pink|yellow|mint|lavender|sky)\b/i.test(
+    colour || "",
+  );
+}
+
+/**
+ * Everything the model wears that is NOT the product.
+ *
+ * Four panels are four independent API calls that share no memory, so "the
+ * same shoes across the whole run" was an instruction nothing could obey: each
+ * call invented its own sneakers and its own t-shirt. So the pieces are NAMED —
+ * the same words in every panel of every run.
+ *
+ * Naming them is also what made them win over the photographs. A jacket shot on
+ * a person in beige wide-leg trousers came back in "plain black slim
+ * trousers", because the lock named those and the escape clause ("if the
+ * photos show that piece, the photos win") had no words of its own to compete
+ * with. So a piece the photos show is now named FROM the photos (the analyser's
+ * OUTFIT lines), and only a piece they do not show gets a default.
+ *
+ * The defaults are streetwear rather than plain basics — denim, a boxy
+ * heavyweight tee, chunky white sneakers — with the colour of the partner piece
+ * chosen against the product's own colour, so a cream jacket is not styled with
+ * a cream tee. Accessories stay off unless the photos show them: an invented
+ * watch or chain competes with the product's own hardware.
+ */
+export function buildStylingLock(
+  itemTypeValue: string,
+  gender: string,
+  opts?: { outfit?: Partial<Record<OutfitSlot, string>>; itemColour?: string },
+): string {
   const female = String(gender || "").trim().toLowerCase() === "female";
   const category = inferItemTypeCategory(itemTypeValue);
   const swim = isSwimwearItemType(itemTypeValue);
+  const seen = opts?.outfit ?? {};
+  const light = isLightColour(opts?.itemColour ?? "");
+  const fromPhotos = (label: string, d: string) =>
+    `- ${label}: ${d} — exactly as worn in the item photos: same colour, cut, fit, length and fabric.`;
 
-  const shoes = swim
-    ? "- FOOTWEAR: plain black flip-flops, or naturally bare feet. The same choice in every frame."
-    : "- FOOTWEAR: plain white low-top leather sneakers — flat white laces, plain white rubber soles, no visible branding, no contrast panels. The exact same pair in every frame, both feet identical.";
-  const socks = swim ? "" : "- SOCKS: plain white no-show socks, never visible above the shoe.";
-  const top = female
-    ? "- TOP: a plain black fitted crew-neck short-sleeve t-shirt, untucked — no print, no logo, no pocket, no graphic."
-    : "- TOP: a plain black crew-neck short-sleeve cotton t-shirt, untucked — no print, no logo, no pocket, no graphic.";
-  const bottom = female
-    ? "- BOTTOM: plain black slim full-length trousers — no print, no logo, no visible hardware."
-    : "- BOTTOM: plain mid-grey slim straight full-length trousers — no print, no logo, no visible hardware.";
-  const accessories =
-    "- ACCESSORIES: none at all — no watch, no jewellery, no belt, no hat, no sunglasses, no bag, no visible socks logo.";
+  const shoes = seen.footwear
+    ? fromPhotos("FOOTWEAR", seen.footwear) + " The same pair in every frame."
+    : swim
+      ? "- FOOTWEAR: plain black flip-flops, or naturally bare feet. The same choice in every frame."
+      : "- FOOTWEAR: chunky white leather low-top sneakers with a thick plain white rubber sole, flat white laces, no visible branding, no contrast panels. The exact same pair in every frame, both feet identical.";
+  const socks = swim || seen.footwear ? "" : "- SOCKS: plain white no-show socks, never visible above the shoe.";
+  const teeColour = light ? "washed black" : "off-white";
+  const top = seen.top
+    ? fromPhotos("TOP", seen.top)
+    : female
+      ? `- TOP: a slightly cropped boxy heavyweight cotton t-shirt in ${teeColour}, dropped shoulders — no print, no logo, no pocket, no graphic.`
+      : `- TOP: an oversized boxy heavyweight cotton t-shirt in ${teeColour}, dropped shoulders, untucked — no print, no logo, no pocket, no graphic.`;
+  const topUnder = seen.top_under
+    ? fromPhotos("TOP UNDER THE OUTERWEAR", seen.top_under)
+    : `- TOP UNDER THE OUTERWEAR: a plain fitted ribbed crew-neck tee in ${light ? "black" : "white"} — no print, no logo.`;
+  const bottom = seen.bottom
+    ? fromPhotos("BOTTOM", seen.bottom)
+    : female
+      ? `- BOTTOM: high-waisted wide-leg ${light ? "mid-blue" : "light-blue"} washed denim jeans, full length, clean hem — no rips, no visible logo.`
+      : `- BOTTOM: relaxed straight-leg ${light ? "mid-blue" : "light-blue"} washed denim jeans, full length with a slight stack at the ankle — no rips, no visible logo.`;
+  const outer = seen.outerwear ? fromPhotos("OUTERWEAR", seen.outerwear) : "";
+  const accessories = seen.accessories
+    ? fromPhotos("ACCESSORIES", seen.accessories) + " Nothing else added."
+    : "- ACCESSORIES: none at all — no watch, no jewellery, no belt, no hat, no sunglasses, no bag, no visible socks logo.";
 
   const lines: string[] = [];
   if (category === "top" || category === "outerwear") lines.push(bottom);
@@ -464,7 +528,8 @@ export function buildStylingLock(itemTypeValue: string, gender: string): string 
   else if (category === "full-look") {
     /* The look is complete in the photos; only the parts it cannot show. */
   } else lines.push(top);
-  if (category === "outerwear") lines.push(top.replace("- TOP:", "- TOP UNDER THE OUTERWEAR:"));
+  if (category === "outerwear") lines.push(topUnder);
+  if (outer && category !== "outerwear") lines.push(outer);
   if (category !== "footwear") lines.push(shoes);
   if (socks && category !== "footwear") lines.push(socks);
   lines.push(accessories);

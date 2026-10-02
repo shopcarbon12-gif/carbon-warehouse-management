@@ -65,6 +65,8 @@ export function factsFromStudioSpec(lockText: string, maxBytes = VERIFIED_FACTS_
     /* Statements about the photography, not about the garment. */
     if (/^BACK:\s*not photographed/i.test(line)) continue;
     if (/^NOT CLEARLY VISIBLE/i.test(line)) continue;
+    /* What the product was photographed WITH, not the product. */
+    if (/^OUTFIT\b/i.test(line)) continue;
     /* Directives aimed at the image model; the observation is what precedes them. */
     const v = line
       .replace(/\s*Reproduce verbatim[\s\S]*$/i, ".")

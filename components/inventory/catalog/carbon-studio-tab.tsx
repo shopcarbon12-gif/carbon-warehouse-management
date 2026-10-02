@@ -6,6 +6,7 @@ import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-
 import { parseSpecBackState, specListsBackDesign, studioRefViewKey } from "@/lib/studio-item-spec";
 import {
   buildStylingLock,
+  parseOutfitFromSpec,
   buildMasterPanelPrompt,
   getPanelPosePair,
   getPanelButtonLabel,
@@ -1327,7 +1328,15 @@ export function CarbonStudioTab({
        panel is a separate API call that cannot see the others, so naming the
        t-shirt and the shoes here is the only thing that makes the set look
        like one shoot instead of four. */
-    const stylingLock = buildStylingLock(itemType, model.gender);
+    /* Dress the model in what the item photos show (the analyser's OUTFIT
+       lines), and only fall back to streetwear defaults for the pieces they do
+       not show. The defaults pick their colour against the product's, which is
+       the colourway being rendered when there is one. */
+    const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(specForRun)?.[1] ?? "";
+    const stylingLock = buildStylingLock(itemType, model.gender, {
+      outfit: parseOutfitFromSpec(specForRun),
+      itemColour: activeColorRun?.colorName || garmentColour || color,
+    });
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
     // Touch devices only: keep the screen awake while the panels generate — a
     // locked phone suspends the page and aborts the in-flight fetches, which
@@ -1534,7 +1543,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun, color]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under

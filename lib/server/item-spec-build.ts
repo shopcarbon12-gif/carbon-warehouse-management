@@ -153,6 +153,23 @@ export function buildLockText(spec: any): string {
   const tr = text(spec?.trims_hems_cuffs_collar);
   if (tr) push(`TRIMS/HEMS/CUFFS/COLLAR: ${tr}.`);
   for (const s of list(spec?.other_details)) push(`DETAIL: ${s}.`);
+  /* The rest of the outfit in the photos. Last on purpose: the list is capped
+     from the end, and the product's own lines must never be the ones dropped.
+     The Studio reads these back to dress the model (lib/panelGeneration.ts
+     buildStylingLock); the SEO writer skips them, since a jacket's description
+     must not inherit the trousers it was photographed with. */
+  const seen = spec?.outfit_seen;
+  if (seen && seen.worn === true && Array.isArray(seen.pieces)) {
+    const SLOTS = new Set(["top", "top_under", "bottom", "outerwear", "footwear", "accessories"]);
+    const done = new Set<string>();
+    for (const piece of seen.pieces.slice(0, 6)) {
+      const slot = text(piece?.slot).toLowerCase().replace(/\s+/g, "_");
+      const d = text(piece?.description);
+      if (!SLOTS.has(slot) || !d || done.has(slot)) continue;
+      done.add(slot);
+      push(`OUTFIT — ${slot.toUpperCase().replace("_", " ")}: ${d}.`);
+    }
+  }
   // Hard cap so the spec can never push the image prompt over the model limit
   // (the generate route appends it inside its server block and caps it too).
   const out: string[] = [];
@@ -174,6 +191,7 @@ export function buildSpecInstruction(itemType: string, sortedViews: boolean): st
     '  "hardware": string[] (each: item, count, finish/colour, exact location, AND its form in enough detail to redraw it — a chain needs its link shape, strand count, length and both attachment points; a zip needs tooth colour, pull shape and whether it sits inside or outside; a BUTTON needs its diameter AND how big it looks against the part it sits on (e.g. "about 2 cm, nearly as tall as the 4 cm waistband"), how many holes it has or whether it is a shank, its shape, and its material look (matte horn, glossy plastic, metal, fabric-covered) — a button described only as "round, dark" comes back as a small generic one — buttons, rivets, zips, eyelets, snaps, buckles, D-rings, chains),',
     '  "stitching": string (thread colour(s), single/double/triple topstitch, bar tacks, decorative stitching, where),',
     '  "pockets": string[] (type, count, placement, details), "closures": string, "seams_panels": string,',
+    '  "outfit_seen": { "worn": boolean, "pieces": [{ "slot": "top" | "top_under" | "bottom" | "outerwear" | "footwear" | "accessories", "description": string }] } — the OTHER clothes in the photos, the ones that are not the product. worn=true when a photo shows the product worn by a person or styled together with other garments; then describe each other piece precisely enough to dress the model in it again: colour, cut, fit, length, rise, fabric look, how it is worn (tucked, cuffed, open). Use slot top_under for what is worn under a jacket or coat. Describe only what is clearly visible; a piece cut out of the frame is simply not listed. Never describe the person. worn=false and pieces=[] when the photos show the product alone (flat lay, hanger, ghost mannequin, product shot).',
     '  "construction_zones": [{ "zone": string, "detail": string }] — the design-bearing areas of THIS garment, each described well enough to rebuild it. For bottoms cover: waistband (height, flat or elasticated, pleats or none), closure/fly, belt loops (count or none), front pockets, back pockets, front of leg, back of leg, side seam, hem/cuff. THE CLOSURE IS THE MOST LOOKED-AT PART OF A WAISTBAND and "zip fly with button closure" is not enough to draw: say how the waistband actually fastens — a plain button on the band, or an extended or squared tab that reaches past the fly — which side laps over which, how far it reaches, how many buttons, and how large the button is against the band. For tops cover: neckline/collar, shoulder seam, chest, sleeve and cuff, side seam, hem, back yoke. For outerwear also: lapel/hood, front closure, pocket flaps, vents.',
     '  "text": [{ "text": exact characters as printed (keep case, punctuation, spacing), "placement": string, "style": string, "color": string, "technique": string }] — include EVERY word, number, logo wordmark, label text, embroidery and print lettering; transcribe letter-by-letter,',
     '  "logos_icons": [{ "description": string, "placement": string, "size": string, "colors": string, "technique": string, "finish": string }] — every brand mark, symbol, icon, emblem, monogram, artwork or illustration,',
@@ -187,7 +205,7 @@ export function buildSpecInstruction(itemType: string, sortedViews: boolean): st
     'FIT_SILHOUETTE must be specific: oversized / boxy / drop-shoulder / relaxed / regular / slim / cropped / longline, sleeve length and shape, body length, hem shape, neckline (crew / V / ribbed collar width).',
     'For every logo, icon, graphic and text: state the APPLICATION TECHNIQUE as seen — heat transfer / vinyl, screen print, silicone or high-density raised print, puff print, foil / metallic, embroidery (thread colours, stitch density), appliqué / patch (sewn or bonded), embossed / debossed, laser etch, rhinestones / studs / metal badge, sublimation, woven label — and the FINISH (matte or gloss, flat or raised, cracked / distressed print). Say "unclear" if it cannot be determined.',
     'A PLAIN ZONE MUST STILL BE DESCRIBED. Write "flat, no pressed crease, no pleat" or "plain, no stripe or tape" or "none" rather than leaving the zone out. A zone you do not mention is a zone the image generator will fill in with whatever that kind of garment usually has — a crease down a trouser leg, a chest pocket on a shirt — so saying a zone is empty is as valuable as describing a busy one. Never write a zone you cannot see; put that under "uncertain" instead.',
-    "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam', 'white silicone raised logo 4 cm wide on left chest'). Ignore any person, background, or styling in the photos — describe the product only.",
+    "Be exhaustive and specific (measurable where possible: e.g. 'five copper rivets on front pockets', 'contrast orange double topstitch on outseam', 'white silicone raised logo 4 cm wide on left chest'). Ignore the person and the background. Every key above describes the PRODUCT only — the clothes worn WITH it go in outfit_seen and nowhere else, so a pair of trousers styled under a jacket never becomes a detail of the jacket.",
     ...(sortedViews
       ? [
           "VIEW LABELS ARE AUTHORITATIVE: the reference images below are grouped under GENERAL / FRONT / BACK headings chosen by the operator. Anything seen on a FRONT-labelled image gets placement \"front, …\"; anything on a BACK-labelled image gets placement \"back, …\". Never decide the side from the garment shape when a label is given. Text or graphics that appear on both a FRONT and a BACK image get one entry per side.",
