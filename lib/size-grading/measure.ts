@@ -402,7 +402,7 @@ function fillHoles(src: Uint8Array, w: number, h: number): Uint8Array {
   return out;
 }
 
-function rowExtent(data: Uint8Array, w: number, y: number): [number, number] | null {
+export function rowExtent(data: Uint8Array, w: number, y: number): [number, number] | null {
   const row = y * w;
   let l = -1;
   let r = -1;
@@ -416,7 +416,7 @@ function rowExtent(data: Uint8Array, w: number, y: number): [number, number] | n
 }
 
 /** The contiguous run of shirt pixels on row y containing (or nearest to) column cx. */
-function centerRun(data: Uint8Array, w: number, y: number, cx: number): [number, number] | null {
+export function centerRun(data: Uint8Array, w: number, y: number, cx: number): [number, number] | null {
   const row = y * w;
   let x = cx;
   if (!data[row + x]) {

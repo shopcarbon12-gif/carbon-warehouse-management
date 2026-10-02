@@ -18,7 +18,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Upload } from "lucide-react";
 
-import { DEFAULT_THRESHOLD, measureShirt, type MeasureResult, type Point } from "@/lib/size-grading/measure";
+import { DEFAULT_THRESHOLD, segmentShirt, type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import {
+  GARMENT_LABELS,
+  POMS_FOR,
+  POM_LABEL,
+  measureGarment,
+  type GarmentResult,
+  type GarmentType,
+  type PomKey,
+} from "@/lib/size-grading/garment";
 import {
   POMS,
   POM_LABELS,
@@ -26,9 +35,25 @@ import {
   gradeShirt,
   parseChart,
   type Measured,
-  type Pom,
   type SizeChart,
 } from "@/lib/size-grading/size-chart";
+
+/**
+ * References whose size is fixed by standard, so staff do not have to measure
+ * the thing they calibrate with. A bank card is the one everybody has on them;
+ * ISO/IEC 7810 ID-1 fixes it at 85.60 × 53.98 mm and every card follows it.
+ *
+ * Bigger is more accurate: the same one-pixel slip in a tap is a smaller share
+ * of a long edge. That is why the card's long edge is offered and the short
+ * edge is a last resort, and why A4 is still here for a fixed photo station.
+ */
+const CALIB_PRESETS: Array<{ id: string; label: string; cm: number; note: string }> = [
+  { id: "card-long", label: "Bank card — long edge", cm: 8.56, note: "any credit/debit card" },
+  { id: "a4-long", label: "A4 sheet — long edge", cm: 29.7, note: "most accurate" },
+  { id: "a4-short", label: "A4 sheet — short edge", cm: 21.0, note: "" },
+  { id: "card-short", label: "Bank card — short edge", cm: 5.4, note: "least accurate" },
+  { id: "custom", label: "Something else…", cm: 0, note: "type the length" },
+];
 
 const WORK_MAX_PX = 1000;
 const CHART_KEY = "wms.sizeGrading.chart";
@@ -64,11 +89,18 @@ export function SizeGradingWorkspace() {
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
   const [calibRatio, setCalibRatio] = useState<number | null>(null);
   const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
-  const [result, setResult] = useState<MeasureResult | null>(null);
+  const [result, setResult] = useState<GarmentResult | null>(null);
+  const [mask, setMask] = useState<ShirtMask | null>(null);
+  /** Operator's override of the detected garment, when the shape fooled it. */
+  const [typeOverride, setTypeOverride] = useState<GarmentType | "">("");
   const [busy, setBusy] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibPts, setCalibPts] = useState<Point[]>([]);
-  const [refLengthCm, setRefLengthCm] = useState("29.7");
+  const [refLengthCm, setRefLengthCm] = useState("8.56");
+  const [calibPreset, setCalibPreset] = useState("card-long");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [labeledSize, setLabeledSize] = useState("");
   const [chartOpen, setChartOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,20 +121,31 @@ export function SizeGradingWorkspace() {
     }
     setBusy(true);
     const id = window.setTimeout(() => {
-      setResult(measureShirt(image.data, image.width, image.height, pxPerCm, threshold));
+      const m = segmentShirt(image.data, image.width, image.height, threshold);
+      setMask(m);
+      setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, threshold]);
+  }, [image, pxPerCm, threshold, typeOverride]);
 
+  /** The points this garment actually produced, in the family's own order. */
+  const readings = useMemo(() => {
+    if (!result?.ok) return [];
+    return POMS_FOR[result.type]
+      .map((k) => ({ key: k, cm: result.points[k]?.cm }))
+      .filter((r): r is { key: PomKey; cm: number } => typeof r.cm === "number");
+  }, [result]);
+
+  /* The size chart is a tee chart, so grading only applies to a top. Everything
+     else is measured and reported — inventing a chart for it would be worse
+     than saying nothing. */
   const measured: Measured | null = useMemo(() => {
-    if (!result?.ok || !pxPerCm) return null;
-    return {
-      chest: result.px.chest / pxPerCm,
-      length: result.px.length / pxPerCm,
-      hem: result.px.hem / pxPerCm,
-    };
-  }, [result, pxPerCm]);
+    if (!result?.ok || result.type !== "top") return null;
+    const { chest, length, hem } = result.points;
+    if (!chest || !length || !hem) return null;
+    return { chest: chest.cm, length: length.cm, hem: hem.cm };
+  }, [result]);
 
   const grade = useMemo(() => (measured ? gradeShirt(measured, chart) : null), [measured, chart]);
 
@@ -117,8 +160,8 @@ export function SizeGradingWorkspace() {
     ctx.putImageData(image, 0, 0);
     const lw = Math.max(2, Math.round(image.width / 250));
 
-    if (result?.mask) {
-      const { width, height, data } = result.mask;
+    if (mask) {
+      const { width, height, data } = mask;
       const tint = ctx.getImageData(0, 0, width, height);
       for (let i = 0; i < data.length; i++) {
         if (!data[i]) continue;
@@ -129,20 +172,27 @@ export function SizeGradingWorkspace() {
       }
       ctx.putImageData(tint, 0, 0);
     }
-    if (result?.ok && measured) {
-      const colors: Record<Pom, string> = { chest: "#f59e0b", length: "#3b82f6", hem: "#ec4899" };
+    if (result?.ok) {
+      const colors: Partial<Record<PomKey, string>> = {
+        chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
+        hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
+        inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#ec4899", rise: "#a855f7",
+      };
       ctx.font = `bold ${Math.max(14, Math.round(image.width / 40))}px sans-serif`;
-      for (const pom of POMS) {
-        const { a, b } = result.px.lines[pom];
-        ctx.strokeStyle = colors[pom];
+      for (const key of POMS_FOR[result.type]) {
+        const m = result.points[key];
+        if (!m) continue;
+        const { a, b } = m.line;
+        ctx.strokeStyle = colors[key] ?? "#3b82f6";
         ctx.lineWidth = lw;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
-        const label = fmt(measured[pom]);
-        const lx = pom === "length" ? a.x + lw * 3 : (a.x + b.x) / 2 - ctx.measureText(label).width / 2;
-        const ly = pom === "length" ? (a.y + b.y) / 2 : a.y - lw * 3;
+        const label = fmt(m.cm);
+        const vertical = Math.abs(b.y - a.y) > Math.abs(b.x - a.x);
+        const lx = vertical ? a.x + lw * 3 : (a.x + b.x) / 2 - ctx.measureText(label).width / 2;
+        const ly = vertical ? (a.y + b.y) / 2 : a.y - lw * 3;
         ctx.lineWidth = lw * 2;
         ctx.strokeStyle = "rgba(0,0,0,0.75)";
         ctx.strokeText(label, lx, ly);
@@ -166,7 +216,70 @@ export function SizeGradingWorkspace() {
         ctx.stroke();
       }
     }
-  }, [image, result, measured, calibrating, calibPts]);
+  }, [image, result, mask, calibrating, calibPts]);
+
+  /**
+   * Open the device's own camera with the settings this measurement needs,
+   * rather than handing off to the OS camera app.
+   *
+   * `<input capture>` opens whatever mode the phone happens to be left in —
+   * portrait, a zoomed lens, a filter — and a measurement read off a zoomed or
+   * distorted frame is wrong in a way nobody notices. Asking for the stream
+   * directly pins the rear camera, the largest resolution the sensor will give,
+   * and continuous autofocus, which is what makes the edges crisp enough to
+   * segment. The file input stays as a fallback for anything that refuses.
+   */
+  const openCamera = useCallback(async () => {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 2560 },
+          height: { ideal: 1920 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      const track = stream.getVideoTracks()[0];
+      /* Best-effort: not every device exposes these, and a rejection here must
+         not cost us the stream we already have. */
+      try {
+        const caps = track.getCapabilities?.() as MediaTrackCapabilities & { focusMode?: string[] };
+        const advanced: MediaTrackConstraintSet[] = [];
+        if (caps?.focusMode?.includes("continuous")) {
+          advanced.push({ focusMode: "continuous" } as MediaTrackConstraintSet);
+        }
+        if (advanced.length) await track.applyConstraints({ advanced });
+      } catch {
+        /* keep the stream as-is */
+      }
+      setCameraOpen(true);
+      // The <video> mounts with the panel, so attach on the next frame.
+      requestAnimationFrame(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play().catch(() => {});
+        }
+      });
+    } catch {
+      setError("Could not open the camera — allow camera access, or use Upload.");
+      cameraInputRef.current?.click();
+    }
+  }, []);
+
+  const closeCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+  }, []);
+
+  /* A live camera left running is a hot phone and a privacy light nobody asked
+     for — stop it when the page goes away. */
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+  }, []);
 
   const loadFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
@@ -189,6 +302,34 @@ export function SizeGradingWorkspace() {
       setError("Could not read that image.");
     }
   }, []);
+
+  /** Prefer a full-resolution still; fall back to the preview frame. */
+  const shoot = useCallback(async () => {
+    const video = videoRef.current;
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!video || !track) return;
+    try {
+      const Ctor = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } })
+        .ImageCapture;
+      if (Ctor) {
+        const blob = await new Ctor(track).takePhoto();
+        closeCamera();
+        await loadFile(new File([blob], "capture.jpg", { type: blob.type || "image/jpeg" }));
+        return;
+      }
+    } catch {
+      /* takePhoto is unsupported or refused — the frame grab below still works */
+    }
+    const off = document.createElement("canvas");
+    off.width = video.videoWidth;
+    off.height = video.videoHeight;
+    const c = off.getContext("2d");
+    if (!c) return;
+    c.drawImage(video, 0, 0);
+    const blob = await new Promise<Blob | null>((r) => off.toBlob(r, "image/jpeg", 0.95));
+    closeCamera();
+    if (blob) await loadFile(new File([blob], "capture.jpg", { type: "image/jpeg" }));
+  }, [closeCamera, loadFile]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!calibrating || !image) return;
@@ -243,7 +384,7 @@ export function SizeGradingWorkspace() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => cameraInputRef.current?.click()}>
+        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => void openCamera()}>
           <Camera className="h-4 w-4" /> Take photo
         </button>
         <button type="button" className="wms-btn-accent-soft inline-flex items-center gap-1.5 max-md:min-h-11" onClick={() => fileInputRef.current?.click()}>
@@ -268,19 +409,42 @@ export function SizeGradingWorkspace() {
       {calibrating ? (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
           <Ruler className="h-4 w-4 shrink-0 text-[var(--wms-accent)]" />
-          <span>
-            Tap both ends of the reference in the photo ({calibPts.length}/2), then enter its real length:
-          </span>
-          <input
-            type="text"
-            inputMode="decimal"
-            autoComplete="off"
-            enterKeyHint="done"
-            value={refLengthCm}
-            onChange={(e) => setRefLengthCm(e.target.value)}
-            className="w-20 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[var(--wms-fg)] max-md:text-base"
-          />
-          <span className="font-mono text-xs text-[var(--wms-muted)]">cm (A4 long edge = 29.7)</span>
+          <span>Tap both ends of the reference in the photo ({calibPts.length}/2):</span>
+          <select
+            value={calibPreset}
+            onChange={(e) => {
+              const id = e.target.value;
+              setCalibPreset(id);
+              const preset = CALIB_PRESETS.find((p) => p.id === id);
+              if (preset && preset.cm > 0) setRefLengthCm(String(preset.cm));
+            }}
+            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
+          >
+            {CALIB_PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+                {p.cm > 0 ? ` — ${p.cm} cm` : ""}
+              </option>
+            ))}
+          </select>
+          {calibPreset === "custom" ? (
+            <>
+              <input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                enterKeyHint="done"
+                value={refLengthCm}
+                onChange={(e) => setRefLengthCm(e.target.value)}
+                className="w-20 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[var(--wms-fg)] max-md:text-base"
+              />
+              <span className="font-mono text-xs text-[var(--wms-muted)]">cm</span>
+            </>
+          ) : (
+            <span className="font-mono text-xs text-[var(--wms-muted)]">
+              {CALIB_PRESETS.find((p) => p.id === calibPreset)?.note}
+            </span>
+          )}
           <button
             type="button"
             className="wms-btn-primary wms-btn-sm max-md:min-h-11"
@@ -294,6 +458,29 @@ export function SizeGradingWorkspace() {
 
       {error ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{error}</p> : null}
 
+      {cameraOpen ? (
+        <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
+          <video
+            ref={videoRef}
+            playsInline
+            muted
+            autoPlay
+            className="block h-auto w-full rounded"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => void shoot()}>
+              <Camera className="h-4 w-4" /> Capture
+            </button>
+            <button type="button" className="wms-btn max-md:min-h-11" onClick={closeCamera}>
+              Cancel
+            </button>
+            <span className="font-mono text-xs text-[var(--wms-muted)]">
+              Rear camera, full sensor resolution, continuous focus. Hold the phone level and square above the garment.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
           {image ? (
@@ -305,9 +492,12 @@ export function SizeGradingWorkspace() {
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--wms-muted)]">
               <Camera className="h-8 w-8" />
-              <p>Lay the shirt flat, front up, collar at the top, on a plain contrasting background.</p>
-              <p>Shoot straight down with the whole shirt in frame, and keep the sleeves away from the body.</p>
-              <p>For calibration, place an A4 sheet or ruler beside the shirt.</p>
+              <p>Lay the garment flat and front up on a plain background that contrasts with it.</p>
+              <p>
+                Shoot straight down with the whole garment in frame. Sleeves out away from the body; trousers and
+                shorts with a clear gap between the legs.
+              </p>
+              <p>To calibrate, put a bank card flat beside the garment and tap its two long-edge corners.</p>
             </div>
           )}
         </div>
@@ -325,9 +515,61 @@ export function SizeGradingWorkspace() {
               </p>
             ) : result && !result.ok ? (
               <p className="mt-1 text-sm text-[var(--wms-status-danger-fg)]">{result.error}</p>
-            ) : measured && grade?.best ? (
+            ) : result?.ok ? (
               <>
-                <div className="mt-2 flex items-baseline gap-3">
+                {/* What it thinks this is, always correctable. A guess shown as
+                    a fact is how a wrong measurement reaches the size chart. */}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                  <select
+                    value={typeOverride || result.type}
+                    onChange={(e) => setTypeOverride(e.target.value as GarmentType)}
+                    className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-medium text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
+                  >
+                    {(Object.keys(GARMENT_LABELS) as GarmentType[]).map((t) => (
+                      <option key={t} value={t}>
+                        {GARMENT_LABELS[t]}
+                      </option>
+                    ))}
+                  </select>
+                  {typeOverride ? (
+                    <button
+                      type="button"
+                      className="font-mono text-xs text-[var(--wms-accent)] underline"
+                      onClick={() => setTypeOverride("")}
+                    >
+                      use auto
+                    </button>
+                  ) : (
+                    <span className="font-mono text-xs text-[var(--wms-muted)]">
+                      detected · {result.classification.why}
+                    </span>
+                  )}
+                </div>
+                {!typeOverride && result.classification.confidence < 0.6 ? (
+                  <p className="mt-1 text-xs text-[var(--wms-status-warning-fg)]">
+                    Not certain of the type — check it above before trusting the numbers.
+                  </p>
+                ) : null}
+
+                <table className="mt-3 w-full text-sm">
+                  <tbody>
+                    {readings.map((r) => (
+                      <tr key={r.key} className="border-t border-[var(--wms-border)]">
+                        <td className="py-1.5 text-[var(--wms-muted)]">{POM_LABEL[r.key]}</td>
+                        <td className="py-1.5 text-right font-mono text-[var(--wms-fg)]">{fmtIn(r.cm)}</td>
+                        <td className="py-1.5 pl-3 text-right font-mono text-[var(--wms-muted)]">{fmt(r.cm)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+                  Flat measurements, taken across the garment as it lies — not doubled.
+                </p>
+              </>
+            ) : null}
+            {result?.ok && measured && grade?.best ? (
+              <div className="mt-4 border-t border-[var(--wms-border)] pt-3">
+                <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-bold text-[var(--wms-fg)]">{grade.best.size}</span>
                   <span
                     className={`text-sm font-medium ${
@@ -345,7 +587,7 @@ export function SizeGradingWorkspace() {
                       <tr key={pom} className="border-t border-[var(--wms-border)]">
                         <td className="py-1.5 text-[var(--wms-muted)]">{POM_LABELS[pom]}</td>
                         <td className="py-1.5 text-right font-mono text-[var(--wms-fg)]">
-                          {fmt(measured[pom])} <span className="text-[var(--wms-muted)]">({fmtIn(measured[pom])})</span>
+                          {fmtIn(measured[pom])} <span className="text-[var(--wms-muted)]">{fmt(measured[pom])}</span>
                         </td>
                         <td
                           className={`py-1.5 pl-2 text-right font-mono ${
@@ -393,14 +635,15 @@ export function SizeGradingWorkspace() {
                           .join(", ")}).`}
                   </p>
                 ) : null}
-              </>
+              </div>
             ) : null}
           </div>
 
           {image ? (
             <label className="flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
               <span>
-                Background sensitivity <span className="font-mono text-[var(--wms-muted)]">{threshold}</span>
+                Green = what the app thinks the garment is{" "}
+                <span className="font-mono text-[var(--wms-muted)]">{threshold}</span>
               </span>
               <input
                 type="range"
@@ -410,8 +653,9 @@ export function SizeGradingWorkspace() {
                 onChange={(e) => setThreshold(Number(e.target.value))}
               />
               <span className="text-xs text-[var(--wms-muted)]">
-                Lower it if parts of the shirt are missing from the green area; raise it if shadows or background are
-                included.
+                Drag until the green covers the garment and nothing else. Drag LEFT if part of the garment is missing
+                (its colour is close to the table); drag RIGHT if shadows or table are green. On good contrast you
+                should not need to touch this.
               </span>
             </label>
           ) : null}
