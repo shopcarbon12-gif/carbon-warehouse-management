@@ -530,7 +530,12 @@ function DetailsTab({
 
         {/* Measurements sit with the size they were taken on. */}
         <Section title="Size Grading">
-          <SizeGradingSection customSkuId={row.custom_sku_id} editable={editable} />
+          <SizeGradingSection
+            customSkuId={row.custom_sku_id}
+            editable={editable}
+            category={row.category}
+            subcategory={row.subcategory_1}
+          />
         </Section>
 
         <Section title="IDs">

@@ -10,8 +10,9 @@ import { getPool } from "@/lib/db";
  *      ?upc=<code>        → the same, found by UPC (what a scan gives us)
  *      ?customSkuId=<uuid> → { measurement } — the latest reading for one size,
  *                            which is what the item card shows and edits
- * POST { customSkuId, garmentType, pointsCm, pxPerCm, typeOverridden, note }
- *      → saves the measurement against EVERY colour of that size.
+ * POST { customSkuId, garmentType, pointsCm, pxPerCm, typeOverridden, view, note }
+ *      → saves the measurement against EVERY colour of that size, for one side
+ *        of the garment (front or back).
  *
  * A garment's flat measurements come from the pattern, and the pattern does not
  * change with the dye: a size 38 in teal and a size 38 in purple are cut from
@@ -45,21 +46,26 @@ export async function GET(req: Request) {
     if (!UUID_RE.test(customSkuId)) {
       return NextResponse.json({ error: "customSkuId must be a uuid" }, { status: 400 });
     }
+    /* The latest of each side, not the latest overall: measuring the back
+       must not make the front reading disappear from the card. */
     const latest = await pool.query<{
       id: string;
       garment_type: string;
       points_cm: Record<string, number>;
       measured_at: string;
       note: string | null;
+      view: string;
     }>(
-      `SELECT id, garment_type, points_cm, measured_at, note
+      `SELECT DISTINCT ON (view) id, garment_type, points_cm, measured_at, note, view
          FROM size_grading_measurements
         WHERE custom_sku_id = $1::uuid
-        ORDER BY measured_at DESC
-        LIMIT 1`,
+        ORDER BY view, measured_at DESC`,
       [customSkuId],
     );
-    return NextResponse.json({ measurement: latest.rows[0] ?? null });
+    const front = latest.rows.find((r) => r.view === "front") ?? null;
+    const back = latest.rows.find((r) => r.view === "back") ?? null;
+    // `measurement` stays for anything still reading the old shape.
+    return NextResponse.json({ measurement: front ?? back, front, back });
   }
 
   const matrixId = (searchParams.get("matrixId") ?? "").trim();
@@ -74,10 +80,13 @@ export async function GET(req: Request) {
   /* By UPC, a code can land on either level: the matrix carries one and so does
      every SKU. Both are accepted because a scan does not know the difference —
      the operator just pointed the camera at a label. */
-  const found = await pool.query<{ id: string; upc: string | null; description: string | null; vendor: string | null }>(
+  const found = await pool.query<{
+    id: string; upc: string | null; description: string | null; vendor: string | null;
+    category: string | null; subcategory_1: string | null;
+  }>(
     matrixId
-      ? `SELECT id, upc, description, vendor FROM matrices WHERE id = $1::uuid`
-      : `SELECT m.id, m.upc, m.description, m.vendor
+      ? `SELECT id, upc, description, vendor, category, subcategory_1 FROM matrices WHERE id = $1::uuid`
+      : `SELECT m.id, m.upc, m.description, m.vendor, m.category, m.subcategory_1
            FROM matrices m
           WHERE m.upc = $1
              OR EXISTS (SELECT 1 FROM custom_skus cs
@@ -108,7 +117,13 @@ export async function GET(req: Request) {
   );
 
   return NextResponse.json({
-    item: { matrixId: item.id, upc: item.upc, name: item.description, vendor: item.vendor },
+    /* The category travels with the item so the page can start on the right
+       garment family instead of inferring it from the silhouette and being
+       corrected — the catalogue already knows this product is a pair of pants. */
+    item: {
+      matrixId: item.id, upc: item.upc, name: item.description, vendor: item.vendor,
+      category: item.category, subcategory: item.subcategory_1,
+    },
     sizes: sizes.rows,
   });
 }
@@ -120,6 +135,8 @@ const Body = z.object({
   pointsCm: z.record(z.string(), z.number().finite().positive()),
   pxPerCm: z.number().finite().positive().optional(),
   typeOverridden: z.boolean().optional(),
+  /** Which side of the garment was photographed. */
+  view: z.enum(["front", "back"]).optional(),
   note: z.string().max(500).optional(),
 });
 
@@ -161,8 +178,8 @@ export async function POST(req: Request) {
   const ids = targets.rows.map((r) => r.id);
   const saved = await pool.query<{ measured_at: string }>(
     `INSERT INTO size_grading_measurements
-       (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note)
-     SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, $5, $6, $7
+       (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note, view)
+     SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, $5, $6, $7, $8
      RETURNING measured_at`,
     [
       ids,
@@ -172,12 +189,14 @@ export async function POST(req: Request) {
       b.typeOverridden ?? false,
       session.sub ?? null,
       b.note ?? null,
+      b.view ?? "front",
     ],
   );
 
   return NextResponse.json({
     ok: true,
     measuredAt: saved.rows[0]?.measured_at ?? new Date().toISOString(),
+    view: b.view ?? "front",
     size: picked.size,
     appliedTo: ids.length,
     colors: targets.rows.map((r) => r.color_code).filter(Boolean),

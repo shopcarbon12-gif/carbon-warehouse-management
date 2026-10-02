@@ -102,6 +102,22 @@ const CASES: Case[] = [
     tol: 3,
   },
   {
+    // Sleeves at the top AND a leg split at the bottom: a romper. Before this
+    // family existed the leg split won and it was measured as a pair of
+    // shorts, which reported a waist and threw the whole torso away.
+    name: "Romper",
+    expect: "onepiece",
+    draw: (b) => {
+      fill(b, CX - 112, 110, CX + 112, 170);       // sleeves, 224 px = 56 cm
+      fill(b, CX - 76, 110, CX + 76, 300);         // torso, 152 px = 38 cm
+      fill(b, CX - 88, 300, CX + 88, 360);         // hip, 176 px = 44 cm
+      fill(b, CX - 88, 360, CX - 10, 470);         // left leg
+      fill(b, CX + 10, 360, CX + 88, 470);         // right leg
+    },
+    want: { chest: 38, length: 90, inseam: 27.5 },
+    tol: 4,
+  },
+  {
     // Sleeves, and far taller than it is wide.
     name: "Dress",
     expect: "dress",

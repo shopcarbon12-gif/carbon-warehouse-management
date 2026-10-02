@@ -2,11 +2,16 @@
  * What is this garment, and where are its points of measure?
  *
  * The segmentation in measure.ts already produces a clean silhouette. That
- * silhouette says more than enough to tell the four families apart without
- * sending the photo anywhere: a pair of trousers has a gap between the legs, a
- * top has sleeves standing out from the body, a skirt is widest at the hem and
- * narrow where it starts. So the type is read from the shape, on the device,
- * and the operator can override it when a cut is unusual.
+ * silhouette says more than enough to tell the families apart without sending
+ * the photo anywhere: a pair of trousers has a gap between the legs, a top has
+ * sleeves standing out from the body, a skirt is widest at the hem and narrow
+ * where it starts, and a romper has both sleeves and legs. So the type is read
+ * from the shape, on the device, and the operator can override it when a cut is
+ * unusual.
+ *
+ * Where the catalogue already knows what a product is, that beats reading the
+ * shape — see catalog-family.ts. The silhouette is the fallback, not the first
+ * answer.
  *
  * Everything here is pure functions over the mask — no DOM, no canvas — so the
  * same code runs in the browser and in node test scripts.
@@ -19,7 +24,7 @@
 
 import { centerRun, rowExtent, type Segment, type ShirtMask } from "./measure";
 
-export type GarmentType = "top" | "trousers" | "shorts" | "dress" | "skirt";
+export type GarmentType = "top" | "trousers" | "shorts" | "dress" | "skirt" | "onepiece";
 
 export const GARMENT_LABELS: Record<GarmentType, string> = {
   top: "Top / T-shirt",
@@ -27,6 +32,7 @@ export const GARMENT_LABELS: Record<GarmentType, string> = {
   shorts: "Shorts",
   dress: "Dress",
   skirt: "Skirt",
+  onepiece: "Bodysuit / romper / overall",
 };
 
 /** Every point of measure this module can produce, across all garment types. */
@@ -57,6 +63,10 @@ export const POMS_FOR: Record<GarmentType, PomKey[]> = {
   shorts: ["waist", "hip", "inseam", "legOpening"],
   dress: ["chest", "waist", "length", "hem"],
   skirt: ["waist", "hip", "length", "hem"],
+  /* A one-piece is measured on both halves. Reporting only the legs — which is
+     what happens when a romper is taken for a pair of shorts — throws away the
+     entire upper body and nothing on screen says so. */
+  onepiece: ["chest", "waist", "hip", "length", "inseam", "legOpening", "shoulder", "sleeve"],
 };
 
 export type Classification = {
@@ -179,11 +189,21 @@ function crotchY(s: Shape): number {
   return -1;
 }
 
-/** Row where the sleeves stop and the body begins, scanning up from the hem. */
-function armpitY(s: Shape): number {
+/**
+ * Where the body widens into sleeves, scanning up from `startBelow`.
+ *
+ * `startBelow` matters on anything with legs. `centerRun` does not give up when
+ * the centre column falls in the gap between two legs — it snaps to the nearest
+ * run — so a scan that starts at the hem reads ONE LEG as the body, and the
+ * step up from leg width to hip width looks exactly like a body widening into
+ * sleeves. On a romper that returned the crotch as the armpit. Callers that
+ * know where the legs separate pass a point above it.
+ */
+function armpitY(s: Shape, startBelow?: number): number {
   const { data, width } = s.mask;
   const recent: number[] = [];
-  for (let y = s.bottom - Math.round(s.h * 0.05); y >= s.top + Math.round(s.h * 0.1); y--) {
+  const from = Math.min(startBelow ?? s.bottom, s.bottom) - Math.round(s.h * 0.05);
+  for (let y = from; y >= s.top + Math.round(s.h * 0.1); y--) {
     const run = centerRun(data, width, y, s.cx);
     if (!run) continue;
     const w = run[1] - run[0] + 1;
@@ -210,7 +230,8 @@ export function classify(mask: ShirtMask): Classification | null {
   if (!s) return null;
 
   const crotch = crotchY(s);
-  const pit = armpitY(s);
+  // Above the legs when there are legs — see armpitY.
+  const pit = armpitY(s, crotch > 0 ? crotch : undefined);
   const aspect = s.h / Math.max(1, s.w);
 
   // Width of the very top of the garment, relative to its widest point: a
@@ -229,6 +250,19 @@ export function classify(mask: ShirtMask): Classification | null {
     if (s.widths[y] > 0) waistW = Math.min(waistW, s.widths[y]);
   }
   const flare = hemW / Math.max(1, waistW === Infinity ? hemW : waistW);
+
+  /* Sleeves AND a leg split: a romper, an overall, a jumpsuit. This has to be
+     tested before the leg branch, because a one-piece does have legs and would
+     otherwise be filed as shorts — which measures the bottom half and silently
+     discards the top. The catalogue has forty of these (bodysuits, swimsuits,
+     rompers, overalls), so it is not an edge case. */
+  if (crotch > 0 && pit > 0 && pit < crotch) {
+    return {
+      type: "onepiece",
+      confidence: 0.8,
+      why: "sleeves at the top and legs at the bottom — one piece",
+    };
+  }
 
   if (crotch > 0) {
     // Legs. Long = trousers, short = shorts. The split point relative to the
@@ -324,6 +358,78 @@ export function measureGarment(
   // Body length / outseam: top edge to bottom edge, down the centre.
   const lengthPx = s.h;
   const lengthLine = seg(s.cx, s.top, s.cx, s.bottom);
+
+  if (type === "onepiece") {
+    /* Both halves, in one pass: the chest and sleeves off the top of the
+       silhouette, the hip and legs off the bottom, and the waist at the
+       narrowest point in between. */
+    const crotch = crotchY(s);
+    const pit = armpitY(s, crotch > 0 ? crotch : undefined);
+    put("length", lengthPx, lengthLine);
+
+    if (pit > 0) {
+      const chestY = Math.min(s.bottom, pit + Math.max(1, Math.round(2.54 * pxPerCm)));
+      const chest = steadyRun(s, chestY, 1);
+      if (chest) put("chest", chest.w, seg(chest.run[0], chestY, chest.run[1], chestY));
+
+      const shoulderY = Math.max(s.top + 1, pit - Math.round(s.h * 0.06));
+      const sh = steadyExtent(s, shoulderY, 2);
+      if (sh) put("shoulder", sh.w, seg(sh.run[0], shoulderY, sh.run[1], shoulderY));
+
+      let wideY = s.top, wideW = -1;
+      for (let y = s.top; y <= pit; y++) {
+        if (s.widths[y] > wideW) { wideW = s.widths[y]; wideY = y; }
+      }
+      const widest = rowExtent(s.mask.data, s.mask.width, wideY);
+      if (sh && widest) {
+        put("sleeve", Math.hypot(sh.run[0] - widest[0], wideY - shoulderY),
+            seg(sh.run[0], shoulderY, widest[0], wideY));
+      }
+    } else {
+      // Sleeveless (a bodysuit, a one-piece swimsuit): take the chest at the
+      // widest row in the upper third instead of below an armpit that is not there.
+      let cy = s.top, cw = -1;
+      for (let y = s.top; y <= s.top + Math.round(s.h * 0.35); y++) {
+        if (s.widths[y] > cw) { cw = s.widths[y]; cy = y; }
+      }
+      const chest = steadyExtent(s, cy, 2);
+      if (chest) put("chest", chest.w, seg(chest.run[0], cy, chest.run[1], cy));
+    }
+
+    // Waist: the narrowest single run between the armpit and the crotch.
+    const waistFrom = (pit > 0 ? pit : s.top + Math.round(s.h * 0.2)) + 1;
+    const waistTo = crotch > 0 ? crotch - 1 : s.top + Math.round(s.h * 0.65);
+    let wy = -1, ww = Infinity;
+    for (let y = waistFrom; y <= waistTo; y++) {
+      if (s.widths[y] > 0 && s.runs[y] === 1 && s.widths[y] < ww) { ww = s.widths[y]; wy = y; }
+    }
+    if (wy > 0) {
+      const waist = steadyExtent(s, wy, 2);
+      if (waist) put("waist", waist.w, seg(waist.run[0], wy, waist.run[1], wy));
+    }
+
+    // Hip: the widest single run between the waist and the crotch.
+    const hipTo = crotch > 0 ? crotch : s.top + Math.round(s.h * 0.75);
+    let hy = -1, hw = -1;
+    for (let y = wy > 0 ? wy : waistFrom; y <= hipTo; y++) {
+      if (s.runs[y] === 1 && s.widths[y] > hw) { hw = s.widths[y]; hy = y; }
+    }
+    if (hy > 0) {
+      const hip = steadyExtent(s, hy, 2);
+      if (hip) put("hip", hip.w, seg(hip.run[0], hy, hip.run[1], hy));
+    }
+
+    if (crotch > 0) {
+      put("inseam", s.bottom - crotch, seg(s.cx, crotch, s.cx, s.bottom));
+      const legY = s.bottom - Math.max(2, Math.round(s.h * 0.02));
+      const rs = solidRuns(s.mask.data, s.mask.width, legY, Math.max(2, Math.round(s.mask.width * 0.012)));
+      if (rs.length >= 1) {
+        const leg = rs[0];
+        put("legOpening", leg[1] - leg[0] + 1, seg(leg[0], legY, leg[1], legY));
+      }
+    }
+    return { ok: true, type, classification, points };
+  }
 
   if (type === "trousers" || type === "shorts") {
     const crotch = crotchY(s);

@@ -40,6 +40,9 @@ export type PickedItem = {
   upc: string | null;
   name: string | null;
   vendor: string | null;
+  /** Merchandise category — decides which points of measure are offered. */
+  category?: string | null;
+  subcategory?: string | null;
 };
 
 type Hit = { matrix_id: string; upc: string | null; name: string | null; vendor: string | null };

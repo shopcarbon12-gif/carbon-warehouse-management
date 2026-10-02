@@ -24,6 +24,7 @@ import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
 import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { focusReading, type FocusReading } from "@/lib/size-grading/sharpness";
+import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -158,11 +159,17 @@ export function SizeGradingWorkspace() {
   const [allowSoft, setAllowSoft] = useState(false);
   /** Operator's override of the detected garment, when the shape fooled it. */
   const [typeOverride, setTypeOverride] = useState<GarmentType | "">("");
+  /** What the catalogue says this product is — better than reading the shape. */
+  const [catalogueType, setCatalogueType] = useState<GarmentType | null>(null);
   const [busy, setBusy] = useState(false);
   const [calibrating, setCalibrating] = useState(false);
   const [calibPts, setCalibPts] = useState<Point[]>([]);
   const [refLengthCm, setRefLengthCm] = useState("27.94");
   const [calibPreset, setCalibPreset] = useState("letter-long");
+  /* Front and back are two measurements of the same garment. The operator
+     shoots one, saves it, flips the garment and shoots the other; the side is
+     stored with the reading so a back rise is never filed as a front rise. */
+  const [view, setView] = useState<"front" | "back">("front");
   const [pickedItem, setPickedItem] = useState<PickedItem | null>(null);
   const [pickedSize, setPickedSize] = useState<PickedSize | null>(null);
   const [saving, setSaving] = useState(false);
@@ -580,6 +587,16 @@ export function SizeGradingWorkspace() {
     if (blob) await loadFile(new File([blob], "capture.jpg", { type: "image/jpeg" }));
   }, [closeCamera, loadFile, focusAt]);
 
+  /* When an item is picked, start on the family the catalogue already knows.
+     The silhouette is the fallback, not the first answer, and this is also what
+     stops a pair of evening pants being measured as a shirt. */
+  useEffect(() => {
+    const guess = familyForCategory(pickedItem?.category, pickedItem?.subcategory);
+    const t = guess?.kind === "garment" ? guess.type : null;
+    setCatalogueType(t);
+    if (t) setTypeOverride(t);
+  }, [pickedItem]);
+
   const saveToItem = useCallback(async () => {
     if (!pickedSize || !result?.ok) return;
     const pointsCm: Record<string, number> = {};
@@ -598,6 +615,7 @@ export function SizeGradingWorkspace() {
           pointsCm,
           pxPerCm: pxPerCm ?? undefined,
           typeOverridden: Boolean(typeOverride),
+          view,
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; measuredAt?: string; error?: string };
@@ -608,7 +626,7 @@ export function SizeGradingWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [pickedSize, result, pxPerCm, typeOverride]);
+  }, [pickedSize, result, pxPerCm, typeOverride, view]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!image) return;
@@ -672,6 +690,35 @@ export function SizeGradingWorkspace() {
           e.target.value = "";
         }}
       />
+
+      {/* Which side is in front of the operator. Both sides are measured and
+          stored separately: the back rise of a pair of trousers is a different
+          number from the front rise, and on a top the pair is a free
+          cross-check — the two should agree within a few millimetres. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-xs uppercase tracking-wide text-[var(--wms-muted)]">Side</span>
+        <div className="inline-flex overflow-hidden rounded border border-[var(--wms-border)]">
+          {(["front", "back"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`px-3 py-1.5 text-sm capitalize max-md:min-h-11 ${
+                view === v
+                  ? "bg-[var(--wms-accent)] font-semibold text-[var(--wms-on-accent,#0c0f12)]"
+                  : "bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)]"
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <span className="font-mono text-xs text-[var(--wms-muted)]">
+          {view === "front"
+            ? "Lay the garment front up."
+            : "Turn the garment over — back up, same flat surface."}
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {/* The phone's own camera app first. It focuses; the in-page stream on
@@ -912,13 +959,18 @@ export function SizeGradingWorkspace() {
                     ))}
                   </select>
                   {typeOverride ? (
-                    <button
-                      type="button"
-                      className="font-mono text-xs text-[var(--wms-accent)] underline"
-                      onClick={() => setTypeOverride("")}
-                    >
-                      use auto
-                    </button>
+                    <span className="flex items-center gap-2">
+                      {catalogueType && typeOverride === catalogueType ? (
+                        <span className="font-mono text-xs text-[var(--wms-muted)]">from the catalogue</span>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="font-mono text-xs text-[var(--wms-accent)] underline"
+                        onClick={() => setTypeOverride("")}
+                      >
+                        use the photo instead
+                      </button>
+                    </span>
                   ) : (
                     <span className="font-mono text-xs text-[var(--wms-muted)]">
                       detected · {result.classification.why}
@@ -935,7 +987,9 @@ export function SizeGradingWorkspace() {
                   <tbody>
                     {readings.map((r) => (
                       <tr key={r.key} className="border-t border-[var(--wms-border)]">
-                        <td className="py-1.5 text-[var(--wms-muted)]">{POM_LABEL[r.key]}</td>
+                        <td className="py-1.5 text-[var(--wms-muted)]">
+                          {r.key === "rise" && view === "back" ? "Back rise" : POM_LABEL[r.key]}
+                        </td>
                         <td className="py-1.5 text-right font-mono text-[var(--wms-fg)]">{fmtIn(r.cm)}</td>
                         <td className="py-1.5 pl-3 text-right font-mono text-[var(--wms-muted)]">{fmt(r.cm)}</td>
                       </tr>
@@ -990,7 +1044,7 @@ export function SizeGradingWorkspace() {
                     title={pickedSize ? undefined : "Choose the item and size first"}
                   >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    {saving ? "Saving…" : "Save to item"}
+                    {saving ? "Saving…" : `Save ${view} to item`}
                   </button>
                   {focus?.verdict === "soft" && !allowSoft ? (
                     <button

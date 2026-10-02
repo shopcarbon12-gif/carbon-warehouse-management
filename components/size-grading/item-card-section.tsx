@@ -12,16 +12,25 @@
  *
  * Saving appends rather than overwrites, matching the Size Grading page: the
  * photo reading and the operator's correction are both kept, and the card shows
- * the most recent.
+ * the most recent of each side.
  *
- * Centimetres are stored; inches are shown beside each box as you type, because
- * the floor works in inches and the spec sheets are in centimetres.
+ * Front and back are held separately. Some points only exist on one side — a
+ * back rise is not a front rise — and where both exist the pair is a free
+ * cross-check on whether the garment was lying flat.
+ *
+ * Which points appear comes from the product's own category: a pair of evening
+ * pants offers Waist and Inseam, not Chest and Sleeve.
+ *
+ * Inches are shown by default because that is what the floor measures in, with
+ * a one-click switch to centimetres. Centimetres are what is STORED, always, so
+ * switching units can never round a saved value.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
 import { GARMENT_LABELS, POMS_FOR, POM_LABEL, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
+import { familyForCategory } from "@/lib/size-grading/catalog-family";
 
 type Measurement = {
   id: string;
@@ -29,18 +38,67 @@ type Measurement = {
   points_cm: Record<string, number>;
   measured_at: string;
   note: string | null;
+  view?: string;
 };
 
 const isGarment = (v: string): v is GarmentType => v in GARMENT_LABELS;
 
-export function SizeGradingSection({ customSkuId, editable }: { customSkuId: string; editable: boolean }) {
+/** The floor works in inches; the spec sheets are in centimetres. Stored cm. */
+const UNIT_KEY = "wms.sizeGrading.unit";
+
+export function SizeGradingSection({
+  customSkuId,
+  editable,
+  category,
+  subcategory,
+}: {
+  customSkuId: string;
+  editable: boolean;
+  /** The product's merchandise category, so the right points are offered. */
+  category?: string | null;
+  subcategory?: string | null;
+}) {
   const [loading, setLoading] = useState(true);
-  const [measurement, setMeasurement] = useState<Measurement | null>(null);
+  /* Front and back are separate readings of the same garment, so the card
+     carries both and the operator switches between them. Showing only the most
+     recent would hide the front the moment the back was measured. */
+  const [side, setSide] = useState<"front" | "back">("front");
+  const [sides, setSides] = useState<{ front: Measurement | null; back: Measurement | null }>({
+    front: null,
+    back: null,
+  });
+  const measurement = sides[side];
   /** Text, not numbers: a half-typed "5." must survive a keystroke. */
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /** Inches by default — it is what the floor measures in. Remembered per device. */
+  const [unit, setUnit] = useState<"in" | "cm">("in");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(UNIT_KEY) === "cm") setUnit("cm");
+    } catch {
+      /* storage blocked — inches it is */
+    }
+  }, []);
+  const toggleUnit = useCallback(() => {
+    setUnit((u) => {
+      const next = u === "in" ? "cm" : "in";
+      try {
+        window.localStorage.setItem(UNIT_KEY, next);
+      } catch {
+        /* nothing to remember it with */
+      }
+      return next;
+    });
+  }, []);
+
+  /* What the catalogue says this product is. A pair of evening pants should
+     offer Waist and Inseam, not Chest and Sleeve — and before this it offered
+     Chest and Sleeve, because the fallback for "nothing measured yet" was
+     "assume a top". */
+  const fromCatalogue = useMemo(() => familyForCategory(category, subcategory), [category, subcategory]);
 
   useEffect(() => {
     let alive = true;
@@ -48,10 +106,16 @@ export function SizeGradingSection({ customSkuId, editable }: { customSkuId: str
     void (async () => {
       try {
         const r = await fetch(`/api/inventory/size-grading?customSkuId=${customSkuId}`);
-        const j = (await r.json().catch(() => ({}))) as { measurement?: Measurement | null };
+        const j = (await r.json().catch(() => ({}))) as {
+          front?: Measurement | null;
+          back?: Measurement | null;
+        };
         if (!alive) return;
-        const m = j.measurement ?? null;
-        setMeasurement(m);
+        setSides({ front: j.front ?? null, back: j.back ?? null });
+        // Open on whichever side has a reading, front first.
+        const start: "front" | "back" = j.front ? "front" : j.back ? "back" : "front";
+        setSide(start);
+        const m = (start === "front" ? j.front : j.back) ?? null;
         setDraft(
           m ? Object.fromEntries(Object.entries(m.points_cm).map(([k, v]) => [k, String(v)])) : {},
         );
@@ -64,7 +128,14 @@ export function SizeGradingSection({ customSkuId, editable }: { customSkuId: str
     };
   }, [customSkuId]);
 
-  const type: GarmentType = measurement && isGarment(measurement.garment_type) ? measurement.garment_type : "top";
+  /* A saved measurement knows its own family; otherwise the catalogue decides;
+     only then fall back to a top. */
+  const type: GarmentType =
+    measurement && isGarment(measurement.garment_type)
+      ? measurement.garment_type
+      : fromCatalogue?.kind === "garment"
+        ? fromCatalogue.type
+        : "top";
   /* The family's own points, plus anything already stored that is not in that
      list — so a reading taken before a family changed is still shown and still
      editable, rather than silently dropped. */
@@ -72,6 +143,20 @@ export function SizeGradingSection({ customSkuId, editable }: { customSkuId: str
     ...POMS_FOR[type],
     ...Object.keys(draft).filter((k) => !(POMS_FOR[type] as string[]).includes(k)),
   ];
+
+  /* Switching side swaps which reading is being edited. Done here rather than
+     in the click handler so an unsaved edit on one side cannot leak onto the
+     other. */
+  const showSide = useCallback(
+    (next: "front" | "back") => {
+      setSide(next);
+      const m = sides[next];
+      setDraft(m ? Object.fromEntries(Object.entries(m.points_cm).map(([k, v]) => [k, String(v)])) : {});
+      setMsg(null);
+      setErr(null);
+    },
+    [sides],
+  );
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -91,19 +176,30 @@ export function SizeGradingSection({ customSkuId, editable }: { customSkuId: str
           customSkuId,
           garmentType: type,
           pointsCm,
+          view: side,
           note: "edited on the item card",
         }),
       });
       const j = (await r.json().catch(() => ({}))) as { ok?: boolean; measuredAt?: string; error?: string };
       if (!r.ok || !j.ok) throw new Error(j.error ?? "Could not save");
-      setMeasurement((m) => (m ? { ...m, points_cm: pointsCm, measured_at: j.measuredAt ?? m.measured_at } : m));
+      setSides((prev) => ({
+        ...prev,
+        [side]: {
+          id: prev[side]?.id ?? "new",
+          garment_type: type,
+          points_cm: pointsCm,
+          measured_at: j.measuredAt ?? new Date().toISOString(),
+          note: "edited on the item card",
+          view: side,
+        },
+      }));
       setMsg("Saved.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save");
     } finally {
       setSaving(false);
     }
-  }, [customSkuId, draft, type]);
+  }, [customSkuId, draft, type, side]);
 
   if (loading) {
     return (
@@ -123,30 +219,77 @@ export function SizeGradingSection({ customSkuId, editable }: { customSkuId: str
 
   return (
     <div className="flex flex-col gap-2 px-3 py-2">
-      <p className="font-mono text-[0.72rem] text-[var(--wms-muted)]">
-        {measurement
-          ? `${GARMENT_LABELS[type]} · measured ${new Date(measurement.measured_at).toLocaleDateString()}`
-          : "Not measured yet — type the measurements in, or use Inventory → Size Grading."}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-mono text-[0.72rem] text-[var(--wms-muted)]">
+          {measurement
+            ? `${GARMENT_LABELS[type]} · measured ${new Date(measurement.measured_at).toLocaleDateString()}`
+            : fromCatalogue?.kind === "not-measurable"
+              ? fromCatalogue.why
+              : `${GARMENT_LABELS[type]} · not measured yet — type them in, or use Inventory → Size Grading.`}
+        </p>
+        <span className="inline-flex overflow-hidden rounded border border-[var(--wms-border)]">
+          {(["front", "back"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => showSide(v)}
+              className={`px-2 py-0.5 font-mono text-[0.7rem] capitalize max-md:min-h-9 ${
+                side === v
+                  ? "bg-[var(--wms-accent)] font-semibold text-[var(--wms-on-accent,#0c0f12)]"
+                  : "text-[var(--wms-fg)]"
+              }`}
+            >
+              {v}
+              {sides[v] ? " ✓" : ""}
+            </button>
+          ))}
+        </span>
+        <button
+          type="button"
+          onClick={toggleUnit}
+          className="rounded border border-[var(--wms-border)] px-2 py-0.5 font-mono text-[0.7rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:min-h-9"
+          title={`Showing ${unit === "in" ? "inches" : "centimetres"} — click for ${unit === "in" ? "cm" : "inches"}`}
+        >
+          {unit === "in" ? "inches" : "cm"} ⇄
+        </button>
+      </div>
 
       {keys.map((k) => {
         const raw = draft[k] ?? "";
         const n = Number(String(raw).replace(",", "."));
-        const inches = Number.isFinite(n) && n > 0 ? `${(n / 2.54).toFixed(1)}"` : "";
+        /* Centimetres are what is stored, so the box shows the chosen unit and
+           the other one sits beside it. Converting on display rather than on
+           every keystroke keeps a half-typed "5." intact and means switching
+           units can never round a saved value. */
+        const shown = unit === "cm" ? raw : Number.isFinite(n) && n > 0 ? (n / 2.54).toFixed(2).replace(/\.?0+$/, "") : raw;
+        const other =
+          Number.isFinite(n) && n > 0 ? (unit === "cm" ? `${(n / 2.54).toFixed(1)}"` : `${n.toFixed(1)} cm`) : "";
         return (
           <label key={k} className="flex items-center justify-between gap-3 text-[0.85rem]">
-            <span className="text-[var(--wms-muted)]">{POM_LABEL[k as PomKey] ?? k}</span>
+            <span className="text-[var(--wms-muted)]">
+              {k === "rise" && side === "back" ? "Back rise" : (POM_LABEL[k as PomKey] ?? k)}
+            </span>
             <span className="flex items-center gap-2">
-              <span className="w-12 text-right font-mono text-[0.75rem] text-[var(--wms-muted)]">{inches}</span>
+              <span className="w-16 text-right font-mono text-[0.75rem] text-[var(--wms-muted)]">{other}</span>
               <input
                 type="text"
                 inputMode="decimal"
-                value={raw}
+                value={shown}
                 disabled={!editable}
-                onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))}
+                onChange={(e) => {
+                  const typed = e.target.value;
+                  if (unit === "cm") {
+                    setDraft((d) => ({ ...d, [k]: typed }));
+                    return;
+                  }
+                  // Typed in inches: keep the draft in centimetres, which is
+                  // the only unit anything downstream deals in.
+                  const v = Number(typed.replace(",", "."));
+                  setDraft((d) => ({ ...d, [k]: Number.isFinite(v) && typed.trim() ? String(+(v * 2.54).toFixed(2)) : "" }));
+                }}
                 className="w-24 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-right font-mono text-[var(--wms-fg)] disabled:opacity-60 max-md:min-h-11 max-md:text-base"
               />
-              <span className="w-6 font-mono text-[0.75rem] text-[var(--wms-muted)]">cm</span>
+              <span className="w-6 font-mono text-[0.75rem] text-[var(--wms-muted)]">{unit === "cm" ? "cm" : "in"}</span>
             </span>
           </label>
         );
