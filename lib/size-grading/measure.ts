@@ -116,6 +116,108 @@ export function autoThreshold(
   return Math.max(15, Math.min(120, best));
 }
 
+/**
+ * Grow the garment outward from the pixel the operator tapped.
+ *
+ * The border-ring background model below assumes a plain sweep. Photographed
+ * on a warehouse floor it fails badly and silently: the border is floorboards,
+ * a dark pile at one edge and the operator's own feet, so the fitted
+ * "background" is meaningless, the lit part of the floor becomes foreground,
+ * and the largest blob is a patch of floor — the garment never even competes.
+ *
+ * Growing from a tap needs no background model at all. It takes the colour
+ * where the operator pointed and spreads while the colour holds, which is what
+ * "this garment" actually means and is unaffected by whatever else is in frame.
+ *
+ * `tolerance` is the RGB distance a pixel may differ from the seed colour.
+ */
+export function segmentFromSeed(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  seed: Point,
+  tolerance: number,
+): ShirtMask {
+  const n = width * height;
+  const sx = Math.max(0, Math.min(width - 1, Math.round(seed.x)));
+  const sy = Math.max(0, Math.min(height - 1, Math.round(seed.y)));
+
+  /* Median of a small patch, not the single pixel: a tap can land on a seam, a
+     print or a specular highlight, none of which is the garment's colour. */
+  const rs: number[] = [], gs: number[] = [], bs: number[] = [];
+  const R = 4;
+  for (let y = Math.max(0, sy - R); y <= Math.min(height - 1, sy + R); y++) {
+    for (let x = Math.max(0, sx - R); x <= Math.min(width - 1, sx + R); x++) {
+      const p = (y * width + x) * 4;
+      rs.push(rgba[p]); gs.push(rgba[p + 1]); bs.push(rgba[p + 2]);
+    }
+  }
+  const mid = (a: number[]) => { a.sort((x, y) => x - y); return a[a.length >> 1]; };
+  const sr = mid(rs), sg = mid(gs), sb = mid(bs);
+
+  const t2 = tolerance * tolerance;
+  let fg: Uint8Array = new Uint8Array(n);
+  const stack = new Int32Array(n);
+  let sp = 0;
+  const start = sy * width + sx;
+  fg[start] = 1;
+  stack[sp++] = start;
+  const close = (i: number) => {
+    const p = i * 4;
+    const dr = rgba[p] - sr, dg = rgba[p + 1] - sg, db = rgba[p + 2] - sb;
+    return dr * dr + dg * dg + db * db <= t2;
+  };
+  while (sp) {
+    const p = stack[--sp];
+    const x = p % width;
+    const visit = (q: number) => {
+      if (!fg[q] && close(q)) { fg[q] = 1; stack[sp++] = q; }
+    };
+    if (x > 0) visit(p - 1);
+    if (x < width - 1) visit(p + 1);
+    if (p >= width) visit(p - width);
+    if (p < width * (height - 1)) visit(p + width);
+  }
+
+  const r = Math.max(1, Math.round(Math.min(width, height) / 300));
+  fg = erode(dilate(fg, width, height, r), width, height, r); // seal seams and creases
+  fg = dilate(erode(fg, width, height, r), width, height, r); // drop speckle
+  fg = fillHoles(fg, width, height);
+  let area = 0;
+  for (let i = 0; i < n; i++) area += fg[i];
+  return { width, height, data: fg, area };
+}
+
+/**
+ * A starting tolerance for the seeded grow, from how varied the garment's own
+ * colour is around the tap — a flat jersey needs a tight tolerance, a textured
+ * or creased fabric a looser one.
+ */
+export function autoSeedTolerance(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  seed: Point,
+): number {
+  const sx = Math.max(0, Math.min(width - 1, Math.round(seed.x)));
+  const sy = Math.max(0, Math.min(height - 1, Math.round(seed.y)));
+  const R = Math.max(6, Math.round(Math.min(width, height) * 0.02));
+  const vals: number[] = [];
+  for (let y = Math.max(0, sy - R); y <= Math.min(height - 1, sy + R); y += 2) {
+    for (let x = Math.max(0, sx - R); x <= Math.min(width - 1, sx + R); x += 2) {
+      const p = (y * width + x) * 4;
+      vals.push(rgba[p], rgba[p + 1], rgba[p + 2]);
+    }
+  }
+  let mean = 0;
+  for (const v of vals) mean += v;
+  mean /= Math.max(1, vals.length);
+  let varsum = 0;
+  for (const v of vals) varsum += (v - mean) * (v - mean);
+  const sd = Math.sqrt(varsum / Math.max(1, vals.length));
+  return Math.max(28, Math.min(110, Math.round(28 + sd * 2.4)));
+}
+
 export function segmentShirt(
   rgba: Uint8ClampedArray | Uint8Array,
   width: number,

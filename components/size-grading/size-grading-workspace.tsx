@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Upload } from "lucide-react";
 
-import { autoThreshold, segmentShirt, type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -98,8 +98,11 @@ export function SizeGradingWorkspace() {
   /** null = chosen from the photo itself; a number = the operator took over. */
   const [threshold, setThreshold] = useState<number | null>(null);
   const [autoT, setAutoT] = useState(48);
-  /** Where the operator tapped to say "this is the garment". */
-  const [seed, setSeed] = useState<Point | null>(null);
+  /** Where the garment is. Starts at the centre of the frame; the operator
+   *  moves it by tapping, which is the only reliable way to say which of the
+   *  things in a warehouse photo is the one being measured. */
+  const [seed, setSeed] = useState<Point>({ x: 0, y: 0 });
+  const [tapped, setTapped] = useState(false);
   const [result, setResult] = useState<GarmentResult | null>(null);
   const [mask, setMask] = useState<ShirtMask | null>(null);
   /** Operator's override of the detected garment, when the shape fooled it. */
@@ -136,7 +139,7 @@ export function SizeGradingWorkspace() {
     setBusy(true);
     const id = window.setTimeout(() => {
       const t = threshold ?? autoT;
-      const m = segmentShirt(image.data, image.width, image.height, t, seed);
+      const m = segmentFromSeed(image.data, image.width, image.height, seed, t);
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
       setBusy(false);
@@ -215,6 +218,20 @@ export function SizeGradingWorkspace() {
         ctx.fillText(label, lx, ly);
       }
     }
+    if (!calibrating && image) {
+      // Where the green is growing from — so a wrong mask is obvious at a glance.
+      ctx.strokeStyle = "#22c55e";
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.arc(seed.x, seed.y, lw * 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(seed.x - lw * 9, seed.y);
+      ctx.lineTo(seed.x + lw * 9, seed.y);
+      ctx.moveTo(seed.x, seed.y - lw * 9);
+      ctx.lineTo(seed.x, seed.y + lw * 9);
+      ctx.stroke();
+    }
     if (calibrating) {
       ctx.strokeStyle = "#ef4444";
       ctx.fillStyle = "#ef4444";
@@ -231,7 +248,7 @@ export function SizeGradingWorkspace() {
         ctx.stroke();
       }
     }
-  }, [image, result, mask, calibrating, calibPts]);
+  }, [image, result, mask, calibrating, calibPts, seed]);
 
   /**
    * Open the device's own camera with the settings this measurement needs,
@@ -345,10 +362,12 @@ export function SizeGradingWorkspace() {
       ctx.drawImage(bmp, 0, 0, w, h);
       bmp.close();
       const data = ctx.getImageData(0, 0, w, h);
+      const centre = { x: w / 2, y: h / 2 };
       setImage(data);
-      setAutoT(autoThreshold(data.data, w, h));
+      setSeed(centre);
+      setTapped(false);
+      setAutoT(autoSeedTolerance(data.data, w, h, centre));
       setThreshold(null);
-      setSeed(null);
       setCalibPts([]);
     } catch {
       setError("Could not read that image.");
@@ -398,8 +417,12 @@ export function SizeGradingWorkspace() {
       setCalibPts((pts) => (pts.length >= 2 ? [p] : [...pts, p]));
       return;
     }
-    /* Not calibrating: the tap says which shape is the garment. */
+    /* Not calibrating: the tap says which garment is being measured, and the
+       tolerance is re-read from the fabric around it. */
     setSeed(p);
+    setTapped(true);
+    setAutoT(autoSeedTolerance(image.data, image.width, image.height, p));
+    setThreshold(null);
   };
 
   const saveCalibration = () => {
@@ -445,8 +468,15 @@ export function SizeGradingWorkspace() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => void openCamera()}>
+        {/* The phone's own camera app first. It focuses; the in-page stream on
+            at least one Android here does not, and a soft photo measures wrong
+            without ever looking wrong. The live preview stays for devices that
+            do expose focus control. */}
+        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => cameraInputRef.current?.click()}>
           <Camera className="h-4 w-4" /> Take photo
+        </button>
+        <button type="button" className="wms-btn max-md:min-h-11" onClick={() => void openCamera()}>
+          Live preview
         </button>
         <button type="button" className="wms-btn-accent-soft inline-flex items-center gap-1.5 max-md:min-h-11" onClick={() => fileInputRef.current?.click()}>
           <Upload className="h-4 w-4" /> Upload
@@ -738,8 +768,9 @@ export function SizeGradingWorkspace() {
                 onChange={(e) => setThreshold(Number(e.target.value))}
               />
               <span className="text-xs text-[var(--wms-muted)]">
-                <strong>Green on the wrong thing? Tap the garment in the photo</strong> — that picks the shape under
-                your finger instead of the biggest one.
+                <strong>Tap the middle of the garment in the photo.</strong> The green grows out from where you tap,
+                so whatever else is in frame — floor, feet, a pile of stock — is ignored.
+                {!tapped ? " Right now it is guessing from the centre of the frame." : ""}
               </span>
               <span className="text-xs text-[var(--wms-muted)]">
                 The level is chosen from the photo. Drag LEFT if part of the garment is missing from the green, RIGHT
