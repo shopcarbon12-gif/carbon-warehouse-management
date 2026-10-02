@@ -574,6 +574,42 @@ function parseItemRefViews(views: unknown, fallbackRefs: unknown): ItemRefViewLi
 /** Which attached images are the FRONT and which are the BACK — so the
  *  generator can never copy a back print onto the front (or vice versa).
  *  Only emitted when the operator actually sorted photos into Front/Back. */
+type ColorRun = { name: string; detail: string; refUrl: string; hardwareNote: string };
+
+function parseColorOverride(v: unknown): ColorRun | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const s = (x: unknown, max: number) => (typeof x === "string" ? x.trim().slice(0, max) : "");
+  const name = s(o.name, 120);
+  const refUrl = s(o.refUrl, 2048);
+  if (!name && !refUrl) return null;
+  // A data URL here would be re-uploaded on every panel of every run; the
+  // Studio stores the photo first and sends the stored URL.
+  return {
+    name,
+    detail: s(o.detail, 400),
+    refUrl: /^https?:\/\//i.test(refUrl) ? refUrl : "",
+    hardwareNote: s(o.hardwareNote, 600),
+  };
+}
+
+/**
+ * Put the new colourway into the spec's own Garment line.
+ *
+ * Only that line. The spec also says things like "STITCHING: matching dark grey
+ * topstitch" and "HARDWARE: zip, black", and rewriting every colour word in it
+ * would be a blunt instrument: "black" on a zip is the zip's own finish, not the
+ * cloth, and turning it into "navy" would invent hardware nobody has seen. The
+ * cloth colour is replaced here and the rule below tells the generator how to
+ * read the rest.
+ */
+function applySpecColorOverride(spec: string, colorName: string): string {
+  if (!spec || !colorName) return spec;
+  const line = /^(\s*\d+\.\s*Garment:\s*[^—\n]*—\s*)([^\n]*?)(\.?\s*)$/m;
+  if (line.test(spec)) return spec.replace(line, (_m, head: string, _old: string, tail: string) => `${head}${colorName}${tail}`);
+  return `${spec}\nGARMENT COLOUR: ${colorName}.`;
+}
+
 function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefView[] }): string[] {
   const front = args.itemViews.filter((v) => v === "front").length;
   const back = args.itemViews.filter((v) => v === "back").length;
@@ -708,17 +744,38 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       matrixId,
       backIsPlain,
       specConfirmed,
+      colorOverride,
     } = await req.json();
     // Item refs sorted by view (Studio: General / Front / Back sections). The
     // image order sent to OpenAI is general → front → back so the prompt can
     // say which attached images are the front and which are the back.
     const viewLists = parseItemRefViews(itemRefViews, itemRefs);
+    /* "Generate another colour": the same garment in a colourway we hold ONE
+       photo of. The matrix spec stays in charge of construction, text,
+       placement and the zone map — those do not change with the dye, and one
+       phone photo could not overturn them anyway. Only the cloth colour is
+       replaced, and the photo rides along as a reference so the render matches
+       a real sample rather than a colour word. */
+    const colorRun = parseColorOverride(colorOverride);
+    /* Appended LAST among the general photos, so its position in the item list
+       is known without matching URLs back after normalisation. */
+    let colorAnchorIdx = -1;
+    if (colorRun?.refUrl) {
+      viewLists.general = [...viewLists.general, colorRun.refUrl];
+      colorAnchorIdx = viewLists.general.length - 1;
+    }
     // Pre-generation item analysis (client → /api/openai/item-spec, possibly
     // edited by the operator). Appended INSIDE the server lock block and capped
     // so it can never push the prompt over the model limit.
     const itemSpecRaw =
       typeof itemSpec === "string" && itemSpec.trim()
-        ? cutToBytes(itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"), LOCK_TEXT_MAX_BYTES + 100)
+        ? cutToBytes(
+            applySpecColorOverride(
+              itemSpec.trim().replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n"),
+              colorRun?.name ?? "",
+            ),
+            LOCK_TEXT_MAX_BYTES + 100,
+          )
         : "";
     /* The back of a garment has THREE states, not two, and collapsing them is
        how you get both failure modes at once: an invented back print, and a
@@ -1024,6 +1081,24 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           ]
         : buildBackStateLine(backState, normalizedPanelQa)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
+      ...(colorRun
+        ? [
+            `COLOURWAY — this run renders the SAME product in a different colour: ${
+              colorRun.name || "the colour in the colour reference photo"
+            }.${colorRun.detail ? ` ${colorRun.detail}` : ""}`,
+            ...(colorImageNumber
+              ? [
+                  `- Attached image ${colorImageNumber} is a photograph of THIS colourway. Take the colour from it: match the cloth's lightness, saturation, undertone and surface the way that photo shows them, not a generic idea of the colour's name. Take nothing else from it — it is a colour swatch, not a second opinion on how the garment is built.`,
+                ]
+              : [
+                  `- No photograph of this colourway reached the renderer, so the colour comes from its name alone. Keep it plain and even; do not invent a wash, a fade or a pattern.`,
+                ]),
+            "- The CLOTH is this colour everywhere it appears: front, back, legs, sleeves, waistband, collar, cuffs and hem. Where a line below names the old colour for the fabric, read it as this colour instead.",
+            "- HARDWARE, TRIM AND STITCHING KEEP THE COLOURS THEIR OWN LINES GIVE THEM. A zip the spec calls black stays black; topstitch the spec calls matching follows the NEW cloth colour, because that is what matching means.",
+            ...(colorRun.hardwareNote ? [`- Checked on the colourway photo: ${colorRun.hardwareNote}`] : []),
+            "- Everything else is unchanged: same cut, same fit, same seams, same pockets, same hardware in the same places, same text and graphics at the same size and position. This is a dye change, not a redesign.",
+          ]
+        : []),
       ...sidePlacementLines,
       ...(poseVariationDirective ? [poseVariationDirective] : []),
     ].join("\n");
@@ -1064,6 +1139,21 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const itemFilesCount = downloaded
       .slice(modelAnchors.length)
       .filter((r) => r.status === "fulfilled").length;
+
+    /* Which attached image is the colourway photo, counted the way the view map
+       counts: model refs first, then the item photos that actually downloaded.
+       A photo that failed to download is a photo the model never saw, so if the
+       colour ref is the one that failed we say nothing about it rather than
+       pointing at somebody else's picture. */
+    const colorImageNumber = (() => {
+      if (colorAnchorIdx < 0) return 0;
+      const slot = downloaded[modelAnchors.length + colorAnchorIdx];
+      if (!slot || slot.status !== "fulfilled") return 0;
+      const okBefore = downloaded
+        .slice(modelAnchors.length, modelAnchors.length + colorAnchorIdx)
+        .filter((r) => r.status === "fulfilled").length;
+      return modelFilesCount + okBefore + 1;
+    })();
 
     if (!referenceFiles.length || modelFilesCount === 0 || itemFilesCount === 0) {
       const summary = buildReferenceDownloadErrorDetails({

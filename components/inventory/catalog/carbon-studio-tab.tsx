@@ -40,6 +40,18 @@ type Crop = {
   /** The run judges are still working (the image is already here). */
   qaPending?: boolean;
 };
+/** One colourway on file for this product: the single photo of it, the colour
+ *  name the render must hit, anything the colour check found that disagrees
+ *  with the product spec, and the seed that keeps this colour's poses and
+ *  expressions away from the other colours'. */
+type ColorRun = {
+  color: string;
+  colorRefUrl: string;
+  colorName: string;
+  hardwareNote: string;
+  variationSeed: number;
+};
+
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
 /** Item-reference sections (owner, 2026-08-26): General = exactly the old
@@ -615,6 +627,31 @@ export function CarbonStudioTab({
   }, [variants]);
   const [color, setColor] = useState<string>("");
 
+  /* "Generate another colour": the same product rendered in a colourway we hold
+     ONE photo of. The item analysis above is per product and is reused as-is —
+     construction, text, placement and the zone map do not change with the dye,
+     and a single phone photo could not overturn them. Only the cloth colour,
+     that photo, and the variation seed are per colour. */
+  const [colorRuns, setColorRuns] = useState<Record<string, ColorRun>>({});
+  const [colorBusy, setColorBusy] = useState(false);
+  const colorRun = colorRuns[color] ?? null;
+  const loadColorRuns = useCallback(async () => {
+    if (!matrixId) return;
+    try {
+      const r = await fetch(`/api/studio/color-run?matrixId=${encodeURIComponent(matrixId)}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = (await r.json().catch(() => ({}))) as { runs?: ColorRun[] };
+      const map: Record<string, ColorRun> = {};
+      for (const run of j.runs ?? []) if (run?.color) map[run.color] = run;
+      setColorRuns(map);
+    } catch {
+      /* the colourway panel simply shows nothing on file */
+    }
+  }, [matrixId]);
+  useEffect(() => {
+    void loadColorRuns();
+  }, [loadColorRuns]);
+
   // Per-colour image assignment (matches Images tab): one colour → every size's
   // variant. Used to set a generated pic as the MAIN pic for a variant colour.
   const colorOpts = useMemo(() => {
@@ -755,6 +792,14 @@ export function CarbonStudioTab({
      still there or not: a re-collect ("Check again", the drain on Done) must
      not bring back a photo the operator removed or cropped away. */
   const handoffSeenRef = useRef<Set<string>>(new Set());
+  /* Which slot the phone is currently feeding: the item-reference tray, or the
+     colourway's single photo. A ref, not state, because addHandoffBatch holds
+     no dependencies on purpose — a verdict that lands after the panel closed
+     must still be delivered. */
+  const handoffTargetRef = useRef<"refs" | "colour">("refs");
+  /* Late-bound for the same reason: addHandoffBatch is created once, and must
+     call the CURRENT adopt function rather than the one that existed then. */
+  const adoptColorPhotoRef = useRef<(url: string) => void | Promise<void>>(() => {});
   /* When the server will drop the session — refreshed from every poll (each
      phone upload extends it), so the panel's lifetime follows the phone's
      activity instead of a fixed timer that ran out mid-upload. */
@@ -771,6 +816,20 @@ export function CarbonStudioTab({
     );
     if (!fresh.length) return 0;
     for (const im of fresh) handoffSeenRef.current.add(im.imageUrl);
+    /* The operator opened the QR from the colourway row, so the next photo is
+       the colour sample, not another product reference. One photo is all that
+       slot holds; the target resets immediately so a second shot behaves
+       normally instead of silently replacing the first. */
+    if (handoffTargetRef.current === "colour") {
+      handoffTargetRef.current = "refs";
+      void adoptColorPhotoRef.current(fresh[0].imageUrl);
+      const rest = fresh.slice(1);
+      if (!rest.length) return 1;
+      const more = rest.map((im): ItemRef => ({ url: im.imageUrl, preview: previewFor(im.imageUrl), view }));
+      itemRefsRef.current = [...itemRefsRef.current, ...more];
+      setItemRefs((prev) => [...prev, ...more.filter((b) => !prev.some((p) => p.url === b.url))]);
+      return fresh.length;
+    }
     // Displayed through the durable admin proxy (the session-scoped preview
     // route dies with the session; the R2 object does not).
     const batch = fresh.map((im): ItemRef => ({ url: im.imageUrl, preview: previewFor(im.imageUrl), view }));
@@ -944,6 +1003,111 @@ export function CarbonStudioTab({
       setBusy(null);
     }
   }, []);
+
+  /**
+   * Take a stored photo as THIS colour's sample: read the colour off it, note
+   * anything that disagrees with the product spec, and save both.
+   *
+   * The colour is named rather than left as "whatever that photo looks like",
+   * because a phone photo carries its lighting with it — warm indoors, blue in
+   * shade — and the name is what the operator can correct when it reads wrong.
+   */
+  const adoptColorPhoto = useCallback(
+    async (url: string) => {
+      const target = color;
+      if (!target || !url) return;
+      setColorBusy(true);
+      setErr(null);
+      try {
+        let colorName = "";
+        let hardwareNote = "";
+        try {
+          const r = await fetch("/api/openai/color-check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ colorRef: url, itemSpec, itemType, colorLabel: target }),
+          });
+          const j = (await r.json().catch(() => ({}))) as {
+            colorName?: string;
+            colorDetail?: string;
+            uncertain?: string;
+            hardwareNote?: string;
+            error?: string;
+          };
+          if (!r.ok) throw new Error(j.error || `Colour check failed (HTTP ${r.status})`);
+          colorName = [j.colorName, j.colorDetail].filter(Boolean).join(" — ").slice(0, 120);
+          hardwareNote = [j.hardwareNote, j.uncertain ? `Uncertain: ${j.uncertain}` : ""].filter(Boolean).join(" ");
+        } catch (e) {
+          /* The photo is still the colour reference even when the check fails;
+             it goes to the generator either way. Only the name is missing, and
+             the operator can type it. */
+          setErr(
+            `Colour photo saved, but the colour could not be read automatically${
+              e instanceof Error ? `: ${e.message}` : "."
+            } Type the colour name yourself before generating.`,
+          );
+        }
+        const save = await fetch("/api/studio/color-run", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ matrixId, color: target, colorRefUrl: url, colorName, hardwareNote }),
+        });
+        const sj = (await save.json().catch(() => ({}))) as { run?: ColorRun; error?: string };
+        if (!save.ok || !sj.run) throw new Error(sj.error || `Could not save the colourway (HTTP ${save.status})`);
+        setColorRuns((prev) => ({ ...prev, [target]: sj.run as ColorRun }));
+        if (colorName) setMsg(`Colour read as "${colorName}".`);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not save the colourway photo.");
+      } finally {
+        setColorBusy(false);
+      }
+    },
+    [color, itemSpec, itemType, matrixId],
+  );
+  useEffect(() => {
+    adoptColorPhotoRef.current = adoptColorPhoto;
+  }, [adoptColorPhoto]);
+
+  /** Upload one file as this colour's sample. */
+  const uploadColorPhoto = useCallback(
+    async (file: File | undefined) => {
+      if (!file || !file.type.startsWith("image/")) return;
+      setColorBusy(true);
+      setErr(null);
+      try {
+        const { blob, name } = await downscaleForUpload(file);
+        const fd = new FormData();
+        fd.append("file", blob, name);
+        const r = await fetch("/api/models/upload", { method: "POST", body: fd });
+        const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!r.ok || !j.url) throw new Error(j.error ?? `Upload failed (HTTP ${r.status})`);
+        await adoptColorPhoto(j.url);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Colour photo upload failed.");
+        setColorBusy(false);
+      }
+    },
+    [adoptColorPhoto],
+  );
+
+  /** Forget this colourway: the product's own photos and spec are untouched. */
+  const clearColorRun = useCallback(async () => {
+    if (!color || !matrixId) return;
+    setColorBusy(true);
+    try {
+      await fetch(
+        `/api/studio/color-run?matrixId=${encodeURIComponent(matrixId)}&color=${encodeURIComponent(color)}`,
+        { method: "DELETE" },
+      );
+      setColorRuns((prev) => {
+        const next = { ...prev };
+        delete next[color];
+        return next;
+      });
+    } finally {
+      setColorBusy(false);
+    }
+  }, [color, matrixId]);
 
   /** Replace one item reference with its cropped version, keeping its view. */
   const applyCrop = useCallback(
@@ -1140,6 +1304,10 @@ export function CarbonStudioTab({
     const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
     const runTag = Date.now().toString(36);
     const chosen = [...panels].sort((a, b) => a - b);
+    /* Pinned for the whole run: the operator switching the colour dropdown
+       mid-generation must not leave panel 3 rendering a different colourway
+       from panel 1. */
+    const activeColorRun = colorRun?.colorRefUrl ? colorRun : null;
     // One facial expression per run so the model doesn't look robotic across
     // products; kept consistent across this run's panels for set coherence.
     const expressionDirective = pickExpressionDirective();
@@ -1225,6 +1393,21 @@ export function CarbonStudioTab({
             backIsPlain,
             // true = a human edited the spec text; false = raw analyzer output.
             specConfirmed,
+            /* A colourway on file turns this into a dye change: same analysis,
+               same construction, new cloth colour, with that colour's own photo
+               attached. Its stored seed keeps the poses and expressions away
+               from the colours already generated, which is the whole reason the
+               seed is stored per colour rather than taken from the clock. */
+            ...(activeColorRun
+              ? {
+                  colorOverride: {
+                    name: activeColorRun.colorName,
+                    refUrl: activeColorRun.colorRefUrl,
+                    hardwareNote: activeColorRun.hardwareNote,
+                  },
+                  variationSeed: activeColorRun.variationSeed,
+                }
+              : {}),
           }),
         });
         const parsed = (await resp.json().catch(() => null)) as PanelResponse | null;
@@ -1335,7 +1518,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -2125,6 +2308,103 @@ export function CarbonStudioTab({
           </select>
         </div>
       </div>
+
+      {/* Another colourway: same product, same analysis, one photo of the new
+          colour. Only rendered when the catalogue actually has colours. */}
+      {canManage && colors.length > 0 && color ? (
+        <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={`${label} mb-0`}>
+              Colourway · <span className="text-[var(--wms-fg)]">{color}</span>
+            </span>
+            {colorRun?.colorRefUrl ? (
+              <button
+                type="button"
+                onClick={() => void clearColorRun()}
+                disabled={colorBusy}
+                className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
+              >
+                remove colour photo
+              </button>
+            ) : null}
+          </div>
+
+          {colorRun?.colorRefUrl ? (
+            <div className="mt-2 flex flex-wrap items-start gap-3">
+              <img
+                src={previewFor(colorRun.colorRefUrl)}
+                alt={`${color} colour reference`}
+                className="h-20 w-20 shrink-0 rounded border border-[var(--wms-border)] object-cover"
+              />
+              <div className="min-w-[14rem] flex-1">
+                <span className={label}>Colour the render must hit</span>
+                <input
+                  className={`${field} max-md:text-base`}
+                  value={colorRun.colorName}
+                  placeholder="e.g. deep navy blue"
+                  onChange={(e) =>
+                    setColorRuns((prev) => ({ ...prev, [color]: { ...prev[color], colorName: e.target.value } }))
+                  }
+                  onBlur={(e) => {
+                    void fetch("/api/studio/color-run", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        matrixId,
+                        color,
+                        colorRefUrl: colorRun.colorRefUrl,
+                        colorName: e.target.value,
+                        hardwareNote: colorRun.hardwareNote,
+                      }),
+                    }).catch(() => {});
+                  }}
+                />
+                <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
+                  Read off the photo. A phone photo carries its lighting, so correct this if the shade looks wrong —
+                  the words are what the render follows.
+                </p>
+                {colorRun.hardwareNote ? (
+                  <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+                    Colour check: {colorRun.hardwareNote}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1 text-[0.78rem] text-[var(--wms-fg)]">
+              Add one photo of this colour to render the same product in it. The item photos and the analysis above are
+              reused unchanged — only the cloth colour changes, and the poses and expressions are rotated so the set
+              does not look like the other colour with a filter on it.
+            </p>
+          )}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
+              {colorRun?.colorRefUrl ? "replace photo" : "upload colour photo"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  void uploadColorPhoto(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                handoffTargetRef.current = "colour";
+                void startPhoneCamera();
+              }}
+              className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2"
+            >
+              phone camera
+            </button>
+            {colorBusy ? <span className="font-mono text-[0.72rem] text-[var(--wms-accent)]">reading colour…</span> : null}
+          </div>
+        </div>
+      ) : null}
 
       <div>
         <span className={label}>Item instruction (optional)</span>
