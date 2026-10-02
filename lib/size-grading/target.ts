@@ -976,13 +976,121 @@ export function applyH(H: Homography, x: number, y: number): Point {
 
 /* ──────────────────────────────── rectify ───────────────────────────────── */
 
+/**
+ * Where the squared-up image sits in the world (target centimetres, the
+ * target's top-left at 0,0): output pixel (ox, oy) is the point
+ * u = minU + ox / pxPerCm, v = minV + oy / pxPerCm in a frame turned by
+ * `angle` from the target's own axes. Kept so a second image — the garment
+ * mask — can be warped onto exactly the same pixels.
+ */
+export type RectFrame = {
+  angle: number;
+  minU: number;
+  minV: number;
+  pxPerCm: number;
+  width: number;
+  height: number;
+};
+
 export type Rectified = {
   data: Uint8ClampedArray;
   width: number;
   height: number;
   /** Exact, by construction — this is the whole point of rectifying. */
   pxPerCm: number;
+  frame: RectFrame;
+  /** The target's four corners, in output pixels. */
+  targetOut: Quad;
 };
+
+/** World centimetres → output pixels of a frame. */
+export function worldToFrame(f: RectFrame, x: number, y: number): Point {
+  const c = Math.cos(f.angle), s = Math.sin(f.angle);
+  return { x: (c * x + s * y - f.minU) * f.pxPerCm, y: (-s * x + c * y - f.minV) * f.pxPerCm };
+}
+
+/** A frame's output pixel → the photo pixel it was sampled from. */
+export function frameToSource(quad: Quad, f: RectFrame, ox: number, oy: number): Point {
+  const W = TARGET.outerWCm, Hc = TARGET.outerHCm;
+  const H = homography([{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: Hc }, { x: 0, y: Hc }], quad);
+  const c = Math.cos(f.angle), s = Math.sin(f.angle);
+  const u = f.minU + ox / f.pxPerCm, v = f.minV + oy / f.pxPerCm;
+  return H ? applyH(H, c * u - s * v, s * u + c * v) : { x: ox, y: oy };
+}
+
+/** How far the paper reaches past the printed ring, in cm. */
+export const SHEET_CM = 2.5;
+
+/** The sheet the target is printed on, in a frame's output pixels. */
+export function targetSheet(f: RectFrame): Quad {
+  const m = SHEET_CM, W = TARGET.outerWCm, Hc = TARGET.outerHCm;
+  return [[-m, -m], [W + m, -m], [W + m, Hc + m], [-m, Hc + m]].map(([x, y]) => worldToFrame(f, x, y)) as Quad;
+}
+
+/** Whether a point is inside a convex quad (either winding). */
+export function insideQuad(q: Quad, x: number, y: number): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i], b = q[(i + 1) % 4];
+    const cr = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+    if (cr === 0) continue;
+    if (sign === 0) sign = Math.sign(cr);
+    else if (Math.sign(cr) !== sign) return false;
+  }
+  return true;
+}
+
+/** The furthest from the target the squared-up image ever reaches, in cm. */
+const FRAME_CAP_CM = 150;
+
+/**
+ * The frame that shows the photo the way it was taken: the photo's "down"
+ * stays down, and the window covers the photo rather than a fixed square
+ * around the target.
+ *
+ * Squaring up to the target's own axes turned the whole picture by however
+ * crooked the sheet lay, and a fixed window round the target left the rest
+ * white — the owner's photo came back as a tilted photo on a white page.
+ * A rotation changes nothing about the scale, so the measurement is the same;
+ * only the picture now looks like the one that was taken.
+ */
+function uprightFrame(width: number, height: number, quad: Quad, maxPx: number): RectFrame | null {
+  const W = TARGET.outerWCm, Hc = TARGET.outerHCm;
+  const world: Quad = [{ x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: Hc }, { x: 0, y: Hc }];
+  const inv = homography(quad, world);
+  if (!inv) return null;
+  // The photo's "down", in world terms, at the target.
+  const pc = { x: (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4, y: (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4 };
+  const a0 = applyH(inv, pc.x, pc.y);
+  const a1 = applyH(inv, pc.x, pc.y + Math.max(4, height / 50));
+  const dx = a1.x - a0.x, dy = a1.y - a0.y, n = Math.hypot(dx, dy) || 1;
+  const angle = Math.atan2(-dx / n, dy / n);
+  const c = Math.cos(angle), s = Math.sin(angle);
+  // The photo's border in that frame, sampled, clamped near the target.
+  const cx = W / 2, cy = Hc / 2;
+  const cu = c * cx + s * cy, cv = -s * cx + c * cy;
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  const STEPS = 24;
+  for (let i = 0; i <= STEPS; i++) {
+    const t = i / STEPS;
+    for (const [px, py] of [[t * width, 0], [t * width, height], [0, t * height], [width, t * height]]) {
+      const d = inv[6] * px + inv[7] * py + inv[8];
+      if (d <= 1e-9) continue; // behind the camera: the horizon, not the table
+      const w = applyH(inv, px, py);
+      const u = Math.max(cu - FRAME_CAP_CM, Math.min(cu + FRAME_CAP_CM, c * w.x + s * w.y));
+      const v = Math.max(cv - FRAME_CAP_CM, Math.min(cv + FRAME_CAP_CM, -s * w.x + c * w.y));
+      minU = Math.min(minU, u); maxU = Math.max(maxU, u);
+      minV = Math.min(minV, v); maxV = Math.max(maxV, v);
+    }
+  }
+  if (!(maxU - minU > 10 && maxV - minV > 10)) return null;
+  const pxPerCm = Math.min(maxPx / (maxU - minU), maxPx / (maxV - minV));
+  return {
+    angle, minU, minV, pxPerCm,
+    width: Math.max(16, Math.round((maxU - minU) * pxPerCm)),
+    height: Math.max(16, Math.round((maxV - minV) * pxPerCm)),
+  };
+}
 
 /**
  * Re-render the photo as if it had been taken from straight above.
@@ -992,10 +1100,14 @@ export type Rectified = {
  * measurement taken on this image is therefore in real centimetres, with the
  * camera's angle already divided out.
  *
- * The region covered is clamped around the target rather than taken from the
- * photo's corners, because under strong perspective the far corners of an image
- * map to enormous — occasionally negative — world coordinates, and sizing a
- * canvas from those numbers is how a browser tab dies.
+ * The region covered is clamped near the target rather than taken from the
+ * photo's corners unchecked, because under strong perspective the far corners
+ * of an image map to enormous — occasionally negative — world coordinates, and
+ * sizing a canvas from those numbers is how a browser tab dies.
+ *
+ * `upright` follows the photo's orientation and covers the whole photo (what
+ * the app shows); without it the frame is the target's own axes with
+ * `aroundCm` either side. `frame` reuses an earlier call's frame exactly.
  */
 export function rectify(
   rgba: Uint8ClampedArray | Uint8Array,
@@ -1003,7 +1115,7 @@ export function rectify(
   height: number,
   quad: Quad,
   /** fill: value written where the output falls outside the photo. */
-  opts?: { maxPx?: number; aroundCm?: number; pxPerCm?: number; fill?: number },
+  opts?: { maxPx?: number; aroundCm?: number; pxPerCm?: number; fill?: number; upright?: boolean; frame?: RectFrame },
 ): Rectified | null {
   const maxPx = opts?.maxPx ?? 1100;
   const around = opts?.aroundCm ?? 70; // a garment reaches ~70 cm from the target
@@ -1019,22 +1131,24 @@ export function rectify(
   const H = homography(world, quad);
   if (!H) return null;
 
-  const minX = -around;
-  const minY = -around;
-  const maxX = W + around;
-  const maxY = Hc + around;
-  const spanX = maxX - minX;
-  const spanY = maxY - minY;
-  const pxPerCm = opts?.pxPerCm ?? Math.min(maxPx / spanX, maxPx / spanY);
-  const outW = Math.max(16, Math.round(spanX * pxPerCm));
-  const outH = Math.max(16, Math.round(spanY * pxPerCm));
+  let frame = opts?.frame ?? (opts?.upright ? uprightFrame(width, height, quad, maxPx) : null);
+  if (!frame) {
+    const pxPerCm = opts?.pxPerCm ?? Math.min(maxPx / (W + 2 * around), maxPx / (Hc + 2 * around));
+    frame = {
+      angle: 0, minU: -around, minV: -around, pxPerCm,
+      width: Math.max(16, Math.round((W + 2 * around) * pxPerCm)),
+      height: Math.max(16, Math.round((Hc + 2 * around) * pxPerCm)),
+    };
+  }
+  const { pxPerCm, width: outW, height: outH } = frame;
+  const c = Math.cos(frame.angle), s = Math.sin(frame.angle);
 
   const out = new Uint8ClampedArray(outW * outH * 4);
   for (let oy = 0; oy < outH; oy++) {
-    const wy = minY + oy / pxPerCm;
+    const v = frame.minV + oy / pxPerCm;
     for (let ox = 0; ox < outW; ox++) {
-      const wx = minX + ox / pxPerCm;
-      const p = applyH(H, wx, wy);
+      const u = frame.minU + ox / pxPerCm;
+      const p = applyH(H, c * u - s * v, s * u + c * v);
       const o = (oy * outW + ox) * 4;
       // Bilinear: the resampling is the only place this step can lose an edge,
       // and nearest-neighbour would cost more than the tilt correction gains.
@@ -1063,5 +1177,6 @@ export function rectify(
       out[o + 3] = 255;
     }
   }
-  return { data: out, width: outW, height: outH, pxPerCm };
+  const targetOut = world.map((q) => worldToFrame(frame, q.x, q.y)) as Quad;
+  return { data: out, width: outW, height: outH, pxPerCm, frame, targetOut };
 }

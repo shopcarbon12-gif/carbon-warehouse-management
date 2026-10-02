@@ -24,12 +24,11 @@ import { pathToFileURL } from "node:url";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { PNG } = require("pngjs") as { PNG: { sync: { read(b: Buffer): { width: number; height: number; data: Buffer } } } };
 
-import { detectTarget, rectify } from "@/lib/size-grading/target";
+import { detectTarget, frameToSource, rectify } from "@/lib/size-grading/target";
 import { MODEL_INPUT_SIZE, maskForMeasuring, modelInput, modelOutputToMask } from "@/lib/size-grading/model-segment";
 import { measureGarment, pomsFor, POM_SOURCE } from "@/lib/size-grading/garment";
 
 const FIXTURE = "scripts/fixtures/size-grading/leggings-dark-table.png";
-const AROUND_CM = 60; // must match the workspace
 
 /** Plausible ranges for a women's size S legging, flat. Replace with tape values. */
 const TAPE: Record<string, [number, number]> = {
@@ -56,10 +55,28 @@ async function main() {
   check("the printed target is found", !!det, det ? `confidence ${det.confidence.toFixed(2)}` : "");
   if (!det) return;
 
-  const rect = rectify(src.data, src.width, src.height, det.quad, { maxPx: 1400, aroundCm: AROUND_CM });
+  // Exactly the call the workspace makes.
+  const rect = rectify(src.data, src.width, src.height, det.quad, { maxPx: 1400, upright: true });
   if (!rect) return check("the photo squares up", false);
   // By construction the target is now exactly 18 x 24 cm; this guards the maths.
   check("photo squared up", rect.pxPerCm > 3, `${rect.pxPerCm.toFixed(2)} px/cm`);
+
+  /* What the owner sees. Squaring up to the target's own axes showed a photo
+     turned by however crooked the sheet lay, on a white page. The picture must
+     come back the way it was taken: nearly upright, and mostly photo. */
+  const deg = (rect.frame.angle * 180) / Math.PI;
+  check("the picture stays the way it was taken", Math.abs(deg) < 10, `turned ${deg.toFixed(1)}°`);
+  let blank = 0;
+  for (let i = 0; i < rect.width * rect.height; i++) {
+    const o = i * 4;
+    if (rect.data[o] === 255 && rect.data[o + 1] === 255 && rect.data[o + 2] === 255) blank++;
+  }
+  const blankPct = (100 * blank) / (rect.width * rect.height);
+  check("the picture is photo, not white page", blankPct < 15, `${blankPct.toFixed(1)}% blank`);
+  // Tapped corners on the squared-up picture go back to the right photo pixel.
+  const t = rect.targetOut[2], back = frameToSource(det.quad, rect.frame, t.x, t.y);
+  const err = Math.hypot(back.x - det.quad[2].x, back.y - det.quad[2].y);
+  check("a tap on the picture maps back onto the photo", err < 0.5, `${err.toFixed(3)} px`);
 
   // 2. The model, on the PHOTO, through the browser's own runtime.
   const ort = await import("onnxruntime-web/wasm");
@@ -74,7 +91,7 @@ async function main() {
     [session.inputNames[0]]: new ort.Tensor("float32", modelInput(src.data, src.width, src.height), [1, 3, S, S]),
   });
   const raw = modelOutputToMask(out[session.outputNames[0]].data as Float32Array, src.width, src.height);
-  const mask = maskForMeasuring(raw, src, rect, { quad: det.quad, pxPerCm: rect.pxPerCm, aroundCm: AROUND_CM });
+  const mask = maskForMeasuring(raw, src, rect, { quad: det.quad, frame: rect.frame });
 
   /* The failure this is guarding: the model selecting the table, which is most
      of the frame. Leggings are a few thousand square centimetres. */

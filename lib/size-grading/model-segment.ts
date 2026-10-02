@@ -35,7 +35,7 @@
  */
 
 import type { ShirtMask } from "./measure";
-import { TARGET, rectify, type Quad } from "./target";
+import { insideQuad, rectify, targetSheet, type Quad, type RectFrame } from "./target";
 import { dilate, erode, fillHoles } from "./measure";
 
 /** The model, its input size, and how it wants pixels. */
@@ -251,33 +251,29 @@ export function maskForMeasuring(
   raw: Uint8Array,
   src: { width: number; height: number },
   out: { width: number; height: number },
-  squared?: { quad: Quad; pxPerCm: number; aroundCm: number },
+  squared?: { quad: Quad; frame: RectFrame },
 ): ShirtMask {
   let inSpace: Uint8Array;
-  let exclude: ModelSegmentOptions["exclude"];
   if (squared) {
     // Carry the mask through the same transform as the picture, exactly.
     const rgba = new Uint8ClampedArray(src.width * src.height * 4);
     for (let i = 0; i < raw.length; i++) if (raw[i]) rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 255;
-    const warped = rectify(rgba, src.width, src.height, squared.quad, {
-      pxPerCm: squared.pxPerCm,
-      aroundCm: squared.aroundCm,
-      fill: 0,
-    });
+    const warped = rectify(rgba, src.width, src.height, squared.quad, { frame: squared.frame, fill: 0 });
     if (!warped || warped.width !== out.width || warped.height !== out.height) throw new Error("warp mismatch");
     inSpace = new Uint8Array(out.width * out.height);
     for (let i = 0; i < inSpace.length; i++) inSpace[i] = warped.data[i * 4] > 127 ? 1 : 0;
     /* The target and the sheet it is printed on. The paper margin round the
        ring is part of what the model selects, so the cut is the ring plus a few
-       centimetres. */
-    const SHEET_CM = 2.5;
-    const p = squared.pxPerCm;
-    exclude = [{
-      x: Math.round((squared.aroundCm - SHEET_CM) * p),
-      y: Math.round((squared.aroundCm - SHEET_CM) * p),
-      w: Math.round((TARGET.outerWCm + 2 * SHEET_CM) * p),
-      h: Math.round((TARGET.outerHCm + 2 * SHEET_CM) * p),
-    }];
+       centimetres — as a quad, because the frame follows the photo and the
+       sheet usually lies at an angle to it. */
+    const sheet = targetSheet(squared.frame);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of sheet) { x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y); x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y); }
+    for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(out.height - 1, Math.ceil(y1)); y++) {
+      for (let x = Math.max(0, Math.floor(x0)); x <= Math.min(out.width - 1, Math.ceil(x1)); x++) {
+        if (insideQuad(sheet, x, y)) inSpace[y * out.width + x] = 0;
+      }
+    }
   } else {
     inSpace = new Uint8Array(out.width * out.height);
     for (let y = 0; y < out.height; y++) {
@@ -288,5 +284,5 @@ export function maskForMeasuring(
       }
     }
   }
-  return finishMask(inSpace, out.width, out.height, { exclude });
+  return finishMask(inSpace, out.width, out.height);
 }

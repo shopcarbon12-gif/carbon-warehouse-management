@@ -29,7 +29,16 @@ import { segmentGarment } from "@/lib/size-grading/segment";
 import { maskForMeasuring, maskFromModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
-import { TARGET, detectTarget, orderQuad, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
+import {
+  detectTarget,
+  frameToSource,
+  orderQuad,
+  rectify,
+  targetSheet,
+  type Quad,
+  type RectFrame,
+  type TargetDetection,
+} from "@/lib/size-grading/target";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -50,14 +59,11 @@ import {
   type SizeChart,
 } from "@/lib/size-grading/size-chart";
 
-/** The rectified image is rendered with this much room around the target. */
-const TARGET_MARGIN_CM = 60;
+/** A photo with no target is measured at this size. */
 const WORK_MAX_PX = 1000;
 /** The photo is kept this big for target detection and un-warping. */
 const SRC_MAX_PX = 1800;
 const CHART_KEY = "wms.sizeGrading.chart";
-/** Calibration stored as px-per-cm divided by working-image width, so it survives resolution changes. */
-const CALIB_KEY = "wms.sizeGrading.calibration";
 
 function readLocal(key: string): string | null {
   try {
@@ -143,7 +149,6 @@ export function SizeGradingWorkspace() {
 
   const [image, setImage] = useState<ImageData | null>(null);
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
-  const [calibRatio, setCalibRatio] = useState<number | null>(null);
   /** How readily a pixel joins the garment. 0 is the neutral comparison. */
   const [bias, setBias] = useState(0);
   /** Where the garment is. Starts at the centre of the frame; the operator
@@ -161,7 +166,8 @@ export function SizeGradingWorkspace() {
      photo is never left unmeasurable because a download failed. */
   const [modelMask, setModelMask] = useState<ShirtMask | null>(null);
   const [finding, setFinding] = useState(false);
-  const [modelFailed, setModelFailed] = useState(false);
+  /** Why the finder gave up on this photo, in words — shown, not swallowed. */
+  const [modelFailed, setModelFailed] = useState<string | null>(null);
   const [selectedPom, setSelectedPom] = useState<string | null>(null);
   /** How sharp the garment is in this photo, and whether it can be trusted. */
   const [focus, setFocus] = useState<FocusReading | null>(null);
@@ -180,6 +186,8 @@ export function SizeGradingWorkspace() {
   const [targetSource, setTargetSource] = useState<"detected" | "tapped" | null>(null);
   /** Exact px-per-cm of the un-warped image, by construction. */
   const [rectPxPerCm, setRectPxPerCm] = useState<number | null>(null);
+  /** Where the squared-up image sits, so the garment mask lands on the same pixels. */
+  const [rectFrame, setRectFrame] = useState<RectFrame | null>(null);
   /** Corners the operator tapped, when detection missed. */
   const [cornerTaps, setCornerTaps] = useState<Point[]>([]);
   const [tappingCorners, setTappingCorners] = useState(false);
@@ -210,8 +218,6 @@ export function SizeGradingWorkspace() {
 
   useEffect(() => {
     setChart(parseChart(readLocal(CHART_KEY)));
-    const c = Number(readLocal(CALIB_KEY));
-    if (Number.isFinite(c) && c > 0) setCalibRatio(c);
   }, []);
 
   /* An un-warped image's scale is exact by construction, so it always wins over
@@ -234,14 +240,26 @@ export function SizeGradingWorkspace() {
       /* The calibration target is never part of the garment, and it is the one
          thing in the frame whose position is known exactly — so it is cut out
          before anything is measured rather than hoped to be a different colour. */
-      const exclude = rectPxPerCm
+      const sheet = rectFrame ? targetSheet(rectFrame) : null;
+      const exclude = sheet
         ? [{
-            x: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
-            y: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
-            w: Math.round(TARGET.outerWCm * rectPxPerCm),
-            h: Math.round(TARGET.outerHCm * rectPxPerCm),
+            x: Math.round(Math.min(...sheet.map((q) => q.x))),
+            y: Math.round(Math.min(...sheet.map((q) => q.y))),
+            w: Math.round(Math.max(...sheet.map((q) => q.x)) - Math.min(...sheet.map((q) => q.x))),
+            h: Math.round(Math.max(...sheet.map((q) => q.y)) - Math.min(...sheet.map((q) => q.y))),
           }]
         : undefined;
+      /* While the finder is still working, propose nothing. The colour model's
+         guess on a dark garment on a dark table is the table, and on a phone
+         the finder takes long enough that its wrong lines were what got
+         photographed and reported as the result. */
+      if (!modelMask && finding) {
+        setMask(null);
+        setResult(null);
+        setFocus(null);
+        setBusy(false);
+        return;
+      }
       const m = modelMask ?? segmentGarment(image.data, image.width, image.height, seed, { bias, exclude });
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
@@ -252,7 +270,7 @@ export function SizeGradingWorkspace() {
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm, modelMask]);
+  }, [image, pxPerCm, bias, seed, typeOverride, rectFrame, modelMask, finding]);
 
   /** Every point this family is measured on, whatever the photo managed. */
   const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
@@ -338,9 +356,10 @@ export function SizeGradingWorkspace() {
     }
     let alive = true;
     setFinding(true);
-    setModelFailed(false);
+    setModelFailed(null);
     const src = srcRef.current;
     const quad = target?.quad;
+    const started = performance.now();
     void (async () => {
       if (!src) throw new Error("no photo");
       /* The model looks at the PHOTO, never the squared-up image: squaring up
@@ -351,7 +370,7 @@ export function SizeGradingWorkspace() {
         raw,
         src,
         image,
-        rectPxPerCm && quad ? { quad, pxPerCm: rectPxPerCm, aroundCm: TARGET_MARGIN_CM } : undefined,
+        rectFrame && quad ? { quad, frame: rectFrame } : undefined,
       );
     })()
       .then((m) => {
@@ -359,11 +378,15 @@ export function SizeGradingWorkspace() {
         // A mask covering almost nothing, or almost everything, is not a
         // garment — keep what the colour model found rather than trust it.
         const share = m.area / (image.width * image.height);
+        const secs = ((performance.now() - started) / 1000).toFixed(1);
+        console.info(`[size-grading] finder: ${(share * 100).toFixed(1)}% of the frame in ${secs}s`);
         if (share > 0.01 && share < 0.6) setModelMask(m);
-        else setModelFailed(true);
+        else setModelFailed(`it selected ${(share * 100).toFixed(0)}% of the photo, which is not a garment`);
       })
-      .catch(() => {
-        if (alive) setModelFailed(true);
+      .catch((e: unknown) => {
+        const why = e instanceof Error ? e.message : String(e);
+        console.error("[size-grading] finder failed:", e);
+        if (alive) setModelFailed(why || "unknown error");
       })
       .finally(() => {
         if (alive) setFinding(false);
@@ -371,7 +394,7 @@ export function SizeGradingWorkspace() {
     return () => {
       alive = false;
     };
-  }, [image, rectPxPerCm, target]);
+  }, [image, rectFrame, target]);
 
   /* Fetch the model while the operator is still picking the item, so the first
      photo does not wait for a 17 MB download that could have happened already. */
@@ -633,7 +656,7 @@ export function SizeGradingWorkspace() {
     const useQuad = quad ?? (det && det.confidence >= 0.3 ? det.quad : null);
 
     if (useQuad) {
-      const rect = rectify(src.data, src.width, src.height, useQuad, { maxPx: 1400, aroundCm: TARGET_MARGIN_CM });
+      const rect = rectify(src.data, src.width, src.height, useQuad, { maxPx: 1400, upright: true });
       if (rect) {
         /* new ImageData(...) rejects a Uint8ClampedArray whose buffer type is
            not narrowed to ArrayBuffer, so the pixels are copied into one the
@@ -642,6 +665,7 @@ export function SizeGradingWorkspace() {
         data.data.set(rect.data);
         setImage(data);
         setRectPxPerCm(rect.pxPerCm);
+        setRectFrame(rect.frame);
         setTarget(det ?? { quad: useQuad, confidence: 1, tiltPercent: 0 });
         setTargetSource(quad ? "tapped" : "detected");
         const centre = { x: rect.width / 2, y: rect.height / 2 };
@@ -671,6 +695,7 @@ export function SizeGradingWorkspace() {
     }
     setImage(data);
     setRectPxPerCm(null);
+    setRectFrame(null);
     setTarget(null);
     setTargetSource(null);
     const centre = { x: data.width / 2, y: data.height / 2 };
@@ -959,11 +984,15 @@ export function SizeGradingWorkspace() {
       setCornerTaps(next);
       if (next.length === 4 && srcRef.current) {
         const src = srcRef.current;
-        /* Taps are in working-image coordinates; the source is bigger. */
+        /* Taps are on the image on screen. If that is already squared up (a
+           target was found, but the wrong one), they go back through the same
+           transform; otherwise it is the photo, just smaller. */
         const kx = src.width / image.width;
         const ky = src.height / image.height;
+        const toSrc = (q: Point) =>
+          rectFrame && target ? frameToSource(target.quad, rectFrame, q.x, q.y) : { x: q.x * kx, y: q.y * ky };
         // Any tap order works — see orderQuad.
-        const quad = orderQuad(next.map((q) => ({ x: q.x * kx, y: q.y * ky })));
+        const quad = orderQuad(next.map(toSrc));
         setTappingCorners(false);
         applySource(src, quad);
       }
@@ -1250,6 +1279,22 @@ export function SizeGradingWorkspace() {
 
       <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
+          {/* Right above the photo, because below it is off the bottom of a
+              phone screen — the operator photographed the colour model's lines
+              without ever seeing that the background remover was still at work. */}
+          {image && !tappingCorners && !calibrating ? (
+            <p className="mb-2 flex items-center gap-2 text-xs" role="status">
+              {finding && !modelMask ? (
+                <span className="flex items-center gap-2 text-[var(--wms-muted)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Removing the background and finding the garment…
+                </span>
+              ) : modelMask ? (
+                <span className="text-[var(--wms-status-success-fg)]">Background removed — garment found.</span>
+              ) : modelFailed ? (
+                <span className="text-[var(--wms-status-warning-fg)]">Background remover failed: {modelFailed}</span>
+              ) : null}
+            </p>
+          ) : null}
           {image && (calibrating || tappingCorners) ? (
             <canvas
               ref={canvasRef}
@@ -1278,10 +1323,7 @@ export function SizeGradingWorkspace() {
                 Shoot straight down with the whole garment in frame. Sleeves out away from the body; trousers and
                 shorts with a clear gap between the legs.
               </p>
-              <p>
-                To calibrate, lay a sheet of US Letter paper flat beside the garment and tap the two ends of its long
-                (11 in) edge. A bank card works when there is no paper, but is less accurate.
-              </p>
+              <p>Put the printed target flat beside the garment — it sets the scale, so nothing needs calibrating.</p>
               <p className="font-mono text-xs">
                 On a computer, Take photo shows a QR code — scan it with a phone and shoot from there.
               </p>
@@ -1294,8 +1336,15 @@ export function SizeGradingWorkspace() {
             <h2 className="text-sm font-semibold text-[var(--wms-fg)]">Result</h2>
             {!image ? (
               <p className="mt-1 text-sm text-[var(--wms-muted)]">Take or upload a photo to start.</p>
-            ) : !calibRatio ? (
-              <p className="mt-1 text-sm text-[var(--wms-muted)]">Calibrate first (tap Calibrate).</p>
+            ) : !pxPerCm ? (
+              <p className="mt-1 text-sm text-[var(--wms-muted)]">
+                No target found in this photo, so there is no scale yet — put the printed target beside the
+                garment and shoot again, or tap the target&apos;s 4 corners.
+              </p>
+            ) : finding && !modelMask ? (
+              <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
+                <Loader2 className="h-4 w-4 animate-spin" /> Removing the background…
+              </p>
             ) : busy ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" /> Measuring…
@@ -1586,8 +1635,8 @@ export function SizeGradingWorkspace() {
                   </span>
                 ) : modelFailed ? (
                   <span className="text-[var(--wms-status-warning-fg)]">
-                    The finder could not pick the garment out of this photo, so the lines are a rough guess — place
-                    them by hand, or shoot against a plainer surface.
+                    The background remover could not pick the garment out of this photo ({modelFailed}), so the
+                    lines are a rough guess — place them by hand, or shoot against a plainer surface.
                   </span>
                 ) : null}
               </p>
