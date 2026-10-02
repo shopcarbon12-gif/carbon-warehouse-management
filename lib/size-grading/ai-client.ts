@@ -69,7 +69,7 @@ export function chooseWithAi(
   src: { width: number; height: number },
   quad: Quad,
 ): Chosen {
-  const quickWhy = quick ? (garmentCheck(quick, frame, src, quad) ?? disagreesWithAi(quick, ai)) : "it did not run";
+  const quickWhy = quick ? (garmentCheck(quick, frame, src, quad) ?? disagreesWithAi(quick, ai, frame.pxPerCm)) : "it did not run";
   if (quick && !quickWhy) return { mask: quick, how: "the AI confirmed the cut-out", lines: aiLinesOnMask(ai, quick, frame.pxPerCm) };
   const own = maskFromAi(picture.data, picture.width, picture.height, frame.pxPerCm, ai);
   if (own) {
@@ -107,15 +107,25 @@ export function mergeLines(
 ): Partial<Record<PomKey, Segment>> {
   const out: Partial<Record<PomKey, Segment>> = {};
   const keys = new Set<string>([...Object.keys(outline ?? {}), ...Object.keys(ai ?? {})]);
+  const len = (l: Segment | undefined) => (l ? Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) : 0);
+  /* A leg narrows from the thigh down. An AI line below the thigh that comes
+     out wider than the thigh has snapped across something else — on one run
+     a knee read 19 cm against a 13.5 cm thigh — so the outline's line is used. */
+  const thigh = len(outline?.thigh?.line ?? ai?.thigh);
+  const BELOW_THIGH = new Set(["knee", "calf", "legOpening"]);
+  const usedAi = new Set<string>();
   for (const k of keys as Set<PomKey>) {
-    const o = outline?.[k]?.line, a = ai?.[k];
+    const o = outline?.[k]?.line;
+    let a = ai?.[k];
+    if (a && BELOW_THIGH.has(k) && thigh && len(a) > thigh * 1.05) a = undefined;
     const pick = AI_FIRST.has(k) ? (a ?? o) : (o ?? a);
     if (pick) out[k] = { a: { ...pick.a }, b: { ...pick.b } };
+    if (pick && pick === a) usedAi.add(k);
   }
   /* The seams end at the hem's corners. When the hem is the AI's line (square
      across an angled leg), the outline's seams end on the row's pointed corner
      instead — so their bottom ends move to the hem line's nearer end. */
-  const hem = ai?.legOpening ? out.legOpening : undefined; // legOpening is AI-first, so this is the AI's
+  const hem = usedAi.has("legOpening") ? out.legOpening : undefined;
   if (hem) {
     for (const k of ["inseam", "outseam"] as const) {
       const s = out[k];

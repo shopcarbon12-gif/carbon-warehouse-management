@@ -262,9 +262,11 @@ export function maskFromAi(px: Uint8ClampedArray, w: number, h: number, pxPerCm:
      colours still has each colour at more than one point. */
   const centres = ai.on.map((p) => ({ p, c: sample(px, w, h, P(p).x, P(p).y, Math.max(1, r >> 1)) }));
   const agreed = centres.filter((a) => a.c && centres.some((b) => b !== a && b.c && dist(a.c!, b.c) < 45));
+  /* 30, not 45: near-black wood grain is within 45 of black leggings, and
+     with it in the fabric set the cut-out took the table with it. */
   const fabric = (agreed.length ? agreed : centres)
     .flatMap((a) => patch(P(a.p), r))
-    .filter((c) => (agreed.length ? agreed.some((a) => dist(c, a.c!) < 45) : true));
+    .filter((c) => (agreed.length ? agreed.some((a) => dist(c, a.c!) < 30) : true));
   if (!fabric.length) return null;
   const seeds = (agreed.length ? agreed : centres).map((a) => a.p);
   const ground = ai.off.flatMap((p) => patch(P(p), r));
@@ -357,15 +359,26 @@ export function maskFromAi(px: Uint8ClampedArray, w: number, h: number, pxPerCm:
  * Null when it agrees, otherwise the reason — shown to the operator, so a
  * rejected cut-out is never silent.
  */
-export function disagreesWithAi(mask: ShirtMask, ai: AiReading): string | null {
+export function disagreesWithAi(mask: ShirtMask, ai: AiReading, pxPerCm: number): string | null {
   const { width: w, height: h, data } = mask;
-  const at = ([x, y]: [number, number]) => {
-    const px = Math.round((x / 1000) * w), py = Math.round((y / 1000) * h);
-    return px >= 0 && py >= 0 && px < w && py < h && !!data[py * w + px];
+  const inside = (px: number, py: number) => {
+    const x = Math.round(px), y = Math.round(py);
+    return x >= 0 && y >= 0 && x < w && y < h && !!data[y * w + x];
+  };
+  const at = ([x, y]: [number, number]) => inside((x / 1000) * w, (y / 1000) * h);
+  /* The model's points are as imprecise as its lines: an "off" point it put
+     just outside the leggings landed on their edge, and a correct cut-out was
+     thrown away for it. An "off" point counts only when it is well inside —
+     1.5 cm of garment all round it. */
+  const deep = ([x, y]: [number, number]) => {
+    const cx = (x / 1000) * w, cy = (y / 1000) * h, r = 1.5 * pxPerCm;
+    if (!inside(cx, cy)) return false;
+    for (let k = 0; k < 8; k++) if (!inside(cx + r * Math.cos((k * Math.PI) / 4), cy + r * Math.sin((k * Math.PI) / 4))) return false;
+    return true;
   };
   const on = ai.on.filter(at).length;
   if (ai.on.length && on < Math.ceil(ai.on.length * 0.8)) return `it misses ${ai.on.length - on} of the ${ai.on.length} places the AI sees fabric`;
-  const off = ai.off.filter(at).length;
+  const off = ai.off.filter(deep).length;
   if (off) return `it covers ${off} place${off === 1 ? "" : "s"} the AI says is not the garment`;
   if (ai.box) {
     let x0 = w, y0 = h, x1 = 0, y1 = 0;
