@@ -393,6 +393,40 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
 }
 
 /**
+ * The features this kind of garment usually has — and this one does not.
+ *
+ * An image model completes a garment the way the clothes in its training data
+ * are made: "evening pants" came back with a pressed centre crease down each
+ * leg that the real trousers do not have. A general "never invent anything"
+ * rule does not stop that, because the model does not experience a convention
+ * as an invention. Naming the conventions out loud does.
+ *
+ * Only the spec and the photos can ADD a feature; this list can only say that
+ * silence means absent.
+ */
+export function buildAbsentFeatureGuard(itemTypeValue: string): string {
+  const category = inferItemTypeCategory(itemTypeValue);
+  const common: Record<string, string> = {
+    bottom:
+      "a pressed centre crease down the front or back of the leg, pleats at the waist, turn-ups or cuffed hems, a side stripe or tape, contrast-coloured stitching, extra or cargo pockets, a coin pocket, rivets, a visible brand patch or tab",
+    top:
+      "a chest pocket, contrast collar, cuff or hem trim, side slits, shoulder epaulettes, contrast-coloured stitching, a chest logo or print, a brand tab at the hem",
+    outerwear:
+      "extra chest or sleeve pockets, epaulettes, a hood, drawcords, contrast lining showing at the cuff or hem, contrast-coloured stitching, a visible brand patch",
+    "full-look":
+      "a belt, contrast piping or trim, extra pockets, pleats, contrast-coloured stitching, a visible brand patch",
+    footwear: "a contrast sole stripe, perforations, a logo on the side or tongue, contrast laces",
+    accessory: "a logo, contrast stitching, extra buckles, studs or charms",
+  };
+  const extras = common[category] ?? "extra pockets, contrast stitching, trims, or any visible branding";
+  return (
+    "NOTHING BEYOND THE SPEC: this garment has ONLY the features the item photos and the spec show. " +
+    `It does NOT have ${extras} — unless a line above names one. A feature that is conventional for this kind of garment is still an invention when this garment does not have it, and an invented seam, crease or trim is as wrong as a missing logo. ` +
+    "Buttons, zips, stitching, pockets and hardware are reproduced exactly as given: same number, same places, same colour, same finish — no extras, none left out, none moved."
+  );
+}
+
+/**
  * Everything the model wears that is NOT the product.
  *
  * Four panels are four independent API calls that share no memory, so "the
@@ -562,6 +596,7 @@ export function buildMasterPanelPrompt(args: {
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is Pose A, the RIGHT half (768x1024) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
     "ITEM REFERENCES: the item photos are product references only. Take the garment's shape, colour, material, construction and every detail from them. Any person, mannequin or hanger in an item photo is a display fixture — never copy a face, hair, skin tone, body, age, tattoos, jewellery, pose or styling from an item photo; the person in every frame is the model from the MODEL references.",
     "If the item photos show a complete outfit, reproduce the whole outfit (top, bottom, shoes, accessories) unchanged in every frame. Anything the photos do NOT show comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.",
+    buildAbsentFeatureGuard(args.itemType),
     "STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. If the item photos show that piece, the photos win instead:",
     stylingLock,
     "WORN BY THE MODEL: every frame shows the garment ON the living model from the MODEL references — the model's own body inside the clothes, their legs in the trousers, their skin at the ankle and wrist. A cropped frame still contains their body. Never a flat lay, never a ghost mannequin, never an empty garment floating on the background, never a frame with no person in it.",
