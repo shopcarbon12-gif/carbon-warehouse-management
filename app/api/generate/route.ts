@@ -745,7 +745,13 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       backIsPlain,
       specConfirmed,
       colorOverride,
+      instruction: operatorInstructionRaw,
     } = await req.json();
+    /* The operator's own words about this garment and this shoot. */
+    const operatorInstruction =
+      typeof operatorInstructionRaw === "string"
+        ? operatorInstructionRaw.replace(/\s+/g, " ").trim().slice(0, 1200)
+        : "";
     // Item refs sorted by view (Studio: General / Front / Back sections). The
     // image order sent to OpenAI is general → front → back so the prompt can
     // say which attached images are the front and which are the back.
@@ -1107,6 +1113,20 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
          with the chain on opposite hips in its two frames while this mapping
          sat above all that; it now has the last word. */
       ...wearerSideFrameLines,
+      /* THE LAST WORD, and it belongs to the operator.
+         The instruction used to sit in the middle of the client prompt with
+         authority only over the garment spec. Everything after it — the
+         styling lock, the outfit, the colourway, the side mapping, the pose
+         variation — was read later and carried more weight, so an instruction
+         like "style with black leather trousers" or "cuffs rolled once" lost to
+         whatever came last. This session has shown more than once that the most
+         recent and the most specific line wins; the operator's instruction is
+         now both. It sits in this server block, which is never trimmed. */
+      ...(operatorInstruction
+        ? [
+            `OPERATOR INSTRUCTION — FINAL WORD: "${operatorInstruction}". Written by the person holding this garment and publishing these photos. It outranks EVERY line above: the item spec, the styling lock, the outfit from the photos, the colourway, the side directions, the pose directions and the background. Where it disagrees with any of them, do what it says and drop the conflicting part. Where it says nothing, everything above still applies.`,
+          ]
+        : []),
     ].join("\n");
 
     // Keep model identity anchors bounded; include all item refs provided by section 0.5.
@@ -1387,6 +1407,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           itemSpec: itemSpecText,
           itemType: String(normalizedPanelQa.itemType || ""),
           colorName: colorRun?.name ?? "",
+          instruction: operatorInstruction,
         },
       );
     }

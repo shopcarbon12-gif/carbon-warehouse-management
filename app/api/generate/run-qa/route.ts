@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       itemSpec: context?.itemSpec,
       itemType: context?.itemType ?? "",
       colorName: context?.colorName ?? "",
+      instruction: context?.instruction ?? "",
       timeoutMs: QA_TIMEOUT_MS,
     });
     /* The images are the expensive thing to hold; the verdict is bytes. */

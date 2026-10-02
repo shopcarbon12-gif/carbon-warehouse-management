@@ -668,7 +668,7 @@ export function buildMasterPanelPrompt(args: {
     `GARMENT FIDELITY: the ${itemLabel} is the exact product in the item photos — identical cut and fit (a slim fit stays slim, an oversized fit stays oversized; never lengthen, shorten, loosen or tighten it), identical colour, wash, material and texture, identical seams, stitching, pockets, hardware, closures, hems and cuffs, identical distressing in the same places, and every logo, text, print and graphic at the same size, position, colours and print effect. Never redesign, simplify, recolour, move, resize, mirror or add anything. It stays identical in both frames and across every panel of this run.`,
     ...(styleInstructions
       ? [
-          "ITEM INSTRUCTION — written by the person holding this garment, and therefore the highest authority on it. Where it names a placement, a finish or a fit that the VERIFIED ITEM SPEC below describes differently, THIS line wins and the spec's version of that detail is ignored:",
+          "OPERATOR INSTRUCTION — written by the person holding this garment and publishing these photos, and therefore the highest authority in this whole prompt. It outranks the item spec, the styling lock, the outfit from the photos, the colourway, the pose directions and the background. Where it disagrees with any of them, it wins and that part is dropped; where it is silent, they still apply. It is repeated as the last line of this prompt:",
           styleInstructions,
         ]
       : []),

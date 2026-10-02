@@ -436,6 +436,8 @@ async function runAccuracyCheck(args: {
   itemType: string;
   /** Operator-confirmed colourway for this run, when one is active. */
   colorName?: string;
+  /** The operator's instruction: it outranks the photographs and the spec. */
+  instruction?: string;
   timeoutMs: number;
 }): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
   const spec = String(args.itemSpec || "").trim();
@@ -487,6 +489,16 @@ async function runAccuracyCheck(args: {
         "List a frame only if you can see the problem in that frame. Below 0.75 confidence it is treated as a note.",
       ].join("\n"),
     },
+    ...(String(args.instruction || "").trim()
+      ? [
+          {
+            type: "input_text",
+            text: `OPERATOR INSTRUCTION — this overrides the reference photographs and the spec below: "${String(
+              args.instruction,
+            ).trim()}". Anything in a frame that follows this instruction is CORRECT, even where the photographs or the spec show something else. Never report it as a mismatch.`,
+          },
+        ]
+      : []),
     ...(spec
       ? [
           {
@@ -565,6 +577,7 @@ export async function runRunQa(args: {
   itemSpec?: string;
   itemType: string;
   colorName?: string;
+  instruction?: string;
   timeoutMs: number;
 }): Promise<RunQaVerdict> {
   const model = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
@@ -595,6 +608,7 @@ export async function runRunQa(args: {
       itemSpec: args.itemSpec,
       itemType: args.itemType,
       colorName: args.colorName,
+      instruction: args.instruction,
       timeoutMs: args.timeoutMs,
     }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false })),
     sidedDetails.length && args.panels.length

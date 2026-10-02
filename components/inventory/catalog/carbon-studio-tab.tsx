@@ -1414,6 +1414,9 @@ export function CarbonStudioTab({
             backIsPlain,
             // true = a human edited the spec text; false = raw analyzer output.
             specConfirmed,
+            /* Sent on its own as well as inside the prompt, so the server can
+               give it the last word — see app/api/generate/route.ts. */
+            instruction: instruction.trim() || undefined,
             /* A colourway on file turns this into a dye change: same analysis,
                same construction, new cloth colour, with that colour's own photo
                attached. Its stored seed keeps the poses and expressions away

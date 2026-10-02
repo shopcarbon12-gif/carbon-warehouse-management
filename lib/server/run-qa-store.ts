@@ -57,6 +57,8 @@ export type RunQaContext = {
    *  attribute the reference photographs do NOT settle — the same black cloth
    *  reads charcoal under room light — so the judge is given the name instead. */
   colorName: string;
+  /** The operator's instruction; it overrides the photos and spec, so the judge must too. */
+  instruction: string;
 };
 
 type RunEntry = {
