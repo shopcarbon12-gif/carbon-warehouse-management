@@ -534,10 +534,6 @@ export default function ImageUploadPage() {
   const btnAlt: React.CSSProperties = { ...btn, background: "#1e293b", color: "#e8eaed" };
   const full = shots.length >= MAX_PHOTOS;
   const uploading = status === "uploading";
-  /* For a measurement, lead with the phone's camera app. The in-page preview
-     cannot focus on demand on an iPhone at all, and a soft photo is not a
-     slightly worse measurement — it is a wrong one. */
-  const appFirst = purpose === "size-grading";
   /* Size Grading keeps only the session it is actively waiting on, so there is
      no Studio-style "collect them later" — if nobody is listening, the photo
      has to be sent again from a fresh code. Saying otherwise would send the
@@ -751,30 +747,26 @@ export default function ImageUploadPage() {
             style={{ display: "none" }}
             onChange={(e) => { addFromPicker(e.target.files); e.target.value = ""; }}
           />
-          {/* The phone's own camera app: full sensor resolution, HDR, and
-              tap-to-focus on every phone — the sharpest path where the web
-              camera cannot focus on demand (all iPhones in Safari). For a
-              measurement it is the DEFAULT, not the fallback: sharpness is the
-              whole job, and this is the path that reliably delivers it. */}
-          {cam === "live" && !appFirst ? (
+          {/* Capture from the preview leads, now that the shutter waits for the
+              picture to actually be sharp and measures what it got. It is one
+              tap and never leaves the page, which is what the operator wants
+              when there are six photos to take. The camera app stays as the
+              fallback for a phone whose lens genuinely cannot focus at this
+              distance — no amount of waiting fixes that. */}
+          {cam === "live" ? (
             <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
-              {full ? "Max 6 reached" : capturePhase === "focusing" ? "Focusing…" : capturePhase === "shooting" ? "Capturing…" : "📷 Capture photo"}
+              {full
+                ? "Max 6 reached"
+                : capturePhase === "focusing"
+                  ? "Focusing…"
+                  : capturePhase === "shooting"
+                    ? "Capturing…"
+                    : "📷 Capture from this preview"}
             </button>
           ) : null}
-          <button style={cam === "live" && !appFirst ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
-            {full
-              ? "Max 6 reached"
-              : appFirst
-                ? "📸 Take photo with the camera app"
-                : cam === "live"
-                  ? "📸 Camera app (sharpest, tap to focus there)"
-                  : "📷 Take photo"}
+          <button style={cam === "live" ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
+            {full ? "Max 6 reached" : cam === "live" ? "📸 Take photo with the camera app" : "📷 Take photo"}
           </button>
-          {cam === "live" && appFirst ? (
-            <button style={btnAlt} disabled={full || capturing || uploading} onClick={() => void capture()}>
-              {full ? "Max 6 reached" : capturePhase === "focusing" ? "Focusing…" : capturePhase === "shooting" ? "Capturing…" : "📷 Capture from this preview"}
-            </button>
-          ) : null}
           <button style={btnAlt} disabled={full || uploading} onClick={() => galleryInputRef.current?.click()}>
             🖼 Upload from this phone
           </button>
