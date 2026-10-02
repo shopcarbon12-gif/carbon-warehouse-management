@@ -28,12 +28,18 @@ ENV CI=true
 ENV DOCKER_BUILD=1
 # React Compiler off in image build (saves large amounts of compile RAM); runtime unchanged.
 ENV NEXT_REACT_COMPILER=0
-# Heap cap. The Coolify build host has 1.9 GB RAM + 2 GB swap. 6144 was
-# the original default and started OOM-killing the TypeScript phase
-# during 2026-05-14 deploys (exit 255 + Coolify generic DeploymentException).
-# 2048 fits comfortably alongside the running app containers; tsc + webpack
-# both stay under that cap on this codebase. Raise back if the build host
-# is upsized.
+# Heap cap. 6144 was the original default and started OOM-killing the
+# TypeScript phase during 2026-05-14 deploys (exit 255 + Coolify's generic
+# DeploymentException). 2048 fits comfortably alongside the running app
+# containers; tsc + webpack both stay under that cap on this codebase.
+#
+# The host is now the Netcup box: 7.9 GB RAM + 4 GB swap, not the 1.9 GB
+# machine this cap was first written for. It is still 2048 on purpose — two
+# builds at 2 GB plus ~3.7 GB of running containers is what overran the box
+# and produced the same silent exit 255 on 2026-10-02. The fix for that was
+# the server's `concurrent_builds` setting (2 → 1), not a bigger heap, so
+# raising this buys nothing and spends the headroom that keeps a single
+# build safe.
 ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

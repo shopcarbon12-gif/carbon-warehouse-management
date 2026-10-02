@@ -163,8 +163,47 @@ async function waitFor(name, target, queued, timeoutMs = 30 * 60 * 1000) {
   return lastStatus || null;
 }
 
+/**
+ * Don't start a build while the box is already building something.
+ *
+ * Two Next builds at once is what OOM-kills this one (exit 255, no error), and
+ * it does not take two people to cause it: another agent session pushing to
+ * main and deploying is enough, and that is exactly what killed the 03:20
+ * deploy on 2026-10-02. Coolify's own guard is the server's `concurrent_builds`
+ * setting, now 1 so it queues rather than races; this is the half that reports
+ * it, so a wait of several minutes is explained rather than mysterious.
+ */
+async function waitForTheBoxToBeFree() {
+  if (!token) return;
+  const { origin } = appUuidFrom(url || workerUrl || "");
+  if (!origin) return;
+  for (let i = 0; i < 80; i++) {
+    let running = [];
+    try {
+      const r = await fetch(`${origin}/api/v1/deployments`, { headers });
+      if (!r.ok) return;
+      const list = await r.json();
+      running = (Array.isArray(list) ? list : []).filter((d) => !TERMINAL.has(d.status));
+    } catch {
+      return; /* cannot tell — go ahead rather than refuse to deploy */
+    }
+    if (!running.length) return;
+    if (i === 0) {
+      console.log(
+        `waiting: ${running
+          .map((d) => `${d.application_name ?? "?"} (${d.status})`)
+          .join(", ")} already building — two builds at once OOM-kills this box.`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, 15000));
+  }
+  console.warn("still busy after 20 min — triggering anyway; Coolify will queue it.");
+}
+
 let webOk = true;
 let workerOk = true;
+
+if (!NO_WAIT) await waitForTheBoxToBeFree();
 
 if (!WORKER_ONLY) {
   const { res, queued } = await deploy("web app", url);

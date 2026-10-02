@@ -96,6 +96,8 @@ npm run deploy:coolify
 
 Keep both values in gitignored **`.env.coolify.local`** (not in git).
 
+**One build at a time.** The deploy host has 7.9 GB of RAM and the image build caps Node's heap at 2 GB; two builds at once overruns it and the web build is the one that dies — **exit code 255 with no error message** and Coolify's generic `DeploymentException`. It has looked like a flaky deploy twice now (2026-05-14, 2026-10-02). The server's **`concurrent_builds`** is therefore set to **1** (Coolify → Servers → localhost → Settings), so a second deploy queues instead of racing; `deploy:coolify` also waits for any in-flight deployment before firing and waits for a terminal status afterwards, so a queued webhook is never reported as a shipped build. If a deploy ever dies with 255 and no error again, check `concurrent_builds` first — including deploys triggered by someone else or by another agent session.
+
 **API sanity check (`npm run coolify:api-check`):** calls **GET** `/api/v1/applications/{uuid}` using **`COOLIFY_API_TOKEN`** and the same base/uuid resolution as **`coolify:set-db`**. Official reference: [Authorization](https://coolify.io/docs/api-reference/authorization), [Get application](https://coolify.io/docs/api-reference/api/operations/get-application-by-uuid), [Bulk update envs](https://coolify.io/docs/api-reference/api/operations/update-envs-by-application-uuid) (**PATCH** returns **201** on success).
 
 Optional: set **`WMS_BASE_PATH`** at **build time** if the app is served under a subpath (see `next.config.ts`).
