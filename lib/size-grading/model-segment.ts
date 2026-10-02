@@ -35,6 +35,7 @@
  */
 
 import type { ShirtMask } from "./measure";
+import { TARGET, rectify, type Quad } from "./target";
 import { dilate, erode, fillHoles } from "./measure";
 
 /** The model, its input size, and how it wants pixels. */
@@ -44,6 +45,9 @@ const MODEL = {
   mean: [0.485, 0.456, 0.406],
   std: [0.229, 0.224, 0.225],
 } as const;
+
+/** The square the model expects its input resized to. */
+export const MODEL_INPUT_SIZE = MODEL.size;
 
 type Ort = typeof import("onnxruntime-web/wasm");
 let sessionPromise: Promise<{ ort: Ort; session: import("onnxruntime-web/wasm").InferenceSession }> | null = null;
@@ -95,19 +99,14 @@ export type ModelSegmentOptions = {
   exclude?: Array<{ x: number; y: number; w: number; h: number }>;
 };
 
-/**
- * Segment the garment. Throws if the model cannot run, so the caller can fall
- * back to something that always works.
- */
-export async function segmentWithModel(
-  rgba: Uint8ClampedArray | Uint8Array,
-  width: number,
-  height: number,
-  opts: ModelSegmentOptions = {},
-): Promise<ShirtMask> {
-  const { ort, session } = await getSession();
-  const S = MODEL.size;
+/* The three stages are pure and exported so the SAME code runs in the browser
+   (onnxruntime-web) and in scripts/test-size-grading-model.ts (onnxruntime-node).
+   Testing a copy of this logic is how a pipeline passes its test and fails in
+   the app. */
 
+/** Pixels → the model's normalised input tensor, area-averaged. */
+export function modelInput(rgba: Uint8ClampedArray | Uint8Array, width: number, height: number): Float32Array {
+  const S = MODEL.size;
   /* Area-averaged down to the model's input. Nearest-neighbour here drops thin
      parts of a garment — a spaghetti strap, a belt loop — before the model ever
      sees them, and the model cannot find what was never sampled. */
@@ -120,18 +119,12 @@ export async function segmentWithModel(
     for (let x = 0; x < S; x++) {
       const x0 = Math.floor(x * sxStep);
       const x1 = Math.min(width, Math.max(x0 + 1, Math.floor((x + 1) * sxStep)));
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let n = 0;
+      let r = 0, g = 0, b = 0, n = 0;
       for (let yy = y0; yy < y1; yy++) {
         const row = yy * width;
         for (let xx = x0; xx < x1; xx++) {
           const i = (row + xx) * 4;
-          r += rgba[i];
-          g += rgba[i + 1];
-          b += rgba[i + 2];
-          n++;
+          r += rgba[i]; g += rgba[i + 1]; b += rgba[i + 2]; n++;
         }
       }
       if (!n) n = 1;
@@ -139,62 +132,88 @@ export async function segmentWithModel(
       for (let c = 0; c < 3; c++) input[c * S * S + y * S + x] = (px[c] - MODEL.mean[c]) / MODEL.std[c];
     }
   }
+  return input;
+}
 
-  const feeds = { [session.inputNames[0]]: new ort.Tensor("float32", input, [1, 3, S, S]) };
-  const out = await session.run(feeds);
-  const probs = out[session.outputNames[0]].data as Float32Array;
-
+/** The model's salience map → a binary mask at the photo's own size. */
+export function modelOutputToMask(probs: Float32Array, width: number, height: number): Uint8Array {
+  const S = MODEL.size;
   /* U²-Net's output is unnormalised salience, not a probability, so it is
      scaled to its own range before thresholding. A fixed cut on raw values
      would move with the picture. */
-  let lo = Infinity;
-  let hi = -Infinity;
+  let lo = Infinity, hi = -Infinity;
   for (let i = 0; i < S * S; i++) {
     if (probs[i] < lo) lo = probs[i];
     if (probs[i] > hi) hi = probs[i];
   }
   const span = Math.max(1e-6, hi - lo);
-
-  const small = new Uint8Array(S * S);
-  for (let i = 0; i < S * S; i++) small[i] = (probs[i] - lo) / span > 0.5 ? 1 : 0;
-
-  // Back to the working image's size.
   const data = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
     const my = Math.min(S - 1, Math.floor((y * S) / height));
     for (let x = 0; x < width; x++) {
       const mx = Math.min(S - 1, Math.floor((x * S) / width));
-      data[y * width + x] = small[my * S + mx];
+      data[y * width + x] = (probs[my * S + mx] - lo) / span > 0.5 ? 1 : 0;
     }
   }
+  return data;
+}
 
+/**
+ * Clean a raw mask in the space it will be measured in: drop the target,
+ * smooth the upscaling staircase, fill holes, keep the biggest piece.
+ */
+export function finishMask(
+  raw: Uint8Array,
+  width: number,
+  height: number,
+  opts: ModelSegmentOptions = {},
+): ShirtMask {
+  const data = new Uint8Array(raw);
   /* The calibration target is a bright printed rectangle sitting next to the
-     garment, which is exactly the kind of thing a salience model likes. Its
-     position is known exactly, so it is removed rather than hoped against. */
+     garment, which is exactly the kind of thing a salience model likes — on the
+     owner's photo it was selected along with the leggings. Its position is
+     known exactly, so it is removed rather than hoped against. */
   for (const r of opts.exclude ?? []) {
     for (let y = Math.max(0, r.y); y < Math.min(height, r.y + r.h); y++) {
       for (let x = Math.max(0, r.x); x < Math.min(width, r.x + r.w); x++) data[y * width + x] = 0;
     }
   }
-
-  // Smooth the staircase that upscaling a 320 px mask leaves on the edges.
   const rad = Math.max(1, Math.round(Math.min(width, height) / 260));
   let mask = dilate(data, width, height, rad);
   mask = erode(mask, width, height, rad);
   mask = erode(mask, width, height, rad);
   mask = dilate(mask, width, height, rad);
   mask = fillHoles(mask, width, height);
-
-  // Keep the biggest piece. A second garment at the edge of the table, or the
-  // operator's hand, is not part of this measurement.
+  // Keep the biggest piece: a second garment, a hand, the hole in the table.
   mask = largestComponent(mask, width, height);
-
   let area = 0;
   for (let i = 0; i < mask.length; i++) area += mask[i];
   return { data: mask, width, height, area };
 }
 
-function largestComponent(src: Uint8Array, width: number, height: number): Uint8Array {
+/**
+ * Run the model on a photo and return its raw mask at the photo's size.
+ *
+ * Give it the PHOTO, not the squared-up image. Squaring up fills everything
+ * outside the original frame with white, and on that canvas the whole photo is a
+ * dark shape on white — so the model selected the entire picture, table and
+ * all, which is exactly what the operator kept seeing. On the photo itself it
+ * picks out the garment. Warp the result afterwards (see the workspace).
+ */
+export async function maskFromModel(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+): Promise<Uint8Array> {
+  const { ort, session } = await getSession();
+  const S = MODEL.size;
+  const out = await session.run({
+    [session.inputNames[0]]: new ort.Tensor("float32", modelInput(rgba, width, height), [1, 3, S, S]),
+  });
+  return modelOutputToMask(out[session.outputNames[0]].data as Float32Array, width, height);
+}
+
+export function largestComponent(src: Uint8Array, width: number, height: number): Uint8Array {
   const n = width * height;
   const seen = new Uint8Array(n);
   const out = new Uint8Array(n);
@@ -219,4 +238,55 @@ function largestComponent(src: Uint8Array, width: number, height: number): Uint8
   }
   for (const p of best) out[p] = 1;
   return out;
+}
+
+/**
+ * Bring the model's mask from the photo into measuring space, and clean it.
+ *
+ * Shared by the app and scripts/test-size-grading-photo.ts so the test runs the
+ * code that ships rather than a copy of it. `quad` and `pxPerCm` are the ones the
+ * picture was squared up with; without them the mask is just resized.
+ */
+export function maskForMeasuring(
+  raw: Uint8Array,
+  src: { width: number; height: number },
+  out: { width: number; height: number },
+  squared?: { quad: Quad; pxPerCm: number; aroundCm: number },
+): ShirtMask {
+  let inSpace: Uint8Array;
+  let exclude: ModelSegmentOptions["exclude"];
+  if (squared) {
+    // Carry the mask through the same transform as the picture, exactly.
+    const rgba = new Uint8ClampedArray(src.width * src.height * 4);
+    for (let i = 0; i < raw.length; i++) if (raw[i]) rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 255;
+    const warped = rectify(rgba, src.width, src.height, squared.quad, {
+      pxPerCm: squared.pxPerCm,
+      aroundCm: squared.aroundCm,
+      fill: 0,
+    });
+    if (!warped || warped.width !== out.width || warped.height !== out.height) throw new Error("warp mismatch");
+    inSpace = new Uint8Array(out.width * out.height);
+    for (let i = 0; i < inSpace.length; i++) inSpace[i] = warped.data[i * 4] > 127 ? 1 : 0;
+    /* The target and the sheet it is printed on. The paper margin round the
+       ring is part of what the model selects, so the cut is the ring plus a few
+       centimetres. */
+    const SHEET_CM = 2.5;
+    const p = squared.pxPerCm;
+    exclude = [{
+      x: Math.round((squared.aroundCm - SHEET_CM) * p),
+      y: Math.round((squared.aroundCm - SHEET_CM) * p),
+      w: Math.round((TARGET.outerWCm + 2 * SHEET_CM) * p),
+      h: Math.round((TARGET.outerHCm + 2 * SHEET_CM) * p),
+    }];
+  } else {
+    inSpace = new Uint8Array(out.width * out.height);
+    for (let y = 0; y < out.height; y++) {
+      const sy = Math.min(src.height - 1, Math.floor((y * src.height) / out.height));
+      for (let x = 0; x < out.width; x++) {
+        const sx = Math.min(src.width - 1, Math.floor((x * src.width) / out.width));
+        inSpace[y * out.width + x] = raw[sy * src.width + sx];
+      }
+    }
+  }
+  return finishMask(inSpace, out.width, out.height, { exclude });
 }

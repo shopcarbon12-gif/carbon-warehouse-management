@@ -457,7 +457,184 @@ function steadyExtent(s: Shape, y: number, span = 2): { w: number; run: [number,
   return out[out.length >> 1];
 }
 
-export function measureGarment(
+/**
+ * Measure a garment, whatever angle it is lying at.
+ *
+ * Every measurement below is taken along a row or a column of the mask, which
+ * silently assumes the garment lies perfectly straight in the frame. Nobody
+ * lays one that way. At 5° off, a T-shirt's chest read 64.5 cm instead of 48,
+ * its hem 19.5 instead of 48, a skirt was classified as a top, and the
+ * operator's leggings got a 14.6 cm waist because the measuring row clipped the
+ * corner of a waistband tilted a few degrees.
+ *
+ * So the tilt is read from the garment's top edge — the waistband, or the line
+ * across the shoulders — the outline is turned upright, measured there, and the
+ * lines are turned back so they sit on the photo where they were taken.
+ */
+export function measureGarment(mask: ShirtMask, pxPerCm: number, forced?: GarmentType): GarmentResult {
+  const angle = topEdgeTilt(mask);
+  if (Math.abs(angle) < (0.4 * Math.PI) / 180) return measureUpright(mask, pxPerCm, forced);
+  const { upright, back } = rotateUpright(mask, angle);
+  const res = measureUpright(upright, pxPerCm, forced);
+  if (!res.ok) return res;
+  for (const p of Object.values(res.points)) {
+    if (!p) continue;
+    p.line = { a: back(p.line.a), b: back(p.line.b) };
+  }
+  return res;
+}
+
+/**
+ * How far the garment's top edge is from level, in radians.
+ *
+ * The topmost pixel of each column across the top, with the outer fifth either
+ * side ignored (rounded corners, sleeve ends), fitted with a line, then refitted
+ * without its worst points so a neckline dip or a crumpled corner cannot drag
+ * it. Clamped, because a garment photographed more than 25° off is better left
+ * alone than "corrected" on a bad estimate.
+ */
+export function topEdgeTilt(mask: ShirtMask): number {
+  const { data, width, height } = mask;
+  let left = width, right = -1, top = height, bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!data[y * width + x]) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  if (right - left < 20 || bottom - top < 20) return 0;
+  const h = bottom - top + 1;
+  const span = right - left;
+
+  // The topmost pixel of every column.
+  const cols: Array<[number, number]> = [];
+  for (let x = Math.round(left + span * 0.05); x <= Math.round(right - span * 0.05); x++) {
+    for (let y = top; y <= bottom; y++) {
+      if (data[y * width + x]) { cols.push([x, y]); break; }
+    }
+  }
+  /* Only columns whose top IS the top edge. A skirt is narrow at the waistband
+     and wide at the hem, so most of its columns start on the sloping sides —
+     fitting those measured the flare, not the tilt, and a skirt laid 5° off was
+     then classified as a top. Start from the columns near the very top, fit,
+     then gather every column that sits on that line and fit again. */
+  let pts = cols.filter(([, y]) => y <= top + h * 0.12);
+  if (pts.length < 10) return 0;
+  const fit = (q: Array<[number, number]>) => {
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const [x, y] of q) { sx += x; sy += y; sxx += x * x; sxy += x * y; }
+    const n = q.length, d = n * sxx - sx * sx;
+    const b = d ? (n * sxy - sx * sy) / d : 0;
+    return { a: (sy - b * sx) / n, b };
+  };
+  let line = fit(pts);
+  for (let pass = 0; pass < 3; pass++) {
+    const near = cols.filter(([x, y]) => Math.abs(y - (line.a + line.b * x)) <= Math.max(3, h * 0.03));
+    if (near.length < 10) break;
+    // Drop the worst third: a neckline dip or a crumpled corner.
+    const resid = near.map(([x, y]) => Math.abs(y - (line.a + line.b * x)));
+    const cut = [...resid].sort((u, v) => u - v)[Math.floor(resid.length * 0.7)];
+    pts = near.filter((_, i) => resid[i] <= Math.max(1.5, cut));
+    if (pts.length < 10) break;
+    line = fit(pts);
+  }
+  const angle = Math.atan(line.b);
+  return Math.abs(angle) > (25 * Math.PI) / 180 ? 0 : angle;
+}
+
+/** Turn the mask so its top edge is level; `back` maps a point on the upright mask onto the original. */
+function rotateUpright(mask: ShirtMask, angle: number): { upright: ShirtMask; back: (p: Point2) => Point2 } {
+  const { data, width, height } = mask;
+  let minX = width, maxX = -1, minY = height, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!data[y * width + x]) continue;
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+  }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  // A square big enough to hold the garment at any angle, so nothing is clipped.
+  const D = Math.ceil(Math.hypot(maxX - minX + 1, maxY - minY + 1)) + 8;
+  const oc = D / 2;
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const back = (p: Point2): Point2 => {
+    const qx = p.x - oc, qy = p.y - oc;
+    return { x: c * qx - s * qy + cx, y: s * qx + c * qy + cy };
+  };
+  const out = new Uint8Array(D * D);
+  let area = 0;
+  for (let y = 0; y < D; y++) {
+    for (let x = 0; x < D; x++) {
+      const p = back({ x, y });
+      const sx = Math.round(p.x), sy = Math.round(p.y);
+      if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+      if (data[sy * width + sx]) { out[y * D + x] = 1; area++; }
+    }
+  }
+  return { upright: { data: out, width: D, height: D, area } as ShirtMask, back };
+}
+
+type Point2 = { x: number; y: number };
+
+/**
+ * Where the inseam and the rise actually run.
+ *
+ * Both used to be drawn as plain vertical lines — the inseam straight down the
+ * middle of the frame from the crotch to the lowest pixel of the garment, the
+ * rise up the outside edge. On a pair of leggings laid with one leg splayed, the
+ * inseam line ran across the TABLE between the legs, and the rise sat beside the
+ * garment rather than on it. The owner's guide draws them where a tape goes: the
+ * rise up the centre from the crotch to the top of the waistband, the inseam
+ * from the crotch down the inside edge of one leg to its hem.
+ */
+function legGeometry(s: Shape, crotch: number) {
+  const minRun = Math.max(2, Math.round(s.mask.width * 0.012));
+  // The crotch point: the middle of the gap where the legs first part.
+  const at = solidRuns(s.mask.data, s.mask.width, crotch, minRun);
+  const crotchX = at.length >= 2 ? (at[0][1] + at[1][0]) / 2 : s.cx;
+
+  // Top of the waistband directly above the crotch.
+  let topY = s.top;
+  for (let y = s.top; y < crotch; y++) {
+    if (s.mask.data[y * s.mask.width + Math.round(crotchX)]) { topY = y; break; }
+  }
+
+  // Down the inner edge of the left leg to the last row it exists on.
+  let lastY = crotch;
+  let innerX = crotchX;
+  let outerX = s.left;
+  for (let y = crotch; y <= s.bottom; y++) {
+    const rs = solidRuns(s.mask.data, s.mask.width, y, minRun);
+    if (!rs.length) continue;
+    // The left leg is the run that starts left of the crotch.
+    const leftLeg = rs.find((r) => r[0] < crotchX);
+    if (!leftLeg) continue;
+    lastY = y;
+    innerX = Math.min(leftLeg[1], crotchX);
+    outerX = leftLeg[0];
+  }
+  // The outseam starts at the waistband's outer corner on the same side.
+  const topRun = solidRuns(s.mask.data, s.mask.width, Math.min(s.bottom, s.top + 2), minRun)[0];
+  const outerTopX = topRun ? topRun[0] : s.left;
+  /* The inseam runs along the leg's inner edge, so it starts ON that edge at
+     the crotch — not in the middle of the gap, from where a splayed leg drew
+     the line diagonally across the table between the legs. */
+  const inseamTopX = at.length >= 2 ? at[0][1] : crotchX;
+  return {
+    inseamPx: Math.hypot(innerX - inseamTopX, lastY - crotch),
+    inseamLine: seg(inseamTopX, crotch, innerX, lastY),
+    risePx: crotch - topY,
+    riseLine: seg(crotchX, topY, crotchX, crotch),
+    outseamPx: Math.hypot(outerX - outerTopX, lastY - s.top),
+    outseamLine: seg(outerTopX, s.top, outerX, lastY),
+  };
+}
+
+function measureUpright(
   mask: ShirtMask,
   pxPerCm: number,
   forced?: GarmentType,
@@ -554,8 +731,9 @@ export function measureGarment(
     }
 
     if (crotch > 0) {
-      put("inseam", s.bottom - crotch, seg(s.cx, crotch, s.cx, s.bottom));
-      put("rise", crotch - s.top, seg(s.left + Math.round(s.w * 0.12), s.top, s.left + Math.round(s.w * 0.12), crotch));
+      const legs = legGeometry(s, crotch);
+      put("inseam", legs.inseamPx, legs.inseamLine);
+      put("rise", legs.risePx, legs.riseLine);
       const legMin = Math.max(2, Math.round(s.mask.width * 0.012));
       const legAt = (frac: number) => {
         const y = Math.round(crotch + (s.bottom - crotch) * frac);
@@ -591,8 +769,9 @@ export function measureGarment(
     if (hip) put("hip", hip.w, seg(hip.run[0], hipY, hip.run[1], hipY));
 
     if (crotch > 0) {
-      put("inseam", s.bottom - crotch, seg(s.cx, crotch, s.cx, s.bottom));
-      put("rise", crotch - s.top, seg(s.left + Math.round(s.w * 0.12), s.top, s.left + Math.round(s.w * 0.12), crotch));
+      const legs = legGeometry(s, crotch);
+      put("inseam", legs.inseamPx, legs.inseamLine);
+      put("rise", legs.risePx, legs.riseLine);
 
       /* Everything down one leg. The left leg is taken throughout — it is the
          first solid run on the row, and a tech pack measures one leg, not the
@@ -628,8 +807,15 @@ export function measureGarment(
     } else if (type === "shorts") {
       return { ok: false, error: "Could not find where the legs separate — lay the shorts flat with a gap between the legs.", classification };
     }
-    // Outseam / side length — on both, since the swim spec asks for it on shorts.
-    put("outseam", lengthPx, lengthLine);
+    /* Outseam / side length — on both, since the swim spec asks for it on
+       shorts. Down the outside of the leg, as a tape goes; it used to be the
+       garment's whole height down the middle, through the gap between the legs. */
+    if (crotch > 0) {
+      const legs = legGeometry(s, crotch);
+      put("outseam", legs.outseamPx, legs.outseamLine);
+    } else {
+      put("outseam", lengthPx, lengthLine);
+    }
     return { ok: true, type, classification, points };
   }
 

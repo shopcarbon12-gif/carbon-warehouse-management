@@ -192,7 +192,12 @@ export function detectTarget(
   for (const win of [Math.round(long / 12), Math.round(long / 24)]) {
     for (const offset of [12, 24]) {
       consider(detectAtThreshold(small, w, h, -win, scale, trace, adaptiveInk(small, w, h, win, offset)));
-      if (best && (best as { score: number }).score > 0.88 && !trace) return (best as { det: TargetDetection }).det;
+      /* Every candidate that gets this far has already passed the pattern
+         check — ink where the printed design has ink, at all four corners — so
+         a good score is trustworthy and the rest of the search is wasted time.
+         On the owner's photo stopping here took detection from 2.5 s to under
+         one, which on a phone is the difference between waiting and not. */
+      if (best && (best as { score: number }).score > 0.7 && !trace) return (best as { det: TargetDetection }).det;
     }
   }
   /* Then global cuts: a fixed ladder across the mid-tones — so a threshold
@@ -201,7 +206,7 @@ export function detectTarget(
   const ladder = [60, 90, 120, 150, 180];
   for (const t of [...new Set([...ladder, ...candidateThresholds(small)])].sort((a, b) => a - b)) {
     consider(detectAtThreshold(small, w, h, t, scale, trace));
-    if (best && (best as { score: number }).score > 0.88 && !trace) break;
+    if (best && (best as { score: number }).score > 0.7 && !trace) break;
   }
   return (best as { det: TargetDetection; score: number } | null)?.det ?? null;
 }
@@ -997,7 +1002,8 @@ export function rectify(
   width: number,
   height: number,
   quad: Quad,
-  opts?: { maxPx?: number; aroundCm?: number; pxPerCm?: number },
+  /** fill: value written where the output falls outside the photo. */
+  opts?: { maxPx?: number; aroundCm?: number; pxPerCm?: number; fill?: number },
 ): Rectified | null {
   const maxPx = opts?.maxPx ?? 1100;
   const around = opts?.aroundCm ?? 70; // a garment reaches ~70 cm from the target
@@ -1035,7 +1041,9 @@ export function rectify(
       const fx = Math.floor(p.x);
       const fy = Math.floor(p.y);
       if (fx < 0 || fy < 0 || fx >= width - 1 || fy >= height - 1) {
-        out[o] = out[o + 1] = out[o + 2] = 255;
+        /* Outside the photo. White for a picture; 0 for a mask, where white would
+           mean "garment" and turn the whole frame into one. */
+        out[o] = out[o + 1] = out[o + 2] = opts?.fill ?? 255;
         out[o + 3] = 255;
         continue;
       }

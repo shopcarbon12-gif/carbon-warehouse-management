@@ -26,7 +26,7 @@ import { GuidePanel } from "./guide-panel";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
-import { segmentWithModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
+import { maskForMeasuring, maskFromModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import { TARGET, detectTarget, orderQuad, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
@@ -339,21 +339,27 @@ export function SizeGradingWorkspace() {
     let alive = true;
     setFinding(true);
     setModelFailed(false);
-    const exclude = rectPxPerCm
-      ? [{
-          x: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
-          y: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
-          w: Math.round(TARGET.outerWCm * rectPxPerCm),
-          h: Math.round(TARGET.outerHCm * rectPxPerCm),
-        }]
-      : undefined;
-    void segmentWithModel(image.data, image.width, image.height, { exclude })
+    const src = srcRef.current;
+    const quad = target?.quad;
+    void (async () => {
+      if (!src) throw new Error("no photo");
+      /* The model looks at the PHOTO, never the squared-up image: squaring up
+         fills everything outside the frame with white, and on white the whole
+         photo is one dark object — which is how it kept selecting the table. */
+      const raw = await maskFromModel(src.data, src.width, src.height);
+      return maskForMeasuring(
+        raw,
+        src,
+        image,
+        rectPxPerCm && quad ? { quad, pxPerCm: rectPxPerCm, aroundCm: TARGET_MARGIN_CM } : undefined,
+      );
+    })()
       .then((m) => {
         if (!alive) return;
         // A mask covering almost nothing, or almost everything, is not a
         // garment — keep what the colour model found rather than trust it.
         const share = m.area / (image.width * image.height);
-        if (share > 0.01 && share < 0.92) setModelMask(m);
+        if (share > 0.01 && share < 0.6) setModelMask(m);
         else setModelFailed(true);
       })
       .catch(() => {
@@ -365,7 +371,7 @@ export function SizeGradingWorkspace() {
     return () => {
       alive = false;
     };
-  }, [image, rectPxPerCm]);
+  }, [image, rectPxPerCm, target]);
 
   /* Fetch the model while the operator is still picking the item, so the first
      photo does not wait for a 17 MB download that could have happened already. */

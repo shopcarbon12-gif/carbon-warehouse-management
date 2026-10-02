@@ -59,6 +59,8 @@ function flare(buf: Uint8ClampedArray, cx: number, yTop: number, yBot: number, w
 
 type Case = {
   name: string;
+  /** Rotate the drawn garment by this many degrees — nobody lays one straight. */
+  rotate?: number;
   expect: GarmentType;
   draw: (b: Uint8ClampedArray) => void;
   /** POM → expected cm, checked to ±tolerance cm. */
@@ -151,14 +153,38 @@ const CASES: Case[] = [
 let pass = 0;
 let fail = 0;
 
-for (const c of CASES) {
-  const buf = canvas();
-  c.draw(buf);
+/** Rotate an RGBA image about its centre; uncovered corners get the table colour. */
+function rotated(src: Uint8ClampedArray, deg: number): Uint8ClampedArray {
+  if (!deg) return src;
+  const out = canvas();
+  const t = (deg * Math.PI) / 180, c = Math.cos(t), s2 = Math.sin(t), cx = W / 2, cy = H / 2;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      // Inverse map: where in the upright source does this output pixel come from?
+      const sx = Math.round(c * (x - cx) + s2 * (y - cy) + cx);
+      const sy = Math.round(-s2 * (x - cx) + c * (y - cy) + cy);
+      if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
+      const i = (y * W + x) * 4, j = (sy * W + sx) * 4;
+      out[i] = src[j]; out[i + 1] = src[j + 1]; out[i + 2] = src[j + 2]; out[i + 3] = 255;
+    }
+  }
+  return out;
+}
+
+const ROTATED: Case[] = CASES.filter((c) => ["T-shirt", "Trousers", "Skirt"].includes(c.name)).flatMap((c) => [
+  { ...c, name: `${c.name} +5°`, rotate: 5 },
+  { ...c, name: `${c.name} −7°`, rotate: -7 },
+]);
+
+for (const c of [...CASES, ...ROTATED]) {
+  const upright = canvas();
+  c.draw(upright);
+  const buf = rotated(upright, c.rotate ?? 0);
   const mask = segmentShirt(buf, W, H);
   const res = measureGarment(mask, PX_PER_CM);
 
   if (!res.ok) {
-    console.log(`  FAIL  ${c.name.padEnd(10)} — ${res.error}`);
+    console.log(`  FAIL  ${c.name.padEnd(14)} — ${res.error}`);
     fail++;
     continue;
   }
@@ -178,11 +204,11 @@ for (const c of CASES) {
   const missing = POMS_FOR[res.type].filter((k) => res.points[k] === undefined);
 
   if (problems.length) {
-    console.log(`  FAIL  ${c.name.padEnd(10)} ${problems.join("; ")}`);
+    console.log(`  FAIL  ${c.name.padEnd(14)} ${problems.join("; ")}`);
     fail++;
   } else {
     console.log(
-      `  PASS  ${c.name.padEnd(10)} ${res.type.padEnd(9)} ` +
+      `  PASS  ${c.name.padEnd(14)} ${res.type.padEnd(9)} ` +
       `conf ${res.classification.confidence.toFixed(2)}  ${shown.join("  ")}` +
       (missing.length ? `   [not produced: ${missing.join(", ")}]` : ""),
     );
