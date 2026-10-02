@@ -25,6 +25,7 @@ import { MeasurePoints, type HandleMap } from "./measure-points";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
+import { segmentWithModel, warmUpSegmenter } from "@/lib/size-grading/model-segment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import { TARGET, detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
@@ -176,6 +177,12 @@ export function SizeGradingWorkspace() {
      up against the printed target, so any two points on it ARE a measurement —
      the segmentation only proposes where they start. */
   const [handles, setHandles] = useState<HandleMap>({});
+  /* The model's mask, when it has finished. Null means "not yet" or "it could
+     not run", and in both cases the colour model carries on in its place — a
+     photo is never left unmeasurable because a download failed. */
+  const [modelMask, setModelMask] = useState<ShirtMask | null>(null);
+  const [finding, setFinding] = useState(false);
+  const [modelFailed, setModelFailed] = useState(false);
   const [selectedPom, setSelectedPom] = useState<string | null>(null);
   /** How sharp the garment is in this photo, and whether it can be trusted. */
   const [focus, setFocus] = useState<FocusReading | null>(null);
@@ -252,7 +259,7 @@ export function SizeGradingWorkspace() {
             h: Math.round(TARGET.outerHCm * rectPxPerCm),
           }]
         : undefined;
-      const m = segmentGarment(image.data, image.width, image.height, seed, { bias, exclude });
+      const m = modelMask ?? segmentGarment(image.data, image.width, image.height, seed, { bias, exclude });
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
       /* Focus is judged over the garment, not the frame: a sharp table behind a
@@ -262,7 +269,7 @@ export function SizeGradingWorkspace() {
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm]);
+  }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm, modelMask]);
 
   /** Every point this family is measured on, whatever the photo managed. */
   const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
@@ -282,7 +289,10 @@ export function SizeGradingWorkspace() {
       const next: HandleMap = {};
       pomKeys.forEach((key, i) => {
         const kept = prev[key];
-        if (kept?.set) {
+        /* Only a handle the operator moved is protected. An app proposal is
+           replaced when a better mask arrives — that is the whole point of the
+           model finishing after the colour model. */
+        if (kept?.touched) {
           next[key] = kept;
           return;
         }
@@ -303,6 +313,54 @@ export function SizeGradingWorkspace() {
     });
     setSelectedPom((cur) => (cur && pomKeys.includes(cur as PomKey) ? cur : (pomKeys[0] ?? null)));
   }, [image, result, pomKeys]);
+
+  /* Find the garment the moment a photo exists. Nothing is asked of the
+     operator: no tap, no sensitivity, no second button. The colour model has
+     already produced something to look at by the time this starts, so the
+     screen is never empty while it runs, and when it finishes the lines move to
+     the better answer — except any the operator has already corrected. */
+  useEffect(() => {
+    if (!image) {
+      setModelMask(null);
+      setFinding(false);
+      return;
+    }
+    let alive = true;
+    setFinding(true);
+    setModelFailed(false);
+    const exclude = rectPxPerCm
+      ? [{
+          x: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+          y: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+          w: Math.round(TARGET.outerWCm * rectPxPerCm),
+          h: Math.round(TARGET.outerHCm * rectPxPerCm),
+        }]
+      : undefined;
+    void segmentWithModel(image.data, image.width, image.height, { exclude })
+      .then((m) => {
+        if (!alive) return;
+        // A mask covering almost nothing, or almost everything, is not a
+        // garment — keep what the colour model found rather than trust it.
+        const share = m.area / (image.width * image.height);
+        if (share > 0.01 && share < 0.92) setModelMask(m);
+        else setModelFailed(true);
+      })
+      .catch(() => {
+        if (alive) setModelFailed(true);
+      })
+      .finally(() => {
+        if (alive) setFinding(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [image, rectPxPerCm]);
+
+  /* Fetch the model while the operator is still picking the item, so the first
+     photo does not wait for a 17 MB download that could have happened already. */
+  useEffect(() => {
+    warmUpSegmenter();
+  }, []);
 
   const cmOf = useCallback(
     (key: string): number | null => {
@@ -1518,10 +1576,21 @@ export function SizeGradingWorkspace() {
                 <strong>The app proposes each line; you have the last word.</strong> Nothing is measured from a mask
                 you have to supervise — drag an end if a line is in the wrong place, and leave it alone if it is not.
               </p>
-              <p className="text-xs text-[var(--wms-muted)]">
-                The proposals land much closer when the garment is on a plain surface that contrasts with it — a roll
-                of white or black paper, or a felt mat, is the cheapest accuracy you can buy on this whole page. On a
-                patterned table expect to place more of them by hand.
+              <p className="flex items-center gap-2 text-xs text-[var(--wms-muted)]">
+                {finding ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Finding the garment…
+                  </>
+                ) : modelMask ? (
+                  <span className="text-[var(--wms-status-success-fg)]">
+                    Garment found automatically — check the lines, drag anything that is off.
+                  </span>
+                ) : modelFailed ? (
+                  <span className="text-[var(--wms-status-warning-fg)]">
+                    The finder could not pick the garment out of this photo, so the lines are a rough guess — place
+                    them by hand, or shoot against a plainer surface.
+                  </span>
+                ) : null}
               </p>
             </div>
           ) : null}

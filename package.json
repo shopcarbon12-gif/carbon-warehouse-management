@@ -60,7 +60,8 @@
     "upload:mobile-apk": "node scripts/upload-mobile-apk.mjs",
     "favicon:build": "node scripts/build-app-icons.mjs",
     "remotion:streetwear": "npm run dev --prefix remotion/streetwear-promo",
-    "remotion:streetwear:render": "npm run render --prefix remotion/streetwear-promo"
+    "remotion:streetwear:render": "npm run render --prefix remotion/streetwear-promo",
+    "ort:copy": "node scripts/copy-ort-runtime.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1108.0",
@@ -73,6 +74,7 @@
     "jose": "^6.2.2",
     "lucide-react": "^1.7.0",
     "next": "16.2.1",
+    "onnxruntime-web": "^1.30.0",
     "openai": "^6.49.0",
     "pg": "^8.16.0",
     "react": "19.2.4",

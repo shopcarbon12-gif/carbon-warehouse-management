@@ -36,8 +36,10 @@ import type { Point } from "@/lib/size-grading/measure";
 export type Handle = {
   a: Point;
   b: Point;
-  /** True once the operator has moved it, or it came from the photo. */
+  /** It has a usable position — proposed by the app or placed by hand. */
   set: boolean;
+  /** The operator moved this one. A better proposal must never overwrite it. */
+  touched?: boolean;
 };
 export type HandleMap = Record<string, Handle>;
 
@@ -245,7 +247,7 @@ export function MeasurePoints({
     const hv = handles[drag.key];
     if (!hv) return;
     setDrag({ ...drag, at: p });
-    onChange(drag.key, { ...hv, [drag.end]: p, set: true });
+    onChange(drag.key, { ...hv, [drag.end]: p, set: true, touched: true });
   };
 
   const endDrag = (e: React.PointerEvent<HTMLCanvasElement>) => {

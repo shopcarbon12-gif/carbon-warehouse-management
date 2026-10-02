@@ -110,3 +110,6 @@ client_secret_*.json
 
 # GMC overlay sync log
 .gmc-overlay-sync.log
+
+# ONNX runtime, copied from node_modules at build time (scripts/copy-ort-runtime.mjs)
+public/ort/

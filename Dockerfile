@@ -43,6 +43,12 @@ ENV NEXT_REACT_COMPILER=0
 ENV NODE_OPTIONS=--max-old-space-size=2048
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Size Grading's garment finder runs an ONNX model in the browser. Its wasm
+# runtime is copied out of node_modules here rather than committed, because the
+# runtime's JS and .wasm must be the exact same version — a committed copy goes
+# stale on the next dependency bump and fails with an error that never mentions
+# versions. public/ort/ is gitignored; this is the only thing that fills it.
+RUN node scripts/copy-ort-runtime.mjs
 # Avoid `npm run build` here: package.json runs db:migrate first, which needs DATABASE_URL.
 # Migrations run at container start via docker-entrypoint (WMS_AUTO_MIGRATE) or Coolify hooks.
 # Always webpack in Docker (not Turbopack); matches `next build --webpack` recommendations for CI.
