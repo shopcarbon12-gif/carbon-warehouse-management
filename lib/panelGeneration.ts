@@ -320,7 +320,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
   const legsCropLine = (pose: number) =>
     upperBodyItem
       ? upperBodyCropLockLine(pose)
-      : `- LEFT Pose ${pose} is a LEGS-ONLY crop (waist to feet), NOT a full body. HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. Fill the frame with the lower body (waistband + closure, front rise, pockets, thighs, hem) and keep the shoes/feet visible at the very bottom. If a full standing body — or the head/torso — appears, it is WRONG and must be re-framed as a waist-to-feet crop.`;
+      : `- LEFT Pose ${pose} is a LEGS-ONLY crop (waist to feet) OF THE MODEL WEARING IT, NOT a full body and NOT a product-only shot. HARD CROP LOCK: the head, face, chest, and upper torso MUST be entirely OUT of frame — the frame starts at the waistband and ends at the feet. The model's own legs fill the garment and their shoes are on their feet at the very bottom. Fill the frame with the lower body (waistband + closure, front rise, pockets, thighs, hem). A full standing body, a visible head/torso, or an empty garment with nobody in it is WRONG.`;
   const g = String(gender || "").toLowerCase();
   if (g === "female") {
     if (panelNumber === 1) {
@@ -342,7 +342,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       return [
         "PANEL 3 (Pose 7 + Pose 5):",
         legsCropLine(7),
-        "- RIGHT Pose 5: one close-up of this same look.",
+        "- RIGHT Pose 5: one close-up of this same look, ON the model — fabric on the body, never a product-only still.",
         closeUpSubjectLine,
         closeUpCategoryRule,
       ];
@@ -373,7 +373,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     return [
       "PANEL 3 (Pose 5 + Pose 6):",
       legsCropLine(5),
-      "- RIGHT Pose 6: one close-up detail of this same item.",
+      "- RIGHT Pose 6: one close-up detail of this same item, ON the model — fabric on the body, never a product-only still.",
       closeUpSubjectLine,
       closeUpCategoryRule,
     ];
@@ -383,6 +383,51 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
     "- LEFT Pose 7 is a TORSO-BACK crop (mid-thigh to head), back-facing, with an over-the-shoulder head turn — NOT a full body. HARD CROP LOCK: crop the frame at mid-thigh; the lower legs and feet MUST be OUT of frame. If a full head-to-toe standing body appears, it is WRONG and must be re-framed as a mid-thigh-to-head crop.",
     "- RIGHT Pose 8: one controlled creative pose of this same look.",
   ];
+}
+
+/**
+ * Everything the model wears that is NOT the product.
+ *
+ * Four panels are four independent API calls that share no memory, so "the
+ * same shoes across the whole run" was an instruction nothing could obey:
+ * each call invented its own sneakers and its own t-shirt, and a set came
+ * back styled four different ways. The complementary pieces are therefore
+ * NAMED — the same words in every panel of every run — so consistency comes
+ * from the prompt instead of from hope.
+ *
+ * It never overrides the item photos: it supplies only the pieces they do not
+ * show.
+ */
+export function buildStylingLock(itemTypeValue: string, gender: string): string {
+  const female = String(gender || "").trim().toLowerCase() === "female";
+  const category = inferItemTypeCategory(itemTypeValue);
+  const swim = isSwimwearItemType(itemTypeValue);
+
+  const shoes = swim
+    ? "- FOOTWEAR: plain black flip-flops, or naturally bare feet. The same choice in every frame."
+    : "- FOOTWEAR: plain white low-top leather sneakers — flat white laces, plain white rubber soles, no visible branding, no contrast panels. The exact same pair in every frame, both feet identical.";
+  const socks = swim ? "" : "- SOCKS: plain white no-show socks, never visible above the shoe.";
+  const top = female
+    ? "- TOP: a plain black fitted crew-neck short-sleeve t-shirt, untucked — no print, no logo, no pocket, no graphic."
+    : "- TOP: a plain black crew-neck short-sleeve cotton t-shirt, untucked — no print, no logo, no pocket, no graphic.";
+  const bottom = female
+    ? "- BOTTOM: plain black slim full-length trousers — no print, no logo, no visible hardware."
+    : "- BOTTOM: plain mid-grey slim straight full-length trousers — no print, no logo, no visible hardware.";
+  const accessories =
+    "- ACCESSORIES: none at all — no watch, no jewellery, no belt, no hat, no sunglasses, no bag, no visible socks logo.";
+
+  const lines: string[] = [];
+  if (category === "top" || category === "outerwear") lines.push(bottom);
+  else if (category === "bottom") lines.push(top);
+  else if (category === "footwear" || category === "accessory") lines.push(top, bottom);
+  else if (category === "full-look") {
+    /* The look is complete in the photos; only the parts it cannot show. */
+  } else lines.push(top);
+  if (category === "outerwear") lines.push(top.replace("- TOP:", "- TOP UNDER THE OUTERWEAR:"));
+  if (category !== "footwear") lines.push(shoes);
+  if (socks && category !== "footwear") lines.push(socks);
+  lines.push(accessories);
+  return lines.join("\n");
 }
 
 /**
@@ -465,6 +510,8 @@ export function buildMasterPanelPrompt(args: {
   itemStyleInstructions?: string;
   /** Per-generation facial-expression cue (varies run-to-run so models don't look robotic). */
   expressionDirective?: string;
+  /** The non-product styling, identical across the run. Defaults per item type. */
+  stylingLock?: string;
 }) {
   /*
    * One rule, one voice. The previous builder said "the model is over 25" in
@@ -496,6 +543,8 @@ export function buildMasterPanelPrompt(args: {
   const promptItemType = gender === "female" && swimwearActive ? "swimwear" : args.itemType.trim();
   const itemLabel = promptItemType || "apparel item";
   const styleInstructions = normalizePromptInstruction(args.itemStyleInstructions);
+  /* Named, not described: the four panels cannot see each other's choices. */
+  const stylingLock = args.stylingLock?.trim() || buildStylingLock(args.itemType, args.modelGender);
   const expressionDirective =
     normalizePromptInstruction(args.expressionDirective, 240) ||
     "a natural, relaxed premium expression with soft, warm eyes";
@@ -505,14 +554,17 @@ export function buildMasterPanelPrompt(args: {
     `Professional ecommerce catalog photo shoot. Panel ${args.panelNumber} (${args.panelLabel}). Model: ${modelLabel}. Item type: ${itemLabel}.`,
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is Pose A, the RIGHT half (768x1024) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
     "ITEM REFERENCES: the item photos are product references only. Take the garment's shape, colour, material, construction and every detail from them. Any person, mannequin or hanger in an item photo is a display fixture — never copy a face, hair, skin tone, body, age, tattoos, jewellery, pose or styling from an item photo; the person in every frame is the model from the MODEL references.",
-    "If the item photos show a complete outfit, reproduce the whole outfit (top, bottom, shoes, accessories) unchanged in every frame. If only one piece is shown, complete the look with plain, neutral, solid-colour, unbranded basics — never invent branded or designed pieces, prints, logos or accessories that the photos do not show.",
+    "If the item photos show a complete outfit, reproduce the whole outfit (top, bottom, shoes, accessories) unchanged in every frame. Anything the photos do NOT show comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.",
+    "STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. If the item photos show that piece, the photos win instead:",
+    stylingLock,
+    "WORN BY THE MODEL: every frame shows the garment ON the living model from the MODEL references — the model's own body inside the clothes, their legs in the trousers, their skin at the ankle and wrist. A cropped frame still contains their body. Never a flat lay, never a ghost mannequin, never an empty garment floating on the background, never a frame with no person in it.",
     `GARMENT FIDELITY: the ${itemLabel} is the exact product in the item photos — identical cut and fit (a slim fit stays slim, an oversized fit stays oversized; never lengthen, shorten, loosen or tighten it), identical colour, wash, material and texture, identical seams, stitching, pockets, hardware, closures, hems and cuffs, identical distressing in the same places, and every logo, text, print and graphic at the same size, position, colours and print effect. Never redesign, simplify, recolour, move, resize, mirror or add anything. It stays identical in both frames and across every panel of this run.`,
     ...(styleInstructions
       ? ["STYLING INSTRUCTIONS (apply while keeping the product identical):", styleInstructions]
       : []),
     swimwearActive
-      ? "FOOTWEAR: full-body frames use clean flip-flops / sandals / water-shoes or naturally uncovered feet, the same choice across the whole run."
-      : "FOOTWEAR: every full-body frame shows shoes — the exact pair from the item photos or styling instructions; if none is given, clean neutral unbranded studio sneakers, the same pair across the whole run. Never barefoot, never socks-only.",
+      ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
+      : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock, on both feet. Never barefoot, never socks-only, never a different pair from the other panels.",
     `EXPRESSION for this generation: ${expressionDirective}. The face looks alive and human, with subtle natural variation between the two frames; expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline.`,
     "Photorealistic: real human anatomy and skin texture; no CGI, plastic or mannequin look.",
     ...(globalRules

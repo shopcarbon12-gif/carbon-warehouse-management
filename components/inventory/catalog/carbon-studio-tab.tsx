@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import { parseSpecBackState, specListsBackDesign, studioRefViewKey } from "@/lib/studio-item-spec";
 import {
+  buildStylingLock,
   buildMasterPanelPrompt,
   getPanelPosePair,
   getPanelButtonLabel,
@@ -1130,6 +1131,11 @@ export function CarbonStudioTab({
     // One facial expression per run so the model doesn't look robotic across
     // products; kept consistent across this run's panels for set coherence.
     const expressionDirective = pickExpressionDirective();
+    /* The non-product styling, resolved ONCE and sent to all four panels. Each
+       panel is a separate API call that cannot see the others, so naming the
+       t-shirt and the shoes here is the only thing that makes the set look
+       like one shoot instead of four. */
+    const stylingLock = buildStylingLock(itemType, model.gender);
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
     // Touch devices only: keep the screen awake while the panels generate — a
     // locked phone suspends the page and aborts the in-flight fetches, which
@@ -1171,6 +1177,7 @@ export function CarbonStudioTab({
         itemType,
         itemStyleInstructions: instruction,
         expressionDirective,
+        stylingLock,
         // itemSpec travels as its own request field (server appends it inside the
         // protected lock block) — NOT inside the prompt, which is near the
         // model's length limit and gets trimmed from the middle.
