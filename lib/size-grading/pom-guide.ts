@@ -10,15 +10,20 @@
 
 import type { GarmentType, PomKey } from "./garment";
 
+/* Matched to the owner's reference pictures (public/size-grading/guide/), so a
+   line on the measuring screen is the same colour as the same line in the
+   guide. Where the pictures reuse a hue for two points on one garment (hip and
+   thigh are both cyan there), the second is a shade apart so the two lines can
+   still be told apart on the photo. */
 export const POM_COLOR: Record<PomKey, string> = {
-  chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
-  hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
-  sleeveInseam: "#fb923c", bicep: "#fbbf24", cuff: "#f472b6", armhole: "#c084fc",
-  inseam: "#22c55e", outseam: "#6366f1", legOpening: "#ec4899", rise: "#a855f7",
-  thigh: "#2dd4bf", knee: "#38bdf8", calf: "#818cf8",
-  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#a5b4fc",
-  shoulderSlope: "#fcd34d", waistbandHeight: "#f9a8d4",
-  frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5", backPocketLength: "#f87171",
+  chest: "#facc15", waist: "#a855f7", hip: "#22d3ee", length: "#3b82f6",
+  hem: "#f43f5e", shoulder: "#22c55e", sleeve: "#8b5cf6",
+  sleeveInseam: "#fb923c", bicep: "#f59e0b", cuff: "#f472b6", armhole: "#f97316",
+  inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#f43f5e", rise: "#f472b6",
+  thigh: "#06b6d4", knee: "#a78bfa", calf: "#818cf8",
+  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#bfdbfe",
+  shoulderSlope: "#fde047", waistbandHeight: "#f9a8d4",
+  frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5", backPocketLength: "#ef4444",
 };
 export const colorForPom = (key: string) => POM_COLOR[key as PomKey] ?? "#38bdf8";
 
