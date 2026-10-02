@@ -12,8 +12,9 @@ export default async function SizeGradingPage() {
       <div className="border-b border-[var(--wms-border)] pb-3">
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Size Grading</h1>
         <p className="mt-1 max-w-2xl font-mono text-xs text-[var(--wms-muted)]">
-          Photograph a T-shirt laid flat. The page measures chest width, body length and hem width, then grades it
-          against the size chart. Prototype — everything runs on this device; nothing is saved to inventory.
+          Photograph a garment laid flat beside the printed target. The target fixes the scale and squares the photo
+          up, so the camera can be hand-held at any distance or angle; the garment is then measured and saved against
+          the item. Front and back are measured separately.
         </p>
       </div>
       <SizeGradingWorkspace />

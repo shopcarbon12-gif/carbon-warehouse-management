@@ -25,6 +25,7 @@ import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { focusReading, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
+import { detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -69,6 +70,8 @@ const CALIB_PRESETS: Array<{ id: string; label: string; cm: number; note: string
 ];
 
 const WORK_MAX_PX = 1000;
+/** The photo is kept this big for target detection and un-warping. */
+const SRC_MAX_PX = 1800;
 const CHART_KEY = "wms.sizeGrading.chart";
 /** Calibration stored as px-per-cm divided by working-image width, so it survives resolution changes. */
 const CALIB_KEY = "wms.sizeGrading.calibration";
@@ -139,6 +142,8 @@ export function SizeGradingWorkspace() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** The photo as decoded, before any un-warping — what rectify samples from. */
+  const srcRef = useRef<ImageData | null>(null);
 
   const [image, setImage] = useState<ImageData | null>(null);
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
@@ -166,6 +171,14 @@ export function SizeGradingWorkspace() {
   const [calibPts, setCalibPts] = useState<Point[]>([]);
   const [refLengthCm, setRefLengthCm] = useState("27.94");
   const [calibPreset, setCalibPreset] = useState("letter-long");
+  /* The printed target, found in this photo. When it is there, it supplies the
+     scale AND squares the photo up, so no calibration is involved at all. */
+  const [target, setTarget] = useState<TargetDetection | null>(null);
+  /** Exact px-per-cm of the un-warped image, by construction. */
+  const [rectPxPerCm, setRectPxPerCm] = useState<number | null>(null);
+  /** Corners the operator tapped, when detection missed. */
+  const [cornerTaps, setCornerTaps] = useState<Point[]>([]);
+  const [tappingCorners, setTappingCorners] = useState(false);
   /* Front and back are two measurements of the same garment. The operator
      shoots one, saves it, flips the garment and shoots the other; the side is
      stored with the reading so a back rise is never filed as a front rise. */
@@ -197,7 +210,9 @@ export function SizeGradingWorkspace() {
     if (Number.isFinite(c) && c > 0) setCalibRatio(c);
   }, []);
 
-  const pxPerCm = image && calibRatio ? calibRatio * image.width : null;
+  /* An un-warped image's scale is exact by construction, so it always wins over
+     a calibration someone tapped in once on a different photo. */
+  const pxPerCm = rectPxPerCm ?? (image && calibRatio ? calibRatio * image.width : null);
 
   // Measure whenever the photo, calibration or sensitivity changes.
   useEffect(() => {
@@ -291,7 +306,7 @@ export function SizeGradingWorkspace() {
         ctx.fillText(label, lx, ly);
       }
     }
-    if (!calibrating && image) {
+    if (!calibrating && !tappingCorners && image) {
       // Where the green is growing from — so a wrong mask is obvious at a glance.
       ctx.strokeStyle = "#22c55e";
       ctx.lineWidth = lw;
@@ -304,6 +319,27 @@ export function SizeGradingWorkspace() {
       ctx.moveTo(seed.x, seed.y - lw * 9);
       ctx.lineTo(seed.x, seed.y + lw * 9);
       ctx.stroke();
+    }
+    if (tappingCorners || cornerTaps.length) {
+      // The corners tapped so far, numbered, so a mis-tap is obvious.
+      ctx.fillStyle = "#38bdf8";
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = lw;
+      ctx.font = `bold ${Math.max(14, Math.round(image.width / 36))}px sans-serif`;
+      cornerTaps.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, lw * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeText(String(i + 1), p.x + lw * 6, p.y - lw * 3);
+        ctx.fillText(String(i + 1), p.x + lw * 6, p.y - lw * 3);
+      });
+      if (cornerTaps.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(cornerTaps[0].x, cornerTaps[0].y);
+        for (const p of cornerTaps.slice(1)) ctx.lineTo(p.x, p.y);
+        if (cornerTaps.length === 4) ctx.closePath();
+        ctx.stroke();
+      }
     }
     if (calibrating) {
       ctx.strokeStyle = "#ef4444";
@@ -321,7 +357,7 @@ export function SizeGradingWorkspace() {
         ctx.stroke();
       }
     }
-  }, [image, result, mask, calibrating, calibPts, seed]);
+  }, [image, result, mask, calibrating, calibPts, seed, tappingCorners, cornerTaps]);
 
   /**
    * Open the device's own camera with the settings this measurement needs,
@@ -419,13 +455,80 @@ export function SizeGradingWorkspace() {
     streamRef.current?.getTracks().forEach((t) => t.stop());
   }, []);
 
+  /**
+   * Turn a photo into the image everything downstream measures.
+   *
+   * If the printed target is in the frame, this is where the photo stops being
+   * a photograph and becomes a measurement: its four corners give both the
+   * scale and the orientation of the surface, so the image is re-rendered as if
+   * shot from straight above, at an exact and known number of pixels per
+   * centimetre. Calibration and the two taps are then not merely optional, they
+   * are meaningless — there is nothing left to estimate.
+   *
+   * Without the target it falls back to the old path: the photo as taken, with
+   * whatever scale was calibrated on this device, and no tilt correction.
+   */
+  const applySource = useCallback((src: ImageData, quad?: Quad) => {
+    const det = quad ? null : detectTarget(src.data, src.width, src.height);
+    const useQuad = quad ?? (det && det.confidence >= 0.3 ? det.quad : null);
+
+    if (useQuad) {
+      const rect = rectify(src.data, src.width, src.height, useQuad, { maxPx: 1400, aroundCm: 60 });
+      if (rect) {
+        /* new ImageData(...) rejects a Uint8ClampedArray whose buffer type is
+           not narrowed to ArrayBuffer, so the pixels are copied into one the
+           constructor will take. */
+        const data = new ImageData(rect.width, rect.height);
+        data.data.set(rect.data);
+        setImage(data);
+        setRectPxPerCm(rect.pxPerCm);
+        setTarget(det ?? { quad: useQuad, confidence: 1, tiltPercent: 0 });
+        const centre = { x: rect.width / 2, y: rect.height / 2 };
+        setSeed(centre);
+        setTapped(false);
+        setAutoT(autoSeedTolerance(data.data, rect.width, rect.height, centre));
+        return;
+      }
+    }
+
+    // No target: the photo as taken, scaled to the working size.
+    const scale = Math.min(1, WORK_MAX_PX / Math.max(src.width, src.height));
+    let data = src;
+    if (scale < 1) {
+      const w = Math.round(src.width * scale);
+      const h = Math.round(src.height * scale);
+      const off = document.createElement("canvas");
+      off.width = w;
+      off.height = h;
+      const ctx = off.getContext("2d");
+      if (ctx) {
+        const tmp = document.createElement("canvas");
+        tmp.width = src.width;
+        tmp.height = src.height;
+        tmp.getContext("2d")?.putImageData(src, 0, 0);
+        ctx.drawImage(tmp, 0, 0, w, h);
+        data = ctx.getImageData(0, 0, w, h);
+      }
+    }
+    setImage(data);
+    setRectPxPerCm(null);
+    setTarget(null);
+    const centre = { x: data.width / 2, y: data.height / 2 };
+    setSeed(centre);
+    setTapped(false);
+    setAutoT(autoSeedTolerance(data.data, data.width, data.height, centre));
+  }, []);
+
   const loadFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
     setError(null);
     setHandoffNote(null);
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-      const scale = Math.min(1, WORK_MAX_PX / Math.max(bmp.width, bmp.height));
+      /* Decoded larger than the working image: the target is detected and the
+         un-warping sampled from THIS, so throwing resolution away first would
+         cost corner precision, which is the dominant error in the result. */
+      const scale = Math.min(1, SRC_MAX_PX / Math.max(bmp.width, bmp.height));
       const w = Math.round(bmp.width * scale);
       const h = Math.round(bmp.height * scale);
       const off = document.createElement("canvas");
@@ -435,21 +538,20 @@ export function SizeGradingWorkspace() {
       if (!ctx) throw new Error("Canvas unavailable");
       ctx.drawImage(bmp, 0, 0, w, h);
       bmp.close();
-      const data = ctx.getImageData(0, 0, w, h);
-      const centre = { x: w / 2, y: h / 2 };
-      setImage(data);
-      setSeed(centre);
-      setTapped(false);
-      setAutoT(autoSeedTolerance(data.data, w, h, centre));
+      const src = ctx.getImageData(0, 0, w, h);
+      srcRef.current = src;
       setThreshold(null);
       setCalibPts([]);
+      setCornerTaps([]);
+      setTappingCorners(false);
       setSavedAt(null);
       setFocus(null);
       setAllowSoft(false);
+      applySource(src);
     } catch {
       setError("Could not read that image.");
     }
-  }, []);
+  }, [applySource]);
 
   /**
    * PC → phone hand-off.
@@ -635,6 +737,25 @@ export function SizeGradingWorkspace() {
       x: ((e.clientX - rect.left) / rect.width) * image.width,
       y: ((e.clientY - rect.top) / rect.height) * image.height,
     };
+    if (tappingCorners) {
+      /* Four taps, clockwise from the target's top-left, rectify from the
+         original photo. The fallback exists because detection on a dark floor
+         under bad light will miss sometimes, and "it did not work" is not an
+         acceptable end state when the operator can see the corners perfectly
+         well. */
+      const next = cornerTaps.length >= 4 ? [p] : [...cornerTaps, p];
+      setCornerTaps(next);
+      if (next.length === 4 && srcRef.current) {
+        const src = srcRef.current;
+        /* Taps are in working-image coordinates; the source is bigger. */
+        const kx = src.width / image.width;
+        const ky = src.height / image.height;
+        const quad = next.map((q) => ({ x: q.x * kx, y: q.y * ky })) as Quad;
+        setTappingCorners(false);
+        applySource(src, quad);
+      }
+      return;
+    }
     if (calibrating) {
       setCalibPts((pts) => (pts.length >= 2 ? [p] : [...pts, p]));
       return;
@@ -745,11 +866,18 @@ export function SizeGradingWorkspace() {
             setCalibPts([]);
           }}
         >
-          <Crosshair className="h-4 w-4" /> {calibrating ? "Cancel calibration" : "Calibrate"}
+          <Crosshair className="h-4 w-4" /> {calibrating ? "Cancel calibration" : "Calibrate by hand"}
         </button>
         <span className="font-mono text-xs text-[var(--wms-muted)]">
-          {calibRatio ? "Calibrated on this device" : "Not calibrated yet"}
+          {rectPxPerCm
+            ? "Target found — scale exact, tilt corrected"
+            : calibRatio
+              ? "No target in this photo — using the saved calibration"
+              : "No target, not calibrated"}
         </span>
+        <a href="/inventory/size-grading/target" className="wms-btn wms-btn-sm max-md:min-h-11" target="_blank" rel="noreferrer">
+          Print target
+        </a>
       </div>
 
       {calibrating ? (
@@ -803,6 +931,68 @@ export function SizeGradingWorkspace() {
       ) : null}
 
       {error ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{error}</p> : null}
+
+      {image ? (
+        <div
+          className={`rounded-md border p-2 text-sm ${
+            rectPxPerCm
+              ? "border-[var(--wms-status-success-fg)]/40 bg-[var(--wms-status-success-fg)]/10"
+              : "border-[var(--wms-status-warning-fg)]/40 bg-[var(--wms-status-warning-fg)]/10"
+          }`}
+        >
+          {rectPxPerCm ? (
+            <>
+              <p className="text-[var(--wms-fg)]">
+                Calibration target found. This photo has been squared up and measures{" "}
+                <span className="font-mono">{rectPxPerCm.toFixed(1)} px/cm</span> exactly — no calibration needed.
+              </p>
+              {target && target.tiltPercent > 18 ? (
+                <p className="mt-1 text-xs text-[var(--wms-status-warning-fg)]">
+                  Shot at a steep angle (opposite sides of the target differ by {target.tiltPercent.toFixed(0)}%). The
+                  tilt has been corrected, but accuracy falls off away from the target — shoot squarer if you can, and
+                  keep the target beside the garment rather than off in a corner.
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="text-[var(--wms-fg)]">
+                No calibration target in this photo.{" "}
+                {calibRatio
+                  ? "Falling back to the calibration saved on this device — the scale is only right if the camera is the same distance away as when you calibrated, and any tilt is uncorrected."
+                  : "Nothing can be measured until there is either a target in frame or a calibration."}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="wms-btn wms-btn-sm max-md:min-h-11"
+                  onClick={() => {
+                    setTappingCorners((v) => !v);
+                    setCornerTaps([]);
+                    setCalibrating(false);
+                  }}
+                >
+                  {tappingCorners ? `Cancel (${cornerTaps.length}/4)` : "Tap the target's 4 corners"}
+                </button>
+                <a
+                  href="/inventory/size-grading/target"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="wms-btn wms-btn-sm max-md:min-h-11"
+                >
+                  Print a target
+                </a>
+              </div>
+              {tappingCorners ? (
+                <p className="mt-1 text-xs text-[var(--wms-muted)]">
+                  Tap the four outer corners of the black frame, clockwise, starting at its top-left.{" "}
+                  {cornerTaps.length}/4 tapped.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
       {handoffNote ? (
         <p className="font-mono text-xs text-[var(--wms-muted)]">{handoffNote}</p>
       ) : null}
@@ -908,7 +1098,7 @@ export function SizeGradingWorkspace() {
             <canvas
               ref={canvasRef}
               onClick={onCanvasClick}
-              className={`block h-auto w-full ${calibrating ? "cursor-crosshair" : ""}`}
+              className={`block h-auto w-full ${calibrating || tappingCorners ? "cursor-crosshair" : ""}`}
             />
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--wms-muted)]">
