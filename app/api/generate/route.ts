@@ -7,10 +7,9 @@ import { LOCK_TEXT_MAX_BYTES, parseSpecBackState, specListsBackDesign, withCanon
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import {
   recordStudioGeneration,
-  updateStudioGenerationQa,
   type StudioGenerationLog,
 } from "@/lib/server/studio-generation-log";
-import { isValidQaId, runPanelQa } from "@/lib/server/panel-qa-store";
+import { isValidRunId, stashRunPanel } from "@/lib/server/run-qa-store";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
@@ -237,7 +236,6 @@ function enforcePromptLength(prompt: string, maxLen = MODEL_PROMPT_MAX_CHARS) {
   return cutToBytes(compacted, maxLen);
 }
 
-
 /**
  * Brand safety, once. The only place the prompt says "adult, 25+" and the only
  * place it says what coverage means for this item type. It used to be said in
@@ -286,16 +284,6 @@ type PanelQaInput = {
   modelGender: string;
   itemType: string;
 };
-
-function isFullBodyPose(gender: string, pose: number | null) {
-  if (!Number.isFinite(Number(pose))) return false;
-  const p = Number(pose);
-  const g = String(gender || "").trim().toLowerCase();
-  if (g === "female") {
-    return p === 1 || p === 2 || p === 3 || p === 6;
-  }
-  return p === 1 || p === 2 || p === 4;
-}
 
 function isBackFacingPose(gender: string, pose: number | null) {
   if (!Number.isFinite(Number(pose))) return false;
@@ -411,40 +399,6 @@ function isSwimwearItemType(itemTypeValue: string) {
     t.includes("one piece swimsuit") ||
     t.includes("swimsuit")
   );
-}
-
-function getCloseUpCategoryQaRule(itemTypeValue: string) {
-  const category = inferItemTypeCategory(itemTypeValue);
-  if (category === "top") {
-    return "Expected close-up category: TOP only (not shorts/pants/shoes).";
-  }
-  if (category === "bottom") {
-    return "Expected close-up category: BOTTOM only (not tops/shoes).";
-  }
-  if (category === "footwear") {
-    return "Expected close-up category: FOOTWEAR only.";
-  }
-  if (category === "outerwear") {
-    return "Expected close-up category: OUTERWEAR only.";
-  }
-  if (category === "accessory") {
-    return "Expected close-up category: ACCESSORY only.";
-  }
-  if (category === "full-look") {
-    return "Expected close-up category: one hero detail from the locked full look.";
-  }
-  return "Expected close-up category: must match the exact section 0.5 item type.";
-}
-
-function hasPanel3CloseUpSubjectLock(panelQa: PanelQaInput) {
-  const g = String(panelQa.modelGender || "").trim().toLowerCase();
-  const panelNumber = Number(panelQa.panelNumber);
-  const rightPose = Number(panelQa.poseB);
-  if (!Number.isFinite(panelNumber) || !Number.isFinite(rightPose)) return false;
-  if (g === "female") {
-    return panelNumber === 3 && rightPose === 5;
-  }
-  return panelNumber === 3 && rightPose === 6;
 }
 
 function sanitizeText(value: unknown, maxLen = 180) {
@@ -578,59 +532,6 @@ function buildBackStateLine(backState: BackState, panelQa: PanelQaInput): string
   ];
 }
 
-function extractOpenAiOutputText(result: any) {
-  const direct = typeof result?.output_text === "string" ? result.output_text.trim() : "";
-  if (direct) return direct;
-  const chunks: string[] = [];
-  const output = Array.isArray(result?.output) ? result.output : [];
-  for (const row of output) {
-    const content = Array.isArray(row?.content) ? row.content : [];
-    for (const part of content) {
-      if (typeof part?.text === "string" && part.text.trim()) {
-        chunks.push(part.text.trim());
-      }
-    }
-  }
-  return chunks.join("\n").trim();
-}
-
-function parseJsonObjectFromText(text: string): Record<string, any> | null {
-  const raw = String(text || "").trim();
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    const first = raw.indexOf("{");
-    const last = raw.lastIndexOf("}");
-    if (first < 0 || last <= first) return null;
-    try {
-      const parsed = JSON.parse(raw.slice(first, last + 1));
-      return parsed && typeof parsed === "object" ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
-}
-
-function asStrictBoolean(value: unknown): boolean | null {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1 ? true : value === 0 ? false : null;
-  if (typeof value !== "string") return null;
-  const v = value.trim().toLowerCase();
-  if (["true", "yes", "y", "pass", "ok"].includes(v)) return true;
-  if (["false", "no", "n", "fail"].includes(v)) return false;
-  return null;
-}
-
-function normalizeReasons(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((v) => (typeof v === "string" ? v.trim() : ""))
-    .filter((v) => Boolean(v))
-    .slice(0, 8);
-}
-
 /** Studio item-reference sections: General (any view — accessories, flats),
  *  Front (front of the garment), Back (back of the garment). */
 type ItemRefView = "general" | "front" | "back";
@@ -682,341 +583,6 @@ function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefVie
       ? ["- No FRONT photo was supplied: render the front exactly as the general photos / verified spec show it; if they show nothing, keep the front clean in the item colour — never invent a front design."]
       : []),
   ];
-}
-
-/** QA judge input: item refs grouped and labelled by view. */
-function buildLabelledItemRefContent(itemRefs: string[], views?: ItemRefView[]): any[] {
-  const tagged = itemRefs.map((url, i) => ({ url, view: views?.[i] ?? "general" }));
-  const groups: { view: ItemRefView; label: string }[] = [
-    { view: "general", label: "ITEM reference images — GENERAL (any view: accessories, flats, details):" },
-    { view: "front", label: "ITEM reference images — FRONT of the garment (everything here is on the front only):" },
-    { view: "back", label: "ITEM reference images — BACK of the garment (everything here is on the back only):" },
-  ];
-  const hasSorted = tagged.some((t) => t.view !== "general");
-  if (!hasSorted) {
-    return [
-      { type: "input_text", text: "ITEM reference images (outfit lock):" },
-      ...tagged.map((t) => ({ type: "input_image", image_url: t.url })),
-    ];
-  }
-  const out: any[] = [];
-  for (const g of groups) {
-    const urls = tagged.filter((t) => t.view === g.view).map((t) => t.url);
-    if (!urls.length) continue;
-    out.push({ type: "input_text", text: g.label });
-    out.push(...urls.map((url) => ({ type: "input_image", image_url: url })));
-  }
-  return out;
-}
-
-type QaFrame = "left" | "right" | "both";
-type QaReason = { frame: QaFrame; text: string };
-const QA_MIN_CONFIDENCE = 0.75;
-const normalizeForCompare = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
-
-/**
- * A "reason" that is actually a confirmation ("text matches the reference",
- * "logo present and correctly placed"). The judge lists these under reasons
- * when asked for structured output, and each one used to be shown to the
- * operator as a red failure. A line that also names a defect is not one.
- */
-function looksLikeConfirmation(detail: string, observed: string): boolean {
-  const t = `${detail} ${observed}`.toLowerCase();
-  if (!t.trim()) return false;
-  // Open-ended stems (differ|ent|s, invent|ed, relocat|ed …) and the contrast
-  // words that introduce a defect after a compliment ("logo is correct, BUT…").
-  // A first version anchored whole words and dropped 11 of 12 real defects.
-  const defect =
-    /\b(?:missing|absent|not (?:present|visible|shown|rendered|match\w*)|wrong|differ\w*|mismatch\w*|misspel\w*|garbled|merged|invent\w*|extra|added|moved|relocat\w*|resiz\w*|shrunk|shrink\w*|swap\w*|chang\w*|alter\w*|redesign\w*|simplif\w*|recolou?r\w*|duplicat\w*|omit\w*|lack\w*|remov\w*|barefoot|full standing|older|younger|incorrect\w*|instead of|should be|does not|doesn't|isn't|is not|are not|aren't|however|although|except|whereas|but\b)|;/;
-  if (defect.test(t)) return false;
-  return /\b(?:matches|match(?:ing|ed)?|correct(?:ly)?|consistent|as expected|identical|same as|accurate|present and|confirmed|no (?:issue|mismatch|difference|problem)|looks (?:right|good|fine)|preserved|intact|faithful)\b/.test(
-    t
-  );
-}
-
-/**
- * Structured judge verdicts → operator-facing reasons. The judge has produced
- * "misspelled as '<the expected string>'" and "full standing body" on an
- * upper-body crop, so each reason carries expected/observed/confidence and:
- * - expected == observed (after normalisation) is a self-contradiction → dropped;
- * - a confirmation phrased as a reason → dropped;
- * - confidence missing or < QA_MIN_CONFIDENCE → demoted to a note (a reason
- *   with no confidence is the judge not committing, not the judge being sure);
- * - the frame lets the Studio flag only the crop that is actually wrong.
- * Legacy string reasons are kept as-is on both frames.
- */
-function parseQaReasons(value: unknown): { kept: QaReason[]; demoted: string[]; dropped: number } {
-  const kept: QaReason[] = [];
-  const demoted: string[] = [];
-  let dropped = 0;
-  if (!Array.isArray(value)) return { kept, demoted, dropped };
-  for (const v of value.slice(0, 12)) {
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (!t) continue;
-      if (looksLikeConfirmation(t, "")) {
-        // Never silently discard what the judge attached to a verdict: a
-        // "confirmation" still reaches the operator, as a note.
-        demoted.push(`${t} (reads as a confirmation)`);
-        dropped += 1;
-        continue;
-      }
-      kept.push({ frame: "both", text: t });
-      continue;
-    }
-    if (!v || typeof v !== "object") continue;
-    const r = v as Record<string, unknown>;
-    const cls = String(r.class || "").toUpperCase().trim();
-    const frameRaw = String(r.frame || "").toLowerCase().trim();
-    const frame: QaFrame = frameRaw.startsWith("l") ? "left" : frameRaw.startsWith("r") ? "right" : "both";
-    const expected = typeof r.expected === "string" ? r.expected.trim() : "";
-    const observed = typeof r.observed === "string" ? r.observed.trim() : "";
-    const detail = typeof r.detail === "string" ? r.detail.trim() : "";
-    const confidence = Number(r.confidence);
-    const body = detail || (expected || observed ? `expected "${expected}", saw "${observed}"` : "");
-    const text = [cls ? `${cls}:` : "", body].filter(Boolean).join(" ").trim().slice(0, 240);
-    if (!text) continue;
-    if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) {
-      dropped += 1;
-      continue;
-    }
-    if (looksLikeConfirmation(detail, observed)) {
-      demoted.push(`${text} (reads as a confirmation)`);
-      dropped += 1;
-      continue;
-    }
-    if (!Number.isFinite(confidence) || confidence < QA_MIN_CONFIDENCE) {
-      demoted.push(`${text} (${Number.isFinite(confidence) ? "low" : "no"} confidence)`);
-      continue;
-    }
-    kept.push({ frame, text });
-  }
-  return { kept: kept.slice(0, 8), demoted: demoted.slice(0, 6), dropped };
-}
-
-async function runPanelComplianceCheck(args: {
-  openai: OpenAI;
-  imageBase64: string;
-  modelRefs: string[];
-  itemRefs: string[];
-  panelQa: PanelQaInput;
-  /** View tag per itemRefs entry (general / front / back), same order. */
-  itemRefViews?: ItemRefView[];
-  /** Verified item spec (pre-generation analysis) so the judge can check text
-   *  letter by letter and graphic placement side by side. */
-  itemSpec?: string;
-  backState: BackState;
-  timeoutMs: number;
-}) {
-  // gpt-4o (not -mini): the verdict is now shown to the operator per crop, so
-  // it has to be worth reading — mini's face/background judgements were noisy.
-  const qaModel = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
-  const qaGender = String(args.panelQa.modelGender || "").trim().toLowerCase();
-  const legsCropPose = qaGender === "female" ? 7 : 5;
-  const legsCropActive =
-    Number(args.panelQa.poseA) === legsCropPose || Number(args.panelQa.poseB) === legsCropPose;
-  const qaCategory = inferItemTypeCategory(args.panelQa.itemType);
-  const upperBodyItem = qaCategory === "top" || qaCategory === "outerwear";
-  const itemSpecForQa = String(args.itemSpec || "").trim();
-  const panelName =
-    args.panelQa.panelLabel ||
-    (args.panelQa.panelNumber ? `Panel ${args.panelQa.panelNumber}` : "Panel");
-  const hasFullBodyActivePose =
-    isFullBodyPose(args.panelQa.modelGender, args.panelQa.poseA) ||
-    isFullBodyPose(args.panelQa.modelGender, args.panelQa.poseB);
-  const hasBackFacingActivePose =
-    isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseA) ||
-    isBackFacingPose(args.panelQa.modelGender, args.panelQa.poseB);
-  const swimwearActive = isSwimwearItemType(args.panelQa.itemType);
-  const closeUpSubjectLockActive = hasPanel3CloseUpSubjectLock(args.panelQa);
-  const closeUpCategoryQaRule = getCloseUpCategoryQaRule(args.panelQa.itemType);
-  const userContent: any[] = [
-    {
-      type: "input_text",
-      text: [
-        "Expected lock context:",
-        `- Panel: ${panelName}`,
-        `- Left pose: ${args.panelQa.poseA ?? "unknown"}`,
-        `- Right pose: ${args.panelQa.poseB ?? "unknown"}`,
-        `- Model: ${args.panelQa.modelName || "unknown"} (${args.panelQa.modelGender || "unknown"})`,
-        `- Item type: ${args.panelQa.itemType || "apparel item"}`,
-        ...(hasFullBodyActivePose
-          ? [
-              swimwearActive
-                ? "- Swimwear footwear lock active: full-body poses may use flip-flops/water-shoes, or naturally uncovered feet."
-                : "- Footwear hard lock active: full-body poses must include visible shoes. Barefoot is forbidden.",
-            ]
-          : []),
-        ...(closeUpSubjectLockActive
-          ? [
-              "- Close-up subject lock active for this panel.",
-              `- Right-side close-up must match section 0.5 item type exactly: "${args.panelQa.itemType || "apparel item"}".`,
-              `- ${closeUpCategoryQaRule}`,
-              "- Right-side close-up must preserve visible brand label/logo/patch details from item refs (same position, shape, and color family).",
-            ]
-          : []),
-        ...(hasBackFacingActivePose
-          ? [
-              "- Back-view lock active for this panel: the back-facing frame must show exactly the back the item refs / spec establish.",
-              args.backState === "present"
-                ? "- The spec lists a design on the BACK. The back-facing frame must show it in full; a clean back, or a shrunken / relocated version, is a FAIL."
-                : args.backState === "absent"
-                  ? "- The back is verified PLAIN. Any print, text, graphic, logo or patch on the back-facing frame is a FAIL."
-                  : args.backState === "photo"
-                    ? "- The BACK reference image(s) show the back. Compare the back-facing frame with them: anything they show that is missing, changed or moved, or anything added that they do not show, is a FAIL."
-                    : "- The back was not photographed. Any print, text, graphic, logo or patch on the back-facing frame is a FAIL.",
-            ]
-          : []),
-        ...(legsCropActive
-          ? [
-              upperBodyItem
-                ? `- Crop lock: Pose ${legsCropPose} is an UPPER-BODY product crop of the top (neckline to hem, head out of frame). A legs/shorts crop or a full standing body in that frame is a FAIL.`
-                : `- Crop lock: Pose ${legsCropPose} is a LEGS-ONLY crop (waist to feet) of the model wearing the garment. Waistband-to-shoes with no head is CORRECT — do not fail it. Only a frame that also shows the head is a full standing body and a FAIL; so is an empty garment with nobody in it.`,
-            ]
-          : []),
-        "- Identity: the person must be the same individual as the MODEL refs.",
-        "- Cosmetics (background tint, centring, lighting) are observations only — never failures.",
-      ].join("\n"),
-    },
-    ...(itemSpecForQa
-      ? [
-          {
-            type: "input_text",
-            text:
-              "VERIFIED ITEM SPEC (what the item references contain — check every TEXT line letter by letter, and every LOGO / GRAPHIC placement and side, against the generated panel):\n" +
-              itemSpecForQa,
-          },
-        ]
-      : []),
-    { type: "input_text", text: "MODEL reference images (identity lock):" },
-    ...args.modelRefs.slice(0, 6).map((url) => ({ type: "input_image", image_url: url })),
-    ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
-    { type: "input_text", text: "Generated panel to audit:" },
-    { type: "input_image", image_url: `data:image/png;base64,${args.imageBase64}` },
-    {
-      type: "input_text",
-      text: [
-        "Return JSON only with these keys:",
-        "{",
-        '  "pass": boolean,',
-        '  "reasons": [ { "frame": "left" | "right" | "both", "class": "PRODUCT" | "POSE" | "IDENTITY" | "COVERAGE", "expected": string, "observed": string, "detail": string, "confidence": number 0-1 } ],',
-        '  "notes": string[]',
-        "}",
-        "Set pass=false ONLY for the four failure classes below. List ONLY defects under \"reasons\" — never confirmations (\"text matches\", \"logo correct\"); those go in \"notes\" or nowhere. Each reason names the frame it applies to, what was expected (from the refs / spec / pose lock), what you actually observe, and your confidence (anything under 0.75, or a missing confidence, is treated as a note, not a failure).",
-        "SCALE RULE: in a FULL-BODY frame small text (taglines, chest / back small lines) is only a few pixels tall — do NOT judge its spelling, legibility, or print effect there, and do not fail for it being faint; judge small text only in torso-crop and close-up frames. Large graphics, logos and prints are judged in EVERY frame by comparing them with the item reference photos: same artwork, same size relative to the garment, same position, same colours. A redesigned, simplified, resized, relocated or recoloured graphic is a PRODUCT failure even in a full-body frame.",
-        "MISSPELLING RULE: before reporting a misspelling, transcribe the letters you actually see into \"observed\". If they equal \"expected\", it is NOT a failure — omit it.",
-        "VISIBILITY RULE: fail only for something that would be visible from that frame's angle and crop. Inside labels, interior prints, care labels, inner waistbands and anything under another garment are never visible on a worn item — never fail for them. A back-waistband mark, back pocket or back print can be judged only in a back-facing frame; a front chest print only in a front-facing frame. A close-up frame does not establish which side of the garment it shows — never fail a close-up for a mark being on the \"wrong side\".",
-        "CROP RULE: an upper-body crop shows the garment from neckline to hem with the head cut off; a torso crop shows mid-thigh to head; a legs crop shows waist to feet with NO head in frame. \"Full standing body\" means the head AND both feet are visible in the SAME frame — report it only when you can actually see both. A waist-to-feet frame showing the waistband and the shoes but no head IS the legs crop doing exactly what it was asked to do: never report that as a full standing body.",
-        "HARDWARE RULE: chains, zips, buttons, rivets, belt loops, drawcords, eyelets and other hardware listed in the spec are part of the garment. They may hang, swing or be visible from any angle, including from behind, and they are never an invented graphic and never a \"back design\" violation — the back rules concern prints, text, graphics, logos and patches only. A placement the spec calls inner, inside, hidden or concealed must not be visible on the OUTSIDE of the garment; that one is a real failure.",
-        "1. PRODUCT: any text is misspelled, garbled, merged, missing, duplicated, or on the wrong side/placement versus the item refs / spec; a logo or graphic is missing, invented, moved, resized, or its print effect changed; the garment colour, fit/silhouette, or construction clearly differs from the refs; a back-facing frame lacks the back design the refs / spec show, or shows a back design the refs do not. ADDED FEATURES COUNT: a detail the render put there that the refs and spec do not have — a pressed centre crease down the leg, a pleat, a turn-up, an extra pocket, a side stripe, contrast stitching, a brand tab, an extra button or zip — is a PRODUCT failure exactly like a missing one. Compare the garment's surface against the photos feature by feature, not just its colour and shape.",
-        "2. POSE / CROP: a frame shows a full standing body where a crop pose is expected; a crop of the wrong body region (e.g. legs/shorts where the top is expected); a close-up of the wrong item category; label/logo/patch details missing or relocated in the close-up; or the left/right poses swapped.",
-        "3. IDENTITY: the person is clearly a DIFFERENT individual from the MODEL refs (different face structure, ethnicity, hair colour/length, or apparent age). Minor angle, expression, or lighting differences are NOT a failure.",
-        swimwearActive
-          ? "4. COVERAGE: nudity or partial nudity, or exposure beyond a regular bikini / one-piece (women) or swim trunks (men). Uncovered feet are allowed for swimwear."
-          : "4. COVERAGE: nudity or partial nudity — bare skin where a garment belongs. ONLY report this when you can SEE the bare skin. A crop that leaves the torso out of frame is not a bare torso; a crop that leaves the feet out of frame is not barefoot. \"Footwear not visible\", \"cannot tell\", \"the torso is not shown\" and \"appears cropped\" are NEVER failures — a crop pose is supposed to cut the body somewhere, and that somewhere is not nudity. Report barefoot only when you can see an actual naked foot, and say so in \"observed\" first.",
-        "NEVER fail for background tint, gradient, shadow, vignette, slight off-centre framing, lighting or colour temperature, expression, or hand position. Put such observations in \"notes\" (short, optional) — not in \"reasons\".",
-        "If uncertain about a failure, set pass=true and put the doubt in notes.",
-      ].join("\n"),
-    },
-  ];
-
-  const qaAttempts = Math.max(1, Number(process.env.PANEL_QA_ATTEMPTS) || 2);
-  let qaResponse: any = null;
-  let qaCallErr: any = null;
-  for (let attempt = 0; attempt < qaAttempts; attempt += 1) {
-    try {
-      qaResponse = await withTimeout(
-        args.openai.responses.create({
-          model: qaModel,
-          temperature: 0,
-          // 420 truncated the JSON on any verdict with more than two reasons;
-          // the unparsable remainder then became a fail-open pass.
-          max_output_tokens: 1400,
-          input: [
-            {
-              role: "system",
-              content: [
-                {
-                  type: "input_text",
-                  text:
-                    "You are a product-accuracy QA reviewer for fashion ecommerce panel outputs. " +
-                    "You fail an output ONLY for a product mismatch against the item references / spec, a pose or crop violation, a clearly different person than the model references, or a coverage problem. " +
-                    "Cosmetic issues (background tint, centring, lighting, expression) are notes, never failures. No prose. Return JSON only.",
-                },
-              ],
-            },
-            {
-              role: "user",
-              content: userContent,
-            },
-          ],
-        }),
-        Math.max(30000, Math.min(args.timeoutMs, 90000)),
-        "OpenAI panel compliance check"
-      );
-      break;
-    } catch (e: any) {
-      qaCallErr = e;
-      qaResponse = null;
-    }
-  }
-  if (!qaResponse) {
-    return {
-      decisive: false,
-      pass: true,
-      unavailable: true,
-      reasons: [`Compliance check unavailable: ${qaCallErr?.message || "unknown error"}`],
-      raw: "",
-    };
-  }
-
-  const raw = extractOpenAiOutputText(qaResponse).slice(0, 3000);
-  const parsed = parseJsonObjectFromText(raw);
-  if (!parsed) {
-    return {
-      decisive: false,
-      pass: true,
-      unavailable: false,
-      reasons: ["Compliance check returned unparsable output."],
-      raw,
-    };
-  }
-
-  const passFlag = asStrictBoolean(parsed.pass);
-  if (passFlag === null) {
-    return {
-      decisive: false,
-      pass: true,
-      unavailable: false,
-      reasons: ["Compliance check missing boolean pass field."],
-      raw,
-    };
-  }
-  const { kept, demoted, dropped } = parseQaReasons(parsed.reasons);
-  // A judge "fail" whose every reason was filtered out (self-contradiction /
-  // confirmation / low confidence) is a pass; a judge "pass" that still lists
-  // reasons keeps them as notes only.
-  const failing = passFlag === false ? kept : [];
-  const notes = [
-    ...normalizeReasons(parsed.notes),
-    ...demoted,
-    ...(passFlag === true ? kept.map((r) => r.text) : []),
-  ].slice(0, 8);
-  const pass = failing.length === 0;
-  return {
-    decisive: true,
-    pass,
-    unavailable: false,
-    judgeSaidPass: passFlag,
-    droppedReasons: dropped,
-    reasons: pass ? [] : failing.map((r) => r.text),
-    reasonsBySide: {
-      left: failing.filter((r) => r.frame !== "right").map((r) => r.text),
-      right: failing.filter((r) => r.frame !== "left").map((r) => r.text),
-    },
-    notes,
-    raw,
-  };
 }
 
 /**
@@ -1529,177 +1095,45 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       );
     }
 
-    const strictLocksEnabled =
-      (process.env.STRICT_PANEL_LOCKS || "true").trim().toLowerCase() !== "false";
-    // When QA can't reach a confident verdict (inconclusive, or the QA call itself
-    // failed/timed out), fail open by default: serve the already-generated image
-    // instead of discarding it. Set PANEL_QA_FAIL_OPEN=false to hard-block instead.
-    const qaFailOpen =
-      (process.env.PANEL_QA_FAIL_OPEN || "true").trim().toLowerCase() !== "false";
-    let qaWarnings: string[] = [];
-    let qaWarningsBySide: { left: string[]; right: string[] } | null = null;
-    let qaNotes: string[] = [];
-    let qa: any = null;
-
-    /* The judge is a second vision call. Waiting for it before answering kept
-       the operator staring at nothing for another 10-20 s per panel, for a
-       verdict that only decorates an image they have already paid for. When the
-       client supplies `x-panel-qa`, the image goes back now and the judge runs
-       on; the Studio collects the flags from /api/generate/qa and applies them
-       to the crops in place. Only valid in fail-open mode — blocking on an
-       inconclusive verdict requires having it first. */
-    const deferredQaId = req.headers.get("x-panel-qa")?.trim() ?? "";
-    const imageB64: string = b64;
-    if (strictLocksEnabled && qaFailOpen && isValidQaId(deferredQaId)) {
-      const judge = () =>
-        runPanelComplianceCheck({
-          openai,
-          imageBase64: imageB64,
-          modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
+    /* Run-level QA. The judge used to run once per panel, and a panel seen on
+       its own cannot answer the question the operator actually has: are these
+       eight pictures the same outfit on the same person? Each panel is stashed
+       here as it lands, with the references already resolved for this request,
+       and the Studio asks /api/generate/run-qa to audit the whole set once the
+       last panel is in. lib/server/run-qa.ts records why the per-panel judge
+       had to go. */
+    const runQaId = req.headers.get("x-generate-run")?.trim() ?? "";
+    const runQaActive = isValidRunId(runQaId);
+    const logId = crypto.randomUUID();
+    if (runQaActive) {
+      stashRunPanel(
+        runQaId,
+        {
+          panel: Number(normalizedPanelQa.panelNumber) || 0,
+          poseA: Number(normalizedPanelQa.poseA) || null,
+          poseB: Number(normalizedPanelQa.poseB) || null,
+          b64,
+          logId,
+        },
+        {
           itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
           itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
-          panelQa: normalizedPanelQa,
-          itemSpec: itemSpecText,
-          backState,
-          timeoutMs: imageTimeoutMs,
-        });
-      /* The row is written now, with the verdict attached when it lands — the
-         log exists to answer "what did the judge say", so it must not record
-         "QA never ran" for every panel. */
-      const logId = crypto.randomUUID();
-      const inserted = recordStudioGeneration({ ...logBase(), ...logRefs, id: logId, outcome: "ok" });
-      void runPanelQa(deferredQaId, async () => {
-        let v: any;
-        try {
-          v = await judge();
-        } catch (e: any) {
-          v = { decisive: false, pass: true, unavailable: true, reasons: [`Compliance check threw: ${e?.message || "unknown error"}`] };
-        }
-        const warnings: string[] =
-          v.decisive && !v.pass ? (Array.isArray(v.reasons) ? v.reasons.map(String).filter(Boolean) : []) : [];
-        const side = v.reasonsBySide;
-        const bySide =
-          warnings.length && side && Array.isArray(side.left) && Array.isArray(side.right)
-            ? { left: side.left.map(String), right: side.right.map(String) }
-            : null;
-        const notes: string[] = v.decisive ? (Array.isArray(v.notes) ? v.notes.map(String).filter(Boolean) : []) : [];
-        if (warnings.length) console.warn(`[generate] Panel QA FAILED (deferred) — ${warnings.join(" | ")}`);
-        await inserted.catch(() => {});
-        updateStudioGenerationQa(logId, {
-          qaDecisive: v.decisive === true,
-          qaPass: v.decisive ? v.judgeSaidPass === true : null,
-          qaWarnings: warnings.length,
-          qaReasons: v.decisive ? warnings : Array.isArray(v.reasons) ? v.reasons.map(String) : [],
-          qaNotes: notes,
-          qaDropped: v.droppedReasons ?? 0,
-        });
-        return { qaWarnings: warnings, qaWarningsBySide: bySide, qaNotes: notes, unavailable: v.decisive !== true };
-      });
-      return NextResponse.json({
-        imageBase64: imageB64,
-        qaId: deferredQaId,
-        qaPending: true,
-        ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
-        backState,
-      });
-    }
-
-    if (strictLocksEnabled) {
-      try {
-        qa = await runPanelComplianceCheck({
-          openai,
-          imageBase64: b64,
           modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
-          itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
-          itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
-          panelQa: normalizedPanelQa,
           itemSpec: itemSpecText,
-          backState,
-          timeoutMs: imageTimeoutMs,
-        });
-      } catch (qaErr: any) {
-        qa = {
-          decisive: false,
-          pass: true,
-          unavailable: true,
-          reasons: [`Compliance check threw: ${qaErr?.message || "unknown error"}`],
-        };
-      }
-      if (qa.decisive && !qa.pass) {
-        // Confident lock violation. Owner decision 2026-08-26: NEVER discard a
-        // paid render — serve it flagged with the exact reasons so the operator
-        // sees the image AND the verdict and decides (the Studio delivers such
-        // crops unselected with a red QA badge). Blocking here threw away all
-        // four panels of a run with no explanation.
-        qaWarnings = (Array.isArray(qa.reasons) ? qa.reasons : []).map((r: unknown) => String(r)).filter(Boolean);
-        const side = qa.reasonsBySide;
-        if (side && Array.isArray(side.left) && Array.isArray(side.right)) {
-          qaWarningsBySide = { left: side.left.map(String), right: side.right.map(String) };
-        }
-        console.warn(`[generate] Panel QA FAILED — serving flagged: ${qaWarnings.join(" | ")}`);
-      }
-      if (qa.decisive) {
-        // Cosmetic observations (background tint, centring, lighting) never fail
-        // a render; they ride along as muted notes for the operator.
-        qaNotes = (Array.isArray(qa.notes) ? qa.notes : []).map((r: unknown) => String(r)).filter(Boolean);
-      }
-      if (!qa.decisive && !qaFailOpen) {
-        // Strict mode: block when QA could not confidently clear the image.
-        const unavailable = qa.unavailable === true;
-        return logged(
-          {
-            ...logRefs,
-            outcome: "blocked",
-            errorCode: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
-            qaDecisive: false,
-            qaReasons: qa.reasons,
-          },
-          NextResponse.json(
-            {
-              error: {
-                type: "lock_violation",
-                code: unavailable ? "qa_unavailable_blocked" : "qa_inconclusive_blocked",
-                message: unavailable
-                  ? "Generated output was blocked because lock QA was unavailable. Please retry this panel."
-                  : "Generated output was blocked because compliance QA was inconclusive. Regenerate this panel.",
-                reasons: qa.reasons,
-              },
-            },
-            { status: unavailable ? 503 : 422 }
-          )
-        );
-      }
-      if (!qa.decisive) {
-        console.warn(
-          `[generate] Panel QA non-decisive (${qa.unavailable ? "unavailable" : "inconclusive"}); serving image (fail-open).`,
-          qa.reasons
-        );
-      }
+          itemType: String(normalizedPanelQa.itemType || ""),
+        },
+      );
     }
     return logged(
-      {
-        ...logRefs,
-        outcome: "ok",
-        qaDecisive: qa ? qa.decisive === true : null,
-        // The judge's own verdict, before our filters: a "fail" whose reasons
-        // were all confirmations is logged as pass=false/warnings=0 so the
-        // filter's effect stays visible.
-        qaPass: qa?.decisive ? qa.judgeSaidPass === true : null,
-        qaWarnings: qaWarnings.length,
-        qaReasons: qa?.decisive ? qaWarnings : Array.isArray(qa?.reasons) ? qa.reasons.map(String) : [],
-        qaNotes,
-        qaDropped: qa?.droppedReasons ?? 0,
-      },
+      { ...logRefs, id: logId, outcome: "ok" },
       NextResponse.json({
         imageBase64: b64,
-        ...(qaWarnings.length ? { qaWarnings } : {}),
-        ...(qaWarnings.length && qaWarningsBySide ? { qaWarningsBySide } : {}),
-        ...(qaNotes.length ? { qaNotes } : {}),
+        ...(runQaActive ? { runQaPending: true, runQaId } : {}),
         // Rides back with the image so a trimmed prompt is visible in the
         // Studio instead of only in a server log.
         ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
         backState,
-      })
+      }),
     );
   } catch (err: unknown) {
     console.error("Generate failed:", err);

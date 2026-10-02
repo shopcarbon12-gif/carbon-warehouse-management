@@ -21,9 +21,11 @@ import {
  */
 type Model = { model_id: string; name: string; gender: string; ref_image_urls: string[] };
 type StudioVariant = { id: string; color: string | null; shopify_variant_id?: string | null };
-/** qaWarnings = the server's post-generation lock QA found mismatches (text,
- * graphics, fit, identity, background…). The crop is still delivered — flagged
- * and unselected — so the operator sees the render AND the reasons and decides. */
+/** qaWarnings = what the run-level QA found wrong with THIS crop: either it
+ * disagrees with the rest of the run (different shoes, different top, a
+ * different face) or the garment does not match the reference photographs. The
+ * crop is still delivered — flagged and unselected — so the operator sees the
+ * render AND the reasons and decides. */
 type Crop = {
   id: string;
   b64: string;
@@ -33,10 +35,10 @@ type Crop = {
   qaNotes?: string[];
   /** Which half this crop is, so a verdict that arrives later lands on the right frame. */
   side?: "left" | "right";
-  /** The judge is still running for this panel (its image is already here). */
+  /** Which panel it came from, so a run-level finding lands on the right crop. */
+  panel?: number;
+  /** The run judges are still working (the image is already here). */
   qaPending?: boolean;
-  /** Collect the verdict from /api/generate/qa under this id. */
-  qaId?: string;
 };
 /** url = what the generator fetches (may be an auth'd R2 URL); preview = a
  * browser-renderable thumbnail (data URL for uploads, public URL for Shopify). */
@@ -224,15 +226,13 @@ type PanelResponse = {
   imageBase64?: string;
   degraded?: boolean;
   warning?: string;
-  qaWarnings?: string[];
-  /** Per-frame split of qaWarnings so only the crop that is wrong gets flagged. */
-  qaWarningsBySide?: { left?: string[]; right?: string[] };
   /** True when the server dropped part of the prompt to fit the length limit. */
   promptTrimmed?: boolean;
   promptOverflowBytes?: number;
-  /** The judge is running after the fact; collect its verdict under this id. */
-  qaPending?: boolean;
-  qaId?: string;
+  /** The server is holding this panel for the run-level judges, which run once
+   *  every panel has landed. */
+  runQaPending?: boolean;
+  runQaId?: string;
   /** What the server established about the garment's back for this run. */
   backState?: "present" | "absent" | "unknown" | "photo";
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
@@ -355,20 +355,6 @@ async function panelResponseToCrops(
     return [{ id: `p${panel}-err-${runTag}`, b64: "", label: `Panel ${panel}: ${detail}`, selected: false }];
   }
   const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
-  // QA-flagged renders are delivered but NOT pre-selected: the operator sees the
-  // image and the reasons and opts in explicitly.
-  const qaWarnings = Array.isArray(json.qaWarnings) && json.qaWarnings.length ? json.qaWarnings : undefined;
-  const bySide = json.qaWarningsBySide;
-  // Per-frame attribution when the server provides it (a perfect close-up must
-  // not wear its neighbour's flag); otherwise both crops share the panel verdict.
-  const forSide = (side: "left" | "right"): string[] | undefined => {
-    if (!qaWarnings) return undefined;
-    const s = bySide?.[side];
-    if (bySide && Array.isArray(s)) return s.length ? s : undefined;
-    return qaWarnings;
-  };
-  const leftWarnings = forSide("left");
-  const rightWarnings = forSide("right");
   const qaNotes = Array.isArray(json.qaNotes) && json.qaNotes.length ? json.qaNotes : undefined;
   /* The server had to drop the MIDDLE of this panel's instructions to fit
      OpenAI's prompt limit, and generated anyway. Rides in as a note so the
@@ -380,32 +366,58 @@ async function panelResponseToCrops(
       : null;
   const extraNotes = [trimNote].filter(Boolean) as string[];
   const notes = extraNotes.length ? [...(qaNotes ?? []), ...extraNotes] : qaNotes;
-  /* The image is here but the judge is still working (deferred QA). The crops
-     show now — selected, with a "checking" badge — and the flags land later. */
-  const qaPending = json.qaPending === true && typeof json.qaId === "string" ? json.qaId : null;
+  /* The image is here; the judges only run once the whole run has landed,
+     because what they check is how the frames compare with each other. Crops
+     show now with a "checking" badge and the flags arrive after the last
+     panel. */
+  const qaPending = json.runQaPending === true;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: !leftWarnings, qaWarnings: leftWarnings, qaNotes: notes, side: "left", qaPending: Boolean(qaPending), qaId: qaPending ?? undefined },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: !rightWarnings, qaWarnings: rightWarnings, qaNotes: notes, side: "right", qaPending: Boolean(qaPending), qaId: qaPending ?? undefined },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · Pose ${poseA}`, selected: true, qaNotes: notes, side: "left", panel, qaPending },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · Pose ${poseB}`, selected: true, qaNotes: notes, side: "right", panel, qaPending },
   ];
 }
 
-/** Poll the deferred compliance verdict and fold it into the crops it belongs to. */
-async function collectPanelQa(
-  qaId: string,
-  apply: (v: { qaWarnings: string[]; qaWarningsBySide: { left: string[]; right: string[] } | null; qaNotes: string[]; unavailable: boolean } | null) => void,
-): Promise<void> {
-  const deadline = Date.now() + 2 * 60_000;
+type RunQaFinding = { panel: number; frame: "left" | "right" | "both"; text: string };
+type RunQaVerdict = { findings: RunQaFinding[]; notes: string[]; unavailable: boolean };
+
+/**
+ * Start the run-level judges and wait for their verdict.
+ *
+ * The panels are already on the server, so this sends an id and nothing else.
+ * Both judges run in parallel there; one pass asks whether the frames agree
+ * with each other, the other whether the garment matches the photographs.
+ */
+async function collectRunQa(runId: string, apply: (v: RunQaVerdict | null) => void): Promise<void> {
+  try {
+    const started = await fetch("/api/generate/run-qa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId }),
+    });
+    if (!started.ok) return apply(null);
+  } catch {
+    return apply(null);
+  }
+  const deadline = Date.now() + 3 * 60_000;
   while (Date.now() < deadline) {
     try {
-      const r = await fetch(`/api/generate/qa?id=${encodeURIComponent(qaId)}`, { cache: "no-store" });
+      const r = await fetch(`/api/generate/run-qa?id=${encodeURIComponent(runId)}`, { cache: "no-store" });
       if (r.status === 404) return apply(null); // expired / server restarted — no verdict, not a pass
       if (r.ok) {
         const j = (await r.json().catch(() => ({}))) as { status?: string } & Record<string, unknown>;
         if (j.status === "done") {
+          const rows = Array.isArray(j.findings) ? (j.findings as unknown[]) : [];
           return apply({
-            qaWarnings: Array.isArray(j.qaWarnings) ? (j.qaWarnings as string[]).map(String) : [],
-            qaWarningsBySide: (j.qaWarningsBySide as { left: string[]; right: string[] } | null) ?? null,
-            qaNotes: Array.isArray(j.qaNotes) ? (j.qaNotes as string[]).map(String) : [],
+            findings: rows
+              .map((row) => row as Record<string, unknown>)
+              .filter((row) => row && typeof row === "object")
+              .map((row): RunQaFinding => ({
+                panel: Number(row.panel) || 0,
+                frame: row.frame === "left" ? "left" : row.frame === "right" ? "right" : "both",
+                text: String(row.text ?? "").trim(),
+              }))
+              .filter((f) => f.text && f.panel > 0),
+            notes: Array.isArray(j.notes) ? (j.notes as string[]).map(String) : [],
             unavailable: j.unavailable === true,
           });
         }
@@ -1197,9 +1209,9 @@ export function CarbonStudioTab({
             Accept: "application/json",
             "x-generate-stream": "1",
             "x-generate-job": jobId,
-            // Return the image as soon as it exists; the judge runs after and
-            // its verdict is collected from /api/generate/qa under this id.
-            "x-panel-qa": `${jobId}-qa`,
+            // Hold this panel for the run-level judges. They compare the frames
+            // with each other, so they can only run once the whole run is in.
+            "x-generate-run": runTag,
           },
           body: JSON.stringify({
             prompt,
@@ -1241,7 +1253,6 @@ export function CarbonStudioTab({
          late verdicts go straight to state, which also protects any selection
          the operator has since toggled. */
       const byPanel = new Map<number, Crop[]>();
-      let runActive = true;
       const render = () => {
         const ordered = chosen.filter((p) => byPanel.has(p)).flatMap((p) => byPanel.get(p)!);
         setCrops([...kept, ...ordered]);
@@ -1268,39 +1279,51 @@ export function CarbonStudioTab({
               ? `Panel ${done} of ${chosen.length} done — ${got} crop(s) ready, still rendering…`
               : "",
           );
-          /* The judge is still working on this panel; fold its verdict in when
-             it lands so the flags catch up without holding the images back. */
-          const qaId = (byPanel.get(panel) ?? []).find((c) => c.qaId)?.qaId;
-          if (qaId) {
-            const ids = new Set((byPanel.get(panel) ?? []).map((c) => c.id));
-            void collectPanelQa(qaId, (v) => {
-              const applyVerdict = (c: Crop): Crop => {
-                if (!v) {
-                  return { ...c, qaPending: false, qaNotes: [...(c.qaNotes ?? []), "Compliance check did not report back — review this crop yourself."] };
-                }
-                const mine = v.qaWarningsBySide && c.side ? v.qaWarningsBySide[c.side] : v.qaWarnings;
-                const warnings = mine && mine.length ? mine : undefined;
-                const notes = [...(c.qaNotes ?? []), ...v.qaNotes, ...(v.unavailable ? ["Compliance check was inconclusive — this crop was not verified."] : [])];
+        }),
+      );
+      const all = [...byPanel.values()].flat();
+      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
+
+      /* Every panel is in, so the judges can finally do the only comparison
+         that matters: these frames against each other, and the garment against
+         the photographs. The images stay on screen and selected while this
+         runs — a flag arriving late unselects just the crop it names. */
+      const pending = all.filter((c) => c.qaPending && c.b64);
+      if (pending.length) {
+        setProgress(`Checking ${pending.length} crop(s) for consistency…`);
+        await collectRunQa(runTag, (v) => {
+          setCrops((prev) =>
+            prev.map((c) => {
+              if (!c.qaPending) return c;
+              if (!v) {
                 return {
                   ...c,
                   qaPending: false,
-                  qaWarnings: warnings,
-                  qaNotes: notes.length ? notes : undefined,
-                  // A flagged crop must not stay selected for publishing.
-                  selected: warnings ? false : c.selected,
+                  qaNotes: [...(c.qaNotes ?? []), "The checks did not report back — review this crop yourself."],
                 };
+              }
+              const mine = v.findings
+                .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
+                .map((f) => f.text);
+              const warnings = mine.length ? mine : undefined;
+              const notes = [
+                ...(c.qaNotes ?? []),
+                ...v.notes,
+                ...(v.unavailable ? ["The checks were inconclusive — this crop was not verified."] : []),
+              ];
+              return {
+                ...c,
+                qaPending: false,
+                qaWarnings: warnings,
+                qaNotes: notes.length ? notes : undefined,
+                // A flagged crop must not stay selected for publishing.
+                selected: warnings ? false : c.selected,
               };
-              const cur = byPanel.get(panel);
-              if (cur) byPanel.set(panel, cur.map(applyVerdict));
-              if (runActive) render();
-              else setCrops((prev) => prev.map((c) => (ids.has(c.id) ? applyVerdict(c) : c)));
-            });
-          }
-        }),
-      );
-      runActive = false;
-      const all = [...byPanel.values()].flat();
-      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
+            }),
+          );
+        });
+        setProgress("");
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -1348,6 +1371,44 @@ export function CarbonStudioTab({
             ? `Recovered ${ok.length} crop(s) from the run that was interrupted.`
             : "The interrupted run could not be recovered — please generate again.",
         );
+        /* The server may still be holding this run's panels, in which case the
+           recovered crops can be checked exactly like a fresh run. If it is
+           not, the crops say so rather than looking verified. */
+        const pending = recovered.filter((c) => c.qaPending && c.b64);
+        if (pending.length) {
+          setProgress(`Checking ${pending.length} recovered crop(s) for consistency…`);
+          await collectRunQa(run.runTag, (v) => {
+            if (cancelled) return;
+            setCrops((prev) =>
+              prev.map((c) => {
+                if (!c.qaPending) return c;
+                if (!v) {
+                  return {
+                    ...c,
+                    qaPending: false,
+                    qaNotes: [...(c.qaNotes ?? []), "The checks did not report back — review this crop yourself."],
+                  };
+                }
+                const mine = v.findings
+                  .filter((f) => f.panel === c.panel && (f.frame === "both" || f.frame === c.side))
+                  .map((f) => f.text);
+                const warnings = mine.length ? mine : undefined;
+                const notes = [
+                  ...(c.qaNotes ?? []),
+                  ...v.notes,
+                  ...(v.unavailable ? ["The checks were inconclusive — this crop was not verified."] : []),
+                ];
+                return {
+                  ...c,
+                  qaPending: false,
+                  qaWarnings: warnings,
+                  qaNotes: notes.length ? notes : undefined,
+                  selected: warnings ? false : c.selected,
+                };
+              }),
+            );
+          });
+        }
       } finally {
         writePendingRun(null);
         setNativeBusy(false);
@@ -2247,7 +2308,7 @@ export function CarbonStudioTab({
                 </button>
                 <span className="block px-1 py-0.5 text-center font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   {c.label} {c.selected ? "✓" : ""}
-                  {c.qaPending ? <span className="ml-1 text-[var(--wms-accent)]" title="The compliance check is still running for this panel">· checking…</span> : null}
+                  {c.qaPending ? <span className="ml-1 text-[var(--wms-accent)]" title="Waiting for the rest of the run, then these frames are compared with each other and with the item photos">· checking…</span> : null}
                 </span>
                 {c.qaWarnings?.length ? (
                   <div

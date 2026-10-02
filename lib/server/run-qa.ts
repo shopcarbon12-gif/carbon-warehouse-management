@@ -1,0 +1,461 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * Run-level QA for Carbon Studio: two judges that look at the whole run.
+ *
+ * WHY THIS REPLACED THE PER-PANEL JUDGE
+ * The old judge audited one panel at a time against a list of locks: the back
+ * must be plain, pose 5 is a legs crop, no nudity, and so on. Each lock asked
+ * it to decide what OUGHT to be true and then look for a breach, and it
+ * answered from the expectation rather than from the pixels. 118 of the 309
+ * failures it ever logged were that shape — a chain "should not" be visible
+ * from behind, a head "is visible" in a frame that has no head, footwear "not
+ * visible" reported as a bare foot. Every one was the render being right and
+ * the judge being wrong, and each one cost the operator a crop.
+ *
+ * What an operator actually needs answered is comparative: are these eight
+ * pictures the same outfit on the same person, and is that outfit the one in
+ * the photographs? Neither question requires an expectation to be inferred, so
+ * neither can be answered from one. Hence two judges:
+ *
+ *   CONSISTENCY — sees only the generated panels. No references, no spec, no
+ *   pose locks. It cannot hallucinate a requirement because it is never given
+ *   one. It reports an attribute only when some frames disagree with the rest,
+ *   and names which frames are the odd ones out, so only those get flagged.
+ *
+ *   ACCURACY — sees the panels, the item references and the model references.
+ *   It judges the garment surface and the person, and nothing about framing,
+ *   crop, pose or coverage. This is the pass that catches an invented crease,
+ *   which pure consistency cannot: a fault present in all eight frames is
+ *   perfectly consistent.
+ *
+ * Two calls per run instead of one per panel, so this is also cheaper.
+ */
+import type OpenAI from "openai";
+import { withTimeout, extractOpenAiOutputText, parseJsonObjectFromText } from "@/lib/seo/aiText";
+import type { RunPanelImage, RunQaFinding, RunQaVerdict } from "@/lib/server/run-qa-store";
+
+export type ItemRefView = "general" | "front" | "back";
+
+const QA_MIN_CONFIDENCE = 0.75;
+const MAX_FINDINGS = 10;
+const MAX_NOTES = 8;
+
+const normalizeForCompare = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+
+/**
+ * A "finding" that is actually a confirmation ("the shoes match in every
+ * frame"). Both judges emit these when asked for structured output, and shown
+ * to the operator they read as red failures. A line that also names a defect
+ * is not one.
+ */
+function looksLikeConfirmation(text: string): boolean {
+  const t = text.toLowerCase();
+  if (!t.trim()) return false;
+  const defect =
+    /\b(?:missing|absent|not (?:present|visible|shown|rendered|match\w*)|wrong|differ\w*|mismatch\w*|misspel\w*|garbled|merged|invent\w*|extra|added|moved|relocat\w*|resiz\w*|shrunk|shrink\w*|swap\w*|chang\w*|alter\w*|redesign\w*|simplif\w*|recolou?r\w*|duplicat\w*|omit\w*|lack\w*|remov\w*|older|younger|incorrect\w*|instead of|should be|does not|doesn't|isn't|is not|are not|aren't|however|although|except|whereas|but\b)|;/;
+  if (defect.test(t)) return false;
+  return /\b(?:matches|match(?:ing|ed)?|correct(?:ly)?|consistent|as expected|identical|same as|accurate|present and|confirmed|no (?:issue|mismatch|difference|problem)|looks (?:right|good|fine)|preserved|intact|faithful)\b/.test(
+    t,
+  );
+}
+
+/**
+ * Phrases that mean "I could not see it". The old judge turned every one of
+ * these into a failure; neither judge is allowed to, so they are filtered even
+ * if a judge ignores the instruction.
+ */
+function looksLikeNonObservation(text: string): boolean {
+  return /\b(?:not visible|cannot tell|can't tell|unclear|obscured|out of frame|not shown|not in frame|hidden from view|cannot be (?:seen|determined|assessed)|unable to (?:see|tell|determine)|appears cropped|is cropped|no information)\b/i.test(
+    text,
+  );
+}
+
+/** "P3L" / "p1r" / "P2B" → the crop it names. */
+function parseFrameToken(token: unknown): { panel: number; frame: "left" | "right" | "both" } | null {
+  const m = String(token ?? "").trim().match(/^P?\s*(\d{1,2})\s*([LRB])$/i);
+  if (!m) return null;
+  const panel = Number(m[1]);
+  if (!Number.isFinite(panel) || panel < 1 || panel > 12) return null;
+  const side = m[2].toUpperCase();
+  return { panel, frame: side === "L" ? "left" : side === "R" ? "right" : "both" };
+}
+
+/** Item refs grouped and labelled by view, so a side claim is the operator's
+ *  sorting rather than the judge's guess. */
+function buildLabelledItemRefContent(itemRefs: string[], views?: ItemRefView[]): any[] {
+  const tagged = itemRefs.map((url, i) => ({ url, view: views?.[i] ?? "general" }));
+  const groups: { view: ItemRefView; label: string }[] = [
+    { view: "general", label: "ITEM reference photographs — GENERAL (any view: accessories, flats, details):" },
+    { view: "front", label: "ITEM reference photographs — FRONT of the garment (everything here is on the front only):" },
+    { view: "back", label: "ITEM reference photographs — BACK of the garment (everything here is on the back only):" },
+  ];
+  const hasSorted = tagged.some((t) => t.view !== "general");
+  if (!hasSorted) {
+    return [
+      { type: "input_text", text: "ITEM reference photographs (what the garment really looks like):" },
+      ...tagged.map((t) => ({ type: "input_image", image_url: t.url })),
+    ];
+  }
+  const out: any[] = [];
+  for (const g of groups) {
+    const urls = tagged.filter((t) => t.view === g.view).map((t) => t.url);
+    if (!urls.length) continue;
+    out.push({ type: "input_text", text: g.label });
+    out.push(...urls.map((url) => ({ type: "input_image", image_url: url })));
+  }
+  return out;
+}
+
+/** One line per panel naming the frame tokens, then the image itself. */
+function buildPanelContent(panels: RunPanelImage[]): any[] {
+  const out: any[] = [];
+  for (const p of panels) {
+    out.push({
+      type: "input_text",
+      text:
+        `Panel ${p.panel}. Left half = frame P${p.panel}L` +
+        (p.poseA ? ` (pose ${p.poseA})` : "") +
+        `. Right half = frame P${p.panel}R` +
+        (p.poseB ? ` (pose ${p.poseB})` : "") +
+        ".",
+    });
+    out.push({ type: "input_image", image_url: `data:image/png;base64,${p.b64}` });
+  }
+  return out;
+}
+
+function frameRoster(panels: RunPanelImage[]): string {
+  return panels.map((p) => `P${p.panel}L, P${p.panel}R`).join(", ");
+}
+
+async function callJudge(
+  openai: OpenAI,
+  model: string,
+  system: string,
+  content: any[],
+  timeoutMs: number,
+  label: string,
+): Promise<{ parsed: Record<string, any> | null; raw: string; error: string | null }> {
+  const attempts = Math.max(1, Number(process.env.PANEL_QA_ATTEMPTS) || 2);
+  let lastErr: any = null;
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const response = await withTimeout(
+        openai.responses.create({
+          model,
+          temperature: 0,
+          max_output_tokens: 1600,
+          input: [
+            { role: "system", content: [{ type: "input_text", text: system }] },
+            { role: "user", content },
+          ],
+        }),
+        Math.max(30_000, Math.min(timeoutMs, 90_000)),
+        label,
+      );
+      const raw = extractOpenAiOutputText(response).slice(0, 4000);
+      return { parsed: parseJsonObjectFromText(raw), raw, error: null };
+    } catch (e: any) {
+      lastErr = e;
+    }
+  }
+  return { parsed: null, raw: "", error: lastErr?.message || "unknown error" };
+}
+
+const CONSISTENCY_SYSTEM =
+  "You compare photographs from a single fashion shoot against EACH OTHER. " +
+  "You are not shown the product references and you must never guess what the product is supposed to look like. " +
+  "Your only question is whether the frames agree with one another. " +
+  "No prose. Return JSON only.";
+
+const ACCURACY_SYSTEM =
+  "You check whether a rendered fashion panel reproduces the garment in the reference photographs, " +
+  "and whether the person shown is the model in the model references. " +
+  "You judge the garment surface and the person. You never judge framing, crop, pose or coverage. " +
+  "No prose. Return JSON only.";
+
+/**
+ * CONSISTENCY: do the frames agree with each other?
+ * Deliberately blind to the references, the spec and the pose plan.
+ */
+async function runConsistencyCheck(args: {
+  openai: OpenAI;
+  model: string;
+  panels: RunPanelImage[];
+  itemType: string;
+  timeoutMs: number;
+}): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
+  const roster = frameRoster(args.panels);
+  const content: any[] = [
+    {
+      type: "input_text",
+      text: [
+        `These frames are all from ONE shoot: the same model, wearing the same outfit, photographed the same day.`,
+        `The product being sold is: ${args.itemType || "an apparel item"}. Everything else worn is styling.`,
+        `The frames are: ${roster}.`,
+        "",
+        "Compare them with each other on these attributes:",
+        "- FOOTWEAR: the same pair of shoes, same style, same colour, same sole, same laces, on every frame that shows feet.",
+        "- TOP / other garment: the same shirt or top, same colour, same neckline, same sleeve length.",
+        "- SOCKS and ACCESSORIES: the same, or absent in all. A watch, belt, hat, bag or jewellery that appears in some frames and not others is an inconsistency.",
+        "- PERSON: the same individual — same face, same hair colour and length, same build, same apparent age.",
+        "- THE PRODUCT ITSELF: the same colour, same waistband, same pockets, same hardware, same stitching, same hems, same length and fit.",
+        "",
+        "Report an attribute ONLY when one or a few frames disagree with what the rest show.",
+        "Name what the majority show, and list ONLY the odd frames in odd_frames. Frames that agree with the majority must never appear there.",
+        "If every frame agrees on an attribute, say nothing about it. An empty list is the correct and expected answer for a good run.",
+        "",
+        "THESE ARE NOT INCONSISTENCIES, and must never be reported:",
+        "- Camera angle, distance, zoom, crop, which body parts are in shot, or how much of the garment is visible.",
+        "- Lighting, shadow, colour temperature, background tint, centring.",
+        "- Pose, stance, expression, hand position, which way the model faces.",
+        "- A hanging part — a chain, drawcord, strap or tie — swinging, hanging differently, or being seen from another side. Same object seen differently is the same object.",
+        "- A part of the garment being seen from the front in one frame and from the back in another.",
+        "",
+        "A FRAME THAT DOES NOT SHOW AN ATTRIBUTE SIMPLY DOES NOT VOTE ON IT.",
+        "If the feet are out of shot, that frame says nothing about footwear — it does not disagree with anything.",
+        'Never write "not visible", "cannot tell", "out of frame", "obscured" or "unclear" as a finding. Those are not findings. Omit them entirely.',
+        "",
+        "Return JSON only:",
+        "{",
+        '  "inconsistencies": [ { "attribute": string, "majority": string, "odd_frames": ["P3L"], "odd_shows": string, "confidence": number 0-1 } ],',
+        '  "notes": string[]',
+        "}",
+        "confidence is how sure you are that this is a real difference in the object and not a difference in viewing conditions. Below 0.75 it will be treated as a note, so use a high value only when you can point at both versions.",
+      ].join("\n"),
+    },
+    ...buildPanelContent(args.panels),
+  ];
+
+  const { parsed, error } = await callJudge(
+    args.openai,
+    args.model,
+    CONSISTENCY_SYSTEM,
+    content,
+    args.timeoutMs,
+    "Studio consistency check",
+  );
+  if (!parsed) return { findings: [], notes: [], ok: false };
+  if (error) return { findings: [], notes: [], ok: false };
+
+  const findings: RunQaFinding[] = [];
+  const notes: string[] = [];
+  const rows = Array.isArray(parsed.inconsistencies) ? parsed.inconsistencies.slice(0, MAX_FINDINGS * 2) : [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const attribute = String(r.attribute ?? "").trim();
+    const majority = String(r.majority ?? "").trim();
+    const oddShows = String(r.odd_shows ?? "").trim();
+    const confidence = Number(r.confidence);
+    const tokens = Array.isArray(r.odd_frames) ? r.odd_frames : [];
+    const targets = tokens.map(parseFrameToken).filter((t): t is NonNullable<typeof t> => t !== null);
+    if (!attribute && !oddShows) continue;
+    const text = `INCONSISTENT ${attribute || "styling"}: this frame shows ${oddShows || "something different"}${
+      majority ? `, the other frames show ${majority}` : ""
+    }.`.slice(0, 240);
+    if (looksLikeNonObservation(`${oddShows} ${majority} ${attribute}`)) continue;
+    if (looksLikeConfirmation(text)) continue;
+    if (majority && oddShows && normalizeForCompare(majority) === normalizeForCompare(oddShows)) continue;
+    if (!Number.isFinite(confidence) || confidence < QA_MIN_CONFIDENCE) {
+      notes.push(`${text} (${Number.isFinite(confidence) ? "low" : "no"} confidence)`);
+      continue;
+    }
+    if (!targets.length) {
+      // A real difference the judge could not pin to a frame is worth saying,
+      // but it must not flag crops at random.
+      notes.push(text);
+      continue;
+    }
+    for (const t of targets) findings.push({ panel: t.panel, frame: t.frame, text });
+  }
+  for (const n of Array.isArray(parsed.notes) ? parsed.notes : []) {
+    const t = String(n ?? "").trim();
+    if (t) notes.push(t);
+  }
+  return { findings: findings.slice(0, MAX_FINDINGS), notes, ok: true };
+}
+
+/**
+ * ACCURACY: does the garment match the photographs, and is it the right person?
+ * Says nothing about crop, pose, framing or coverage.
+ */
+async function runAccuracyCheck(args: {
+  openai: OpenAI;
+  model: string;
+  panels: RunPanelImage[];
+  itemRefs: string[];
+  itemRefViews?: ItemRefView[];
+  modelRefs: string[];
+  itemSpec?: string;
+  itemType: string;
+  timeoutMs: number;
+}): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
+  const spec = String(args.itemSpec || "").trim();
+  const roster = frameRoster(args.panels);
+  const content: any[] = [
+    {
+      type: "input_text",
+      text: [
+        `The product is: ${args.itemType || "an apparel item"}.`,
+        `The rendered frames are: ${roster}.`,
+        "",
+        "Compare the GARMENT SURFACE in the rendered frames against the item reference photographs:",
+        "- TEXT: wording and spelling, letter by letter, and which side it sits on.",
+        "- ARTWORK: logo, print or graphic — same artwork, same size relative to the garment, same position, same colours.",
+        "- COLOUR of the garment itself.",
+        "- CONSTRUCTION: seams, panels, pockets, waistband, closure, belt loops, hems, cuffs, collar.",
+        "- HARDWARE the photographs show: buttons, zips, rivets, eyelets, chains, drawcords.",
+        "",
+        "ADDED FEATURES COUNT AS MISMATCHES. A detail the render put there that the photographs do not have — a pressed centre crease down the leg, a pleat, a turn-up, an extra pocket, a side stripe, contrast stitching, a brand tab, an extra button or zip — is a mismatch exactly like a missing one. Compare the garment feature by feature, not just by colour and shape.",
+        "",
+        "Also check the PERSON against the model reference photographs: report only if this is clearly a DIFFERENT individual (different face structure, ethnicity, hair colour or length, apparent age). Angle, expression and lighting differences are not a mismatch.",
+        "",
+        "YOU DO NOT JUDGE ANY OF THE FOLLOWING. They are somebody else's job and are never mismatches:",
+        "- How the frame is cropped, which body parts are in shot, or whether the head, feet or torso appear.",
+        "- Pose, stance, framing, centring, background, lighting.",
+        "- Whether a garment or a body part is visible at all, and whether something 'should' be visible from a given angle.",
+        "- Nudity or coverage of any kind.",
+        "- Hardware being seen from an unexpected side. A chain, tie or drawcord may hang, swing and be visible from behind. That is never a mismatch.",
+        "",
+        "REPORT ONLY WHAT YOU CAN SEE in a named frame. If you cannot see it, say nothing about it.",
+        'Never write "not visible", "cannot tell", "out of frame" or "unclear" as a mismatch.',
+        "Small text in a full-body frame is only a few pixels tall: never judge its spelling or legibility there. Judge small text only in a close-up.",
+        "Before reporting a misspelling, transcribe the letters you actually see into in_the_render. If they equal in_the_photos, it is NOT a mismatch — omit it.",
+        "If every frame reproduces the garment, return an empty list. That is the expected answer for a good run.",
+        "",
+        "Return JSON only:",
+        "{",
+        '  "mismatches": [ { "frames": ["P1L","P1R"], "what": string, "in_the_photos": string, "in_the_render": string, "confidence": number 0-1 } ],',
+        '  "notes": string[]',
+        "}",
+        "List a frame only if you can see the problem in that frame. Below 0.75 confidence it is treated as a note.",
+      ].join("\n"),
+    },
+    ...(spec
+      ? [
+          {
+            type: "input_text",
+            text:
+              "VERIFIED ITEM SPEC — what the reference photographs were found to contain. A ZONE line is a complete account of that area: where it says a zone is flat or plain, that zone really is empty and anything drawn there is an added feature.\n" +
+              spec,
+          },
+        ]
+      : []),
+    { type: "input_text", text: "MODEL reference photographs (who the person should be):" },
+    ...args.modelRefs.slice(0, 6).map((url) => ({ type: "input_image", image_url: url })),
+    ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
+    { type: "input_text", text: "Rendered frames to check:" },
+    ...buildPanelContent(args.panels),
+  ];
+
+  const { parsed, error } = await callJudge(
+    args.openai,
+    args.model,
+    ACCURACY_SYSTEM,
+    content,
+    args.timeoutMs,
+    "Studio accuracy check",
+  );
+  if (!parsed || error) return { findings: [], notes: [], ok: false };
+
+  const findings: RunQaFinding[] = [];
+  const notes: string[] = [];
+  const rows = Array.isArray(parsed.mismatches) ? parsed.mismatches.slice(0, MAX_FINDINGS * 2) : [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const what = String(r.what ?? "").trim();
+    const expected = String(r.in_the_photos ?? "").trim();
+    const observed = String(r.in_the_render ?? "").trim();
+    const confidence = Number(r.confidence);
+    const tokens = Array.isArray(r.frames) ? r.frames : [];
+    const targets = tokens.map(parseFrameToken).filter((t): t is NonNullable<typeof t> => t !== null);
+    if (!what && !observed) continue;
+    const text = `PRODUCT ${what || "mismatch"}: the photographs show ${expected || "something else"}, this frame shows ${
+      observed || "something different"
+    }.`.slice(0, 240);
+    if (looksLikeNonObservation(`${what} ${expected} ${observed}`)) continue;
+    if (looksLikeConfirmation(text)) continue;
+    if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) continue;
+    if (!Number.isFinite(confidence) || confidence < QA_MIN_CONFIDENCE) {
+      notes.push(`${text} (${Number.isFinite(confidence) ? "low" : "no"} confidence)`);
+      continue;
+    }
+    if (!targets.length) {
+      notes.push(text);
+      continue;
+    }
+    for (const t of targets) findings.push({ panel: t.panel, frame: t.frame, text });
+  }
+  for (const n of Array.isArray(parsed.notes) ? parsed.notes : []) {
+    const t = String(n ?? "").trim();
+    if (t) notes.push(t);
+  }
+  return { findings: findings.slice(0, MAX_FINDINGS), notes, ok: true };
+}
+
+/**
+ * Both passes, in parallel, merged into one verdict.
+ *
+ * The consistency pass is skipped when there is only one frame to compare —
+ * a single crop agrees with itself, and asking produces invention.
+ */
+export async function runRunQa(args: {
+  openai: OpenAI;
+  panels: RunPanelImage[];
+  itemRefs: string[];
+  itemRefViews?: ItemRefView[];
+  modelRefs: string[];
+  itemSpec?: string;
+  itemType: string;
+  timeoutMs: number;
+}): Promise<RunQaVerdict> {
+  const model = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
+  const frameCount = args.panels.length * 2;
+  const wantConsistency = frameCount >= 3;
+
+  const [consistency, accuracy] = await Promise.all([
+    wantConsistency
+      ? runConsistencyCheck({
+          openai: args.openai,
+          model,
+          panels: args.panels,
+          itemType: args.itemType,
+          timeoutMs: args.timeoutMs,
+        }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false }))
+      : Promise.resolve({ findings: [] as RunQaFinding[], notes: [] as string[], ok: true }),
+    runAccuracyCheck({
+      openai: args.openai,
+      model,
+      panels: args.panels,
+      itemRefs: args.itemRefs,
+      itemRefViews: args.itemRefViews,
+      modelRefs: args.modelRefs,
+      itemSpec: args.itemSpec,
+      itemType: args.itemType,
+      timeoutMs: args.timeoutMs,
+    }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false })),
+  ]);
+
+  const notes = [...consistency.notes, ...accuracy.notes].slice(0, MAX_NOTES);
+  if (!consistency.ok && !accuracy.ok) {
+    return { findings: [], notes, unavailable: true };
+  }
+  if (!consistency.ok && wantConsistency) {
+    notes.unshift("The consistency check did not report back — these crops were compared against the references only.");
+  }
+  if (!accuracy.ok) {
+    notes.unshift("The accuracy check did not report back — these crops were compared with each other only.");
+  }
+  // Same text on the same crop from both judges collapses to one flag.
+  const seen = new Set<string>();
+  const findings: RunQaFinding[] = [];
+  for (const f of [...consistency.findings, ...accuracy.findings]) {
+    const key = `${f.panel}|${f.frame}|${normalizeForCompare(f.text)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    findings.push(f);
+  }
+  return { findings, notes: notes.slice(0, MAX_NOTES), unavailable: false };
+}
