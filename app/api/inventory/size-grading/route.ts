@@ -65,7 +65,12 @@ export async function GET(req: Request) {
     const front = latest.rows.find((r) => r.view === "front") ?? null;
     const back = latest.rows.find((r) => r.view === "back") ?? null;
     // `measurement` stays for anything still reading the old shape.
-    return NextResponse.json({ measurement: front ?? back, front, back });
+    /* Never cached: the item card reads this straight after a save on the
+       Size Grading page, and a stale copy reads as "nothing was saved". */
+    return NextResponse.json(
+      { measurement: front ?? back, front, back },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
 
   const matrixId = (searchParams.get("matrixId") ?? "").trim();
@@ -176,22 +181,32 @@ export async function POST(req: Request) {
   /* Appended, never updated: a garment remeasured after a production change is
      a new fact about a new garment, not a correction of the old reading. */
   const ids = targets.rows.map((r) => r.id);
-  const saved = await pool.query<{ measured_at: string }>(
-    `INSERT INTO size_grading_measurements
-       (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note, view)
-     SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, $5, $6, $7, $8
-     RETURNING measured_at`,
-    [
-      ids,
-      b.garmentType,
-      JSON.stringify(b.pointsCm),
-      b.pxPerCm ?? null,
-      b.typeOverridden ?? false,
-      session.sub ?? null,
-      b.note ?? null,
-      b.view ?? "front",
-    ],
-  );
+  /* A database failure is reported as JSON with its reason. Thrown, it became
+     an HTML 500 the page could only call "Could not save" — which is how a
+     save could fail with nothing on screen to say why. */
+  let saved: { rows: Array<{ measured_at: string }> };
+  try {
+    saved = await pool.query<{ measured_at: string }>(
+      `INSERT INTO size_grading_measurements
+         (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note, view)
+       SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, $5, $6, $7, $8
+       RETURNING measured_at`,
+      [
+        ids,
+        b.garmentType,
+        JSON.stringify(b.pointsCm),
+        b.pxPerCm ?? null,
+        b.typeOverridden ?? false,
+        session.sub ?? null,
+        b.note ?? null,
+        b.view ?? "front",
+      ],
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[size-grading] save failed", msg);
+    return NextResponse.json({ error: `Database refused the save: ${msg}` }, { status: 500 });
+  }
 
   return NextResponse.json({
     ok: true,

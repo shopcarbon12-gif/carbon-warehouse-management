@@ -128,7 +128,7 @@ export const POMS_FOR: Record<GarmentType, PomKey[]> = {
   ],
   shorts: [
     "waist", "hip", "thigh", "legOpening", "inseam", "outseam", "rise",
-    "waistbandHeight", "frontPocketOpening",
+    "waistbandHeight", "frontPocketOpening", "backPocketWidth", "backPocketLength",
   ],
   dress: [
     "chest", "waist", "hip", "hem", "length", "shoulder", "armhole",
