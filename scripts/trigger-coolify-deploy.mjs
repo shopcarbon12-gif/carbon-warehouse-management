@@ -21,6 +21,7 @@
  *
  * Flags:
  *   --web-only      deploy the web app, leave the worker on its current code
+ *                   (still waits for the build, and fails if it does not finish)
  *   --worker-only   deploy the worker only
  *   --no-wait       fire both immediately (the old, racy behaviour)
  *
@@ -175,8 +176,11 @@ if (!WORKER_ONLY) {
         : "401: add COOLIFY_API_TOKEN to .env.coolify.local (Coolify → Security → API Tokens, deploy or root).",
     );
   }
-  /* Wait before the worker is triggered — two builds at once is what kills this one. */
-  if (webOk && !NO_WAIT && workerUrl && !WEB_ONLY) {
+  /* Wait before the worker is triggered — two builds at once is what kills this
+     one. Also waited on --web-only: a queued webhook is not a deployed build,
+     and a run that exits 0 on "queued" is how a failed deploy gets reported as
+     shipped (2026-09-30). */
+  if (webOk && !NO_WAIT) {
     const status = await waitFor("web app", url, queued);
     if (status && status !== "finished") webOk = false;
   }

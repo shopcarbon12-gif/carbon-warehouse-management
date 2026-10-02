@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 
 /**
  * Carbon Studio phone-camera capture page (public, opened via QR on a phone).
@@ -22,21 +22,15 @@ type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
 export default function ImageUploadPage() {
   const params = useParams();
   const sessionId = String(params?.sessionId || "");
-  /* Which page on the computer is waiting for this photo. Read off the URL in
-     an effect rather than from useSearchParams, which would drag a Suspense
-     boundary into a page that is otherwise entirely client-side. Studio is the
-     default because it is where the hand-off started and old QR codes carry no
-     parameter. */
-  const [purpose, setPurpose] = useState<"studio" | "size-grading">("studio");
-  useEffect(() => {
-    try {
-      if (new URLSearchParams(window.location.search).get("for") === "size-grading") {
-        setPurpose("size-grading");
-      }
-    } catch {
-      /* no URL to read — Studio it is */
-    }
-  }, []);
+  /* Which page on the computer is waiting for this photo. Read at render, not
+     in an effect, so the heading is right in the first frame instead of saying
+     "Carbon Studio" for a moment on a phone that was sent here by Size
+     Grading. The route is server-rendered on demand, so the parameter is
+     there to read. Studio is the default: that is where the hand-off started,
+     and a QR code minted before this carries no parameter at all. */
+  const search = useSearchParams();
+  const purpose: "studio" | "size-grading" =
+    search?.get("for") === "size-grading" ? "size-grading" : "studio";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const captureRef = useRef<ImageCaptureLike | null>(null);
