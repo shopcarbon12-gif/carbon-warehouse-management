@@ -140,17 +140,90 @@ export function detectTarget(
   const small = new Uint8Array(w * h);
   {
     const gray = toGray(rgba, width, height);
+    /* Area-averaged, NOT nearest-neighbour.
+     *
+     * The ring is thin — two centimetres of an eighteen centimetre target — and
+     * picking one source pixel per output pixel aliases it into a dotted line
+     * that then fails the "is it a closed ring" test. That is not theoretical:
+     * the same photo was found at 1004 px, LOST at 1400 and 1600, and found
+     * again at 1800, purely from where the sampling grid happened to land.
+     * Averaging the block each output pixel covers keeps the ring's contrast
+     * and makes the answer stop depending on the photo's resolution. */
     for (let y = 0; y < h; y++) {
-      const sy = Math.min(height - 1, Math.round(y / scale));
+      const sy0 = Math.floor(y / scale);
+      const sy1 = Math.min(height, Math.max(sy0 + 1, Math.floor((y + 1) / scale)));
       for (let x = 0; x < w; x++) {
-        small[y * w + x] = gray[sy * width + Math.min(width - 1, Math.round(x / scale))];
+        const sx0 = Math.floor(x / scale);
+        const sx1 = Math.min(width, Math.max(sx0 + 1, Math.floor((x + 1) / scale)));
+        let sum = 0;
+        let n = 0;
+        for (let yy = sy0; yy < sy1; yy++) {
+          const row = yy * width;
+          for (let xx = sx0; xx < sx1; xx++) {
+            sum += gray[row + xx];
+            n++;
+          }
+        }
+        small[y * w + x] = n ? sum / n : gray[Math.min(height - 1, sy0) * width + Math.min(width - 1, sx0)];
       }
     }
   }
 
-  const t = otsu(small);
+  /* Several thresholds, not one.
+   *
+   * A single global Otsu split assumes the target's ink is the dark thing in
+   * the picture. On a warehouse table it often is not: the operator's photo had
+   * a black chair and dark leggings pulling the threshold down, a wood table at
+   * 146 and a ring that photographed at 113 — barely thirty levels apart, and
+   * on the wrong side of the line. Sweeping a handful of thresholds and keeping
+   * whichever produces the best-scoring ring costs a few passes over a small
+   * image and removes a whole class of "it just doesn't find it". */
+  const thresholds = candidateThresholds(small);
+  let best: { det: TargetDetection; score: number } | null = null;
+  for (const t of thresholds) {
+    const found = detectAtThreshold(small, w, h, t, scale);
+    if (found && (!best || found.score > best.score)) best = found;
+    // A confident find is not going to be beaten by another threshold.
+    if (best && best.score > 0.88) break;
+  }
+  return best?.det ?? null;
+}
+
+/** Otsu, plus a spread of percentile cuts around it. */
+function candidateThresholds(gray: Uint8Array): number[] {
+  const hist = new Float64Array(256);
+  for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
+  const total = gray.length;
+  const at = (fraction: number) => {
+    let seen = 0;
+    for (let t = 0; t < 256; t++) {
+      seen += hist[t];
+      if (seen >= total * fraction) return t;
+    }
+    return 255;
+  };
+  const out = new Set<number>([otsu(gray)]);
+  for (const f of [0.04, 0.08, 0.14, 0.22, 0.3, 0.4, 0.5]) out.add(at(f));
+  return [...out].filter((t) => t > 4 && t < 250).sort((a, b) => a - b);
+}
+
+function detectAtThreshold(
+  small: Uint8Array,
+  w: number,
+  h: number,
+  t: number,
+  scale: number,
+): { det: TargetDetection; score: number } | null {
   const dark = new Uint8Array(w * h);
-  for (let i = 0; i < dark.length; i++) dark[i] = small[i] < t ? 1 : 0;
+  let darkN = 0;
+  for (let i = 0; i < dark.length; i++) {
+    if (small[i] < t) {
+      dark[i] = 1;
+      darkN++;
+    }
+  }
+  // Nothing useful at the extremes, and labelling them is the expensive part.
+  if (darkN < w * h * 0.002 || darkN > w * h * 0.7) return null;
 
   // Label dark components.
   const labels = new Int32Array(w * h).fill(-1);
@@ -190,21 +263,44 @@ export function detectTarget(
     if (area < frameArea * 0.004 || area > frameArea * 0.75) continue;
     if (bw < 12 || bh < 12) continue;
 
-    /* The ring test. The target is a frame, so most of its bounding box is the
-       bright hole in the middle; a solid dark object fills its box. This single
-       check is what keeps a black garment, a phone or a shadow from being
-       mistaken for the target. */
+    /* The ring test, and it is a measurement rather than a sanity check.
+     *
+     * The target's proportions are known exactly: an 18 x 24 frame with a 2 cm
+     * border is 14 x 20 of hole, so the hole is 64.8% of the bounding box and
+     * the ink is the other 35.2%. Scoring against those numbers — rather than
+     * accepting anything vaguely ring-shaped — is what stops a blurred photo
+     * picking some other dark shape with a gap in it. Loose bounds here cost
+     * two of the blurred test cases 13 cm. */
     const fill = c.pixels / area;
-    if (fill < 0.12 || fill > 0.72) continue;
-    if (!hasEnclosedHole(labels, w, h, c)) continue;
+    if (fill < 0.16 || fill > 0.6) continue;
+    const holePixels = enclosedHoleArea(labels, w, c);
+    const holeFraction = holePixels / area;
+    if (holeFraction < 0.3) continue;
+    const EXPECTED_FILL = 1 - ((TARGET.outerWCm - 2 * TARGET.borderCm) * (TARGET.outerHCm - 2 * TARGET.borderCm)) /
+      (TARGET.outerWCm * TARGET.outerHCm);
+    const fillErr = Math.abs(fill - EXPECTED_FILL) / EXPECTED_FILL;
+    if (fillErr > 0.75) continue;
 
     const found = quadCorners(labels, w, c);
     if (!found) continue;
-    /* Refine before scaling back. Corner precision is the single biggest term
-       in the final error: the target is small next to the garment, so a corner
-       that is one pixel out moves a measurement taken 70 cm away by roughly
-       four times that. */
-    const refined = refineCorners(found.pts, found.quad) ?? found.quad;
+    /* Two refinements, in order of authority.
+     *
+     * The binary one fits lines to the thresholded boundary, which is good but
+     * inherits whatever the threshold did to the edge. The grey one puts each
+     * edge where the brightness actually crosses between ink and background,
+     * which no threshold can shift — and that matters because this function is
+     * now called at several thresholds, and without it the sweep that made
+     * detection reliable made the measurements worse. */
+    const binary = refineCorners(found.pts, found.quad) ?? found.quad;
+    const refined = refineCornersGray(small, w, h, binary) ?? binary;
+    /* Does this quad actually reproduce the printed target? Everything above
+       finds something ring-shaped; this is the step that checks it is OUR ring,
+       by looking at where the ink and the paper have to be if the quad is
+       right. A quad skewed by a tenth of its width puts the ring samples onto
+       the table, and the check fails — which is the correct answer, because
+       saying "no target" sends the operator to the four-corner tap, while
+       accepting it silently measured 13 cm wrong. */
+    if (!looksLikeTarget(small, w, h, refined)) continue;
     const quad = refined.map((p) => ({ x: p.x / scale, y: p.y / scale })) as Quad;
 
     const side = (a: Point, b: Point) => Math.hypot(b.x - a.x, b.y - a.y);
@@ -227,15 +323,18 @@ export function detectTarget(
     const aspectErr = Math.min(Math.abs(aspect / want - 1), Math.abs(aspect / (1 / want) - 1));
     if (aspectErr > 0.45) continue;
 
-    // Prefer: closer to the printed aspect, squarer to the camera, bigger.
-    const score = (1 - Math.min(1, aspectErr / 0.45)) * 0.5
-      + (1 - Math.min(1, tilt / 60)) * 0.3
-      + Math.min(1, area / (frameArea * 0.25)) * 0.2;
+    /* Prefer, in order: the right proportions of ink to hole, the printed
+       aspect ratio, a square-on shot, and size. The first two are what identify
+       the target; the last two only break ties. */
+    const score = (1 - Math.min(1, fillErr / 0.75)) * 0.4
+      + (1 - Math.min(1, aspectErr / 0.45)) * 0.35
+      + (1 - Math.min(1, tilt / 60)) * 0.15
+      + Math.min(1, area / (frameArea * 0.25)) * 0.1;
     const confidence = Math.max(0, Math.min(1, score));
     if (!best || score > best.score) best = { det: { quad, confidence, tiltPercent: tilt }, score };
   }
 
-  return best?.det ?? null;
+  return best;
 }
 
 /**
@@ -422,8 +521,220 @@ function refineCorners(pts: Point[], quad: Quad): Quad | null {
   return out as Quad;
 }
 
-/** Does this component enclose a bright region that the border cannot reach? */
-function hasEnclosedHole(labels: Int32Array, w: number, h: number, c: Component): boolean {
+/**
+ * Verify a candidate against what the printed target must look like.
+ *
+ * Independent of how the corners were found: it maps the printed design onto
+ * the image through the candidate's own homography and asks whether the ink is
+ * where the ink should be and the paper where the paper should be. A shape that
+ * passes every proportion test can still be the wrong shape, or the right shape
+ * with one corner badly placed, and this is what separates those from a target.
+ */
+function looksLikeTarget(gray: Uint8Array, w: number, h: number, quad: Quad): boolean {
+  const W = TARGET.outerWCm;
+  const Hc = TARGET.outerHCm;
+  const b = TARGET.borderCm;
+  const H = homography(
+    [
+      { x: 0, y: 0 },
+      { x: W, y: 0 },
+      { x: W, y: Hc },
+      { x: 0, y: Hc },
+    ],
+    quad,
+  );
+  if (!H) return false;
+
+  const read = (cmX: number, cmY: number): number | null => {
+    const p = applyH(H, cmX, cmY);
+    const x = Math.round(p.x);
+    const y = Math.round(p.y);
+    if (x < 0 || y < 0 || x >= w || y >= h) return null;
+    return gray[y * w + x];
+  };
+
+  const ink: Array<number | null> = [];
+  const paper: Array<number | null> = [];
+  const mid = b / 2; // the middle of the printed border
+  for (let t = 0.12; t <= 0.88; t += 0.04) {
+    // Along the middle of each of the four bars — this must be ink.
+    ink.push(read(W * t, mid), read(W * t, Hc - mid));
+    ink.push(read(mid, Hc * t), read(W - mid, Hc * t));
+    // Just inside the ring — this must be paper. The orientation dot and the
+    // printed text live in the upper half, so the lower half is sampled.
+    paper.push(read(W * (0.3 + 0.4 * t), Hc * 0.72));
+  }
+  /* The four corners of the ring, sampled on their own and judged strictly.
+     A quad can be right along its sides and wrong at one corner — that is the
+     shape of the failure this exists to catch — and corner samples are the only
+     ones that move off the ink when it happens. */
+  const corners = [
+    read(mid, mid),
+    read(W - mid, mid),
+    read(W - mid, Hc - mid),
+    read(mid, Hc - mid),
+  ];
+
+  const clean = (a: Array<number | null>): number[] =>
+    a.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  const inkV = clean(ink);
+  const paperV = clean(paper);
+  if (inkV.length < 20 || paperV.length < 8) return false;
+
+  const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  const inkMean = mean(inkV);
+  const paperMean = mean(paperV);
+  // Ink has to be meaningfully darker than the paper it surrounds.
+  if (paperMean - inkMean < 28) return false;
+
+  // And it has to be darker almost everywhere, not merely on average: an
+  // average survives a quad that is half on the ring and half on the table.
+  const cut = (inkMean + paperMean) / 2;
+  const inkOk = inkV.filter((v) => v < cut).length / inkV.length;
+  const paperOk = paperV.filter((v) => v > cut).length / paperV.length;
+  const cornerV = clean(corners);
+  if (cornerV.length < 4 || cornerV.some((v) => v >= cut)) return false;
+  return inkOk >= 0.85 && paperOk >= 0.8;
+}
+
+/**
+ * Put each edge where the brightness crosses, not where the threshold fell.
+ *
+ * A corner taken from a binary image is only ever as good as the threshold that
+ * made it, and this detector deliberately tries several. Sampling the grey
+ * profile across each edge removes that dependency: along a line crossing the
+ * target's boundary the brightness runs from ink to background, and the edge is
+ * where it passes the half-way point between the two. That half-way point does
+ * not move when the threshold does.
+ *
+ * The levels are taken from each individual profile rather than globally, so it
+ * works whether the target is lying on a pale table or a dark floor — the only
+ * requirement is that the two sides of the edge differ, which is what being an
+ * edge means.
+ */
+function refineCornersGray(gray: Uint8Array, w: number, h: number, quad: Quad): Quad | null {
+  const sample = (x: number, y: number): number => {
+    const fx = Math.max(0, Math.min(w - 2, Math.floor(x)));
+    const fy = Math.max(0, Math.min(h - 2, Math.floor(y)));
+    const ax = Math.max(0, Math.min(1, x - fx));
+    const ay = Math.max(0, Math.min(1, y - fy));
+    const i = fy * w + fx;
+    return (
+      gray[i] * (1 - ax) * (1 - ay) +
+      gray[i + 1] * ax * (1 - ay) +
+      gray[i + w] * (1 - ax) * ay +
+      gray[i + w + 1] * ax * ay
+    );
+  };
+
+  type Line = { px: number; py: number; dx: number; dy: number };
+  const lines: Line[] = [];
+  const REACH = 5; // how far either side of the edge to look, in pixels
+
+  for (let e = 0; e < 4; e++) {
+    const a = quad[e];
+    const b = quad[(e + 1) % 4];
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    const len = Math.hypot(ex, ey);
+    if (len < 12) return null;
+    const ux = ex / len;
+    const uy = ey / len;
+    // Outward normal: away from the quad's centre.
+    const cx = (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4;
+    const cy = (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    let nx = -uy;
+    let ny = ux;
+    if ((mx - cx) * nx + (my - cy) * ny < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+
+    const crossings: Point[] = [];
+    const STEPS = 48;
+    for (let s0 = 0; s0 <= STEPS; s0++) {
+      const t = 0.15 + (0.7 * s0) / STEPS; // skip the rounded corners
+      const px = a.x + ex * t;
+      const py = a.y + ey * t;
+
+      // Profile across the edge, inside → outside.
+      let lo = Infinity;
+      let hi = -Infinity;
+      const prof: number[] = [];
+      for (let d = -REACH; d <= REACH; d += 0.5) {
+        const v = sample(px + nx * d, py + ny * d);
+        prof.push(v);
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      if (hi - lo < 18) continue; // no real edge here — a gap in the print, or glare
+      const mid = (lo + hi) / 2;
+
+      // First crossing of the mid level, with linear interpolation.
+      let found = NaN;
+      for (let k = 1; k < prof.length; k++) {
+        const v0 = prof[k - 1];
+        const v1 = prof[k];
+        if ((v0 - mid) * (v1 - mid) <= 0 && v0 !== v1) {
+          const f = (mid - v0) / (v1 - v0);
+          found = -REACH + (k - 1 + f) * 0.5;
+          break;
+        }
+      }
+      if (!Number.isFinite(found)) continue;
+      crossings.push({ x: px + nx * found, y: py + ny * found });
+    }
+    if (crossings.length < 12) return null;
+
+    // Total least squares, then one pass discarding the worst outliers.
+    const fit = (pts: Point[]): Line => {
+      let sx = 0;
+      let sy = 0;
+      for (const p of pts) { sx += p.x; sy += p.y; }
+      const mx2 = sx / pts.length;
+      const my2 = sy / pts.length;
+      let sxx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (const p of pts) {
+        const dx2 = p.x - mx2;
+        const dy2 = p.y - my2;
+        sxx += dx2 * dx2;
+        syy += dy2 * dy2;
+        sxy += dx2 * dy2;
+      }
+      const theta = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+      return { px: mx2, py: my2, dx: Math.cos(theta), dy: Math.sin(theta) };
+    };
+    let line = fit(crossings);
+    const resid = crossings.map((p) => Math.abs((p.x - line.px) * line.dy - (p.y - line.py) * line.dx));
+    const sorted = [...resid].sort((x, y) => x - y);
+    const cut = Math.max(1.2, sorted[Math.floor(sorted.length * 0.8)]);
+    const kept = crossings.filter((_, i) => resid[i] <= cut);
+    if (kept.length >= 10) line = fit(kept);
+    lines.push(line);
+  }
+
+  const out: Point[] = [];
+  for (let i = 0; i < 4; i++) {
+    const l1 = lines[(i + 3) % 4];
+    const l2 = lines[i];
+    const det = l1.dx * -l2.dy - l1.dy * -l2.dx;
+    if (Math.abs(det) < 1e-9) return null;
+    const rx = l2.px - l1.px;
+    const ry = l2.py - l1.py;
+    const t = (rx * -l2.dy - ry * -l2.dx) / det;
+    const p = { x: l1.px + l1.dx * t, y: l1.py + l1.dy * t };
+    if (Math.hypot(p.x - quad[i].x, p.y - quad[i].y) > 10) return null;
+    out.push(p);
+  }
+  return out as Quad;
+}
+
+/** How many pixels this component encloses that its outside cannot reach. */
+function enclosedHoleArea(labels: Int32Array, w: number, c: Component): number {
   const bw = c.maxX - c.minX + 1;
   const bh = c.maxY - c.minY + 1;
   // Flood the NOT-component pixels inward from the bounding box edge; anything
@@ -456,8 +767,7 @@ function hasEnclosedHole(labels: Int32Array, w: number, h: number, c: Component)
       hole++;
     }
   }
-  // A real frame's hole is most of its box; a nick in a solid shape is not.
-  return hole > bw * bh * 0.1;
+  return hole;
 }
 
 /* ─────────────────────────────── homography ─────────────────────────────── */

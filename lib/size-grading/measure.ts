@@ -447,11 +447,11 @@ function solvePlane(idx: number[], xs: number[], ys: number[], v: (k: number) =>
 }
 
 /** Square-window max filter (separable). */
-function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+export function dilate(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   return morph(src, w, h, r, 1);
 }
 /** Square-window min filter (separable). */
-function erode(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
+export function erode(src: Uint8Array, w: number, h: number, r: number): Uint8Array {
   return morph(src, w, h, r, 0);
 }
 function morph(src: Uint8Array, w: number, h: number, r: number, hit: 0 | 1): Uint8Array {
@@ -575,7 +575,7 @@ function largestComponent(src: Uint8Array, w: number, h: number): Uint8Array {
 }
 
 /** Background reachable from the border stays background; enclosed holes become shirt. */
-function fillHoles(src: Uint8Array, w: number, h: number): Uint8Array {
+export function fillHoles(src: Uint8Array, w: number, h: number): Uint8Array {
   const outside = new Uint8Array(w * h);
   const stack = new Int32Array(w * h);
   let sp = 0;

@@ -6,7 +6,8 @@
  * took. The border-ring background model has no plain sweep to fit, so it
  * cannot work here; the seeded grow should not care.
  */
-import { autoSeedTolerance, segmentFromSeed, segmentShirt } from "@/lib/size-grading/measure";
+import { segmentShirt } from "@/lib/size-grading/measure";
+import { segmentGarment } from "@/lib/size-grading/segment";
 import { measureGarment } from "@/lib/size-grading/garment";
 
 const W = 540, H = 760, PX_PER_CM = 4;
@@ -54,11 +55,10 @@ console.log(
     : `                      ${oldRes.error}`,
 );
 
-const tol = autoSeedTolerance(buf, W, H, seed);
-const seeded = segmentFromSeed(buf, W, H, seed, tol);
+const seeded = segmentGarment(buf, W, H, seed);
 const res = measureGarment(seeded, PX_PER_CM);
 const area = ((seeded.area / (W * H)) * 100).toFixed(1);
-console.log(`\n  tap-to-grow (new)   tolerance ${tol}, mask covers ${area}% of the frame`);
+console.log(`\n  colour model (new)  mask covers ${area}% of the frame`);
 if (!res.ok) { console.log(`                      FAIL ${res.error}`); process.exit(1); }
 const chest = res.points.chest?.cm ?? 0;
 const length = res.points.length?.cm ?? 0;

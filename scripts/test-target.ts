@@ -72,10 +72,15 @@ function drawScene(tiltDeg: number, rollDeg: number, distanceCm: number): Scene 
   const project = cameraMatrix(tiltDeg, rollDeg, distanceCm);
 
   /** Fill the image region covered by a world-space rectangle. */
-  const fillWorldRect = (x0: number, y0: number, x1: number, y1: number, rgb: [number, number, number]) => {
-    // Walk the world rectangle densely enough that no image pixel is missed.
-    const stepsX = Math.max(2, Math.ceil((x1 - x0) * 24));
-    const stepsY = Math.max(2, Math.ceil((y1 - y0) * 24));
+  const fillWorldRect = (
+    x0: number, y0: number, x1: number, y1: number, rgb: [number, number, number], perCm = 24,
+  ) => {
+    /* Dense enough that no image pixel inside the rectangle is skipped. The
+       target's thin bars need a finer walk than the garment: at 40 degrees of
+       roll a 24-per-cm walk left gaps in the ring, the ring stopped being
+       closed, and the detector was blamed for a hole the renderer made. */
+    const stepsX = Math.max(2, Math.ceil((x1 - x0) * perCm));
+    const stepsY = Math.max(2, Math.ceil((y1 - y0) * perCm));
     for (let a = 0; a <= stepsX; a++) {
       for (let b = 0; b <= stepsY; b++) {
         const p = project(x0 + ((x1 - x0) * a) / stepsX, y0 + ((y1 - y0) * b) / stepsY);
@@ -94,15 +99,15 @@ function drawScene(tiltDeg: number, rollDeg: number, distanceCm: number): Scene 
   const H = TARGET.outerHCm;
   const b = TARGET.borderCm;
   // The ring, drawn as four bars so the middle stays paper-white.
-  fillWorldRect(0, 0, W, b, [20, 20, 20]);
-  fillWorldRect(0, H - b, W, H, [20, 20, 20]);
-  fillWorldRect(0, 0, b, H, [20, 20, 20]);
-  fillWorldRect(W - b, 0, W, H, [20, 20, 20]);
+  fillWorldRect(0, 0, W, b, [20, 20, 20], 90);
+  fillWorldRect(0, H - b, W, H, [20, 20, 20], 90);
+  fillWorldRect(0, 0, b, H, [20, 20, 20], 90);
+  fillWorldRect(W - b, 0, W, H, [20, 20, 20], 90);
   // The paper inside the ring.
-  fillWorldRect(b, b, W - b, H - b, [246, 246, 244]);
+  fillWorldRect(b, b, W - b, H - b, [246, 246, 244], 90);
   // Orientation dot.
   fillWorldRect(b + TARGET.dotInsetCm, b + TARGET.dotInsetCm,
-                b + TARGET.dotInsetCm + TARGET.dotCm, b + TARGET.dotInsetCm + TARGET.dotCm, [20, 20, 20]);
+                b + TARGET.dotInsetCm + TARGET.dotCm, b + TARGET.dotInsetCm + TARGET.dotCm, [20, 20, 20], 90);
 
   // The garment: a dark rectangle of known size, to the right of the target.
   const gx = W + 6;
@@ -200,6 +205,14 @@ for (const c of CASES) {
   const cornerErr = Math.max(
     ...det.quad.map((p, i) => Math.hypot(p.x - scene.truthQuad[i].x, p.y - scene.truthQuad[i].y)),
   );
+  if (process.env.DEBUG_QUAD) {
+    const side = (q: typeof det.quad, i: number) =>
+      Math.hypot(q[(i + 1) % 4].x - q[i].x, q[(i + 1) % 4].y - q[i].y).toFixed(0);
+    console.log(`    [${c.label}] detected sides ${[0,1,2,3].map(i=>side(det.quad,i)).join("/")}` +
+                `  truth sides ${[0,1,2,3].map(i=>side(scene.truthQuad,i)).join("/")}`);
+    console.log(`      detected ${det.quad.map(p=>`${p.x.toFixed(0)},${p.y.toFixed(0)}`).join(" ")}`);
+    console.log(`      truth    ${scene.truthQuad.map(p=>`${p.x.toFixed(0)},${p.y.toFixed(0)}`).join(" ")}`);
+  }
 
   const rect = rectify(img, IMG_W, IMG_H, det.quad, { maxPx: 1200, aroundCm: 75 });
   if (!rect) {

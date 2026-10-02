@@ -22,10 +22,11 @@ import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload 
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
-import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import { segmentGarment } from "@/lib/size-grading/segment";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
-import { detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
+import { TARGET, detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -69,6 +70,8 @@ const CALIB_PRESETS: Array<{ id: string; label: string; cm: number; note: string
   { id: "custom", label: "Something else…", cm: 0, note: "type the length" },
 ];
 
+/** The rectified image is rendered with this much room around the target. */
+const TARGET_MARGIN_CM = 60;
 const WORK_MAX_PX = 1000;
 /** The photo is kept this big for target detection and un-warping. */
 const SRC_MAX_PX = 1800;
@@ -148,9 +151,8 @@ export function SizeGradingWorkspace() {
   const [image, setImage] = useState<ImageData | null>(null);
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
   const [calibRatio, setCalibRatio] = useState<number | null>(null);
-  /** null = chosen from the photo itself; a number = the operator took over. */
-  const [threshold, setThreshold] = useState<number | null>(null);
-  const [autoT, setAutoT] = useState(48);
+  /** How readily a pixel joins the garment. 0 is the neutral comparison. */
+  const [bias, setBias] = useState(0);
   /** Where the garment is. Starts at the centre of the frame; the operator
    *  moves it by tapping, which is the only reliable way to say which of the
    *  things in a warehouse photo is the one being measured. */
@@ -222,8 +224,18 @@ export function SizeGradingWorkspace() {
     }
     setBusy(true);
     const id = window.setTimeout(() => {
-      const t = threshold ?? autoT;
-      const m = segmentFromSeed(image.data, image.width, image.height, seed, t);
+      /* The calibration target is never part of the garment, and it is the one
+         thing in the frame whose position is known exactly — so it is cut out
+         before anything is measured rather than hoped to be a different colour. */
+      const exclude = rectPxPerCm
+        ? [{
+            x: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+            y: Math.round(TARGET_MARGIN_CM * rectPxPerCm),
+            w: Math.round(TARGET.outerWCm * rectPxPerCm),
+            h: Math.round(TARGET.outerHCm * rectPxPerCm),
+          }]
+        : undefined;
+      const m = segmentGarment(image.data, image.width, image.height, seed, { bias, exclude });
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
       /* Focus is judged over the garment, not the frame: a sharp table behind a
@@ -233,7 +245,7 @@ export function SizeGradingWorkspace() {
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, threshold, autoT, seed, typeOverride]);
+  }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm]);
 
   /** The points this garment actually produced, in the family's own order. */
   const readings = useMemo(() => {
@@ -477,7 +489,7 @@ export function SizeGradingWorkspace() {
     const useQuad = quad ?? (det && det.confidence >= 0.3 ? det.quad : null);
 
     if (useQuad) {
-      const rect = rectify(src.data, src.width, src.height, useQuad, { maxPx: 1400, aroundCm: 60 });
+      const rect = rectify(src.data, src.width, src.height, useQuad, { maxPx: 1400, aroundCm: TARGET_MARGIN_CM });
       if (rect) {
         /* new ImageData(...) rejects a Uint8ClampedArray whose buffer type is
            not narrowed to ArrayBuffer, so the pixels are copied into one the
@@ -490,7 +502,6 @@ export function SizeGradingWorkspace() {
         const centre = { x: rect.width / 2, y: rect.height / 2 };
         setSeed(centre);
         setTapped(false);
-        setAutoT(autoSeedTolerance(data.data, rect.width, rect.height, centre));
         return;
       }
     }
@@ -520,7 +531,6 @@ export function SizeGradingWorkspace() {
     const centre = { x: data.width / 2, y: data.height / 2 };
     setSeed(centre);
     setTapped(false);
-    setAutoT(autoSeedTolerance(data.data, data.width, data.height, centre));
   }, []);
 
   const loadFile = useCallback(async (file: File | undefined) => {
@@ -544,7 +554,7 @@ export function SizeGradingWorkspace() {
       bmp.close();
       const src = ctx.getImageData(0, 0, w, h);
       srcRef.current = src;
-      setThreshold(null);
+      setBias(0);
       setCalibPts([]);
       setCornerTaps([]);
       setTappingCorners(false);
@@ -818,11 +828,9 @@ export function SizeGradingWorkspace() {
       return;
     }
     /* Not calibrating: the tap says which garment is being measured, and the
-       tolerance is re-read from the fabric around it. */
+       colours around it become the model of what the garment looks like. */
     setSeed(p);
     setTapped(true);
-    setAutoT(autoSeedTolerance(image.data, image.width, image.height, p));
-    setThreshold(null);
   };
 
   const saveCalibration = () => {
@@ -1396,28 +1404,33 @@ export function SizeGradingWorkspace() {
               <span>
                 Green = what the app thinks the garment is{" "}
                 <span className="font-mono text-[var(--wms-muted)]">
-                  {threshold ?? autoT}
-                  {threshold === null ? " auto" : ""}
+                  {bias === 0 ? "balanced" : bias > 0 ? `+${bias.toFixed(1)} generous` : `${bias.toFixed(1)} strict`}
                 </span>
               </span>
+              {/* One honest control. The app compares every pixel against what
+                  the garment looks like and what the background looks like;
+                  this only shifts where the tie is broken. It is not a colour
+                  tolerance — that was the old control, and no setting of it was
+                  right for both a shaded fold and a nearby table. */}
               <input
                 type="range"
-                min={15}
-                max={120}
-                value={threshold ?? autoT}
-                onChange={(e) => setThreshold(Number(e.target.value))}
+                min={-3}
+                max={3}
+                step={0.25}
+                value={bias}
+                onChange={(e) => setBias(Number(e.target.value))}
               />
               <span className="text-xs text-[var(--wms-muted)]">
-                <strong>Tap the middle of the garment in the photo.</strong> The green grows out from where you tap,
-                so whatever else is in frame — floor, feet, a pile of stock — is ignored.
+                <strong>Tap the middle of the garment in the photo.</strong> The colours around your tap become the
+                model of the garment; the edges of the frame become the model of the table and floor. Every pixel then
+                goes to whichever it resembles more.
                 {!tapped ? " Right now it is guessing from the centre of the frame." : ""}
               </span>
               <span className="text-xs text-[var(--wms-muted)]">
-                The level is chosen from the photo. Drag LEFT if part of the garment is missing from the green, RIGHT
-                if shadow or table is green.{" "}
-                {threshold !== null ? (
-                  <button type="button" className="text-[var(--wms-accent)] underline" onClick={() => setThreshold(null)}>
-                    back to auto
+                Drag RIGHT if part of the garment is missing from the green, LEFT if table or shadow is green.{" "}
+                {bias !== 0 ? (
+                  <button type="button" className="text-[var(--wms-accent)] underline" onClick={() => setBias(0)}>
+                    back to balanced
                   </button>
                 ) : null}
               </span>
