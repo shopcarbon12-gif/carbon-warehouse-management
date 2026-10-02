@@ -23,7 +23,7 @@ import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
 import { autoSeedTolerance, segmentFromSeed, type Point, type ShirtMask } from "@/lib/size-grading/measure";
-import { focusReading, type FocusReading } from "@/lib/size-grading/sharpness";
+import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 import { detectTarget, rectify, type Quad, type TargetDetection } from "@/lib/size-grading/target";
 import {
@@ -373,11 +373,15 @@ export function SizeGradingWorkspace() {
   const openCamera = useCallback(async () => {
     setError(null);
     try {
+      /* A moderate preview on purpose: asking for the sensor's maximum selects
+         a camera mode on many Android devices whose autofocus never fires, so
+         the preview is sharp on a far wall and soft on a garment an arm away.
+         A sharp 1920 frame measures better than a soft 2560 one. */
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 2560 },
-          height: { ideal: 1920 },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
         },
         audio: false,
       });
@@ -657,40 +661,93 @@ export function SizeGradingWorkspace() {
     await startHandoff();
   }, [startHandoff]);
 
-  /** Prefer a full-resolution still; fall back to the preview frame. */
+  /**
+   * Take the photo, and prove it is sharp before accepting it.
+   *
+   * Waiting a fixed time and hoping is what this replaces: on a device whose
+   * autofocus never fires, a delay produces exactly the same soft frame as no
+   * delay. Here the shutter waits on the pixels — it does not fire until the
+   * preview reads sharp or the budget runs out — and both capture paths are
+   * then measured, because takePhoto() can hand back a frame focused
+   * differently from the preview that was just verified.
+   */
   const shoot = useCallback(async () => {
     const video = videoRef.current;
     const track = streamRef.current?.getVideoTracks()[0];
     if (!video || !track) return;
-    /* Give autofocus a moment to settle before the shutter — capturing the
-       instant the button is pressed is how a soft frame gets measured. */
-    await focusAt(0.5, 0.5);
-    await new Promise((r) => setTimeout(r, 650));
-    try {
-      const Ctor = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } })
-        .ImageCapture;
-      if (Ctor) {
-        const blob = await new Ctor(track).takePhoto();
-        closeCamera();
-        await loadFile(new File([blob], "capture.jpg", { type: blob.type || "image/jpeg" }));
-        return;
+
+    const readNow = () => {
+      if (!video.videoWidth) return null;
+      const sample = sampleForFocus(video, video.videoWidth, video.videoHeight);
+      return sample ? focusReading(sample.data, sample.width, sample.height) : null;
+    };
+    const scoreBlob = async (blob: Blob) => {
+      try {
+        const bmp = await createImageBitmap(blob);
+        const sample = sampleForFocus(bmp, bmp.width, bmp.height);
+        bmp.close();
+        return sample ? focusReading(sample.data, sample.width, sample.height).score : -1;
+      } catch {
+        return -1;
       }
-    } catch {
-      /* takePhoto is unsupported or refused — the frame grab below still works */
+    };
+
+    setFocusing(true);
+    let best: { blob: Blob; score: number } | null = null;
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await focusAt(0.5, 0.5);
+        const until = Date.now() + 2600;
+        while (Date.now() < until) {
+          const r = readNow();
+          if (r && (r.verdict === "sharp" || r.verdict === "flat")) break;
+          await new Promise((res) => setTimeout(res, 120));
+        }
+
+        const candidates: Blob[] = [];
+        const off = document.createElement("canvas");
+        off.width = video.videoWidth;
+        off.height = video.videoHeight;
+        const c = off.getContext("2d");
+        if (c) {
+          c.drawImage(video, 0, 0);
+          const frame = await new Promise<Blob | null>((r) => off.toBlob(r, "image/jpeg", 0.95));
+          if (frame) candidates.push(frame);
+        }
+        try {
+          const Ctor = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } })
+            .ImageCapture;
+          if (Ctor) {
+            const still = await Promise.race([
+              new Ctor(track).takePhoto().catch(() => null),
+              new Promise<null>((r) => setTimeout(() => r(null), 4000)),
+            ]);
+            if (still && still.size > 0) candidates.push(still);
+          }
+        } catch {
+          /* unsupported or refused — the frame grab above still stands */
+        }
+
+        for (const blob of candidates) {
+          const score = await scoreBlob(blob);
+          if (!best || score > best.score) best = { blob, score };
+        }
+        if (best && best.score >= 6) break;
+      }
+    } finally {
+      setFocusing(false);
     }
-    const off = document.createElement("canvas");
-    off.width = video.videoWidth;
-    off.height = video.videoHeight;
-    const c = off.getContext("2d");
-    if (!c) return;
-    c.drawImage(video, 0, 0);
-    const blob = await new Promise<Blob | null>((r) => off.toBlob(r, "image/jpeg", 0.95));
+
+    if (!best) {
+      setError("Could not take the photo — use Take photo, or Upload.");
+      return;
+    }
     closeCamera();
-    if (blob) await loadFile(new File([blob], "capture.jpg", { type: "image/jpeg" }));
+    await loadFile(new File([best.blob], "capture.jpg", { type: best.blob.type || "image/jpeg" }));
   }, [closeCamera, loadFile, focusAt]);
 
   /* When an item is picked, start on the family the catalogue already knows.
-     The silhouette is the fallback, not the first answer, and this is also what
+     The silhouette is the fallback, not the first answer, and this is what
      stops a pair of evening pants being measured as a shirt. */
   useEffect(() => {
     const guess = familyForCategory(pickedItem?.category, pickedItem?.subcategory);

@@ -57,15 +57,26 @@ export default function ImageUploadPage() {
     let cancelled = false;
     void (async () => {
       try {
-        // Everything in the one request: the largest frame the device offers
-        // AND continuous autofocus. Forcing the track to its reported maximum
-        // afterwards (an earlier version did) can make Android pick a fixed-
-        // focus camera mode — a sharp preview that never focuses again.
+        /* A MODERATE preview, deliberately.
+         *
+         * Asking for 4096 x 3072 asks for the sensor's maximum, and on Android
+         * that frequently selects a camera mode with no working autofocus — the
+         * preview looks fine on a distant wall and never focuses on a garment
+         * an arm's length away. That is what made "capture from this preview"
+         * come back soft however long it was given to settle. An earlier
+         * comment here already suspected forcing the maximum; it was right, and
+         * asking for it up front has the same effect as forcing it afterwards.
+         *
+         * 1920 x 1440 focuses reliably and costs nothing downstream: every
+         * photo is shrunk to 2048 on the long edge before it is sent anyway, so
+         * the extra sensor pixels were being thrown away a moment later. A
+         * sharp 1920 frame beats a soft 4096 one for every purpose this page
+         * has — measuring a garment or photographing a product. */
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 4096 },
-            height: { ideal: 3072 },
+            width: { ideal: 1920 },
+            height: { ideal: 1440 },
             advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet],
           },
           audio: false,
@@ -159,6 +170,17 @@ export default function ImageUploadPage() {
    * garment is; the corners are table and floor.
    */
   const [liveFocus, setLiveFocus] = useState<FocusVerdict | null>(null);
+
+  /** How sharp the preview is at this instant. */
+  const readFocusNow = useCallback((): { verdict: FocusVerdict; score: number } | null => {
+    const v = videoRef.current;
+    if (!v?.videoWidth) return null;
+    const sample = sampleForFocus(v, v.videoWidth, v.videoHeight);
+    if (!sample) return null;
+    const r = focusReading(sample.data, sample.width, sample.height);
+    return { verdict: r.verdict, score: r.score };
+  }, []);
+
   useEffect(() => {
     if (cam !== "live") {
       setLiveFocus(null);
@@ -166,17 +188,15 @@ export default function ImageUploadPage() {
     }
     let alive = true;
     const id = setInterval(() => {
-      const v = videoRef.current;
-      if (!alive || !v?.videoWidth) return;
-      const sample = sampleForFocus(v, v.videoWidth, v.videoHeight);
-      if (!sample) return;
-      setLiveFocus(focusReading(sample.data, sample.width, sample.height).verdict);
+      if (!alive) return;
+      const r = readFocusNow();
+      if (r) setLiveFocus(r.verdict);
     }, 250);
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, [cam]);
+  }, [cam, readFocusNow]);
 
   /**
    * Shrink a captured photo for transport.
@@ -261,18 +281,10 @@ export default function ImageUploadPage() {
   );
 
   const [capturing, setCapturing] = useState(false);
+  const [capturePhase, setCapturePhase] = useState<"idle" | "focusing" | "shooting">("idle");
 
-  /**
-   * Give the lens a moment to find the garment before the shutter.
-   *
-   * Firing takePhoto() the instant the button is pressed captures whatever the
-   * lens happened to be on, which on a phone held over a table is usually the
-   * table edge or the far wall — and a soft photo measures wrong without ever
-   * looking wrong. Where the device honours a focus point we ask for a
-   * single-shot focus at the middle (where the garment is) and wait for it;
-   * where it does not, the wait alone still lets continuous autofocus settle.
-   */
-  const settleFocus = useCallback(async () => {
+  /** Ask the lens to focus on the middle of the frame, where the subject is. */
+  const triggerFocus = useCallback(async () => {
     const track = streamRef.current?.getVideoTracks()[0];
     if (!track) return;
     try {
@@ -284,13 +296,100 @@ export default function ImageUploadPage() {
             advanced: [{ focusMode: "single-shot", pointsOfInterest: [{ x: 0.5, y: 0.5 }] }] as unknown as MediaTrackConstraintSet[],
           })
           .catch(() => {});
+      } else if (modes.includes("continuous")) {
+        await track
+          .applyConstraints({
+            advanced: [{ focusMode: "continuous", pointsOfInterest: [{ x: 0.5, y: 0.5 }] }] as unknown as MediaTrackConstraintSet[],
+          })
+          .catch(() => {});
       }
     } catch {
-      /* best effort — the wait below is the part that always helps */
+      /* the device refused — waiting below is what actually carries this */
     }
-    await new Promise((r) => setTimeout(r, 900));
   }, []);
 
+  /**
+   * Wait until the preview is genuinely sharp, rather than waiting a fixed time
+   * and hoping.
+   *
+   * A fixed delay was the previous attempt and it does not work, because
+   * nothing in it is connected to whether the lens actually found anything —
+   * on a device whose autofocus never fires, nine hundred milliseconds of
+   * waiting produces exactly the same soft photo as no wait at all. Reading the
+   * preview closes the loop: the shutter does not fire until the pixels say the
+   * image is sharp, or until the budget runs out and the operator is told.
+   *
+   * "flat" ends the wait too — a plain surface has no detail to focus on, and
+   * waiting for a sharpness that cannot exist would just stall the shutter.
+   */
+  const waitForSharp = useCallback(
+    async (budgetMs: number) => {
+      const started = Date.now();
+      let last: { verdict: FocusVerdict; score: number } | null = null;
+      while (Date.now() - started < budgetMs) {
+        const r = readFocusNow();
+        if (r) {
+          last = r;
+          if (r.verdict === "sharp" || r.verdict === "flat") return r;
+        }
+        await new Promise((res) => setTimeout(res, 120));
+      }
+      return readFocusNow() ?? last;
+    },
+    [readFocusNow],
+  );
+
+  /** How sharp a captured photo is, judged at the same scale as the preview. */
+  const scoreBlob = useCallback(async (blob: Blob): Promise<number> => {
+    try {
+      const bmp = await createImageBitmap(blob);
+      const sample = sampleForFocus(bmp, bmp.width, bmp.height);
+      bmp.close();
+      if (!sample) return -1;
+      return focusReading(sample.data, sample.width, sample.height).score;
+    } catch {
+      return -1;
+    }
+  }, []);
+
+  /** A frame straight off the preview — exactly what the sharpness meter read. */
+  const grabFrame = useCallback(async (): Promise<Blob | null> => {
+    const v = videoRef.current;
+    if (!v?.videoWidth) return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(v, 0, 0);
+    return new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.95));
+  }, []);
+
+  /** The sensor's own still, if the browser offers one. */
+  const takeStill = useCallback(async (): Promise<Blob | null> => {
+    const ic = captureRef.current;
+    if (!ic) return null;
+    /* No imageWidth/imageHeight. Forcing the sensor's maximum here reconfigures
+       the camera for a photo mode whose focus state is not the one the preview
+       just settled — which is how a verified-sharp preview turned into a soft
+       photo. Let the device pick. */
+    const timeout = new Promise<null>((res) => setTimeout(() => res(null), 4000));
+    const still = ic.takePhoto().catch(() => null);
+    const blob = await Promise.race([still, timeout]);
+    return blob && blob.size > 0 ? blob : null;
+  }, []);
+
+  /**
+   * Take the photo — and prove it is sharp before keeping it.
+   *
+   * Every device lies differently about focus: Android may ignore a focus
+   * point, every iPhone in Safari ignores all of them, and takePhoto() can
+   * return a frame focused differently from the preview it came from. So
+   * nothing here is trusted. Both capture paths are tried, both are measured,
+   * and the sharper one wins; if that is still soft the whole thing is repeated
+   * once. Verifying the result is the only approach that does not depend on a
+   * particular phone keeping a promise.
+   */
   const capture = useCallback(async () => {
     const v = videoRef.current;
     if (!v || shots.length >= MAX_PHOTOS || capturing) return;
@@ -299,38 +398,46 @@ export default function ImageUploadPage() {
       return;
     }
     setCapturing(true);
+    setErr("");
     try {
-      await settleFocus();
-      // Full-resolution still from the sensor when the browser offers it. Some
-      // Android builds never settle takePhoto(), so it races a 4 s timeout and
-      // the frame grab below takes over.
-      const ic = captureRef.current;
-      if (ic) {
-        const timeout = new Promise<null>((res) => setTimeout(() => res(null), 4000));
-        const still = ic
-          .takePhoto({ imageWidth: 4096, imageHeight: 3072 })
-          .catch(() => ic.takePhoto())
-          .catch(() => null);
-        const blob = await Promise.race([still, timeout]);
-        if (blob && blob.size > 0) {
-          await pushShot(blob);
-          return;
+      let best: { blob: Blob; score: number } | null = null;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        setCapturePhase("focusing");
+        await triggerFocus();
+        await waitForSharp(2600);
+
+        setCapturePhase("shooting");
+        const candidates: Blob[] = [];
+        const frame = await grabFrame();
+        if (frame) candidates.push(frame);
+        const still = await takeStill();
+        if (still) candidates.push(still);
+
+        for (const blob of candidates) {
+          const score = await scoreBlob(blob);
+          if (!best || score > best.score) best = { blob, score };
         }
+        // Good enough to stop; the threshold is the one the metric is
+        // calibrated against (see lib/size-grading/sharpness.ts).
+        if (best && best.score >= 6) break;
       }
-      const w = v.videoWidth || 1080;
-      const h = v.videoHeight || 1440;
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(v, 0, 0, w, h);
-      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.95));
-      if (blob) await pushShot(blob);
+
+      if (!best) {
+        setErr("Could not take the photo — use the camera app button.");
+        return;
+      }
+      if (best.score < 3) {
+        setErr(
+          "That came out soft and the camera would not focus. Take it with the camera app button instead — it focuses on every phone.",
+        );
+      }
+      await pushShot(best.blob);
     } finally {
+      setCapturePhase("idle");
       setCapturing(false);
     }
-  }, [shots.length, capturing, pushShot, settleFocus]);
+  }, [shots.length, capturing, pushShot, triggerFocus, waitForSharp, grabFrame, takeStill, scoreBlob]);
 
   /* Photos from the camera app or the gallery. Anything that is not already
      JPEG / PNG / WebP (an iPhone's HEIC, mostly) is re-encoded to JPEG here —
@@ -651,7 +758,7 @@ export default function ImageUploadPage() {
               whole job, and this is the path that reliably delivers it. */}
           {cam === "live" && !appFirst ? (
             <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
-              {full ? "Max 6 reached" : capturing ? "Focusing…" : "📷 Capture photo"}
+              {full ? "Max 6 reached" : capturePhase === "focusing" ? "Focusing…" : capturePhase === "shooting" ? "Capturing…" : "📷 Capture photo"}
             </button>
           ) : null}
           <button style={cam === "live" && !appFirst ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
@@ -665,7 +772,7 @@ export default function ImageUploadPage() {
           </button>
           {cam === "live" && appFirst ? (
             <button style={btnAlt} disabled={full || capturing || uploading} onClick={() => void capture()}>
-              {full ? "Max 6 reached" : capturing ? "Focusing…" : "📷 Capture from this preview"}
+              {full ? "Max 6 reached" : capturePhase === "focusing" ? "Focusing…" : capturePhase === "shooting" ? "Capturing…" : "📷 Capture from this preview"}
             </button>
           ) : null}
           <button style={btnAlt} disabled={full || uploading} onClick={() => galleryInputRef.current?.click()}>
