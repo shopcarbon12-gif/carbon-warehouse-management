@@ -11,6 +11,12 @@
  *
  * Only once an item is settled does the size list appear, because a measurement
  * without a size is not a fact about anything.
+ *
+ * The list is SIZES, not size-and-colour pairs. Flat measurements come from the
+ * pattern and the pattern does not change with the dye, so a 38 is a 38 whatever
+ * colour it is dyed; offering "38 · TEAL" and "38 · PURPLE" separately would be
+ * asking the operator to measure the same garment twice. One reading is saved
+ * to every colour in that size.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,11 +25,13 @@ import { Loader2, Search } from "lucide-react";
 import { BarcodeScanButton } from "@/components/inventory/catalog/barcode-scan-button";
 
 export type PickedSize = {
+  /** One SKU of this size; the server fans the save out to the rest. */
   customSkuId: string;
   sku: string;
   size: string | null;
-  colorCode: string | null;
-  upc: string | null;
+  /** Every colour this size exists in — what a save will cover. */
+  colors: string[];
+  count: number;
   lastMeasuredAt: string | null;
 };
 
@@ -94,14 +102,30 @@ export function ItemPicker({
           error?: string;
         };
         if (!r.ok || !j.item) throw new Error(j.error ?? "Not found");
-        const list: PickedSize[] = (j.sizes ?? []).map((s) => ({
-          customSkuId: s.custom_sku_id,
-          sku: s.sku,
-          size: s.size,
-          colorCode: s.color_code,
-          upc: s.upc,
-          lastMeasuredAt: s.last_measured_at,
-        }));
+        /* Collapse colour variants into one entry per size. */
+        const bySize = new Map<string, PickedSize>();
+        for (const s of j.sizes ?? []) {
+          const key = s.size ?? `sku:${s.sku}`;
+          const found = bySize.get(key);
+          if (!found) {
+            bySize.set(key, {
+              customSkuId: s.custom_sku_id,
+              sku: s.sku,
+              size: s.size,
+              colors: s.color_code ? [s.color_code] : [],
+              count: 1,
+              lastMeasuredAt: s.last_measured_at,
+            });
+            continue;
+          }
+          found.count += 1;
+          if (s.color_code && !found.colors.includes(s.color_code)) found.colors.push(s.color_code);
+          // Show the most recent measurement across the colours of this size.
+          if (s.last_measured_at && (!found.lastMeasuredAt || s.last_measured_at > found.lastMeasuredAt)) {
+            found.lastMeasuredAt = s.last_measured_at;
+          }
+        }
+        const list = [...bySize.values()];
         onPick(j.item);
         setSizes(list);
         onPickSize(list.length === 1 ? list[0] : null);
@@ -189,7 +213,8 @@ export function ItemPicker({
               <option value="">Choose…</option>
               {sizes.map((s) => (
                 <option key={s.customSkuId} value={s.customSkuId}>
-                  {[s.size ?? s.sku, s.colorCode].filter(Boolean).join(" · ")}
+                  {s.size ?? s.sku}
+                  {s.count > 1 ? ` · ${s.count} colours` : ""}
                   {s.lastMeasuredAt ? " ✓" : ""}
                 </option>
               ))}
@@ -200,9 +225,14 @@ export function ItemPicker({
             Change item
           </button>
 
-          {size?.lastMeasuredAt ? (
+          {size ? (
             <span className="font-mono text-xs text-[var(--wms-muted)]">
-              last measured {new Date(size.lastMeasuredAt).toLocaleDateString()}
+              {size.count > 1
+                ? `saves to all ${size.count} colours${size.colors.length ? ` (${size.colors.join(", ")})` : ""}`
+                : "one colour in this size"}
+              {size.lastMeasuredAt
+                ? ` · last measured ${new Date(size.lastMeasuredAt).toLocaleDateString()}`
+                : ""}
             </span>
           ) : null}
         </div>

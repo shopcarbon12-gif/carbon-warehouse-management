@@ -7,8 +7,10 @@
  *   1. Calibrate: tap both ends of a reference of known length in the photo
  *      (an A4 sheet's long edge, a ruler…). Saved on this device, so a fixed
  *      overhead station only calibrates once.
- *   2. Take / upload a photo. The shirt is segmented from the background and
- *      chest width, body length and hem width are measured (lib/size-grading).
+ *   2. Take / upload a photo. On a phone the camera opens; on a PC a QR code
+ *      appears, and the phone that scans it sends its photo back to the page.
+ *      The garment is segmented from the background and measured per family
+ *      (lib/size-grading).
  *   3. The measurements are compared against every size in the chart; the
  *      closest size and per-measurement pass/fail are shown.
  *
@@ -16,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Upload } from "lucide-react";
+import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload } from "lucide-react";
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
 
@@ -85,6 +87,29 @@ function writeLocal(key: string, value: string | null) {
   }
 }
 
+/**
+ * Can the device in front of the operator actually take this photo?
+ *
+ * Not "does it have a camera" — a laptop has one, and it is bolted to a screen
+ * hinge pointing at whoever is sitting there. This photo has to be taken
+ * straight down over a garment lying flat, so the real question is whether the
+ * thing can be picked up and aimed at a table, and the only honest signal a
+ * browser gives for that is a coarse pointer: a touchscreen. Everything else
+ * gets the phone hand-off instead of a camera that cannot see the garment.
+ */
+async function canShootHere(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (window.matchMedia?.("(any-pointer: coarse)").matches !== true) return false;
+  // A touchscreen with no camera — a wall panel, a kiosk — still cannot do it.
+  try {
+    const devices = await navigator.mediaDevices?.enumerateDevices?.();
+    if (devices && !devices.some((d) => d.kind === "videoinput")) return false;
+  } catch {
+    /* the device refused to enumerate — trust the touchscreen */
+  }
+  return true;
+}
+
 const fmt = (cm: number) => `${cm.toFixed(1)} cm`;
 const fmtIn = (cm: number) => `${(cm / 2.54).toFixed(1)}"`;
 const signed = (cm: number) => `${cm >= 0 ? "+" : "−"}${Math.abs(cm).toFixed(1)}`;
@@ -119,6 +144,13 @@ export function SizeGradingWorkspace() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  /** The QR hand-off, while it is on screen and being waited on. */
+  const [handoff, setHandoff] = useState<{
+    sessionId: string;
+    scanUrl: string;
+    qrCodeUrl: string;
+  } | null>(null);
+  const [handoffNote, setHandoffNote] = useState<string | null>(null);
   /** Null until the stream is open; false when the device gives us no focus control. */
   const [canFocus, setCanFocus] = useState<boolean | null>(null);
   const [focusing, setFocusing] = useState(false);
@@ -355,6 +387,7 @@ export function SizeGradingWorkspace() {
   const loadFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
     setError(null);
+    setHandoffNote(null);
     try {
       const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
       const scale = Math.min(1, WORK_MAX_PX / Math.max(bmp.width, bmp.height));
@@ -380,6 +413,110 @@ export function SizeGradingWorkspace() {
       setError("Could not read that image.");
     }
   }, []);
+
+  /**
+   * PC → phone hand-off.
+   *
+   * On a desktop there is nothing to point at the garment, so "Take photo"
+   * puts a QR code on screen instead. Scanning it opens the phone's camera on
+   * /image-upload/<session>; the photo taken there comes straight back to this
+   * screen and is measured exactly as if it had been taken here.
+   *
+   * It is the hand-off Carbon Studio already uses for product photos — the
+   * same session table, the same phone page, the same upload route — rather
+   * than a second one to keep working. The session is tagged with the picked
+   * item when there is one, so the photo is traceable to what it measured.
+   */
+  const startHandoff = useCallback(async () => {
+    setError(null);
+    setHandoffNote(null);
+    try {
+      const r = await fetch("/api/image-handoff/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId: pickedItem?.matrixId ?? null, purpose: "size-grading" }),
+      });
+      const j = (await r.json().catch(() => ({}))) as {
+        sessionId?: string;
+        scanUrl?: string;
+        qrCodeUrl?: string;
+        error?: string;
+      };
+      if (!r.ok || !j.sessionId || !j.qrCodeUrl) {
+        throw new Error(j.error ?? "Could not start a phone session.");
+      }
+      setHandoff({ sessionId: j.sessionId, scanUrl: j.scanUrl ?? "", qrCodeUrl: j.qrCodeUrl });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start a phone session.");
+    }
+  }, [pickedItem]);
+
+  /* While the QR is up, watch the session for the phone's photo. Polling is
+     also what tells the phone a desktop is listening, so it can warn the
+     operator if this page was closed. */
+  useEffect(() => {
+    const sessionId = handoff?.sessionId;
+    if (!sessionId) return;
+    let alive = true;
+    let timer = 0;
+    const tick = async () => {
+      try {
+        const r = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}`, {
+          cache: "no-store",
+        });
+        if (r.status === 404) {
+          if (alive) {
+            setHandoff(null);
+            setError("That phone session expired — tap Take photo again.");
+          }
+          return;
+        }
+        const j = (await r.json().catch(() => ({}))) as { ready?: boolean; images?: { imageId: string }[] };
+        const batch = j.ready ? (j.images ?? []) : [];
+        const last = batch[batch.length - 1];
+        if (last) {
+          /* Through our own proxy, not the stored URL: the bucket needs
+             credentials the browser does not have, and a cross-origin image
+             taints the canvas that every pixel of this measurement is read
+             from — which is a silent failure, not an error. */
+          const img = await fetch(
+            `/api/image-handoff/image?s=${encodeURIComponent(sessionId)}&i=${encodeURIComponent(last.imageId)}`,
+            { cache: "no-store" },
+          );
+          if (!img.ok) throw new Error("photo unavailable");
+          const blob = await img.blob();
+          if (!alive) return;
+          setHandoff(null);
+          await loadFile(new File([blob], "phone.jpg", { type: blob.type || "image/jpeg" }));
+          // The phone can send a burst; one garment needs one photo, so the
+          // last one wins and the operator is told that is what happened.
+          // Set after loading, which clears the note of the previous photo.
+          if (alive && batch.length > 1) {
+            setHandoffNote(`Measuring the last of the ${batch.length} photos the phone sent.`);
+          }
+          return;
+        }
+      } catch {
+        /* a dropped poll is not a failure — the next one picks it up */
+      }
+      if (alive) timer = window.setTimeout(tick, 2000);
+    };
+    timer = window.setTimeout(tick, 1200);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [handoff?.sessionId, loadFile]);
+
+  /** The phone's own camera where there is one to hold up, the QR where not. */
+  const takePhoto = useCallback(async () => {
+    setError(null);
+    if (await canShootHere()) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    await startHandoff();
+  }, [startHandoff]);
 
   /** Prefer a full-resolution still; fall back to the preview frame. */
   const shoot = useCallback(async () => {
@@ -510,8 +647,10 @@ export function SizeGradingWorkspace() {
         {/* The phone's own camera app first. It focuses; the in-page stream on
             at least one Android here does not, and a soft photo measures wrong
             without ever looking wrong. The live preview stays for devices that
-            do expose focus control. */}
-        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => cameraInputRef.current?.click()}>
+            do expose focus control. On a PC the same button hands off to a
+            phone by QR, because there is no camera here that can see a garment
+            on the table. */}
+        <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => void takePhoto()}>
           <Camera className="h-4 w-4" /> Take photo
         </button>
         <button type="button" className="wms-btn max-md:min-h-11" onClick={() => void openCamera()}>
@@ -587,6 +726,63 @@ export function SizeGradingWorkspace() {
       ) : null}
 
       {error ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{error}</p> : null}
+      {handoffNote ? (
+        <p className="font-mono text-xs text-[var(--wms-muted)]">{handoffNote}</p>
+      ) : null}
+
+      {handoff ? (
+        <div className="flex min-w-0 flex-wrap items-start gap-4 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
+          {/* A remote QR image, not an asset next/image could optimise. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={handoff.qrCodeUrl}
+            alt="QR code — scan it with your phone to open the camera"
+            className="h-40 w-40 shrink-0 rounded bg-white p-1.5"
+          />
+          <div className="min-w-0 flex-1">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--wms-fg)]">
+              <Smartphone className="h-4 w-4 text-[var(--wms-accent)]" /> Scan this with your phone
+            </h2>
+            <p className="mt-1 text-sm text-[var(--wms-muted)]">
+              Scanning opens the phone&apos;s camera. Lay the garment flat with the US&nbsp;Letter sheet beside it,
+              shoot straight down, and send — the photo lands on this screen and is measured here.
+            </p>
+            <p className="mt-2 flex items-center gap-2 font-mono text-xs text-[var(--wms-accent)]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for the photo… keep this page open.
+            </p>
+            {handoff.scanUrl ? (
+              <p className="mt-2 break-all font-mono text-[0.68rem] text-[var(--wms-muted)]">{handoff.scanUrl}</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className="wms-btn max-md:min-h-11" onClick={() => setHandoff(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="wms-btn max-md:min-h-11"
+                onClick={() => {
+                  setHandoff(null);
+                  fileInputRef.current?.click();
+                }}
+              >
+                <Upload className="h-4 w-4" /> Upload a file instead
+              </button>
+              {/* A webcam cannot look down at a table, but if someone has a
+                  document camera or a USB camera on a stand, let them use it. */}
+              <button
+                type="button"
+                className="wms-btn max-md:min-h-11"
+                onClick={() => {
+                  setHandoff(null);
+                  void openCamera();
+                }}
+              >
+                Use this computer&apos;s camera
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {cameraOpen ? (
         <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
@@ -648,6 +844,9 @@ export function SizeGradingWorkspace() {
               <p>
                 To calibrate, lay a sheet of US Letter paper flat beside the garment and tap the two ends of its long
                 (11 in) edge. A bank card works when there is no paper, but is less accurate.
+              </p>
+              <p className="font-mono text-xs">
+                On a computer, Take photo shows a QR code — scan it with a phone and shoot from there.
               </p>
             </div>
           )}

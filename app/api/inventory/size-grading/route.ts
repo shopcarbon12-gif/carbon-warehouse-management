@@ -11,7 +11,19 @@ import { getPool } from "@/lib/db";
  *      ?customSkuId=<uuid> → { measurement } — the latest reading for one size,
  *                            which is what the item card shows and edits
  * POST { customSkuId, garmentType, pointsCm, pxPerCm, typeOverridden, note }
- *      → saves one measurement against that exact SKU.
+ *      → saves the measurement against EVERY colour of that size.
+ *
+ * A garment's flat measurements come from the pattern, and the pattern does not
+ * change with the dye: a size 38 in teal and a size 38 in purple are cut from
+ * the same pieces. Measuring one and leaving the other blank would mean
+ * measuring the same garment again for no reason, so one reading is written to
+ * every colour in that size — which is what the owner asked for, and is also
+ * the only version that stays consistent.
+ *
+ * Scope is the matrix the operator picked, not every matrix sharing the UPC:
+ * colours were deliberately split into separate products this week (Karina /
+ * Christy / Brandi all carry 2521402 but are different garments), so crossing
+ * that boundary would put one garment's measurements on another's.
  *
  * Deliberately NOT admin-only. Measuring a garment is floor work, and the whole
  * point of the page is that whoever is holding the garment can do it. It reads
@@ -126,21 +138,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No measurements to save." }, { status: 400 });
   }
 
-  const sku = await pool.query<{ id: string }>(
-    `SELECT id FROM custom_skus WHERE id = $1::uuid AND archived = false`,
+  const sku = await pool.query<{ id: string; matrix_id: string; size: string | null }>(
+    `SELECT id, matrix_id, size FROM custom_skus WHERE id = $1::uuid AND archived = false`,
     [b.customSkuId],
   );
-  if (!sku.rows[0]) return NextResponse.json({ error: "That size no longer exists." }, { status: 404 });
+  const picked = sku.rows[0];
+  if (!picked) return NextResponse.json({ error: "That size no longer exists." }, { status: 404 });
+
+  /* Every colour of this size on this product. A null size matches only itself
+     — a SKU with no size recorded cannot be grouped with anything safely. */
+  const targets = await pool.query<{ id: string; color_code: string | null }>(
+    picked.size === null
+      ? `SELECT id, color_code FROM custom_skus WHERE id = $1::uuid`
+      : `SELECT id, color_code FROM custom_skus
+          WHERE matrix_id = $2::uuid AND archived = false
+            AND size IS NOT DISTINCT FROM $3`,
+    picked.size === null ? [picked.id] : [picked.id, picked.matrix_id, picked.size],
+  );
 
   /* Appended, never updated: a garment remeasured after a production change is
      a new fact about a new garment, not a correction of the old reading. */
-  const saved = await pool.query<{ id: string; measured_at: string }>(
+  const ids = targets.rows.map((r) => r.id);
+  const saved = await pool.query<{ measured_at: string }>(
     `INSERT INTO size_grading_measurements
        (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note)
-     VALUES ($1::uuid, $2, $3::jsonb, $4, $5, $6, $7)
-     RETURNING id, measured_at`,
+     SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, $5, $6, $7
+     RETURNING measured_at`,
     [
-      b.customSkuId,
+      ids,
       b.garmentType,
       JSON.stringify(b.pointsCm),
       b.pxPerCm ?? null,
@@ -150,5 +175,11 @@ export async function POST(req: Request) {
     ],
   );
 
-  return NextResponse.json({ ok: true, id: saved.rows[0].id, measuredAt: saved.rows[0].measured_at });
+  return NextResponse.json({
+    ok: true,
+    measuredAt: saved.rows[0]?.measured_at ?? new Date().toISOString(),
+    size: picked.size,
+    appliedTo: ids.length,
+    colors: targets.rows.map((r) => r.color_code).filter(Boolean),
+  });
 }

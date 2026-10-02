@@ -22,6 +22,21 @@ type ImageCaptureCtor = new (track: MediaStreamTrack) => ImageCaptureLike;
 export default function ImageUploadPage() {
   const params = useParams();
   const sessionId = String(params?.sessionId || "");
+  /* Which page on the computer is waiting for this photo. Read off the URL in
+     an effect rather than from useSearchParams, which would drag a Suspense
+     boundary into a page that is otherwise entirely client-side. Studio is the
+     default because it is where the hand-off started and old QR codes carry no
+     parameter. */
+  const [purpose, setPurpose] = useState<"studio" | "size-grading">("studio");
+  useEffect(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get("for") === "size-grading") {
+        setPurpose("size-grading");
+      }
+    } catch {
+      /* no URL to read — Studio it is */
+    }
+  }, []);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const captureRef = useRef<ImageCaptureLike | null>(null);
@@ -339,10 +354,31 @@ export default function ImageUploadPage() {
   const btnAlt: React.CSSProperties = { ...btn, background: "#1e293b", color: "#e8eaed" };
   const full = shots.length >= MAX_PHOTOS;
   const uploading = status === "uploading";
+  /* Size Grading keeps only the session it is actively waiting on, so there is
+     no Studio-style "collect them later" — if nobody is listening, the photo
+     has to be sent again from a fresh code. Saying otherwise would send the
+     operator to a tab that will never show it. */
+  const dest =
+    purpose === "size-grading"
+      ? {
+          title: "Carbon WMS — size grading",
+          name: "Size Grading",
+          hint: "Lay the garment flat, front up, with a sheet of US Letter paper beside it. Shoot straight down with the whole garment in frame.",
+          lost: "On the computer, tap Take photo on the Size Grading page again and send this photo to the new code.",
+        }
+      : {
+          title: "Carbon Studio — item photos",
+          name: "Carbon Studio",
+          hint: "",
+          lost: "Nothing is lost: on the computer, open this product's Studio tab and click Add … photos from phone.",
+        };
 
   return (
     <div style={box}>
-      <h1 style={{ fontSize: 18, margin: "4px 0" }}>Carbon Studio — item photos</h1>
+      <h1 style={{ fontSize: 18, margin: "4px 0" }}>{dest.title}</h1>
+      {dest.hint ? (
+        <p style={{ textAlign: "center", opacity: 0.8, maxWidth: 360, fontSize: 13, margin: 0 }}>{dest.hint}</p>
+      ) : null}
 
       {/* Live camera — stays mounted through the "sent" screen (hidden), so
           "Take more" comes back to a live preview instead of a black box. */}
@@ -401,12 +437,11 @@ export default function ImageUploadPage() {
           {listening === false ? (
             <p style={{ textAlign: "center", opacity: 0.9, maxWidth: 360 }}>
               {sent.done} photo{sent.done === 1 ? "" : "s"} saved — <b>but the computer is not listening right now</b>{" "}
-              (its QR panel is closed). Nothing is lost: on the computer, open this product&apos;s Studio tab and
-              click <b>Add … photos from phone</b>.
+              (its QR panel is closed). {dest.lost}
             </p>
           ) : (
             <p style={{ textAlign: "center", opacity: 0.85 }}>
-              {sent.done} photo{sent.done === 1 ? "" : "s"} sent to Carbon Studio — they appear on the computer
+              {sent.done} photo{sent.done === 1 ? "" : "s"} sent to {dest.name} — they appear on the computer
               within a few seconds. Keep going, or close this page.
             </p>
           )}
@@ -479,7 +514,7 @@ export default function ImageUploadPage() {
             <button style={{ ...btn, background: "#e8eaed" }} disabled={status === "uploading"} onClick={() => void uploadAll()}>
               {status === "uploading"
                 ? `Sending ${Math.min(sent.done + 1, sent.total)}/${sent.total}…`
-                : `⤴ Send ${shots.length} to Carbon Studio`}
+                : `⤴ Send ${shots.length} to ${dest.name}`}
             </button>
           ) : null}
           {err ? <p style={{ color: "#f87171", fontSize: 13 }}>{err}</p> : null}
