@@ -886,20 +886,64 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     // below, because its ITEM VIEW MAP and the identity line must describe the
     // images that actually reached OpenAI (a failed download shifts every
     // index after it).
+    /*
+     * "Inner" is a position, not a disappearing act.
+     *
+     * The Evening Pants carry a zip up the INNER side of each ankle, which the
+     * photographs show plainly: a slim closed seam with a small pull, on the
+     * edge of each leg that faces the other leg. The prompt used to tell the
+     * model that a placement called INNER or CONCEALED "stays out of sight …
+     * never surfacing on the outside of the garment", which asks for something
+     * impossible — a visible detail that must not be visible. Given an
+     * impossible instruction the model fell back on how these trousers are
+     * usually made, and put the zip on the OUTER ankle, run after run.
+     *
+     * So the two ideas are separated and both are spelled out as geometry:
+     * INNER names which edge, CONCEALED names the finish, and neither means
+     * leave it out. Only emitted when a side or finish word actually appears,
+     * so garments it cannot help do not pay for it.
+     */
+    /* A rule placed far from the line it governs loses to the line. That is how
+       the hardware rule lost to the back lock, so the clarification goes INTO
+       the spec line the model is copying, not only into a rule below it. */
+    const clarifySideWords = (spec: string): string =>
+      spec
+        .split("\n")
+        .map((line) =>
+          /\b(hardware|zone|zip|zipper|pocket|stitch|seam|vent|slit)\b/i.test(line)
+            ? line.replace(
+                /\b(inner|inside|medial|inseam)\b/gi,
+                "$1 (the edge that faces the other leg, beside the gap between the legs — never the outer edge)",
+              )
+            : line,
+        )
+        .join("\n");
+    const sideWordSource = `${itemSpecText}\n${typeof prompt === "string" ? prompt : ""}`;
+    const sidePlacementLines = /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible)\b/i.test(
+      sideWordSource,
+    )
+      ? [
+          "- SIDE WORDS ARE GEOMETRY, NOT VISIBILITY. INNER / INSIDE / MEDIAL / INSEAM means the side of that limb which FACES THE OTHER LIMB, on the OUTER SURFACE of the fabric, fully visible in the picture. With both legs in frame, two inner details are the pair CLOSEST TOGETHER — one each side of the gap between the legs, mirroring each other across it. The far edge of each leg, the edge nearest the edge of the picture, carries NOTHING. Check it before you finish: if the two details sit far apart, one near each outside edge of the frame, they are on the wrong sides and must be mirrored inward. OUTER / LATERAL means that far edge, and a line saying INNER never puts anything there.",
+          "- CONCEALED / HIDDEN / INVISIBLE describes a FINISH, never a reason to leave something out or move it. A concealed zip is present and visible as a slim closed seam with its small pull, simply with no exposed teeth. Draw it where its line says, at the size its line says.",
+          "- Where this garment places a detail differently from how such garments are usually made, THIS garment wins. An ankle zip on the outer leg, a crease down the front, a pocket where there is none: the convention is not evidence, and copying it is an invention.",
+        ]
+      : [];
+
     const buildServerLockBlock = (modelCount: number, itemViewMapLines: string[]) => [
       buildServerLockPrompt(normalizedPanelQa, modelCount),
       ...itemViewMapLines,
       ...(itemSpecText
         ? [
             "VERIFIED ITEM SPEC (read off the item photos — every line MUST appear exactly as stated, in every frame and every panel. It overrides generic styling, but NOT the ITEM INSTRUCTION above: that was written by the person holding the garment, so where the two disagree about a placement, finish or fit, the instruction wins and this line yields):",
-            itemSpecText,
-            "- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position — and a placement the spec calls INNER, INSIDE, HIDDEN or CONCEALED stays out of sight on BOTH sides of the body, never surfacing on the outside of the garment in any frame. Anything NOT CLEARLY VISIBLE stays plain — never invented.",
+            clarifySideWords(itemSpecText),
+            "- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position. Anything NOT CLEARLY VISIBLE stays plain — never invented.",
             "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",
             "- A ZONE line is a complete account of that part of the garment: build it exactly as written and add nothing else there. Where a ZONE line says a zone is flat, plain or has none, that zone STAYS empty — no crease, no pleat, no pocket, no stripe, no topstitch that the line does not name.",
             ...buildBackStateLine(backState, normalizedPanelQa),
           ]
         : buildBackStateLine(backState, normalizedPanelQa)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
+      ...sidePlacementLines,
       ...(poseVariationDirective ? [poseVariationDirective] : []),
     ].join("\n");
 
