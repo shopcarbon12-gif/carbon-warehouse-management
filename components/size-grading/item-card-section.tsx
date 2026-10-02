@@ -29,7 +29,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
-import { GARMENT_LABELS, POMS_FOR, POM_LABEL, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
+import { GARMENT_LABELS, POMS_FOR, POM_SOURCE, pomLabel, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
 
 type Measurement = {
@@ -267,7 +267,15 @@ export function SizeGradingSection({
         return (
           <label key={k} className="flex items-center justify-between gap-3 text-[0.85rem]">
             <span className="text-[var(--wms-muted)]">
-              {k === "rise" && side === "back" ? "Back rise" : (POM_LABEL[k as PomKey] ?? k)}
+              {pomLabel(k, side)}
+              {/* A point the camera cannot read is marked, so a blank box is
+                  understood as "nobody has typed this yet" rather than as the
+                  app having failed to measure it. */}
+              {POM_SOURCE[k as PomKey] === "manual" ? (
+                <span className="ml-1 font-mono text-[0.62rem] uppercase tracking-wide text-[var(--wms-muted)]/70">
+                  by hand
+                </span>
+              ) : null}
             </span>
             <span className="flex items-center gap-2">
               <span className="w-16 text-right font-mono text-[0.75rem] text-[var(--wms-muted)]">{other}</span>

@@ -30,7 +30,7 @@ import { TARGET, detectTarget, rectify, type Quad, type TargetDetection } from "
 import {
   GARMENT_LABELS,
   POMS_FOR,
-  POM_LABEL,
+  pomLabel,
   measureGarment,
   type GarmentResult,
   type GarmentType,
@@ -294,7 +294,9 @@ export function SizeGradingWorkspace() {
       const colors: Partial<Record<PomKey, string>> = {
         chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
         hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
+        sleeveInseam: "#fb923c", bicep: "#fbbf24", cuff: "#f472b6", armhole: "#c084fc",
         inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#ec4899", rise: "#a855f7",
+        thigh: "#2dd4bf", knee: "#38bdf8", calf: "#818cf8",
       };
       ctx.font = `bold ${Math.max(14, Math.round(image.width / 40))}px sans-serif`;
       for (const key of POMS_FOR[result.type]) {
@@ -1242,9 +1244,7 @@ export function SizeGradingWorkspace() {
                   <tbody>
                     {readings.map((r) => (
                       <tr key={r.key} className="border-t border-[var(--wms-border)]">
-                        <td className="py-1.5 text-[var(--wms-muted)]">
-                          {r.key === "rise" && view === "back" ? "Back rise" : POM_LABEL[r.key]}
-                        </td>
+                        <td className="py-1.5 text-[var(--wms-muted)]">{pomLabel(r.key, view)}</td>
                         <td className="py-1.5 text-right font-mono text-[var(--wms-fg)]">{fmtIn(r.cm)}</td>
                         <td className="py-1.5 pl-3 text-right font-mono text-[var(--wms-muted)]">{fmt(r.cm)}</td>
                       </tr>

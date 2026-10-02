@@ -37,6 +37,17 @@ function fill(buf: Uint8ClampedArray, x0: number, y0: number, x1: number, y1: nu
   }
 }
 
+/** One tapered leg: a real trouser narrows from thigh to hem. */
+function leg(
+  buf: Uint8ClampedArray, xOuter: number, xInner: number, yTop: number, yBot: number, narrowBy: number,
+) {
+  for (let y = yTop; y <= yBot; y++) {
+    const t = (y - yTop) / Math.max(1, yBot - yTop);
+    const inset = Math.round((narrowBy * t) / 2);
+    fill(buf, xOuter + inset, y, xInner - inset, y);
+  }
+}
+
 /** Trapezoid, for flared skirts and dresses. */
 function flare(buf: Uint8ClampedArray, cx: number, yTop: number, yBot: number, wTop: number, wBot: number) {
   for (let y = yTop; y <= yBot; y++) {
@@ -66,7 +77,10 @@ const CASES: Case[] = [
       fill(b, CX - 96, 120, CX + 96, 400);        // body, 192 px wide, 280 px tall
       fill(b, CX - 128, 120, CX + 128, 185);      // sleeves, 256 px wide
     },
-    want: { chest: 48, length: 70, hem: 48, shoulder: 64 },
+    want: {
+      chest: 48, length: 70, hem: 48, shoulder: 64, waist: 48,
+      bicep: 16.5, cuff: 16.5, armhole: 9.1, sleeveInseam: 7.3,
+    },
     tol: 2.5,
   },
   {
@@ -75,10 +89,14 @@ const CASES: Case[] = [
     expect: "trousers",
     draw: (b) => {
       fill(b, CX - 80, 120, CX + 80, 220);        // seat
-      fill(b, CX - 80, 220, CX - 12, 520);        // left leg
-      fill(b, CX + 12, 220, CX + 80, 520);        // right leg
+      // Legs 68 px (17 cm) at the thigh, narrowing by 20 px to 12 cm at the hem.
+      leg(b, CX - 80, CX - 12, 220, 520, 20);
+      leg(b, CX + 12, CX + 80, 220, 520, 20);
     },
-    want: { waist: 40, inseam: 75, outseam: 100, legOpening: 17 },
+    want: {
+      waist: 40, inseam: 75, outseam: 100,
+      thigh: 16.8, knee: 14.9, calf: 13.6, legOpening: 12.2,
+    },
     tol: 3,
   },
   {
@@ -90,7 +108,7 @@ const CASES: Case[] = [
       fill(b, CX - 80, 250, CX - 12, 330);        // left leg
       fill(b, CX + 12, 250, CX + 80, 330);        // right leg
     },
-    want: { waist: 40, inseam: 20, legOpening: 17 },
+    want: { waist: 40, inseam: 20, legOpening: 17, thigh: 17, outseam: 45 },
     tol: 3,
   },
   {
@@ -122,7 +140,7 @@ const CASES: Case[] = [
     name: "Dress",
     expect: "dress",
     draw: (b) => {
-      fill(b, CX - 90, 100, CX + 90, 170);        // sleeves
+      fill(b, CX - 108, 100, CX + 108, 172);      // sleeves, standing clear of the body
       flare(b, CX, 100, 560, 150, 230);           // body, 115 cm long
     },
     want: { length: 115 },
