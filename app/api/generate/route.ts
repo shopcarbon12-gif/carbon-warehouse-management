@@ -918,13 +918,70 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
             : line,
         )
         .join("\n");
+    /*
+     * Do not ask the image model which side of the picture "the wearer's left"
+     * lands on. It gets it wrong.
+     *
+     * The analyser side of this is now right: the spec says "chain … the
+     * wearer's left belt loop", which matches the garment. The renders still
+     * put the chain on the wearer's RIGHT in five frames of eight. Telling it
+     * the rule ("the wearer's left appears on the right of a front-facing
+     * frame") did not fix it, and probably made it worse — the sentence
+     * contains the word "left", and a diffusion model reading "left" near a
+     * placement tends to draw on the left of the canvas.
+     *
+     * We already know everything needed to remove the question. The panel's
+     * two poses are fixed, and isBackFacingPose() says which way the model
+     * faces in each. So the mapping is computed here, per frame, and the
+     * prompt states the side of the PICTURE to draw on. No anatomy, no mirror,
+     * nothing left to infer.
+     */
+    const frameSideLine = (pose: number | null, half: "LEFT" | "RIGHT"): string => {
+      const back = isBackFacingPose(normalizedPanelQa.modelGender, pose);
+      const poseLabel = pose ? `Pose ${pose}` : "that pose";
+      return back
+        ? `  • ${half} half (${poseLabel}, seen from BEHIND): "the wearer's left" = the LEFT-hand side of that half; "the wearer's right" = the RIGHT-hand side.`
+        : `  • ${half} half (${poseLabel}, facing the camera): "the wearer's left" = the RIGHT-hand side of that half; "the wearer's right" = the LEFT-hand side.`;
+    };
+    /* One concrete detail from the spec, named, so the mapping is not abstract. */
+    const firstSidedDetail = (() => {
+      for (const line of itemSpecText.split("\n")) {
+        const m = /^\s*\d+\.\s*[A-Z/ ]+:\s*([^,.]+)[^]*?the wearer's (left|right)/.exec(line);
+        if (m) return { what: m[1].trim().toLowerCase(), side: m[2].toLowerCase() as "left" | "right" };
+      }
+      return null;
+    })();
+    const wearerSideFrameLines = /the wearer's (left|right)/i.test(itemSpecText)
+      ? [
+          "- WHICH SIDE OF THE PICTURE TO DRAW ON. Every \"the wearer's left\" and \"the wearer's right\" above has already been converted for you, per frame, below. Use these lines literally and do not work it out again. In particular do NOT read the word \"left\" as the left of the picture — read the mapping:",
+          frameSideLine(normalizedPanelQa.poseA ?? null, "LEFT"),
+          frameSideLine(normalizedPanelQa.poseB ?? null, "RIGHT"),
+          ...(firstSidedDetail
+            ? [
+                `  So the ${firstSidedDetail.what} (spec says the wearer's ${firstSidedDetail.side}) goes on the ${
+                  isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA ?? null) ===
+                  (firstSidedDetail.side === "left")
+                    ? "LEFT"
+                    : "RIGHT"
+                }-hand side of the LEFT half, and on the ${
+                  isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB ?? null) ===
+                  (firstSidedDetail.side === "left")
+                    ? "LEFT"
+                    : "RIGHT"
+                }-hand side of the RIGHT half.`,
+              ]
+            : []),
+          "  It is the same hip, shoulder or leg of the same body in every frame of this run — it changes side of the picture only because the model has turned around. Never mirror it for any other reason.",
+        ]
+      : [];
+
     const sideWordSource = `${itemSpecText}\n${typeof prompt === "string" ? prompt : ""}`;
     const sidePlacementLines = /\b(inner|inside|medial|inseam|outer|lateral|concealed|hidden|invisible|left|right)\b/i.test(
       sideWordSource,
     )
       ? [
           "- SIDE WORDS ARE GEOMETRY, NOT VISIBILITY. INNER / INSIDE / MEDIAL / INSEAM means the side of that limb which FACES THE OTHER LIMB, on the OUTER SURFACE of the fabric, fully visible in the picture. With both legs in frame, two inner details are the pair CLOSEST TOGETHER — one each side of the gap between the legs, mirroring each other across it. The far edge of each leg, the edge nearest the edge of the picture, carries NOTHING. Check it before you finish: if the two details sit far apart, one near each outside edge of the frame, they are on the wrong sides and must be mirrored inward. OUTER / LATERAL means that far edge, and a line saying INNER never puts anything there.",
-          "- LEFT AND RIGHT BELONG TO THE MODEL, NEVER TO THE CAMERA. \"Wearer's left\", or a bare \"left\" in any line above, means the side of the model's own body — their left hand, their left hip. In a frame where the model FACES the camera this appears on the RIGHT of the picture, and the model's right appears on the LEFT of the picture; in a frame shot from BEHIND the two agree. So a chain on the wearer's left hip hangs on the right-hand side of a front-facing frame and on the left-hand side of a back-facing frame, and it stays on that same hip in every frame of the run. Never mirror a detail from one frame to the next.",
+          ...wearerSideFrameLines,
           "- CONCEALED / HIDDEN / INVISIBLE describes a FINISH, never a reason to leave something out or move it. A concealed zip is present and visible as a slim closed seam with its small pull, simply with no exposed teeth. Draw it where its line says, at the size its line says.",
           "- Where this garment places a detail differently from how such garments are usually made, THIS garment wins. An ankle zip on the outer leg, a crease down the front, a pocket where there is none: the convention is not evidence, and copying it is an invention.",
         ]
