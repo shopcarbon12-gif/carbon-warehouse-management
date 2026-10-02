@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Save, Smartphone, Upload } from "lucide-react";
 
 import { ItemPicker, type PickedItem, type PickedSize } from "./item-picker";
+import { MeasurePoints, type HandleMap } from "./measure-points";
 
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
@@ -137,6 +138,18 @@ function maskBounds(mask: ShirtMask) {
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+const POM_COLOR: Record<string, string> = {
+  chest: "#f59e0b", waist: "#a855f7", hip: "#14b8a6", length: "#3b82f6",
+  hem: "#ec4899", shoulder: "#eab308", sleeve: "#f97316",
+  sleeveInseam: "#fb923c", bicep: "#fbbf24", cuff: "#f472b6", armhole: "#c084fc",
+  inseam: "#22c55e", outseam: "#3b82f6", legOpening: "#ec4899", rise: "#a855f7",
+  thigh: "#2dd4bf", knee: "#38bdf8", calf: "#818cf8",
+  neck: "#60a5fa", neckDrop: "#93c5fd", collarHeight: "#a5b4fc",
+  shoulderSlope: "#fcd34d", waistbandHeight: "#f9a8d4",
+  frontPocketOpening: "#fda4af", backPocketWidth: "#fca5a5", backPocketLength: "#f87171",
+};
+const colorForPom = (key: string) => POM_COLOR[key] ?? "#38bdf8";
+
 const fmt = (cm: number) => `${cm.toFixed(1)} cm`;
 const fmtIn = (cm: number) => `${(cm / 2.54).toFixed(1)}"`;
 const signed = (cm: number) => `${cm >= 0 ? "+" : "−"}${Math.abs(cm).toFixed(1)}`;
@@ -157,9 +170,13 @@ export function SizeGradingWorkspace() {
    *  moves it by tapping, which is the only reliable way to say which of the
    *  things in a warehouse photo is the one being measured. */
   const [seed, setSeed] = useState<Point>({ x: 0, y: 0 });
-  const [tapped, setTapped] = useState(false);
   const [result, setResult] = useState<GarmentResult | null>(null);
   const [mask, setMask] = useState<ShirtMask | null>(null);
+  /* The measurement itself: two movable ends per point. The photo is squared
+     up against the printed target, so any two points on it ARE a measurement —
+     the segmentation only proposes where they start. */
+  const [handles, setHandles] = useState<HandleMap>({});
+  const [selectedPom, setSelectedPom] = useState<string | null>(null);
   /** How sharp the garment is in this photo, and whether it can be trusted. */
   const [focus, setFocus] = useState<FocusReading | null>(null);
   /** The operator has seen the softness warning and wants to save regardless. */
@@ -247,13 +264,63 @@ export function SizeGradingWorkspace() {
     return () => window.clearTimeout(id);
   }, [image, pxPerCm, bias, seed, typeOverride, rectPxPerCm]);
 
-  /** The points this garment actually produced, in the family's own order. */
-  const readings = useMemo(() => {
-    if (!result?.ok) return [];
-    return POMS_FOR[result.type]
-      .map((k) => ({ key: k, cm: result.points[k]?.cm }))
-      .filter((r): r is { key: PomKey; cm: number } => typeof r.cm === "number");
-  }, [result]);
+  /** Every point this family is measured on, whatever the photo managed. */
+  const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || "top") as GarmentType;
+  const pomKeys = useMemo(() => [...POMS_FOR[activeType]], [activeType]);
+
+  /* Seed the ends from what the photo found, and give everything else a
+     sensible place to be dragged from. A point with no proposal — a neck
+     opening on a flat garment — still gets a line, because "place it yourself"
+     is a usable answer and "nothing on screen" is not. */
+  useEffect(() => {
+    if (!image) {
+      setHandles({});
+      setSelectedPom(null);
+      return;
+    }
+    setHandles((prev) => {
+      const next: HandleMap = {};
+      pomKeys.forEach((key, i) => {
+        const kept = prev[key];
+        if (kept?.set) {
+          next[key] = kept;
+          return;
+        }
+        const line = result?.ok ? result.points[key]?.line : undefined;
+        if (line) {
+          next[key] = { a: { ...line.a }, b: { ...line.b }, set: true };
+          return;
+        }
+        // Staggered across the middle so unplaced lines do not stack up.
+        const y = image.height * (0.3 + 0.045 * (i % 9));
+        next[key] = {
+          a: { x: image.width * 0.34, y },
+          b: { x: image.width * 0.66, y },
+          set: false,
+        };
+      });
+      return next;
+    });
+    setSelectedPom((cur) => (cur && pomKeys.includes(cur as PomKey) ? cur : (pomKeys[0] ?? null)));
+  }, [image, result, pomKeys]);
+
+  const cmOf = useCallback(
+    (key: string): number | null => {
+      const h = handles[key];
+      if (!h || !pxPerCm) return null;
+      return Math.hypot(h.b.x - h.a.x, h.b.y - h.a.y) / pxPerCm;
+    },
+    [handles, pxPerCm],
+  );
+
+  /** What will be saved: every point whose ends have been settled. */
+  const readings = useMemo(
+    () =>
+      pomKeys
+        .map((key) => ({ key, cm: handles[key]?.set ? cmOf(key) : null }))
+        .filter((r): r is { key: PomKey; cm: number } => typeof r.cm === "number" && r.cm > 0),
+    [pomKeys, handles, cmOf],
+  );
 
   /* The size chart is a tee chart, so grading only applies to a top. Everything
      else is measured and reported — inventing a chart for it would be worse
@@ -503,7 +570,6 @@ export function SizeGradingWorkspace() {
         setTarget(det ?? { quad: useQuad, confidence: 1, tiltPercent: 0 });
         const centre = { x: rect.width / 2, y: rect.height / 2 };
         setSeed(centre);
-        setTapped(false);
         return;
       }
     }
@@ -532,7 +598,6 @@ export function SizeGradingWorkspace() {
     setTarget(null);
     const centre = { x: data.width / 2, y: data.height / 2 };
     setSeed(centre);
-    setTapped(false);
   }, []);
 
   const loadFile = useCallback(async (file: File | undefined) => {
@@ -769,11 +834,12 @@ export function SizeGradingWorkspace() {
   }, [pickedItem]);
 
   const saveToItem = useCallback(async () => {
-    if (!pickedSize || !result?.ok) return;
+    if (!pickedSize || !readings.length) return;
+    /* What is saved is what is ON SCREEN — the lines as they stand after any
+       dragging — not what the segmentation originally proposed. Saving the
+       proposal would quietly discard every correction the operator made. */
     const pointsCm: Record<string, number> = {};
-    for (const [k, v] of Object.entries(result.points)) {
-      if (v) pointsCm[k] = Number(v.cm.toFixed(2));
-    }
+    for (const r of readings) pointsCm[r.key] = Number(r.cm.toFixed(2));
     setSaving(true);
     setError(null);
     try {
@@ -782,7 +848,7 @@ export function SizeGradingWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customSkuId: pickedSize.customSkuId,
-          garmentType: result.type,
+          garmentType: activeType,
           pointsCm,
           pxPerCm: pxPerCm ?? undefined,
           typeOverridden: Boolean(typeOverride),
@@ -797,7 +863,7 @@ export function SizeGradingWorkspace() {
     } finally {
       setSaving(false);
     }
-  }, [pickedSize, result, pxPerCm, typeOverride, view]);
+  }, [pickedSize, readings, activeType, pxPerCm, typeOverride, view]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!image) return;
@@ -832,7 +898,6 @@ export function SizeGradingWorkspace() {
     /* Not calibrating: the tap says which garment is being measured, and the
        colours around it become the model of what the garment looks like. */
     setSeed(p);
-    setTapped(true);
   };
 
   const saveCalibration = () => {
@@ -1161,12 +1226,28 @@ export function SizeGradingWorkspace() {
 
       <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2">
-          {image ? (
+          {image && (calibrating || tappingCorners) ? (
             <canvas
               ref={canvasRef}
               onClick={onCanvasClick}
-              className={`block h-auto w-full ${calibrating || tappingCorners ? "cursor-crosshair" : ""}`}
+              className="block h-auto w-full cursor-crosshair"
             />
+          ) : image && pxPerCm ? (
+            /* The measurement is the thing on screen now — no mask, no
+               sensitivity. Drag either end of a line and the number follows. */
+            <MeasurePoints
+              image={image}
+              pxPerCm={pxPerCm}
+              keys={pomKeys}
+              labelFor={(k) => pomLabel(k, view)}
+              colorFor={colorForPom}
+              handles={handles}
+              selected={selectedPom}
+              onSelect={setSelectedPom}
+              onChange={(key, next) => setHandles((h) => ({ ...h, [key]: next }))}
+            />
+          ) : image ? (
+            <canvas ref={canvasRef} className="block h-auto w-full" />
           ) : (
             <div className="flex min-h-64 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-[var(--wms-muted)]">
               <Camera className="h-8 w-8" />
@@ -1240,17 +1321,49 @@ export function SizeGradingWorkspace() {
                   </p>
                 ) : null}
 
-                <table className="mt-3 w-full text-sm">
-                  <tbody>
-                    {readings.map((r) => (
-                      <tr key={r.key} className="border-t border-[var(--wms-border)]">
-                        <td className="py-1.5 text-[var(--wms-muted)]">{pomLabel(r.key, view)}</td>
-                        <td className="py-1.5 text-right font-mono text-[var(--wms-fg)]">{fmtIn(r.cm)}</td>
-                        <td className="py-1.5 pl-3 text-right font-mono text-[var(--wms-muted)]">{fmt(r.cm)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {/* Every point of this family, whether the photo found it or
+                    not. Tap one to work on it; its line lights up on the photo
+                    with a grab handle at each end. A point with no number yet
+                    is not a failure, it is the next thing to place. */}
+                <ul className="mt-3 divide-y divide-[var(--wms-border)]">
+                  {pomKeys.map((key) => {
+                    const h = handles[key];
+                    const cm = h?.set ? cmOf(key) : null;
+                    const active = selectedPom === key;
+                    return (
+                      <li key={key}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPom(key)}
+                          className={`flex w-full items-center gap-2 py-1.5 text-left text-sm max-md:min-h-11 ${
+                            active ? "bg-[var(--wms-surface-elevated)]" : ""
+                          }`}
+                        >
+                          <span
+                            aria-hidden
+                            className="h-3 w-3 shrink-0 rounded-full"
+                            style={{ background: colorForPom(key), opacity: cm ? 1 : 0.3 }}
+                          />
+                          <span className={`min-w-0 flex-1 truncate ${active ? "font-semibold text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"}`}>
+                            {pomLabel(key, view)}
+                          </span>
+                          {cm ? (
+                            <>
+                              <span className="font-mono text-[var(--wms-fg)]">{fmtIn(cm)}</span>
+                              <span className="w-16 text-right font-mono text-xs text-[var(--wms-muted)]">{fmt(cm)}</span>
+                            </>
+                          ) : (
+                            <span className="font-mono text-xs text-[var(--wms-status-warning-fg)]">place it</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+                  Drag either end of the highlighted line on the photo. The number follows as you drag, and a
+                  magnifier shows what is under your finger.
+                </p>
                 <p className="mt-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
                   Flat measurements, taken across the garment as it lies — not doubled.
                   {focus && focus.verdict !== "soft" ? (
@@ -1294,7 +1407,7 @@ export function SizeGradingWorkspace() {
                   <button
                     type="button"
                     className="wms-btn-primary max-md:min-h-11"
-                    disabled={!pickedSize || saving || (focus?.verdict === "soft" && !allowSoft)}
+                    disabled={!pickedSize || saving || !readings.length || (focus?.verdict === "soft" && !allowSoft)}
                     onClick={() => void saveToItem()}
                     title={pickedSize ? undefined : "Choose the item and size first"}
                   >
@@ -1400,41 +1513,17 @@ export function SizeGradingWorkspace() {
           </div>
 
           {image ? (
-            <label className="flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
-              <span>
-                Green = what the app thinks the garment is{" "}
-                <span className="font-mono text-[var(--wms-muted)]">
-                  {bias === 0 ? "balanced" : bias > 0 ? `+${bias.toFixed(1)} generous` : `${bias.toFixed(1)} strict`}
-                </span>
-              </span>
-              {/* One honest control. The app compares every pixel against what
-                  the garment looks like and what the background looks like;
-                  this only shifts where the tie is broken. It is not a colour
-                  tolerance — that was the old control, and no setting of it was
-                  right for both a shaded fold and a nearby table. */}
-              <input
-                type="range"
-                min={-3}
-                max={3}
-                step={0.25}
-                value={bias}
-                onChange={(e) => setBias(Number(e.target.value))}
-              />
-              <span className="text-xs text-[var(--wms-muted)]">
-                <strong>Tap the middle of the garment in the photo.</strong> The colours around your tap become the
-                model of the garment; the edges of the frame become the model of the table and floor. Every pixel then
-                goes to whichever it resembles more.
-                {!tapped ? " Right now it is guessing from the centre of the frame." : ""}
-              </span>
-              <span className="text-xs text-[var(--wms-muted)]">
-                Drag RIGHT if part of the garment is missing from the green, LEFT if table or shadow is green.{" "}
-                {bias !== 0 ? (
-                  <button type="button" className="text-[var(--wms-accent)] underline" onClick={() => setBias(0)}>
-                    back to balanced
-                  </button>
-                ) : null}
-              </span>
-            </label>
+            <div className="flex flex-col gap-2 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
+              <p>
+                <strong>The app proposes each line; you have the last word.</strong> Nothing is measured from a mask
+                you have to supervise — drag an end if a line is in the wrong place, and leave it alone if it is not.
+              </p>
+              <p className="text-xs text-[var(--wms-muted)]">
+                The proposals land much closer when the garment is on a plain surface that contrasts with it — a roll
+                of white or black paper, or a felt mat, is the cheapest accuracy you can buy on this whole page. On a
+                patterned table expect to place more of them by hand.
+              </p>
+            </div>
           ) : null}
         </div>
       </div>
