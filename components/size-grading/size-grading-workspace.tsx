@@ -18,7 +18,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Crosshair, Loader2, RotateCcw, Ruler, Upload } from "lucide-react";
 
-import { DEFAULT_THRESHOLD, segmentShirt, type Point, type ShirtMask } from "@/lib/size-grading/measure";
+import { autoThreshold, segmentShirt, type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import {
   GARMENT_LABELS,
   POMS_FOR,
@@ -95,7 +95,11 @@ export function SizeGradingWorkspace() {
   const [image, setImage] = useState<ImageData | null>(null);
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
   const [calibRatio, setCalibRatio] = useState<number | null>(null);
-  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD);
+  /** null = chosen from the photo itself; a number = the operator took over. */
+  const [threshold, setThreshold] = useState<number | null>(null);
+  const [autoT, setAutoT] = useState(48);
+  /** Where the operator tapped to say "this is the garment". */
+  const [seed, setSeed] = useState<Point | null>(null);
   const [result, setResult] = useState<GarmentResult | null>(null);
   const [mask, setMask] = useState<ShirtMask | null>(null);
   /** Operator's override of the detected garment, when the shape fooled it. */
@@ -106,6 +110,9 @@ export function SizeGradingWorkspace() {
   const [refLengthCm, setRefLengthCm] = useState("27.94");
   const [calibPreset, setCalibPreset] = useState("letter-long");
   const [cameraOpen, setCameraOpen] = useState(false);
+  /** Null until the stream is open; false when the device gives us no focus control. */
+  const [canFocus, setCanFocus] = useState<boolean | null>(null);
+  const [focusing, setFocusing] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [labeledSize, setLabeledSize] = useState("");
@@ -128,13 +135,14 @@ export function SizeGradingWorkspace() {
     }
     setBusy(true);
     const id = window.setTimeout(() => {
-      const m = segmentShirt(image.data, image.width, image.height, threshold);
+      const t = threshold ?? autoT;
+      const m = segmentShirt(image.data, image.width, image.height, t, seed);
       setMask(m);
       setResult(measureGarment(m, pxPerCm, typeOverride || undefined));
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, threshold, typeOverride]);
+  }, [image, pxPerCm, threshold, autoT, seed, typeOverride]);
 
   /** The points this garment actually produced, in the family's own order. */
   const readings = useMemo(() => {
@@ -253,13 +261,13 @@ export function SizeGradingWorkspace() {
          not cost us the stream we already have. */
       try {
         const caps = track.getCapabilities?.() as MediaTrackCapabilities & { focusMode?: string[] };
-        const advanced: MediaTrackConstraintSet[] = [];
-        if (caps?.focusMode?.includes("continuous")) {
-          advanced.push({ focusMode: "continuous" } as MediaTrackConstraintSet);
+        const modes = caps?.focusMode ?? [];
+        setCanFocus(modes.length > 0);
+        if (modes.includes("continuous")) {
+          await track.applyConstraints({ advanced: [{ focusMode: "continuous" } as MediaTrackConstraintSet] });
         }
-        if (advanced.length) await track.applyConstraints({ advanced });
       } catch {
-        /* keep the stream as-is */
+        setCanFocus(false);
       }
       setCameraOpen(true);
       // The <video> mounts with the panel, so attach on the next frame.
@@ -275,11 +283,44 @@ export function SizeGradingWorkspace() {
     }
   }, []);
 
+  /**
+   * Focus on the point the operator tapped.
+   *
+   * Continuous autofocus alone is not enough: pointed at a plain table it has
+   * nothing to lock onto and happily settles on the floor or the far wall, and
+   * a flat garment photographed out of focus has soft edges — which is the
+   * segmentation reading a blurred boundary and the measurement drifting by a
+   * centimetre or two. A tap gives it something to focus on.
+   */
+  const focusAt = useCallback(async (xNorm: number, yNorm: number) => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    setFocusing(true);
+    try {
+      const caps = track.getCapabilities?.() as MediaTrackCapabilities & {
+        focusMode?: string[];
+        pointsOfInterest?: unknown;
+      };
+      const advanced: MediaTrackConstraintSet[] = [];
+      if (caps?.pointsOfInterest) {
+        advanced.push({ pointsOfInterest: [{ x: xNorm, y: yNorm }] } as unknown as MediaTrackConstraintSet);
+      }
+      const modes = caps?.focusMode ?? [];
+      if (modes.includes("single-shot")) advanced.push({ focusMode: "single-shot" } as MediaTrackConstraintSet);
+      else if (modes.includes("continuous")) advanced.push({ focusMode: "continuous" } as MediaTrackConstraintSet);
+      if (advanced.length) await track.applyConstraints({ advanced });
+    } catch {
+      /* the device refused — the preview is still usable */
+    }
+    window.setTimeout(() => setFocusing(false), 700);
+  }, []);
+
   const closeCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOpen(false);
+    setCanFocus(null);
   }, []);
 
   /* A live camera left running is a hot phone and a privacy light nobody asked
@@ -303,7 +344,11 @@ export function SizeGradingWorkspace() {
       if (!ctx) throw new Error("Canvas unavailable");
       ctx.drawImage(bmp, 0, 0, w, h);
       bmp.close();
-      setImage(ctx.getImageData(0, 0, w, h));
+      const data = ctx.getImageData(0, 0, w, h);
+      setImage(data);
+      setAutoT(autoThreshold(data.data, w, h));
+      setThreshold(null);
+      setSeed(null);
       setCalibPts([]);
     } catch {
       setError("Could not read that image.");
@@ -315,6 +360,10 @@ export function SizeGradingWorkspace() {
     const video = videoRef.current;
     const track = streamRef.current?.getVideoTracks()[0];
     if (!video || !track) return;
+    /* Give autofocus a moment to settle before the shutter — capturing the
+       instant the button is pressed is how a soft frame gets measured. */
+    await focusAt(0.5, 0.5);
+    await new Promise((r) => setTimeout(r, 650));
     try {
       const Ctor = (window as unknown as { ImageCapture?: new (t: MediaStreamTrack) => { takePhoto: () => Promise<Blob> } })
         .ImageCapture;
@@ -336,16 +385,21 @@ export function SizeGradingWorkspace() {
     const blob = await new Promise<Blob | null>((r) => off.toBlob(r, "image/jpeg", 0.95));
     closeCamera();
     if (blob) await loadFile(new File([blob], "capture.jpg", { type: "image/jpeg" }));
-  }, [closeCamera, loadFile]);
+  }, [closeCamera, loadFile, focusAt]);
 
   const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!calibrating || !image) return;
+    if (!image) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const p = {
       x: ((e.clientX - rect.left) / rect.width) * image.width,
       y: ((e.clientY - rect.top) / rect.height) * image.height,
     };
-    setCalibPts((pts) => (pts.length >= 2 ? [p] : [...pts, p]));
+    if (calibrating) {
+      setCalibPts((pts) => (pts.length >= 2 ? [p] : [...pts, p]));
+      return;
+    }
+    /* Not calibrating: the tap says which shape is the garment. */
+    setSeed(p);
   };
 
   const saveCalibration = () => {
@@ -472,19 +526,37 @@ export function SizeGradingWorkspace() {
             playsInline
             muted
             autoPlay
-            className="block h-auto w-full rounded"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              void focusAt((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
+            }}
+            className={`block h-auto w-full rounded ${canFocus ? "cursor-crosshair" : ""} ${
+              focusing ? "opacity-90 outline outline-2 outline-[var(--wms-accent)]" : ""
+            }`}
           />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button type="button" className="wms-btn-primary max-md:min-h-11" onClick={() => void shoot()}>
-              <Camera className="h-4 w-4" /> Capture
+              <Camera className="h-4 w-4" /> {focusing ? "Focusing…" : "Capture"}
             </button>
             <button type="button" className="wms-btn max-md:min-h-11" onClick={closeCamera}>
               Cancel
             </button>
-            <span className="font-mono text-xs text-[var(--wms-muted)]">
-              Rear camera, full sensor resolution, continuous focus. Hold the phone level and square above the garment.
-            </span>
+            <button
+              type="button"
+              className="wms-btn max-md:min-h-11"
+              onClick={() => {
+                closeCamera();
+                cameraInputRef.current?.click();
+              }}
+            >
+              Use the phone&apos;s camera app
+            </button>
           </div>
+          <p className="mt-2 font-mono text-xs text-[var(--wms-muted)]">
+            {canFocus === false
+              ? "This device gives the browser no focus control — if the photo comes out soft, use the phone's camera app button, which focuses properly."
+              : "Tap the garment in the preview to focus there, then Capture. Hold the phone level and square above it."}
+          </p>
         </div>
       ) : null}
 
@@ -653,19 +725,30 @@ export function SizeGradingWorkspace() {
             <label className="flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 text-sm text-[var(--wms-fg)]">
               <span>
                 Green = what the app thinks the garment is{" "}
-                <span className="font-mono text-[var(--wms-muted)]">{threshold}</span>
+                <span className="font-mono text-[var(--wms-muted)]">
+                  {threshold ?? autoT}
+                  {threshold === null ? " auto" : ""}
+                </span>
               </span>
               <input
                 type="range"
                 min={15}
                 max={120}
-                value={threshold}
+                value={threshold ?? autoT}
                 onChange={(e) => setThreshold(Number(e.target.value))}
               />
               <span className="text-xs text-[var(--wms-muted)]">
-                Drag until the green covers the garment and nothing else. Drag LEFT if part of the garment is missing
-                (its colour is close to the table); drag RIGHT if shadows or table are green. On good contrast you
-                should not need to touch this.
+                <strong>Green on the wrong thing? Tap the garment in the photo</strong> — that picks the shape under
+                your finger instead of the biggest one.
+              </span>
+              <span className="text-xs text-[var(--wms-muted)]">
+                The level is chosen from the photo. Drag LEFT if part of the garment is missing from the green, RIGHT
+                if shadow or table is green.{" "}
+                {threshold !== null ? (
+                  <button type="button" className="text-[var(--wms-accent)] underline" onClick={() => setThreshold(null)}>
+                    back to auto
+                  </button>
+                ) : null}
               </span>
             </label>
           ) : null}

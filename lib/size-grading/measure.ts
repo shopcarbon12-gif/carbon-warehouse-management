@@ -57,29 +57,81 @@ export type MeasureResult =
 /** Distance (RGB, 0–441) a pixel must be from the background to count as shirt. */
 export const DEFAULT_THRESHOLD = 48;
 
-export function segmentShirt(
+/**
+ * How far each pixel sits from the modelled background, 0–441.
+ * Kept separate so the threshold can be chosen from the distribution rather
+ * than guessed, and so the same distances are reused for the mask.
+ */
+function backgroundDistance(
   rgba: Uint8ClampedArray | Uint8Array,
   width: number,
   height: number,
-  threshold = DEFAULT_THRESHOLD,
-): ShirtMask {
+): Uint16Array {
   const bg = fitBackground(rgba, width, height);
-  const n = width * height;
-  let fg: Uint8Array = new Uint8Array(n);
-  const t2 = threshold * threshold;
+  const out = new Uint16Array(width * height);
   for (let y = 0, i = 0; y < height; y++) {
     for (let x = 0; x < width; x++, i++) {
       const p = i * 4;
       const dr = rgba[p] - (bg[0][0] + bg[0][1] * x + bg[0][2] * y);
       const dg = rgba[p + 1] - (bg[1][0] + bg[1][1] * x + bg[1][2] * y);
       const db = rgba[p + 2] - (bg[2][0] + bg[2][1] * x + bg[2][2] * y);
-      fg[i] = dr * dr + dg * dg + db * db > t2 ? 1 : 0;
+      out[i] = Math.round(Math.sqrt(dr * dr + dg * dg + db * db));
     }
   }
+  return out;
+}
+
+/**
+ * Pick the cut between "background" and "garment" from this photo's own
+ * distances (Otsu), instead of a fixed number.
+ *
+ * A fixed 48 is right for a navy shirt on a white table and wrong for a cream
+ * shirt on a grey one — and when it is wrong the green covers the wrong thing,
+ * which is exactly the failure an operator sees. Clamped, because a photo with
+ * no garment in it would otherwise produce a meaningless split.
+ */
+export function autoThreshold(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+): number {
+  const dist = backgroundDistance(rgba, width, height);
+  const BINS = 256;
+  const hist = new Float64Array(BINS);
+  for (let i = 0; i < dist.length; i++) hist[Math.min(BINS - 1, dist[i])]++;
+  let total = 0, sum = 0;
+  for (let b = 0; b < BINS; b++) { total += hist[b]; sum += b * hist[b]; }
+  let wB = 0, sumB = 0, best = 0, bestVar = -1;
+  for (let b = 0; b < BINS; b++) {
+    wB += hist[b];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += b * hist[b];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > bestVar) { bestVar = between; best = b; }
+  }
+  return Math.max(15, Math.min(120, best));
+}
+
+export function segmentShirt(
+  rgba: Uint8ClampedArray | Uint8Array,
+  width: number,
+  height: number,
+  threshold = DEFAULT_THRESHOLD,
+  /** Pixel the operator tapped on the garment — picks that shape, not the biggest. */
+  seed?: Point | null,
+): ShirtMask {
+  const dist = backgroundDistance(rgba, width, height);
+  const n = width * height;
+  let fg: Uint8Array = new Uint8Array(n);
+  for (let i = 0; i < n; i++) fg[i] = dist[i] > threshold ? 1 : 0;
   const r = Math.max(1, Math.round(Math.min(width, height) / 300));
   fg = erode(dilate(fg, width, height, r), width, height, r); // close: seal seams/creases
   fg = dilate(erode(fg, width, height, r), width, height, r); // open: drop speckle
-  fg = largestComponent(fg, width, height);
+  fg = componentFor(fg, width, height, seed ?? null);
   fg = fillHoles(fg, width, height);
   let area = 0;
   for (let i = 0; i < n; i++) area += fg[i];
@@ -328,6 +380,56 @@ function morph(src: Uint8Array, w: number, h: number, r: number, hit: 0 | 1): Ui
       }
       out[y * w + x] = v;
     }
+  }
+  return out;
+}
+
+/**
+ * The shape the operator pointed at, or the biggest one when they have not.
+ *
+ * "Biggest" is only a guess at which shape is the garment. A folded backdrop,
+ * a shadow under the table edge or a second item in frame can all outrank it,
+ * and then every measurement is of the wrong object. One tap settles it, so
+ * the tap wins whenever there is one.
+ */
+function componentFor(src: Uint8Array, w: number, h: number, seed: Point | null): Uint8Array {
+  if (seed) {
+    const sx = Math.max(0, Math.min(w - 1, Math.round(seed.x)));
+    const sy = Math.max(0, Math.min(h - 1, Math.round(seed.y)));
+    // Search outward a little: a tap can land on a print or a seam that the
+    // threshold dropped, and the operator means the garment around it.
+    const maxR = Math.max(4, Math.round(Math.min(w, h) * 0.03));
+    for (let r = 0; r <= maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = sx + dx, y = sy + dy;
+          if (x < 0 || y < 0 || x >= w || y >= h) continue;
+          if (src[y * w + x]) return floodFrom(src, w, h, y * w + x);
+        }
+      }
+    }
+  }
+  return largestComponent(src, w, h);
+}
+
+/** The connected shape containing one pixel. */
+function floodFrom(src: Uint8Array, w: number, h: number, start: number): Uint8Array {
+  const out = new Uint8Array(w * h);
+  const stack = new Int32Array(w * h);
+  let sp = 0;
+  stack[sp++] = start;
+  out[start] = 1;
+  while (sp) {
+    const p = stack[--sp];
+    const x = p % w;
+    const visit = (q: number) => {
+      if (src[q] && !out[q]) { out[q] = 1; stack[sp++] = q; }
+    };
+    if (x > 0) visit(p - 1);
+    if (x < w - 1) visit(p + 1);
+    if (p >= w) visit(p - w);
+    if (p < w * (h - 1)) visit(p + w);
   }
   return out;
 }
