@@ -429,7 +429,8 @@ export function SizeGradingWorkspace() {
         const t = reading.garment as GarmentType;
         setAiType(["top", "trousers", "shorts", "dress", "skirt", "onepiece"].includes(t) ? t : null);
         setAiLines(chosen.lines);
-        setFindHow(`${chosen.how} — the phone's own cut-out was rejected: ${quickWhy}`);
+        setFindHow(chosen.how);
+        void quickWhy; // already part of chosen.how
         console.info(`[size-grading] AI read "${reading.description ?? reading.garment}" in ${secs()}s — ${chosen.how}`);
         if (chosen.mask) setModelMask(chosen.mask);
       })
