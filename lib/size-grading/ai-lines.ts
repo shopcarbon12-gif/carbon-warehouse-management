@@ -274,13 +274,17 @@ export function maskFromAi(px: Uint8ClampedArray, w: number, h: number, pxPerCm:
   const m = 0.04 * 1000;
   const x0 = Math.max(0, Math.floor(((box[0] - m) / 1000) * w)), y0 = Math.max(0, Math.floor(((box[1] - m) / 1000) * h));
   const x1 = Math.min(w - 1, Math.ceil(((box[2] + m) / 1000) * w)), y1 = Math.min(h - 1, Math.ceil(((box[3] + m) / 1000) * h));
-  // The rim of the grown box is surroundings, all the way round.
-  const step = Math.max(4, Math.round(pxPerCm));
-  for (let x = x0; x <= x1; x += step) for (const y of [y0, y1]) { const c = sample(px, w, h, x, y, 1); if (c) ground.push(c); }
-  for (let y = y0; y <= y1; y += step) for (const x of [x0, x1]) { const c = sample(px, w, h, x, y, 1); if (c) ground.push(c); }
-  // Drop surroundings samples that are really fabric (a box rim can touch a sleeve).
+  /* The rim of the grown box is surroundings — mostly. The model draws the box
+     tight, and where its edge crosses the garment (it ran across both hems) a
+     rim sample is fabric in a deeper shade, which taught the cut that the hems
+     were not leggings. So a rim sample anywhere near a fabric colour is
+     dropped; the model's own "off" points still say what the table looks like. */
   const fabricLike = (c: Rgb) => Math.min(...fabric.map((g) => dist(c, g)));
-  const bg = ground.filter((c) => fabricLike(c) > 25);
+  const rim: Rgb[] = [];
+  const step = Math.max(4, Math.round(pxPerCm));
+  for (let x = x0; x <= x1; x += step) for (const y of [y0, y1]) { const c = sample(px, w, h, x, y, 1); if (c) rim.push(c); }
+  for (let y = y0; y <= y1; y += step) for (const x of [x0, x1]) { const c = sample(px, w, h, x, y, 1); if (c) rim.push(c); }
+  const bg = [...ground.filter((c) => fabricLike(c) > 25), ...rim.filter((c) => fabricLike(c) > 60)];
   if (!bg.length) return null;
 
   /* Hundreds of samples, most of them near-duplicates: comparing every pixel

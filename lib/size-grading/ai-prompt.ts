@@ -56,7 +56,7 @@ const TYPE_WORDS: Record<GarmentType, string> = {
 export const AI_GRID_STEP = 100; // grid labelled every 100 on a 0–1000 scale
 
 export function buildAiPrompt(keys: PomKey[], type: GarmentType | null, view: "front" | "back"): string {
-  const pts = keys.map((k) => `- ${k}: ${HINT[k] ?? k}.`).join("\n");
+  const pts = keys.length ? keys.map((k) => `- ${k}: ${HINT[k] ?? k}.`).join("\n") : "(none — return an empty object)";
   return `You are a garment technologist measuring a garment laid flat, photographed from above and squared up to a true top-down view.
 A printed calibration sheet (a grey rectangular ring on white paper) is in the photo: it is NOT the garment. Tables, floors, paper, fabric scraps, tools and hands are NOT the garment. Measure only the ONE main garment.
 ${type ? `It is ${TYPE_WORDS[type]}, lying ${view} side up.` : `It is lying ${view} side up.`}

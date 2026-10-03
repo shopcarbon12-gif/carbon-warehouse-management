@@ -4,7 +4,7 @@
  */
 import { drawAiGrid } from "./ai-grid";
 import { aiLinesOnMask, disagreesWithAi, maskFromAi, snapAiLines, type AiReading } from "./ai-lines";
-import { ALL_POMS, type GarmentType, type PomKey } from "./garment";
+import { ALL_POMS, POM_SOURCE, type GarmentType, type PomKey } from "./garment";
 import type { Segment, ShirtMask } from "./measure";
 import { cutSheet } from "./model-segment";
 import { garmentCheck } from "./find-garment";
@@ -15,10 +15,15 @@ const SIDE_ONLY: Record<"front" | "back", ReadonlySet<string>> = {
   back: new Set(["frontPocketOpening"]),
 };
 
-/** Every point that can exist on this side — the family may not be known yet. */
+/**
+ * The points the AI is asked to place: only those the outline cannot measure
+ * (waistband height, pockets, neck…). Everything else is measured off the
+ * cut-out, square across the garment — asking the AI for those lines too cost
+ * two-thirds of every call and they were the lines it got wrong.
+ */
 export function aiKeysFor(type: GarmentType | null, view: "front" | "back", known: PomKey[]): PomKey[] {
-  if (type) return known;
-  return ALL_POMS.filter((k) => !SIDE_ONLY[view].has(k));
+  const pool = type ? known : ALL_POMS.filter((k) => !SIDE_ONLY[view].has(k));
+  return pool.filter((k) => POM_SOURCE[k] === "manual");
 }
 
 export async function readWithAi(
@@ -88,53 +93,16 @@ export function chooseWithAi(
 }
 
 /**
- * Which line each point is measured on.
- *
- * Measured on the owner's photos, two of the same leggings on different
- * tables: the outline's rows were consistent for the waist, hip, thigh and
- * the seams (they are built from the crotch it finds), and wrong on a leg
- * lying at an angle — a row cuts the hem's pointed corner (4.2 cm for a 10 cm
- * hem). The AI's lines run square across the leg, so for the lower leg and
- * the sleeve they are the better line once snapped onto the cut-out. For
- * points the outline cannot see at all (waistband height, pockets, neck) the
- * AI's line is the only one.
+ * Which line each point is measured on: the outline's, measured off the
+ * cut-out — widths square across the leg, seams to the hem's corners — and the
+ * AI's only for the points the outline cannot see.
  */
-const AI_FIRST = new Set<string>(["knee", "calf", "legOpening", "bicep", "cuff", "sleeve", "sleeveInseam"]);
-
 export function mergeLines(
   outline: Partial<Record<PomKey, { line: Segment }>> | null,
   ai: Partial<Record<PomKey, Segment>> | null,
 ): Partial<Record<PomKey, Segment>> {
   const out: Partial<Record<PomKey, Segment>> = {};
-  const keys = new Set<string>([...Object.keys(outline ?? {}), ...Object.keys(ai ?? {})]);
-  const len = (l: Segment | undefined) => (l ? Math.hypot(l.b.x - l.a.x, l.b.y - l.a.y) : 0);
-  /* A leg narrows from the thigh down. An AI line below the thigh that comes
-     out wider than the thigh has snapped across something else — on one run
-     a knee read 19 cm against a 13.5 cm thigh — so the outline's line is used. */
-  const thigh = len(outline?.thigh?.line ?? ai?.thigh);
-  const BELOW_THIGH = new Set(["knee", "calf", "legOpening"]);
-  const usedAi = new Set<string>();
-  for (const k of keys as Set<PomKey>) {
-    const o = outline?.[k]?.line;
-    let a = ai?.[k];
-    if (a && BELOW_THIGH.has(k) && thigh && len(a) > thigh * 1.05) a = undefined;
-    const pick = AI_FIRST.has(k) ? (a ?? o) : (o ?? a);
-    if (pick) out[k] = { a: { ...pick.a }, b: { ...pick.b } };
-    if (pick && pick === a) usedAi.add(k);
-  }
-  /* The seams end at the hem's corners. When the hem is the AI's line (square
-     across an angled leg), the outline's seams end on the row's pointed corner
-     instead — so their bottom ends move to the hem line's nearer end. */
-  const hem = usedAi.has("legOpening") ? out.legOpening : undefined;
-  if (hem) {
-    for (const k of ["inseam", "outseam"] as const) {
-      const s = out[k];
-      if (!s || !outline?.[k]) continue;
-      const lowEnd = s.a.y > s.b.y ? "a" : "b";
-      const p = s[lowEnd];
-      const near = Math.hypot(hem.a.x - p.x, hem.a.y - p.y) <= Math.hypot(hem.b.x - p.x, hem.b.y - p.y) ? hem.a : hem.b;
-      s[lowEnd] = { ...near };
-    }
-  }
+  for (const [k, p] of Object.entries(outline ?? {})) if (p) out[k as PomKey] = { a: { ...p.line.a }, b: { ...p.line.b } };
+  for (const [k, l] of Object.entries(ai ?? {})) if (l && !out[k as PomKey]) out[k as PomKey] = { a: { ...l.a }, b: { ...l.b } };
   return out;
 }

@@ -28,7 +28,7 @@ import { detectTarget, rectify } from "@/lib/size-grading/target";
 import { buildAiPrompt } from "@/lib/size-grading/ai-prompt";
 import { drawAiGrid } from "@/lib/size-grading/ai-grid";
 import { type AiReading } from "@/lib/size-grading/ai-lines";
-import { chooseWithAi, mergeLines } from "@/lib/size-grading/ai-client";
+import { aiKeysFor, chooseWithAi, mergeLines } from "@/lib/size-grading/ai-client";
 import { findGarment, type Runner } from "@/lib/size-grading/find-garment";
 import { measureGarment, pomsFor } from "@/lib/size-grading/garment";
 import path from "node:path";
@@ -75,28 +75,49 @@ async function read(client: OpenAI, file: string) {
   const rect = rectify(src, png.width, png.height, det.quad, { maxPx: 1400, upright: true })!;
   const gridded = drawAiGrid(rect.data, rect.width, rect.height);
   const image = `data:image/png;base64,${PNG.sync.write({ width: rect.width, height: rect.height, data: Buffer.from(gridded) }).toString("base64")}`;
-  const keys = pomsFor("trousers", "front");
-  const t = Date.now();
-  // LOAD reuses a saved reading, to work on the snapping without new AI calls.
-  const saved = process.env.LOAD ? `${process.env.LOAD}-${file.split("/").pop()}.json` : "";
-  const reply = saved && fs.existsSync(saved) ? { output_text: fs.readFileSync(saved, "utf8") } : await client.responses.create({
-    model: process.env.SIZE_GRADING_AI_MODEL || "gpt-5.5",
-    reasoning: { effort: "low" },
-    text: { format: { type: "json_object" } },
-    input: [{ role: "user", content: [
-      { type: "input_text", text: buildAiPrompt(keys, "trousers", "front") },
-      { type: "input_image", image_url: image, detail: "high" },
-    ] }],
-  });
-  const ai = JSON.parse(reply.output_text) as AiReading;
-  if (process.env.DUMP) fs.writeFileSync(`${process.env.DUMP}-${file.split("/").pop()}.json`, JSON.stringify(ai));
-  check("the AI reads it as trousers", ai.garment === "trousers", `${ai.description ?? ""} in ${((Date.now() - t) / 1000).toFixed(1)}s`);
-  // Exactly what the app does with the reading: judge the quick cut-out, or cut it out from the AI's seeds.
-  const quick = await findGarment(await runner(), { src: { data: src, width: png.width, height: png.height }, picture: rect.data, quad: det.quad, frame: rect.frame, quickOnly: true });
-  const chosen = chooseWithAi(ai, quick.mask, rect, rect.frame, { width: png.width, height: png.height }, det.quad);
-  check("a cut-out holds up", !!chosen.mask, chosen.how);
+  const runQuick = () =>
+    findGarment(quickRunner!, { src: { data: src, width: png.width, height: png.height }, picture: rect.data, quad: det.quad, frame: rect.frame, quickOnly: true });
+  await runner();
+  // As the app: the phone first; the AI only when its cut-out fails its checks.
+  const quick = await runQuick();
+  const needsAi = !(quick.mask && !quick.rejected);
+  check(needsAi ? "the phone's cut-out is rejected → AI" : "the phone finds it alone → no AI call", true,
+    needsAi ? (quick.mask ? quick.rejected ?? "" : quick.why) : `${Math.round(quick.cm2)} cm²`);
+  let ai: AiReading = { garment: "trousers", on: [], off: [], lines: {} };
+  let chosen: { mask: typeof quick.mask; how: string; lines: Record<string, { a: { x: number; y: number }; b: { x: number; y: number } }> } =
+    { mask: quick.mask, how: "phone only", lines: {} };
+  if (needsAi) {
+    const keys = aiKeysFor("trousers", "front", pomsFor("trousers", "front"));
+    const t = Date.now();
+    // LOAD reuses a saved reading, to work on the snapping without new AI calls.
+    const saved = process.env.LOAD ? `${process.env.LOAD}-${file.split("/").pop()}.json` : "";
+    const model = process.env.SIZE_GRADING_AI_MODEL || "gpt-5.4";
+    const reply = saved && fs.existsSync(saved) ? { output_text: fs.readFileSync(saved, "utf8") } : await client.responses.create({
+      model,
+      reasoning: { effort: (process.env.EFFORT || "none") as "none" },
+      text: { format: { type: "json_object" } },
+      input: [{ role: "user", content: [
+        { type: "input_text", text: buildAiPrompt(keys, "trousers", "front") },
+        { type: "input_image", image_url: image, detail: (process.env.DETAIL || "high") as "high" },
+      ] }],
+    });
+    if ("usage" in reply && reply.usage) {
+      const u = reply.usage;
+      // $ per million tokens, in / out (OpenAI list prices, October 2026).
+      const PRICE: Record<string, [number, number]> = { "gpt-5.5": [5, 30], "gpt-5.4": [2.5, 15], "gpt-5.4-mini": [0.75, 4.5] };
+      const [pi, po] = PRICE[model] ?? [5, 30];
+      console.log(`  cost: ${u.input_tokens} in + ${u.output_tokens} out = ${((u.input_tokens * pi + u.output_tokens * po) / 1e4).toFixed(2)}¢`);
+    }
+    ai = JSON.parse(reply.output_text) as AiReading;
+    if (process.env.DUMP) fs.writeFileSync(`${process.env.DUMP}-${file.split("/").pop()}.json`, JSON.stringify(ai));
+    check("the AI reads it as trousers", ai.garment === "trousers", `${ai.description ?? ""} in ${((Date.now() - t) / 1000).toFixed(1)}s`);
+    chosen = chooseWithAi(ai, quick.mask, rect, rect.frame, { width: png.width, height: png.height }, det.quad) as typeof chosen;
+    check("a cut-out holds up", !!chosen.mask, chosen.how);
+    const wb = chosen.lines.waistbandHeight;
+    const wbCm = wb ? Math.hypot(wb.b.x - wb.a.x, wb.b.y - wb.a.y) / rect.pxPerCm : NaN;
+    check("the AI places the waistband height", wbCm >= 1.5 && wbCm <= 10, `${wbCm.toFixed(1)} cm`);
+  }
   const res = chosen.mask ? measureGarment(chosen.mask, rect.pxPerCm, "trousers") : null;
-  // As the app: each point from whichever line is reliable for it.
   const lines = mergeLines(res?.ok ? res.points : null, chosen.lines) as Record<string, { a: { x: number; y: number }; b: { x: number; y: number } }>;
   const cm: Record<string, number> = {};
   for (const [k, s] of Object.entries(lines)) cm[k] = Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / rect.pxPerCm;

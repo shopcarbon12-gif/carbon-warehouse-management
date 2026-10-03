@@ -634,6 +634,79 @@ function legGeometry(s: Shape, crotch: number) {
   };
 }
 
+/**
+ * The left leg, measured square across itself.
+ *
+ * Rows across the photo are right only for a leg lying straight down. Laid
+ * splayed — as the owner's leggings were, at ~15° — a row reads every width a
+ * few per cent wide, and at the bottom it cuts the hem's pointed corner: 4.2 cm
+ * for a 10 cm hem. So the leg's centre line is fitted through the middle of
+ * its runs, and each width is taken at right angles to that line; the hem is
+ * the width a centimetre above where the centre line leaves the leg.
+ */
+function legAxis(s: Shape, crotch: number, crotchX: number, pxPerCm: number) {
+  const { data, width: w, height: h } = s.mask;
+  const minRun = Math.max(2, Math.round(w * 0.012));
+  const ys: number[] = [], xs: number[] = [];
+  const span = s.bottom - crotch;
+  for (let y = Math.round(crotch + span * 0.08); y <= s.bottom - span * 0.05; y += 2) {
+    const leg = solidRuns(data, w, y, minRun).find((r) => r[0] < crotchX);
+    if (!leg) continue;
+    ys.push(y);
+    xs.push((leg[0] + leg[1]) / 2);
+  }
+  if (ys.length < 10) return null;
+  // x = a + b·y, least squares.
+  const n = ys.length;
+  const my = ys.reduce((p, v) => p + v, 0) / n, mx = xs.reduce((p, v) => p + v, 0) / n;
+  let sxy = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sxy += (ys[i] - my) * (xs[i] - mx); syy += (ys[i] - my) ** 2; }
+  const b = syy ? sxy / syy : 0, a = mx - b * my;
+  const dn = Math.hypot(b, 1);
+  const d = { x: b / dn, y: 1 / dn }; // down the leg
+  const nrm = { x: d.y, y: -d.x }; // across it, pointing right
+  const on = (x: number, y: number) => {
+    const xx = Math.round(x), yy = Math.round(y);
+    return xx >= 0 && yy >= 0 && xx < w && yy < h && !!data[yy * w + xx];
+  };
+  // From a point inside the leg, out to the edge each way (gaps under 2 px are fabric).
+  const across = (c: Point2) => {
+    const edge = (sgn: number) => {
+      let t = 0, gap = 0, last = 0;
+      while (t < w) {
+        t += 0.5;
+        if (on(c.x + nrm.x * t * sgn, c.y + nrm.y * t * sgn)) { last = t; gap = 0; } else if (++gap > 4) break;
+      }
+      return last;
+    };
+    const r = edge(1), l = edge(-1);
+    const A = { x: c.x - nrm.x * l, y: c.y - nrm.y * l }, B = { x: c.x + nrm.x * r, y: c.y + nrm.y * r };
+    return { w: l + r, line: seg(A.x, A.y, B.x, B.y) };
+  };
+  const centre = (y: number): Point2 => ({ x: a + b * y, y });
+  /* Where the centre line leaves the leg: the hem. A break inside the leg —
+     a crease, a stripe, a speck the cut-out missed — stopped the first version
+     halfway down; a gap only ends the leg if it runs on for 1.5 cm. */
+  const start = centre(crotch + span * 0.5);
+  let end = start, gap = 0;
+  const maxGap = Math.max(4, Math.round(1.5 * pxPerCm));
+  for (let t = 1; t < 2 * h && gap <= maxGap; t++) {
+    const p = { x: start.x + d.x * t, y: start.y + d.y * t };
+    if (on(p.x, p.y)) { end = p; gap = 0; } else gap++;
+  }
+  return {
+    /** Width square across the leg, `frac` of the way from crotch to hem. */
+    at: (frac: number) => {
+      const c = centre(crotch + span * frac);
+      return on(c.x, c.y) ? across(c) : null;
+    },
+    hem: (() => {
+      const back = Math.max(2, pxPerCm);
+      return across({ x: end.x - d.x * back, y: end.y - d.y * back });
+    })(),
+  };
+}
+
 function measureUpright(
   mask: ShirtMask,
   pxPerCm: number,
@@ -753,6 +826,7 @@ function measureUpright(
 
   if (type === "trousers" || type === "shorts") {
     const crotch = crotchY(s);
+    let hemOuter: Point2 | null = null;
     const waistY = s.top + Math.max(1, Math.round(s.h * 0.02));
     const waist = steadyExtent(s, waistY, 2);
     if (!waist) return { ok: false, error: "Could not read the waistband.", classification };
@@ -791,18 +865,38 @@ function measureUpright(
         put("thigh", thigh.run[1] - thigh.run[0] + 1,
             seg(thigh.run[0], thigh.y, thigh.run[1], thigh.y));
       }
+      /* Below the thigh, square across the leg (see legAxis); a row only when
+         the leg is too short or too broken to fit a centre line through. */
+      const at = solidRuns(s.mask.data, s.mask.width, crotch, legMin);
+      const crotchX = at.length >= 2 ? (at[0][1] + at[1][0]) / 2 : s.cx;
+      const axis = legAxis(s, crotch, crotchX, pxPerCm);
       // Knee and calf only mean something on a full-length leg.
       if (type === "trousers") {
-        const knee = legAt(0.45);
-        if (knee) put("knee", knee.run[1] - knee.run[0] + 1, seg(knee.run[0], knee.y, knee.run[1], knee.y));
-        const calf = legAt(0.68);
-        if (calf) put("calf", calf.run[1] - calf.run[0] + 1, seg(calf.run[0], calf.y, calf.run[1], calf.y));
+        const knee = axis?.at(0.45) ?? null;
+        const kneeRow = knee ? null : legAt(0.45);
+        if (knee) put("knee", knee.w, knee.line);
+        else if (kneeRow) put("knee", kneeRow.run[1] - kneeRow.run[0] + 1, seg(kneeRow.run[0], kneeRow.y, kneeRow.run[1], kneeRow.y));
+        const calf = axis?.at(0.68) ?? null;
+        const calfRow = calf ? null : legAt(0.68);
+        if (calf) put("calf", calf.w, calf.line);
+        else if (calfRow) put("calf", calfRow.run[1] - calfRow.run[0] + 1, seg(calfRow.run[0], calfRow.y, calfRow.run[1], calfRow.y));
       }
-      // Leg opening: one leg's width just above the hem.
-      const opening = legAt(0.98);
-      if (opening) {
-        put("legOpening", opening.run[1] - opening.run[0] + 1,
-            seg(opening.run[0], opening.y, opening.run[1], opening.y));
+      // Leg opening: across the hem, square to the leg.
+      if (axis && axis.hem.w > 0) {
+        put("legOpening", axis.hem.w, axis.hem.line);
+        /* The seams end at the hem's corners: the inseam at the inner one, the
+           outseam at the outer — not at the row's pointed corner. */
+        const { a: hA, b: hB } = axis.hem.line;
+        const inner = hA.x > hB.x ? hA : hB, outer = hA.x > hB.x ? hB : hA;
+        const ins = points.inseam?.line;
+        if (ins) put("inseam", Math.hypot(inner.x - ins.a.x, inner.y - ins.a.y), seg(ins.a.x, ins.a.y, inner.x, inner.y));
+        hemOuter = outer;
+      } else {
+        const opening = legAt(0.98);
+        if (opening) {
+          put("legOpening", opening.run[1] - opening.run[0] + 1,
+              seg(opening.run[0], opening.y, opening.run[1], opening.y));
+        }
       }
     } else if (type === "shorts") {
       return { ok: false, error: "Could not find where the legs separate — lay the shorts flat with a gap between the legs.", classification };
@@ -812,7 +906,9 @@ function measureUpright(
        garment's whole height down the middle, through the gap between the legs. */
     if (crotch > 0) {
       const legs = legGeometry(s, crotch);
-      put("outseam", legs.outseamPx, legs.outseamLine);
+      const top = legs.outseamLine.a;
+      if (hemOuter) put("outseam", Math.hypot(hemOuter.x - top.x, hemOuter.y - top.y), seg(top.x, top.y, hemOuter.x, hemOuter.y));
+      else put("outseam", legs.outseamPx, legs.outseamLine);
     } else {
       put("outseam", lengthPx, lengthLine);
     }

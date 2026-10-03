@@ -7,10 +7,14 @@
  * on the phone (lib/size-grading/ai-lines.ts), against the full-resolution
  * picture this route never needs to see.
  *
- * Model: SIZE_GRADING_AI_MODEL (default gpt-5.5, reasoning effort low). At
- * effort low it took 7–10 s on the owner's photos and placed every point on
- * the right part of the garment; gpt-5.4-mini and gpt-4.1 were faster and put
- * lines on the table. ~3.5k tokens a photo.
+ * Model: SIZE_GRADING_AI_MODEL (default gpt-5.4), SIZE_GRADING_AI_EFFORT
+ * (default none). The AI only says which object is the garment (type, box,
+ * points on and off it) and places what an outline cannot see — waistband,
+ * pockets, neck; the outline measures the rest. Measured on the owner's
+ * photos: gpt-5.5 thinking cost ~3.7¢ a photo, gpt-5.4 without thinking
+ * ~1.2¢ and ~4 s with the same answers on those jobs. gpt-5.4-mini and
+ * gpt-4.1 put the garment on the table — do not downgrade without testing.
+ * And it is only called when the phone's own cut-out fails its checks.
  */
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
@@ -30,7 +34,7 @@ const Body = z.object({
   image: z.string().startsWith("data:image/").max(MAX_DATA_URL),
   type: z.enum(["top", "trousers", "shorts", "dress", "skirt", "onepiece"]).nullable().optional(),
   view: z.enum(["front", "back"]).default("front"),
-  keys: z.array(z.enum(ALL_POMS)).min(1).max(ALL_POMS.length),
+  keys: z.array(z.enum(ALL_POMS)).max(ALL_POMS.length),
 });
 
 const Pt = z.tuple([z.number(), z.number()]);
@@ -53,7 +57,8 @@ export async function POST(req: Request) {
   const apiKey = getOpenAiApiKey().trim();
   if (!apiKey) return NextResponse.json({ error: "The AI is not configured on this server (no OpenAI key)." }, { status: 503 });
 
-  const model = (process.env.SIZE_GRADING_AI_MODEL || "gpt-5.5").trim();
+  const model = (process.env.SIZE_GRADING_AI_MODEL || "gpt-5.4").trim();
+  const effort = (process.env.SIZE_GRADING_AI_EFFORT || "none").trim() as "none" | "low" | "medium";
   const client = new OpenAI({ apiKey });
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
@@ -62,7 +67,7 @@ export async function POST(req: Request) {
     const res = await client.responses.create(
       {
         model,
-        ...(model.startsWith("gpt-5") ? { reasoning: { effort: "low" as const } } : {}),
+        ...(model.startsWith("gpt-5") ? { reasoning: { effort } } : {}),
         text: { format: { type: "json_object" } },
         input: [
           {

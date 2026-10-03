@@ -390,40 +390,48 @@ export function SizeGradingWorkspace() {
     const secs = () => ((performance.now() - started) / 1000).toFixed(1);
     const input = { src: { data: src.data, width: src.width, height: src.height }, picture: image.data, quad, frame: rectFrame };
     const type = typeRef.current, side = viewRef.current;
-    /* Both at once: the AI reads the photo (~10 s) while the quick model cuts
-       out its best guess (~3–6 s). The AI then judges that guess, and cuts the
-       garment out itself when the guess is the table. */
-    const quick = findGarmentOffThread({ ...input, quickOnly: true });
-    const ai = readWithAi(image, type, side, aiKeysFor(type, side, pomsFor(type ?? "top", side)));
-    void Promise.allSettled([quick, ai])
-      .then(async ([q, a]) => {
+    /* The phone first (~3–6 s, free). Only when its cut-out fails its checks
+       — it took the table, or half a leg — is the AI asked (~4 s, ~1¢), and
+       the AI then cuts the garment out from its own reading. A plain-background
+       photo never reaches the AI; its waistband and pocket lines are then left
+       for the operator to place. */
+    setFindStage("salience");
+    void findGarmentOffThread({ ...input, quickOnly: true })
+      .then(async (q) => {
         if (!alive) return;
-        const quickMask = q.status === "fulfilled" && q.value.mask ? q.value.mask : null;
-        if (a.status === "fulfilled") {
-          const chosen = chooseWithAi(a.value, quickMask, image, rectFrame, src, quad);
-          const t = a.value.garment as GarmentType;
-          setAiType(["top", "trousers", "shorts", "dress", "skirt", "onepiece"].includes(t) ? t : null);
-          setAiLines(chosen.lines);
-          setFindHow(chosen.how);
-          console.info(`[size-grading] AI read "${a.value.description ?? a.value.garment}" in ${secs()}s — ${chosen.how}`);
-          if (chosen.mask) setModelMask(chosen.mask);
+        if (q.mask && !q.rejected) {
+          console.info(`[size-grading] garment ${Math.round(q.cm2)} cm² on the phone in ${secs()}s — no AI needed`);
+          setFindHow("found on this phone — no AI needed");
+          setModelMask(q.mask);
           return;
         }
-        // No AI (offline, no key, timed out): the on-device finder alone, as before.
-        const why = a.reason instanceof Error ? a.reason.message : String(a.reason);
-        console.warn("[size-grading] AI unavailable:", why);
-        if (q.status === "fulfilled" && q.value.mask && !q.value.rejected) {
-          setFindHow(`the AI was unavailable (${why}); the on-device finder's cut-out passed its checks`);
-          setModelMask(q.value.mask);
+        const quickWhy = q.mask ? q.rejected : q.why;
+        setFindStage("ai");
+        let reading;
+        try {
+          reading = await readWithAi(image, type, side, aiKeysFor(type, side, pomsFor(type ?? "top", side)));
+        } catch (e) {
+          if (!alive) return;
+          // No AI (offline, no key, timed out): the on-device closer look, as before.
+          const why = e instanceof Error ? e.message : String(e);
+          console.warn("[size-grading] AI unavailable:", why);
+          setFindStage("segments");
+          const r = await findGarmentOffThread(input);
+          if (!alive) return;
+          if (r.mask) {
+            setFindHow(`the AI was unavailable (${why}); found by the on-device closer look`);
+            setModelMask(r.mask);
+          } else setModelFailed(`${r.why}; and the AI was unavailable (${why})`);
           return;
         }
-        setFindStage("segments");
-        const r = await findGarmentOffThread(input);
         if (!alive) return;
-        if (r.mask) {
-          setFindHow(`the AI was unavailable (${why}); found by the on-device closer look`);
-          setModelMask(r.mask);
-        } else setModelFailed(`${r.why}; and the AI was unavailable (${why})`);
+        const chosen = chooseWithAi(reading, q.mask, image, rectFrame, src, quad);
+        const t = reading.garment as GarmentType;
+        setAiType(["top", "trousers", "shorts", "dress", "skirt", "onepiece"].includes(t) ? t : null);
+        setAiLines(chosen.lines);
+        setFindHow(`${chosen.how} — the phone's own cut-out was rejected: ${quickWhy}`);
+        console.info(`[size-grading] AI read "${reading.description ?? reading.garment}" in ${secs()}s — ${chosen.how}`);
+        if (chosen.mask) setModelMask(chosen.mask);
       })
       .catch((e: unknown) => {
         console.error("[size-grading] finder failed:", e);
@@ -1330,7 +1338,9 @@ export function SizeGradingWorkspace() {
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
                   {findStage === "segments"
                     ? "Looking closer for the garment on this device — this takes up to a minute on a phone…"
-                    : "The AI is reading the photo and finding the garment…"}
+                    : findStage === "ai"
+                      ? "The phone could not pick the garment out on its own — the AI is reading the photo…"
+                      : "Finding the garment…"}
                 </span>
               ) : modelMask ? (
                 <span className="text-[var(--wms-status-success-fg)]">
@@ -1396,7 +1406,7 @@ export function SizeGradingWorkspace() {
             ) : finding && !modelMask ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                {findStage === "segments" ? "Looking closer for the garment…" : "The AI is reading the photo…"}
+                {findStage === "segments" ? "Looking closer for the garment…" : findStage === "ai" ? "The AI is reading the photo…" : "Finding the garment…"}
               </p>
             ) : busy ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
