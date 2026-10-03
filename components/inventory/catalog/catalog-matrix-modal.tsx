@@ -1017,6 +1017,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       setOkMsg(oj.skipped ? "Already well-optimized." : "Review the proposal, then Save to Shopify.");
     } catch (e) {
       setOkMsg(null);
+      /* Leaving the SEO tab cancels the auto-optimize on purpose (no OpenAI
+         spend on a run the operator walked away from). That cancellation is
+         not a failure — it surfaced as a red "signal is aborted without
+         reason" banner over whatever tab was open next, which read as the
+         Publish having failed. The metafield and category panels already
+         ignore their own aborts; this one now does too. */
+      if ((e as Error)?.name === "AbortError") return;
       setErr(e instanceof Error ? e.message : "SEO failed");
     } finally {
       setSeoBusy(null);
