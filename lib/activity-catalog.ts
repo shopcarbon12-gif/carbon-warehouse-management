@@ -87,6 +87,8 @@ const ROUTES: Record<string, Entry> = {
   "webhooks/shopify/orders-paid": { module: "Shopify orders", label: "Shopify order paid" },
   "webhooks/shopify/refunds-create": { module: "Shopify orders", label: "Shopify refund" },
   "webhooks/shopify/orders-cancelled": { module: "Shopify orders", label: "Shopify order cancelled — thank-you code expired" },
+  "webhooks/shopify/returns-process": { module: "Shopify orders", label: "Shopify exchange released — new items reserved" },
+  "webhooks/shopify/reverse-fulfillment-dispose": { module: "Shopify orders", label: "Shopify return restocked — tags back to live" },
   "webhooks/shopify/orders-fulfilled": { module: "Shopify orders", label: "Shopify order fulfilled — unknown tags back to live" },
 
   "inventory/bulk-status": { module: "Inventory status", label: "Changed tag status" },
