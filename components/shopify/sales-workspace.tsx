@@ -7,7 +7,7 @@
  * change is made in Shopify, and "Open in Shopify" is one click away.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Printer, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
 import { ShopifyLogo } from "@/components/shopify/shopify-logo";
 
 /** Square icon button for the order drawer header. */
@@ -706,6 +706,18 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                     order in Shopify, where "Create shipping label" is. When the
                     operator comes back, the order and the menu count re-read. */}
                 <div className="flex flex-wrap gap-2">
+                  {/* The approved CARBON packing slip (no prices), filled from this
+                      order — opens in a new tab with the print dialog. */}
+                  {sale.lines.some((x) => x.quantity > 0) ? (
+                    <a
+                      className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
+                      href={`/api/shopify/sales/${id}/packing-slip?print=1`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Printer className="h-4 w-4" /> Print a packing slip
+                    </a>
+                  ) : null}
                   {needsLabel(sale) ? (
                     <button
                       type="button"
