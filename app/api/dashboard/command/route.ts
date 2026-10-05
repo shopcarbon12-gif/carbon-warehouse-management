@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import {
-  getCommandCenterKpis,
-  listRecentAuditForTenant,
-} from "@/lib/queries/dashboard-command";
+import { getCommandCenterKpis } from "@/lib/queries/dashboard-command";
+import { listActivity } from "@/lib/server/activity-feed";
 
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -19,7 +17,17 @@ export async function GET(req: Request) {
 
   try {
     const kpis = await getCommandCenterKpis(pool, session.lid, session.tid);
-    const activity = await listRecentAuditForTenant(pool, session.tid, 10);
+    // Same feed as Reports → Activity history: people's actions in plain
+    // English, reader zone moves left out. A feed failure must not blank
+    // the KPIs, so it degrades to an empty list.
+    const activity = await listActivity(pool, session.tid, { limit: 15 })
+      // Every signed-in user sees the dashboard; the full request record
+      // (IP, body) stays on the manager-only Activity history page.
+      .then((page) => page.rows.slice(0, 10).map((r) => ({ ...r, details: {}, names: {} })))
+      .catch((e) => {
+        console.error("[dashboard/command] activity", e);
+        return [];
+      });
     return NextResponse.json(
       { kpis, activity },
       { headers: { "Cache-Control": "no-store" } },

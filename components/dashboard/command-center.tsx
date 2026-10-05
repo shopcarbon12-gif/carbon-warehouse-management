@@ -12,7 +12,7 @@ import {
   Smartphone,
   Wifi,
 } from "lucide-react";
-import type { AuditLogListRow } from "@/lib/queries/dashboard-command";
+import type { ActivityRow } from "@/lib/server/activity-feed";
 import { useCountUp } from "./use-count-up";
 
 type HardwareCounts = {
@@ -34,7 +34,7 @@ type Kpis = {
 
 type CommandPayload = {
   kpis: Kpis;
-  activity: AuditLogListRow[];
+  activity: ActivityRow[];
 };
 
 type LookupRow = {
@@ -227,16 +227,24 @@ function KpiTile({
   );
 }
 
-function formatAuditLine(row: AuditLogListRow): string {
-  const bits: string[] = [row.action, row.entity].filter(Boolean);
-  if (row.metadata && typeof row.metadata === "object" && row.metadata !== null) {
-    const m = row.metadata as Record<string, unknown>;
-    const summary = m.summary ?? m.detail ?? m.label;
-    if (typeof summary === "string" && summary.length < 80) {
-      bits.push(`— ${summary}`);
-    }
-  }
-  return bits.join(" · ");
+function activityWhat(row: ActivityRow): string {
+  const detail =
+    row.change && (row.change.from || row.change.to)
+      ? `${row.change.from ? `${row.change.from} → ` : ""}${row.change.to ?? "—"}`
+      : row.summary;
+  const item = row.item
+    ? [row.item.product, row.item.color, row.item.size].filter(Boolean).join(" · ") || row.item.epc || row.item.sku
+    : row.itemCount
+      ? `${row.itemCount} tags`
+      : null;
+  return [row.action, detail, item].filter(Boolean).join(" · ");
+}
+
+function activityMeta(row: ActivityRow): string {
+  const source = row.sourceDetail && row.source !== "Web" ? `${row.source} (${row.sourceDetail})` : row.source;
+  return [new Date(row.at).toLocaleString(), row.module, source, row.outcome === "failed" ? `Failed${row.status ? ` (${row.status})` : ""}` : null]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function CommandCenter() {
@@ -639,7 +647,7 @@ export function CommandCenter() {
         <div className="rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_6%,var(--wms-surface))] shadow-sm dark:bg-[var(--wms-surface)]">
           <div className="border-b border-[var(--wms-border)] px-4 py-3">
             <p className="font-mono text-base text-[color-mix(in_srgb,var(--wms-fg)_72%,var(--wms-muted))]">
-              Last 10 audit events ·{" "}
+              Last 10 actions ·{" "}
               <Link href="/reports/activity" className="text-[var(--wms-accent)] hover:underline">
                 View all
               </Link>
@@ -665,7 +673,7 @@ export function CommandCenter() {
           <ul className="divide-y divide-[var(--wms-border)]/80">
             {activity.length === 0 ? (
               <li className="px-4 py-10 text-center font-mono text-base text-[var(--wms-muted)]">
-                No audit events yet.
+                No activity yet.
               </li>
             ) : (
               activity.map((row, i) => (
@@ -682,10 +690,12 @@ export function CommandCenter() {
                   ) : null}
                   <div className="min-w-0 flex-1">
                     <p className="font-mono text-base leading-snug text-[var(--wms-fg)] max-md:break-words">
-                      {formatAuditLine(row)}
+                      <span className="font-semibold">{row.actor || "—"}</span>
+                      {" — "}
+                      <span className={row.outcome === "failed" ? "text-red-400" : undefined}>{activityWhat(row)}</span>
                     </p>
-                    <p className="mt-1.5 font-mono text-sm tabular-nums text-[color-mix(in_srgb,var(--wms-fg)_62%,var(--wms-muted))]">
-                      {new Date(row.created_at).toLocaleString()}
+                    <p className="mt-1.5 font-mono text-sm tabular-nums text-[color-mix(in_srgb,var(--wms-fg)_62%,var(--wms-muted))] max-md:break-words">
+                      {activityMeta(row)}
                     </p>
                   </div>
                 </li>
