@@ -1,6 +1,7 @@
 "use client";
 
 import useSWR from "swr";
+import { NewOrdersNotice } from "@/components/dashboard/new-orders-notice";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -562,6 +563,9 @@ export function CommandCenter() {
           </div>
         </div>
       </header>
+
+      {/* Only when Shopify has orders waiting — renders nothing at zero. */}
+      <NewOrdersNotice />
 
       {/* Top: KPI cards */}
       <section aria-label="Key metrics">

@@ -330,20 +330,48 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
   };
 }
 
+/** An order still to fulfil, for the home-screen notice. */
+export type ToFulfillOrder = {
+  legacyId: string;
+  name: string;
+  createdAt: string;
+  customer: string | null;
+  total: Money | null;
+  items: number;
+};
+
 /**
- * The number on Shopify's "Orders" menu item: open orders that still have
- * something to fulfil. Same filter as Shopify's — checked against the admin on
- * 2026-10-05 (both said 1, order #1076).
+ * The number on Shopify's "Orders" menu item — open orders that still have
+ * something to fulfil — and the newest of them. Same filter as Shopify's,
+ * checked against the admin on 2026-10-05 (both said 1, order #1076).
  */
-export async function toFulfillCount(): Promise<number> {
+export async function toFulfill(): Promise<{ count: number; orders: ToFulfillOrder[] }> {
   const ctx = await ctxOrThrow();
-  const r = await runShopifyGraphql<{ ordersCount: { count: number } | null }>({
+  const r = await runShopifyGraphql<{
+    ordersCount: { count: number } | null;
+    orders: { nodes: Array<{ legacyResourceId: string; name: string; createdAt: string; customer: { displayName: string } | null; currentTotalPriceSet: { shopMoney: Money } | null; currentSubtotalLineItemsQuantity: number }> };
+  }>({
     shop: ctx.shop,
     token: ctx.token,
     apiVersion: ctx.apiVersion,
-    query: `query ToFulfill($q: String) { ordersCount(query: $q) { count } }`,
+    query: `query ToFulfill($q: String) {
+      ordersCount(query: $q) { count }
+      orders(first: 10, sortKey: CREATED_AT, reverse: true, query: $q) {
+        nodes { legacyResourceId name createdAt customer { displayName } currentTotalPriceSet { shopMoney { amount currencyCode } } currentSubtotalLineItemsQuantity }
+      }
+    }`,
     variables: { q: "status:open AND (fulfillment_status:unfulfilled OR fulfillment_status:partial)" },
   });
   if (!r.ok || !r.data) throw gqlError(r.errors);
-  return r.data.ordersCount?.count ?? 0;
+  return {
+    count: r.data.ordersCount?.count ?? 0,
+    orders: r.data.orders.nodes.map((o) => ({
+      legacyId: o.legacyResourceId,
+      name: o.name,
+      createdAt: o.createdAt,
+      customer: o.customer?.displayName ?? null,
+      total: o.currentTotalPriceSet?.shopMoney ?? null,
+      items: o.currentSubtotalLineItemsQuantity ?? 0,
+    })),
+  };
 }

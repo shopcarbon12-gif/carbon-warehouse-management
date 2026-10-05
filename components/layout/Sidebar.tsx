@@ -50,6 +50,7 @@ import {
   X,
 } from "lucide-react";
 import { LocationSwitcher } from "@/components/location-switcher";
+import { useShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { logoutAction } from "@/app/actions/auth";
 
 type NavItem = {
@@ -316,44 +317,10 @@ function CountPill({ n }: { n: number }) {
   );
 }
 
-/**
- * The numbers beside menu items. Shopify's own rule for the Orders count —
- * open orders still to fulfil — read every minute and whenever the tab comes
- * back into view. Only admins may read sales; anyone else gets a 403 once and
- * the polling stops, so the menu simply shows no number.
- */
+/** The numbers beside menu items (see lib/use-shopify-to-fulfill.ts). */
 function useMenuCounts(): Counts {
-  const [counts, setCounts] = useState<Counts>({});
-  useEffect(() => {
-    let stopped = false;
-    const load = async () => {
-      if (stopped || document.visibilityState !== "visible") return;
-      try {
-        const r = await fetch("/api/shopify/sales?badge=1", { cache: "no-store" });
-        if (r.status === 401 || r.status === 403) {
-          stopped = true;
-          return;
-        }
-        if (!r.ok) return;
-        const j = (await r.json()) as { toFulfill?: number };
-        if (typeof j.toFulfill === "number") setCounts((c) => ({ ...c, shopifyToFulfill: j.toFulfill }));
-      } catch {
-        /* offline — keep the last number */
-      }
-    };
-    void load();
-    const t = window.setInterval(load, 60_000);
-    const onVis = () => void load();
-    document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("wms:shopify-sales-changed", onVis);
-    return () => {
-      stopped = true;
-      window.clearInterval(t);
-      document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("wms:shopify-sales-changed", onVis);
-    };
-  }, []);
-  return counts;
+  const toFulfill = useShopifyToFulfill();
+  return useMemo(() => (toFulfill ? { shopifyToFulfill: toFulfill.count } : {}), [toFulfill]);
 }
 
 export function Sidebar({

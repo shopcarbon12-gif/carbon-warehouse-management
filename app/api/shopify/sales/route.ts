@@ -4,14 +4,14 @@
  *
  *   GET ?tab=all|unfulfilled|unpaid|open|archived&q=…&after=…|before=…
  *   GET ?today=1&tz=America/New_York  → the "Today" bar
- *   GET ?badge=1                      → { toFulfill } for the menu badge
+ *   GET ?badge=1                      → { toFulfill, orders } for the menu badge and home notice
  */
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { SALES_TABS, ShopifyNotConnected, listSales, salesToday, toFulfillCount, type SalesTab } from "@/lib/server/shopify-sales";
+import { SALES_TABS, ShopifyNotConnected, listSales, salesToday, toFulfill, type SalesTab } from "@/lib/server/shopify-sales";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +26,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   try {
     if (url.searchParams.get("badge")) {
-      return NextResponse.json({ toFulfill: await toFulfillCount() });
+      const t = await toFulfill();
+      return NextResponse.json({ toFulfill: t.count, orders: t.orders });
     }
     if (url.searchParams.get("today")) {
       const tz = url.searchParams.get("tz") || "America/New_York";

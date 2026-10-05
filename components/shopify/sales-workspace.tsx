@@ -7,8 +7,9 @@
  * change is made in Shopify, and "Open in Shopify" is one click away.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, Search, Truck, X } from "lucide-react";
 import { useUrlParam } from "@/lib/use-url-param";
+import { refreshShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 
 type Money = { amount: string; currencyCode: string };
 type Row = {
@@ -211,7 +212,7 @@ export function SalesWorkspace() {
       setError(null);
       setUpdatedAt(new Date());
       // The menu's "to fulfil" number follows the page rather than waiting a minute.
-      window.dispatchEvent(new Event("wms:shopify-sales-changed"));
+      refreshShopifyToFulfill();
     } catch (e) {
       if (id === reqRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -223,12 +224,23 @@ export function SalesWorkspace() {
     void load();
   }, [load]);
 
-  // Kept in sync with Shopify: the page reloads itself every minute while it is open.
+  /* Kept in sync with Shopify: reloaded every minute while open, and the
+     moment the operator comes back to this tab — the shipping label is made in
+     Shopify, and its order should not still read "Unfulfilled" here. */
   useEffect(() => {
     const t = window.setInterval(() => {
       if (document.visibilityState === "visible") void load(true);
     }, REFRESH_MS);
-    return () => window.clearInterval(t);
+    const onWake = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
   }, [load]);
 
   const changeTab = (t: typeof tab) => {
@@ -456,6 +468,14 @@ export function SalesWorkspace() {
 
 /* ─────────────────────────────── one order ─────────────────────────────── */
 
+/** Still has something to ship: what Shopify offers "Create shipping label" for. */
+function needsLabel(s: Detail): boolean {
+  if (s.cancelledAt) return false;
+  return ["UNFULFILLED", "PARTIALLY_FULFILLED", "ON_HOLD", "SCHEDULED", "IN_PROGRESS", "OPEN", "PENDING_FULFILLMENT"].includes(
+    s.fulfillmentStatus ?? "",
+  );
+}
+
 function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const [sale, setSale] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -463,16 +483,29 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   useEffect(() => {
     // Mounted fresh per order (key={id} below), so there is nothing to reset here.
     let alive = true;
-    fetch(`/api/shopify/sales/${encodeURIComponent(id)}`, { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (!alive) return;
-        if (!r.ok) setError(j?.error || `Could not load the order (${r.status})`);
-        else setSale(j as Detail);
-      })
-      .catch((e) => alive && setError(String(e)));
+    const fetchSale = () =>
+      fetch(`/api/shopify/sales/${encodeURIComponent(id)}`, { cache: "no-store" })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({}));
+          if (!alive) return;
+          if (!r.ok) setError(j?.error || `Could not load the order (${r.status})`);
+          else {
+            setError(null);
+            setSale(j as Detail);
+          }
+        })
+        .catch((e) => alive && setError(String(e)));
+    void fetchSale();
+    // Back from making the label in Shopify: show the order as it is now.
+    const onWake = () => {
+      if (document.visibilityState === "visible") void fetchSale();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
     return () => {
       alive = false;
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
     };
   }, [id]);
 
@@ -544,9 +577,24 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
         {sale ? (
           <div className="flex flex-col gap-3 p-4">
             <section className="rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)]">
-              <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-4 py-2">
-                <FulfillmentBadge s={sale.fulfillmentStatus} />
-                {sale.deliveryMethod ? <span className="text-xs text-[var(--wms-muted)]">{sale.deliveryMethod}</span> : null}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)] px-4 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <FulfillmentBadge s={sale.fulfillmentStatus} />
+                  {sale.deliveryMethod ? <span className="text-xs text-[var(--wms-muted)]">{sale.deliveryMethod}</span> : null}
+                </div>
+                {/* Shopify does not let other apps buy its labels, so this opens the
+                    order in Shopify, where "Create shipping label" is. When the
+                    operator comes back, the order and the menu count re-read. */}
+                {needsLabel(sale) ? (
+                  <a
+                    className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
+                    href={sale.adminUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Truck className="h-4 w-4" /> Create shipping label
+                  </a>
+                ) : null}
               </div>
               <ul>
                 {lines.map((l, i) => (
