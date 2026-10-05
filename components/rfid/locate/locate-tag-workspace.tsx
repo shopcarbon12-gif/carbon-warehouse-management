@@ -122,7 +122,11 @@ function flattenReaders(tree: HardwareConfigTree | undefined): FlatReader[] {
         name: r.name,
         zoneName,
         locationCode: loc.code,
-        online: r.status_online,
+        /* "Offline" only when the reader cannot be reached at all — the same
+           rule as Hardware Config. status_online alone means "the chip is
+           producing reads right now", and a reader PAUSED between scans (the
+           normal state) produces none, so it went "offline" while healthy. */
+        online: r.bridge_state ? r.bridge_state !== "offline" : r.status_online,
         antennaId: r.antennas?.[0]?.id ?? null,
       });
     };
