@@ -251,11 +251,11 @@ export function SalesWorkspace() {
           <span className="font-mono text-xs text-[var(--wms-muted)]">
             {updatedAt ? `Synced with Shopify ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "Syncing…"}
           </span>
-          <button type="button" className="wms-btn max-md:min-h-11" onClick={() => void load()} disabled={loading}>
+          <button type="button" className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" onClick={() => void load()} disabled={loading}>
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
           </button>
           {page ? (
-            <a className="wms-btn max-md:min-h-11" href={`${page.adminBase}/orders`} target="_blank" rel="noreferrer">
+            <a className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" href={`${page.adminBase}/orders`} target="_blank" rel="noreferrer">
               <ExternalLink className="h-4 w-4" /> Open in Shopify
             </a>
           ) : null}
@@ -417,7 +417,7 @@ export function SalesWorkspace() {
               <button
                 type="button"
                 aria-label="Previous page"
-                className="wms-btn max-md:min-h-11"
+                className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11"
                 disabled={!page.pageInfo.hasPreviousPage || loading}
                 onClick={() => {
                   setCursor({ before: page.pageInfo.startCursor ?? undefined });
@@ -429,7 +429,7 @@ export function SalesWorkspace() {
               <button
                 type="button"
                 aria-label="Next page"
-                className="wms-btn max-md:min-h-11"
+                className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11"
                 disabled={!page.pageInfo.hasNextPage || loading}
                 onClick={() => {
                   setCursor({ after: page.pageInfo.endCursor ?? undefined });
@@ -482,6 +482,18 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   }, [onClose]);
 
   const lines = useMemo(() => sale?.lines.filter((l) => l.quantity > 0) ?? [], [sale]);
+  /* Shopify's order page lists the subtotal BEFORE discounts and the discount
+     on its own line, so subtotal − discount + shipping + taxes = total. The
+     API's subtotal is already discounted; showing it beside the discount
+     counted the discount twice. */
+  const grossSubtotal = useMemo<Money | null>(() => {
+    const priced = lines.filter((l) => l.unit);
+    if (!priced.length) return sale?.subtotal ?? null;
+    return {
+      amount: String(priced.reduce((t, l) => t + Number(l.unit!.amount) * l.quantity, 0)),
+      currencyCode: priced[0].unit!.currencyCode,
+    };
+  }, [lines, sale]);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
@@ -511,11 +523,11 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {sale ? (
-              <a className="wms-btn max-md:min-h-11" href={sale.adminUrl} target="_blank" rel="noreferrer">
+              <a className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" href={sale.adminUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="h-4 w-4" /> Shopify
               </a>
             ) : null}
-            <button type="button" aria-label="Close" className="wms-btn max-md:min-h-11" onClick={onClose}>
+            <button type="button" aria-label="Close" className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" onClick={onClose}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -552,7 +564,9 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                     <div className="shrink-0 text-right text-sm tabular-nums text-[var(--wms-fg)]/85">
                       {money(l.unit)} × {l.quantity}
                     </div>
-                    <div className="w-20 shrink-0 text-right text-sm tabular-nums text-[var(--wms-fg)]">{money(l.total)}</div>
+                    <div className="w-20 shrink-0 text-right text-sm tabular-nums text-[var(--wms-fg)]">
+                      {money(l.unit ? { amount: String(Number(l.unit.amount) * l.quantity), currencyCode: l.unit.currencyCode } : null)}
+                    </div>
                   </li>
                 ))}
                 {!lines.length ? <li className="px-4 py-3 text-sm text-[var(--wms-muted)]">No items left on this order.</li> : null}
@@ -580,7 +594,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               <div className="mb-2"><PaymentBadge s={sale.financialStatus} /></div>
               <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 text-sm">
                 <dt className="text-[var(--wms-fg)]/85">Subtotal · {sale.items} {sale.items === 1 ? "item" : "items"}</dt>
-                <dd className="text-right tabular-nums">{money(sale.subtotal)}</dd>
+                <dd className="text-right tabular-nums">{money(grossSubtotal)}</dd>
                 {sale.discounts && Number(sale.discounts.amount) > 0 ? (
                   <>
                     <dt className="text-[var(--wms-fg)]/85">Discount</dt>
