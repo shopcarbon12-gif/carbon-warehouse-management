@@ -53,6 +53,7 @@ type Exchange = Wms & {
   processed: number;
   processable: number;
   scannedOut: ScanOutItem[];
+  marked: ScanOutItem[];
 };
 type Detail = {
   id: string;
@@ -238,7 +239,7 @@ function ReturnPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
     ].filter(Boolean);
     const warn = [
       expected > freshIn ? `${expected - freshIn} returned piece${expected - freshIn === 1 ? " is" : "s are"} not scanned in and will stay open on the return.` : null,
-      unscannedOut ? `${unscannedOut} exchange piece${unscannedOut === 1 ? " is" : "s are"} not scanned out yet — one LIVE tag each will be held as UNKNOWN until shipped.` : null,
+      unscannedOut ? `${unscannedOut} exchange piece${unscannedOut === 1 ? " is" : "s are"} not scanned out yet — the tags marked UNKNOWN stay held until the order ships.` : null,
     ].filter(Boolean);
     if (!window.confirm(`Complete ${d.name} in Shopify: ${parts.join(" and ")}?${warn.length ? "\n\n" + warn.join("\n") : ""}`)) return;
     setCompleting(true);
@@ -367,6 +368,14 @@ function ReturnPanel({ id, onClose, onChanged }: { id: string; onClose: () => vo
                           {Math.min(x.scannedOut.length, x.quantity)} / {x.quantity} scanned out
                           {x.processed ? <div className="text-xs font-normal text-[var(--wms-muted)]">released in Shopify</div> : null}
                         </div>
+                      </div>
+                      <div className="mt-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">Tags marked by this return</div>
+                        {x.marked.length ? (
+                          <TagRow tags={x.marked} onOpen={(t) => openTags(t, x)} />
+                        ) : (
+                          <p className="mt-1 text-xs text-[var(--wms-muted)]">None — no LIVE tag of this item was available to hold.</p>
+                        )}
                       </div>
                       <div className="mt-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2">
                         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">Tags scanned out</div>

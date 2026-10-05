@@ -158,6 +158,8 @@ export type ExchangeLine = WmsItem & {
   processed: number;
   processable: number;
   scannedOut: ScanOutItem[];
+  /** LIVE tags flipped to UNKNOWN when the return was approved — held for this exchange until it ships. */
+  marked: ScanOutItem[];
 };
 
 export type ReturnDetail = {
@@ -304,6 +306,11 @@ export async function getReturn(pool: Pool, id: string): Promise<ReturnDetail> {
       inTransit: w.customSkuId ? transitItems.filter((t) => t.customSkuId === w.customSkuId) : [],
     });
   }
+  const mk = await pool.query<{ id: string; epcs: string[] }>(
+    `SELECT exchange_line_item_id AS id, epcs FROM shopify_exchange_marks WHERE return_id = $1 OR return_id = $2`,
+    [r.id, returnId],
+  );
+  const markedBy = new Map(mk.rows.map((x) => [x.id, x.epcs]));
   const exchanges: ExchangeLine[] = [];
   for (const x of r.exchangeLineItems.nodes) {
     const v = x.variantId ? vmap.get(x.variantId) : undefined;
@@ -319,6 +326,7 @@ export async function getReturn(pool: Pool, id: string): Promise<ReturnDetail> {
       processed: x.processedQuantity,
       processable: x.processableQuantity,
       scannedOut: await lookupItems(pool, w.customSkuId ? scannedOut.get(w.customSkuId) ?? [] : []),
+      marked: await lookupItems(pool, markedBy.get(x.id) ?? []),
     });
   }
   return {
