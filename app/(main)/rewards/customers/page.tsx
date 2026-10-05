@@ -25,6 +25,7 @@ type Row = {
   email: string | null;
   email_2: string | null;
   sales: string;
+  sales_online: string;
   points: string;
   store_credit_balance: string;
   created_at: string;
@@ -98,14 +99,17 @@ export default async function RewardsCustomers({
                 pc.phone_2,
                 pc.email,
                 pc.email_2,
-                -- number of this customer's completed (non-voided) sales
-                COALESCE((
-                  SELECT COUNT(*)
-                    FROM pos_sales s
-                   WHERE s.customer_id = pc.id
-                     AND s.status = 'completed'
-                     AND s.voided_at IS NULL
-                ), 0)::text                   AS sales,
+                -- in-store + online purchases (customer_purchases view,
+                -- owned by Carbon-Rewards), cancelled orders excluded
+                (SELECT COUNT(*)
+                   FROM customer_purchases cp
+                  WHERE cp.customer_id = pc.id
+                    AND cp.status <> 'cancelled')::text AS sales,
+                (SELECT COUNT(*)
+                   FROM customer_purchases cp
+                  WHERE cp.customer_id = pc.id
+                    AND cp.channel = 'online'
+                    AND cp.status <> 'cancelled')::text AS sales_online,
                 COALESCE(lb.balance, 0)::text AS points,
                 COALESCE(pc.store_credit_balance, 0)::text AS store_credit_balance,
                 pc.created_at,

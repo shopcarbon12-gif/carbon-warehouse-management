@@ -18,7 +18,10 @@ export type CustomersTableRow = {
   phone_2: string | null;
   email: string | null;
   email_2: string | null;
+  /** In-store + online purchases, cancelled excluded. */
   sales: string;
+  /** The online share of `sales`. */
+  sales_online: string;
   points: string;
   store_credit_balance: string;
   created_at: string;
@@ -140,8 +143,15 @@ export function LoyaltyCustomersTable({ rows }: { rows: CustomersTableRow[] }) {
                   <td className={`${cellTruncate} px-3 py-2 max-md:hidden`} title={r.email_2 ?? ""}>
                     {r.email_2 ?? DASH}
                   </td>
-                  <td className="overflow-hidden px-3 py-2 text-right tabular-nums">
+                  <td
+                    className="overflow-hidden whitespace-nowrap px-3 py-2 text-right tabular-nums"
+                    title={`${Number(r.sales) - Number(r.sales_online)} in-store · ${Number(r.sales_online)} online`}
+                  >
                     {count(r.sales)}
+                    {/* online share of the total, e.g. "5 · 2 online" */}
+                    {Number(r.sales_online) > 0 ? (
+                      <span className="text-xs text-muted-foreground"> · {count(r.sales_online)} online</span>
+                    ) : null}
                   </td>
                   <td className="overflow-hidden px-3 py-2 text-right tabular-nums font-bold">
                     {count(r.points)}

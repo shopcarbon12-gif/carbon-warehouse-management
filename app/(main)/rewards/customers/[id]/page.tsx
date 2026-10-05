@@ -6,6 +6,7 @@ import { loyaltyPost } from "@/lib/loyalty-client";
 import { getSession } from "@/lib/get-session";
 import { shortName } from "@/lib/format-name";
 import { AlertTriangle, UserSearch } from "lucide-react";
+import { PurchaseHistoryTable, type PurchaseHistoryRow } from "@/components/loyalty/purchase-history-table";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
  * /api/admin/adjust endpoint (idempotent + auditable). The Source column in
  * the ledger resolves source='pos' rows to "<code> · <name>" via
  * pos_sales → pos_locations → locations (matches Loyalty's JOIN).
+ * Purchase history lists in-store + online purchases from the shared
+ * customer_purchases view (online rows expand to their Shopify line items).
  */
 export default async function CustomerDetail({
   params,
@@ -65,6 +68,7 @@ export default async function CustomerDetail({
   let customer: Customer | null = null;
   let balance = 0;
   let ledger: LedgerRow[] = [];
+  let purchases: PurchaseHistoryRow[] = [];
   let dbError: string | null = null;
   let pgCode: string | null = null;
 
@@ -121,6 +125,29 @@ export default async function CustomerDetail({
         [customerId],
       );
       ledger = lR.rows;
+
+      // In-store + online purchases from the shared customer_purchases view
+      // (owned by Carbon-Rewards). Limit first, then attach the POS store
+      // code (sale link) and the Shopify line items to just those rows.
+      const pR = await pool.query<PurchaseHistoryRow>(
+        `SELECT p.channel, p.ref, p.number, p.placed_at::text, p.total::text,
+                p.status, p.location_name, p.item_count,
+                pl.store_code,
+                so.line_items
+           FROM (SELECT cp.*
+                   FROM customer_purchases cp
+                  WHERE cp.customer_id = $1
+                  ORDER BY cp.placed_at DESC NULLS LAST
+                  LIMIT 100) p
+           LEFT JOIN pos_sales      ps ON p.channel = 'store'
+                                      AND ps.id::text = p.ref
+           LEFT JOIN pos_locations  pl ON pl.id = ps.pos_location_id
+           LEFT JOIN shopify_orders so ON p.channel = 'online'
+                                      AND so.order_gid = p.ref
+          ORDER BY p.placed_at DESC NULLS LAST`,
+        [customerId],
+      );
+      purchases = pR.rows;
     } catch (e) {
       console.error("[loyalty/customers/detail] db query failed:", e);
       dbError = e instanceof Error ? e.message : "Unknown database error";
@@ -308,6 +335,16 @@ export default async function CustomerDetail({
             </table>
             </div>
           </div>
+
+          <div className="border border-border bg-card overflow-x-auto mt-4">
+            <h2 className="text-base font-bold p-4 border-b border-border">
+              Purchase history · last 100
+            </h2>
+            {/* Same phone-only scroll box as the ledger above. */}
+            <div className="max-md:overflow-x-auto max-md:overflow-y-auto max-md:max-h-[60dvh] max-md:overscroll-contain">
+              <PurchaseHistoryTable rows={purchases} />
+            </div>
+          </div>
         </section>
 
         <aside className="space-y-4">
@@ -404,7 +441,7 @@ export default async function CustomerDetail({
               </li>
               {c?.shopify_customer_gid ? (
                 <li>
-                  <a className="underline" href={`https://admin.shopify.com/store/30e7d3/customers/${c.shopify_customer_gid.split("/").pop()}`} target="_blank" rel="noreferrer">
+                  <a className="underline" href={`https://admin.shopify.com/store/shopcarbon1/customers/${c.shopify_customer_gid.split("/").pop()}`} target="_blank" rel="noreferrer">
                     Shopify customer ↗
                   </a>
                 </li>
