@@ -27,6 +27,7 @@ const fetcher = async (url: string) => {
 /* WMS items.status → display label per /settings/statuses convention. */
 const WMS_TO_LABEL: Record<string, string> = {
   "in-stock": "LIVE",
+  unknown: "UNKNOWN",
   return: "RETURN",
   damaged: "DAMAGED",
   sold: "SOLD",
@@ -90,7 +91,8 @@ export function RfidTagsModal({
   onClose,
   onMutated,
 }: {
-  modalSku: CatalogGridRow;
+  /** Only these three are read — so a Shopify order line can open the same window. */
+  modalSku: Pick<CatalogGridRow, "custom_sku_id" | "name" | "sku">;
   onClose: () => void;
   /** Called after a successful status change so the parent can re-fetch grid counts. */
   onMutated?: () => void;

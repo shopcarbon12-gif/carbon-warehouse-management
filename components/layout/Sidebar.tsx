@@ -107,7 +107,7 @@ const sections: NavSection[] = [
       { href: "/tags-labels/encode-items", label: "Encode Items", icon: Tags },
       { href: "/tags-labels/encode-print", label: "Encode & Print", icon: Stamp },
       { href: "/tags-labels/bulk-status", label: "Bulk status", icon: SlidersHorizontal },
-      { href: "/tags-labels/ship-scan-out", label: "Ship / Scan-out", icon: Truck },
+      { href: "/tags-labels/ship-scan-out", label: "Scan-out", icon: Truck },
     ],
   },
   {
@@ -147,6 +147,7 @@ const sections: NavSection[] = [
       { href: "/reports/activity", label: "Activity history", icon: Activity },
       { href: "/reports/asset-movements", label: "Asset movements", icon: Route },
       { href: "/reports/status-logs", label: "Status & tag logs", icon: Tags },
+      { href: "/reports/scan-out", label: "Scan-out log", icon: Truck },
       { href: "/reports/adjustments", label: "Inventory adjustments", icon: SlidersHorizontal },
       { href: "/reports/replenishments", label: "Replenishments", icon: PackagePlus },
       { href: "/reports/bulk-imports", label: "Bulk imports", icon: FolderInput },

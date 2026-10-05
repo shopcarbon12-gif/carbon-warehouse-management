@@ -7,9 +7,16 @@
  * change is made in Shopify, and "Open in Shopify" is one click away.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, Search, Truck, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
 import { useUrlParam } from "@/lib/use-url-param";
 import { refreshShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
+import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
+import {
+  ShipScanOutWorkspace,
+  statusClass,
+  statusLabel,
+  type ScanOutItem,
+} from "@/components/rfid/ship-scan-out/ship-scan-out-workspace";
 
 type Money = { amount: string; currencyCode: string };
 type Row = {
@@ -51,9 +58,21 @@ type Detail = Row & {
   tax: Money | null;
   discounts: Money | null;
   refunded: Money | null;
-  lines: Array<{ title: string; variant: string | null; sku: string | null; quantity: number; unit: Money | null; total: Money | null; image: string | null }>;
+  lines: Array<{ title: string; variant: string | null; sku: string | null; variantId: string | null; quantity: number; unit: Money | null; total: Money | null; image: string | null }>;
   tracking: Array<{ company: string | null; number: string | null; url: string | null; status: string | null }>;
   adminUrl: string;
+};
+
+/** The WMS side of an order line (lib/server/shopify-sale-wms.ts). */
+type LineWms = {
+  sku: string | null;
+  customSkuId: string | null;
+  upc: string | null;
+  bin: string | null;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  marked: ScanOutItem[];
 };
 
 const TABS = [
@@ -479,6 +498,25 @@ function needsLabel(s: Detail): boolean {
 function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const [sale, setSale] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wms, setWms] = useState<{ processed: boolean; lines: LineWms[] } | null>(null);
+  const [tagsFor, setTagsFor] = useState<{ custom_sku_id: string; name: string; sku: string } | null>(null);
+  const [scanOutOpen, setScanOutOpen] = useState(false);
+  const [wmsTick, setWmsTick] = useState(0);
+  const reloadWms = useCallback(() => setWmsTick((t) => t + 1), []);
+
+  // The WMS side: each line's item, and the tags this order marked unknown — re-read after a scan-out.
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/shopify/sales/${encodeURIComponent(id)}/wms`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (alive && j) setWms(j as { processed: boolean; lines: LineWms[] });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [id, wmsTick]);
 
   useEffect(() => {
     // Mounted fresh per order (key={id} below), so there is nothing to reset here.
@@ -498,7 +536,10 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
     void fetchSale();
     // Back from making the label in Shopify: show the order as it is now.
     const onWake = () => {
-      if (document.visibilityState === "visible") void fetchSale();
+      if (document.visibilityState === "visible") {
+        void fetchSale();
+        setWmsTick((t) => t + 1);
+      }
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -510,12 +551,18 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   }, [id]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Escape closes the window on top first — the scanner or the tag list, then the order.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || tagsFor) return;
+      if (scanOutOpen) setScanOutOpen(false);
+      else onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, scanOutOpen, tagsFor]);
 
-  const lines = useMemo(() => sale?.lines.filter((l) => l.quantity > 0) ?? [], [sale]);
+  // Keep each line's index into the order, so it lines up with its WMS side.
+  const lines = useMemo(() => (sale?.lines ?? []).map((l, idx) => ({ ...l, idx })).filter((l) => l.quantity > 0), [sale]);
   /* Shopify's order page lists the subtotal BEFORE discounts and the discount
      on its own line, so subtotal − discount + shipping + taxes = total. The
      API's subtotal is already discounted; showing it beside the discount
@@ -532,7 +579,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
       <aside
-        className="flex h-full w-full max-w-xl flex-col overflow-y-auto bg-[var(--wms-bg)] shadow-xl"
+        className="flex h-full w-full max-w-2xl flex-col overflow-y-auto bg-[var(--wms-bg)] shadow-xl"
         onClick={(e) => e.stopPropagation()}
         aria-label="Order details"
       >
@@ -585,6 +632,16 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 {/* Shopify does not let other apps buy its labels, so this opens the
                     order in Shopify, where "Create shipping label" is. When the
                     operator comes back, the order and the menu count re-read. */}
+                <div className="flex flex-wrap gap-2">
+                  {needsLabel(sale) ? (
+                    <button
+                      type="button"
+                      className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11"
+                      onClick={() => setScanOutOpen(true)}
+                    >
+                      <ScanLine className="h-4 w-4" /> Scan out
+                    </button>
+                  ) : null}
                 {needsLabel(sale) ? (
                   <a
                     className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
@@ -595,29 +652,91 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                     <Truck className="h-4 w-4" /> Create shipping label
                   </a>
                 ) : null}
+                </div>
               </div>
               <ul>
-                {lines.map((l, i) => (
-                  <li key={i} className="flex items-center gap-3 border-b border-[var(--wms-border)]/60 px-4 py-2.5 last:border-0">
-                    {l.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={l.image} alt="" className="h-12 w-12 shrink-0 rounded-md border border-[var(--wms-border)] object-cover" />
-                    ) : (
-                      <div className="h-12 w-12 shrink-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-[var(--wms-fg)]">{l.title}</div>
-                      {l.variant ? <div className="text-xs text-[var(--wms-muted)]">{l.variant}</div> : null}
-                      {l.sku ? <div className="font-mono text-xs text-[var(--wms-muted)]">SKU: {l.sku}</div> : null}
-                    </div>
-                    <div className="shrink-0 text-right text-sm tabular-nums text-[var(--wms-fg)]/85">
-                      {money(l.unit)} × {l.quantity}
-                    </div>
-                    <div className="w-20 shrink-0 text-right text-sm tabular-nums text-[var(--wms-fg)]">
-                      {money(l.unit ? { amount: String(Number(l.unit.amount) * l.quantity), currencyCode: l.unit.currencyCode } : null)}
-                    </div>
-                  </li>
-                ))}
+                {lines.map((l) => {
+                  const w = wms?.lines[l.idx];
+                  return (
+                    <li key={l.idx} className="border-b border-[var(--wms-border)]/60 px-4 py-3 last:border-0">
+                      <div className="flex items-start gap-3">
+                        {l.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={l.image} alt="" className="h-16 w-16 shrink-0 rounded-md border border-[var(--wms-border)] object-cover" />
+                        ) : (
+                          <div className="h-16 w-16 shrink-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]" />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-base font-semibold leading-snug text-[var(--wms-fg)]">{w?.name ?? l.title}</div>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {(w?.color ?? l.variant?.split(" / ")[0]) ? (
+                              <span className="rounded-md bg-[var(--wms-accent)]/15 px-2 py-0.5 text-sm font-semibold text-[var(--wms-accent)]">
+                                {w?.color ?? l.variant?.split(" / ")[0]}
+                              </span>
+                            ) : null}
+                            {(w?.size ?? l.variant?.split(" / ")[1]) ? (
+                              <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-sm font-semibold text-sky-600 dark:text-sky-300">
+                                Size {w?.size ?? l.variant?.split(" / ")[1]}
+                              </span>
+                            ) : null}
+                          </div>
+                          <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-sm">
+                            <dt className="text-[var(--wms-muted)]">SKU</dt>
+                            <dd className="font-semibold text-[var(--wms-fg)]">{l.sku ?? "—"}</dd>
+                            <dt className="text-[var(--wms-muted)]">UPC</dt>
+                            <dd className="font-semibold text-[var(--wms-fg)]">{w?.upc ?? "—"}</dd>
+                            <dt className="text-[var(--wms-muted)]">Bin</dt>
+                            <dd className="font-semibold text-amber-600 dark:text-amber-300">{w ? (w.bin ?? "none") : "…"}</dd>
+                          </dl>
+                        </div>
+                        <div className="shrink-0 text-right text-sm tabular-nums">
+                          <div className="text-[var(--wms-fg)]/85">
+                            {money(l.unit)} × {l.quantity}
+                          </div>
+                          <div className="font-semibold text-[var(--wms-fg)]">
+                            {money(l.unit ? { amount: String(Number(l.unit.amount) * l.quantity), currencyCode: l.unit.currencyCode } : null)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* The exact tag(s) this order marked unknown when it came in, and what they are now. */}
+                      <div className="mt-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">Tag marked by this order</div>
+                        {!wms ? (
+                          <p className="mt-1 text-xs text-[var(--wms-muted)]">Loading…</p>
+                        ) : w && w.marked.length ? (
+                          <ul className="mt-1 flex flex-col gap-1">
+                            {w.marked.map((m) => (
+                              <li key={m.epc} className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="font-mono text-sm font-semibold text-[var(--wms-accent)] underline-offset-2 hover:underline max-md:min-h-11"
+                                  title="Show every tag of this item"
+                                  onClick={() =>
+                                    w.customSkuId &&
+                                    setTagsFor({ custom_sku_id: w.customSkuId, name: w.name ?? l.title, sku: w.sku ?? l.sku ?? "" })
+                                  }
+                                >
+                                  {m.epc}
+                                </button>
+                                <span className={`rounded-md border px-1.5 py-0.5 font-mono text-[0.65rem] font-semibold ${statusClass(m.status)}`}>
+                                  {statusLabel(m.status)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-1 text-xs text-[var(--wms-muted)]">
+                            {!wms.processed
+                              ? "The WMS has no record of this order arriving — no tag was marked."
+                              : !w?.customSkuId
+                                ? "This item is not in the WMS, so no tag was marked."
+                                : "No LIVE tag was available to mark when the order came in."}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
                 {!lines.length ? <li className="px-4 py-3 text-sm text-[var(--wms-muted)]">No items left on this order.</li> : null}
               </ul>
               {sale.tracking.length ? (
@@ -718,6 +837,43 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
           </div>
         ) : null}
       </aside>
+
+      {tagsFor ? (
+        <div onClick={(e) => e.stopPropagation()}>
+          <RfidTagsModal modalSku={tagsFor} onClose={() => setTagsFor(null)} onMutated={reloadWms} />
+        </div>
+      ) : null}
+
+      {scanOutOpen && sale ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/60 p-4 max-md:p-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            setScanOutOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-label="Scan-out"
+            className="w-full max-w-6xl rounded-xl border border-[var(--wms-border)] bg-[var(--wms-bg)] p-4 shadow-2xl max-md:min-h-full max-md:rounded-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-[var(--wms-fg)]">Scan-out · {sale.name}</h2>
+                <p className="text-xs text-[var(--wms-muted)]">Items on this order are marked in the list. Every action is logged against {sale.name}.</p>
+              </div>
+              <button type="button" aria-label="Close" className="wms-btn inline-flex items-center max-md:min-h-11" onClick={() => setScanOutOpen(false)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <ShipScanOutWorkspace
+              order={{ id: sale.legacyId, name: sale.name, skus: sale.lines.map((x) => x.sku ?? "").filter(Boolean) }}
+              onScannedOut={reloadWms}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

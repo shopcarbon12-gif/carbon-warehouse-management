@@ -238,6 +238,7 @@ export type SaleDetail = SaleRow & {
     title: string;
     variant: string | null;
     sku: string | null;
+    variantId: string | null;
     quantity: number;
     unit: Money | null;
     total: Money | null;
@@ -264,7 +265,7 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
       totalRefundedSet { shopMoney { amount currencyCode } }
       lineItems(first: 100) {
         nodes {
-          title variantTitle sku currentQuantity
+          title variantTitle sku currentQuantity variant { id }
           originalUnitPriceSet { shopMoney { amount currencyCode } }
           discountedTotalSet { shopMoney { amount currencyCode } }
           image { url(transform: { maxWidth: 120, maxHeight: 120 }) }
@@ -294,6 +295,7 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
               variantTitle: string | null;
               sku: string | null;
               currentQuantity: number;
+              variant: { id: string } | null;
               originalUnitPriceSet: M;
               discountedTotalSet: M;
               image: { url: string } | null;
@@ -324,6 +326,7 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
       title: l.title,
       variant: l.variantTitle,
       sku: l.sku,
+      variantId: l.variant?.id ?? null,
       quantity: l.currentQuantity,
       unit: m(l.originalUnitPriceSet),
       total: m(l.discountedTotalSet),

@@ -24,7 +24,7 @@ const TABS: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
   { href: "/dashboard", label: "Dash", icon: LayoutDashboard },
   { href: "/inventory/catalog", label: "Catalog", icon: Boxes },
   { href: "/inventory/cycle-counts", label: "Counts", icon: ClipboardList },
-  { href: "/tags-labels/ship-scan-out", label: "Ship", icon: PackageCheck },
+  { href: "/tags-labels/ship-scan-out", label: "Scan-out", icon: PackageCheck },
 ];
 
 export function MobileTabBar({ onMenu }: { onMenu: () => void }) {
