@@ -11,6 +11,11 @@ import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Printer, RefreshCw, S
 import { ShopifyLogo } from "@/components/shopify/shopify-logo";
 import { ThankYouToggle } from "@/components/shopify/thank-you-toggle";
 
+/** Compact action button for the order's fulfilment row, so Print a packing
+ *  slip, the thank-you switch, Scan out and Create shipping label share ONE row. */
+const ROW_BTN =
+  "wms-btn-primary wms-btn-compact inline-flex items-center gap-1 whitespace-nowrap px-2.5 text-[0.75rem] max-md:min-h-11";
+
 /** Square icon button for the order drawer header. */
 const SQUARE_BTN =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/40 max-md:h-11 max-md:w-11";
@@ -706,37 +711,37 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 {/* Shopify does not let other apps buy its labels, so this opens the
                     order in Shopify, where "Create shipping label" is. When the
                     operator comes back, the order and the menu count re-read. */}
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                   {/* The approved CARBON packing slip (no prices), filled from this
                       order — opens in a new tab with the print dialog. */}
                   {sale.lines.some((x) => x.quantity > 0) ? (
                     <a
-                      className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
+                      className={ROW_BTN}
                       href={`/api/shopify/sales/${id}/packing-slip?print=1`}
                       target="_blank"
                       rel="noreferrer"
                     >
-                      <Printer className="h-4 w-4" /> Print a packing slip
+                      <Printer className="h-3.5 w-3.5" /> Print a packing slip
                     </a>
                   ) : null}
                   {sale.lines.some((x) => x.quantity > 0) ? <ThankYouToggle orderId={id} /> : null}
                   {needsLabel(sale) ? (
                     <button
                       type="button"
-                      className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
+                      className={ROW_BTN}
                       onClick={() => setScanOutOpen(true)}
                     >
-                      <ScanLine className="h-4 w-4" /> Scan out
+                      <ScanLine className="h-3.5 w-3.5" /> Scan out
                     </button>
                   ) : null}
                 {needsLabel(sale) ? (
                   <a
-                    className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
+                    className={ROW_BTN}
                     href={sale.adminUrl}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <Truck className="h-4 w-4" /> Create shipping label
+                    <Truck className="h-3.5 w-3.5" /> Create shipping label
                   </a>
                 ) : null}
                 </div>
