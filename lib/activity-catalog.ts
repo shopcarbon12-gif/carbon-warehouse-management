@@ -239,6 +239,7 @@ const ACTIONS: Record<string, Entry> = {
   rfid_print: { module: "Tags & labels", label: "Printed label" },
   exception_state: { module: "Exceptions", label: "Changed exception" },
   bulk_import_commit: { module: "Inventory", label: "Committed bulk import" },
+  thank_you_code_created: { module: "Shopify", label: "Created thank-you code (15% off next order)" },
   STATUS_CHANGE: { module: "Inventory status", label: "Changed tag status" },
   ADJUSTMENT: { module: "Stock adjustments", label: "Adjusted stock" },
   KILLED_TAG: { module: "Inventory status", label: "Killed tag" },

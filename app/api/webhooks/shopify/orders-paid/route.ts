@@ -35,7 +35,12 @@ async function POST_handler(req: Request) {
     return new NextResponse("unauthorized", { status: 401 });
   }
 
-  let order: { id?: number | string; name?: string; line_items?: LineItem[] };
+  let order: {
+    id?: number | string;
+    name?: string;
+    line_items?: LineItem[];
+    discount_codes?: { code?: string | null }[];
+  };
   try {
     order = JSON.parse(raw);
   } catch {
@@ -47,6 +52,23 @@ async function POST_handler(req: Request) {
 
   const pool = getPool();
   if (!pool) return NextResponse.json({ ok: false, error: "db" }, { status: 500 });
+
+  /* A thank-you code (created when a packing slip is printed) used on this
+     order: mark it used so it leaves the customer's Rewards page. Idempotent,
+     so it runs before the duplicate check; a failure never blocks the sale. */
+  const usedCodes = (Array.isArray(order.discount_codes) ? order.discount_codes : [])
+    .map((d) => String(d?.code ?? "").trim().toUpperCase())
+    .filter(Boolean);
+  if (usedCodes.length) {
+    await pool
+      .query(
+        `UPDATE order_thank_you_codes
+            SET used_at = now(), used_order_name = $2
+          WHERE upper(code) = ANY($1::text[]) AND used_at IS NULL`,
+        [usedCodes, order.name ?? null],
+      )
+      .catch((e) => console.error("[orders-paid] thank-you code", e));
+  }
 
   // Idempotency: claim the order id. If already processed, ack and stop.
   const claim = await pool.query(
