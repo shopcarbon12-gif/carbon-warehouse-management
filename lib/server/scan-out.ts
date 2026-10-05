@@ -155,7 +155,33 @@ export async function scanOut(
          VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, 'sold', $4, NULL, $5::uuid, $6)`,
         [who.tenantId, epc, row.status, reason, who.userId, ctx.reader ?? null],
       );
-      await logEvent(client, who, "scan_out", item, { ...ctx, oldStatus: row.status, newStatus: "sold", rssi });
+      // The order held a LIVE tag of this item as UNKNOWN (orders/paid, or an approved
+      // exchange) until the real piece was known. A LIVE piece scanned out is now SOLD
+      // itself, so one held tag goes back to LIVE right away. (A held tag scanned out
+      // itself was that placeholder — nothing to release.)
+      let detail: string | null = null;
+      if (ctx.orderId && row.status === "in-stock" && row.custom_sku_id) {
+        const held = await client.query<{ epc: string }>(
+          `SELECT i.epc FROM items i
+            WHERE i.custom_sku_id = $2::uuid AND i.status = 'unknown' AND i.epc <> $3
+              AND i.epc IN (SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(e->'epcs') = 'array' THEN e->'epcs' ELSE '[]'::jsonb END)
+                              FROM shopify_sale_events s, jsonb_array_elements(CASE WHEN jsonb_typeof(s.detail) = 'array' THEN s.detail ELSE '[]'::jsonb END) e
+                             WHERE s.order_id = $1)
+            ORDER BY i.epc LIMIT 1 FOR UPDATE OF i SKIP LOCKED`,
+          [ctx.orderId, row.custom_sku_id, epc],
+        );
+        const h = held.rows[0]?.epc;
+        if (h) {
+          await client.query(`UPDATE items SET status = 'in-stock' WHERE epc = $1`, [h]);
+          await client.query(
+            `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
+             VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'unknown', 'in-stock', $3, NULL, $4::uuid, $5)`,
+            [who.tenantId, h, `scan_out_release ${ctx.returnName ?? ctx.orderName ?? ""} (${epc} shipped)`.trim(), who.userId, ctx.reader ?? null],
+          );
+          detail = `Held tag ${h} back to LIVE`;
+        }
+      }
+      await logEvent(client, who, "scan_out", item, { ...ctx, oldStatus: row.status, newStatus: "sold", rssi, detail });
       await client.query("COMMIT");
       out.push({ ...item, status: "sold", ok: true, oldStatus: row.status });
     } catch (e) {
@@ -231,7 +257,8 @@ export async function scanIn(
 /**
  * Undo a scan-out: the tag goes back to what it was before — LIVE almost
  * always; UNKNOWN when it was the placeholder an online order had marked, so
- * the order's piece is not counted twice. Only the latest scan-out of a tag
+ * the order's piece is not counted twice. A held tag the scan-out released
+ * goes back to UNKNOWN. Only the latest scan-out of a tag
  * that is still SOLD can be undone; the undo is logged as its own action.
  */
 export async function undoScanOut(pool: Pool, who: Who, epc: string, ctx: OrderRef): Promise<ScanOutResult> {
@@ -245,8 +272,8 @@ export async function undoScanOut(pool: Pool, who: Who, epc: string, ctx: OrderR
       return { epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null, ok: false, oldStatus: null, error: "This tag is not in the WMS." };
     }
     const item = toItem(row);
-    const last = await client.query<{ action: string; old_status: string | null }>(
-      `SELECT action, old_status FROM scan_out_events
+    const last = await client.query<{ action: string; old_status: string | null; detail: string | null }>(
+      `SELECT action, old_status, detail FROM scan_out_events
         WHERE tenant_id = $1::uuid AND epc = $2 AND action IN ('scan_out', 'scan_in', 'undo')
         ORDER BY created_at DESC, id DESC LIMIT 1`,
       [who.tenantId, epc],
@@ -266,7 +293,21 @@ export async function undoScanOut(pool: Pool, who: Who, epc: string, ctx: OrderR
        VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, $4, $5, NULL, $6::uuid, NULL)`,
       [who.tenantId, epc, expect, back, `${ev.action}_undo ${ctx.returnName ?? ctx.orderName ?? ""}`.trim(), who.userId],
     );
-    await logEvent(client, who, "undo", item, { ...ctx, oldStatus: expect, newStatus: back });
+    // The scan-out released a held tag back to LIVE — hold it again while it is still LIVE.
+    let detail: string | null = null;
+    const released = ev.action === "scan_out" ? ev.detail?.match(/Held tag ([0-9A-F]{24}) back to LIVE/)?.[1] : undefined;
+    if (released) {
+      const re = await client.query(`UPDATE items SET status = 'unknown' WHERE epc = $1 AND status = 'in-stock' RETURNING epc`, [released]);
+      if (re.rowCount) {
+        await client.query(
+          `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
+           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'in-stock', 'unknown', $3, NULL, $4::uuid, NULL)`,
+          [who.tenantId, released, `scan_out_undo ${ctx.returnName ?? ctx.orderName ?? ""} (held again)`.trim(), who.userId],
+        );
+        detail = `Held tag ${released} UNKNOWN again`;
+      }
+    }
+    await logEvent(client, who, "undo", item, { ...ctx, oldStatus: expect, newStatus: back, detail });
     await client.query("COMMIT");
     return { ...item, status: back, ok: true, oldStatus: expect };
   } catch (e) {
