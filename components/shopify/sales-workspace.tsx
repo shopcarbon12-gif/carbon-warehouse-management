@@ -8,6 +8,11 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
+import { ShopifyLogo } from "@/components/shopify/shopify-logo";
+
+/** Square icon button for the order drawer header. */
+const SQUARE_BTN =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/40 max-md:h-11 max-md:w-11";
 import { useUrlParam } from "@/lib/use-url-param";
 import { refreshShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
@@ -663,13 +668,20 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
               </p>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-2">
             {sale ? (
-              <a className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" href={sale.adminUrl} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-4 w-4" /> Shopify
+              <a
+                className={SQUARE_BTN}
+                href={sale.adminUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open in Shopify"
+                title="Open in Shopify"
+              >
+                <ShopifyLogo className="h-5 w-5" />
               </a>
             ) : null}
-            <button type="button" aria-label="Close" className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11" onClick={onClose}>
+            <button type="button" aria-label="Close" title="Close" className={SQUARE_BTN} onClick={onClose}>
               <X className="h-4 w-4" />
             </button>
           </div>
