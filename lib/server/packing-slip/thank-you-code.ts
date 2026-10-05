@@ -12,6 +12,9 @@
  *    copyable, on the customer's Rewards page in their Shopify account.
  *  - Cancelling the order (any reason) expires the code at once — see
  *    expireThankYouCodeForOrder and the orders/cancelled webhook.
+ *  - The order panel's "Thank-you code" switch (default ON) controls it per
+ *    order: OFF = printing creates nothing and an existing code for THIS order
+ *    is deleted; ON = the code is created at once. See setThankYouEnabled.
  *
  * Never throws: a failure here is logged and the slip still prints.
  */
@@ -48,6 +51,9 @@ export async function ensureThankYouCode(
     if (existing.rows[0]) {
       return { status: "existing", code: existing.rows[0].code, endsAt: existing.rows[0].ends_at.toISOString() };
     }
+
+    const off = await pool.query(`SELECT 1 FROM order_thank_you_optout WHERE shopify_order_id = $1`, [orderLegacyId]);
+    if (off.rowCount) return { status: "skipped", reason: "thank-you code is switched off for this order" };
 
     const ctx = await resolveShopContext();
     if (!ctx) return { status: "failed", reason: "Shopify is not connected" };
@@ -206,4 +212,137 @@ export async function expireThankYouCodeForOrder(
     [orderLegacyId, reason],
   );
   return { status: "expired", code: row.code };
+}
+
+export type ThankYouState = {
+  /** Switch position: false only when switched off for this order. */
+  enabled: boolean;
+  /** Why a code cannot exist (switch greyed out), or null when it can. */
+  blocked: string | null;
+  code: string | null;
+  endsAt: string | null;
+  used: boolean;
+  expired: boolean;
+};
+
+async function orderBasics(orderLegacyId: string) {
+  const ctx = await resolveShopContext();
+  if (!ctx) return null;
+  const o = await runShopifyGraphql<{
+    order: { name: string; createdAt: string; cancelledAt: string | null; customer: { id: string } | null } | null;
+  }>({
+    ...ctx,
+    query: `query ThankYouOrder($id: ID!) { order(id: $id) { name createdAt cancelledAt customer { id } } }`,
+    variables: { id: `gid://shopify/Order/${orderLegacyId}` },
+  });
+  return o.ok ? (o.data?.order ?? null) : null;
+}
+
+/** What the order panel's switch shows for one order. */
+export async function getThankYouState(pool: Pool, orderLegacyId: string): Promise<ThankYouState> {
+  const [row, off, order] = await Promise.all([
+    pool.query<{ code: string; ends_at: Date; used_at: Date | null; expired_at: Date | null }>(
+      `SELECT code, ends_at, used_at, expired_at FROM order_thank_you_codes WHERE shopify_order_id = $1`,
+      [orderLegacyId],
+    ),
+    pool.query(`SELECT 1 FROM order_thank_you_optout WHERE shopify_order_id = $1`, [orderLegacyId]),
+    orderBasics(orderLegacyId),
+  ]);
+  const r = row.rows[0];
+  const used = !!r?.used_at;
+  const expired = !!r && !used && (!!r.expired_at || r.ends_at.getTime() <= Date.now());
+  let blocked: string | null = null;
+  if (used) blocked = "The customer already used this code";
+  else if (expired) blocked = "This code has expired";
+  else if (!order) blocked = "Could not read the order from Shopify";
+  else if (order.cancelledAt) blocked = "Order is cancelled";
+  else if (!order.customer) blocked = "Order has no customer account";
+  else if (!r && Date.parse(order.createdAt) + THANK_YOU_VALID_DAYS * 86_400_000 <= Date.now()) {
+    blocked = `Order is older than ${THANK_YOU_VALID_DAYS} days`;
+  }
+  return {
+    enabled: (off.rowCount ?? 0) === 0,
+    blocked,
+    code: r?.code ?? null,
+    endsAt: r ? r.ends_at.toISOString() : null,
+    used,
+    expired,
+  };
+}
+
+/**
+ * Flip the order's switch.
+ *  ON  → clears the opt-out and creates the code now (ensureThankYouCode).
+ *  OFF → records the opt-out and DELETES this order's code from Shopify and
+ *        from Carbon Rewards. Only this order's code; a used code is left alone.
+ */
+export async function setThankYouEnabled(
+  pool: Pool,
+  orderLegacyId: string,
+  on: boolean,
+  opts: { tenantId: string; userId: string | null },
+): Promise<{ ok: boolean; error?: string; state: ThankYouState }> {
+  if (on) {
+    await pool.query(`DELETE FROM order_thank_you_optout WHERE shopify_order_id = $1`, [orderLegacyId]);
+    const r = await ensureThankYouCode(pool, orderLegacyId, opts);
+    const state = await getThankYouState(pool, orderLegacyId);
+    if (r.status === "failed") return { ok: false, error: r.reason, state };
+    return { ok: true, state };
+  }
+
+  const row = await pool.query<{ code: string; discount_gid: string; order_name: string; used_at: Date | null }>(
+    `SELECT code, discount_gid, order_name, used_at FROM order_thank_you_codes WHERE shopify_order_id = $1`,
+    [orderLegacyId],
+  );
+  const existing = row.rows[0];
+  if (existing?.used_at) {
+    return { ok: false, error: "The customer already used this code", state: await getThankYouState(pool, orderLegacyId) };
+  }
+  if (existing) {
+    const ctx = await resolveShopContext();
+    if (!ctx) return { ok: false, error: "Shopify is not connected", state: await getThankYouState(pool, orderLegacyId) };
+    const d = await runShopifyGraphql<{
+      discountCodeDelete: { deletedCodeDiscountId: string | null; userErrors: { message: string }[] };
+    }>({
+      ...ctx,
+      query: `mutation DeleteThankYou($id: ID!) { discountCodeDelete(id: $id) { deletedCodeDiscountId userErrors { message } } }`,
+      variables: { id: existing.discount_gid },
+    });
+    const errs = d.ok ? (d.data?.discountCodeDelete.userErrors ?? []) : [{ message: "Shopify returned an error" }];
+    // Already deleted in Shopify admin is fine — the code is gone either way.
+    if (errs.length && !errs.some((e) => /not exist|not found/i.test(e.message))) {
+      return { ok: false, error: errs.map((e) => e.message).join("; "), state: await getThankYouState(pool, orderLegacyId) };
+    }
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO order_thank_you_optout (shopify_order_id, order_name, opted_out_by)
+       VALUES ($1, $2, $3) ON CONFLICT (shopify_order_id) DO NOTHING`,
+      [orderLegacyId, existing?.order_name ?? null, opts.userId],
+    );
+    if (existing) {
+      await client.query(`DELETE FROM order_thank_you_codes WHERE shopify_order_id = $1`, [orderLegacyId]);
+      await client.query(
+        `INSERT INTO audit_log (tenant_id, user_id, action, entity, metadata)
+         SELECT $1::uuid, u.id, 'thank_you_code_deleted', $2, $3::jsonb
+         FROM (SELECT 1) one LEFT JOIN users u ON u.id = $4::uuid`,
+        [
+          opts.tenantId,
+          `order:${orderLegacyId}`,
+          JSON.stringify({ summary: `${existing.code} · order ${existing.order_name}`, code: existing.code, order: existing.order_name }),
+          opts.userId,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  return { ok: true, state: await getThankYouState(pool, orderLegacyId) };
 }

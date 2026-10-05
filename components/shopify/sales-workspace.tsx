@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Printer, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
 import { ShopifyLogo } from "@/components/shopify/shopify-logo";
+import { ThankYouToggle } from "@/components/shopify/thank-you-toggle";
 
 /** Square icon button for the order drawer header. */
 const SQUARE_BTN =
@@ -705,7 +706,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 {/* Shopify does not let other apps buy its labels, so this opens the
                     order in Shopify, where "Create shipping label" is. When the
                     operator comes back, the order and the menu count re-read. */}
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {/* The approved CARBON packing slip (no prices), filled from this
                       order — opens in a new tab with the print dialog. */}
                   {sale.lines.some((x) => x.quantity > 0) ? (
@@ -718,6 +719,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                       <Printer className="h-4 w-4" /> Print a packing slip
                     </a>
                   ) : null}
+                  {sale.lines.some((x) => x.quantity > 0) ? <ThankYouToggle orderId={id} /> : null}
                   {needsLabel(sale) ? (
                     <button
                       type="button"

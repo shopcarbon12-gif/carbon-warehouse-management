@@ -68,6 +68,7 @@ const ROUTES: Record<string, Entry> = {
   "models/upload": { module: "Studio", label: "Uploaded model photo" },
 
   "shopify/publish": { module: "Shopify", label: "Published to Shopify" },
+  "shopify/sales/[id]/thank-you-code": { module: "Shopify", label: { PUT: "Switched thank-you code on/off" } },
   "shopify/status": { module: "Shopify", label: "Changed Shopify product status" },
   "shopify/media": { module: "Shopify", label: { POST: "Changed Shopify images", PUT: "Changed Shopify images", PATCH: "Reordered Shopify images", DELETE: "Deleted Shopify image" } },
   "shopify/image-upload": { module: "Shopify", label: "Uploaded image to Shopify" },
@@ -241,6 +242,7 @@ const ACTIONS: Record<string, Entry> = {
   exception_state: { module: "Exceptions", label: "Changed exception" },
   bulk_import_commit: { module: "Inventory", label: "Committed bulk import" },
   thank_you_code_created: { module: "Shopify", label: "Created thank-you code (15% off next order)" },
+  thank_you_code_deleted: { module: "Shopify", label: "Deleted thank-you code (switched off)" },
   STATUS_CHANGE: { module: "Inventory status", label: "Changed tag status" },
   ADJUSTMENT: { module: "Stock adjustments", label: "Adjusted stock" },
   KILLED_TAG: { module: "Inventory status", label: "Killed tag" },
