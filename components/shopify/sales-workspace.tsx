@@ -636,7 +636,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                   {needsLabel(sale) ? (
                     <button
                       type="button"
-                      className="wms-btn inline-flex items-center gap-1.5 max-md:min-h-11"
+                      className="wms-btn-primary inline-flex items-center gap-1.5 max-md:min-h-11"
                       onClick={() => setScanOutOpen(true)}
                     >
                       <ScanLine className="h-4 w-4" /> Scan out
