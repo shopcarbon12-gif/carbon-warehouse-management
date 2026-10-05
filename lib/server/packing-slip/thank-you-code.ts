@@ -10,6 +10,8 @@
  *    its 45 days.
  *  - Not printed on the slip. Carbon Rewards (rewards.shopcarbon.com) shows it,
  *    copyable, on the customer's Rewards page in their Shopify account.
+ *  - Cancelling the order (any reason) expires the code at once — see
+ *    expireThankYouCodeForOrder and the orders/cancelled webhook.
  *
  * Never throws: a failure here is logged and the slip still prints.
  */
@@ -159,4 +161,49 @@ export async function ensureThankYouCode(
     console.error("[thank-you-code]", orderLegacyId, e);
     return { status: "failed", reason: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Expire an order's thank-you code NOW — called when the order is cancelled,
+ * for any reason. Shopify's discountCodeDeactivate sets the code's end date to
+ * now (status EXPIRED, unusable at checkout); the row's ends_at moves too, so
+ * Carbon Rewards stops showing it. Safe to call twice; a no-op when the order
+ * has no code.
+ */
+export async function expireThankYouCodeForOrder(
+  pool: Pool,
+  orderLegacyId: string,
+  reason: string,
+): Promise<{ status: "expired" | "none" | "already" | "failed"; code?: string; error?: string }> {
+  const r = await pool.query<{ code: string; discount_gid: string; expired_at: Date | null; used_at: Date | null }>(
+    `SELECT code, discount_gid, expired_at, used_at FROM order_thank_you_codes WHERE shopify_order_id = $1`,
+    [orderLegacyId],
+  );
+  const row = r.rows[0];
+  if (!row) return { status: "none" };
+  if (row.expired_at) return { status: "already", code: row.code };
+
+  const ctx = await resolveShopContext();
+  if (!ctx) return { status: "failed", code: row.code, error: "Shopify is not connected" };
+  const res = await runShopifyGraphql<{
+    discountCodeDeactivate: { codeDiscountNode: { id: string } | null; userErrors: { message: string }[] };
+  }>({
+    ...ctx,
+    query: `mutation ExpireThankYou($id: ID!) {
+      discountCodeDeactivate(id: $id) { codeDiscountNode { id } userErrors { message } }
+    }`,
+    variables: { id: row.discount_gid },
+  });
+  const errs = res.ok ? (res.data?.discountCodeDeactivate.userErrors ?? []) : [{ message: "Shopify returned an error" }];
+  // A code already deleted in Shopify admin cannot be used either — still expire the row.
+  const gone = errs.some((e) => /not exist|not found/i.test(e.message));
+  if (errs.length && !gone) return { status: "failed", code: row.code, error: errs.map((e) => e.message).join("; ") };
+
+  await pool.query(
+    `UPDATE order_thank_you_codes
+        SET ends_at = LEAST(ends_at, now()), expired_at = now(), expired_reason = $2
+      WHERE shopify_order_id = $1 AND expired_at IS NULL`,
+    [orderLegacyId, reason],
+  );
+  return { status: "expired", code: row.code };
 }

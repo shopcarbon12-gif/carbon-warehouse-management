@@ -85,6 +85,7 @@ const ROUTES: Record<string, Entry> = {
   "shopify/category-attributes": { module: "Shopify", label: "Set Shopify category attributes" },
   "webhooks/shopify/orders-paid": { module: "Shopify orders", label: "Shopify order paid" },
   "webhooks/shopify/refunds-create": { module: "Shopify orders", label: "Shopify refund" },
+  "webhooks/shopify/orders-cancelled": { module: "Shopify orders", label: "Shopify order cancelled — thank-you code expired" },
   "webhooks/shopify/orders-fulfilled": { module: "Shopify orders", label: "Shopify order fulfilled — unknown tags back to live" },
 
   "inventory/bulk-status": { module: "Inventory status", label: "Changed tag status" },
