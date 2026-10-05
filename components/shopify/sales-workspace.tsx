@@ -444,8 +444,7 @@ export function SalesWorkspace() {
       </div>
 
       <p className="font-mono text-xs text-[var(--wms-muted)]">
-        Read live from Shopify and refreshed every minute. Shopify only shares the last 60 days of orders with this
-        app until it is given the &ldquo;read all orders&rdquo; permission.
+        Read live from Shopify and refreshed every minute.
       </p>
 
       {openId ? <SaleDrawer key={openId} id={openId} onClose={() => setOpenId(null)} /> : null}

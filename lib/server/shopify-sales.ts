@@ -7,7 +7,8 @@
  *
  * Limits worth knowing:
  *  - Without the `read_all_orders` scope Shopify returns only the last 60 days
- *    of orders. The current token does not have it (checked 2026-10-05).
+ *    of orders. The token was granted it on 2026-10-05 (74 orders, from #1001);
+ *    if the list ever shrinks to two months, that scope has been lost.
  *  - Customer names come back because the token has `read_customers`.
  */
 import { runShopifyGraphql } from "@/lib/shopify";
