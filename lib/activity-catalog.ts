@@ -37,7 +37,7 @@ type Entry = { module: ActivityModule; label: string | Partial<Record<string, st
 
 /** Route pattern → module + label (string, or per HTTP method). */
 const ROUTES: Record<string, Entry> = {
-  "auth/login": { module: "Sign-in", label: "Signed in" },
+  "auth/login": { module: "Sign-in", label: "Sign-in" },
   "auth/logout": { module: "Sign-in", label: "Signed out" },
   "session/location": { module: "Sign-in", label: "Switched location" },
 
