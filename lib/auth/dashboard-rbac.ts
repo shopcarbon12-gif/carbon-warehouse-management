@@ -17,6 +17,9 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure")) return true;
   if (pathname.startsWith("/settings")) return true;
   if (pathname.startsWith("/integrations")) return true;
+  // Shopify → Sales: customer names and money.
+  if (pathname.startsWith("/shopify")) return true;
+  if (pathname.startsWith("/api/shopify/sales")) return true;
   // Devices moved from /infrastructure/devices → /rfid/devices (menu regroup);
   // keep it admin-only even though the rest of /rfid is floor-accessible.
   if (pathname.startsWith("/rfid/devices")) return true;
