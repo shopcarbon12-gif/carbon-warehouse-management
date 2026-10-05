@@ -90,12 +90,15 @@ export function RfidTagsModal({
   modalSku,
   onClose,
   onMutated,
+  showAllInitially = false,
 }: {
   /** Only these three are read — so a Shopify order line can open the same window. */
   modalSku: Pick<CatalogGridRow, "custom_sku_id" | "name" | "sku">;
   onClose: () => void;
   /** Called after a successful status change so the parent can re-fetch grid counts. */
   onMutated?: () => void;
+  /** Open with every status showing — from a Shopify order the tag clicked is usually UNKNOWN, not LIVE. */
+  showAllInitially?: boolean;
 }) {
   const { data: itemData, isLoading: itemsLoading, mutate: mutateItems } = useSWR<CatalogItemRow[]>(
     `/api/inventory/catalog?customSkuId=${encodeURIComponent(modalSku.custom_sku_id)}`,
@@ -103,7 +106,7 @@ export function RfidTagsModal({
     { revalidateOnFocus: false },
   );
 
-  const [showAllStatuses, setShowAllStatuses] = useState(false);
+  const [showAllStatuses, setShowAllStatuses] = useState(showAllInitially);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [statusDrawerOpen, setStatusDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);

@@ -840,7 +840,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
 
       {tagsFor ? (
         <div onClick={(e) => e.stopPropagation()}>
-          <RfidTagsModal modalSku={tagsFor} onClose={() => setTagsFor(null)} onMutated={reloadWms} />
+          <RfidTagsModal modalSku={tagsFor} onClose={() => setTagsFor(null)} onMutated={reloadWms} showAllInitially />
         </div>
       ) : null}
 
