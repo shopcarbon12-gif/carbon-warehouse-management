@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   Cpu,
+  Link2,
   Printer,
   Radio,
   Smartphone,
@@ -610,6 +611,31 @@ export function CommandCenter() {
         )}
       </section>
 
+      {/* Shortcuts — the pages people jump to most from the dashboard */}
+      <section aria-label="Shortcuts">
+        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
+          <Link2 className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
+          Shortcuts
+        </h2>
+        <div className="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
+          {[
+            { href: "/inventory/catalog", label: "Catalog" },
+            { href: "/shopify/sales", label: "Orders" },
+            { href: "/integrations", label: "Integrations" },
+            { href: "/tags-labels/print", label: "Print tags" },
+            { href: "/tags-labels/bulk-status", label: "Bulk status" },
+            { href: "/rfid/hardware-config", label: "Hardware config" },
+          ].map((l, i) => (
+            <span key={l.href} className="inline-flex items-center gap-2">
+              {i > 0 ? <span aria-hidden>·</span> : null}
+              <Link className="text-[var(--wms-accent)] hover:underline max-md:inline-block max-md:py-2" href={l.href}>
+                {l.label}
+              </Link>
+            </span>
+          ))}
+        </div>
+      </section>
+
       {/* Middle: hardware pulse */}
       <section aria-label="Hardware pulse">
         <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
@@ -652,23 +678,6 @@ export function CommandCenter() {
                 View all
               </Link>
             </p>
-          </div>
-          <div className="border-b border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
-            <Link className="text-[var(--wms-accent)] hover:underline" href="/inventory">
-              Inventory
-            </Link>
-            {" · "}
-            <Link className="text-[var(--wms-accent)] hover:underline" href="/compare">
-              Compare
-            </Link>
-            {" · "}
-            <Link className="text-[var(--wms-accent)] hover:underline" href="/integrations">
-              Integrations
-            </Link>
-            {" · "}
-            <Link className="text-[var(--wms-accent)] hover:underline" href="/tags-labels/print">
-              Print tags
-            </Link>
           </div>
           <ul className="divide-y divide-[var(--wms-border)]/80">
             {activity.length === 0 ? (
