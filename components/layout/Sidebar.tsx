@@ -97,6 +97,12 @@ const sections: NavSection[] = [
     ],
   },
   {
+    id: "shopify",
+    label: "Shopify",
+    isActiveSection: (p) => p.startsWith("/shopify"),
+    items: [{ href: "/shopify/sales", label: "Sales", icon: ShoppingBag, count: "shopifyToFulfill" }],
+  },
+  {
     id: "tags-labels",
     label: "Tags & Labels",
     isActiveSection: (p) => p.startsWith("/tags-labels"),
@@ -165,12 +171,6 @@ const sections: NavSection[] = [
       { href: "/rewards/tiers", label: "Tiers", icon: Layers },
       { href: "/rewards/referrals", label: "Referrals", icon: Share2 },
     ],
-  },
-  {
-    id: "shopify",
-    label: "Shopify",
-    isActiveSection: (p) => p.startsWith("/shopify"),
-    items: [{ href: "/shopify/sales", label: "Sales", icon: ShoppingBag, count: "shopifyToFulfill" }],
   },
   {
     id: "integrations",

@@ -29,6 +29,7 @@ type Row = {
 const ACTION: Record<string, [string, string]> = {
   scan_out: ["Scanned out", "text-emerald-600 dark:text-emerald-300"],
   rejected: ["Refused", "text-red-600 dark:text-red-300"],
+  undo: ["Undone", "text-amber-600 dark:text-amber-300"],
   reader_start: ["Reader started", "text-[var(--wms-muted)]"],
   reader_stop: ["Reader stopped", "text-[var(--wms-muted)]"],
 };

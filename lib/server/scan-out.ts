@@ -98,7 +98,7 @@ type OrderRef = { orderId?: string | null; orderName?: string | null };
 async function logEvent(
   q: Pick<Pool, "query">,
   who: Who,
-  action: "reader_start" | "reader_stop" | "scan_out" | "rejected",
+  action: "reader_start" | "reader_stop" | "scan_out" | "rejected" | "undo",
   item: Partial<ScanOutItem> & { epc?: string | null },
   extra: OrderRef & { oldStatus?: string | null; newStatus?: string | null; reader?: string | null; rssi?: number | null; detail?: string | null },
 ) {
@@ -165,6 +165,52 @@ export async function scanOut(
     }
   }
   return out;
+}
+
+/**
+ * Undo a scan-out: the tag goes back to what it was before — LIVE almost
+ * always; UNKNOWN when it was the placeholder an online order had marked, so
+ * the order's piece is not counted twice. Only the latest scan-out of a tag
+ * that is still SOLD can be undone; the undo is logged as its own action.
+ */
+export async function undoScanOut(pool: Pool, who: Who, epc: string, ctx: OrderRef): Promise<ScanOutResult> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cur = await client.query<ItemRow>(`${ITEM_SQL} WHERE i.epc = $1 FOR UPDATE OF i`, [epc]);
+    const row = cur.rows[0];
+    if (!row) {
+      await client.query("ROLLBACK");
+      return { epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null, ok: false, oldStatus: null, error: "This tag is not in the WMS." };
+    }
+    const item = toItem(row);
+    const last = await client.query<{ action: string; old_status: string | null }>(
+      `SELECT action, old_status FROM scan_out_events
+        WHERE tenant_id = $1::uuid AND epc = $2 AND action IN ('scan_out', 'undo')
+        ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [who.tenantId, epc],
+    );
+    const ev = last.rows[0];
+    if (row.status !== "sold" || !ev || ev.action !== "scan_out") {
+      await client.query("ROLLBACK");
+      return { ...item, ok: false, oldStatus: row.status, error: row.status !== "sold" ? `This tag is ${row.status === "in-stock" ? "LIVE" : row.status.toUpperCase()} now — nothing to undo.` : "This tag was not scanned out here, so it cannot be undone here." };
+    }
+    const back = ev.old_status === "unknown" ? "unknown" : "in-stock";
+    await client.query(`UPDATE items SET status = $2 WHERE epc = $1`, [epc, back]);
+    await client.query(
+      `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
+       VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'sold', $3, $4, NULL, $5::uuid, NULL)`,
+      [who.tenantId, epc, back, ctx.orderName ? `scan_out_undo ${ctx.orderName}` : "scan_out_undo", who.userId],
+    );
+    await logEvent(client, who, "undo", item, { ...ctx, oldStatus: "sold", newStatus: back });
+    await client.query("COMMIT");
+    return { ...item, status: back, ok: true, oldStatus: "sold" };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    return { epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null, ok: false, oldStatus: null, error: e instanceof Error ? e.message : "Database error" };
+  } finally {
+    client.release();
+  }
 }
 
 /* ─────────────────────────────── the report ─────────────────────────────── */

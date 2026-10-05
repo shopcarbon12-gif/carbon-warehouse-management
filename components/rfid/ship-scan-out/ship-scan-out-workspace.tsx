@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { CheckCircle2, Eraser, Play, Radio, Square, Truck, XCircle } from "lucide-react";
+import { CheckCircle2, Eraser, Play, Radio, Square, Truck, Undo2, XCircle } from "lucide-react";
 import { RssiProximitySlider, passesRssi } from "@/components/shared/rssi-proximity-slider";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
@@ -246,6 +246,42 @@ export function ShipScanOutWorkspace({
     }
   }, [checkedVisible, seen, order, onScannedOut]);
 
+  /* Undo a scan-out: the tag goes back to what it was — LIVE, or UNKNOWN if it
+     was the order's placeholder — and leaves the right-hand list. */
+  const [undoing, setUndoing] = useState<string | null>(null);
+  const undo = useCallback(
+    async (d: Done) => {
+      setUndoing(d.epc);
+      setErr(null);
+      setMsg(null);
+      try {
+        const r = await fetch("/api/rfid/ship-scan-out/undo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ epc: d.epc, orderId: order?.id, orderName: order?.name }),
+        });
+        const j = (await r.json().catch(() => ({}))) as ScanOutItem & { ok?: boolean; error?: string };
+        if (!j.ok) {
+          setErr(j.error ?? "Could not undo.");
+          return;
+        }
+        setDone((prev) => prev.filter((x) => !(x.epc === d.epc && x.at === d.at)));
+        setInfo((prev) => {
+          const next = new Map(prev);
+          next.set(d.epc, { ...(next.get(d.epc) ?? d), status: j.status });
+          return next;
+        });
+        setMsg(`Undone — ${[d.name, d.color, d.size].filter(Boolean).join(" · ") || d.epc} is ${statusLabel(j.status)} again.`);
+        onScannedOut?.();
+      } catch (ex) {
+        setErr(ex instanceof Error ? ex.message : "Network error");
+      } finally {
+        setUndoing(null);
+      }
+    },
+    [order, onScannedOut],
+  );
+
   const stopReader = () => {
     setReaderOn(false);
     logReader("stop");
@@ -431,7 +467,19 @@ export function ShipScanOutWorkspace({
                         {d.ok ? `${statusLabel(d.oldStatus)} → SOLD` : d.error}
                       </div>
                     </div>
-                    <span className="shrink-0 font-mono text-xs text-[var(--wms-muted)]">{fmtTime(d.at)}</span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className="font-mono text-xs text-[var(--wms-muted)]">{fmtTime(d.at)}</span>
+                      {d.ok ? (
+                        <button
+                          type="button"
+                          disabled={undoing !== null}
+                          onClick={() => void undo(d)}
+                          className="inline-flex items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-500/20 disabled:opacity-40 dark:text-amber-300 max-md:min-h-11"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" /> {undoing === d.epc ? "Undoing…" : "Undo"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </li>
               ))}
