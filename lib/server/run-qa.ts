@@ -421,6 +421,30 @@ async function runConsistencyCheck(args: {
   return { findings: findings.slice(0, MAX_FINDINGS), notes, ok: true };
 }
 
+/** Clothing that is usually styling around the product rather than the product. */
+const STYLING_PIECES: [RegExp, RegExp][] = [
+  [/\b(t-?shirt|tee|undershirt)\b/i, /\b(t-?shirt|tee|tank|vest|bralette)\b/i],
+  [/\b(trousers|jeans|pants|denim|shorts|chinos)\b/i, /\b(trousers|jeans|pants|shorts|chinos|denim)\b/i],
+  [/\b(shoes|sneakers|trainers|boots|footwear|socks)\b/i, /\b(shoe|sneaker|trainer|boot|footwear|sock|slide|sandal|flip)\b/i],
+];
+
+/** A layer worn UNDER the product ("the top worn underneath", "top under is
+ *  black", "inner layer") is styling whatever the product is called — the
+ *  product is the outer piece. Underwear products are the exception. */
+const UNDER_LAYER =
+  /\b(?:(?:top|shirt|tee|t-?shirt|layer|vest|tank)\s+(?:worn\s+)?(?:under|underneath)|(?:under|underneath)\s+(?:the\s+)?(?:jacket|shirt|top|overshirt|coat|blazer|hoodie)|worn\s+underneath|inner\s+(?:top|layer|shirt|tee))\b/i;
+const UNDERWEAR = /\b(bra|bralette|boxer|brief|underwear|lingerie|camisole|cami)\b/i;
+
+/** A complaint about a piece worn WITH the product (and not the product itself). */
+function isStylingComplaint(what: string, itemType: string): boolean {
+  if (UNDER_LAYER.test(what) && !UNDERWEAR.test(itemType || "")) return true;
+  return STYLING_PIECES.some(([piece, productIs]) => piece.test(what) && !productIs.test(itemType || ""));
+}
+
+/** Words that name a visible difference between two people. */
+const PERSON_TRAIT =
+  /\b(hair|bald|shaved|fade|curl|braid|dread|beard|stubble|moustache|mustache|clean-shaven|skin|complexion|age|older|younger|face shape|jaw|nose|eyes|eyebrow|freckle|tattoo|glasses|build)\b/i;
+
 /**
  * ACCURACY: does the garment match the photographs, and is it the right person?
  * Says nothing about crop, pose, framing or coverage.
@@ -466,7 +490,14 @@ async function runAccuracyCheck(args: {
         "",
         "ADDED FEATURES COUNT AS MISMATCHES. A detail the render put there that the photographs do not have — a pressed centre crease down the leg, a pleat, a turn-up, an extra pocket, a side stripe, contrast stitching, a brand tab, an extra button or zip — is a mismatch exactly like a missing one. Compare the garment feature by feature, not just by colour and shape.",
         "",
-        "Also check the PERSON against the model reference photographs: report only if this is clearly a DIFFERENT individual (different face structure, ethnicity, hair colour or length, apparent age). Angle, expression and lighting differences are not a mismatch.",
+        /* The item photographs are often worn by a shop model. That wearer is
+           not this shoot's model: comparing against them failed all eight
+           frames of a correct run ("the photographs show Reference model, this
+           frame shows Rendered model") because the jacket's product shots were
+           worn by somebody else. */
+        args.modelRefs.length
+          ? "THE PERSON. Whoever wears the item in the ITEM reference photographs — a shop model, a mannequin, a hand — is NOT the model of this shoot. Never compare the rendered person with them. Judge the person ONLY against the MODEL reference photographs. Report a person mismatch only when a visible face is clearly a different individual from the MODEL references, and name the concrete trait that differs in both in_the_photos and in_the_render (hair style or colour, skin tone, beard, apparent age, face shape). Angle, expression and lighting are not a mismatch. Back views and frames with no visible face: say nothing about the person."
+          : "There are no model reference photographs for this run: do not judge the person at all.",
         "",
         "YOU DO NOT JUDGE ANY OF THE FOLLOWING. They are somebody else's job and are never mismatches:",
         "- How the frame is cropped, which body parts are in shot, or whether the head, feet or torso appear.",
@@ -474,6 +505,7 @@ async function runAccuracyCheck(args: {
         "- Whether a garment or a body part is visible at all, and whether something 'should' be visible from a given angle.",
         "- Nudity or coverage of any kind.",
         "- Hardware being seen from an unexpected side. A chain, tie or drawcord may hang, swing and be visible from behind. That is never a mismatch.",
+        `- Anything worn WITH the product that is not the product itself — the t-shirt underneath, trousers, shoes, accessories. That is styling, chosen elsewhere. Judge only the ${args.itemType || "product"}.`,
         "",
         "REPORT ONLY WHAT YOU CAN SEE in a named frame. If you cannot see it, say nothing about it.",
         'Never write "not visible", "cannot tell", "out of frame" or "unclear" as a mismatch.',
@@ -483,7 +515,7 @@ async function runAccuracyCheck(args: {
         "",
         "Return JSON only:",
         "{",
-        '  "mismatches": [ { "frames": ["P1L","P1R"], "what": string, "in_the_photos": string, "in_the_render": string, "confidence": number 0-1 } ],',
+        '  "mismatches": [ { "kind": "garment" | "person", "frames": ["P1L","P1R"], "what": string, "in_the_photos": string, "in_the_render": string, "confidence": number 0-1 } ],',
         '  "notes": string[]',
         "}",
         "List a frame only if you can see the problem in that frame. Below 0.75 confidence it is treated as a note.",
@@ -509,7 +541,10 @@ async function runAccuracyCheck(args: {
           },
         ]
       : []),
-    { type: "input_text", text: "MODEL reference photographs (who the person should be):" },
+    {
+      type: "input_text",
+      text: "MODEL reference photographs — the ONLY source for who the person should be (never the people in the item photographs):",
+    },
     ...args.modelRefs.slice(0, 6).map((url) => ({ type: "input_image", image_url: url })),
     ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
     { type: "input_text", text: "Rendered frames to check:" },
@@ -539,9 +574,25 @@ async function runAccuracyCheck(args: {
     const tokens = Array.isArray(r.frames) ? r.frames : [];
     const targets = tokens.map(parseFrameToken).filter((t): t is NonNullable<typeof t> => t !== null);
     if (!what && !observed) continue;
-    const text = `PRODUCT ${what || "mismatch"}: the photographs show ${expected || "something else"}, this frame shows ${
-      observed || "something different"
-    }.`.slice(0, 240);
+    const isPerson =
+      r.kind === "person" || /\b(model|person|individual|face|identity)\b/i.test(what);
+    if (isPerson) {
+      /* A person flag must name what differs. "Reference model" vs "Rendered
+         model" names nothing — that judge was comparing against the wrong
+         person — so it becomes a note, never a failed crop. */
+      const traits = `${expected} ${observed}`;
+      if (!args.modelRefs.length || !PERSON_TRAIT.test(traits)) {
+        notes.push(`Person check without a concrete difference (ignored): ${what} — ${expected} / ${observed}`.slice(0, 240));
+        continue;
+      }
+    }
+    if (!isPerson && isStylingComplaint(what, args.itemType)) {
+      notes.push(`Styling, not the product (ignored): ${what} — ${expected} / ${observed}`.slice(0, 240));
+      continue;
+    }
+    const text = `${isPerson ? "MODEL" : "PRODUCT"} ${what || "mismatch"}: ${
+      isPerson ? "the model photos show" : "the photographs show"
+    } ${expected || "something else"}, this frame shows ${observed || "something different"}.`.slice(0, 240);
     if (looksLikeNonObservation(`${what} ${expected} ${observed}`)) continue;
     if (looksLikeConfirmation(text)) continue;
     if (expected && observed && normalizeForCompare(expected) === normalizeForCompare(observed)) continue;

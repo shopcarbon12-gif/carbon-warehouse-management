@@ -70,9 +70,12 @@ async function main() {
         })
         .filter((r: { url: string }) => r.url)
     : [];
+  // RUN_QA_MODEL=<name> picks a stored model (e.g. the one the real run used).
+  const modelName = (process.env.RUN_QA_MODEL || "").trim();
   const models = await pool.query(
     `SELECT name, ref_image_urls FROM models WHERE ref_image_urls IS NOT NULL
-        AND jsonb_array_length(ref_image_urls) > 0 ORDER BY name LIMIT 1`,
+        AND jsonb_array_length(ref_image_urls) > 0 ${modelName ? "AND name = $1" : ""} ORDER BY name LIMIT 1`,
+    modelName ? [modelName] : [],
   );
   await pool.end();
 
