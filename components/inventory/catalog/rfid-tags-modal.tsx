@@ -447,6 +447,10 @@ function ChangeStatusDrawer({
             epcs,
             targetStatus: target.wms,
             reason: "catalog_rfid_modal",
+            /* Picking a status here IS the operator's explicit choice, so it
+             * carries the override for risky moves (sold → live). The server
+             * still requires Super Admin for those, so permissions decide. */
+            override: true,
           }),
         });
         const j = (await res.json().catch(() => ({}))) as {
