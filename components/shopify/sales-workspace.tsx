@@ -331,7 +331,7 @@ export function SalesWorkspace() {
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight text-[var(--wms-fg)]">Sales</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--wms-fg)]">Orders</h1>
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-[var(--wms-muted)]">
             {updatedAt ? `Synced with Shopify ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}` : "Syncing…"}

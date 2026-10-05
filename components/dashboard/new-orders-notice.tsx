@@ -45,7 +45,7 @@ export function NewOrdersNotice() {
           </h2>
         </div>
         <Link href="/shopify/sales" className="inline-flex items-center gap-1 text-sm font-medium text-[var(--wms-accent)] hover:underline max-md:min-h-11">
-          View in Sales <ChevronRight className="h-4 w-4" />
+          View in Orders <ChevronRight className="h-4 w-4" />
         </Link>
       </div>
       <ul>

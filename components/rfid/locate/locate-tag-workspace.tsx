@@ -716,7 +716,9 @@ export function LocateTagWorkspace() {
           Pick a target tag and the readers to hunt with, then press Scan.
         </div>
       ) : (
-        <ul className="space-y-2">
+        /* Boxes, not rows: all of a location's readers on one screen, so the
+           strongest can be spotted at a glance instead of scrolled for. */
+        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {rows.map((row) => {
             const bucket = row.liveRssi !== null ? rssiBucket(row.liveRssi) : null;
             const fill = row.liveRssi !== null ? rssiToBarFraction(row.liveRssi) : 0;
@@ -725,73 +727,22 @@ export function LocateTagWorkspace() {
             return (
               <li
                 key={row.id}
-                className={`rounded-lg border px-3 py-3 ${
+                className={`flex min-w-0 flex-col rounded-lg border px-2.5 py-2 ${isRefining ? "col-span-2" : ""} ${
                   row.fresh
                     ? "border-emerald-500/40 bg-emerald-500/5"
                     : "border-[var(--wms-border)] bg-[var(--wms-surface)]/60"
                 }`}
               >
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {/* Phones give the reader name its own row so the bar keeps
-                      a usable width; desktop keeps all three on one line. */}
-                  <div className="min-w-0 flex-1 max-md:basis-full">
-                    <div className="font-mono text-sm font-semibold text-[var(--wms-fg)]">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-sm font-semibold text-[var(--wms-fg)]" title={row.name}>
                       {row.name}
-                      {!row.online ? (
-                        <span className="ml-2 font-normal text-[0.65rem] text-amber-300/80">offline</span>
-                      ) : null}
                     </div>
-                    <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">{row.zoneName}</div>
-                  </div>
-
-                  {/* Signal bar — the live Geiger needle. */}
-                  <div className="flex min-w-[9rem] flex-1 items-center gap-2">
-                    <div
-                      className="h-2.5 flex-1 overflow-hidden rounded-full bg-[var(--wms-surface-elevated)]"
-                      role="meter"
-                      aria-label={`${row.name} signal`}
-                      aria-valuenow={Math.round(fill * 100)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <div
-                        className="h-full rounded-full transition-[width] duration-200"
-                        style={{
-                          width: `${Math.round(fill * 100)}%`,
-                          background: bucket?.color ?? "transparent",
-                        }}
-                      />
+                    <div className="truncate font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                      {row.zoneName}
+                      {!row.online ? <span className="ml-1 text-amber-500 dark:text-amber-300/80">· offline</span> : null}
                     </div>
-                    <span className="w-[4.5rem] shrink-0 text-right font-mono text-xs tabular-nums text-[var(--wms-fg)]">
-                      {row.liveRssi !== null ? `${row.liveRssi.toFixed(0)} dBm` : "—"}
-                    </span>
                   </div>
-
-                  <div className="w-[8.5rem] shrink-0 text-right">
-                    {bucket && feet !== null ? (
-                      <>
-                        <div className="font-mono text-sm font-semibold" style={{ color: bucket.color }}>
-                          ≈ {feet < 10 ? feet.toFixed(1) : Math.round(feet)} ft
-                        </div>
-                        <div className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                          {bucket.label}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="font-mono text-xs text-[var(--wms-muted)]">
-                        {row.stat ? `lost · ${agoLabel(row.age ?? 0)}` : hunting ? "listening…" : "no contact"}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-                  <span>{row.stat?.reads ?? 0} reads</span>
-                  {row.stat?.bestRssi !== null && row.stat?.bestRssi !== undefined ? (
-                    <span>· best {row.stat.bestRssi.toFixed(0)} dBm</span>
-                  ) : null}
-                  {row.age !== null ? <span>· seen {agoLabel(row.age)}</span> : null}
-
                   <button
                     type="button"
                     onClick={() => (isRefining ? cancelRefine() : void startRefine(row.id))}
@@ -799,21 +750,58 @@ export function LocateTagWorkspace() {
                     title={
                       !row.hasAntenna
                         ? "No antenna registered on this reader."
-                        : "Ramp this reader 10 → 33 dBm and report the lowest power the tag answers at."
+                        : isRefining
+                          ? refine?.phase === "done" || refine?.phase === "error"
+                            ? "Clear the measurement"
+                            : "Cancel the ramp"
+                          : "Refine: ramp this reader 10 → 33 dBm and report the lowest power the tag answers at."
                     }
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 text-[0.65rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11"
+                    aria-label={isRefining ? "Cancel or clear refine" : `Refine ${row.name}`}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-1 text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-teal-500/40 disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11 max-md:px-2.5"
                   >
                     {isRefining && (refine?.phase === "starting" || refine?.phase === "ramping") ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
-                      <Ruler className="h-3.5 w-3.5" />
+                      <Ruler className="h-3 w-3" />
                     )}
-                    {!isRefining
-                      ? "Refine"
-                      : refine?.phase === "done" || refine?.phase === "error"
-                        ? "Clear"
-                        : "Cancel ramp"}
+                    {!isRefining ? "Refine" : refine?.phase === "done" || refine?.phase === "error" ? "Clear" : "Cancel"}
                   </button>
+                </div>
+
+                {/* Signal bar — the live Geiger needle. */}
+                <div
+                  className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--wms-surface-elevated)]"
+                  role="meter"
+                  aria-label={`${row.name} signal`}
+                  aria-valuenow={Math.round(fill * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className="h-full rounded-full transition-[width] duration-200"
+                    style={{ width: `${Math.round(fill * 100)}%`, background: bucket?.color ?? "transparent" }}
+                  />
+                </div>
+
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  {bucket && feet !== null ? (
+                    <span className="truncate font-mono text-sm font-semibold" style={{ color: bucket.color }} title={bucket.label}>
+                      ≈ {feet < 10 ? feet.toFixed(1) : Math.round(feet)} ft
+                    </span>
+                  ) : (
+                    <span className="truncate font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                      {row.stat ? `lost · ${agoLabel(row.age ?? 0)}` : hunting ? "listening…" : "no contact"}
+                    </span>
+                  )}
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-[var(--wms-fg)]">
+                    {row.liveRssi !== null ? `${row.liveRssi.toFixed(0)} dBm` : "—"}
+                  </span>
+                </div>
+
+                <div className="mt-0.5 truncate font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                  {row.stat?.reads ?? 0} reads
+                  {row.stat?.bestRssi !== null && row.stat?.bestRssi !== undefined ? ` · best ${row.stat.bestRssi.toFixed(0)}` : ""}
+                  {row.age !== null ? ` · ${agoLabel(row.age)}` : ""}
                 </div>
 
                 {/* Ramp panel — only under the reader being measured. */}

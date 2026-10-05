@@ -100,7 +100,7 @@ const sections: NavSection[] = [
     id: "shopify",
     label: "Shopify",
     isActiveSection: (p) => p.startsWith("/shopify"),
-    items: [{ href: "/shopify/sales", label: "Sales", icon: ShoppingBag, count: "shopifyToFulfill" }],
+    items: [{ href: "/shopify/sales", label: "Orders", icon: ShoppingBag, count: "shopifyToFulfill" }],
   },
   {
     id: "tags-labels",
