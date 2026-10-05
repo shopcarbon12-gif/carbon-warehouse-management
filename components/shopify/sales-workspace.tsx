@@ -114,6 +114,7 @@ const FULFILLMENT: Record<string, [string, Tone]> = {
   OPEN: ["Open", "attention"],
   PENDING_FULFILLMENT: ["Pending", "attention"],
   RESTOCKED: ["Restocked", "neutral"],
+  NOT_REQUIRED: ["Not required", "neutral"],
   REQUEST_DECLINED: ["Request declined", "critical"],
 };
 const DELIVERY_TONE: Record<string, Tone> = {
@@ -163,7 +164,7 @@ function PaymentBadge({ s }: { s: string | null }) {
 function FulfillmentBadge({ s }: { s: string | null }) {
   if (!s) return null;
   const [label, tone] = FULFILLMENT[s] ?? [title(s), "neutral" as Tone];
-  const fill = s === "FULFILLED" ? "full" : s.startsWith("PARTIALLY") || s === "IN_PROGRESS" ? "half" : "empty";
+  const fill = s === "FULFILLED" || s === "NOT_REQUIRED" ? "full" : s.startsWith("PARTIALLY") || s === "IN_PROGRESS" ? "half" : "empty";
   return <Badge label={label} tone={tone} fill={fill} />;
 }
 function DeliveryBadge({ s }: { s: string | null }) {
@@ -209,6 +210,8 @@ export function SalesWorkspace() {
       if (t.ok && tj) setToday(tj as Today);
       setError(null);
       setUpdatedAt(new Date());
+      // The menu's "to fulfil" number follows the page rather than waiting a minute.
+      window.dispatchEvent(new Event("wms:shopify-sales-changed"));
     } catch (e) {
       if (id === reqRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -355,30 +358,29 @@ export function SalesWorkspace() {
                   <tr
                     key={r.id}
                     onClick={() => setOpenId(r.legacyId)}
-                    className="cursor-pointer border-b border-[var(--wms-border)]/60 hover:bg-[var(--wms-surface-elevated)]/60"
+                    className={`cursor-pointer border-b border-[var(--wms-border)]/60 hover:bg-[var(--wms-surface-elevated)]/60 ${
+                      r.cancelledAt ? "[&>td.strike]:line-through [&>td.strike]:opacity-70" : ""
+                    }`}
                   >
-                    <td className="px-3 py-2.5 font-semibold text-[var(--wms-fg)]">
-                      <span className={r.cancelledAt ? "line-through opacity-70" : ""}>{r.name}</span>
+                    <td className="strike px-3 py-2.5 font-semibold text-[var(--wms-fg)]">
+                      {r.name}
                       {r.test ? <span className="ml-1.5 text-xs font-normal text-[var(--wms-muted)]">test</span> : null}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">{shopifyDate(r.createdAt)}</td>
-                    <td className="px-3 py-2.5 text-[var(--wms-fg)]">{r.customer ?? <span className="text-[var(--wms-muted)]">No customer</span>}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">{r.channel ?? "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-[var(--wms-fg)]">
-                      <span className={r.cancelledAt ? "line-through opacity-70" : ""}>{money(r.total)}</span>
+                    <td className="strike whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">{shopifyDate(r.createdAt)}</td>
+                    <td className="strike px-3 py-2.5 text-[var(--wms-fg)]">{r.customer ?? <span className="text-[var(--wms-muted)]">No customer</span>}</td>
+                    <td className="strike whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">{r.channel ?? "—"}</td>
+                    <td className="strike whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-[var(--wms-fg)]">
+                      {money(r.total)}
                     </td>
                     <td className="px-3 py-2.5"><PaymentBadge s={r.financialStatus} /></td>
                     <td className="px-3 py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        <FulfillmentBadge s={r.fulfillmentStatus} />
-                        {r.returnStatus && r.returnStatus !== "NO_RETURN" ? <Badge label={title(r.returnStatus)} tone="warning" /> : null}
-                      </div>
+                      <FulfillmentBadge s={r.fulfillmentStatus} />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">
+                    <td className="strike whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">
                       {r.items} {r.items === 1 ? "item" : "items"}
                     </td>
                     <td className="px-3 py-2.5"><DeliveryBadge s={r.deliveryStatus} /></td>
-                    <td className="px-3 py-2.5 text-[var(--wms-fg)]/85">{r.deliveryMethod ?? ""}</td>
+                    <td className="strike px-3 py-2.5 text-[var(--wms-fg)]/85">{r.deliveryMethod ?? ""}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {r.tags.map((t) => (

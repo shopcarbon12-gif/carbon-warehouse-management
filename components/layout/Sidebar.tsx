@@ -57,7 +57,12 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   notify?: boolean;
+  /** A live number shown beside the label, like Shopify's order count. */
+  count?: CountKey;
 };
+
+type CountKey = "shopifyToFulfill";
+type Counts = Partial<Record<CountKey, number>>;
 
 type NavSection = {
   id: string;
@@ -163,7 +168,7 @@ const sections: NavSection[] = [
     id: "shopify",
     label: "Shopify",
     isActiveSection: (p) => p.startsWith("/shopify"),
-    items: [{ href: "/shopify/sales", label: "Sales", icon: ShoppingBag }],
+    items: [{ href: "/shopify/sales", label: "Sales", icon: ShoppingBag, count: "shopifyToFulfill" }],
   },
   {
     id: "integrations",
@@ -206,7 +211,9 @@ function NavAccordion({
   onNavigate,
   isOpen,
   onToggle,
+  counts,
 }: {
+  counts: Counts;
   section: NavSection;
   pathname: string;
   onNavigate: () => void;
@@ -215,6 +222,7 @@ function NavAccordion({
   onToggle: () => void;
 }) {
   const open = isOpen;
+  const sectionCount = section.items.reduce((t, i) => t + (i.count ? (counts[i.count] ?? 0) : 0), 0);
 
   // Click handler for nav items: if the operator clicks the menu entry
   // for the page they're already on, Next's <Link> normally no-ops.
@@ -243,7 +251,10 @@ function NavAccordion({
         className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-3 text-left font-mono text-base font-semibold uppercase tracking-wide text-[var(--wms-secondary)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
         onClick={onToggle}
       >
-        {section.label}
+        <span className="flex items-center gap-2">
+          {section.label}
+          {sectionCount > 0 ? <CountPill n={sectionCount} /> : null}
+        </span>
         <ChevronDown
           className={`h-6 w-6 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           strokeWidth={1.75}
@@ -281,7 +292,8 @@ function NavAccordion({
                       />
                     ) : null}
                   </span>
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.count && (counts[item.count] ?? 0) > 0 ? <CountPill n={counts[item.count]!} /> : null}
                 </Link>
               </li>
             );
@@ -290,6 +302,58 @@ function NavAccordion({
       ) : null}
     </div>
   );
+}
+
+/** Shopify's menu count: a small rounded number. */
+function CountPill({ n }: { n: number }) {
+  return (
+    <span
+      className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--wms-accent)] px-1.5 py-0.5 font-sans text-xs font-semibold normal-case tracking-normal text-[var(--wms-bg)] tabular-nums"
+      aria-label={`${n} to fulfil`}
+    >
+      {n > 99 ? "99+" : n}
+    </span>
+  );
+}
+
+/**
+ * The numbers beside menu items. Shopify's own rule for the Orders count —
+ * open orders still to fulfil — read every minute and whenever the tab comes
+ * back into view. Only admins may read sales; anyone else gets a 403 once and
+ * the polling stops, so the menu simply shows no number.
+ */
+function useMenuCounts(): Counts {
+  const [counts, setCounts] = useState<Counts>({});
+  useEffect(() => {
+    let stopped = false;
+    const load = async () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      try {
+        const r = await fetch("/api/shopify/sales?badge=1", { cache: "no-store" });
+        if (r.status === 401 || r.status === 403) {
+          stopped = true;
+          return;
+        }
+        if (!r.ok) return;
+        const j = (await r.json()) as { toFulfill?: number };
+        if (typeof j.toFulfill === "number") setCounts((c) => ({ ...c, shopifyToFulfill: j.toFulfill }));
+      } catch {
+        /* offline — keep the last number */
+      }
+    };
+    void load();
+    const t = window.setInterval(load, 60_000);
+    const onVis = () => void load();
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("wms:shopify-sales-changed", onVis);
+    return () => {
+      stopped = true;
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("wms:shopify-sales-changed", onVis);
+    };
+  }, []);
+  return counts;
 }
 
 export function Sidebar({
@@ -309,6 +373,7 @@ export function Sidebar({
   onOpenChange: (open: boolean) => void;
 }) {
   const pathname = usePathname() ?? "";
+  const counts = useMenuCounts();
   // Pinned sidebars stay open after clicking a nav item — matches the
   // POS behaviour where the pin "locks" the menu. Unpinned sidebars
   // close themselves like an overlay drawer.
@@ -487,6 +552,7 @@ export function Sidebar({
               <NavAccordion
                 key={section.id}
                 section={section}
+                counts={counts}
                 pathname={pathname}
                 onNavigate={onNavigate}
                 isOpen={openSection === section.id}

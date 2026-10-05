@@ -66,7 +66,7 @@ const ROW_FIELDS = `
   customer { displayName }
   channelInformation { channelDefinition { channelName } }
   app { name }
-  currentSubtotalLineItemsQuantity
+  currentSubtotalLineItemsQuantity requiresShipping
   tags
   shippingLines(first: 1) { nodes { title } }
   fulfillments(first: 5) { displayStatus createdAt }
@@ -88,6 +88,7 @@ type RawOrder = {
   channelInformation: { channelDefinition: { channelName: string } | null } | null;
   app: { name: string } | null;
   currentSubtotalLineItemsQuantity: number;
+  requiresShipping: boolean;
   tags: string[];
   shippingLines: { nodes: Array<{ title: string }> };
   fulfillments: Array<{ displayStatus: string | null; createdAt: string }>;
@@ -108,11 +109,17 @@ function toRow(o: RawOrder): SaleRow {
     channel: o.channelInformation?.channelDefinition?.channelName ?? o.app?.name ?? null,
     total: o.currentTotalPriceSet?.shopMoney ?? null,
     financialStatus: o.displayFinancialStatus,
-    fulfillmentStatus: o.displayFulfillmentStatus,
+    /* Shopify's list says "Not required" for an order with nothing left to
+       ship — refunded or cancelled down to 0 items — while the API still says
+       UNFULFILLED. Showed as yellow "Unfulfilled" before; it is not work. */
+    fulfillmentStatus:
+      o.displayFulfillmentStatus === "UNFULFILLED" && ((o.currentSubtotalLineItemsQuantity ?? 0) === 0 || o.requiresShipping === false)
+        ? "NOT_REQUIRED"
+        : o.displayFulfillmentStatus,
     returnStatus: o.returnStatus,
     items: o.currentSubtotalLineItemsQuantity ?? 0,
     deliveryStatus: latest?.displayStatus ?? null,
-    deliveryMethod: o.shippingLines?.nodes?.[0]?.title ?? null,
+    deliveryMethod: o.shippingLines?.nodes?.[0]?.title ?? (o.requiresShipping === false ? "Shipping not required" : "Shipping"),
     tags: o.tags ?? [],
   };
 }
@@ -321,4 +328,22 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
     ),
     adminUrl: `${adminBaseFor(ctx.shop)}/orders/${o.legacyResourceId}`,
   };
+}
+
+/**
+ * The number on Shopify's "Orders" menu item: open orders that still have
+ * something to fulfil. Same filter as Shopify's — checked against the admin on
+ * 2026-10-05 (both said 1, order #1076).
+ */
+export async function toFulfillCount(): Promise<number> {
+  const ctx = await ctxOrThrow();
+  const r = await runShopifyGraphql<{ ordersCount: { count: number } | null }>({
+    shop: ctx.shop,
+    token: ctx.token,
+    apiVersion: ctx.apiVersion,
+    query: `query ToFulfill($q: String) { ordersCount(query: $q) { count } }`,
+    variables: { q: "status:open AND (fulfillment_status:unfulfilled OR fulfillment_status:partial)" },
+  });
+  if (!r.ok || !r.data) throw gqlError(r.errors);
+  return r.data.ordersCount?.count ?? 0;
 }
