@@ -4,11 +4,12 @@
  *
  * The markup and CSS below are the approved Liquid template's, rule for rule.
  * Changes are technical only:
- *  - Page margins move from `.carbon-sheet` padding to `@page`, so a long order
- *    that runs onto a second page keeps the same margins there too (with
- *    `@page { margin: 0 }` page 2 printed to the paper edge), and the sheet's
- *    `min-height: 10.4in` is dropped — inside the printable area it forced a
- *    blank extra page. Page 1 looks the same.
+ *  - `@page { margin: 0 }` (as approved) leaves the browser no room to print
+ *    its own date / title / URL / page-number lines. The top and bottom margins
+ *    come from a frame table whose header and footer rows repeat on EVERY
+ *    printed page, so a long order keeps its margins on page 2 too; the
+ *    sheet's `min-height: 10.4in` (forced a blank extra page) is dropped.
+ *  - Logo enlarged on request (2026-10-05): 52 px → 78 px tall.
  *  - Item rows never split across pages; the table header repeats.
  *  - Quantities are the CURRENT quantity (after refunds/removals), so removed
  *    items never print; the item count is their sum.
@@ -128,7 +129,27 @@ function fmtDate(iso: string, tz: string, month: "long" | "short"): string {
 const CSS = `
   @page {
     size: Letter;
-    margin: 0.42in 0.50in 0.34in;
+    margin: 0;
+  }
+
+  /* Repeats on every printed page: top and bottom page margins. */
+  .page-frame {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .page-frame > thead > tr > td,
+  .page-frame > tfoot > tr > td,
+  .page-frame > tbody > tr > td {
+    padding: 0;
+  }
+
+  .frame-top {
+    height: 0.42in;
+  }
+
+  .frame-bottom {
+    height: 0.34in;
   }
 
   * {
@@ -148,6 +169,7 @@ const CSS = `
 
   .carbon-sheet {
     width: 100%;
+    padding: 0 0.50in;
   }
 
   .carbon-header {
@@ -173,8 +195,8 @@ const CSS = `
 
   .logo-cell img {
     display: block;
-    max-width: 190px;
-    max-height: 52px;
+    max-width: 285px;
+    max-height: 78px;
     object-fit: contain;
   }
 
@@ -506,6 +528,10 @@ const CSS = `
       background: #ffffff;
       box-shadow: 0 4px 30px rgba(0, 0, 0, 0.18);
     }
+    .frame-top,
+    .frame-bottom {
+      height: 0;
+    }
     .screen-bar {
       position: fixed;
       top: 0;
@@ -584,6 +610,10 @@ export function renderPackingSlipHtml(o: PackingSlipOrder, opts: { autoPrint?: b
   <button type="button" onclick="window.print()">Print packing slip</button>
   <button type="button" class="secondary" onclick="window.close()">Close</button>
 </div>
+<table class="page-frame">
+<thead><tr><td class="frame-top"></td></tr></thead>
+<tfoot><tr><td class="frame-bottom"></td></tr></tfoot>
+<tbody><tr><td>
 <div class="carbon-sheet">
 
   <div class="carbon-header">
@@ -702,6 +732,8 @@ ${note}
   </div>
 
 </div>
+</td></tr></tbody>
+</table>
 ${
   opts.autoPrint
     ? `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 150); });</script>`

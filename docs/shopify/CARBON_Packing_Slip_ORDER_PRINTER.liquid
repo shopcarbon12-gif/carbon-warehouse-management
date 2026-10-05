@@ -2,8 +2,12 @@
   CARBON packing slip — Shopify Order Printer (approved "ink-friendly" design).
   Baseline: CARBON_Packing_Slip_FINAL.liquid. Technical fixes only, no visual
   change on page 1:
-  - Page margins live on @page (not the sheet), so continuation pages of a long
-    order keep their margins; the 10.4in min-height (forced a blank page) is gone.
+  - @page margin stays 0 (as approved), which leaves the browser no room to
+    print its own date / title / URL / page-number lines. Top and bottom page
+    margins come from a frame table whose header/footer rows repeat on every
+    printed page, so long orders keep margins on page 2+; the 10.4in
+    min-height (forced a blank page) is gone.
+  - Logo enlarged on request (2026-10-05): 52px -> 78px tall.
   - Quantities are current_quantity (after refunds / removed items), with the
     original quantity as fallback; lines at 0 are skipped; "Items" is their sum.
   - Item name is the product title (line_item.title can already contain the
@@ -22,7 +26,26 @@
 <style>
   @page {
     size: Letter;
-    margin: 0.42in 0.50in 0.34in;
+    margin: 0;
+  }
+
+  .page-frame {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .page-frame > thead > tr > td,
+  .page-frame > tfoot > tr > td,
+  .page-frame > tbody > tr > td {
+    padding: 0;
+  }
+
+  .frame-top {
+    height: 0.42in;
+  }
+
+  .frame-bottom {
+    height: 0.34in;
   }
 
   * {
@@ -42,6 +65,7 @@
 
   .carbon-sheet {
     width: 100%;
+    padding: 0 0.50in;
   }
 
   .carbon-header {
@@ -67,8 +91,8 @@
 
   .logo-cell img {
     display: block;
-    max-width: 190px;
-    max-height: 52px;
+    max-width: 285px;
+    max-height: 78px;
     object-fit: contain;
     -webkit-filter: brightness(0);
     filter: brightness(0);
@@ -407,6 +431,10 @@
   {% endif %}
 {% endfor %}
 
+<table class="page-frame">
+<thead><tr><td class="frame-top"></td></tr></thead>
+<tfoot><tr><td class="frame-bottom"></td></tr></tfoot>
+<tbody><tr><td>
 <div class="carbon-sheet">
 
   <div class="carbon-header">
@@ -574,3 +602,5 @@
   </div>
 
 </div>
+</td></tr></tbody>
+</table>
