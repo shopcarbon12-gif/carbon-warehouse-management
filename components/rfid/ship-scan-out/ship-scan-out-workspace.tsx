@@ -74,15 +74,27 @@ export function statusClass(s: string | null): string {
   }
 }
 const canScanOut = (s: string | null) => s === "in-stock" || s === "unknown";
+/** A returned piece comes back IN TRANSIT (set when the return was approved), or SOLD / UNKNOWN / RETURN. */
+const canScanIn = (s: string | null) => s === "in-transit" || s === "sold" || s === "unknown" || s === "return";
 
 export function ShipScanOutWorkspace({
   order,
   onScannedOut,
+  scanIn,
 }: {
   /** When opened from a Shopify order: logged with every action, and its items are marked. */
   order?: { id: string; name: string; skus: string[] };
   onScannedOut?: () => void;
+  /** Scan-IN mode, for a Shopify return: only its items can be checked, and they become LIVE. */
+  scanIn?: { returnId: string; returnName: string; customSkuIds: string[] };
 } = {}) {
+  const inMode = !!scanIn;
+  const allowedIn = useMemo(() => new Set(scanIn?.customSkuIds ?? []), [scanIn]);
+  const eligible = useCallback(
+    (it: ScanOutItem | undefined) =>
+      inMode ? !!it && canScanIn(it.status) && !!it.customSkuId && allowedIn.has(it.customSkuId) : canScanOut(it?.status ?? null),
+    [inMode, allowedIn],
+  );
   const { data: hc } = useSWR<HcTree>("/api/hardware-config", hcFetcher, { revalidateOnFocus: false });
   const readerId = useMemo(() => {
     for (const loc of hc?.locations ?? []) {
@@ -187,7 +199,7 @@ export function ShipScanOutWorkspace({
     [seen, threshold],
   );
   // "Check all" means the rows on screen that can go out — never every tag the reader ever saw.
-  const selectable = useMemo(() => visible.filter((s) => canScanOut(info.get(s.epc)?.status ?? null)).map((s) => s.epc), [visible, info]);
+  const selectable = useMemo(() => visible.filter((s) => eligible(info.get(s.epc))).map((s) => s.epc), [visible, info, eligible]);
   const checkedVisible = useMemo(() => selectable.filter((e) => checked.has(e)), [selectable, checked]);
   const allChecked = selectable.length > 0 && checkedVisible.length === selectable.length;
 
@@ -212,10 +224,14 @@ export function ShipScanOutWorkspace({
         const r = seen.get(e)?.rssi;
         if (typeof r === "number") rssi[e] = r;
       }
-      const r = await fetch("/api/rfid/ship-scan-out", {
+      const r = await fetch(inMode ? "/api/rfid/scan-in" : "/api/rfid/ship-scan-out", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ epcs, orderId: order?.id, orderName: order?.name, reader: READER_IP, rssi }),
+        body: JSON.stringify(
+          inMode
+            ? { epcs, returnId: scanIn!.returnId, reader: READER_IP, rssi }
+            : { epcs, orderId: order?.id, orderName: order?.name, reader: READER_IP, rssi },
+        ),
       });
       const j = (await r.json().catch(() => ({}))) as { results?: Array<ScanOutItem & { ok: boolean; error?: string; oldStatus: string | null }>; error?: string };
       if (!j.results) {
@@ -226,7 +242,7 @@ export function ShipScanOutWorkspace({
       setDone((prev) => [...j.results!.map((x) => ({ ...x, at })), ...prev].slice(0, 200));
       setInfo((prev) => {
         const next = new Map(prev);
-        for (const x of j.results!) if (x.ok) next.set(x.epc, { ...(next.get(x.epc) ?? x), status: "sold" });
+        for (const x of j.results!) if (x.ok) next.set(x.epc, { ...(next.get(x.epc) ?? x), status: inMode ? "in-stock" : "sold" });
         return next;
       });
       setChecked((prev) => {
@@ -236,15 +252,15 @@ export function ShipScanOutWorkspace({
       });
       const ok = j.results.filter((x) => x.ok).length;
       const bad = j.results.length - ok;
-      if (ok) setMsg(`Scanned out ${ok} item${ok === 1 ? "" : "s"} — now SOLD.`);
-      if (bad) setErr(`${bad} could not be scanned out — see the list.`);
+      if (ok) setMsg(inMode ? `Scanned in ${ok} item${ok === 1 ? "" : "s"} — now LIVE.` : `Scanned out ${ok} item${ok === 1 ? "" : "s"} — now SOLD.`);
+      if (bad) setErr(`${bad} could not be scanned ${inMode ? "in" : "out"} — see the list.`);
       if (ok) onScannedOut?.();
     } catch (ex) {
       setErr(ex instanceof Error ? ex.message : "Network error");
     } finally {
       setBusy(false);
     }
-  }, [checkedVisible, seen, order, onScannedOut]);
+  }, [checkedVisible, seen, order, onScannedOut, inMode, scanIn]);
 
   /* Undo a scan-out: the tag goes back to what it was — LIVE, or UNKNOWN if it
      was the order's placeholder — and leaves the right-hand list. */
@@ -258,7 +274,7 @@ export function ShipScanOutWorkspace({
         const r = await fetch("/api/rfid/ship-scan-out/undo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ epc: d.epc, orderId: order?.id, orderName: order?.name }),
+          body: JSON.stringify({ epc: d.epc, orderId: order?.id, orderName: order?.name, returnId: scanIn?.returnId, returnName: scanIn?.returnName }),
         });
         const j = (await r.json().catch(() => ({}))) as ScanOutItem & { ok?: boolean; error?: string };
         if (!j.ok) {
@@ -279,7 +295,7 @@ export function ShipScanOutWorkspace({
         setUndoing(null);
       }
     },
-    [order, onScannedOut],
+    [order, onScannedOut, scanIn],
   );
 
   const stopReader = () => {
@@ -365,7 +381,8 @@ export function ShipScanOutWorkspace({
                 onClick={() => void scanOutChecked()}
                 className="inline-flex items-center gap-2 rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-4 py-1.5 text-sm font-semibold text-[var(--wms-accent-fg)] hover:brightness-110 disabled:opacity-40 max-md:min-h-11"
               >
-                <Truck className="h-4 w-4" /> {busy ? "Scanning out…" : `Scan out (${checkedVisible.length})`}
+                <Truck className="h-4 w-4" />{" "}
+                {busy ? (inMode ? "Scanning in…" : "Scanning out…") : `${inMode ? "Scan in" : "Scan out"} (${checkedVisible.length})`}
               </button>
             </div>
           </div>
@@ -383,8 +400,8 @@ export function ShipScanOutWorkspace({
               {visible.map((s) => {
                 const it = info.get(s.epc);
                 const status = it ? it.status : undefined;
-                const ok = canScanOut(status ?? null);
-                const onOrder = !!it?.sku && orderSkus.has(it.sku);
+                const ok = eligible(it);
+                const onOrder = inMode ? !!it?.customSkuId && allowedIn.has(it.customSkuId) : !!it?.sku && orderSkus.has(it.sku);
                 return (
                   <label
                     key={s.epc}
@@ -408,7 +425,7 @@ export function ShipScanOutWorkspace({
                             <span className="text-base font-semibold text-[var(--wms-fg)]">{it.name ?? "Unknown item"}</span>
                             {onOrder ? (
                               <span className="rounded-full bg-[var(--wms-accent)]/15 px-2 py-0.5 text-[0.65rem] font-semibold text-[var(--wms-accent)]">
-                                ON THIS ORDER
+                                {inMode ? "ON THIS RETURN" : "ON THIS ORDER"}
                               </span>
                             ) : null}
                           </div>
@@ -443,10 +460,10 @@ export function ShipScanOutWorkspace({
         {/* Scanned out this session */}
         <div className="min-w-0 rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-4">
           <h2 className="mb-2 text-[11px] uppercase tracking-wider text-[var(--wms-muted)]">
-            Scanned out this session ({done.filter((d) => d.ok).length})
+            Scanned {inMode ? "in" : "out"} this session ({done.filter((d) => d.ok).length})
           </h2>
           {done.length === 0 ? (
-            <p className="py-6 text-center font-mono text-xs text-[var(--wms-muted)]">Nothing scanned out yet.</p>
+            <p className="py-6 text-center font-mono text-xs text-[var(--wms-muted)]">Nothing scanned {inMode ? "in" : "out"} yet.</p>
           ) : (
             <ul className="space-y-1.5">
               {done.map((d) => (
@@ -464,7 +481,7 @@ export function ShipScanOutWorkspace({
                         {[d.sku && `SKU ${d.sku}`, d.epc].filter(Boolean).join(" · ")}
                       </div>
                       <div className="text-xs text-[var(--wms-muted)]">
-                        {d.ok ? `${statusLabel(d.oldStatus)} → SOLD` : d.error}
+                        {d.ok ? `${statusLabel(d.oldStatus)} → ${inMode ? "LIVE" : "SOLD"}` : d.error}
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
@@ -489,8 +506,11 @@ export function ShipScanOutWorkspace({
       </div>
 
       <p className="flex items-center gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
-        <XCircle className="h-3 w-3" /> Only LIVE or UNKNOWN tags can be scanned out. Scanning out makes the tag SOLD — the EPC
-        value is never changed. Every action is recorded in Reports → Scan-out log.
+        <XCircle className="h-3 w-3" />{" "}
+        {inMode
+          ? "Only this return's items, and only IN TRANSIT, SOLD, UNKNOWN or RETURN tags, can be scanned in. Scanning in makes the tag LIVE — the EPC value is never changed."
+          : "Only LIVE or UNKNOWN tags can be scanned out. Scanning out makes the tag SOLD — the EPC value is never changed."}{" "}
+        Every action is recorded in Reports → Scan-out log.
       </p>
     </div>
   );

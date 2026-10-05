@@ -47,8 +47,10 @@ import {
   Share2,
   Shirt,
   ShoppingBag,
+  Undo2,
   X,
 } from "lucide-react";
+import useSWR from "swr";
 import { LocationSwitcher } from "@/components/location-switcher";
 import { useShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { logoutAction } from "@/app/actions/auth";
@@ -62,7 +64,7 @@ type NavItem = {
   count?: CountKey;
 };
 
-type CountKey = "shopifyToFulfill";
+type CountKey = "shopifyToFulfill" | "shopifyReturns";
 type Counts = Partial<Record<CountKey, number>>;
 
 type NavSection = {
@@ -100,7 +102,10 @@ const sections: NavSection[] = [
     id: "shopify",
     label: "Shopify",
     isActiveSection: (p) => p.startsWith("/shopify"),
-    items: [{ href: "/shopify/sales", label: "Orders", icon: ShoppingBag, count: "shopifyToFulfill" }],
+    items: [
+      { href: "/shopify/sales", label: "Orders", icon: ShoppingBag, count: "shopifyToFulfill" },
+      { href: "/shopify/returns", label: "Returns", icon: Undo2, count: "shopifyReturns" },
+    ],
   },
   {
     id: "tags-labels",
@@ -321,7 +326,22 @@ function CountPill({ n }: { n: number }) {
 /** The numbers beside menu items (see lib/use-shopify-to-fulfill.ts). */
 function useMenuCounts(): Counts {
   const toFulfill = useShopifyToFulfill();
-  return useMemo(() => (toFulfill ? { shopifyToFulfill: toFulfill.count } : {}), [toFulfill]);
+  // Returns in progress — waiting to be scanned in. Only admins may read them; a 403 just shows no number.
+  const { data: returns } = useSWR<{ count?: number }>(
+    "/api/shopify/returns",
+    async (u: string) => {
+      const r = await fetch(u, { cache: "no-store" });
+      return r.ok ? r.json() : {};
+    },
+    { refreshInterval: 120_000, revalidateOnFocus: true, shouldRetryOnError: false },
+  );
+  return useMemo(
+    () => ({
+      ...(toFulfill ? { shopifyToFulfill: toFulfill.count } : {}),
+      ...(typeof returns?.count === "number" ? { shopifyReturns: returns.count } : {}),
+    }),
+    [toFulfill, returns],
+  );
 }
 
 export function Sidebar({

@@ -21,6 +21,7 @@ type Row = {
   size: string | null;
   bin: string | null;
   orderName: string | null;
+  returnName: string | null;
   reader: string | null;
   rssi: number | null;
   detail: string | null;
@@ -30,6 +31,7 @@ const ACTION: Record<string, [string, string]> = {
   scan_out: ["Scanned out", "text-emerald-600 dark:text-emerald-300"],
   rejected: ["Refused", "text-red-600 dark:text-red-300"],
   undo: ["Undone", "text-amber-600 dark:text-amber-300"],
+  scan_in: ["Scanned in", "text-sky-600 dark:text-sky-300"],
   reader_start: ["Reader started", "text-[var(--wms-muted)]"],
   reader_stop: ["Reader stopped", "text-[var(--wms-muted)]"],
 };
@@ -99,7 +101,10 @@ export function ScanOutLogWorkspace() {
                     {label}
                     {r.detail ? <div className="max-w-56 whitespace-normal text-xs font-normal text-[var(--wms-muted)]">{r.detail}</div> : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-[var(--wms-fg)]">{r.orderName ?? ""}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-[var(--wms-fg)]">
+                    {r.orderName ?? ""}
+                    {r.returnName ? <div className="text-xs text-[var(--wms-muted)]">{r.returnName}</div> : null}
+                  </td>
                   <td className="px-3 py-2 text-[var(--wms-fg)]">
                     {r.name ?? ""}
                     {r.color || r.size ? (

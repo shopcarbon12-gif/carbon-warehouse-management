@@ -13,14 +13,19 @@ async function POST_handler(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-  const body = (await req.json().catch(() => ({}))) as { epc?: string; orderId?: string; orderName?: string };
+  const body = (await req.json().catch(() => ({}))) as { epc?: string; orderId?: string; orderName?: string; returnId?: string; returnName?: string };
   const [epc] = cleanEpcs([body.epc]);
   if (!epc) return NextResponse.json({ ok: false, error: "Invalid EPC." }, { status: 400 });
   const r = await undoScanOut(
     pool,
     { tenantId: session.tid, userId: session.sub, locationId: session.lid ?? null },
     epc,
-    { orderId: body.orderId?.slice(0, 40) || null, orderName: body.orderName?.slice(0, 40) || null },
+    {
+      orderId: body.orderId?.slice(0, 40) || null,
+      orderName: body.orderName?.slice(0, 40) || null,
+      returnId: body.returnId?.slice(0, 40) || null,
+      returnName: body.returnName?.slice(0, 40) || null,
+    },
   );
   return NextResponse.json(r, { status: r.ok ? 200 : 409 });
 }

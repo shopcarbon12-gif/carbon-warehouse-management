@@ -87,6 +87,7 @@ const ROUTES: Record<string, Entry> = {
   "webhooks/shopify/orders-paid": { module: "Shopify orders", label: "Shopify order paid" },
   "webhooks/shopify/refunds-create": { module: "Shopify orders", label: "Shopify refund" },
   "webhooks/shopify/orders-cancelled": { module: "Shopify orders", label: "Shopify order cancelled — thank-you code expired" },
+  "webhooks/shopify/returns-approve": { module: "Shopify orders", label: "Shopify return approved — exchange items unknown, returned items in transit" },
   "webhooks/shopify/returns-process": { module: "Shopify orders", label: "Shopify exchange released — new items reserved" },
   "webhooks/shopify/reverse-fulfillment-dispose": { module: "Shopify orders", label: "Shopify return restocked — tags back to live" },
   "webhooks/shopify/orders-fulfilled": { module: "Shopify orders", label: "Shopify order fulfilled — unknown tags back to live" },
@@ -130,7 +131,9 @@ const ROUTES: Record<string, Entry> = {
 
   "rfid/ship-scan-out": { module: "Shipping", label: "Scanned out" },
   "rfid/ship-scan-out/reader": { module: "Shipping", label: "Scan-out reader started/stopped" },
-  "rfid/ship-scan-out/undo": { module: "Shipping", label: "Undid a scan-out" },
+  "rfid/ship-scan-out/undo": { module: "Shipping", label: "Undid a scan" },
+  "rfid/scan-in": { module: "Shipping", label: "Scanned in returned items" },
+  "shopify/returns/[id]/complete": { module: "Shopify orders", label: "Completed a return in Shopify" },
 
   "rfid/commission": { module: "Tags & labels", label: "Commissioned tags" },
   "rfid/encode-claim": { module: "Tags & labels", label: "Encode — claimed EPC" },

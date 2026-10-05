@@ -93,24 +93,25 @@ export async function lookupItems(pool: Pool, epcs: string[]): Promise<ScanOutIt
 }
 
 type Who = { tenantId: string; userId: string; locationId: string | null };
-type OrderRef = { orderId?: string | null; orderName?: string | null };
+type OrderRef = { orderId?: string | null; orderName?: string | null; returnId?: string | null; returnName?: string | null };
 
 async function logEvent(
   q: Pick<Pool, "query">,
   who: Who,
-  action: "reader_start" | "reader_stop" | "scan_out" | "rejected" | "undo",
+  action: "reader_start" | "reader_stop" | "scan_out" | "rejected" | "undo" | "scan_in",
   item: Partial<ScanOutItem> & { epc?: string | null },
   extra: OrderRef & { oldStatus?: string | null; newStatus?: string | null; reader?: string | null; rssi?: number | null; detail?: string | null },
 ) {
   await q.query(
     `INSERT INTO scan_out_events (tenant_id, location_id, user_id, action, epc, old_status, new_status,
-       custom_sku_id, sku, upc, item_name, color, size, bin, order_id, order_name, reader, rssi, detail)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+       custom_sku_id, sku, upc, item_name, color, size, bin, order_id, order_name, reader, rssi, detail, return_id, return_name)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
     [
       who.tenantId, who.locationId, who.userId, action, item.epc ?? null, extra.oldStatus ?? null, extra.newStatus ?? null,
       item.customSkuId ?? null, item.sku ?? null, item.upc ?? null, item.name ?? null, item.color ?? null, item.size ?? null,
       item.bin ?? null, extra.orderId ?? null, extra.orderName ?? null, extra.reader ?? null,
       typeof extra.rssi === "number" ? Math.round(extra.rssi) : null, extra.detail ?? null,
+      extra.returnId ?? null, extra.returnName ?? null,
     ],
   );
 }
@@ -167,6 +168,66 @@ export async function scanOut(
   return out;
 }
 
+/** What a returned piece may be when it comes back: IN TRANSIT (set when the return was approved), SOLD, the order's UNKNOWN placeholder, or RETURN. */
+export const SCAN_IN_FROM = ["in-transit", "sold", "unknown", "return"] as const;
+
+/**
+ * Scan in returned pieces (Shopify → Returns): each tag must be an item on the
+ * return (`allowed`: custom_sku_id → how many may still come in) and SOLD,
+ * UNKNOWN or RETURN; it becomes LIVE. The read itself proves the tag works.
+ */
+export async function scanIn(
+  pool: Pool,
+  who: Who,
+  epcs: string[],
+  ctx: OrderRef & { reader?: string | null; rssi?: Record<string, number>; allowed: Map<string, number> },
+): Promise<ScanOutResult[]> {
+  const left = new Map(ctx.allowed);
+  const out: ScanOutResult[] = [];
+  for (const epc of epcs) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const cur = await client.query<ItemRow>(`${ITEM_SQL} WHERE i.epc = $1 FOR UPDATE OF i`, [epc]);
+      const row = cur.rows[0];
+      const item = row ? toItem(row) : ({ epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null } as ScanOutItem);
+      const rssi = ctx.rssi?.[epc] ?? null;
+      const room = row?.custom_sku_id ? left.get(row.custom_sku_id) ?? 0 : 0;
+      const error = !row
+        ? "This tag is not in the WMS."
+        : !(SCAN_IN_FROM as readonly string[]).includes(row.status)
+          ? `This tag is ${row.status === "in-stock" ? "already LIVE" : row.status.toUpperCase()} — only IN TRANSIT, SOLD, UNKNOWN or RETURN pieces come back in.`
+          : !left.has(row.custom_sku_id ?? "")
+            ? "This item is not on this return."
+            : room <= 0
+              ? "All of this item on the return is already scanned in."
+              : null;
+      if (error) {
+        await logEvent(client, who, "rejected", item, { ...ctx, oldStatus: row?.status ?? null, newStatus: null, rssi, detail: error });
+        await client.query("COMMIT");
+        out.push({ ...item, ok: false, oldStatus: row?.status ?? null, error });
+        continue;
+      }
+      await client.query(`UPDATE items SET status = 'in-stock', last_seen_at = now() WHERE epc = $1`, [epc]);
+      await client.query(
+        `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
+         VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, 'in-stock', $4, NULL, $5::uuid, $6)`,
+        [who.tenantId, epc, row!.status, `scan_in ${ctx.returnName ?? ctx.orderName ?? ""}`.trim(), who.userId, ctx.reader ?? null],
+      );
+      await logEvent(client, who, "scan_in", item, { ...ctx, oldStatus: row!.status, newStatus: "in-stock", rssi });
+      await client.query("COMMIT");
+      left.set(row!.custom_sku_id!, room - 1);
+      out.push({ ...item, status: "in-stock", ok: true, oldStatus: row!.status });
+    } catch (e) {
+      await client.query("ROLLBACK").catch(() => {});
+      out.push({ epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null, ok: false, oldStatus: null, error: e instanceof Error ? e.message : "Database error" });
+    } finally {
+      client.release();
+    }
+  }
+  return out;
+}
+
 /**
  * Undo a scan-out: the tag goes back to what it was before — LIVE almost
  * always; UNKNOWN when it was the placeholder an online order had marked, so
@@ -186,25 +247,28 @@ export async function undoScanOut(pool: Pool, who: Who, epc: string, ctx: OrderR
     const item = toItem(row);
     const last = await client.query<{ action: string; old_status: string | null }>(
       `SELECT action, old_status FROM scan_out_events
-        WHERE tenant_id = $1::uuid AND epc = $2 AND action IN ('scan_out', 'undo')
+        WHERE tenant_id = $1::uuid AND epc = $2 AND action IN ('scan_out', 'scan_in', 'undo')
         ORDER BY created_at DESC, id DESC LIMIT 1`,
       [who.tenantId, epc],
     );
     const ev = last.rows[0];
-    if (row.status !== "sold" || !ev || ev.action !== "scan_out") {
+    // The latest scan of this tag, still in the state it left it in: SOLD after a scan-out, LIVE after a scan-in.
+    const expect = ev?.action === "scan_out" ? "sold" : ev?.action === "scan_in" ? "in-stock" : null;
+    if (!ev || !expect || row.status !== expect) {
       await client.query("ROLLBACK");
-      return { ...item, ok: false, oldStatus: row.status, error: row.status !== "sold" ? `This tag is ${row.status === "in-stock" ? "LIVE" : row.status.toUpperCase()} now — nothing to undo.` : "This tag was not scanned out here, so it cannot be undone here." };
+      return { ...item, ok: false, oldStatus: row.status, error: !expect ? "This tag was not scanned here, so it cannot be undone here." : `This tag is ${row.status === "in-stock" ? "LIVE" : row.status.toUpperCase()} now — nothing to undo.` };
     }
-    const back = ev.old_status === "unknown" ? "unknown" : "in-stock";
+    // After a scan-out: back to what it was (UNKNOWN stays UNKNOWN). After a scan-in: back to what it was.
+    const back = ev.action === "scan_out" ? (ev.old_status === "unknown" ? "unknown" : "in-stock") : (ev.old_status ?? "sold");
     await client.query(`UPDATE items SET status = $2 WHERE epc = $1`, [epc, back]);
     await client.query(
       `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
-       VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'sold', $3, $4, NULL, $5::uuid, NULL)`,
-      [who.tenantId, epc, back, ctx.orderName ? `scan_out_undo ${ctx.orderName}` : "scan_out_undo", who.userId],
+       VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, $4, $5, NULL, $6::uuid, NULL)`,
+      [who.tenantId, epc, expect, back, `${ev.action}_undo ${ctx.returnName ?? ctx.orderName ?? ""}`.trim(), who.userId],
     );
-    await logEvent(client, who, "undo", item, { ...ctx, oldStatus: "sold", newStatus: back });
+    await logEvent(client, who, "undo", item, { ...ctx, oldStatus: expect, newStatus: back });
     await client.query("COMMIT");
-    return { ...item, status: back, ok: true, oldStatus: "sold" };
+    return { ...item, status: back, ok: true, oldStatus: expect };
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     return { epc, status: null, serial: null, customSkuId: null, sku: null, upc: null, name: null, color: null, size: null, bin: null, ok: false, oldStatus: null, error: e instanceof Error ? e.message : "Database error" };
@@ -230,6 +294,7 @@ export type ScanOutEventRow = {
   size: string | null;
   bin: string | null;
   orderName: string | null;
+  returnName: string | null;
   reader: string | null;
   rssi: number | null;
   detail: string | null;
@@ -241,17 +306,17 @@ export async function listScanOutEvents(pool: Pool, tenantId: string, opts: { se
   const s = opts.search?.trim();
   if (s) {
     params.push(`%${s}%`);
-    where += ` AND (e.epc ILIKE $2 OR e.sku ILIKE $2 OR e.upc ILIKE $2 OR e.item_name ILIKE $2 OR e.order_name ILIKE $2 OR u.email ILIKE $2 OR u.first_name ILIKE $2 OR u.last_name ILIKE $2)`;
+    where += ` AND (e.epc ILIKE $2 OR e.sku ILIKE $2 OR e.upc ILIKE $2 OR e.item_name ILIKE $2 OR e.order_name ILIKE $2 OR e.return_name ILIKE $2 OR u.email ILIKE $2 OR u.first_name ILIKE $2 OR u.last_name ILIKE $2)`;
   }
   params.push(Math.min(opts.limit ?? 500, 2000));
   const r = await pool.query<{
     id: string; created_at: Date; action: string; epc: string | null; old_status: string | null; new_status: string | null;
     sku: string | null; upc: string | null; item_name: string | null; color: string | null; size: string | null; bin: string | null;
-    order_name: string | null; reader: string | null; rssi: number | null; detail: string | null;
+    order_name: string | null; return_name: string | null; reader: string | null; rssi: number | null; detail: string | null;
     first_name: string | null; last_name: string | null; email: string | null;
   }>(
     `SELECT e.id::text, e.created_at, e.action, e.epc, e.old_status, e.new_status, e.sku, e.upc, e.item_name, e.color, e.size,
-            e.bin, e.order_name, e.reader, e.rssi, e.detail, u.first_name, u.last_name, u.email
+            e.bin, e.order_name, e.return_name, e.reader, e.rssi, e.detail, u.first_name, u.last_name, u.email
        FROM scan_out_events e LEFT JOIN users u ON u.id = e.user_id
       WHERE ${where}
       ORDER BY e.created_at DESC
@@ -273,6 +338,7 @@ export async function listScanOutEvents(pool: Pool, tenantId: string, opts: { se
     size: x.size,
     bin: x.bin,
     orderName: x.order_name,
+    returnName: x.return_name,
     reader: x.reader,
     rssi: x.rssi,
     detail: x.detail,
