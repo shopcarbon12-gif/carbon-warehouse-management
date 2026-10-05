@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -20,7 +21,7 @@ const bodySchema = z.object({
   variantUpc: z.string().max(64).optional().nullable(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -59,3 +60,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg.slice(0, 400) || "Create failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("inventory/catalog/manual", POST_handler);

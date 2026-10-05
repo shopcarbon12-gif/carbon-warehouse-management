@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  *
  * POST { title, descriptionHtml? } → { id, handle }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -34,3 +35,5 @@ export async function POST(req: Request) {
   if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
   return NextResponse.json({ ok: true, id: res.id, handle: res.handle });
 }
+
+export const POST = withActivity("shopify/collections/create", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -23,7 +24,7 @@ const postBodySchema = z.object({
  * POST: Web "Send to handheld" — session auth required; enqueues EPCs for the
  * named handheld. Validates that the device belongs to the caller's tenant.
  */
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -154,3 +155,5 @@ export async function GET(
     return NextResponse.json({ error: "Query failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("devices/[id]/epc-queue", POST_handler);

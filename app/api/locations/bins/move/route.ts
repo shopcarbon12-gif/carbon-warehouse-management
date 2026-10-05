@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -29,7 +30,7 @@ const Body = z.object({
  * colour goes on a shelf as a unit. `mode: "add"` keeps the group's existing
  * bins and lists this one alongside them; there is no cap on bins per EPC.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,3 +83,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("locations/bins/move", POST_handler);

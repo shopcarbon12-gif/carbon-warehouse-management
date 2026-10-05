@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function DELETE(req: Request, { params }: Ctx) {
+async function DELETE_handler(req: Request, { params }: Ctx) {
   const userSession = await getSessionFromRequest(req);
   if (!userSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -21,3 +22,5 @@ export async function DELETE(req: Request, { params }: Ctx) {
   if (!r.deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
+
+export const DELETE = withActivity("antenna-test/calibrate/[id]", DELETE_handler);

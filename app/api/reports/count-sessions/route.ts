@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -94,7 +95,7 @@ function buildFilename(activity: string, when: Date): string {
   return `${a}_${y}${mo}${d}_${h}${mi}${s}.csv`;
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -235,3 +236,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Query failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("reports/count-sessions", POST_handler);

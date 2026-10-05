@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -10,7 +11,7 @@ import {
 } from "@/lib/server/lightspeed-sync-flag";
 import { randomUUID } from "node:crypto";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -88,3 +89,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("inventory/sync/trigger", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -31,7 +32,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ ok: true, sessions });
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -73,3 +74,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("rfid/cycle-counts/sessions", POST_handler);

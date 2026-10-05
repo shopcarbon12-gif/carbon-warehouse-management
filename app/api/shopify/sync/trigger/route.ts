@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  *
  * Body (optional): { matrixId } to sync a single product; omit for all.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -57,3 +58,5 @@ export async function POST(req: Request) {
   );
   return NextResponse.json({ job_id: ins.rows[0].id, already_running: false });
 }
+
+export const POST = withActivity("shopify/sync/trigger", POST_handler);

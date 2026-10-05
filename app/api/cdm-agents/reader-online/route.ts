@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -23,7 +24,7 @@ const bodySchema = z.object({
  * still flips antennas individually online when tags actually arrive on
  * them — only the reader-level bit is decoupled here.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -69,3 +70,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("cdm-agents/reader-online", POST_handler);

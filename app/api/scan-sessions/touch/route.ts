@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -19,7 +20,7 @@ const bodySchema = z.object({
   sessionIds: z.array(z.string()).max(64),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -37,3 +38,5 @@ export async function POST(req: Request) {
   const refreshed = touchSessions(parsed.data.sessionIds);
   return NextResponse.json({ ok: true, refreshed });
 }
+
+export const POST = withActivity("scan-sessions/touch", POST_handler);

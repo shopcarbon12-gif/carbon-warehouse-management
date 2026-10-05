@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { upsertSession } from "@/lib/server/live-scan-sessions";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  * Once a session exists, the agent's next config-poll (≤3 s) sees
  * `live_scan_active: true` and starts spawning reader binaries.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,3 +25,5 @@ export async function POST(req: Request) {
     started_at: new Date(s.startedAt).toISOString(),
   });
 }
+
+export const POST = withActivity("dashboard/live-scan/start", POST_handler);

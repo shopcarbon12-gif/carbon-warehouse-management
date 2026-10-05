@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -58,7 +59,7 @@ function envAllowZeroQohPush(): boolean {
  *
  * **Safety:** WMS **in-stock count 0** does not PUT unless **WMS_LS_PUSH_ALLOW_ZERO_QOH=1** (prevents wiping LS QOH when WMS has no tagged stock).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -313,3 +314,5 @@ export async function POST(req: Request) {
         : "No Lightspeed PUTs ran (all SKUs skipped). Common causes: missing ls_item_id, WMS count 0 with zero-qoh protection on, or unknown SKUs.",
   });
 }
+
+export const POST = withActivity("integrations/lightspeed/push", POST_handler);

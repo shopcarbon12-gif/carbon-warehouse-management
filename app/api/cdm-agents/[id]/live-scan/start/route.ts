@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -26,7 +27,7 @@ type Ctx = { params: Promise<{ id: string }> };
  * Response: { ok: true, agent_id, live_scan_active, last_started_at, started_by }
  *           { error } on 401 / 403 / 404 / 500.
  */
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -84,3 +85,5 @@ export async function POST(req: Request, { params }: Ctx) {
     started_by: row.live_scan_started_by,
   });
 }
+
+export const POST = withActivity("cdm-agents/[id]/live-scan/start", POST_handler);

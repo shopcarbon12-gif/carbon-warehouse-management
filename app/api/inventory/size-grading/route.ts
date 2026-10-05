@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -140,7 +141,7 @@ const Body = z.object({
   note: z.string().max(500).optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   try {
     return await savePost(req);
   } catch (e) {
@@ -226,3 +227,5 @@ async function savePost(req: Request) {
     colors: targets.rows.map((r) => r.color_code).filter(Boolean),
   });
 }
+
+export const POST = withActivity("inventory/size-grading", POST_handler);

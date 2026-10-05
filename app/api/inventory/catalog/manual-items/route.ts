@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -111,11 +112,11 @@ const bodySchema = z.object({
   matrixIds: z.array(z.string().uuid()).min(1).max(1000),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   return setManualFlag(req, true);
 }
 
-export async function DELETE(req: Request) {
+async function DELETE_handler(req: Request) {
   return setManualFlag(req, false);
 }
 
@@ -151,3 +152,6 @@ async function setManualFlag(req: Request, value: boolean) {
 
   return NextResponse.json({ updated: r.rowCount ?? 0 });
 }
+
+export const POST = withActivity("inventory/catalog/manual-items", POST_handler);
+export const DELETE = withActivity("inventory/catalog/manual-items", DELETE_handler);

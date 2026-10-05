@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -65,7 +66,7 @@ export async function GET(req: Request, ctx: Ctx) {
 /**
  * Handheld / web: append EPCs to a slip, or mark EPCs received/missing during transfer-in.
  */
-export async function POST(req: Request, ctx: Ctx) {
+async function POST_handler(req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -111,3 +112,5 @@ export async function POST(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("inventory/transfer-slips/[slipNumber]", POST_handler);

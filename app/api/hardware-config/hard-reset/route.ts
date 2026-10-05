@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
  *
  * Admin-only, audit-logged. Idempotent — safe to spam.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdminRole(session.role))
@@ -66,3 +67,5 @@ export async function POST(req: Request) {
     note: "Each agent will exit on its next heartbeat (≤30 s) and respawn within ~5 s. Click Live Scan to start a fresh session.",
   });
 }
+
+export const POST = withActivity("hardware-config/hard-reset", POST_handler);

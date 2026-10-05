@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -46,7 +47,7 @@ const bodySchema = z
  * Optional **fromSlipEpcs: true** resolves **itemID** + **toSend** from slip EPCs and `custom_skus.ls_item_id`.
  * Batches of up to 100 lines per Lightspeed request. Scope: **employee:transfers**.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -159,3 +160,5 @@ export async function POST(req: Request) {
     lightspeed: lastBody,
   });
 }
+
+export const POST = withActivity("integrations/lightspeed/slip-transfer-add-items", POST_handler);

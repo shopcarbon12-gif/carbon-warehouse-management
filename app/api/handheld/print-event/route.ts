@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -22,7 +23,7 @@ const bodySchema = z.object({
  * Label Print report. Best-effort from the handheld; failures don't block
  * printing. Actor = the signed-in user.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -70,3 +71,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Log failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("handheld/print-event", POST_handler);

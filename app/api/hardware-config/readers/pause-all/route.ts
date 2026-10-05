@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -7,7 +8,7 @@ import { endSessionForReader } from "@/lib/server/scan-sessions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isAdminRole(session.role))
@@ -70,3 +71,5 @@ export async function POST(req: Request) {
     endedScanSessions,
   });
 }
+
+export const POST = withActivity("hardware-config/readers/pause-all", POST_handler);

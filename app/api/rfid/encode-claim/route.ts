@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -61,7 +62,7 @@ const bodySchema = z.object({
   readerId: z.string().uuid().optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -324,3 +325,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("rfid/encode-claim", POST_handler);

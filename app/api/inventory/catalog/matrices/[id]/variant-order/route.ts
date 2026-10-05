@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -28,7 +29,7 @@ type Ctx = { params: Promise<{ id: string }> };
  * match. A Shopify failure does not fail the save — the order is already stored,
  * and the next Check & Publish carries it — but it is reported back.
  */
-export async function PUT(req: Request, { params }: Ctx) {
+async function PUT_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -94,3 +95,5 @@ export async function PUT(req: Request, { params }: Ctx) {
 
   return NextResponse.json({ ok: true, ordered, shopify });
 }
+
+export const PUT = withActivity("inventory/catalog/matrices/[id]/variant-order", PUT_handler);

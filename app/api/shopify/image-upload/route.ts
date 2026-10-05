@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -18,7 +19,7 @@ export const maxDuration = 120;
  * multipart/form-data: matrixId, customSkuId, [alt], [force=1], file
  * 200: { imageUrl, skipped }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -68,3 +69,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ imageUrl: result.imageUrl, skipped: !!result.skipped });
 }
+
+export const POST = withActivity("shopify/image-upload", POST_handler);

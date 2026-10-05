@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -47,7 +48,7 @@ const saveBody = z.object({
   notes: z.string().max(500).nullable().optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const userSession = await getSessionFromRequest(req);
   if (!userSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -93,3 +94,5 @@ export async function POST(req: Request) {
   });
   return NextResponse.json({ ok: true, id: r.id });
 }
+
+export const POST = withActivity("antenna-test/calibrate", POST_handler);

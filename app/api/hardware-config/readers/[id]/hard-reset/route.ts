@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -29,7 +30,7 @@ export const dynamic = "force-dynamic";
  * as the Pause click path), so an operator's open Transfer Out / Cycle
  * Count workflow doesn't keep the supervisor from completing the kill.
  */
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -88,3 +89,5 @@ export async function POST(
     endedScanSession,
   });
 }
+
+export const POST = withActivity("hardware-config/readers/[id]/hard-reset", POST_handler);

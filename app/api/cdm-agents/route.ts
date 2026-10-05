@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -34,7 +35,7 @@ export async function GET(req: Request) {
  * Save it immediately — it is not retrievable later (only its hash is stored).
  * Updating an existing agent (id provided) does NOT return a token.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -100,3 +101,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("cdm-agents", POST_handler);

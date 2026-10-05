@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -7,7 +8,7 @@ import { endSessionForReader } from "@/lib/server/scan-sessions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -57,3 +58,5 @@ export async function POST(
   );
   return NextResponse.json({ ok: true, endedScanSession });
 }
+
+export const POST = withActivity("hardware-config/readers/[id]/pause", POST_handler);

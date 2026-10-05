@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
  * ids so it's recognised as published without re-creating it). Admin.
  * Body: { matrixId } → { linked, productId, message }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -29,3 +30,5 @@ export async function POST(req: Request) {
   if (!res.ok) return NextResponse.json({ error: res.message }, { status: 400 });
   return NextResponse.json(res);
 }
+
+export const POST = withActivity("shopify/link", POST_handler);

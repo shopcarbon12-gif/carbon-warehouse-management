@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -28,7 +29,7 @@ type Ctx = { params: Promise<{ id: string; sku: string }> };
  * homeless (bin_id = NULL); items that merely list this bin in
  * additional_bin_ids just drop it from that array. Active-location scoped.
  */
-export async function DELETE(req: Request, ctx: Ctx) {
+async function DELETE_handler(req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -106,3 +107,5 @@ export async function DELETE(req: Request, ctx: Ctx) {
     client.release();
   }
 }
+
+export const DELETE = withActivity("locations/bins/[id]/sku/[sku]", DELETE_handler);

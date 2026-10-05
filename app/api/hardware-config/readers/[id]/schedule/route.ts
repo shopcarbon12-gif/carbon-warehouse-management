@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
  * PATCH body: either a full schedule object (validateSchedule shape) OR
  * `{ schedule: null }` to remove an existing schedule.
  */
-export async function PATCH(
+async function PATCH_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -72,3 +73,5 @@ export async function PATCH(
   );
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withActivity("hardware-config/readers/[id]/schedule", PATCH_handler);

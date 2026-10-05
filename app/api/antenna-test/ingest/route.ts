@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -58,7 +59,7 @@ const bodySchema = z.object({
     .optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) return NextResponse.json({ error: "Missing Bearer token" }, { status: 401 });
@@ -131,3 +132,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("antenna-test/ingest", POST_handler);

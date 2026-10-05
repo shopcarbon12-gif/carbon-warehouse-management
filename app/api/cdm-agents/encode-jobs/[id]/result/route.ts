@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -18,7 +19,7 @@ const bodySchema = z.object({
   meta: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -87,3 +88,5 @@ export async function POST(
   }
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("cdm-agents/encode-jobs/[id]/result", POST_handler);

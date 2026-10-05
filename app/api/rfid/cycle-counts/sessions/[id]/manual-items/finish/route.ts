@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -26,7 +27,7 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -103,3 +104,5 @@ export async function POST(req: Request, { params }: Ctx) {
     client.release();
   }
 }
+
+export const POST = withActivity("rfid/cycle-counts/sessions/[id]/manual-items/finish", POST_handler);

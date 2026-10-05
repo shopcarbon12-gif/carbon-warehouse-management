@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -16,7 +17,7 @@ const MAX_BYTES = Number.parseInt(process.env.MODEL_UPLOAD_MAX_FILE_BYTES || "",
  * public URL for use as a generation reference. Admin-only (desktop path;
  * the phone-camera path uploads via /api/image-handoff instead).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -43,3 +44,5 @@ export async function POST(req: Request) {
   const uploaded = await uploadBytesToStorage({ path, bytes, contentType: ct });
   return NextResponse.json({ url: uploaded.url, path: uploaded.path });
 }
+
+export const POST = withActivity("models/upload", POST_handler);

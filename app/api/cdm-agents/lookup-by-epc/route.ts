@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -22,7 +23,7 @@ const bodySchema = z.object({
  * Response: { rows: [{ epcHex, valid, reason?, prefixHex, systemId, serial,
  *                       sku, lsSystemId, color, size, productName }, ...] }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -140,3 +141,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
 }
+
+export const POST = withActivity("cdm-agents/lookup-by-epc", POST_handler);

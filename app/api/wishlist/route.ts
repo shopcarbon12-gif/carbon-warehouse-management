@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { resolveShopContext } from "@/lib/server/shopify-write";
@@ -101,7 +102,7 @@ function sanitiseItems(raw: unknown): Item[] | null {
   return out;
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const cors = corsHeaders(req.headers.get("origin"));
   const json = (body: unknown, status = 200) =>
     NextResponse.json(body, { status, headers: cors });
@@ -177,3 +178,5 @@ export async function POST(req: Request) {
 
   return json({ ok: true, saved: items.length });
 }
+
+export const POST = withActivity("wishlist", POST_handler);

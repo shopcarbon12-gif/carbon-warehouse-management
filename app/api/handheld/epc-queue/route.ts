@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
@@ -79,7 +80,7 @@ export async function GET(req: Request) {
  * Body: { epcs: [...] }
  * Reply: { ok: true, dismissed: number }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -140,3 +141,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Dismiss failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("handheld/epc-queue", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Per-colourway Studio state: the one photo of this colour, the colour name the
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ runs: r.rows.map(rowToRun) });
 }
 
-export async function PUT(req: NextRequest) {
+async function PUT_handler(req: NextRequest) {
   const a = await authed(req);
   if ("error" in a) return a.error;
   const body = await req.json().catch(() => ({}));
@@ -140,7 +141,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({ ok: true, run: rowToRun(r.rows[0]) });
 }
 
-export async function DELETE(req: NextRequest) {
+async function DELETE_handler(req: NextRequest) {
   const a = await authed(req);
   if ("error" in a) return a.error;
   const url = new URL(req.url);
@@ -152,3 +153,6 @@ export async function DELETE(req: NextRequest) {
   await a.pool.query(`DELETE FROM studio_color_runs WHERE matrix_id = $1::uuid AND color = $2`, [matrixId, color]);
   return NextResponse.json({ ok: true });
 }
+
+export const PUT = withActivity("studio/color-run", PUT_handler);
+export const DELETE = withActivity("studio/color-run", DELETE_handler);

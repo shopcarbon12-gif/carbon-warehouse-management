@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -8,7 +9,7 @@ const bodySchema = z.object({
   epcs: z.array(z.string()).min(1).max(200),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,3 +43,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("operations/transfers/lookup", POST_handler);

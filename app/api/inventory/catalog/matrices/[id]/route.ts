@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -244,7 +245,7 @@ const patchSchema = z
   })
   .refine((o) => Object.keys(o).length > 0, { message: "No fields to update" });
 
-export async function PATCH(req: Request, { params }: Ctx) {
+async function PATCH_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -390,7 +391,7 @@ const createVariantSchema = z.object({
   default_cost: z.number().nonnegative().max(1_000_000).nullable().optional(),
 });
 
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -462,3 +463,6 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
   }
 }
+
+export const PATCH = withActivity("inventory/catalog/matrices/[id]", PATCH_handler);
+export const POST = withActivity("inventory/catalog/matrices/[id]", POST_handler);

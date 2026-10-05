@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -113,7 +114,7 @@ export async function GET(req: Request, { params }: Ctx) {
   );
 }
 
-export async function PUT(req: Request, { params }: Ctx) {
+async function PUT_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -201,3 +202,5 @@ export async function PUT(req: Request, { params }: Ctx) {
     client.release();
   }
 }
+
+export const PUT = withActivity("rfid/cycle-counts/sessions/[id]/manual-items", PUT_handler);

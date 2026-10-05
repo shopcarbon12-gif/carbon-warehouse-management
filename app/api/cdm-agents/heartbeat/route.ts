@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import {
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * (NOT a user session) and records that the agent is alive + reports its
  * version/status. Called every ~30s by the agent.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -87,3 +88,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("cdm-agents/heartbeat", POST_handler);

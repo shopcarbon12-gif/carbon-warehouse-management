@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -60,7 +61,7 @@ function configMergePayload(info: z.infer<typeof handheldClientInfoSchema> | und
  * Optional [clientInfo] (serial, Wi‑Fi MAC, radio, build fingerprint, …) is merged into [devices.config]
  * for admin matching; [network_address] prefers a real Wi‑Fi MAC when the app reports one.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -133,3 +134,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Register failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("mobile/device-ping", POST_handler);

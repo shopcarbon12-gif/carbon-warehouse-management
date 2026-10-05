@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -17,7 +18,7 @@ const patchSchema = z.object({
   password: z.string().min(4).max(128).nullable().optional(),
 });
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function PATCH_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -63,7 +64,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function DELETE_handler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(_req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -85,3 +86,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }
 }
+
+export const PATCH = withActivity("settings/access/locations/[id]", PATCH_handler);
+export const DELETE = withActivity("settings/access/locations/[id]", DELETE_handler);

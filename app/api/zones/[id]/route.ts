@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -45,7 +46,7 @@ export async function GET(req: Request, { params }: Ctx) {
   return NextResponse.json({ zone }, { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function PATCH(req: Request, { params }: Ctx) {
+async function PATCH_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -102,7 +103,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 }
 
-export async function DELETE(req: Request, { params }: Ctx) {
+async function DELETE_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -143,3 +144,6 @@ export async function DELETE(req: Request, { params }: Ctx) {
     client.release();
   }
 }
+
+export const PATCH = withActivity("zones/[id]", PATCH_handler);
+export const DELETE = withActivity("zones/[id]", DELETE_handler);

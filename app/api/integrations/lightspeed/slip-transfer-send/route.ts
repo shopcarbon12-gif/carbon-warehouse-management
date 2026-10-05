@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -22,7 +23,7 @@ const bodySchema = z.object({
  * POST Lightspeed **Inventory/Transfer/{id}/Send.json** for the transfer linked on the WMS slip.
  * Typically call after **slip-transfer-add-items**. Scope: **employee:transfers**.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -95,3 +96,5 @@ export async function POST(req: Request) {
     lightspeed: result.body,
   });
 }
+
+export const POST = withActivity("integrations/lightspeed/slip-transfer-send", POST_handler);

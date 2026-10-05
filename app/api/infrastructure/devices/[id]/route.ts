@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -28,7 +29,7 @@ const patchSchema = z.object({
   isAuthorized: z.boolean().optional(),
 });
 
-export async function PATCH(req: Request, ctx: Ctx) {
+async function PATCH_handler(req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -79,7 +80,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 }
 
-export async function DELETE(_req: Request, ctx: Ctx) {
+async function DELETE_handler(_req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(_req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -123,3 +124,6 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     client.release();
   }
 }
+
+export const PATCH = withActivity("infrastructure/devices/[id]", PATCH_handler);
+export const DELETE = withActivity("infrastructure/devices/[id]", DELETE_handler);

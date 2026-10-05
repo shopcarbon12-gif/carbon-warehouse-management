@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -38,7 +39,7 @@ const bodySchema = z.object({
 
 type Action = "inserted" | "promoted" | "skipped";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!session.lid) {
@@ -210,3 +211,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("rfid/bulk-geiger/promote", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -41,7 +42,7 @@ const patchSchema = z.object({
 });
 
 /** Clean 10: only presentation fields (display label + legacy id) are editable. */
-export async function PATCH(req: Request) {
+async function PATCH_handler(req: Request) {
   const gate = await requireAdmin(req);
   if ("response" in gate) return gate.response;
   const { pool } = gate;
@@ -86,3 +87,5 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Update failed" }, { status: 500 });
   }
 }
+
+export const PATCH = withActivity("settings/status-labels", PATCH_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { findAgentByPublicIp } from "@/lib/server/cdm-agents";
@@ -23,7 +24,7 @@ export const dynamic = "force-dynamic";
  * nobody actually signs in, the heartbeat-based 60 s session timeout
  * cleans up automatically.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const ip = extractPublicIp(req);
   if (!ip) {
     return NextResponse.json({ ok: true, prewarmed: false, reason: "no_ip" });
@@ -47,3 +48,5 @@ export async function POST(req: Request) {
     started_at: new Date(session.startedAt).toISOString(),
   });
 }
+
+export const POST = withActivity("agents/network-prewarm", POST_handler);

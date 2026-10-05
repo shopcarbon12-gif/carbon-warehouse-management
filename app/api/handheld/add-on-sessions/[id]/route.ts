@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
@@ -31,7 +32,7 @@ export async function GET(
   return NextResponse.json(session, { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -56,3 +57,5 @@ export async function POST(
   }
   return NextResponse.json({ error: "op must be 'touch' or 'signout'" }, { status: 400 });
 }
+
+export const POST = withActivity("handheld/add-on-sessions/[id]", POST_handler);

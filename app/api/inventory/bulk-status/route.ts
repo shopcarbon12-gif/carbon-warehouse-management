@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -89,7 +90,7 @@ async function resolveCatalog(
  * Bulk status change — Clean 10 WMS vocabulary.
  * Super Admin (`admin` role) bypasses status locks; other staff cannot change super-admin-locked rows or set system-only targets.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -267,3 +268,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("inventory/bulk-status", POST_handler);

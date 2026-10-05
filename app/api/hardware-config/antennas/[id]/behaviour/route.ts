@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -25,7 +26,7 @@ const bodySchema = z.object({
  * mirrored into devices.transmit_power_dbm because the existing supervisor
  * reads `transmit_power_dbm` for the normal-scan path.
  */
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -108,3 +109,5 @@ export async function POST(req: Request, { params }: Ctx) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("hardware-config/antennas/[id]/behaviour", POST_handler);

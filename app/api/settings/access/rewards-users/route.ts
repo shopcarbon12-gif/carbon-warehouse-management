@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -46,7 +47,7 @@ const postSchema = z.object({
  * WMS/POS user; creates the user only when the email is brand-new. Idempotent
  * re-grant — never errors with "email already exists". No PIN, no per-location.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -103,3 +104,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("settings/access/rewards-users", POST_handler);

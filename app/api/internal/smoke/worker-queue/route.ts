@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 
@@ -25,7 +26,7 @@ function authorized(req: Request): boolean {
  * Ops-only: enqueue a stub `reconcile` job when `WMS_OPS_SMOKE_SECRET` is set in the container.
  * Protected by `x-wms-smoke-secret` header (not a session). Disabled when env unset (404).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   if (!smokeSecret()) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -104,3 +105,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Query failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("internal/smoke/worker-queue", POST_handler);

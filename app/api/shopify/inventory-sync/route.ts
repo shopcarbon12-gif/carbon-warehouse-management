@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
  * Body: { full?: boolean } — full=true reconciles every linked variant;
  * otherwise a delta (changed only). Runs in the worker. Single-flight. Admin.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -38,3 +39,5 @@ export async function POST(req: Request) {
   );
   return NextResponse.json({ job_id: ins.rows[0].id, already_running: false });
 }
+
+export const POST = withActivity("shopify/inventory-sync", POST_handler);

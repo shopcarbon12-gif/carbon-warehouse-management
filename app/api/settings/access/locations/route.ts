@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -32,7 +33,7 @@ const postSchema = z.object({
   password: z.string().min(4).max(128).nullable().optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -71,3 +72,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("settings/access/locations", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -216,7 +217,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ linked: true, category: r.category, attributes: r.attributes });
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -370,3 +371,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ category: r.category, attributes: r.attributes, suggestions, assignedCategory });
 }
+
+export const POST = withActivity("shopify/category-attributes", POST_handler);

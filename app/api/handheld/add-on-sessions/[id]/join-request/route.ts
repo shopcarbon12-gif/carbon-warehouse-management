@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -36,7 +37,7 @@ const bodySchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -131,3 +132,5 @@ export async function POST(
   });
   return NextResponse.json({ approved: false });
 }
+
+export const POST = withActivity("handheld/add-on-sessions/[id]/join-request", POST_handler);

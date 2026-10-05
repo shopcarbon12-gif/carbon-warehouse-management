@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Per-product Studio working state: the item reference photos with their
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function PUT(req: NextRequest) {
+async function PUT_handler(req: NextRequest) {
   const a = await authed(req);
   if ("error" in a) return a.error;
   const body = await req.json().catch(() => ({}));
@@ -123,3 +124,5 @@ export async function PUT(req: NextRequest) {
   );
   return NextResponse.json({ ok: true, refs: itemRefs.length });
 }
+
+export const PUT = withActivity("studio/state", PUT_handler);

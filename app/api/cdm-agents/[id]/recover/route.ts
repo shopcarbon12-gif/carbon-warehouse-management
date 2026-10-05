@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -55,7 +56,7 @@ export async function GET(
   return NextResponse.json({ ok: true, diagnosis: diag });
 }
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -112,3 +113,5 @@ export async function POST(
     client.release();
   }
 }
+
+export const POST = withActivity("cdm-agents/[id]/recover", POST_handler);

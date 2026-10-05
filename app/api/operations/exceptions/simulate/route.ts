@@ -1,9 +1,10 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { simulateDockAlarm } from "@/lib/server/operations-exceptions";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,3 +37,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("operations/exceptions/simulate", POST_handler);

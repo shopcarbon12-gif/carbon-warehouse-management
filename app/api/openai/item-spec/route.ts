@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Pre-generation ITEM ANALYSIS for Carbon Studio.
@@ -63,7 +64,7 @@ async function toDataUrl(rawUrl: string): Promise<string> {
 }
 
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -193,3 +194,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const POST = withActivity("openai/item-spec", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { SCOPES } from "@/lib/auth/roles";
@@ -40,7 +41,7 @@ export const dynamic = "force-dynamic";
  *     unchanged_count,
  *   }
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -135,3 +136,5 @@ export async function POST(req: Request) {
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const POST = withActivity("inventory/sync/preview", POST_handler);

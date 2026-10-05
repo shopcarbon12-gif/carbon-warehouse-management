@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -2865,7 +2866,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   if (!isModuleEnabled()) {
     return NextResponse.json(
       { ok: false, error: "Shopify Collection Mapping is disabled by environment flag." },
@@ -4566,3 +4567,5 @@ export async function POST(req: NextRequest) {
     if (releaseMenuLock) releaseMenuLock();
   }
 }
+
+export const POST = withActivity("shopify/collection-mapping", POST_handler);

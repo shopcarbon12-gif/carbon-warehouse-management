@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI, { toFile } from "openai";
 import { NextResponse } from "next/server";
@@ -676,7 +677,7 @@ function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefVie
  * `error` / `degraded` — as a failed panel. Without the header, behaviour is
  * exactly as before.
  */
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   /**
    * `x-generate-job: <id>` (optional): run the generation DETACHED from this
    * response and park the finished body under that id. The heartbeat above
@@ -1470,3 +1471,5 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     return fallbackGenerateResponse(reason);
   }
 }
+
+export const POST = withActivity("generate", POST_handler);

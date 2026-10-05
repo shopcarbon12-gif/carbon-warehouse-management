@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -27,7 +28,7 @@ const bodySchema = z.object({
  * periodically so a server-side row stuck at status_online=true after a
  * prior agent crash self-heals on the next watchdog tick.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -73,3 +74,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("cdm-agents/reader-offline", POST_handler);

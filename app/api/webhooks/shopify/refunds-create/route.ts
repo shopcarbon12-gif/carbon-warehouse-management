@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * failure rolls the claim back too, the 500 makes Shopify retry, and the retry
  * is not mistaken for a duplicate.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const raw = await req.text();
   const hmac = req.headers.get("x-shopify-hmac-sha256");
   if (!verifyShopifyWebhookHmac(raw, hmac)) {
@@ -52,3 +53,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("webhooks/shopify/refunds-create", POST_handler);

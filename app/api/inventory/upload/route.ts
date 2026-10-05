@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { extractEdgeApiKey, verifyEdgeApiKey } from "@/lib/auth/edge-auth";
@@ -16,7 +17,7 @@ const bodySchema = z.object({
   csvData: z.string().min(1).max(5_000_000),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -113,3 +114,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("inventory/upload", POST_handler);

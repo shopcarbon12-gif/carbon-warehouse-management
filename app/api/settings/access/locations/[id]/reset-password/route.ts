@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -17,7 +18,7 @@ const schema = z.object({
  * email is untouched; the location row itself is required to belong to the
  * caller's tenant.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function POST_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -55,3 +56,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({ error: "Reset failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("settings/access/locations/[id]/reset-password", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
@@ -27,7 +28,7 @@ type LineItem = {
   variant_id?: number | string | null;
 };
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const raw = await req.text();
   const hmac = req.headers.get("x-shopify-hmac-sha256");
   if (!verifyShopifyWebhookHmac(raw, hmac)) {
@@ -134,3 +135,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, flipped, manualDec });
 }
+
+export const POST = withActivity("webhooks/shopify/orders-paid", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -58,7 +59,7 @@ function parseTransferIdFromLightspeedBody(body: unknown): string | null {
  *
  * OAuth app needs **employee:transfers** scope.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -226,3 +227,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json(out);
 }
+
+export const POST = withActivity("integrations/lightspeed/sync-slip-transfer", POST_handler);

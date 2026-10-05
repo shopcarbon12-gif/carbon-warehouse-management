@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  * Refreshes catalog matrices + variant lines and updates `custom_skus.ls_on_hand_total`
  * from Lightspeed when the live catalog API returns on-hand fields (same pipeline as **Sync Lightspeed**).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -81,3 +82,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Pull failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("integrations/lightspeed/pull", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -15,7 +16,7 @@ const bodySchema = z.object({
 /**
  * Handheld: ghost-read filtering when `is_visible_to_scanner` is false (Clean 10 brain).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   let raw: unknown;
   try {
     raw = await req.json();
@@ -46,3 +47,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Query failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("mobile/epc-visibility", POST_handler);

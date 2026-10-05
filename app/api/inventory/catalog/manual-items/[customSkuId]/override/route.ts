@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -27,7 +28,7 @@ const bodySchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ customSkuId: string }> },
 ) {
@@ -98,3 +99,5 @@ export async function POST(
     historyId: result.historyId,
   });
 }
+
+export const POST = withActivity("inventory/catalog/manual-items/[customSkuId]/override", POST_handler);

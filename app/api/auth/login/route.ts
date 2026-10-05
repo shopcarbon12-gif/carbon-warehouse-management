@@ -1,9 +1,10 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { sessionCookieSecure, signSession } from "@/lib/auth";
 import { getPool, isDatabaseUnreachable } from "@/lib/db";
 import { findUserWithTenantLocation } from "@/lib/queries/session-user";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const secureCookie = sessionCookieSecure(req);
   let body: { email?: string; password?: string };
   try {
@@ -79,3 +80,5 @@ export async function POST(req: Request) {
   });
   return res;
 }
+
+export const POST = withActivity("auth/login", POST_handler);

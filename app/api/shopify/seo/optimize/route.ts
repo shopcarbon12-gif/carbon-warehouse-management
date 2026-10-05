@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -20,7 +21,7 @@ export const maxDuration = 180;
  * rather than a second copy that drifts. This route is auth, rate limiting and
  * request shape.
  */
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -91,3 +92,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+export const POST = withActivity("shopify/seo/optimize", POST_handler);

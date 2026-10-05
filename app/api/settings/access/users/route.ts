@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -32,7 +33,7 @@ const postSchema = z.object({
   lastName: z.string().trim().max(80).optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -75,3 +76,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("settings/access/users", POST_handler);

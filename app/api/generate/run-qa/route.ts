@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -35,7 +36,7 @@ const QA_TIMEOUT_MS = Math.max(
   Math.min(Number(process.env.OPENAI_IMAGE_TIMEOUT_MS) || 240_000, 120_000),
 );
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -127,3 +128,5 @@ export async function GET(req: NextRequest) {
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const POST = withActivity("generate/run-qa", POST_handler);

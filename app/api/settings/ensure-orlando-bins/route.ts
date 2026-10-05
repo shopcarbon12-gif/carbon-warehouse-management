@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -14,7 +15,7 @@ const bodySchema = z.object({
  * Admin: insert the same Orlando bin grid as local seed (`ON CONFLICT DO NOTHING`).
  * POST body optional: `{ "locationCode": "001" }` (default 001).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -79,3 +80,5 @@ export async function POST(req: Request) {
     inserted: nAfter - nBefore,
   });
 }
+
+export const POST = withActivity("settings/ensure-orlando-bins", POST_handler);

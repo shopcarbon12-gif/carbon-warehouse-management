@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -17,7 +18,7 @@ function safeSegment(s: string): string {
   return s.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 120).toLowerCase();
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -96,3 +97,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to save release row" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("mobile/upload-apk", POST_handler);

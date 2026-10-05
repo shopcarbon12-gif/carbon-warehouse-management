@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
  * cookies forwarded from the login flow) — the edge-API-key path is
  * deliberately not accepted because the role check needs a real user.
  */
-export async function POST(
+async function POST_handler(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -65,3 +66,5 @@ export async function POST(
     return NextResponse.json({ error: "Reopen failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("handheld/add-on-sessions/[id]/reopen", POST_handler);

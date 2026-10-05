@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -6,7 +7,7 @@ import { isAdminRole } from "@/lib/auth/dashboard-rbac";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -45,3 +46,5 @@ export async function POST(
   );
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("hardware-config/readers/[id]/resume", POST_handler);

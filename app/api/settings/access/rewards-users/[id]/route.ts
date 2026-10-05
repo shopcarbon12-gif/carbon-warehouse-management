@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -22,7 +23,7 @@ const patchSchema = z.object({
  * Update a rewards user's role + active flag. Optionally reset the password.
  * `id` is the users.id (UUID).
  */
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function PATCH_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -60,7 +61,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
  * DELETE /api/settings/access/rewards-users/{id}
  * Soft-deactivates the rewards user (sets rewards_employees.is_active = false).
  */
-export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function DELETE_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -82,3 +83,6 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     return NextResponse.json({ error: "Deactivate failed" }, { status: 500 });
   }
 }
+
+export const PATCH = withActivity("settings/access/rewards-users/[id]", PATCH_handler);
+export const DELETE = withActivity("settings/access/rewards-users/[id]", DELETE_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
@@ -39,7 +40,7 @@ export const maxDuration = 120;
  * UNISEX for the whole catalogue, and age group and condition are constants:
  * Carbon has no kids line and no resale.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -124,3 +125,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || "AI scan failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("shopify/metafields/suggest", POST_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -25,7 +26,7 @@ const MAX_PREVIEW_AGE_MIN = 30;
  * Returns: { job_id } so the frontend can poll
  *   GET /api/inventory/sync/jobs/[id]/progress
  */
-export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
+async function POST_handler(req: Request, ctx: { params: Promise<{ token: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -99,3 +100,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const POST = withActivity("inventory/sync/preview/[token]/apply", POST_handler);

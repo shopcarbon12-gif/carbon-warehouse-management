@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { upsertSyncedModel } from "@/lib/modelsRepository";
@@ -40,7 +41,7 @@ const bodySchema = z.object({
   ref_slots: z.record(z.string(), z.string()).nullish(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const secret = syncSecret();
   if (!secret) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (req.headers.get(HDR) !== secret) {
@@ -81,3 +82,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("internal/models-sync", POST_handler);

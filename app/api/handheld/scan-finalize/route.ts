@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -59,7 +60,7 @@ const bodySchema = z.object({
   locationId: z.string().min(1).max(64).optional(),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -124,3 +125,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Finalize failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("handheld/scan-finalize", POST_handler);

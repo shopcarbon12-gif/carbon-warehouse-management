@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ driver: z.enum(["stream", "console"]) });
 
-export async function POST(
+async function POST_handler(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -60,3 +61,5 @@ export async function POST(
   );
   return NextResponse.json({ ok: true, driver: parsed.data.driver });
 }
+
+export const POST = withActivity("hardware-config/readers/[id]/monsoon-driver", POST_handler);

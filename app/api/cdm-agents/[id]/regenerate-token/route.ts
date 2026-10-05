@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -13,7 +14,7 @@ type Ctx = { params: Promise<{ id: string }> };
  * Save it immediately — we only store its hash. The old token stops working
  * the moment this responds.
  */
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -54,3 +55,5 @@ export async function POST(req: Request, { params }: Ctx) {
     client.release();
   }
 }
+
+export const POST = withActivity("cdm-agents/[id]/regenerate-token", POST_handler);

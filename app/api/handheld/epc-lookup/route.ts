@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -31,7 +32,7 @@ function legacyCatalogSystemId(epc: string): string | null {
   return legacyEpcSystemId(epc)?.toString() ?? null;
 }
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
@@ -191,3 +192,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
 }
+
+export const POST = withActivity("handheld/epc-lookup", POST_handler);

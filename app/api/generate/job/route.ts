@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ status: "done", ...payload }, { headers: { "Cache-Control": "no-store" } });
 }
 
-export async function DELETE(req: NextRequest) {
+async function DELETE_handler(req: NextRequest) {
   const denied = await guard(req);
   if (denied) return denied;
   const id = req.nextUrl.searchParams.get("id")?.trim() ?? "";
@@ -59,3 +60,5 @@ export async function DELETE(req: NextRequest) {
   releaseGenerateJob(id);
   return NextResponse.json({ ok: true });
 }
+
+export const DELETE = withActivity("generate/job", DELETE_handler);

@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 const MAX_EPCS = 5000;
 const HEADERish = new Set(["epc", "epcs", "tag", "rfid", "tagid", "tag id"]);
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -74,3 +75,5 @@ export async function POST(req: Request) {
     { headers: { "Cache-Control": "no-store" } },
   );
 }
+
+export const POST = withActivity("rfid/bulk-geiger/parse", POST_handler);

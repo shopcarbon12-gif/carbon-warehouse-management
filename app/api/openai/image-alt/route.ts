@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
@@ -75,7 +76,7 @@ async function toModelImageUrlFromStoragePath(rawPath: string) {
   return `data:${normalizeText(contentType) || "image/png"};base64,${bytes.toString("base64")}`;
 }
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const authPool = getPool();
@@ -170,3 +171,5 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export const POST = withActivity("openai/image-alt", POST_handler);

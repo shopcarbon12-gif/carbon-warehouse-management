@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -23,7 +24,7 @@ const bodySchema = z.object({
   driver: z.enum(["stream", "console"]),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) return NextResponse.json({ error: "Missing Bearer token" }, { status: 401 });
@@ -76,3 +77,5 @@ export async function POST(req: Request) {
     driver: parsed.data.driver,
   });
 }
+
+export const POST = withActivity("cdm-agents/set-monsoon-driver", POST_handler);

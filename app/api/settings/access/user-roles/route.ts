@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -46,7 +47,7 @@ const postSchema = z.object({
   { message: "Warehouse roles aren't allowed under POS, Rewards, or Mobile." },
 );
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -82,3 +83,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Create failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("settings/access/user-roles", POST_handler);

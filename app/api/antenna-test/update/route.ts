@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -23,7 +24,7 @@ const bodySchema = z.object({
   flags: patchSchema,
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const userSession = await getSessionFromRequest(req);
   if (!userSession) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -52,3 +53,5 @@ export async function POST(req: Request) {
   if (!updated) return NextResponse.json({ error: "Session not found" }, { status: 404 });
   return NextResponse.json({ ok: true, flags: updated.flags });
 }
+
+export const POST = withActivity("antenna-test/update", POST_handler);

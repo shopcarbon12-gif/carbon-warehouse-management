@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -255,7 +256,7 @@ async function runBackfillAsync(
   }
 }
 
-export async function PATCH(req: Request, { params }: Ctx) {
+async function PATCH_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -300,3 +301,5 @@ export async function PATCH(req: Request, { params }: Ctx) {
     client.release();
   }
 }
+
+export const PATCH = withActivity("rfid/cycle-counts/sessions/[id]", PATCH_handler);

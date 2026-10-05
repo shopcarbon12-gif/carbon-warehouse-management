@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 // Local API alias for collection mapping so the page can work even when /api/shopify/* routes are unavailable in this runtime.
 import { GET as ShopifyCollectionMappingGET, POST as ShopifyCollectionMappingPOST } from "@/app/api/shopify/collection-mapping/route";
 
@@ -10,6 +11,8 @@ export async function GET(request: Request) {
   return ShopifyCollectionMappingGET(request as never);
 }
 
-export async function POST(request: Request) {
+async function POST_handler(request: Request) {
   return ShopifyCollectionMappingPOST(request as never);
 }
+
+export const POST = withActivity("collection-mapping", POST_handler);

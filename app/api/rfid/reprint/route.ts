@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -48,7 +49,7 @@ const bodySchema = z.object({
 // can't open raw TCP). Mobile callers explicitly pass 9100 in their body.
 const DEFAULT_PRINTER_LINE = "192.168.1.3:80 / PSTPRNT";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -213,3 +214,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ ok: true, outcome });
 }
+
+export const POST = withActivity("rfid/reprint", POST_handler);

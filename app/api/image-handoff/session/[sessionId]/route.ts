@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import {
   getHandoffSession,
@@ -56,7 +57,7 @@ export async function GET(req: Request, { params }: Ctx) {
 /** Phone upload — no WMS session (gated by session id). Stores to R2, then
  * registers the batch in one transaction that re-checks the session is alive,
  * and tells the phone whether a desktop is currently listening. */
-export async function POST(req: Request, { params }: Ctx) {
+async function POST_handler(req: Request, { params }: Ctx) {
   const { sessionId } = await params;
   let s;
   try {
@@ -126,3 +127,5 @@ export async function POST(req: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Could not register the photos — try again." }, { status: 503 });
   }
 }
+
+export const POST = withActivity("image-handoff/session/[sessionId]", POST_handler);

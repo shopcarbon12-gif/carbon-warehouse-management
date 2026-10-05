@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getPool } from "@/lib/db";
@@ -20,7 +21,7 @@ const bodySchema = z.object({
  * Handheld firehose: edge API key **or** mobile Bearer session + registered device, **202** immediately.
  * Heavy work runs in `lib/server/edge-ingest-queue.ts` → `inventory-reconciler.ts`.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   let raw: unknown;
   try {
     raw = await req.json();
@@ -69,3 +70,5 @@ export async function POST(req: Request) {
     { status: 202 },
   );
 }
+
+export const POST = withActivity("edge/ingest", POST_handler);

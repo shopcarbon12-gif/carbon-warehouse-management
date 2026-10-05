@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { authenticateAgentToken } from "@/lib/server/cdm-agents";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
  *
  * Bearer-authenticated with the agent's API token (NOT a user session).
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (!m) {
@@ -86,3 +87,5 @@ export async function GET(req: Request) {
   const rows = await listPendingWiznetDiscoveries(pool, session.tid);
   return NextResponse.json({ ok: true, discoveries: rows });
 }
+
+export const POST = withActivity("cdm-agents/wiznet-discoveries", POST_handler);

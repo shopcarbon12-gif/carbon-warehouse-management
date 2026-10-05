@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { sessionCookieSecure, signSession } from "@/lib/auth";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -15,7 +16,7 @@ import { assertLocationForTenant } from "@/lib/queries/session-user";
  * The proxy.ts catch-all has already validated one of them; we just decode
  * the same payload here and re-sign with the new lid.
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const cur = await getSessionFromRequest(req);
   if (!cur) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -63,3 +64,5 @@ export async function POST(req: Request) {
   });
   return res;
 }
+
+export const POST = withActivity("session/location", POST_handler);

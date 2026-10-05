@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -6,7 +7,7 @@ import { deleteBin } from "@/lib/server/overview-locations";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function DELETE(_req: Request, ctx: Ctx) {
+async function DELETE_handler(_req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(_req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -51,3 +52,5 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     client.release();
   }
 }
+
+export const DELETE = withActivity("locations/bins/[id]", DELETE_handler);

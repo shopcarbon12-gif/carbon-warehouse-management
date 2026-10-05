@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -13,7 +14,7 @@ const bodySchema = z.object({
   csvText: z.string().min(1).max(2_000_000),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,3 +54,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Import failed" }, { status: 500 });
   }
 }
+
+export const POST = withActivity("inventory/catalog/import-csv", POST_handler);

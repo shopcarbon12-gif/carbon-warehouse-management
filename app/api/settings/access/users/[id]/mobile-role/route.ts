@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -17,7 +18,7 @@ const bodySchema = z.object({ mobileRoleId: z.number().int().positive().nullable
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: Request, { params }: Ctx) {
+async function PATCH_handler(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -73,3 +74,5 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const PATCH = withActivity("settings/access/users/[id]/mobile-role", PATCH_handler);

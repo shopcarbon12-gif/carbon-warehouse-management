@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyDeviceKey } from "@/lib/handheld-auth";
@@ -10,7 +11,7 @@ const bodySchema = z.object({
   epcs: z.array(z.string()).min(1).max(5000),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const key = req.headers.get("x-wms-device-key");
   if (!verifyDeviceKey(key)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -82,3 +83,5 @@ export async function POST(req: Request) {
   }
   return NextResponse.json(result);
 }
+
+export const POST = withActivity("handheld/batches", POST_handler);

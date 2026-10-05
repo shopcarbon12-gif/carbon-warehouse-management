@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -5,7 +6,7 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { upsertAntenna, upsertAntennaSchema } from "@/lib/server/cdm-devices";
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -74,3 +75,5 @@ export async function POST(req: Request) {
     client.release();
   }
 }
+
+export const POST = withActivity("hardware-config/antennas", POST_handler);

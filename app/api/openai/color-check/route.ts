@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Read one photo of a colourway and say two things: what colour it is, and
@@ -59,7 +60,7 @@ async function toDataUrl(rawUrl: string): Promise<string> {
   return `data:${text(contentType) || "image/jpeg"};base64,${bytes.toString("base64")}`;
 }
 
-export async function POST(req: NextRequest) {
+async function POST_handler(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -177,3 +178,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const POST = withActivity("openai/color-check", POST_handler);

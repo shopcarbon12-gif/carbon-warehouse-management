@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 /**
  * Size Grading — ask a vision model to read the garment.
  *
@@ -47,7 +48,7 @@ const Reading = z.object({
   lines: z.record(z.string(), z.object({ a: Pt, b: Pt }).nullable()).default({}),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -102,3 +103,5 @@ export async function POST(req: Request) {
     clearTimeout(timer);
   }
 }
+
+export const POST = withActivity("inventory/size-grading/ai-read", POST_handler);

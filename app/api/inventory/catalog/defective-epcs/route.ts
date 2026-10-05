@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { SCOPES } from "@/lib/auth/roles";
@@ -130,7 +131,7 @@ const dismissSchema = z.object({
   epcs: z.array(z.string().regex(/^[0-9A-Fa-f]{24}$/, "Invalid EPC")).min(1).max(1000),
 });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -170,3 +171,5 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ dismissed: r.rowCount ?? 0 });
 }
+
+export const POST = withActivity("inventory/catalog/defective-epcs", POST_handler);

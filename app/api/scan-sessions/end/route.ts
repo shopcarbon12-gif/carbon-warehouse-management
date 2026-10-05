@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({ sessionId: z.string().uuid() });
 
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const userSession = await getSessionFromRequest(req);
   if (!userSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -49,3 +50,5 @@ export async function POST(req: Request) {
   endSession(s.id);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("scan-sessions/end", POST_handler);

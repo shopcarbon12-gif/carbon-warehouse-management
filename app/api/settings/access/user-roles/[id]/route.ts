@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
@@ -11,7 +12,7 @@ const putSchema = z.object({
   permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))),
 });
 
-export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function PUT_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -53,7 +54,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function DELETE_handler(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromRequest(_req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -81,3 +82,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Delete failed" }, { status: 500 });
   }
 }
+
+export const PUT = withActivity("settings/access/user-roles/[id]", PUT_handler);
+export const DELETE = withActivity("settings/access/user-roles/[id]", DELETE_handler);

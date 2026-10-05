@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(req: Request, ctx: Ctx) {
+async function POST_handler(req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -76,3 +77,5 @@ export async function POST(req: Request, ctx: Ctx) {
     client.release();
   }
 }
+
+export const POST = withActivity("locations/bins/[id]/clean", POST_handler);
