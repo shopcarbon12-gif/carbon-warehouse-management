@@ -34,7 +34,7 @@ type Kpis = {
 
 type CommandPayload = {
   kpis: Kpis;
-  activity: ActivityRow[];
+  activity: (ActivityRow & { groupCount?: number })[];
 };
 
 type LookupRow = {
@@ -227,17 +227,17 @@ function KpiTile({
   );
 }
 
-function activityWhat(row: ActivityRow): string {
+function activityWhat(row: ActivityRow & { groupCount?: number }): string {
   const detail =
     row.change && (row.change.from || row.change.to)
       ? `${row.change.from ? `${row.change.from} → ` : ""}${row.change.to ?? "—"}`
       : row.summary;
   const item = row.item
     ? [row.item.product, row.item.color, row.item.size].filter(Boolean).join(" · ") || row.item.epc || row.item.sku
-    : row.itemCount
-      ? `${row.itemCount} tags`
-      : null;
-  return [row.action, detail, item].filter(Boolean).join(" · ");
+    : null;
+  const count = (row.groupCount ?? row.itemCount ?? 1) > 1 ? `${row.groupCount ?? row.itemCount} items` : null;
+  const note = row.reason && row.reason.length <= 40 ? row.reason : null;
+  return [row.action, detail, item, count, note].filter(Boolean).join(" · ");
 }
 
 function activityMeta(row: ActivityRow): string {

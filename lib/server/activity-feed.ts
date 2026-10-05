@@ -3,6 +3,8 @@ import {
   describeAction,
   describeRoute,
   keysForModule,
+  NOT_A_CHANGE_ACTIONS,
+  NOT_A_CHANGE_ROUTES,
   SOURCE_LABEL,
   type ActivityModule,
 } from "@/lib/activity-catalog";
@@ -27,6 +29,8 @@ export type ActivityFilters = {
   q?: string | null;
   readers?: boolean;
   failedOnly?: boolean;
+  /** Only successful calls that leave a lasting change (dashboard). */
+  changesOnly?: boolean;
 };
 
 export type ActivityItem = {
@@ -73,6 +77,11 @@ const RICH_ROUTES = new Set([
   "inventory/bulk-import/commit",
   "mobile/barcode-intake",
   "rfid/bulk-geiger/promote",
+  "rfid/ship-scan-out",
+  "rfid/ship-scan-out/undo",
+  "webhooks/shopify/orders-paid",
+  "webhooks/shopify/orders-fulfilled",
+  "webhooks/shopify/refunds-create",
 ]);
 
 const STATUS_WORD: Record<string, string> = {
@@ -181,6 +190,14 @@ export async function listActivity(pool: Pool, tenantId: string, f: ActivityFilt
   if (f.failedOnly) {
     aw.push(`al.metadata->>'ok' = 'false'`);
     iw.push("false");
+  }
+  if (f.changesOnly) {
+    const routes = p([...NOT_A_CHANGE_ROUTES]);
+    const actions = p([...NOT_A_CHANGE_ACTIONS]);
+    aw.push(`(CASE WHEN al.action = 'api_request'
+               THEN al.metadata->>'ok' = 'true' AND al.metadata->>'method' <> 'GET'
+                    AND NOT (coalesce(al.metadata->>'route', '') = ANY(${routes}::text[]))
+               ELSE NOT (al.action = ANY(${actions}::text[])) END)`);
   }
   let matched = "";
   if (f.q?.trim()) {
@@ -294,6 +311,7 @@ function summarizeBody(body: unknown): string | null {
   const bits: string[] = [];
   for (const [k, v] of Object.entries(b)) {
     if (SKIP_SUMMARY_KEYS.has(k) || v == null || v === "") continue;
+    if (typeof v === "string" && UUID.test(v)) continue;
     if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
       const s = String(v);
       bits.push(`${k}: ${s.length > 60 ? `${s.slice(0, 60)}…` : s}`);
@@ -363,12 +381,26 @@ function shape(r: RawRow): ActivityRow {
     const source = str(m.source) ?? "external";
     const body = m.body as Record<string, unknown> | undefined;
     const target = body && typeof body.targetStatus === "string" ? statusWord(body.targetStatus) : null;
+    const orderName =
+      body && typeof body.orderName === "string"
+        ? body.orderName
+        : route.startsWith("webhooks/shopify/") && body
+          ? typeof body.name === "string"
+            ? body.name
+            : typeof body.order_id === "number" || typeof body.order_id === "string"
+              ? `order ${body.order_id}`
+              : null
+          : null;
     return {
       ...base,
       actor: base.actor || str(m.user_email) || (source === "shopify_webhook" ? "Shopify" : source === "machine" ? "System" : "Not signed in"),
       module: d.module,
       action: d.label,
-      summary: target ? `→ ${target}` : summarizeBody(m.body),
+      summary: target
+        ? `→ ${target}`
+        : orderName
+          ? `Order ${orderName.replace(/^order\s+/i, "")}`
+          : summarizeBody(m.body),
       change: target ? { from: null, to: target } : null,
       item: epcs.length === 1 ? { epc: epcs[0] } : null,
       itemCount: epcs.length > 1 ? (countFrom(m.body) ?? epcs.length) : null,
@@ -432,13 +464,27 @@ function mergeCompanions(rows: ActivityRow[]): ActivityRow[] {
     if (!r.id.startsWith("a:") || r.outcome !== "ok") continue;
     const route = str(r.details.route);
     if (!route || !RICH_ROUTES.has(route)) continue;
+    // The request row is written when the handler returns; its detailed rows
+    // were written while it ran — inside [end − duration, end].
     const t = Date.parse(r.at);
+    const ran = typeof r.details.ms === "number" ? r.details.ms : 15000;
     let matched = false;
     for (const o of rows) {
       if (o === r || o.outcome !== "recorded" || (o.user?.id ?? null) !== (r.user?.id ?? null)) continue;
+      if (o.details.request) continue; // already paired with another request
+      // Tag-level rows (status changes, stock) pair with any tag-changing
+      // request; hand-written rows pair only within the same module.
+      if (!o.id.startsWith("i:") && o.module !== r.module) continue;
       const dt = t - Date.parse(o.at);
-      if (dt < -2000 || dt > 15000) continue;
+      if (dt < -50 || dt > ran + 50) continue;
       matched = true;
+      // The request names the real action ("Scanned out", "Shopify refund");
+      // the detailed row carries the item and the before → after.
+      o.action = r.action;
+      o.module = r.module;
+      if (r.summary?.startsWith("Order ")) o.reason = r.summary;
+      else if (o.reason && /^[a-z_]+( #\S+)?$/.test(o.reason)) o.reason = null; // raw code
+      if (!o.user && (o.actor === "Not recorded" || !o.actor)) o.actor = r.actor;
       o.source = r.source;
       o.sourceDetail = r.sourceDetail;
       o.details = { ...o.details, request: r.details };

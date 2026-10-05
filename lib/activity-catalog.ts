@@ -306,3 +306,67 @@ export const SOURCE_LABEL: Record<string, string> = {
   reader: "Fixed reader",
   job: "Background job",
 };
+
+/**
+ * Calls that do not leave a lasting change behind — starting/stopping a scan,
+ * signing in, tests, AI drafts, previews, lookups, intermediate encode steps,
+ * one-off resets. They stay on Reports → Activity history; the dashboard's
+ * "Recent activity" shows only real changes to data or settings.
+ */
+export const NOT_A_CHANGE_ROUTES: readonly string[] = [
+  "auth/login",
+  "auth/logout",
+  "session/location",
+  "scan-sessions/start",
+  "scan-sessions/stop",
+  "scan-sessions/end",
+  "dashboard/live-scan/start",
+  "dashboard/live-scan/stop",
+  "cdm-agents/[id]/live-scan/start",
+  "cdm-agents/[id]/live-scan/stop",
+  "cdm-agents/[id]/recover",
+  "hardware-config/hard-reset",
+  "hardware-config/readers/[id]/hard-reset",
+  "hardware-config/antennas/[id]/test",
+  "antenna-test/start",
+  "antenna-test/stop",
+  "antenna-test/update",
+  "antenna-test/calibrate",
+  "antenna-test/calibrate/[id]",
+  "rfid/ship-scan-out/reader",
+  "generate",
+  "openai/item-spec",
+  "openai/color-check",
+  "openai/image-alt",
+  "shopify/seo/audit",
+  "shopify/seo/optimize",
+  "inventory/size-grading/ai-read",
+  "inventory/sync/preview",
+  "inventory/bulk-import/scan",
+  "compare/runs",
+  "rfid/cycle-counts/sessions/[id]/scan",
+  "handheld/add-on-sessions/[id]/epc",
+  "handheld/add-on-sessions/[id]/epcs",
+  "handheld/add-on-sessions/[id]/join-request",
+  "rfid/encode-claim",
+  "rfid/encode-resolve",
+  "rfid/encode-resolve-and-claim",
+  "handhelds/epc-queue",
+  "devices/[id]/epc-queue",
+  "operations/exceptions/simulate",
+];
+
+/** Older audit_log actions that are automatic or not lasting changes. */
+export const NOT_A_CHANGE_ACTIONS: readonly string[] = [
+  "rfid_zone_change",
+  "item_live_transition",
+  "cdm_agent_auto_mac_bind",
+  "cdm_agent_auto_ip_update",
+  "cdm_agent_recover_requested",
+  "cdm_hard_reset",
+  "cdm_reader_hard_reset",
+  "cycle_count_scan_start",
+  "cycle_count_scan_pause",
+  "cycle_count_scan_cancel",
+  "lightspeed_catalog_sync",
+];
