@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -7,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** POST { action: "start" | "stop", orderId?, orderName? } — the reader being started or stopped, for the log. */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -23,3 +24,5 @@ export async function POST(req: Request) {
   );
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withActivity("rfid/ship-scan-out/reader", POST_handler);

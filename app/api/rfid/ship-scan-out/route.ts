@@ -1,3 +1,4 @@
+import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
  *   POST { epcs: string[], orderId?, orderName?, reader?, rssi?: { [epc]: dBm } }
  *   POST { epc }   — one tag, kept for older clients
  */
-export async function POST(req: Request) {
+async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
@@ -45,3 +46,5 @@ export async function POST(req: Request) {
   const single = body.epcs ? null : results[0];
   return NextResponse.json(single ? { ...single, ok: single.ok } : { ok: results.every((r) => r.ok), results });
 }
+
+export const POST = withActivity("rfid/ship-scan-out", POST_handler);

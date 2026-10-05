@@ -85,6 +85,7 @@ const ROUTES: Record<string, Entry> = {
   "shopify/category-attributes": { module: "Shopify", label: "Set Shopify category attributes" },
   "webhooks/shopify/orders-paid": { module: "Shopify orders", label: "Shopify order paid" },
   "webhooks/shopify/refunds-create": { module: "Shopify orders", label: "Shopify refund" },
+  "webhooks/shopify/orders-fulfilled": { module: "Shopify orders", label: "Shopify order fulfilled — unknown tags back to live" },
 
   "inventory/bulk-status": { module: "Inventory status", label: "Changed tag status" },
   "mobile/epc-visibility": { module: "Inventory status", label: "Changed tag visibility" },
@@ -123,8 +124,9 @@ const ROUTES: Record<string, Entry> = {
   "inventory/transfer-slips": { module: "Transfers", label: "Created transfer slip" },
   "inventory/transfer-slips/[slipNumber]": { module: "Transfers", label: { PATCH: "Edited transfer slip", DELETE: "Deleted transfer slip", POST: "Edited transfer slip" } },
 
-  "rfid/ship-scan-out": { module: "Shipping", label: "Scanned out for shipping" },
-  "rfid/ship-scan-out/reader": { module: "Shipping", label: "Ship scan-out reader" },
+  "rfid/ship-scan-out": { module: "Shipping", label: "Scanned out" },
+  "rfid/ship-scan-out/reader": { module: "Shipping", label: "Scan-out reader started/stopped" },
+  "rfid/ship-scan-out/undo": { module: "Shipping", label: "Undid a scan-out" },
 
   "rfid/commission": { module: "Tags & labels", label: "Commissioned tags" },
   "rfid/encode-claim": { module: "Tags & labels", label: "Encode — claimed EPC" },

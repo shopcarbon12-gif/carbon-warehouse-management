@@ -73,7 +73,58 @@ type LineWms = {
   color: string | null;
   size: string | null;
   marked: ScanOutItem[];
+  shipped: ScanOutItem[];
 };
+type SaleWms = { processed: boolean; lines: LineWms[]; shippedElsewhere: ScanOutItem[] };
+
+/** A titled list of tags: each opens its item's tags window, with its status now. */
+function TagList({
+  title,
+  tags,
+  empty,
+  onOpen,
+  tone = "neutral",
+}: {
+  title: string;
+  tags: ScanOutItem[];
+  empty?: string;
+  onOpen: (t: ScanOutItem) => void;
+  tone?: "neutral" | "warning";
+}) {
+  return (
+    <div
+      className={`rounded-lg border px-3 py-2 ${
+        tone === "warning" ? "border-amber-500/40 bg-amber-500/10" : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50"
+      }`}
+    >
+      <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">{title}</div>
+      {tags.length ? (
+        <ul className="mt-1 flex flex-col gap-1">
+          {tags.map((m) => (
+            <li key={m.epc} className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="font-mono text-sm font-semibold text-[var(--wms-accent)] underline-offset-2 hover:underline max-md:min-h-11"
+                title="Show every tag of this item"
+                onClick={() => onOpen(m)}
+              >
+                {m.epc}
+              </button>
+              <span className={`rounded-md border px-1.5 py-0.5 font-mono text-[0.65rem] font-semibold ${statusClass(m.status)}`}>
+                {statusLabel(m.status)}
+              </span>
+              {tone === "warning" ? (
+                <span className="text-xs text-[var(--wms-fg)]/85">{[m.name, m.color, m.size && `Size ${m.size}`, m.sku].filter(Boolean).join(" · ")}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : empty ? (
+        <p className="mt-1 text-xs text-[var(--wms-muted)]">{empty}</p>
+      ) : null}
+    </div>
+  );
+}
 
 const TABS = [
   { id: "all", label: "All" },
@@ -498,7 +549,7 @@ function needsLabel(s: Detail): boolean {
 function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const [sale, setSale] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [wms, setWms] = useState<{ processed: boolean; lines: LineWms[] } | null>(null);
+  const [wms, setWms] = useState<SaleWms | null>(null);
   const [tagsFor, setTagsFor] = useState<{ custom_sku_id: string; name: string; sku: string } | null>(null);
   const [scanOutOpen, setScanOutOpen] = useState(false);
   const [wmsTick, setWmsTick] = useState(0);
@@ -510,7 +561,7 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
     fetch(`/api/shopify/sales/${encodeURIComponent(id)}/wms`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (alive && j) setWms(j as { processed: boolean; lines: LineWms[] });
+        if (alive && j) setWms(j as SaleWms);
       })
       .catch(() => {});
     return () => {
@@ -560,6 +611,16 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, scanOutOpen, tagsFor]);
+
+  /** Open the catalog's tags window for the item behind a tag. */
+  const openTags = useCallback(
+    (m: ScanOutItem, w: LineWms | null | undefined, l: { title: string; sku: string | null } | null) => {
+      const id = m.customSkuId ?? w?.customSkuId;
+      if (!id) return;
+      setTagsFor({ custom_sku_id: id, name: m.name ?? w?.name ?? l?.title ?? "", sku: m.sku ?? w?.sku ?? l?.sku ?? "" });
+    },
+    [],
+  );
 
   // Keep each line's index into the order, so it lines up with its WMS side.
   const lines = useMemo(() => (sale?.lines ?? []).map((l, idx) => ({ ...l, idx })).filter((l) => l.quantity > 0), [sale]);
@@ -698,40 +759,27 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                           </div>
                         </div>
                       </div>
-                      {/* The exact tag(s) this order marked unknown when it came in, and what they are now. */}
-                      <div className="mt-2 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">Tag marked by this order</div>
+                      {/* The exact tag(s) this order marked unknown when it came in, and what they are now;
+                          then the tags actually scanned out for it. Each opens the item's tags window. */}
+                      <div className="mt-2 flex flex-col gap-2">
                         {!wms ? (
-                          <p className="mt-1 text-xs text-[var(--wms-muted)]">Loading…</p>
-                        ) : w && w.marked.length ? (
-                          <ul className="mt-1 flex flex-col gap-1">
-                            {w.marked.map((m) => (
-                              <li key={m.epc} className="flex flex-wrap items-center gap-2">
-                                <button
-                                  type="button"
-                                  className="font-mono text-sm font-semibold text-[var(--wms-accent)] underline-offset-2 hover:underline max-md:min-h-11"
-                                  title="Show every tag of this item"
-                                  onClick={() =>
-                                    w.customSkuId &&
-                                    setTagsFor({ custom_sku_id: w.customSkuId, name: w.name ?? l.title, sku: w.sku ?? l.sku ?? "" })
-                                  }
-                                >
-                                  {m.epc}
-                                </button>
-                                <span className={`rounded-md border px-1.5 py-0.5 font-mono text-[0.65rem] font-semibold ${statusClass(m.status)}`}>
-                                  {statusLabel(m.status)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
+                          <p className="text-xs text-[var(--wms-muted)]">Loading tags…</p>
                         ) : (
-                          <p className="mt-1 text-xs text-[var(--wms-muted)]">
-                            {!wms.processed
-                              ? "The WMS has no record of this order arriving — no tag was marked."
-                              : !w?.customSkuId
-                                ? "This item is not in the WMS, so no tag was marked."
-                                : "No LIVE tag was available to mark when the order came in."}
-                          </p>
+                          <>
+                            <TagList
+                              title="Tag marked by this order"
+                              tags={w?.marked ?? []}
+                              onOpen={(m) => openTags(m, w, l)}
+                              empty={
+                                !wms.processed
+                                  ? "The WMS has no record of this order arriving — no tag was marked."
+                                  : !w?.customSkuId
+                                    ? "This item is not in the WMS, so no tag was marked."
+                                    : "No LIVE tag was available to mark when the order came in."
+                              }
+                            />
+                            {w?.shipped.length ? <TagList title="Tags shipped" tags={w.shipped} onOpen={(m) => openTags(m, w, l)} /> : null}
+                          </>
                         )}
                       </div>
                     </li>
@@ -739,6 +787,16 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                 })}
                 {!lines.length ? <li className="px-4 py-3 text-sm text-[var(--wms-muted)]">No items left on this order.</li> : null}
               </ul>
+              {wms?.shippedElsewhere.length ? (
+                <div className="border-t border-[var(--wms-border)] px-4 py-3">
+                  <TagList
+                    title="Scanned out on this order — but not one of its items"
+                    tags={wms.shippedElsewhere}
+                    tone="warning"
+                    onOpen={(m) => openTags(m, null, null)}
+                  />
+                </div>
+              ) : null}
               {sale.tracking.length ? (
                 <div className="border-t border-[var(--wms-border)] px-4 py-2 text-xs text-[var(--wms-muted)]">
                   {sale.tracking.map((t, i) => (
