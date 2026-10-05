@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useId, useState } from "react";
+import { useCallback, useState } from "react";
 import useSWR from "swr";
 import { Loader2 } from "lucide-react";
 
@@ -32,7 +32,6 @@ export function ThankYouToggle({ orderId }: { orderId: string }) {
   const { data, error, mutate } = useSWR<State>(url, fetcher, { revalidateOnFocus: true });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const uid = useId().replace(/:/g, "");
 
   const on = !!data?.enabled && !data.blocked;
   const disabled = busy || !data || !!data.blocked;
@@ -53,10 +52,14 @@ export function ThankYouToggle({ orderId }: { orderId: string }) {
         body: JSON.stringify({ enabled: next }),
       });
       const j = (await res.json().catch(() => ({}))) as State & { error?: string };
-      if (!res.ok) setMsg(j.error ?? "Could not change the code");
+      if (!res.ok) {
+        setMsg(j.error ?? "Could not change the code");
+        window.alert(j.error ?? "Could not change the code");
+      }
       await mutate(res.ok ? j : undefined, { revalidate: !res.ok });
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Could not change the code");
+      window.alert(e instanceof Error ? e.message : "Could not change the code");
     } finally {
       setBusy(false);
     }
@@ -76,29 +79,23 @@ export function ThankYouToggle({ orderId }: { orderId: string }) {
             : "Created when the slip is printed"
           : "Off — printing creates no code";
 
+  // Switch only (owner's request): the details live in the tooltip.
+  const tip = msg ? `15% thank-you code — ${msg}` : `15% thank-you code — ${detail}`;
   return (
-    <div className="inline-flex items-center gap-2 rounded-md border border-[var(--wms-border)] px-2.5 py-1 max-md:min-h-11">
-      <label htmlFor={`thank-you-${uid}`} className="flex cursor-pointer flex-col leading-tight">
-        <span className="text-xs font-semibold text-[var(--wms-fg)]">15% thank-you code</span>
-        <span className="font-mono text-[0.65rem] text-[var(--wms-muted)] max-md:text-xs" title={msg ?? detail}>
-          {msg ? <span className="text-[var(--wms-status-danger-fg)]">{msg}</span> : detail}
-        </span>
-      </label>
+    <span className="inline-flex items-center gap-1.5 max-md:min-h-11" title={tip}>
       {busy ? <Loader2 className="h-4 w-4 animate-spin text-[var(--wms-muted)]" aria-hidden /> : null}
       <button
-        id={`thank-you-${uid}`}
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label="15% thank-you code for this order"
+        aria-label={tip}
         data-state={on ? "on" : "off"}
         disabled={disabled}
-        title={data?.blocked ?? undefined}
         onClick={flip}
         className="wms-toggle-track disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span className="wms-toggle-thumb" />
       </button>
-    </div>
+    </span>
   );
 }
