@@ -142,10 +142,10 @@ export async function listSales(opts: {
   const ctx = await ctxOrThrow();
   const parts = [TAB_QUERY[opts.tab], (opts.search ?? "").trim()].filter(Boolean);
   const q = parts.length > 1 ? parts.map((p) => `(${p})`).join(" AND ") : parts[0] ?? null;
-  const paging = opts.before
-    ? `last: ${SALES_PAGE_SIZE}, before: $before`
-    : `first: ${SALES_PAGE_SIZE}, after: $after`;
-  const query = `query Sales($q: String, $after: String, $before: String) {
+  // Shopify rejects a declared variable that the query does not use.
+  const back = !!opts.before;
+  const paging = back ? `last: ${SALES_PAGE_SIZE}, before: $cursor` : `first: ${SALES_PAGE_SIZE}, after: $cursor`;
+  const query = `query Sales($q: String, $cursor: String) {
     ordersCount(query: $q) { count precision }
     orders(${paging}, sortKey: CREATED_AT, reverse: true, query: $q) {
       pageInfo { hasNextPage hasPreviousPage startCursor endCursor }
@@ -160,7 +160,7 @@ export async function listSales(opts: {
     token: ctx.token,
     apiVersion: ctx.apiVersion,
     query,
-    variables: { q, after: opts.after ?? null, before: opts.before ?? null },
+    variables: { q, cursor: (back ? opts.before : opts.after) ?? null },
   });
   if (!r.ok || !r.data) throw gqlError(r.errors);
   return {
