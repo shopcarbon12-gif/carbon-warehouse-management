@@ -55,7 +55,7 @@ export type SalesPage = {
   pageInfo: { hasNextPage: boolean; hasPreviousPage: boolean; startCursor: string | null; endCursor: string | null };
   count: number | null;
   countIsExact: boolean;
-  /** Admin URL base, e.g. https://admin.shopify.com/store/abc123 */
+  /** Admin URL base, e.g. https://abc123.myshopify.com/admin */
   adminBase: string;
 };
 
@@ -124,8 +124,14 @@ function toRow(o: RawOrder): SaleRow {
   };
 }
 
+/**
+ * Links into the Shopify admin go through the shop's own myshopify address,
+ * which signs in and forwards to admin.shopify.com/store/<handle>. Building
+ * admin.shopify.com/store/<id> directly broke: the store's admin handle
+ * ("shopcarbon1") is not its myshopify id ("30e7d3"), and that URL is a 403.
+ */
 export function adminBaseFor(shop: string): string {
-  return `https://admin.shopify.com/store/${shop.replace(/\.myshopify\.com$/i, "")}`;
+  return `https://${shop}/admin`;
 }
 
 export class ShopifyNotConnected extends Error {}
