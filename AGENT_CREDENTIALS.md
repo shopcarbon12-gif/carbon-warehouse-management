@@ -51,6 +51,9 @@ Look up real values in the env files above. Never paste values into chat or this
 **Email** — `RESEND_API_KEY`, `PUSH_NOTIFICATION_EMAIL`
 **Coolify** — `COOLIFY_DEPLOY_WEBHOOK_URL`, `COOLIFY_API_TOKEN`, `COOLIFY_WORKER_DEPLOY_WEBHOOK_URL`, `COOLIFY_WORKER_APP_UUID`, `COOLIFY_POSTGRES_PUBLIC_PORT`, `COOLIFY_POSTGRES_UUID`
 **CDM agent** — `CARBON_CDM_TOKEN` (different value in dev `.env` vs prod VM `.env`), `CARBON_WMS_URL`
+**Google Ads / GTM** (`.env.agent-secrets`) — `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN`, `GOOGLE_ADS_CUSTOMER_ID` (run ads in 737-472-8972; API v25, no login-customer header)
+**Stape** (`.env.agent-secrets`) — `STAPE_API_KEY` (header `X-AUTH-TOKEN`, base `https://api.app.stape.io`, container `piuohbne`)
+**Meta Marketing API** (`.env.agent-secrets`) — `META_SYSTEM_USER_TOKEN` (system user "claude-reader" in business CARBON, app Carbon Ads Reader; never expires; manager rights on both ad accounts, page Carbon Jeans, CARBON PIXEL, catalogs), `META_BUSINESS_ID`, `META_AD_ACCOUNT_ID`, `META_PIXEL_ID`, `META_CATALOG_ID`, `META_PAGE_ID`. Ask the owner before any change that spends money or alters live delivery.
 
 ---
 
