@@ -260,17 +260,30 @@ export async function onlineStorePublicationId(ctx: ShopCtx): Promise<string | n
   return nodes.find((n) => /online store/i.test(n.name))?.id || null;
 }
 
+/**
+ * Every sales channel a product should be on: Online Store, Shop, Google & YouTube,
+ * Facebook & Instagram, TikTok, Pinterest, Snapchat… — all of them except Shopify
+ * POS (the shop sells in person through Carbon POS; that channel stays empty).
+ */
+export async function salesChannelPublicationIds(ctx: ShopCtx): Promise<Array<{ id: string; name: string }>> {
+  const res = await gql<{ publications?: { nodes?: Array<{ id: string; name: string }> } }>(
+    ctx,
+    `query { publications(first: 50) { nodes { id name } } }`,
+  );
+  return (res.data?.publications?.nodes || []).filter((n) => !/point of sale|\bpos\b/i.test(n.name));
+}
+
 export async function publishToPublication(
   ctx: ShopCtx,
   productId: string,
-  publicationId: string,
+  publicationId: string | string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await gql<{ publishablePublish?: { userErrors?: Array<{ message: string }> } }>(
     ctx,
     `mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
       publishablePublish(id: $id, input: $input) { userErrors { message } }
     }`,
-    { id: toProductGid(productId), input: [{ publicationId }] },
+    { id: toProductGid(productId), input: (Array.isArray(publicationId) ? publicationId : [publicationId]).map((id) => ({ publicationId: id })) },
   );
   const errs = res.data?.publishablePublish?.userErrors || [];
   return errs.length ? { ok: false, error: errs.map((e) => e.message).join("; ") } : { ok: true };

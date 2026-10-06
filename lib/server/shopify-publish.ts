@@ -17,7 +17,7 @@ import {
   productSet,
   primaryLocationId,
   setInventoryQuantitiesBulk,
-  onlineStorePublicationId,
+  salesChannelPublicationIds,
   publishToPublication,
   type SetVariant,
   type ShopVariant,
@@ -216,10 +216,13 @@ export async function pushMatrixToShopify(
     warnings.push("No Shopify location found — inventory not set.");
   }
 
-  // ---- publish to Online Store -----------------------------------------
-  const pubId = await onlineStorePublicationId(ctx);
-  if (pubId) {
-    const r = await publishToPublication(ctx, set.productId, pubId);
+  // ---- publish to every sales channel ----------------------------------
+  // Online Store alone left new products off Meta, Google, TikTok, Pinterest,
+  // Snapchat and Shop (21 found 2026-10-06) — those catalogs only carry what is
+  // published to their channel.
+  const pubs = await salesChannelPublicationIds(ctx);
+  if (pubs.some((p) => /online store/i.test(p.name))) {
+    const r = await publishToPublication(ctx, set.productId, pubs.map((p) => p.id));
     if (!r.ok) warnings.push(`Publish: ${r.error}`);
   } else {
     warnings.push("Online Store publication not found — product is ACTIVE but not published to storefront.");
