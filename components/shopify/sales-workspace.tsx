@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2, Printer, RefreshCw, ScanLine, Search, Truck, X } from "lucide-react";
 import { ShopifyLogo } from "@/components/shopify/shopify-logo";
+import { carrierTrackingUrl } from "@/lib/carrier-tracking";
 import { ThankYouToggle } from "@/components/shopify/thank-you-toggle";
 
 /** Compact action button for the order's fulfilment row, so Print a packing
@@ -48,6 +49,17 @@ type Row = {
   deliveryStatus: string | null;
   deliveryMethod: string | null;
   tags: string[];
+  shipments: Shipment[];
+};
+type Shipment = {
+  status: string | null;
+  company: string | null;
+  number: string | null;
+  url: string | null;
+  shippedAt: string;
+  inTransitAt: string | null;
+  estimatedDeliveryAt: string | null;
+  deliveredAt: string | null;
 };
 type Page = {
   rows: Row[];
@@ -252,6 +264,114 @@ function FulfillmentBadge({ s }: { s: string | null }) {
 function DeliveryBadge({ s }: { s: string | null }) {
   if (!s) return null;
   return <Badge label={title(s)} tone={DELIVERY_TONE[s] ?? "neutral"} />;
+}
+
+const shipDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+
+/** One shipment's label: carrier, tracking number (opens the carrier's tracking page) and dates. */
+function ShipmentCard({ s }: { s: Shipment }) {
+  const href = carrierTrackingUrl(s.company, s.number, s.url);
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/50 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-[var(--wms-fg)]">{s.company ?? "Carrier not set"}</span>
+        <DeliveryBadge s={s.status} />
+      </div>
+      {s.number ? (
+        href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 self-start font-mono text-sm text-[var(--wms-accent)] underline-offset-2 hover:underline"
+            title={`Track on ${s.company ?? "the carrier's site"}`}
+          >
+            {s.number}
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </a>
+        ) : (
+          <span className="select-all font-mono text-sm text-[var(--wms-fg)]">{s.number}</span>
+        )
+      ) : (
+        <span className="text-xs text-[var(--wms-muted)]">No tracking number on this shipment.</span>
+      )}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+        <dt className="text-[var(--wms-muted)]">Shipped</dt>
+        <dd className="text-[var(--wms-fg)]">{shipDate(s.shippedAt)}</dd>
+        {s.inTransitAt ? (<><dt className="text-[var(--wms-muted)]">In transit</dt><dd className="text-[var(--wms-fg)]">{shipDate(s.inTransitAt)}</dd></>) : null}
+        {s.deliveredAt ? (
+          <><dt className="text-[var(--wms-muted)]">Delivered</dt><dd className="text-[var(--wms-fg)]">{shipDate(s.deliveredAt)}</dd></>
+        ) : s.estimatedDeliveryAt ? (
+          <><dt className="text-[var(--wms-muted)]">Expected</dt><dd className="text-[var(--wms-fg)]">{shipDate(s.estimatedDeliveryAt)}</dd></>
+        ) : null}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * The Delivery status cell: the badge opens the order's shipping labels —
+ * carrier, tracking number linked to the carrier's tracking page, dates —
+ * without opening the order itself.
+ */
+function DeliveryCell({ row }: { row: Row }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  if (!row.deliveryStatus && !row.shipments.length) return null;
+  if (!row.shipments.length) return <DeliveryBadge s={row.deliveryStatus} />;
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) {
+      const width = 320;
+      setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) });
+    }
+    setOpen((v) => !v);
+  };
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--wms-accent)]/40"
+        title="Show tracking"
+        aria-expanded={open}
+      >
+        {row.deliveryStatus ? <DeliveryBadge s={row.deliveryStatus} /> : <span className="text-xs text-[var(--wms-accent)] underline">Tracking</span>}
+      </button>
+      {open && pos ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} aria-hidden />
+          <div
+            role="dialog"
+            aria-label={`Tracking for ${row.name}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ top: pos.top, left: pos.left }}
+            className="fixed z-50 flex max-h-[70vh] w-[320px] max-w-[calc(100vw-16px)] cursor-default flex-col gap-2 overflow-y-auto rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3 shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
+                {row.name} · {row.shipments.length === 1 ? "Shipping label" : `${row.shipments.length} shipping labels`}
+              </span>
+              <button type="button" onClick={() => setOpen(false)} className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)]" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {row.shipments.map((s, i) => <ShipmentCard key={i} s={s} />)}
+          </div>
+        </>
+      ) : null}
+    </>
+  );
 }
 
 /* ─────────────────────────────── the page ─────────────────────────────── */
@@ -472,7 +592,7 @@ export function SalesWorkspace() {
                     <td className="strike whitespace-nowrap px-3 py-2.5 text-[var(--wms-fg)]/85">
                       {r.items} {r.items === 1 ? "item" : "items"}
                     </td>
-                    <td className="px-3 py-2.5"><DeliveryBadge s={r.deliveryStatus} /></td>
+                    <td className="px-3 py-2.5"><DeliveryCell row={r} /></td>
                     <td className="strike px-3 py-2.5 text-[var(--wms-fg)]/85">{r.deliveryMethod ?? ""}</td>
                     <td className="px-3 py-2.5">
                       <div className="flex flex-wrap gap-1">
@@ -828,21 +948,12 @@ function SaleDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                   />
                 </div>
               ) : null}
-              {sale.tracking.length ? (
-                <div className="border-t border-[var(--wms-border)] px-4 py-2 text-xs text-[var(--wms-muted)]">
-                  {sale.tracking.map((t, i) => (
-                    <div key={i} className="flex flex-wrap items-center gap-2">
-                      <DeliveryBadge s={t.status} />
-                      <span>{t.company}</span>
-                      {t.url ? (
-                        <a className="text-[var(--wms-accent)] underline-offset-2 hover:underline" href={t.url} target="_blank" rel="noreferrer">
-                          {t.number}
-                        </a>
-                      ) : (
-                        <span className="font-mono">{t.number}</span>
-                      )}
-                    </div>
-                  ))}
+              {sale.shipments.length ? (
+                <div className="flex flex-col gap-2 border-t border-[var(--wms-border)] px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wms-muted)]">
+                    {sale.shipments.length === 1 ? "Shipping label" : "Shipping labels"}
+                  </div>
+                  {sale.shipments.map((s, i) => <ShipmentCard key={i} s={s} />)}
                 </div>
               ) : null}
             </section>

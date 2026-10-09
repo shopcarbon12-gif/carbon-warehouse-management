@@ -48,6 +48,19 @@ export type SaleRow = {
   deliveryStatus: string | null;
   deliveryMethod: string | null;
   tags: string[];
+  /** Every shipment of the order, newest first, with its tracking label. */
+  shipments: Shipment[];
+};
+
+export type Shipment = {
+  status: string | null;
+  company: string | null;
+  number: string | null;
+  url: string | null;
+  shippedAt: string;
+  inTransitAt: string | null;
+  estimatedDeliveryAt: string | null;
+  deliveredAt: string | null;
 };
 
 export type SalesPage = {
@@ -69,7 +82,7 @@ const ROW_FIELDS = `
   currentSubtotalLineItemsQuantity requiresShipping
   tags
   shippingLines(first: 1) { nodes { title } }
-  fulfillments(first: 5) { displayStatus createdAt }
+  fulfillments(first: 5) { displayStatus createdAt inTransitAt estimatedDeliveryAt deliveredAt trackingInfo(first: 3) { company number url } }
 `;
 
 type RawOrder = {
@@ -91,12 +104,25 @@ type RawOrder = {
   requiresShipping: boolean;
   tags: string[];
   shippingLines: { nodes: Array<{ title: string }> };
-  fulfillments: Array<{ displayStatus: string | null; createdAt: string }>;
+  fulfillments: Array<{
+    displayStatus: string | null;
+    createdAt: string;
+    inTransitAt: string | null;
+    estimatedDeliveryAt: string | null;
+    deliveredAt: string | null;
+    trackingInfo: Array<{ company: string | null; number: string | null; url: string | null }>;
+  }>;
 };
 
 function toRow(o: RawOrder): SaleRow {
   // The newest fulfilment's tracking state is what Shopify shows as "Delivery status".
-  const latest = [...(o.fulfillments ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  const byNewest = [...(o.fulfillments ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const latest = byNewest[0];
+  const shipments: Shipment[] = byNewest.flatMap((f) => {
+    const base = { status: f.displayStatus, shippedAt: f.createdAt, inTransitAt: f.inTransitAt, estimatedDeliveryAt: f.estimatedDeliveryAt, deliveredAt: f.deliveredAt };
+    const t = f.trackingInfo ?? [];
+    return t.length ? t.map((x) => ({ ...base, company: x.company, number: x.number, url: x.url })) : [{ ...base, company: null, number: null, url: null }];
+  });
   return {
     id: o.id,
     legacyId: o.legacyResourceId,
@@ -121,6 +147,7 @@ function toRow(o: RawOrder): SaleRow {
     deliveryStatus: latest?.displayStatus ?? null,
     deliveryMethod: o.shippingLines?.nodes?.[0]?.title ?? (o.requiresShipping === false ? "Shipping not required" : "Shipping"),
     tags: o.tags ?? [],
+    shipments,
   };
 }
 
