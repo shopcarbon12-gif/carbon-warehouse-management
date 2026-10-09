@@ -1,0 +1,546 @@
+[
+  {
+    "id": "gid://shopify/MenuItem/604876931324",
+    "title": "MEN",
+    "type": "COLLECTION",
+    "resourceId": "gid://shopify/Collection/432962175228",
+    "items": [
+      {
+        "id": "gid://shopify/MenuItem/604876964092",
+        "title": "NEW & NOW",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433443209468",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604876996860",
+            "title": "NEW ARRIVALS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/432960962812",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877029628",
+            "title": "LIMITED EDITION",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/463748694268",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877062396",
+            "title": "SUMMER SETS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437182333180",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877095164",
+            "title": "WINTER SETS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437171716348",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604877127932",
+        "title": "CLOTHING",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433443373308",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604877160700",
+            "title": "SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107435772",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877193468",
+            "title": "TOPS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433401823484",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877226236",
+            "title": "JEANS",
+            "type": "PAGE",
+            "resourceId": "gid://shopify/Page/128219218172",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877259004",
+            "title": "SWEATSHIRTS & HOODIES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106944252",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877291772",
+            "title": "JACKETS & COATS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106845948",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877324540",
+            "title": "TRACKSUITS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107009788",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877357308",
+            "title": "PANTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107042556",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877390076",
+            "title": "OVERALLS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107108092",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877422844",
+            "title": "POLOS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107140860",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877455612",
+            "title": "T-SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107173628",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877488380",
+            "title": "SHORTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108353276",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877521148",
+            "title": "SWIMWEAR",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108386044",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877553916",
+            "title": "SWEATPANTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433371709692",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877586684",
+            "title": "SWEATERS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433399955708",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877619452",
+            "title": "TANK TOPS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433420730620",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604877652220",
+        "title": "ACCESSORIES & SHOES",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433460707580",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604877684988",
+            "title": "SHOES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107632380",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877783292",
+            "title": "JEWELRY",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107763452",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877816060",
+            "title": "SUNGLASSES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107796220",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877881596",
+            "title": "ALL ACCESSORIES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107927292",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604877914364",
+            "title": "HATS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433368924412",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604877979900",
+        "title": "SHIRT SHOP",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433460838652",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604878012668",
+            "title": "GRAPHIC T-SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107992828",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/615980073212",
+            "title": "GRAPHIC T-SHIRTS (LONG-SLEEVE)",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/460657590524",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604878045436",
+            "title": "DRESS SHIRT",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108025596",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604878078204",
+            "title": "LINEN SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108058364",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604878110972",
+            "title": "DENIM SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108091132",
+            "items": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gid://shopify/MenuItem/604871491836",
+    "title": "WOMEN",
+    "type": "COLLECTION",
+    "resourceId": "gid://shopify/Collection/432960241916",
+    "items": [
+      {
+        "id": "gid://shopify/MenuItem/604871524604",
+        "title": "NEW & NOW",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433459790076",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604871557372",
+            "title": "NEW ARRIVALS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433419190524",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871590140",
+            "title": "LIMITED EDITION",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106616572",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871622908",
+            "title": "SUMMER SETS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108156668",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871655676",
+            "title": "WINTER SETS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437182562556",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604871688444",
+        "title": "CLOTHING",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433459855612",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604874342652",
+            "title": "MATCHING SETS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108222204",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871753980",
+            "title": "DRESSES",
+            "type": "PAGE",
+            "resourceId": "gid://shopify/Page/128302022908",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871786748",
+            "title": "JEANS",
+            "type": "HTTP",
+            "url": "/pages/women-jeans-cuts",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871819516",
+            "title": "SHORTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107239164",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871852284",
+            "title": "SKIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108320508",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871885052",
+            "title": "TOPS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106747644",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871917820",
+            "title": "TANK TOPS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107206396",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871950588",
+            "title": "T-SHIRTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433340645628",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604871983356",
+            "title": "JUMPSUITS & ROMPERS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106813180",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872016124",
+            "title": "JACKETS & COATS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433107501308",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872048892",
+            "title": "BODYSUITS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106878716",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872081660",
+            "title": "TRACKSUITS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433106911484",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872114428",
+            "title": "SWEATPANTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108254972",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872147196",
+            "title": "PANTS & LEGGINGS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433340514556",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872179964",
+            "title": "SWEATSHIRTS & HOODIES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433341169916",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872212732",
+            "title": "SWIMWEAR",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433350869244",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872245500",
+            "title": "SWEATERS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/460656247036",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604872278268",
+        "title": "ACCESSORIES & SHOES",
+        "type": "COLLECTION",
+        "resourceId": "gid://shopify/Collection/433460314364",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604872311036",
+            "title": "JEWELRY",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433365844220",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872376572",
+            "title": "BELTS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433460347132",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872409340",
+            "title": "HATS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108451580",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872442108",
+            "title": "SHOES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433366073596",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872474876",
+            "title": "FRAGRANCE & BEAUTY",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433368957180",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872507644",
+            "title": "ALL ACCESSORIES",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433341038844",
+            "items": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gid://shopify/MenuItem/604872540412",
+    "title": "JEANS",
+    "type": "HTTP",
+    "url": "/pages/jeans",
+    "items": [
+      {
+        "id": "gid://shopify/MenuItem/604872573180",
+        "title": "MEN",
+        "type": "HTTP",
+        "url": "/pages/men-jeans-cuts-1",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604872605948",
+            "title": "SKINNY JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108648188",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872638716",
+            "title": "SUPER SKINNY JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437269397756",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872671484",
+            "title": "BAGGY",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437269528828",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872704252",
+            "title": "SLIM JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437269496060",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "gid://shopify/MenuItem/604872737020",
+        "title": "WOMEN",
+        "type": "HTTP",
+        "url": "/pages/women-jeans-cuts",
+        "items": [
+          {
+            "id": "gid://shopify/MenuItem/604872769788",
+            "title": "SKINNY JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/436771553532",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872802556",
+            "title": "RELAXED JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/437269561596",
+            "items": []
+          },
+          {
+            "id": "gid://shopify/MenuItem/604872835324",
+            "title": "FLARE & WIDE LEG JEANS",
+            "type": "COLLECTION",
+            "resourceId": "gid://shopify/Collection/433108615420",
+            "items": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "gid://shopify/MenuItem/604872868092",
+    "title": "REWARDS",
+    "type": "PAGE",
+    "resourceId": "gid://shopify/Page/111603155196",
+    "items": []
+  }
+]
