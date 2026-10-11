@@ -496,15 +496,28 @@ function isLightColour(colour: string): boolean {
 export function buildStylingLock(
   itemTypeValue: string,
   gender: string,
-  opts?: { outfit?: Partial<Record<OutfitSlot, string>>; itemColour?: string },
+  opts?: {
+    outfit?: Partial<Record<OutfitSlot, string>>;
+    itemColour?: string;
+    /** Pieces read off the operator's STYLE-WITH photos — they win over both the
+     *  outfit seen in the product photos and every default. */
+    styleWith?: Partial<Record<OutfitSlot, string>>;
+  },
 ): string {
   const female = String(gender || "").trim().toLowerCase() === "female";
   const category = inferItemTypeCategory(itemTypeValue);
   const swim = isSwimwearItemType(itemTypeValue);
-  const seen = opts?.outfit ?? {};
+  const styleWith = opts?.styleWith ?? {};
+  const seen: Partial<Record<OutfitSlot, string>> = { ...(opts?.outfit ?? {}), ...styleWith };
   const light = isLightColour(opts?.itemColour ?? "");
-  const fromPhotos = (label: string, d: string) =>
-    `- ${label}: ${d} — exactly as worn in the item photos: same colour, cut, fit, length and fabric.`;
+  /* A style-with piece is named as such, in its own line: the operator chose it,
+     so it is not "as worn in the item photos" and must never read as optional. */
+  const fromPhotos = (label: string, d: string) => {
+    const slot = label === "TOP UNDER THE OUTERWEAR" ? "top_under" : (label.toLowerCase() as OutfitSlot);
+    return styleWith[slot]
+      ? `- ${label}: ${d} — the exact piece in the STYLE-WITH photos, worn in every frame: same colour, cut, fit, length, fabric, print, text and hardware.`
+      : `- ${label}: ${d} — exactly as worn in the item photos: same colour, cut, fit, length and fabric.`;
+  };
 
   const shoes = seen.footwear
     ? fromPhotos("FOOTWEAR", seen.footwear) + " The same pair in every frame."
@@ -628,6 +641,8 @@ export function buildMasterPanelPrompt(args: {
   expressionDirective?: string;
   /** The non-product styling, identical across the run. Defaults per item type. */
   stylingLock?: string;
+  /** The operator attached STYLE-WITH photos (the server numbers them). */
+  hasStyleWith?: boolean;
 }) {
   /*
    * One rule, one voice. The previous builder said "the model is over 25" in
@@ -669,10 +684,14 @@ export function buildMasterPanelPrompt(args: {
   return [
     `Professional ecommerce catalog photo shoot. Panel ${args.panelNumber} (${args.panelLabel}). Model: ${modelLabel}. Item type: ${itemLabel}.`,
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is Pose A, the RIGHT half (768x1024) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
-    "ITEM REFERENCES: the item photos are product references only. Take the garment's shape, colour, material, construction and every detail from them. Any person, mannequin or hanger in an item photo is a display fixture — never copy a face, hair, skin tone, body, age, tattoos, jewellery, pose or styling from an item photo; the person in every frame is the model from the MODEL references.",
-    "If the item photos show a complete outfit, reproduce the whole outfit (top, bottom, shoes, accessories) unchanged in every frame. Anything the photos do NOT show comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.",
+    `ITEM REFERENCES: take the garment's shape, colour, material, construction and every detail from the item photos. Any person, mannequin or hanger in an item photo${args.hasStyleWith ? " or a STYLE-WITH photo" : ""} is a display fixture — never copy a face, hair, skin tone, body, age, tattoos or pose from it; the person in every frame is the model from the MODEL references. The clothes, shoes and accessories those photos show are a different matter: see the next line.`,
+    `OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit, the model wears that exact whole outfit — every piece, colour, layer and accessory — unchanged in every frame.${
+      args.hasStyleWith
+        ? " The STYLE-WITH photos (numbered in the STYLE-WITH PIECES line) are pieces the operator chose for this shoot: the model wears every one of them, exactly as photographed, and they replace any other piece for the same part of the body."
+        : ""
+    } Only what no photo shows comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.`,
     buildAbsentFeatureGuard(args.itemType),
-    "STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. If the item photos show that piece, the photos win instead:",
+    `STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. A piece named "from the STYLE-WITH photos" or "as worn in the item photos" is that photographed piece — reproduce it from the photo, never a generic version of it:`,
     stylingLock,
     "WORN BY THE MODEL: every frame shows the garment ON the living model from the MODEL references — the model's own body inside the clothes, their legs in the trousers, their skin at the ankle and wrist. A cropped frame still contains their body. Never a flat lay, never a ghost mannequin, never an empty garment floating on the background, never a frame with no person in it.",
     `GARMENT FIDELITY: the ${itemLabel} is the exact product in the item photos — identical cut and fit (a slim fit stays slim, an oversized fit stays oversized; never lengthen, shorten, loosen or tighten it), identical colour, wash, material and texture, identical seams, stitching, pockets, hardware, closures, hems and cuffs, identical distressing in the same places, and every logo, text, print and graphic at the same size, position, colours and print effect. Never redesign, simplify, recolour, move, resize, mirror or add anything. It stays identical in both frames and across every panel of this run.`,
@@ -684,7 +703,7 @@ export function buildMasterPanelPrompt(args: {
       : []),
     swimwearActive
       ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
-      : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock, on both feet. Never barefoot, never socks-only, never a different pair from the other panels.",
+      : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock (the photographed pair when it says so), on both feet. Never barefoot, never socks-only, never a different pair from the other panels.",
     `EXPRESSION for this generation: ${expressionDirective}. The face looks alive and human, with subtle natural variation between the two frames; expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline.`,
     "Photorealistic: real human anatomy and skin texture; no CGI, plastic or mannequin look.",
     ...(globalRules

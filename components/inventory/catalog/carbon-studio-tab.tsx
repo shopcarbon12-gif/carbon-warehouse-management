@@ -15,6 +15,7 @@ import {
 import {
   buildStylingLock,
   parseOutfitFromSpec,
+  type OutfitSlot,
   buildMasterPanelPrompt,
   getPanelPosePair,
   getPanelButtonLabel,
@@ -90,6 +91,15 @@ const MAX_STYLING_REFS = 6;
 function groupRefs(refs: ItemRef[]): RefViewLists {
   const out: RefViewLists = { general: [], front: [], back: [], styling: [] };
   for (const r of refs) out[r.view ?? "general"].push(r.url);
+  /* A photo in Style with is a piece to WEAR. Also dropping it into General /
+     Front / Back would make the analysis and the render treat it as part of the
+     product — the opposite of what the operator meant. Style with wins. */
+  const styling = new Set(out.styling);
+  if (styling.size) {
+    out.general = out.general.filter((u) => !styling.has(u));
+    out.front = out.front.filter((u) => !styling.has(u));
+    out.back = out.back.filter((u) => !styling.has(u));
+  }
   return out;
 }
 /** The PRODUCT's photos, in server-side order general → front → back (the
@@ -568,6 +578,8 @@ export function CarbonStudioTab({
      every panel renders DETACHED on the server — so each panel's job is
      cancelled there too, which aborts its OpenAI request. */
   const abortRef = useRef<{ controller: AbortController; jobIds: string[] } | null>(null);
+  /** Style-with pieces already read, by photo set — so a re-run does not pay to read them again. */
+  const stylePiecesRef = useRef(new Map<string, Partial<Record<OutfitSlot, string>>>());
   const [aborting, setAborting] = useState(false);
   const abortGeneration = useCallback(() => {
     const live = abortRef.current;
@@ -1448,11 +1460,49 @@ export function CarbonStudioTab({
     /* An accessory pins this for the whole run, like the colourway: switching
        the item type mid-run must not mix shots and poses in one set. */
     const runAccessory = accessoryKind;
+    /* Style with: name the operator's pieces so the lock can name them — a piece
+       the prompt only points at loses to the lock's named default tee. Read once
+       per set of photos; a run that cannot read them stops rather than paying
+       for four panels that would ignore them. */
+    const hasStyleWith = refViews.styling.length > 0;
+    let styleWith: Partial<Record<OutfitSlot, string>> = {};
+    if (hasStyleWith) {
+      const key = refViews.styling.join("|") + "::" + itemType;
+      const cached = stylePiecesRef.current.get(key);
+      if (cached) styleWith = cached;
+      else {
+        setProgress("Reading the Style with photos…");
+        try {
+          const r = await fetch("/api/openai/style-pieces", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: abort.signal,
+            body: JSON.stringify({ urls: refViews.styling, itemType }),
+          });
+          const j = (await r.json().catch(() => ({}))) as { outfit?: Partial<Record<OutfitSlot, string>>; error?: string };
+          if (!r.ok || !j.outfit) throw new Error(j.error || "Could not read the Style with photos");
+          styleWith = j.outfit;
+          stylePiecesRef.current.set(key, styleWith);
+        } catch (e) {
+          abortRef.current = null;
+          setBusy(null);
+          setNativeBusy(false);
+          setProgress("");
+          setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+          return setErr(
+            abort.signal.aborted
+              ? "Aborted."
+              : `${e instanceof Error ? e.message : "Could not read the Style with photos"} — nothing was generated. Try again, or remove the Style with photos.`,
+          );
+        }
+      }
+    }
     const stylingLock = runAccessory
-      ? buildAccessoryStylingLock(runAccessory, model.gender, itemColour, parseOutfitFromSpec(specForRun))
+      ? buildAccessoryStylingLock(runAccessory, model.gender, itemColour, parseOutfitFromSpec(specForRun), styleWith)
       : buildStylingLock(itemType, model.gender, {
           outfit: parseOutfitFromSpec(specForRun),
           itemColour,
+          styleWith,
         });
     setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
     // Touch devices only: keep the screen awake while the panels generate — a
@@ -1496,6 +1546,7 @@ export function CarbonStudioTab({
             itemStyleInstructions: instruction,
             expressionDirective,
             stylingLock,
+            hasStyleWith,
           })
         : buildMasterPanelPrompt({
         panelNumber: panel,
@@ -1510,6 +1561,7 @@ export function CarbonStudioTab({
         itemStyleInstructions: instruction,
         expressionDirective,
         stylingLock,
+        hasStyleWith,
         // itemSpec travels as its own request field (server appends it inside the
         // protected lock block) — NOT inside the prompt, which is near the
         // model's length limit and gets trimmed from the middle.

@@ -449,14 +449,26 @@ export function buildAccessoryStylingLock(
   gender: string,
   itemColour: string,
   seenOutfit?: Partial<Record<string, string>>,
+  /** Pieces read off the operator's STYLE-WITH photos — they win over the photos' outfit and the defaults. */
+  styleWith?: Partial<Record<string, string>>,
 ): string {
   const k = KINDS[kind] ?? KINDS.other;
   const g: G = String(gender || "").toLowerCase() === "female" ? "female" : "male";
-  const lines = k.outfit(g, partnerColour(itemColour));
-  const fromPhotos = Object.entries(seenOutfit ?? {})
+  const label = (slot: string) => slot.toUpperCase().replace("_", " ");
+  const chosen = Object.entries(styleWith ?? {})
     .filter(([, v]) => v)
-    .map(([slot, v]) => `- ${slot.toUpperCase().replace("_", " ")}: ${v} — exactly as worn in the item photos.`);
-  return [...fromPhotos, ...lines].join("\n");
+    .map(([slot, v]) => `- ${label(slot)}: ${v} — the exact piece in the STYLE-WITH photos, worn in every on-model shot: same colour, cut, fit, fabric, print and hardware.`);
+  const fromPhotos = Object.entries(seenOutfit ?? {})
+    .filter(([slot, v]) => v && !styleWith?.[slot])
+    .map(([slot, v]) => `- ${label(slot)}: ${v} — exactly as worn in the item photos.`);
+  /* A default for a part of the body a photographed piece already covers would
+     name two tops; the photographed one is what the operator wants. */
+  const covered = new Set([...Object.keys(styleWith ?? {}), ...Object.keys(seenOutfit ?? {})].map(label));
+  const lines = k.outfit(g, partnerColour(itemColour)).filter((l) => {
+    const m = /^- ([A-Z ]+?)(?: \(|:)/.exec(l);
+    return !(m && covered.has(m[1]));
+  });
+  return [...chosen, ...fromPhotos, ...lines].join("\n");
 }
 
 /**
@@ -474,6 +486,8 @@ export function buildAccessoryPanelPrompt(args: {
   itemStyleInstructions?: string;
   expressionDirective?: string;
   stylingLock: string;
+  /** The operator attached STYLE-WITH photos (the server numbers them). */
+  hasStyleWith?: boolean;
 }): string {
   const [a, b] = accessoryShotPair(args.panelNumber);
   const k = KINDS[args.kind] ?? KINDS.other;
@@ -485,7 +499,7 @@ export function buildAccessoryPanelPrompt(args: {
     `Professional ecommerce catalog photo shoot for an ACCESSORY: ${label}. Panel ${args.panelNumber} (Shot ${a} + Shot ${b}).`,
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is the first shot, the RIGHT half (768x1024) is the second shot, with a thin divider between them and nothing else: no third view, no collage, no grid, no text overlay.",
     `THE PRODUCT: the ${k.noun} in the item photos is what this shoot sells. Reproduce it exactly in every shot — every bead, link, charm, stone, logo, stitch and piece of hardware, the same count, colour, metal tone, finish and proportions. Keep its REAL size: never enlarge it into a costume piece or shrink it, and on the model it sits exactly as such a piece really sits.`,
-    "ITEM REFERENCES: the item photos are product references only. Any person, hand or mannequin in them is a display fixture — never copy a face, skin, body, pose or styling from an item photo.",
+    `ITEM REFERENCES: the item photos are product references only. Any person, hand or mannequin in them${args.hasStyleWith ? " or in a STYLE-WITH photo" : ""} is a display fixture — never copy a face, skin, body or pose from it.${args.hasStyleWith ? " The pieces in the STYLE-WITH photos are worn by the model in every on-model shot, exactly as photographed (see the styling lock)." : " Never copy styling from an item photo."}`,
     buildAbsentFeatureGuard(args.itemType),
     ...(anyModel
       ? [
