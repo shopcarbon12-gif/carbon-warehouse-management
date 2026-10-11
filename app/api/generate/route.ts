@@ -552,10 +552,49 @@ function buildServerLockPrompt(panelQa: PanelQaInput, modelCount: number) {
 }
 
 /** The back rule for this panel, from the verified state — one line, or none. */
-function buildBackStateLine(backState: BackState, panelQa: PanelQaInput): string[] {
+/**
+ * What exactly is on the back, read off the spec, for the back-facing frames.
+ *
+ * "The back carries the design listed above" never said WHAT it was. On black
+ * ripped shorts whose only back feature is a small leather waistband patch,
+ * pose 7 read "the back design" as artwork and invented a print, and carried
+ * the front rips round onto the back of the legs (the spec says that zone is
+ * plain). Naming the elements — and that nothing else is there — closes it.
+ */
+function backElementsFromSpec(spec: string): { elements: string[]; plainZones: string[] } {
+  const elements: string[] = [];
+  const plainZones: string[] = [];
+  for (const raw of String(spec || "").split("\n")) {
+    const line = raw.replace(/^\s*\d+\.\s*/, "").trim();
+    if (!line) continue;
+    if (/^ZONE\s*—\s*BACK[^:]*:\s*plain\b/i.test(line)) {
+      plainZones.push(line.replace(/^ZONE\s*—\s*/i, "").replace(/:\s*plain[^.]*\.?/i, "").trim().toLowerCase());
+      continue;
+    }
+    if (!/^(TEXT|LOGO\/ICON|GRAPHIC|PRINT|LABEL\/PATCH)\b/i.test(line)) continue;
+    if (!/\bback\b/i.test(line)) continue;
+    const what = line
+      .replace(/\s*Reproduce verbatim[\s\S]*$/i, "")
+      .replace(/\s*[-—]\s*(?:same|exact)\b[\s\S]*$/i, "")
+      .replace(/\.$/, "")
+      .trim();
+    if (what) elements.push(what);
+  }
+  return { elements: elements.slice(0, 4), plainZones };
+}
+
+function buildBackStateLine(backState: BackState, panelQa: PanelQaInput, spec = ""): string[] {
   const frames = backFacingFramesLabel(panelQa);
   if (!frames) return [];
   if (backState === "present") {
+    const { elements, plainZones } = backElementsFromSpec(spec);
+    if (elements.length) {
+      return [
+        `- BACK (verified on the product): ${frames} shows exactly these on the back of the product, at their own size and position, and NOTHING ELSE: ${elements.join(" | ")}. Every other part of the product's back is plain in its own colour and fabric — no added print, graphic, artwork, text, rips or distressing${
+          plainZones.length ? ` (plain: ${plainZones.join(", ")})` : ""
+        }. A small patch or label stays small; it never becomes a large back print. Every other pose keeps its own facing and shows only the front.`,
+      ];
+    }
     return [
       `- BACK DESIGN (verified on the product): the back carries the design listed above. ${frames} shows it in full — same artwork, size, position, colours and print effect. A clean back, a shrunken version, or one moved up to the neck is WRONG. Every other pose keeps its own facing and shows only the front.`,
     ];
@@ -1158,9 +1197,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             "- A PIECE OF HARDWARE KEEPS THE FORM ITS LINE GIVES IT, AT THE SIZE ITS LINE GIVES IT, IN EVERY FRAME THAT SHOWS IT — full-body frames included. A button described with a diameter, a hole count and a size against its waistband is drawn that big with those holes, not shrunk into the small plain disc these garments usually have; the same goes for the way a waistband fastens, a tab that reaches past the fly, the shape of a zip pull and the links of a chain. Far away it may be less sharp. It is never a simpler object.",
             "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",
             "- A ZONE line is a complete account of that part of the garment: build it exactly as written and add nothing else there. Where a ZONE line says a zone is flat, plain or has none, that zone STAYS empty — no crease, no pleat, no pocket, no stripe, no topstitch that the line does not name.",
-            ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa)),
+            ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
           ]
-        : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa)),
+        : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
       ...(colorRun
         ? [
