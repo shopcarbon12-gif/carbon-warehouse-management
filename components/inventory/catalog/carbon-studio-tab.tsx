@@ -14,6 +14,7 @@ import {
 } from "@/lib/accessoryShots";
 import {
   buildStylingLock,
+  withBackWaistbandVisible,
   parseOutfitFromSpec,
   type OutfitSlot,
   buildMasterPanelPrompt,
@@ -1535,6 +1536,11 @@ export function CarbonStudioTab({
       const jobId = jobIds.get(panel)!;
       const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
       const panelLabel = runAccessory ? accessoryPanelLabel(panel) : getPanelButtonLabel(model.gender, panel);
+      /* Back-facing frames keep the top's hem off a back-waistband label. */
+      const panelLock =
+        !runAccessory && (isBackFacingPose(model.gender, poseA) || isBackFacingPose(model.gender, poseB))
+          ? withBackWaistbandVisible(stylingLock, itemType, specForRun)
+          : stylingLock;
       const prompt = runAccessory
         ? buildAccessoryPanelPrompt({
             kind: runAccessory,
@@ -1560,7 +1566,7 @@ export function CarbonStudioTab({
         itemType,
         itemStyleInstructions: instruction,
         expressionDirective,
-        stylingLock,
+        stylingLock: panelLock,
         hasStyleWith,
         // itemSpec travels as its own request field (server appends it inside the
         // protected lock block) — NOT inside the prompt, which is near the

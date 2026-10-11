@@ -560,6 +560,27 @@ export function buildStylingLock(
 }
 
 /**
+ * A back-facing frame of a bottom whose BACK WAISTBAND carries a label, patch,
+ * text or logo: the top must not hide it.
+ *
+ * Poses 4 and 7 (male) / 2 (female) are the only frames that show the back of
+ * the waistband, and an untucked top — the default tee, or an oversized
+ * style-with shirt — fell over it every time, so the label the operator
+ * photographed never appeared. The rule goes INTO the TOP line it overrides
+ * (a separate note far from the lock loses — see the placement lessons).
+ */
+export function withBackWaistbandVisible(lock: string, itemTypeValue: string, spec: string): string {
+  if (inferItemTypeCategory(itemTypeValue) !== "bottom") return lock;
+  const mark = String(spec || "")
+    .split("\n")
+    .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
+  if (!mark) return lock;
+  const clause =
+    " In the frame facing away from the camera, the top's back hem sits just above the waistband — lightly tucked in at the back if it is long — so the label / patch on the back waistband of the product is fully visible and readable; the same top, only where its back hem sits changes.";
+  return lock.replace(/^(- TOP:[^\n]*)$/m, (line) => line + clause);
+}
+
+/**
  * The library's shared preamble — background, lighting, styling, expression —
  * without any individual pose.
  *
