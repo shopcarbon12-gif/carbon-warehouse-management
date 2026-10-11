@@ -49,7 +49,16 @@ async function POST_handler(req: Request) {
   }
   const parsed = postSchema.safeParse(raw);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
+    const issue = parsed.error.issues[0];
+    const field = String(issue?.path?.[0] ?? "");
+    const msg =
+      field === "password" ? "Password must be at least 8 characters (or leave it empty to auto-generate)"
+      : field === "email" ? "Enter a valid email address"
+      : field === "roleId" ? "Choose a role"
+      : field === "locationIds" ? "Choose at least one valid location"
+      : field === "firstName" || field === "lastName" ? "Names can be at most 80 characters"
+      : "Invalid body";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
   const password = parsed.data.password ?? randomBytes(14).toString("base64url");
   try {

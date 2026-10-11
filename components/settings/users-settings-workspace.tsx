@@ -643,7 +643,7 @@ function UserFormModal({
           </div>
           {!initial ? (
             <label className="block text-[var(--wms-muted)]">
-              Password (optional — auto-generated if empty)
+              Password (optional, min 8 chars — auto-generated if empty)
               <input
                 type="password"
                 value={password}

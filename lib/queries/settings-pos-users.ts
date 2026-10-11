@@ -238,6 +238,11 @@ export async function updateTenantPosUser(
  * from there. Creates `users` + `memberships` + `user_locations` +
  * `pos_employees` (with pos_role_id pointing at the seeded "Manager" POS
  * role) atomically.
+ *
+ * If the email already belongs to a user of THIS tenant (e.g. a WMS user),
+ * POS access is added to that same person instead of refusing: their WMS
+ * login, role and other locations are left as they are, the location is
+ * added, and the POS password / PIN are set for the POS only.
  */
 export async function createTenantPosManager(
   pool: Pool,
@@ -251,8 +256,8 @@ export async function createTenantPosManager(
     lastName?: string | null;
   },
 ): Promise<
-  | { ok: true; id: string }
-  | { ok: false; code: "email_taken" | "pos_employees_missing" | "manager_role_missing" | "location_invalid" }
+  | { ok: true; id: string; existingUser: boolean }
+  | { ok: false; code: "email_taken" | "already_pos" | "pos_employees_missing" | "manager_role_missing" | "location_invalid" }
 > {
   const exists = await pool.query<{ exists: boolean }>(
     `SELECT to_regclass('public.pos_employees') IS NOT NULL AS exists`,
@@ -264,11 +269,17 @@ export async function createTenantPosManager(
   }
 
   const email = input.email.trim().toLowerCase();
-  const dup = await pool.query(
-    `SELECT 1 FROM users WHERE lower(email) = lower($1) LIMIT 1`,
-    [email],
+  const dup = await pool.query<{ id: string; member: boolean; pos_active: boolean | null }>(
+    `SELECT u.id::text,
+            EXISTS (SELECT 1 FROM memberships m WHERE m.user_id = u.id AND m.tenant_id = $2::uuid) AS member,
+            (SELECT p.is_active FROM pos_employees p WHERE p.user_id = u.id) AS pos_active
+       FROM users u WHERE lower(u.email) = lower($1) LIMIT 1`,
+    [email, tenantId],
   );
-  if (dup.rows[0]) return { ok: false, code: "email_taken" };
+  const existing = dup.rows[0];
+  // Someone outside this tenant, or already an active POS user: nothing to add.
+  if (existing && !existing.member) return { ok: false, code: "email_taken" };
+  if (existing?.pos_active) return { ok: false, code: "already_pos" };
 
   const role = await pool.query<{ id: number }>(
     `SELECT id FROM user_roles WHERE name = 'Manager' AND scope = 'pos' LIMIT 1`,
@@ -290,6 +301,38 @@ export async function createTenantPosManager(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    if (existing) {
+      const uid = existing.id;
+      await client.query(
+        `INSERT INTO user_locations (user_id, location_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`,
+        [uid, input.locationId],
+      );
+      const hasPos = await client.query<{ exists: boolean }>(
+        `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                         WHERE table_name = 'pos_employees' AND column_name = 'pos_password_hash') AS exists`,
+      );
+      // users.password_hash (the WMS login) is left untouched; the POS gets its own password.
+      if (hasPos.rows[0]?.exists) {
+        await client.query(
+          `INSERT INTO pos_employees (user_id, pin_hash, role, is_active, pos_role_id, pos_password_hash)
+           VALUES ($1::uuid, $2, 'manager', TRUE, $3::int, $4)
+           ON CONFLICT (user_id) DO UPDATE SET pin_hash = EXCLUDED.pin_hash, role = 'manager', is_active = TRUE,
+             pos_role_id = EXCLUDED.pos_role_id, pos_password_hash = EXCLUDED.pos_password_hash`,
+          [uid, pinHash, managerRoleId, passwordHash],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO pos_employees (user_id, pin_hash, role, is_active, pos_role_id)
+           VALUES ($1::uuid, $2, 'manager', TRUE, $3::int)
+           ON CONFLICT (user_id) DO UPDATE SET pin_hash = EXCLUDED.pin_hash, role = 'manager', is_active = TRUE,
+             pos_role_id = EXCLUDED.pos_role_id`,
+          [uid, pinHash, managerRoleId],
+        );
+      }
+      await client.query("COMMIT");
+      return { ok: true, id: uid, existingUser: true };
+    }
 
     const ins = await client.query<{ id: string }>(
       `INSERT INTO users (email, password_hash, first_name, last_name)
@@ -344,7 +387,7 @@ export async function createTenantPosManager(
     }
 
     await client.query("COMMIT");
-    return { ok: true, id: uid };
+    return { ok: true, id: uid, existingUser: false };
   } catch (e) {
     await client.query("ROLLBACK");
     throw e;

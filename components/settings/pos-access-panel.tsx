@@ -447,7 +447,7 @@ function PosManagerCreateModal({
         <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Add POS manager</h3>
         <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
           Provisions a Manager-role POS user for a single location. The manager signs into the POS
-          with this email + password and then provisions cashiers from there.
+          with this email + password and then provisions cashiers from there. If the email already belongs to a WMS user, POS access is added to that same person (their WMS login stays as it is).
         </p>
         <div className="mt-4 space-y-3 font-mono text-xs">
           <label className="block text-[var(--wms-muted)]">

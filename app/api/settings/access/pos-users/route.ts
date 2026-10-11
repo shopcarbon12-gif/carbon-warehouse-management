@@ -74,7 +74,8 @@ async function POST_handler(req: Request) {
     const result = await createTenantPosManager(pool, session.tid, parsed.data);
     if (!result.ok) {
       const map: Record<typeof result.code, { status: number; msg: string }> = {
-        email_taken: { status: 409, msg: "A user with that email already exists" },
+        email_taken: { status: 409, msg: "That email belongs to an account outside this store" },
+        already_pos: { status: 409, msg: "This person already has POS access — edit them in the POS users list" },
         pos_employees_missing: {
           status: 503,
           msg: "POS schema not applied. Run the POS migrations first.",
@@ -88,7 +89,7 @@ async function POST_handler(req: Request) {
       const m = map[result.code];
       return NextResponse.json({ error: m.msg }, { status: m.status });
     }
-    return NextResponse.json({ id: result.id }, { status: 201 });
+    return NextResponse.json({ id: result.id, existingUser: result.existingUser }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Create failed";
     if (msg.startsWith("BAD_REQUEST:")) {
