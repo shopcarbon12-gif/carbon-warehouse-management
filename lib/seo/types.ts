@@ -81,9 +81,10 @@ export const SEO_FIELD_LABELS: Record<SeoFieldKey, string> = {
 
 /** Ideal character ranges Google/ecom best practice targets. */
 export const SEO_LIMITS = {
-  seoTitleMin: 30,
+  seoTitleMin: 20,
   seoTitleMax: 60,
-  metaDescriptionMin: 120,
+  /* A short true snippet beats a padded one; below this it is merely thin. */
+  metaDescriptionMin: 70,
   metaDescriptionMax: 155,
   handleMin: 3,
   handleMax: 60,
@@ -91,7 +92,8 @@ export const SEO_LIMITS = {
   // don't penalize a clean short product name.
   titleMin: 8,
   titleMax: 70,
-  bodyMinChars: 300,
+  /* Length follows the evidence: a bracelet is two sentences. */
+  bodyMinChars: 120,
   altMin: 15,
   altMax: 125,
   tagsMin: 3,

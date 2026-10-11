@@ -284,6 +284,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     fromPhotos: boolean;
     verified: boolean;
     observed: string[];
+    /** Claims the checker deleted (fabric, feel, fit, labels, logo shape…). */
+    removed: string[];
   } | null>(null);
   const [seoAccept, setSeoAccept] = useState<Record<string, boolean>>({});
   // Current Shopify collection titles, shown at the top of the SEO tab. Refreshed
@@ -990,6 +992,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         observed?: string[];
         descriptionFromPhotos?: boolean;
         verifiedFactsUsed?: boolean;
+        removedClaims?: string[];
         error?: string;
       };
       if (!o.ok || !oj.proposed) throw new Error(oj.error ?? "SEO optimize failed");
@@ -1000,6 +1003,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         fromPhotos: oj.descriptionFromPhotos === true,
         verified: oj.verifiedFactsUsed === true,
         observed: Array.isArray(oj.observed) ? oj.observed.map(String) : [],
+        removed: Array.isArray(oj.removedClaims) ? oj.removedClaims.map(String) : [],
       });
       setSeoScores({
         cur: Math.round(oj.currentScorecard?.overall ?? 0),
@@ -1961,6 +1965,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                                 <li key={i} className="break-inside-avoid">{o}</li>
                               ))}
                             </ul>
+                          ) : null}
+                          {seoBasis.removed.length ? (
+                            <div className="mt-1.5 text-[0.72rem] leading-snug text-[var(--wms-muted)]">
+                              Removed because a photo cannot prove it (fabric, feel, fit, labels, logo shape):{" "}
+                              {seoBasis.removed.join(" · ")}
+                            </div>
                           ) : null}
                         </div>
                       ) : null}

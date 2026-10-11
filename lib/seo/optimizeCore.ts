@@ -7,6 +7,16 @@ import type { ProductContext, SeoFields, SeoFieldKey, Scorecard } from "@/lib/se
 import { SEO_LIMITS } from "@/lib/seo/types";
 import { fetchRemoteImageBytes, normalizeRemoteImageUrl, getImageFetchTimeoutMs } from "@/lib/remoteImage";
 import { stripSetBanner } from "@/lib/seo/setNotice";
+import {
+  CARBON_VOICE,
+  claimRulesFor,
+  describeFindings,
+  findClaims,
+  findClaimsInHtml,
+  stripClaimsFromHtml,
+  stripClaimsFromText,
+  type ClaimContext,
+} from "@/lib/seo/claims";
 
 /**
  * The SEO optimizer, extracted from app/api/shopify/seo/optimize so it can run
@@ -42,7 +52,7 @@ const VERIFIED_FACTS_MAX = 2500;
  * other fields (seoTitle, tags) keep the score-driven behaviour so opening
  * the tab on an unchanged product does not churn them.
  */
-const CLAIM_FIELDS: SeoFieldKey[] = ["bodyHtml", "metaDescription"];
+const CLAIM_FIELDS: SeoFieldKey[] = ["seoTitle", "bodyHtml", "metaDescription"];
 
 /**
  * The Studio's item spec is a LOCK LIST for the image generator, not a fact
@@ -67,8 +77,17 @@ export function factsFromStudioSpec(lockText: string, maxBytes = VERIFIED_FACTS_
     if (/^NOT CLEARLY VISIBLE/i.test(line)) continue;
     /* What the product was photographed WITH, not the product. */
     if (/^OUTFIT\b/i.test(line)) continue;
+    /* Labels, patches and tags are never mentioned in the copy (owner's rule),
+       and a line about one usually carries a material ("leather patch") the
+       photos cannot verify. Checked on EVERY line — a "BACK:" line with a woven
+       label slipped through when only TEXT/LOGO lines were filtered. */
+    if (/\b(label|labels|patch|patches|woven|tag|tags)\b/i.test(line)) continue;
     /* Directives aimed at the image model; the observation is what precedes them. */
     const v = line
+      /* The Studio names the logo by its shape so the image model can draw it;
+         in copy it is "the Carbon logo" and nothing more. */
+      .replace(/\s*\([^)]*hexagon[^)]*\)/gi, "")
+      .replace(/\b(?:a |an )?(?:cluster of )?(?:linked )?hexagon(?:al)?(?: outlines?)? (logo|emblem|mark)\b/gi, "the Carbon logo")
       .replace(/\s*Reproduce verbatim[\s\S]*$/i, ".")
       .replace(/\s*[-—]\s*(?:same|exact)\b[^.]*\.?\s*$/i, ".")
       .replace(/[;,]?\s*(?:never|do not|don't)\s+(?:invent|add|paraphrase|move|resize|recolou?r)[\s\S]*$/i, ".")
@@ -158,13 +177,13 @@ const SCHEMA = `{
   "secondaryKeywords": string[],
   "observed": string[],
   "proposed": {
-    "seoTitle": string,
+    "titleDescriptor": string,
     "metaDescription": string,
     "bodyHtml": string,
     "tags": string[]
   },
   "imageAlts": [ { "id": string, "alt": string } ],
-  "rationale": { "seoTitle": string, "metaDescription": string, "bodyHtml": string, "tags": string }
+  "rationale": { "titleDescriptor": string, "metaDescription": string, "bodyHtml": string, "tags": string }
 }`;
 
 type GenExtras = {
@@ -182,19 +201,27 @@ function buildGenInstruction(
   extras: GenExtras,
 ) {
   const colors = (context.colors || []).join(", ") || "(not specified)";
+  const multiColour = (context.colors || []).length > 1;
+  /* The model never writes the SEO title itself: it suggests a short
+     descriptor and finishSeoTitle builds "Name – Descriptor | Carbon". Every
+     doubled "Alex Denim Shorts - Alex Denim Shorts" title came from free-text
+     titles being padded with the name to reach a length target. */
+  const asked = fieldsToGenerate.map((f) => (f === "seoTitle" ? "titleDescriptor" : f));
   return [
-    "You are a senior e-commerce SEO strategist and apparel product-photo analyst.",
+    "You write product copy for Carbon's online store from the product PHOTOS.",
     "",
-    "Generate SEO from these inputs:",
-    `  • Product name: "${context.title}"`,
+    CARBON_VOICE,
+    "",
+    "Inputs:",
+    `  • Product name: "${context.title}" (fixed — never change it, never repeat it twice)`,
     `  • Color(s): ${colors}`,
     useVision
-      ? "  • The product PHOTOS provided in this message — the SOURCE OF TRUTH for every claim about the item. The first photos are attached at full detail: read printed text and logos letter by letter, count pockets and buttons, look at seams, hardware, hems, fabric texture."
-      : "  • (No photos provided — use the name and color only.)",
+      ? "  • The product PHOTOS in this message — the SOURCE OF TRUTH for every claim. The first photos are attached at full detail: read printed text letter by letter, count pockets and buttons, look at seams, hardware, hems and texture."
+      : "  • (No photos provided — use the name and color only, and keep it short.)",
     ...(context.productType ? [`  • Product type: ${context.productType}`] : []),
     ...(extras.verifiedFacts
       ? [
-          "  • CLOSE-UP NOTES, recorded earlier from this item's own detail photos. Use them to fill in what the product photos above cannot resolve — the exact wording of a print, small hardware, stitching. THE PHOTOS WIN on any conflict: if a note disagrees with what you can see, believe your eyes and ignore the note. A note is not evidence that something is absent:",
+          "  • CLOSE-UP NOTES recorded earlier from this item's detail photos. Use them for what the photos cannot resolve (the exact wording of a print, small hardware). THE PHOTOS WIN on any conflict:",
           extras.verifiedFacts
             .split("\n")
             .map((l) => `      ${l}`)
@@ -203,38 +230,34 @@ function buildGenInstruction(
       : []),
     ...(extras.previousDescription
       ? [
-          "  • PREVIOUS DESCRIPTION — NOT something to copy. It is here only so you can rescue non-visual details from it. It may describe a different garment entirely:",
+          "  • PREVIOUS DESCRIPTION — written by an earlier AI and NEVER a source of facts. It is here only so you can see what to correct. Do not copy its sentences, and do not carry over anything it says:",
           `      "${extras.previousDescription}"`,
         ]
       : []),
     "",
-    useVision
-      ? 'FIRST fill "observed": 8-15 short facts you can actually SEE in the photos — garment type, fabric look, fit/silhouette, neckline or collar, sleeves, closures, pockets, prints/text/logos with their exact wording and placement, hardware, hem, colour. Then write every field FROM that list plus the name, colour and the close-up notes. If you cannot see something, leave it out — a shorter, true description beats a fuller invented one.'
-      : 'Leave "observed" empty.',
-    ...(extras.previousDescription
-      ? [
-          "",
-          "HOW TO USE THE PREVIOUS DESCRIPTION:",
-          "  - WRITE THE DESCRIPTION FRESH, from your own \"observed\" list. Do NOT reproduce the previous description, and do NOT reuse its sentences or phrases — if a draft of yours repeats a run of words from it, rewrite that part in your own words from what you can see. Returning the previous text back is a failed answer, however good it reads.",
-          "  - It is there to be CORRECTED and IMPROVED: say what the photos show that it misses, and drop what it claims that they do not show.",
-          "  - Anything a photo CAN show (fabric look, fit, neckline, sleeves, closures, pockets, prints, logos, hardware, hem, colour) must come from the photos. Never keep an old visual claim the photos do not support.",
-          "  - Anything a photo can NEVER show (fibre composition, fabric weight, care instructions, country of origin, measurements, the model's height and size worn) may be carried over as-is, unless the photos contradict it — that detail is worth keeping.",
-          '  - For every such carried-over detail add one entry to "observed" written as "from previous description: …" so it can be checked.',
-        ]
-      : []),
+    claimRulesFor({ productTitle: context.title, isSet: context.isSet }),
     "",
-    "Do NOT change or output the product title or the URL handle — they are fixed.",
-    fieldsToGenerate.length
-      ? `Generate ONLY these "proposed" fields (omit all others): ${fieldsToGenerate.join(", ")}.`
+    useVision
+      ? 'FIRST fill "observed": 6-15 short facts you can actually SEE — garment type, colour and wash, neckline or collar, sleeves, closures, pockets, prints/text/graphics with their exact wording and placement, distressing, hardware, hem, silhouette. Then write every field FROM that list. If you cannot see it, leave it out: a short true description beats a long invented one.'
+      : 'Leave "observed" empty.',
+    "",
+    "FIELDS:",
+    '  • titleDescriptor: 0-3 words that tell a shopper what kind of item this is beyond its name, e.g. "Men\'s Ripped", "Women\'s Mini", "Graphic". Never words already in the name, never a fabric or feel word' +
+      (multiColour ? ", and NO colour (this product comes in several colours)." : ".") +
+      " Empty is fine.",
+    "  • metaDescription: 1-2 sentences, at most 155 characters, about THIS item's look from the observed list. It is also the Google Shopping description. No filler, no \"shop now\".",
+    "  • bodyHtml: <p> 1-3 sentences: what it is and its standout visible details</p>, optionally <p> one styling line</p> when it adds something, optionally <ul> 0-5 <li> real visible details</li>. Length follows the evidence — a simple bracelet needs two sentences, a detailed jacket more. Never pad.",
+    "  • tags: 3-8 lowercase shopper words for what it is and how it looks (category, colour, style). No fabric or feel words, no brand.",
+    "",
+    "Do NOT change or output the product title or the URL handle.",
+    asked.length
+      ? `Generate ONLY these "proposed" fields (omit all others): ${asked.join(", ")}.`
       : `Do NOT generate any "proposed" fields (leave "proposed" empty).`,
     altImageIds.length
-      ? `Also write alt text in "imageAlts" for ONLY these photo ids: ${altImageIds.join(", ")}.`
+      ? `Also write alt text in "imageAlts" for ONLY these photo ids: ${altImageIds.join(", ")} — what that photo shows (the item, its colour, how it is worn or shown), 5-15 words, no claims from the NEVER list.`
       : `Leave "imageAlts" empty.`,
     "",
-    "Ignore any pre-existing tags or metadata. Never invent attributes you have not seen in the photos, read in the close-up notes, or carried over as a non-visual detail. Do NOT output any brand/company/vendor name or placeholder text.",
-    `The "focusKeyword" MUST be a concise 2-4 word search phrase that includes the core word(s) of the product name "${context.title}". Never use the full product title verbatim and never exceed 4 words.`,
-    "Follow the character/format targets EXACTLY — they are graded by an automated scorer; aim for a perfect score — but never satisfy a target by adding a product claim you did not observe: pad with how it wears, how to style it, or care, not with invented features.",
-    "",
+    `The "focusKeyword" is a concise 2-4 word search phrase containing the core word(s) of the product name "${context.title}".`,
     useVision && altImageIds.length ? `Photos are attached in order.` : "",
     "",
     "Return STRICT JSON only, no prose, with this exact shape:",
@@ -252,7 +275,10 @@ function buildProposed(
   return {
     title: String(current.title || "").trim(),
     handle: String(current.handle || "").trim().toLowerCase(),
-    seoTitle: String(p.seoTitle || current.seoTitle || "").trim(),
+    seoTitle:
+      typeof p.titleDescriptor === "string"
+        ? finishSeoTitle(p.titleDescriptor, focusKeyword, current.title)
+        : String(current.seoTitle || "").trim(),
     metaDescription: String(p.metaDescription || current.metaDescription || "").trim(),
     bodyHtml: String(p.bodyHtml || current.bodyHtml || "").trim(),
     tags: p.tags != null ? asStringArray(p.tags, 20) : current.tags || [],
@@ -303,6 +329,8 @@ export interface OptimizeResult {
   proposedScorecard: Scorecard;
   imageAltsAdded: Array<{ id: string; altText: string }>;
   rationale: Partial<Record<SeoFieldKey, string>>;
+  /** Claims that were still in the copy after the rewrite and were deleted. */
+  removedClaims?: string[];
   /** Set when the model came back with nothing usable; the caller decides how to report it. */
   error?: string;
 }
@@ -334,125 +362,77 @@ function hasText(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(n);
 }
 
-function titleCase(v: string): string {
-  return String(v || "").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 /**
- * Guarantee the SEO title.
+ * Build the SEO title: "Name – Descriptor | Carbon", or "Name | Carbon".
  *
- * 30-60 characters with the focus keyword in it. Short titles are padded from
- * facts already on the product — its name, its type, the keyword the copy was
- * written around, the brand — rather than with adjectives, so nothing is
- * claimed here that was not already true.
+ * The model only suggests the descriptor. The old finisher padded a free-text
+ * title with the product name and the keyword until it reached 30 characters,
+ * which is exactly how 31 live products ended up titled "Bradley Jacket -
+ * Bradley Jacket" — in Google Shopping too, since the Shopping title IS the SEO
+ * title. Here the name appears once, words already in the name are dropped
+ * from the descriptor, claim words (fabric, feel, fit) are dropped, and the
+ * result is idempotent: finishing a finished title returns it unchanged.
  */
 export function finishSeoTitle(
   value: string,
-  keyword: string,
+  _keyword: string,
   productTitle: string,
-  productType = "",
+  _productType = "",
 ): string {
-  const min = SEO_LIMITS.seoTitleMin;
   const max = SEO_LIMITS.seoTitleMax;
-  const kw = String(keyword || "").trim();
-  const name = String(productTitle || "").trim();
-
-  let v = String(value || "").trim();
-  if (!v) v = name || titleCase(kw);
-
-  /* Keyword first, then trim, then grow — in that order. Growing first and
-     trimming after can throw the padding straight back out, which is how a
-     rescued title ended up at 15 characters. */
-  if (kw && !hasText(v, kw)) {
-    const joined = `${v} - ${titleCase(kw)}`;
-    v = joined.length <= max ? joined : `${titleCase(kw)} - ${name}`;
-  }
-  if (v.length > max) {
-    const trimmed = cut(v, max);
-    /* Never trim the keyword back out: a shorter title beats one that no longer
-       says what the page is for. */
-    v = kw && !hasText(trimmed, kw) ? cut(`${titleCase(kw)} - ${name}`, max) : trimmed;
-  }
-
-  /* Pad from facts already on the product, most specific first, and only with a
-     part that still fits — overshooting the maximum to satisfy the minimum
-     trades one penalty for a bigger one. */
-  const parts = [
-    name,
-    titleCase(kw),
-    titleCase(productType),
-    /* Long enough to carry a very short product name over the minimum on its
-       own — "blazer" plus the brand alone still falls short — and true of every
-       live product rather than a claim about this one. */
-    "Shop Online at Carbon",
-    "Order Today",
-  ].filter(Boolean);
-  for (const part of parts) {
-    if (v.length >= min) break;
-    if (hasText(v, part)) continue;
-    const joined = `${v} - ${part}`;
-    if (joined.length <= max) v = joined;
-  }
-  return v;
+  const name = String(productTitle || "").replace(/\s+/g, " ").trim();
+  const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let d = String(value || "")
+    .replace(/\s*\|\s*carbon\s*$/i, "")
+    .replace(name ? new RegExp(esc(name), "ig") : /$^/, " ")
+    .replace(/\bcarbon\b/gi, " ");
+  const own = new Set(name.toLowerCase().split(/[^a-z0-9']+/).filter(Boolean));
+  const claimTerms = new Set(
+    findClaims(d, { productTitle: name }).flatMap((f) => f.term.toLowerCase().split(/[^a-z0-9%']+/).filter(Boolean)),
+  );
+  /* Split on spaces and stand-alone dashes only: "Off-Shoulder" is one word. */
+  let words = d
+    .split(/[\s,;:|]+|\s[–—-]\s/)
+    .map((w) => w.replace(/^[–—-]+|[–—-]+$/g, "").trim())
+    .filter(Boolean)
+    .filter((w) => !own.has(w.toLowerCase()) && !claimTerms.has(w.toLowerCase()));
+  /* Cutting a long descriptor leaves half a phrase ("Women's Floral Off"):
+     a descriptor that does not fit in three words is left out. */
+  if (words.length > 3) words = [];
+  d = words.map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
+  const withDesc = d ? `${name} – ${d} | Carbon` : "";
+  if (withDesc && withDesc.length <= max) return withDesc;
+  const plain = `${name} | Carbon`;
+  return plain.length <= max ? plain : cut(name, max);
 }
 
 /**
- * Guarantee the meta description.
+ * Finish the meta description — which is also the Google Shopping
+ * description (the Shopify feed sends the SEO meta, not the body).
  *
- * 120-155 characters, containing the focus keyword and a call to action. Padding
- * sentences state only what is already true of any live product — that it can be
- * ordered, and where — so a guaranteed score never comes at the cost of a
- * guaranteed claim.
+ * It used to be padded to 120 characters with "X is available to order online
+ * today. Discover more from the Carbon collection." — true of every product
+ * and useless on all of them. Now: the name if it is missing and fits, one
+ * short sign-off only if the text is very short, and a clean cut at 155.
  */
 export function finishMetaDescription(
   value: string,
-  keyword: string,
+  _keyword: string,
   productTitle: string,
-  productType = "",
+  _productType = "",
 ): string {
-  const min = SEO_LIMITS.metaDescriptionMin;
   const max = SEO_LIMITS.metaDescriptionMax;
-  const kw = String(keyword || "").trim();
   const name = String(productTitle || "").trim();
-
-  let v = String(value || "").trim();
+  let v = String(value || "").replace(/\s+/g, " ").trim();
+  if (!v) v = name ? `${name}.` : "";
   if (v && !/[.!?]$/.test(v)) v = `${v}.`;
-  if (!v) v = name ? `${name}.` : `${titleCase(kw)}.`;
-
-  if (kw && !hasText(v, kw)) v = `${titleCase(kw)}. ${v}`.trim();
-
-  const filler = [
-    kw ? `Shop ${kw} at Carbon.` : "",
-    name ? `${name} is available to order online today.` : "",
-    productType ? `Browse the full ${String(productType).toLowerCase()} range.` : "",
-    "Discover more from the Carbon collection.",
-    "Order online now.",
-  ].filter(Boolean);
-
-  for (const sentence of filler) {
-    if (v.length >= min) break;
-    if (hasText(v, sentence)) continue;
-    const joined = `${v} ${sentence}`;
-    /* Allow a sentence that lands inside the range, or that closes the gap
-       without running past the maximum. */
-    if (joined.length <= max) v = joined;
-  }
-
+  if (name && !hasText(v, name) && `${name}: ${v}`.length <= max) v = `${name}: ${v}`;
+  if (v.length < SEO_LIMITS.metaDescriptionMin && `${v} Shop it at Carbon.`.length <= max) v = `${v} Shop it at Carbon.`;
   if (v.length > max) {
-    /* Leave room for the full stop the cut removes, so the result is <= max
-       rather than exactly one character over it. */
     v = cut(v, max - 1);
     if (!/[.!?]$/.test(v)) v = `${v}.`;
-    if (kw && !hasText(v, kw)) {
-      v = cut(`${titleCase(kw)}. ${v}`, max - 1);
-      if (!/[.!?]$/.test(v)) v = `${v}.`;
-    }
   }
-
-  /* The scorer accepts a closing full stop OR an action word; the sentences
-     above always end in one, so this only catches a value that arrived
-     unpunctuated and long enough to need nothing else. */
-  if (!/[.!?]$/.test(v) && !/(shop|discover|buy|free|now|today|get)/i.test(v)) v = `${v}.`;
   return v;
 }
 
@@ -617,6 +597,10 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
   function applyGenerated(target: SeoFields, src: any, fields: SeoFieldKey[]): SeoFields {
     const out: SeoFields = { ...target, tags: [...(target.tags || [])] };
     for (const f of fields) {
+      if (f === "seoTitle") {
+        if (typeof src?.titleDescriptor === "string") out.seoTitle = finishSeoTitle(src.titleDescriptor, "", cur.title);
+        continue;
+      }
       if (src?.[f] == null) continue;
       if (f === "tags") out.tags = asStringArray(src.tags, 20);
       else (out as any)[f] = String(src[f]).trim();
@@ -675,7 +659,8 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
       const weak = fieldsToGen.filter((f) => (proposedScorecard.fields[f]?.score ?? 0) < TARGET_SCORE);
       if (!weak.length) break;
       const repairPrompt = [
-        "Improve ONLY these SEO fields so each fully satisfies its rule (they are auto-graded; aim for 100). Keep the same product and focus keyword. Never add, remove or change a product fact — fix only length, structure, wording and keyword placement; pad with how it wears or styles, never with invented features.",
+        "Fix ONLY these fields so each satisfies its rule. Keep the same product and focus keyword. Never add, remove or change a product fact — fix only structure, wording and keyword placement. Never pad to reach a length.",
+        claimRulesFor({ productTitle: cur.title, isSet: ctx.isSet }),
         ...(observed.length ? [`The facts the description is built on (do not go beyond them): ${observed.join("; ")}`] : []),
         `Focus keyword: "${focusKeyword}"`,
         "Current values and the problems to fix:",
@@ -685,8 +670,8 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
           return `• ${f}: ${JSON.stringify(val).slice(0, 600)}\n   issues: ${(fs?.issues || []).join(" ") || "raise quality"}`;
         }),
         "",
-        "Targets: seoTitle 40-60 chars w/ keyword; metaDescription 130-155 chars w/ keyword + CTA; bodyHtml HTML (<p> + <ul> 4-6 <li> + <p>), 450-850 chars text, keyword present; tags 7-12 lowercase deduped.",
-        `Return STRICT JSON only: { ${weak.map((f) => `"${f}": ${f === "tags" ? "string[]" : "string"}`).join(", ")} }`,
+        "Targets: metaDescription at most 155 chars with the product name; bodyHtml <p> 1-3 sentences</p> [+ optional <ul> of real details], keyword present; tags 3-8 lowercase deduped. titleDescriptor 0-3 words not in the name.",
+        `Return STRICT JSON only: { ${weak.map((f) => `"${f === "seoTitle" ? "titleDescriptor" : f}": ${f === "tags" ? "string[]" : "string"}`).join(", ")} }`,
       ].join("\n");
       let repair: any = null;
       try {
@@ -764,7 +749,9 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
      compares what would actually ship against what is live — it used to judge
      a raw value that the finisher was about to bring up to 100, and throw a
      photo-grounded meta description away on a score it never really had. */
-  proposed.seoTitle = finishSeoTitle(proposed.seoTitle, focusKeyword, cur.title, cur.productType);
+  if (fieldsToGen.includes("seoTitle")) {
+    proposed.seoTitle = finishSeoTitle(proposed.seoTitle, focusKeyword, cur.title, cur.productType);
+  }
   proposed.metaDescription = finishMetaDescription(
     proposed.metaDescription,
     focusKeyword,
@@ -789,6 +776,66 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     }
   }
   if (clamped) proposedScorecard = scoreAll(proposed);
+
+  /* Unsupported claims: fabric, feel, fit, care, measurements, origin, labels,
+     the logo by its shape, "Carbon Jeans", set contents. The model gets one
+     rewrite with the exact findings; whatever survives is deleted sentence by
+     sentence. After the clamp on purpose — a clamp that restored the live
+     text would otherwise restore its claims with it. */
+  const claimCtx: ClaimContext = { productTitle: cur.title, isSet: Boolean(ctx.isSet) };
+  const claimsIn = () => ({
+    bodyHtml: findClaimsInHtml(proposed.bodyHtml, claimCtx),
+    metaDescription: findClaims(proposed.metaDescription, claimCtx),
+  });
+  let found = claimsIn();
+  const removedClaims: string[] = [];
+  const dirty = (Object.keys(found) as Array<"bodyHtml" | "metaDescription">).filter((k) => found[k].length);
+  if (dirty.length) {
+    try {
+      const rc: any = await withTimeout(
+        openai.chat.completions.create({
+          model: MODEL,
+          temperature: 0.3,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: "You edit product copy to remove unsupported claims. Return only valid JSON." },
+            {
+              role: "user",
+              content: [
+                "Rewrite these fields WITHOUT the flagged claims. Keep everything else that is true and visible, keep the same voice and HTML structure. Do not replace a removed claim with a different one.",
+                claimRulesFor(claimCtx),
+                ...dirty.map((k) => `• ${k}: ${JSON.stringify(String((proposed as any)[k]).slice(0, 1500))}\n   flagged: ${describeFindings(found[k]).join("; ")}`),
+                `Return STRICT JSON only: { ${dirty.map((k) => `"${k}": string`).join(", ")} }`,
+              ].join("\n"),
+            },
+          ],
+        }),
+        TIMEOUT_MS,
+        "SEO claim repair",
+      );
+      const fix = parseJsonObjectFromText(rc?.choices?.[0]?.message?.content || "");
+      for (const k of dirty) if (typeof fix?.[k] === "string" && fix[k].trim()) (proposed as any)[k] = String(fix[k]).trim();
+    } catch {
+      /* the deterministic strip below still removes them */
+    }
+    found = claimsIn();
+  }
+  for (const k of ["bodyHtml", "metaDescription"] as const) {
+    if (!found[k].length) continue;
+    removedClaims.push(...describeFindings(found[k]).map((d) => `${k === "bodyHtml" ? "description" : "meta"} — ${d}`));
+    if (k === "bodyHtml") proposed.bodyHtml = stripClaimsFromHtml(proposed.bodyHtml, claimCtx);
+    else proposed.metaDescription = finishMetaDescription(stripClaimsFromText(proposed.metaDescription, claimCtx), focusKeyword, cur.title);
+  }
+  /* Tags only ever ADD: other systems (collections, filters, feeds) may rely on
+     a tag the model does not think of, so none is removed here. New tags with a
+     claim in them are dropped. */
+  if (fieldsToGen.includes("tags")) {
+    const seen = new Set((cur.tags || []).map((t) => t.toLowerCase()));
+    const added = (proposed.tags || [])
+      .map((t) => String(t || "").trim().toLowerCase())
+      .filter((t) => t && t !== "carbon" && !seen.has(t) && !findClaims(t, claimCtx).length && (seen.add(t), true));
+    proposed.tags = [...(cur.tags || []), ...added];
+  }
   if (nextHandle) {
     proposed.handle = nextHandle;
     rationale.handle = `The URL should be the product name. Old links keep working: a 301 redirect from "${cur.handle}" is created when this is published.`;
@@ -803,7 +850,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
   const imageAltsAdded: Array<{ id: string; altText: string }> = [];
   proposed.imageAlts = (current.imageAlts || []).map((a) => {
     const id = String(a.id);
-    const gen = altIdSet.has(id) ? altMap.get(id) || "" : "";
+    const gen = altIdSet.has(id) ? stripClaimsFromText(altMap.get(id) || "", claimCtx) : "";
     if (gen) {
       imageAltsAdded.push({ id, altText: gen });
       return { ...a, altText: gen };
@@ -826,5 +873,6 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     proposedScorecard,
     imageAltsAdded,
     rationale,
+    removedClaims,
   };
 }
