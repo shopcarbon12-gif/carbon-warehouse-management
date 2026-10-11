@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/get-session";
 import { ShopifyImagesPanel } from "@/components/infrastructure/settings/shopify-images-panel";
+import { ShopifyTranslatePanel } from "@/components/infrastructure/settings/shopify-translate-panel";
+import { ShopifyAdsSyncPanel } from "@/components/infrastructure/settings/shopify-ads-sync-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +14,12 @@ export default async function ShopifyIntegrationPage() {
       <div>
         <h1 className="text-xl font-semibold text-[var(--foreground)]">Shopify</h1>
         <p className="mt-1 font-mono text-sm text-[var(--muted)]">
-          Product imagery pulled from your Shopify store into the catalog, POS, and handheld.
+          Product pictures from your Shopify store, store translations, and the products your Google and Meta ads advertise.
         </p>
       </div>
       <ShopifyImagesPanel />
+      <ShopifyTranslatePanel />
+      <ShopifyAdsSyncPanel />
     </div>
   );
 }

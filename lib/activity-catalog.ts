@@ -76,6 +76,8 @@ const ROUTES: Record<string, Entry> = {
   "shopify/metafields": { module: "Shopify", label: "Edited Shopify metafields" },
   "shopify/link": { module: "Shopify", label: "Linked product to Shopify" },
   "shopify/link/all": { module: "Shopify", label: "Linked all products to Shopify" },
+  "shopify/channel-jobs": { module: "Shopify", label: "Started Shopify translate / ads sync" },
+  "shopify/ad-groups": { module: "Shopify", label: { POST: "Saved ad product group", DELETE: "Deleted ad product group" } },
   "shopify/inventory-sync": { module: "Shopify", label: "Synced stock to Shopify" },
   "shopify/sync/trigger": { module: "Shopify", label: "Started Shopify sync" },
   "shopify/seo/optimize": { module: "Shopify", label: "Wrote SEO with AI" },

@@ -6,6 +6,8 @@ import { isLightspeedCatalogSyncEnabled } from "@/lib/server/lightspeed-sync-fla
 import { executeShopifyProductPush } from "@/lib/server/shopify-publish";
 import { executeShopifyLinkAll } from "@/lib/server/shopify-link";
 import { executeShopifyInventorySync } from "@/lib/server/shopify-inventory-sync";
+import { executeShopifyTranslate } from "@/lib/server/shopify-translate";
+import { executeShopifyAdsSync } from "@/lib/server/shopify-ads-sync";
 
 loadEnvConfig(process.cwd());
 
@@ -56,6 +58,8 @@ const SELF_TERMINAL_JOB_TYPES = new Set([
   "shopify_product_push",
   "shopify_link_all",
   "shopify_inventory_sync",
+  "shopify_translate",
+  "shopify_ads_sync",
 ]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -166,6 +170,16 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (job.job_type === "shopify_inventory_sync") {
     await executeShopifyInventorySync(pool, job.id);
     /* Sets its own terminal status. */
+    return;
+  }
+  if (job.job_type === "shopify_translate") {
+    await executeShopifyTranslate(pool, job.id);
+    /* Sets its own terminal status + result (every change, before → after). */
+    return;
+  }
+  if (job.job_type === "shopify_ads_sync") {
+    await executeShopifyAdsSync(pool, job.id);
+    /* Sets its own terminal status + per-group report. */
     return;
   }
   // Stub: reconcile / future job types. Idempotency is enforced by idempotency_key on insert.
