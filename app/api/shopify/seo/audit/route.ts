@@ -153,17 +153,34 @@ async function POST_handler(req: Request) {
      the "Complete the Look" notice. Falls back to the Shopify link when the
      caller did not pass a matrixId. */
   let isSet = false;
+  /* The other pieces of the set, by their WMS names. Without them the copy
+     guessed — "pair it with the matching skirt" for a set whose other piece is
+     a pair of shorts. */
+  let setPartners: string[] = [];
   try {
     const setRes = matrixId
-      ? await pool.query<{ is_set: boolean }>(
-          `SELECT is_set FROM matrices WHERE id = $1::uuid`,
+      ? await pool.query<{ is_set: boolean; set_group_id: string | null; id: string }>(
+          `SELECT id, is_set, set_group_id FROM matrices WHERE id = $1::uuid`,
           [matrixId],
         )
-      : await pool.query<{ is_set: boolean }>(
-          `SELECT is_set FROM matrices WHERE shopify_product_id = $1 LIMIT 1`,
+      : await pool.query<{ is_set: boolean; set_group_id: string | null; id: string }>(
+          `SELECT id, is_set, set_group_id FROM matrices WHERE shopify_product_id = $1 LIMIT 1`,
           [productId],
         );
-    isSet = Boolean(setRes.rows[0]?.is_set);
+    const row = setRes.rows[0];
+    isSet = Boolean(row?.is_set);
+    if (isSet && row?.set_group_id) {
+      const partners = await pool.query<{ description: string }>(
+        `SELECT DISTINCT description FROM matrices
+          WHERE set_group_id = $1 AND id <> $2::uuid AND is_set AND description IS NOT NULL`,
+        [row.set_group_id, row.id],
+      );
+      const own = String(product.title || "").trim().toLowerCase();
+      setPartners = partners.rows
+        .map((r) => String(r.description || "").trim())
+        .filter((d) => d && d.toLowerCase() !== own)
+        .slice(0, 4);
+    }
   } catch {
     /* A lookup failure must not fail the audit — it only means no notice. */
   }
@@ -191,6 +208,7 @@ async function POST_handler(req: Request) {
     imageCount: mediaNodes.length,
     onlineStoreUrl: product.onlineStoreUrl || undefined,
     isSet,
+    setPartners,
   };
 
   return NextResponse.json({

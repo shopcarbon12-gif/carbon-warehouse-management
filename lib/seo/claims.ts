@@ -107,7 +107,7 @@ export function sentences(text: string): string[] {
     .filter(Boolean);
 }
 
-export type ClaimContext = { productTitle: string; isSet?: boolean };
+export type ClaimContext = { productTitle: string; isSet?: boolean; setPartners?: string[] };
 
 /** Every unsupported claim in a piece of plain text. */
 export function findClaims(text: string, ctx: ClaimContext): ClaimFinding[] {
@@ -205,13 +205,16 @@ export function claimRulesFor(ctx: ClaimContext): string {
     "  - how it feels or performs: soft, stretchy, breathable, lightweight, warm, comfortable, durable, premium quality",
     "  - how it fits: true to size, slim fit, relaxed fit, high-rise (\"a relaxed look\" — describing the look — is fine)",
     "  - measurements, lengths or sizes, care instructions, where it was made",
-    "  - labels, patches or tags of any kind — never mention the waistband label, a back patch or a brand tag",
+    '  - labels, patches or tags of any kind — never mention the waistband label, a back patch or a brand tag, and never quote the "CARBON JEANS" text printed on them',
     '  - the logo\'s shape: it is "the Carbon logo", and only mention it when it is printed or embroidered as the design',
     "Describe the design instead: colour, wash, print and its wording, graphics, distressing, neckline, sleeves, pockets, closures, hardware, hem, silhouette as it looks.",
   ];
   if (ctx.isSet) {
     lines.push(
       'THIS PAGE SELLS ONE PIECE OF A MATCHING SET. Each piece is sold separately at its own price. You may say it is part of the set and pairs with the matching piece; NEVER say it includes, comes with, or is a two-piece set.',
+      ctx.setPartners?.length
+        ? `  The matching piece${ctx.setPartners.length > 1 ? "s are" : " is"}: ${ctx.setPartners.map((p) => `"${p}"`).join(", ")}. Name it exactly like that, never by a guessed garment type (do not call it a skirt, pants or shorts unless its name says so).`
+        : "  Do not say what kind of garment the matching piece is — you have not seen it.",
     );
   }
   return lines.join("\n");

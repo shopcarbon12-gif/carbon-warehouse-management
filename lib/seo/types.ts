@@ -64,6 +64,8 @@ export interface ProductContext {
   onlineStoreUrl?: string;
   /** One piece of a matching set — drives the "Complete the Look" notice. */
   isSet?: boolean;
+  /** The other pieces of the set, by their WMS names ("River Bottom Set"). */
+  setPartners?: string[];
 }
 
 /** Human-friendly labels for each field key (used by the UI). */

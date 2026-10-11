@@ -13,6 +13,7 @@ import {
   describeFindings,
   findClaims,
   findClaimsInHtml,
+  plainText,
   stripClaimsFromHtml,
   stripClaimsFromText,
   type ClaimContext,
@@ -235,7 +236,7 @@ function buildGenInstruction(
         ]
       : []),
     "",
-    claimRulesFor({ productTitle: context.title, isSet: context.isSet }),
+    claimRulesFor({ productTitle: context.title, isSet: context.isSet, setPartners: context.setPartners }),
     "",
     useVision
       ? 'FIRST fill "observed": 6-15 short facts you can actually SEE — garment type, colour and wash, neckline or collar, sleeves, closures, pockets, prints/text/graphics with their exact wording and placement, distressing, hardware, hem, silhouette. Then write every field FROM that list. If you cannot see it, leave it out: a short true description beats a long invented one.'
@@ -660,7 +661,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
       if (!weak.length) break;
       const repairPrompt = [
         "Fix ONLY these fields so each satisfies its rule. Keep the same product and focus keyword. Never add, remove or change a product fact — fix only structure, wording and keyword placement. Never pad to reach a length.",
-        claimRulesFor({ productTitle: cur.title, isSet: ctx.isSet }),
+        claimRulesFor({ productTitle: cur.title, isSet: ctx.isSet, setPartners: ctx.setPartners }),
         ...(observed.length ? [`The facts the description is built on (do not go beyond them): ${observed.join("; ")}`] : []),
         `Focus keyword: "${focusKeyword}"`,
         "Current values and the problems to fix:",
@@ -782,7 +783,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
      rewrite with the exact findings; whatever survives is deleted sentence by
      sentence. After the clamp on purpose — a clamp that restored the live
      text would otherwise restore its claims with it. */
-  const claimCtx: ClaimContext = { productTitle: cur.title, isSet: Boolean(ctx.isSet) };
+  const claimCtx: ClaimContext = { productTitle: cur.title, isSet: Boolean(ctx.isSet), setPartners: ctx.setPartners };
   const claimsIn = () => ({
     bodyHtml: findClaimsInHtml(proposed.bodyHtml, claimCtx),
     metaDescription: findClaims(proposed.metaDescription, claimCtx),
@@ -825,6 +826,13 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     removedClaims.push(...describeFindings(found[k]).map((d) => `${k === "bodyHtml" ? "description" : "meta"} — ${d}`));
     if (k === "bodyHtml") proposed.bodyHtml = stripClaimsFromHtml(proposed.bodyHtml, claimCtx);
     else proposed.metaDescription = finishMetaDescription(stripClaimsFromText(proposed.metaDescription, claimCtx), focusKeyword, cur.title);
+  }
+  /* A meta left thin by the strip (it is also the Shopping description) is
+     rebuilt from the description's opening sentences, which have just been
+     checked — never padded with filler. */
+  if (proposed.metaDescription.replace(/\s*Shop it at Carbon\.$/, "").length < SEO_LIMITS.metaDescriptionMin) {
+    const intro = stripClaimsFromText(plainText(proposed.bodyHtml).split("\n")[0] || "", claimCtx);
+    if (intro) proposed.metaDescription = finishMetaDescription(intro, focusKeyword, cur.title);
   }
   /* Tags only ever ADD: other systems (collections, filters, feeds) may rely on
      a tag the model does not think of, so none is removed here. New tags with a
