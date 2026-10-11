@@ -254,6 +254,113 @@
   var surplus = cfg.surplus || {};
   var CUR = cfg.currency || "$";
 
+  /* Shopper-facing words in the store's languages. The pairing logic keeps
+     reading the English product JSON (option names like SIZE / COLOR are
+     matched there); only what is DISPLAYED comes from the shopper's language. */
+  var LANG = String((window.Shopify && window.Shopify.locale) || "en").toLowerCase().slice(0, 2);
+  var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
+  var WORDS = {
+    es: {
+      together: "Conjunto completo — se añaden juntos",
+      thisItem: "Este artículo",
+      viewing: " — el artículo que estás viendo",
+      single: "Se vende como artículo individual",
+      noSpare: "No hay ",
+      availIn: " disponible en ",
+      thisColour: "este color",
+      reserved: " — el stock restante está reservado para completar otros conjuntos. Esta pieza se añadirá <strong>sola</strong>, a su propio precio.",
+      chooseSize: "Elige una talla para la pieza a juego",
+      notInSize: " no está disponible en tu talla. Estas tallas están disponibles en ",
+      orAlone: ", o puedes comprar esta pieza sola.",
+      buyOnly: "Comprar solo esta pieza",
+      autoAdded: " — se añade a tu carrito automáticamente",
+      change: "Cambiar",
+      pickSize: " \u2022 elige una talla",
+      full: "Ver todos los detalles",
+      atCheckout: "Se añade con tu conjunto al pagar.",
+      oos: " — agotado",
+      close: "Cerrar", prevImg: "Imagen anterior", nextImg: "Imagen siguiente"
+    },
+    pt: {
+      together: "Conjunto completo — adicionados juntos",
+      thisItem: "Este item",
+      viewing: " — o item que você está vendo",
+      single: "Vendido como item individual",
+      noSpare: "Não há ",
+      availIn: " disponível em ",
+      thisColour: "esta cor",
+      reserved: " — o estoque restante está reservado para completar outros conjuntos. Esta peça será adicionada <strong>sozinha</strong>, pelo seu próprio preço.",
+      chooseSize: "Escolha um tamanho para a peça correspondente",
+      notInSize: " não está disponível no seu tamanho. Estes tamanhos estão em estoque em ",
+      orAlone: ", ou você pode comprar esta peça sozinha.",
+      buyOnly: "Comprar só esta peça",
+      autoAdded: " — adicionada ao seu carrinho automaticamente",
+      change: "Alterar",
+      pickSize: " \u2022 escolha um tamanho",
+      full: "Ver todos os detalhes",
+      atCheckout: "Adicionada com o seu conjunto no checkout.",
+      oos: " — esgotado",
+      close: "Fechar", prevImg: "Imagem anterior", nextImg: "Próxima imagem"
+    },
+    en: {
+      together: "Complete set — added together",
+      thisItem: "This item",
+      viewing: " — the item you are viewing",
+      single: "Sold as an individual item",
+      noSpare: "No spare ",
+      availIn: " is available in ",
+      thisColour: "this colour",
+      reserved: " — the remaining stock is reserved to keep other sets complete. This piece will be added <strong>on its own</strong>, at its own price.",
+      chooseSize: "Choose a size for the matching piece",
+      notInSize: " is not available in your size. These sizes are in stock in ",
+      orAlone: ", or you can buy this piece on its own.",
+      buyOnly: "Buy this piece only",
+      autoAdded: " — added to your cart automatically",
+      change: "Change",
+      pickSize: " \u2022 choose a size",
+      full: "View full details",
+      atCheckout: "Added with your set at checkout.",
+      oos: " — out of stock",
+      close: "Close", prevImg: "Previous image", nextImg: "Next image"
+    }
+  };
+  var T = WORDS[LANG] || WORDS.en;
+
+  /* Display names in the shopper's language, falling back to English. */
+  function tName(p) { return (p && (p.__locTitle || p.title)) || ""; }
+  function vName(v) { return (v && (v.__locTitle || v.title)) || ""; }
+  function colourName(v, fallback) {
+    if (v && v.__locOptions && v.__optionNames) {
+      for (var i = 0; i < v.__optionNames.length; i += 1) {
+        var n = norm(v.__optionNames[i]);
+        if (n === "COLOR" || n === "COLOUR") return v.__locOptions[i] || fallback;
+      }
+    }
+    return fallback;
+  }
+  function pUrl(handle) { return ROOT + "products/" + handle; }
+
+  /* Copy the translated title / description / variant names onto the English
+     product. Failure just leaves English — never blocks the panel. */
+  function localise(p) {
+    if (!p || ROOT === "/") return Promise.resolve(p);
+    return fetch(ROOT + "products/" + p.handle + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (l) {
+        if (!l || !l.variants) return p;
+        p.__locTitle = l.title;
+        p.__locDescription = l.description;
+        var byId = {};
+        l.variants.forEach(function (v) { byId[String(v.id)] = v; });
+        (p.variants || []).forEach(function (v) {
+          var lv = byId[String(v.id)];
+          if (lv) { v.__locTitle = lv.title; v.__locOptions = lv.options; }
+        });
+        return p;
+      });
+  }
+
   function money(cents) {
     return CUR + (Number(cents || 0) / 100).toFixed(2);
   }
@@ -312,6 +419,8 @@
         (p.variants || []).forEach(function (v) { v.__optionNames = names; });
         return p;
       });
+      return Promise.all(partners.map(localise));
+    }).then(function () {
       loaded = true;
     });
   }
@@ -433,7 +542,7 @@
   }
 
   function descriptionOf(product) {
-    var html = String(product.description || "");
+    var html = String(product.__locDescription || product.description || "");
     var d = document.createElement("div");
     d.innerHTML = html;
     d.querySelectorAll(".carbon-set-note, script, style, iframe").forEach(function (n) {
@@ -454,14 +563,14 @@
       '<div class="carbon-qv__box">' +
         '<div class="carbon-qv__head">' +
           '<h2 class="carbon-qv__title"></h2>' +
-          '<button type="button" class="carbon-qv__x" data-close aria-label="Close">&times;</button>' +
+          '<button type="button" class="carbon-qv__x" data-close aria-label="' + T.close + '">&times;</button>' +
         "</div>" +
         '<div class="carbon-qv__body">' +
           '<div class="carbon-qv__media">' +
             '<div class="carbon-qv__stage">' +
               '<img class="carbon-qv__main" alt="" />' +
-              '<button type="button" class="carbon-qv__nav carbon-qv__nav--prev" aria-label="Previous image">&#8249;</button>' +
-              '<button type="button" class="carbon-qv__nav carbon-qv__nav--next" aria-label="Next image">&#8250;</button>' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--prev" aria-label="' + T.prevImg + '">&#8249;</button>' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--next" aria-label="' + T.nextImg + '">&#8250;</button>' +
               '<span class="carbon-qv__count"></span>' +
             "</div>" +
             '<div class="carbon-qv__thumbs"></div>' +
@@ -473,7 +582,7 @@
           "</div>" +
         "</div>" +
         '<div class="carbon-qv__foot">' +
-          '<a class="carbon-qv__full" href="#">View full details</a>' +
+          '<a class="carbon-qv__full" href="#">' + T.full + '</a>' +
           '<span class="carbon-qv__note"></span>' +
         "</div>" +
       "</div>";
@@ -552,14 +661,14 @@
     }
     if (!images.length) images = [product.featured_image || ""];
 
-    box.querySelector(".carbon-qv__title").textContent = product.title || "";
+    box.querySelector(".carbon-qv__title").textContent = tName(product);
     var main = box.querySelector(".carbon-qv__main");
     var thumbs = box.querySelector(".carbon-qv__thumbs");
     var count = box.querySelector(".carbon-qv__count");
     var prev = box.querySelector(".carbon-qv__nav--prev");
     var next = box.querySelector(".carbon-qv__nav--next");
 
-    main.alt = product.title || "";
+    main.alt = tName(product);
     thumbs.innerHTML = "";
     images.forEach(function (src, i) {
       var t = document.createElement("img");
@@ -604,7 +713,7 @@
     box.querySelector(".carbon-qv__price").textContent = money(price);
     var chip = box.querySelector(".carbon-qv__variant");
     var chipText = variant
-      ? (variant.title || "") + (variant.available === false ? " — out of stock" : "")
+      ? vName(variant) + (variant.available === false ? T.oos : "")
       : (colour || "");
     chip.textContent = chipText;
     /* An empty pill is just a stray outline, so it goes rather than sitting
@@ -613,7 +722,7 @@
     box.querySelector(".carbon-qv__desc").innerHTML = descriptionOf(product);
     box.querySelector(".carbon-qv__full").setAttribute("href", href);
     box.querySelector(".carbon-qv__note").textContent = variant
-      ? "Added with your set at checkout."
+      ? T.atCheckout
       : "";
 
     box.hidden = false;
@@ -727,38 +836,36 @@
        sum of what is listed here, and leaving the item you are looking at out
        of that list makes the arithmetic look wrong. */
     if (mine) {
-      html += '<p class="carbon-set-pair__title">Complete set — added together</p>';
+      html += '<p class="carbon-set-pair__title">' + T.together + '</p>';
       var meImg = thumbFor(window.__carbonSetProduct, mine, colour);
       html += '<div class="carbon-set-pair__row">' +
         (meImg ? '<img src="' + meImg + '" alt="" />' : "") +
         '<span><span class="carbon-set-pair__me carbon-set-pair__name">' +
-        ((window.__carbonSetProduct && window.__carbonSetProduct.title) || "This item") +
+        (tName(window.__carbonSetProduct) || T.thisItem) +
         '</span><span class="carbon-set-pair__me"> — ' + money(mine.price) + "</span><br>" +
-        '<span class="carbon-set-pair__sub">' + (mine.title || "") + " — the item you are viewing</span></span></div>" +
+        '<span class="carbon-set-pair__sub">' + vName(mine) + T.viewing + "</span></span></div>" +
         '<hr class="carbon-set-pair__hr" />';
     }
 
+    var colourShown = colourName(mine, colour) || T.thisColour;
     rows.forEach(function (r) {
       var img = thumbFor(r.partner, r.variant, colour);
       if (r.unavailable) {
         warn = true;
-        html += '<p class="carbon-set-pair__title">Sold as an individual item</p>' +
-          '<p>No spare <a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+        html += '<p class="carbon-set-pair__title">' + T.single + '</p>' +
+          '<p>' + T.noSpare + '<a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
           'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
-          'href="/products/' + r.partner.handle + '">' + r.partner.title +
-          "</a> is available in " + (colour || "this colour") +
-          " — the remaining stock is reserved to keep other sets complete. " +
-          "This piece will be added <strong>on its own</strong>, at its own price.</p>";
+          'href="' + pUrl(r.partner.handle) + '">' + tName(r.partner) +
+          "</a>" + T.availIn + colourShown + T.reserved + "</p>";
         return;
       }
       if (r.needsChoice) {
         warn = true;
-        html += '<p class="carbon-set-pair__title">Choose a size for the matching piece</p>' +
+        html += '<p class="carbon-set-pair__title">' + T.chooseSize + '</p>' +
           '<p><a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
           'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
-          'href="/products/' + r.partner.handle + '">' + r.partner.title +
-          "</a> is not available in your size. These sizes are in stock in " +
-          (colour || "this colour") + ", or you can buy this piece on its own.</p>" +
+          'href="' + pUrl(r.partner.handle) + '">' + tName(r.partner) +
+          "</a>" + T.notInSize + colourShown + T.orAlone + "</p>" +
           '<div class="carbon-set-pair__sizes">';
         r.options.forEach(function (v) {
           var sz = optOf(v, "SIZE") || v.title;
@@ -769,7 +876,7 @@
             'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' + sz + "</button>";
         });
         html += '<button type="button" class="carbon-set-pair__solo" data-action="solo">' +
-          "Buy this piece only</button></div>";
+          T.buyOnly + "</button></div>";
         return;
       }
       /* The partner's name links to its own page. It is the one item in this
@@ -778,19 +885,19 @@
          cart without being able to look at it first is a fair objection. The
          variant is carried in the URL so the link lands on the exact colour and
          size that will be added. */
-      var pHref = "/products/" + r.partner.handle + "?variant=" + r.variant.id;
+      var pHref = pUrl(r.partner.handle) + "?variant=" + r.variant.id;
       html += '<div class="carbon-set-pair__row">' +
         (img ? '<a class="carbon-set-pair__pop" data-qv-handle="' + r.partner.handle +
           '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
         '<span><a class="carbon-set-pair__link carbon-set-pair__me carbon-set-pair__name carbon-set-pair__pop" ' +
         'data-qv-handle="' + r.partner.handle + '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '">' +
-        r.partner.title + "</a> — " +
+        tName(r.partner) + "</a> — " +
         '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
-        '<span class="carbon-set-pair__sub">' + (r.variant.title || "") +
-        " — added to your cart automatically</span></span>" +
+        '<span class="carbon-set-pair__sub">' + vName(r.variant) +
+        T.autoAdded + "</span></span>" +
         (r.substituted
           ? '<button type="button" class="carbon-set-pair__change" data-change="' +
-            r.partner.handle + '">Change</button>'
+            r.partner.handle + '">' + T.change + '</button>'
           : "") +
         "</div>";
     });
@@ -919,7 +1026,7 @@
     });
 
     wantSuffix = pending
-      ? " \u2022 choose a size"
+      ? T.pickSize
       : " \u2022 " + money(total * currentQty());
     applyLabel();
     watchButton();
@@ -1025,7 +1132,7 @@
         var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
         (p.variants || []).forEach(function (v) { v.__optionNames = names; });
         window.__carbonSetProduct = p;
-        return load();
+        return localise(p).then(load);
       })
       .then(function () {
         if (!loaded) return;

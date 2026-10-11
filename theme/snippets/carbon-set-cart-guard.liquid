@@ -232,9 +232,20 @@
         if (!Object.keys(updates).length) return;
         update(
           updates,
-          removed
-            ? "Matching sets are sold together, so the rest of the set was removed with it."
-            : "Matching sets are sold together, so the quantities were matched up."
+          (function () {
+            var lang = String((window.Shopify && window.Shopify.locale) || "en").toLowerCase().slice(0, 2);
+            var m = {
+              es: ["Los conjuntos se venden juntos, así que también se quitó el resto del conjunto.",
+                   "Los conjuntos se venden juntos, así que se igualaron las cantidades."],
+              pt: ["Os conjuntos são vendidos juntos, então o restante do conjunto também foi removido.",
+                   "Os conjuntos são vendidos juntos, então as quantidades foram igualadas."],
+              en: ["Matching sets are sold together, so the rest of the set was removed with it.",
+                   "Matching sets are sold together, so the quantities were matched up."]
+            }[lang] || null;
+            m = m || ["Matching sets are sold together, so the rest of the set was removed with it.",
+                      "Matching sets are sold together, so the quantities were matched up."];
+            return removed ? m[0] : m[1];
+          })()
         );
     }
   }
