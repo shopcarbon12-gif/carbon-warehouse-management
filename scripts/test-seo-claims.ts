@@ -40,6 +40,13 @@ test("the owner's live complaint: label and hexagon logo", () => {
   assert.ok(k.includes("cliche"));
 });
 
+test("a distressed patch is design; a label patch is not", () => {
+  assert.deepEqual(kinds("Ripped holes and distressed patches across the front."), []);
+  assert.ok(kinds("A brown leather patch sits on the back waistband.").includes("label"));
+  assert.ok(kinds("The logo patch on the back.").includes("label"));
+  assert.ok(kinds("Standard slant front pockets.").includes("cliche"));
+});
+
 test("Carbon Jeans as the brand is caught", () => {
   assert.ok(kinds("Shop Carbon Jeans today.").includes("brand"));
 });

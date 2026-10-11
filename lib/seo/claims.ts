@@ -60,10 +60,16 @@ const RULES: Rule[] = [
   { kind: "measurement", re: /\b(inseam|rise of|length of)\b/gi },
   { kind: "origin", re: /\b(made in|imported|handmade|hand[- ]made|handcrafted|hand[- ]crafted)\b/gi },
   /* The owner: labels are never mentioned (above all the CARBON JEANS waistband label). */
-  { kind: "label", re: /\b(label|labels|patch|patches|leather patch|woven tag|neck tag|brand tag|hang ?tag)\b/gi },
+  /* "patch" alone is often the design ("distressed patches", "faded patches"),
+     so only a label-type patch counts: one made of leather/PU/rubber, one
+     carrying the brand or logo, or one on the waistband or back. */
+  {
+    kind: "label",
+    re: /\b(labels?|woven tags?|neck tags?|brand tags?|hang ?tags?|(?:leather|leatherette|pu|jacron|rubber|woven|brand(?:ed)?|logo|waistband|back) patch(?:es)?|patch(?:es)? (?:reading|that reads|with the (?:brand|logo)))\b/gi,
+  },
   { kind: "logo-shape", re: /\b(hexagon(?:al)?|hexagons|honeycomb|geometric (?:logo|emblem|mark)|abstract (?:logo|emblem|mark))\b/gi },
   { kind: "brand", re: /\bcarbon\s+jeans\b/gi, label: '"Carbon Jeans" as the brand' },
-  { kind: "cliche", re: /\b(elevat(?:e|es|ed|ing)|versatil(?:e|ity)|must[- ]have|boasts?|adorn(?:s|ed|ing)?|wardrobe (?:staple|essential)|statement piece|trendy|look no further|step into|turn heads|perfect (?:for|blend|choice|addition))\b/gi },
+  { kind: "cliche", re: /\b(elevat(?:e|es|ed|ing)|versatil(?:e|ity)|must[- ]have|boasts?|adorn(?:s|ed|ing)?|wardrobe (?:staple|essential)|statement piece|trendy|look no further|step into|turn heads|perfect (?:for|blend|choice|addition)|standard)\b/gi },
 ];
 
 const SET_RULE: Rule = {
@@ -188,7 +194,7 @@ export const CARBON_VOICE = [
   '- Concrete over hype: "ripped and frayed across the front" beats "edgy distressed detailing".',
   '- Second person sparingly ("Wear them with…"), never "you\'ll love". One idea per sentence. Plain US English. No exclamation marks.',
   '- The brand is "Carbon" — never "Carbon Jeans". The Carbon logo is called "the Carbon logo", never described by its shape.',
-  "- No clichés: elevate, versatile, must-have, boasts, adorned, wardrobe staple/essential, statement piece, trendy, perfect for, step into, turn heads.",
+  "- No clichés: elevate, versatile, must-have, boasts, adorned, wardrobe staple/essential, statement piece, trendy, perfect for, step into, turn heads, standard.",
 ].join("\n");
 
 /** The rules every prompt states, matching what findClaims enforces. */
