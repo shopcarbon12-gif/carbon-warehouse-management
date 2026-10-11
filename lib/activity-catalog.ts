@@ -61,6 +61,7 @@ const ROUTES: Record<string, Entry> = {
   "collection-mapping": { module: "Shopify", label: "Changed collection mapping" },
 
   "generate": { module: "Studio", label: "Generated Studio panel" },
+  "generate/job/cancel": { module: "Studio", label: "Aborted Studio generation" },
   "studio/color-run": { module: "Studio", label: { PUT: "Saved colourway run", DELETE: "Deleted colourway run", POST: "Started colourway run" } },
   "openai/item-spec": { module: "Studio", label: "Analysed item photos" },
   "openai/color-check": { module: "Studio", label: "Checked colourway photo" },
@@ -344,6 +345,7 @@ export const NOT_A_CHANGE_ROUTES: readonly string[] = [
   "antenna-test/calibrate/[id]",
   "rfid/ship-scan-out/reader",
   "generate",
+  "generate/job/cancel",
   "openai/item-spec",
   "openai/color-check",
   "openai/image-alt",

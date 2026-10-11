@@ -32,6 +32,8 @@ type GenerateJob = {
   body: string | null;
   /** Kept so a duplicate POST with the same id joins the run instead of paying twice. */
   promise: Promise<string> | null;
+  /** Fired by the Studio's Abort button — cancels the in-flight OpenAI request. */
+  controller: AbortController;
 };
 
 /** A finished body is claimable for this long; also caps how long a running job is tracked. */
@@ -46,6 +48,10 @@ const MAX_JOBS = 12;
  */
 const G = globalThis as unknown as { __generateJobs?: Map<string, GenerateJob> };
 const jobs: Map<string, GenerateJob> = G.__generateJobs ?? (G.__generateJobs = new Map());
+
+/** Ids cancelled before their POST arrived; checked when the run starts. */
+const CG = globalThis as unknown as { __generateJobsCancelled?: Map<string, number> };
+const cancelledEarly: Map<string, number> = CG.__generateJobsCancelled ?? (CG.__generateJobsCancelled = new Map());
 
 function prune(now: number): void {
   for (const [id, job] of jobs) {
@@ -70,7 +76,7 @@ export function isValidJobId(id: unknown): id is string {
  * with the response body text; the same text is parked for later claim. A second
  * call with a live id joins the existing run rather than starting another.
  */
-export function runGenerateJob(id: string, work: () => Promise<string>): Promise<string> {
+export function runGenerateJob(id: string, work: (signal: AbortSignal) => Promise<string>): Promise<string> {
   const now = Date.now();
   prune(now);
 
@@ -87,10 +93,11 @@ export function runGenerateJob(id: string, work: () => Promise<string>): Promise
     finishedAt: null,
     body: null,
     promise: null,
+    controller: new AbortController(),
   };
   jobs.set(id, job);
 
-  job.promise = work()
+  job.promise = work(job.controller.signal)
     .then((body) => {
       job.body = body;
       return body;
@@ -124,6 +131,33 @@ export function claimGenerateJob(id: string): { status: GenerateJobStatus; body:
   const body = job.body;
   jobs.delete(id);
   return { status: "done", body };
+}
+
+/**
+ * The operator pressed Abort. Stops the OpenAI request mid-flight so no further
+ * time is spent on it; the run resolves with an "aborted" body. Returns false
+ * when there is nothing running under that id (already finished, or unknown).
+ *
+ * An id that has not reached the server yet (the POST is still in transit) is
+ * remembered as cancelled, so the run refuses to start when it does arrive.
+ */
+export function cancelGenerateJob(id: string): boolean {
+  const job = jobs.get(id);
+  if (!job) {
+    cancelledEarly.set(id, Date.now());
+    return false;
+  }
+  if (job.status !== "running") return false;
+  job.controller.abort();
+  return true;
+}
+
+/** Was this id cancelled before its run started? Consumes the mark. */
+export function takeEarlyCancel(id: string): boolean {
+  const now = Date.now();
+  for (const [k, at] of cancelledEarly) if (now - at > JOB_TTL_MS) cancelledEarly.delete(k);
+  if (cancelledEarly.size > 200) cancelledEarly.clear();
+  return cancelledEarly.delete(id);
 }
 
 /** Client got its result over the original connection — drop our copy now. */

@@ -67,21 +67,36 @@ type ColorRun = {
  *  single box (accessories, flats, any view); Front / Back = the front / back
  *  of the garment, so analysis + generation + QA know which photo is which side
  *  and can never copy a back print onto the front. */
-type RefView = "general" | "front" | "back";
+/* "Style with" (owner, 2026-10-11): OTHER products the model wears WITH this
+   one — denim shorts styled with a shirt (front and back), shoes and a
+   bracelet. They dress the model; they are never analyzed, QA'd or locked as
+   the item, so adding one does not stale the spec. */
+type RefView = "general" | "front" | "back" | "styling";
 type ItemRef = { url: string; preview?: string; view?: RefView };
-type RefViewLists = { general: string[]; front: string[]; back: string[] };
+type RefViewLists = { general: string[]; front: string[]; back: string[]; styling: string[] };
 const REF_VIEWS: { view: RefView; title: string; hint: string }[] = [
   { view: "general", title: "General", hint: "Accessories, flats, any view — works exactly as before." },
   { view: "front", title: "Front", hint: "The FRONT of the item (jeans, shirts, dresses…)." },
   { view: "back", title: "Back", hint: "The BACK of the item." },
+  {
+    view: "styling",
+    title: "Style with",
+    hint: "Other pieces the model wears WITH this item — e.g. a shirt (front and back), shoes, a bracelet. They replace the default outfit for what they cover; they are not the item and are not analyzed. Up to 6 photos.",
+  },
 ];
+const isRefView = (v: unknown): v is RefView => v === "general" || v === "front" || v === "back" || v === "styling";
+/** The server sends at most this many style-with photos (OpenAI's 16-image cap). */
+const MAX_STYLING_REFS = 6;
 function groupRefs(refs: ItemRef[]): RefViewLists {
-  const out: RefViewLists = { general: [], front: [], back: [] };
+  const out: RefViewLists = { general: [], front: [], back: [], styling: [] };
   for (const r of refs) out[r.view ?? "general"].push(r.url);
   return out;
 }
-/** Server-side image order: general → front → back (the prompt's view map counts on it). */
+/** The PRODUCT's photos, in server-side order general → front → back (the
+ *  prompt's view map counts on it). Style-with photos are not the product. */
 const orderedRefUrls = (v: RefViewLists) => [...v.general, ...v.front, ...v.back];
+/** What item analysis sees: the product's sections only. */
+const productViews = (v: RefViewLists) => ({ general: v.general, front: v.front, back: v.back });
 /** A ref is identified by url AND view: the same photo may be labelled in more
  *  than one section, and removing it from Front must not remove it from General. */
 const sameRef = (a: ItemRef, b: { url: string; view?: RefView }) =>
@@ -359,9 +374,10 @@ function newJobId(runTag: string, panel: number): string {
 }
 
 /** Poll until the detached render lands. null = gone (expired, or server restarted). */
-async function claimPanelJob(jobId: string, deadline: number): Promise<PanelResponse | null> {
+async function claimPanelJob(jobId: string, deadline: number, signal?: AbortSignal): Promise<PanelResponse | null> {
   while (Date.now() < deadline) {
     await sleep(JOB_POLL_INTERVAL_MS);
+    if (signal?.aborted) return null;
     try {
       const r = await fetch(`/api/generate/job?id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
       // 404 = expired/already claimed; 401/403 = session went away while we were
@@ -375,6 +391,11 @@ async function claimPanelJob(jobId: string, deadline: number): Promise<PanelResp
     }
   }
   return null;
+}
+
+/** Abort button: stop the server-side render (and its OpenAI request) for this panel. */
+function cancelPanelJob(jobId: string): void {
+  void fetch(`/api/generate/job?id=${encodeURIComponent(jobId)}`, { method: "POST", keepalive: true }).catch(() => {});
 }
 
 /** We already have the image; drop the server's parked copy. */
@@ -432,7 +453,11 @@ type RunQaVerdict = { findings: RunQaFinding[]; advisories: RunQaFinding[]; note
  * Both judges run in parallel there; one pass asks whether the frames agree
  * with each other, the other whether the garment matches the photographs.
  */
-async function collectRunQa(runId: string, apply: (v: RunQaVerdict | null) => void): Promise<void> {
+async function collectRunQa(
+  runId: string,
+  apply: (v: RunQaVerdict | null) => void,
+  signal?: AbortSignal,
+): Promise<void> {
   try {
     const started = await fetch("/api/generate/run-qa", {
       method: "POST",
@@ -445,6 +470,7 @@ async function collectRunQa(runId: string, apply: (v: RunQaVerdict | null) => vo
   }
   const deadline = Date.now() + 3 * 60_000;
   while (Date.now() < deadline) {
+    if (signal?.aborted) return apply(null);
     try {
       const r = await fetch(`/api/generate/run-qa?id=${encodeURIComponent(runId)}`, { cache: "no-store" });
       if (r.status === 404) return apply(null); // expired / server restarted — no verdict, not a pass
@@ -537,6 +563,20 @@ export function CarbonStudioTab({
     const total = Math.floor(ms / 1000);
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
   }, [clock, clockNow]);
+  /* Abort button. Live while a run (analysis, panels or the checks after them)
+     is in flight: aborting the fetches alone would not stop anything, because
+     every panel renders DETACHED on the server — so each panel's job is
+     cancelled there too, which aborts its OpenAI request. */
+  const abortRef = useRef<{ controller: AbortController; jobIds: string[] } | null>(null);
+  const [aborting, setAborting] = useState(false);
+  const abortGeneration = useCallback(() => {
+    const live = abortRef.current;
+    if (!live || live.controller.signal.aborted) return;
+    setAborting(true);
+    setProgress("Aborting…");
+    live.controller.abort();
+    for (const id of live.jobIds) cancelPanelJob(id);
+  }, []);
   // Pre-generation item analysis: the item reference photos are inspected at
   // high detail — every word, graphic, material, button, stitch — and the
   // findings are locked into the prompt BEFORE rendering. The spec is shown
@@ -828,6 +868,8 @@ export function CarbonStudioTab({
   }, [flushSave]);
 
   const refViews = useMemo(() => groupRefs(itemRefs), [itemRefs]);
+  /** Photos of the item itself — Style with photos are worn with it, not it. */
+  const productRefCount = refViews.general.length + refViews.front.length + refViews.back.length;
   const refsKey = useMemo(() => refViewKey(refViews), [refViews]);
   /** No spec yet, or the photos changed since it was computed (an operator
    *  edit counts as covering the current photos — see the textarea). */
@@ -1269,7 +1311,7 @@ export function CarbonStudioTab({
   /** High-detail vision pass over the item reference photos → numbered lock
    *  list (see /api/openai/item-spec). Stores the spec + the refs it covers. */
   const analyzeItem = useCallback(
-    async (views: RefViewLists): Promise<{ lockText: string; dropped: number } | null> => {
+    async (views: RefViewLists, signal?: AbortSignal): Promise<{ lockText: string; dropped: number } | null> => {
       const refUrls = orderedRefUrls(views);
       if (!refUrls.length) {
         setErr("Add at least one item photo before analyzing.");
@@ -1280,7 +1322,8 @@ export function CarbonStudioTab({
         const r = await fetch("/api/openai/item-spec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itemRefs: refUrls, itemRefViews: views, itemType }),
+          body: JSON.stringify({ itemRefs: refUrls, itemRefViews: productViews(views), itemType }),
+          signal,
         });
         const j = (await r.json().catch(() => ({}))) as {
           lockText?: string;
@@ -1307,6 +1350,10 @@ export function CarbonStudioTab({
         if (dropped) setMsg(`Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).`);
         return { lockText: j.lockText, dropped };
       } catch (e) {
+        if (signal?.aborted) {
+          setMsg("Aborted — the item analysis was cancelled.");
+          return null;
+        }
         setErr(e instanceof Error ? e.message : "Item analysis failed");
         return null;
       } finally {
@@ -1318,9 +1365,18 @@ export function CarbonStudioTab({
 
   const generate = useCallback(async () => {
     if (!model) return setErr("Pick a model first.");
-    if (!itemRefs.length) return setErr("Add at least one item photo (upload or phone camera).");
-    if (!panels.length) return setErr("Select at least one panel.");
     const refUrls = orderedRefUrls(refViews);
+    if (!refUrls.length) {
+      return setErr(
+        itemRefs.length
+          ? "Add a photo of the item itself to General, Front or Back — Style with holds only the pieces worn with it."
+          : "Add at least one item photo (upload or phone camera).",
+      );
+    }
+    if (!panels.length) return setErr("Select at least one panel.");
+    if (refViews.styling.length > MAX_STYLING_REFS) {
+      return setErr(`Style with holds up to ${MAX_STYLING_REFS} photos — remove ${refViews.styling.length - MAX_STYLING_REFS}.`);
+    }
     /* A back-facing pose of a back nobody has seen is a guess the operator
        pays for. Ask for a Back photo — or the operator's word that the back
        is plain — before spending anything. The server enforces the same. */
@@ -1342,17 +1398,22 @@ export function CarbonStudioTab({
        for exactly these photos, Generate goes straight through. */
     // The stopwatch runs from this click, whichever branch the press takes.
     setClock({ startedAt: Date.now(), endedAt: null });
+    const abort = new AbortController();
+    abortRef.current = { controller: abort, jobIds: [] };
+    setAborting(false);
     if (specStale) {
       setBusy("analyze");
       setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
       try {
-        const analyzed = await analyzeItem(refViews);
+        const analyzed = await analyzeItem(refViews, abort.signal);
         if (analyzed) {
           setMsg(
             `Item spec ready${analyzed.dropped ? ` (${analyzed.dropped} photos over the limit were skipped)` : ""} — read it below and fix anything wrong (especially the BACK line), then press Generate.`,
           );
         }
       } finally {
+        abortRef.current = null;
+        setAborting(false);
         setBusy(null);
         setProgress("");
         setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
@@ -1410,6 +1471,7 @@ export function CarbonStudioTab({
     // is frozen or discarded mid-run (app switch, phone lock, tab evicted) the
     // renders keep going server-side and these ids are how we get them back.
     const jobIds = new Map<number, string>(chosen.map((p) => [p, newJobId(runTag, p)]));
+    abortRef.current = { controller: abort, jobIds: [...jobIds.values()] };
     writePendingRun({
       matrixId,
       runTag,
@@ -1471,6 +1533,7 @@ export function CarbonStudioTab({
             // with each other, so they can only run once the whole run is in.
             "x-generate-run": runTag,
           },
+          signal: abort.signal,
           body: JSON.stringify({
             prompt,
             size: "1536x1024",
@@ -1510,8 +1573,11 @@ export function CarbonStudioTab({
       } catch {
         json = null; // connection died — the render is still running server-side
       }
-      if (!json) json = await claimPanelJob(jobId, deadline);
+      // Aborted: the panel's job was cancelled server-side; it shows nothing.
+      if (abort.signal.aborted) return [];
+      if (!json) json = await claimPanelJob(jobId, deadline, abort.signal);
       else releasePanelJob(jobId);
+      if (abort.signal.aborted) return [];
       return panelResponseToCrops(json, panel, poseA, poseB, runTag, runAccessory ? "Shot" : "Pose");
     };
 
@@ -1538,6 +1604,10 @@ export function CarbonStudioTab({
           try {
             byPanel.set(panel, await genOnePanel(panel));
           } catch (e) {
+            if (abort.signal.aborted) {
+              byPanel.set(panel, []);
+              return;
+            }
             byPanel.set(panel, [
               {
                 id: `p${panel}-fail-${runTag}`,
@@ -1558,6 +1628,15 @@ export function CarbonStudioTab({
         }),
       );
       const all = [...byPanel.values()].flat();
+      if (abort.signal.aborted) {
+        render();
+        const got = all.filter((c) => c.b64).length;
+        setMsg(
+          `Aborted — generation cancelled.${got ? ` ${got} crop(s) that had already finished are kept (not checked).` : ""}`,
+        );
+        setCrops((prev) => prev.map((c) => (c.qaPending ? { ...c, qaPending: false } : c)));
+        return;
+      }
       setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
 
       /* Every panel is in, so the judges can finally do the only comparison
@@ -1568,6 +1647,11 @@ export function CarbonStudioTab({
       if (pending.length) {
         setProgress(`Checking ${pending.length} crop(s) for consistency…`);
         await collectRunQa(runTag, (v) => {
+          if (abort.signal.aborted) {
+            setMsg("Aborted — the consistency checks were cancelled. Review the crops yourself.");
+            setCrops((prev) => prev.map((c) => (c.qaPending ? { ...c, qaPending: false } : c)));
+            return;
+          }
           setCrops((prev) =>
             prev.map((c) => {
               if (!c.qaPending) return c;
@@ -1601,12 +1685,14 @@ export function CarbonStudioTab({
               };
             }),
           );
-        });
+        }, abort.signal);
         setProgress("");
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
     } finally {
+      abortRef.current = null;
+      setAborting(false);
       writePendingRun(null);
       setNativeBusy(false);
       setBusy(null);
@@ -1629,6 +1715,8 @@ export function CarbonStudioTab({
     if (!run) return;
     resumeStartedRef.current = true;
     let cancelled = false;
+    const abort = new AbortController();
+    abortRef.current = { controller: abort, jobIds: run.jobs.map((j) => j.jobId) };
     void (async () => {
       setBusy("generate");
       setNativeBusy(true);
@@ -1638,11 +1726,18 @@ export function CarbonStudioTab({
         const settled = await Promise.allSettled(
           run.jobs.map(async ({ panel, jobId }) => {
             const [poseA, poseB] = run.accessory ? accessoryShotPair(panel) : getPanelPosePair(run.gender, panel);
-            const json = await claimPanelJob(jobId, deadline);
+            const json = await claimPanelJob(jobId, deadline, abort.signal);
+            if (abort.signal.aborted) return [];
             return panelResponseToCrops(json, panel, poseA, poseB, run.runTag, run.accessory ? "Shot" : "Pose");
           }),
         );
         if (cancelled) return;
+        if (abort.signal.aborted) {
+          const kept = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : [])).filter((c) => c.b64);
+          setCrops((prev) => [...prev, ...kept.map((c) => ({ ...c, qaPending: false }))]);
+          setMsg("Aborted — the interrupted run was cancelled.");
+          return;
+        }
         const recovered = settled.flatMap((s) => (s.status === "fulfilled" ? s.value : []));
         const ok = recovered.filter((c) => c.b64);
         setCrops((prev) => [...prev, ...recovered]);
@@ -1691,9 +1786,11 @@ export function CarbonStudioTab({
                 };
               }),
             );
-          });
+          }, abort.signal);
         }
       } finally {
+        if (abortRef.current?.controller === abort) abortRef.current = null;
+        setAborting(false);
         writePendingRun(null);
         setNativeBusy(false);
         setBusy(null);
@@ -2045,7 +2142,7 @@ export function CarbonStudioTab({
                   const imgs = imageFilesFromTransfer(e.dataTransfer);
                   if (imgs.length) void uploadItems(imgs, zone.view);
                 }}
-                className={`rounded-md border p-2 transition-colors ${
+                className={`rounded-md border p-2 transition-colors ${zone.view === "styling" ? "md:col-span-3" : ""} ${
                   isOver
                     ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
                     : isActive
@@ -2096,7 +2193,7 @@ export function CarbonStudioTab({
                       key={ref.url + i}
                       className="relative"
                       draggable={canManage}
-                      title="Drag onto Front or Back to also label it there (on a phone: press and hold, then drag)"
+                      title="Drag onto another section to also label it there (on a phone: press and hold, then drag)"
                       style={touchDrag ? { touchAction: "none" } : undefined}
                       onPointerDown={(e) => {
                         // The mouse keeps the native HTML5 drag; this is for fingers.
@@ -2147,9 +2244,7 @@ export function CarbonStudioTab({
                         setTouchDrag({ preview: p.preview, x: e.clientX, y: e.clientY });
                         const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
                         const target = under?.closest?.("[data-ref-zone]")?.getAttribute("data-ref-zone");
-                        setHoverView(
-                          target === "general" || target === "front" || target === "back" ? (target as RefView) : null,
-                        );
+                        setHoverView(isRefView(target) ? target : null);
                       }}
                       onPointerUp={(e) => {
                         const p = touchDragRef.current;
@@ -2326,7 +2421,7 @@ export function CarbonStudioTab({
           a wrong line here is a wrong garment in every paid panel. */}
       <div
         className={`rounded-md border p-3 ${
-          itemRefs.length && specStale
+          productRefCount && specStale
             ? "border-amber-500/55 bg-amber-950/20"
             : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
         }`}
@@ -2335,14 +2430,14 @@ export function CarbonStudioTab({
           <span className={`${label} mb-0`}>Item spec — what the AI is locked to</span>
           <span
             className={`font-mono text-[0.62rem] uppercase tracking-wide ${
-              !itemRefs.length
+              !productRefCount
                 ? "text-[var(--wms-muted)]"
                 : specStale
                   ? "text-amber-300"
                   : "text-[var(--wms-status-success-fg)]"
             }`}
           >
-            {!itemRefs.length
+            {!productRefCount
               ? "add photos first"
               : !itemSpec.trim()
                 ? "not analyzed yet"
@@ -2353,7 +2448,7 @@ export function CarbonStudioTab({
           <div className="flex-1" />
           <button
             type="button"
-            disabled={!canManage || !itemRefs.length || specBusy || busy !== null}
+            disabled={!canManage || !productRefCount || specBusy || busy !== null}
             onClick={() => void analyzeItem(refViews)}
             className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
           >
@@ -2615,7 +2710,7 @@ export function CarbonStudioTab({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          disabled={!canManage || busy !== null || !model || !itemRefs.length || !panels.length}
+          disabled={!canManage || busy !== null || !model || !orderedRefUrls(refViews).length || !panels.length}
           onClick={() => void generate()}
           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
         >
@@ -2623,12 +2718,23 @@ export function CarbonStudioTab({
             ? "Generating…"
             : busy === "analyze"
               ? "Analyzing item…"
-              : itemRefs.length && specStale
+              : productRefCount && specStale
                 ? "1 · Analyze item first"
                 : crops.length
                   ? `↻ Regenerate ${panels.length}`
                   : `✦ Generate ${panels.length} panel(s)`}
         </button>
+        {busy === "generate" || busy === "analyze" ? (
+          <button
+            type="button"
+            disabled={!canManage || aborting}
+            onClick={abortGeneration}
+            title="Cancel this run — stops the OpenAI generation for every panel still rendering"
+            className="rounded-md border border-[var(--wms-status-danger-fg)]/70 bg-[var(--wms-status-danger-fg)]/10 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-status-danger-fg)] hover:bg-[var(--wms-status-danger-fg)]/20 disabled:opacity-50 max-md:min-h-11"
+          >
+            {aborting ? "Aborting…" : "■ Abort"}
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={!canManage || mediaBusy !== null}
