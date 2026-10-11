@@ -37,6 +37,10 @@ type MatrixHeader = {
   category: string | null;
   subcategory_1: string | null;
   upc: string | null;
+  /** Supplier fabric composition and care (migration 0107). */
+  fabric_composition: string | null;
+  fabric_source: string | null;
+  care_instructions: string | null;
   archived: boolean;
   /** One piece of a multi-piece outfit (see migration 057). */
   is_set: boolean;
@@ -93,6 +97,9 @@ export async function GET(req: Request, { params }: Ctx) {
        m.category                  AS category,
        m.subcategory_1             AS subcategory_1,
        m.upc                       AS upc,
+       m.fabric_composition        AS fabric_composition,
+       m.fabric_source             AS fabric_source,
+       m.care_instructions         AS care_instructions,
        m.is_set                    AS is_set,
        m.set_group_id::text        AS set_group_id,
        m.shopify_product_id        AS shopify_product_id,
@@ -188,6 +195,9 @@ export async function GET(req: Request, { params }: Ctx) {
       category: head.category,
       subcategory_1: head.subcategory_1,
       upc: head.upc,
+      fabric_composition: head.fabric_composition ?? null,
+      fabric_source: head.fabric_source ?? null,
+      care_instructions: head.care_instructions ?? null,
       archived: head.all_archived,
       is_set: Boolean(head.is_set),
       set_group_id: head.set_group_id ?? null,
@@ -237,6 +247,8 @@ const patchSchema = z
     category: nullableText(200),
     subcategory_1: nullableText(200),
     upc: nullableText(100),
+    fabric_composition: nullableText(300),
+    care_instructions: nullableText(500),
     is_set: z.boolean().optional(),
     /** Matrix ids to pull into this product's set. */
     set_add_matrix_ids: z.array(z.string().uuid()).max(20).optional(),
@@ -301,6 +313,12 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   if (d.category !== undefined) add("category", d.category);
   if (d.subcategory_1 !== undefined) add("subcategory_1", d.subcategory_1);
   if (d.upc !== undefined) add("upc", d.upc);
+  if (d.fabric_composition !== undefined) {
+    add("fabric_composition", d.fabric_composition);
+    /* Typed in the Matrix tab, so the sheet is no longer its source. */
+    add("fabric_source", d.fabric_composition ? "manual" : null);
+  }
+  if (d.care_instructions !== undefined) add("care_instructions", d.care_instructions);
   if (d.is_set !== undefined) {
     add("is_set", d.is_set);
     /* Unticking the box means "this is not part of a set", so the recorded

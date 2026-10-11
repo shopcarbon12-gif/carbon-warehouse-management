@@ -54,6 +54,10 @@ type Matrix = {
   category: string | null;
   subcategory_1: string | null;
   upc: string | null;
+  /** Supplier fabric composition and care — migration 0107. */
+  fabric_composition?: string | null;
+  fabric_source?: string | null;
+  care_instructions?: string | null;
   archived: boolean;
   /** One piece of a multi-piece outfit — see migration 057. */
   is_set?: boolean;
@@ -105,6 +109,8 @@ type MatrixForm = {
   category: string;
   subcategory_1: string;
   upc: string;
+  fabric_composition: string;
+  care_instructions: string;
 };
 
 /** Editable Group-Items row (existing or staged-new). */
@@ -162,6 +168,8 @@ function matrixForm(m: Matrix): MatrixForm {
     category: m.category ?? "",
     subcategory_1: m.subcategory_1 ?? "",
     upc: m.upc ?? "",
+    fabric_composition: m.fabric_composition ?? "",
+    care_instructions: m.care_instructions ?? "",
   };
 }
 function rowFromVariant(v: Variant): RowState {
@@ -652,6 +660,10 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     if (mForm.subcategory_1 !== m0.subcategory_1)
       matrixBody.subcategory_1 = mForm.subcategory_1.trim();
     if (mForm.upc !== m0.upc) matrixBody.upc = mForm.upc.trim();
+    if (mForm.fabric_composition !== m0.fabric_composition)
+      matrixBody.fabric_composition = mForm.fabric_composition.trim();
+    if (mForm.care_instructions !== m0.care_instructions)
+      matrixBody.care_instructions = mForm.care_instructions.trim();
 
     try {
       if (Object.keys(matrixBody).length > 0) {
@@ -1736,6 +1748,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 />
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
+                  <div className="space-y-4">
                   {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
                     <EditRow
@@ -1771,6 +1784,31 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       hint="Fills every variant's UPC"
                     />
                   </Section>
+
+                  {/* Product details: shown on the storefront's details block once published. */}
+                  <Section title="Fabric Composition">
+                    <EditRow
+                      label="Fabric Composition"
+                      value={mForm.fabric_composition}
+                      onChange={(v) => patchMatrix({ fabric_composition: v })}
+                      editable={canManage}
+                      hint={
+                        data.matrix.fabric_source
+                          ? `Source: ${data.matrix.fabric_source}`
+                          : "As stated on the supplier sheet, e.g. 97% COTTON 3% ELASTANE"
+                      }
+                    />
+                  </Section>
+                  <Section title="Care">
+                    <EditRow
+                      label="Care"
+                      value={mForm.care_instructions}
+                      onChange={(v) => patchMatrix({ care_instructions: v })}
+                      editable={canManage}
+                      hint="Washing and care instructions"
+                    />
+                  </Section>
+                  </div>
 
                   <div className="space-y-4">
                     <Section title="Matrix Type">
