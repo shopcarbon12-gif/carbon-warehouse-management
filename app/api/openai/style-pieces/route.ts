@@ -27,6 +27,7 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { text } from "@/lib/server/item-spec-build";
+import { withoutContradictedPlain } from "@/lib/server/style-pieces-text";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ Step 2 — the slots: describe each distinct piece once, in the slot it belongs 
 - "footwear": the shoes
 - "accessories": every accessory in one line (belt, bracelet, chain, watch, cap, bag, sunglasses)
 
-Each slot value is ONE line of at most 60 words, in this order: colour, garment, cut / fit and length, fabric and texture, then every print, text, graphic, logo or hardware and WHERE it sits — its size (small / medium / large, how much of the chest or back it covers), its shape (one line, a block, a circle) and what sits at which end. Quote printed text only when it is short (a few words) and you can read every letter; NEVER shorten text with "..." — for long, busy or code-like text say what it looks like instead (e.g. "one long single line of small white code-style text running almost the full width of the chest, a white paint-splatter burst at its left end") — say which content is on the FRONT and which is on the BACK when the photos show both sides. For shoes name the exact spot of every logo or text: the OUTER side (the side facing away from the other shoe), the INNER side, the heel, the tongue or the toe — never just "on the side". End the line with what is plain or not shown, e.g. "inner sides plain", "back plain" — the generator adds nothing there. Plain words, no brand guesses.
+Each slot value is ONE line of at most 60 words, in this order: colour, garment, cut / fit and length, fabric and texture, then every print, text, graphic, logo or hardware and WHERE it sits — its size (small / medium / large, how much of the chest or back it covers), its shape (one line, a block, a circle) and what sits at which end. Quote printed text only when it is short (a few words) and you can read every letter; NEVER shorten text with "..." — for long, busy or code-like text say what it looks like instead (e.g. "one long single line of small white code-style text running almost the full width of the chest, a white paint-splatter burst at its left end") — say which content is on the FRONT and which is on the BACK when the photos show both sides. For shoes name the exact spot of every logo or text: the OUTER side (the side facing away from the other shoe), the INNER side, the heel, the tongue or the toe — never just "on the side". End the line with what is plain or not shown, e.g. "inner sides plain", "back plain" — the generator adds nothing there. Never call a side plain that you described a print, text or graphic on. Plain words, no brand guesses.
 
 Reply with JSON: {"photos": [{"photo": 1, "piece": "...", "side": "..."}], "top": "...", "footwear": "...", ...} — include only the slots that some photo shows. Every photo must belong to a slot.`;
 }
@@ -129,7 +130,7 @@ async function POST_handler(req: NextRequest) {
     const outfit: Partial<Record<(typeof SLOTS)[number], string>> = {};
     for (const s of SLOTS) {
       const v = text(parsed[s]).replace(/\s+/g, " ").slice(0, 500);
-      if (v) outfit[s] = v.replace(/\.$/, "");
+      if (v) outfit[s] = withoutContradictedPlain(v).replace(/\.$/, "");
     }
     if (!Object.keys(outfit).length) {
       return NextResponse.json({ error: "Could not tell what the Style with photos show. Try clearer photos of each piece." }, { status: 422 });
