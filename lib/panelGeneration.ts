@@ -515,7 +515,7 @@ export function buildStylingLock(
   const fromPhotos = (label: string, d: string) => {
     const slot = label === "TOP UNDER THE OUTERWEAR" ? "top_under" : (label.toLowerCase() as OutfitSlot);
     return styleWith[slot]
-      ? `- ${label}: ${d} — the exact piece in the STYLE-WITH photos, worn in every frame: same colour, cut, fit, length, fabric, print, text and hardware.`
+      ? `- ${label}: ${d} — the exact piece in the STYLE-WITH photos, worn in every frame: same colour, cut, fit, length, fabric, print, text and hardware, each logo or text only where the photos show it. A side or part the photos do not show (the inner side of a shoe, an unphotographed back) stays plain — no logo, label or text added there.`
       : `- ${label}: ${d} — exactly as worn in the item photos: same colour, cut, fit, length and fabric.`;
   };
 

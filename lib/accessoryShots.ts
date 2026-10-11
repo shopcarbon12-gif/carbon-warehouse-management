@@ -457,7 +457,7 @@ export function buildAccessoryStylingLock(
   const label = (slot: string) => slot.toUpperCase().replace("_", " ");
   const chosen = Object.entries(styleWith ?? {})
     .filter(([, v]) => v)
-    .map(([slot, v]) => `- ${label(slot)}: ${v} — the exact piece in the STYLE-WITH photos, worn in every on-model shot: same colour, cut, fit, fabric, print and hardware.`);
+    .map(([slot, v]) => `- ${label(slot)}: ${v} — the exact piece in the STYLE-WITH photos, worn in every on-model shot: same colour, cut, fit, fabric, print and hardware, each logo or text only where the photos show it; anything the photos do not show stays plain.`);
   const fromPhotos = Object.entries(seenOutfit ?? {})
     .filter(([slot, v]) => v && !styleWith?.[slot])
     .map(([slot, v]) => `- ${label(slot)}: ${v} — exactly as worn in the item photos.`);

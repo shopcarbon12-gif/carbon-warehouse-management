@@ -56,12 +56,13 @@ async function toDataUrl(rawUrl: string): Promise<string> {
   return `data:${text(contentType) || "image/png"};base64,${bytes.toString("base64")}`;
 }
 
-function instruction(itemType: string): string {
-  return `These photos show clothing, footwear and/or accessories that a model will WEAR in a fashion catalog shoot, together with a different product (a ${itemType}). An image generator must reproduce each piece exactly from your words.
+function instruction(itemType: string, count: number): string {
+  return `The ${count} photos below were chosen by a store owner: EVERY photo shows a piece of clothing, footwear or an accessory that a model will WEAR in a fashion catalog shoot, together with a different product (a ${itemType}). An image generator must reproduce each piece exactly from your words.
 
-Describe each piece once. Several photos of one piece (its front and its back, or a detail) are ONE piece. Ignore any person, mannequin, hanger, packaging and background — describe only the clothes and accessories. If a ${itemType} appears, do not describe it (it is the product, shown elsewhere).
+Photos are often taken in a shop: a garment on a hanger or a rack, shoes on a shelf, a top laid on a counter. The garment on the hanger IS the piece — never skip it as background. Ignore only what is not a piece: the hanger itself, the shelf, the rack, other clothes behind it, packaging, and any person or mannequin's face and body. If a ${itemType} appears, it is the product (shown elsewhere) — do not describe it.
 
-Return JSON with only the slots that a photo actually shows:
+Step 1 — "photos": for EACH photo, in order, say which piece it shows and which side ("front", "back", "side", "detail"). Several photos of one piece (its front and its back, or a close-up) are ONE piece.
+Step 2 — the slots: describe each distinct piece once, in the slot it belongs to:
 - "top": the main top (t-shirt, shirt, tank, polo, sweater, hoodie)
 - "top_under": a top worn under an open jacket or overshirt
 - "bottom": trousers, jeans, shorts, skirt
@@ -69,7 +70,9 @@ Return JSON with only the slots that a photo actually shows:
 - "footwear": the shoes
 - "accessories": every accessory in one line (belt, bracelet, chain, watch, cap, bag, sunglasses)
 
-Each value is ONE line of at most 40 words, in this order: colour, garment, cut / fit and length, fabric and texture, then any print, text (exact spelling, in quotes), graphic, logo, buttons or hardware and where they sit, and how it is worn (open, tucked, sleeves rolled) if the photo shows it. Plain words, no brand guesses. Example: {"top": "cream relaxed-fit short-sleeve linen camp-collar shirt, boxy and hip length, slubby linen texture, five white buttons down the front, worn open over nothing"}`;
+Each slot value is ONE line of at most 55 words, in this order: colour, garment, cut / fit and length, fabric and texture, then every print, text (exact spelling, in quotes), graphic, logo or hardware and WHERE it sits — say which content is on the FRONT and which is on the BACK when the photos show both sides. For shoes name the exact spot of every logo or text: the OUTER side (the side facing away from the other shoe), the INNER side, the heel, the tongue or the toe — never just "on the side". End the line with what is plain or not shown, e.g. "inner sides plain", "back plain" — the generator adds nothing there. Plain words, no brand guesses.
+
+Reply with JSON: {"photos": [{"photo": 1, "piece": "...", "side": "..."}], "top": "...", "footwear": "...", ...} — include only the slots that some photo shows. Every photo must belong to a slot.`;
 }
 
 async function POST_handler(req: NextRequest) {
@@ -100,14 +103,14 @@ async function POST_handler(req: NextRequest) {
       {
         model: (process.env.ITEM_SPEC_MODEL || "gpt-4o").trim() || "gpt-4o",
         temperature: 0.1,
-        max_tokens: 700,
+        max_tokens: 1200,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: "You describe clothing for exact reproduction by an image generator. Output valid JSON only." },
           {
             role: "user",
             content: [
-              { type: "text", text: instruction(itemType) },
+              { type: "text", text: instruction(itemType, loaded.length) },
               ...loaded.map((url) => ({ type: "image_url" as const, image_url: { url, detail: "high" as const } })),
             ],
           },
@@ -125,7 +128,7 @@ async function POST_handler(req: NextRequest) {
     }
     const outfit: Partial<Record<(typeof SLOTS)[number], string>> = {};
     for (const s of SLOTS) {
-      const v = text(parsed[s]).replace(/\s+/g, " ").slice(0, 400);
+      const v = text(parsed[s]).replace(/\s+/g, " ").slice(0, 500);
       if (v) outfit[s] = v.replace(/\.$/, "");
     }
     if (!Object.keys(outfit).length) {
