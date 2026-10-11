@@ -71,7 +71,7 @@ function glossary(locale: string): string {
 export function translateSystem(locale: string): string {
   return `You translate e-commerce product content for CARBON, a US fashion store (shopcarbon.com), from English into ${LANG_NAME[locale] || locale}.
 
-Brand: "Carbon" / "CARBON" is the brand. Never translate it (never "Carbono", "Carbón") and never write "Carbon Jeans". Only when English uses lowercase "carbon" as a material ("carbon fiber", "durable carbon material") translate it as the material.
+Brand: "Carbon" / "CARBON" is the brand. Never translate it (never "Carbono", "Carbón") and never call the brand "Carbon Jeans" — but text printed on a garment that the English quotes (a waistband label reading 'CARBON JEANS') is kept exactly, in quotes. Only when English uses lowercase "carbon" as a material ("carbon fiber", "durable carbon material") translate it as the material.
 
 Product titles: the English model name or slogan stays in English exactly as written — single names (Vick, Alia, Noa, River, Gyda, Kiera, Storm, Mykel), place names (London, Paris, New York, Florida), and graphic-tee slogans ("Make It Happen", "Fill In The Blank", "Successful", "Game Over", "Good Things", "Time Never"). Never translate those words literally. Translate only the garment type and plain descriptive words (Floral, Sequin, Oversized, Cargo, Puffer, Knit, Ribbed, Crop), with the garment word first. Keep trailing codes (letters / numbers like "I", "H", "AK", "73"). If the title is only a generic description with no name ("Logo Hat", "Classic Sneakers", "Womens Long Denim Jeans H"), translate it naturally and keep the code.
 
@@ -98,8 +98,11 @@ When fixing: the English name / slogan stays in English exactly; translate only 
 Reply with JSON {"items":[{"i":<index>,"t":"keep" or "<fixed title>","why":"<few words>"}]} covering every input.`;
 }
 
+/** Quoted text is a label printed on the garment ('CARBON JEANS' on a waistband) — describing it is accurate. */
+const unquoted = (t: string) => t.replace(/['"‘’“”«»][^'"‘’“”«»]{1,80}['"‘’“”«»]/g, " ");
+
 function forbidden(locale: string, text: string): string | null {
-  if (/\bcarbon\s+jeans\b/i.test(text)) return '"Carbon Jeans"';
+  if (/\bcarbon\s+jeans\b/i.test(unquoted(text.replace(/<[^>]+>/g, " ")))) return '"Carbon Jeans"';
   const base = locale.split("-")[0];
   if (base === "es") {
     if (/\btobiller/i.test(text)) return '"tobillera"';
