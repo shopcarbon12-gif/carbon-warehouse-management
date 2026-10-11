@@ -124,3 +124,22 @@ export const POS_PERMISSION_PAGES: PermissionPageDef[] = [
     ],
   },
 ];
+
+/**
+ * Sections the POS can put behind the super admin's approval ("Needs
+ * approval": admin PIN or emailed code on the register). Others are
+ * view / hide only.
+ */
+export const POS_APPROVABLE_SECTIONS = new Set<string>([
+  "pos_sales.exchange",
+  "pos_sales.refund",
+  "pos_sales.park_sale",
+  "pos_sales.discount_at_checkout",
+  "pos_sales.loyalty_redeem",
+  "pos_register.open_register",
+  "pos_register.close_register",
+  "pos_register.cash_drop",
+  "pos_register.add_amount",
+  "pos_register.no_sale_open_drawer",
+  "pos_customers.store_credit",
+]);

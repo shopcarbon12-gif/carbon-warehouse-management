@@ -9,7 +9,7 @@ import { deleteUserRole, updateUserRole } from "@/lib/queries/settings-user-role
 
 const putSchema = z.object({
   name: z.string().min(1).max(256),
-  permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))),
+  permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide", "approval"]))),
 });
 
 async function PUT_handler(req: Request, ctx: { params: Promise<{ id: string }> }) {

@@ -11,7 +11,7 @@ import {
   getSectionMode,
   setSectionMode,
 } from "@/lib/settings/permission-catalog";
-import { POS_PERMISSION_PAGES } from "@/lib/settings/pos-permission-catalog";
+import { POS_APPROVABLE_SECTIONS, POS_PERMISSION_PAGES } from "@/lib/settings/pos-permission-catalog";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -811,7 +811,7 @@ function PosRolePermissionsModal({
     setPerm(hydratePosPermissions(row?.permissions));
   }, [row]);
 
-  const setMode = (pageId: string, sectionId: string, m: "view" | "hide") => {
+  const setMode = (pageId: string, sectionId: string, m: "view" | "hide" | "approval") => {
     setPerm((p) => setSectionMode(p, pageId, sectionId, m));
   };
 
@@ -857,7 +857,8 @@ function PosRolePermissionsModal({
         </h3>
         <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
           POS roles are scoped to the POS app — they are independent of WMS user roles. Empty
-          permissions = full access.
+          permissions = full access. View = allowed · Needs approval = allowed only after the
+          super admin approves on the register (admin PIN or emailed code) · Hide = not allowed.
         </p>
         <label className="mt-4 block font-mono text-xs text-[var(--wms-muted)]">
           Role name
@@ -894,6 +895,20 @@ function PosRolePermissionsModal({
                         >
                           View
                         </button>
+                        {POS_APPROVABLE_SECTIONS.has(`${page.id}.${sec.id}`) ? (
+                          <button
+                            type="button"
+                            onClick={() => setMode(page.id, sec.id, "approval")}
+                            title="Allowed, but the super admin approves each time (admin PIN or emailed code)"
+                            className={`rounded px-2 py-1 font-mono text-xs ${
+                              modeCur === "approval"
+                                ? "bg-amber-100 font-medium text-amber-900 dark:bg-amber-900/35 dark:text-amber-200"
+                                : "text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)]"
+                            }`}
+                          >
+                            Needs approval
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => setMode(page.id, sec.id, "hide")}

@@ -9,7 +9,12 @@
  * Every section here maps to a real URL the WMS serves today.
  */
 
-export type PermissionMode = "view" | "hide";
+/**
+ * "approval" is POS-only: the action is allowed but needs the super
+ * admin's OK on the register (admin PIN or emailed one-time code).
+ * WMS / mobile permission editors only offer view / hide.
+ */
+export type PermissionMode = "view" | "hide" | "approval";
 
 export type PermissionSectionDef = { id: string; label: string };
 export type PermissionPageDef = { id: string; label: string; sections: PermissionSectionDef[] };
@@ -134,7 +139,7 @@ export function getSectionMode(
   sectionId: string,
 ): PermissionMode {
   const p = permissions?.[pageId]?.[sectionId];
-  return p === "hide" ? "hide" : "view";
+  return p === "hide" ? "hide" : p === "approval" ? "approval" : "view";
 }
 
 export function setSectionMode(

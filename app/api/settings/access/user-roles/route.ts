@@ -36,7 +36,7 @@ export async function GET(req: Request) {
 
 const postSchema = z.object({
   name: z.string().min(1).max(256),
-  permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide"]))).optional(),
+  permissions: z.record(z.string(), z.record(z.string(), z.enum(["view", "hide", "approval"]))).optional(),
   scope: z.enum(["wms", "pos", "rewards", "mobile"]).optional(),
 }).refine(
   (v) =>
