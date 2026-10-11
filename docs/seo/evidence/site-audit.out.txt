@@ -1,0 +1,204 @@
+[
+ {
+  "url": "https://shopcarbon.com/",
+  "status": 200,
+  "final": "",
+  "title": "Trendy Clothing &amp; Apparel for Men &amp; Women | Carbon",
+  "canonical": "https://shopcarbon.com/",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "Organization",
+   "WebSite"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/products/alex-denim-shorts",
+  "status": 200,
+  "final": "",
+  "title": "Alex Denim Shorts - Alex Denim Shorts",
+  "canonical": "https://shopcarbon.com/products/alex-denim-shorts",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization",
+   "ProductGroup",
+   "variants=7 with_price=7 with_avail=7 gtin=0 sku=7"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/products/kiera-dress",
+  "status": 200,
+  "final": "",
+  "title": "Kiera Silver Dress - Sleek Satin Mini",
+  "canonical": "https://shopcarbon.com/products/kiera-dress",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization",
+   "ProductGroup",
+   "variants=9 with_price=9 with_avail=9 gtin=0 sku=9"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/products/kiera-dress?variant=1",
+  "status": 200,
+  "final": "",
+  "title": "Kiera Silver Dress - Sleek Satin Mini",
+  "canonical": "https://shopcarbon.com/products/kiera-dress",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization",
+   "ProductGroup",
+   "variants=9 with_price=9 with_avail=9 gtin=0 sku=9"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/collections/men",
+  "status": 200,
+  "final": "",
+  "title": "Shop Men\u2019s Fashion Clothing at Carbon | Trendy Styles",
+  "canonical": "https://shopcarbon.com/collections/men",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/collections/men?sort_by=price-ascending",
+  "status": 200,
+  "final": "",
+  "title": "Shop Men\u2019s Fashion Clothing at Carbon | Trendy Styles",
+  "canonical": "https://shopcarbon.com/collections/men",
+  "robots": "noindex, follow",
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/collections/men?page=2",
+  "status": 200,
+  "final": "",
+  "title": "Shop Men\u2019s Fashion Clothing at Carbon | Trendy Styles\n  \n  \n    &ndash; Page",
+  "canonical": "https://shopcarbon.com/collections/men?page=2",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/es/products/alex-denim-shorts",
+  "status": 200,
+  "final": "",
+  "title": "Shorts de mezclilla Alex - Shorts de mezclilla Alex",
+  "canonical": "https://shopcarbon.com/es/products/alex-denim-shorts",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization",
+   "ProductGroup",
+   "variants=7 with_price=7 with_avail=7 gtin=0 sku=7"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/pt/products/alex-denim-shorts",
+  "status": 200,
+  "final": "",
+  "title": "Shorts Jeans Alex - Shorts Jeans Alex",
+  "canonical": "https://shopcarbon.com/pt/products/alex-denim-shorts",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "BreadcrumbList",
+   "Organization",
+   "ProductGroup",
+   "variants=7 with_price=7 with_avail=7 gtin=0 sku=7"
+  ]
+ },
+ {
+  "url": "https://shopcarbon.com/products/startdust-denim-jacket",
+  "status": 404,
+  "final": "",
+  "title": "",
+  "canonical": null,
+  "robots": null,
+  "hreflang": [],
+  "jsonld": []
+ },
+ {
+  "url": "https://shopcarbon.com/pages/retail-store-locator",
+  "status": 200,
+  "final": "",
+  "title": "RETAIL STORE LOCATOR",
+  "canonical": "https://shopcarbon.com/pages/retail-store-locator",
+  "robots": null,
+  "hreflang": [
+   "x-default",
+   "en",
+   "es",
+   "pt"
+  ],
+  "jsonld": [
+   "Place",
+   "BreadcrumbList",
+   "Organization"
+  ]
+ }
+]
+ROBOTS disallow sample: ['Disallow: /admin', 'Disallow: /cart/', 'Disallow: /*/cart/', 'Disallow: /checkout', 'Disallow: /*/checkout', 'Disallow: /checkouts/', 'Disallow: /*/checkouts/', 'Disallow: /orders', 'Disallow: /*/orders', 'Disallow: /account', 'Disallow: /*/account', 'Disallow: /68065722620']

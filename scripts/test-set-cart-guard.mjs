@@ -54,9 +54,9 @@ const L = (h, q = 1, props = {}) => ({ key: h, handle: h, quantity: q, propertie
 console.log("\nREAL partner data from shopcarbon.com\n");
 const res = [];
 res.push(await run("Alia complete pair survives (the stale link is repaired)",
-  [L("alia-shorts-set"), L("alia-crop-tank")], []));
+  [L("alia-shorts-set"), L("alia-crop-set")], []));
 res.push(await run("Alia, one piece removed → the other goes",
-  [L("alia-crop-tank")], ["alia-crop-tank"]));
+  [L("alia-crop-set")], ["alia-crop-set"]));
 res.push(await run("Lily complete three-piece survives",
   [L("lily-top-set"), L("lily-jacket-set"), L("lily-pants-set")], []));
 res.push(await run("Lily minus the pants → top and jacket go",
@@ -66,6 +66,6 @@ res.push(await run("non-set product on its own is untouched",
 res.push(await run("complete set + unrelated product → nothing removed",
   [L("lily-top-set"), L("lily-jacket-set"), L("lily-pants-set"), L("maci-legging")], []));
 res.push(await run("solo-tagged piece is left alone",
-  [L("alia-crop-tank", 1, { _carbon_set_solo:"1" })], []));
+  [L("alia-crop-set", 1, { _carbon_set_solo:"1" })], []));
 console.log(`\n${res.filter(Boolean).length}/${res.length} passed`);
 process.exit(res.every(Boolean) ? 0 : 1);

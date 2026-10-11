@@ -1,0 +1,3137 @@
+{
+ "taken": "2026-10-11T17:15:53.065Z",
+ "products": [
+  {
+   "id": "gid://shopify/Product/9217322844412",
+   "handle": "braided-bracelet-c",
+   "title": "Braided Bracelet C",
+   "seo": {
+    "title": "Braided Bracelet C - Braided Bracelet C"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217323204860",
+   "handle": "braided-bracelet-k",
+   "title": "Braided Bracelet K",
+   "seo": {
+    "title": "Braided Bracelet K - Braided Bracelet K"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217324122364",
+   "handle": "bracelet-e",
+   "title": "Bracelet E",
+   "seo": {
+    "title": "Bracelet E Accessory - Bracelet E"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217326874876",
+   "handle": "elodie-hoodie-set",
+   "title": "Elodie Hoodie Set",
+   "seo": {
+    "title": "Elodie Hoodie Outfit - Elodie Hoodie Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217335197948",
+   "handle": "anya-bodysuit",
+   "title": "Anya Bodysuit",
+   "seo": {
+    "title": "Anya Bodysuit White - Anya Bodysuit"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217336148220",
+   "handle": "alia-shorts-set",
+   "title": "Alia Shorts Set",
+   "seo": {
+    "title": "Alia Shorts Set - Alia Shorts Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217336738044",
+   "handle": "aleena-knot-t-shirt",
+   "title": "Aleena Knot T-Shirt",
+   "seo": {
+    "title": "Aleena Knot T-Shirt - Aleena Knot T-Shirt"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217337229564",
+   "handle": "alia-crop-tank",
+   "title": "Alia Crop Tank",
+   "seo": {
+    "title": "Alia Shorts Set - Alia Shorts Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217339654396",
+   "handle": "ella-legging",
+   "title": "Ella Legging",
+   "seo": {
+    "title": "Ella Legging Black - Ella Legging"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217351090428",
+   "handle": "trent-denim-shorts",
+   "title": "Trent Denim Shorts",
+   "seo": {
+    "title": "Trent Denim Shorts - Trent Denim Shorts"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217351745788",
+   "handle": "alex-denim-shorts",
+   "title": "Alex Denim Shorts",
+   "seo": {
+    "title": "Alex Denim Shorts - Alex Denim Shorts"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217360789756",
+   "handle": "bracelet-z",
+   "title": "Bracelet Z",
+   "seo": {
+    "title": "Bracelet Z Leather - Bracelet Z"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217433829628",
+   "handle": "edi-lobster-skirt",
+   "title": "Edi Lobster Skirt",
+   "seo": {
+    "title": "Edi Lobster Skirt - Edi Lobster Skirt"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217435140348",
+   "handle": "river-top-set",
+   "title": "River Top Set",
+   "seo": {
+    "title": "Stylish River Top Outfit in Black - River Top Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217468104956",
+   "handle": "philadelphia-tee",
+   "title": "Philadelphia Tee",
+   "seo": {
+    "title": "Philadelphia Tee - Philadelphia Tee"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217473380604",
+   "handle": "bradley-jacket",
+   "title": "Bradley Jacket",
+   "seo": {
+    "title": "Bradley Jacket - Bradley Jacket"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217475903740",
+   "handle": "tim-swimwear",
+   "title": "Tim Swimwear",
+   "seo": {
+    "title": "Tim Swimwear Shorts - Tim Swimwear"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217476034812",
+   "handle": "hank-swimwear",
+   "title": "Hank Swimwear",
+   "seo": {
+    "title": "Hank Swimwear Shorts - Hank Swimwear"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217476231420",
+   "handle": "jaxon-swimwear",
+   "title": "Jaxon Swimwear",
+   "seo": {
+    "title": "Jaxon Swimwear - Jaxon Swimwear"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217476362492",
+   "handle": "landon-swimwear",
+   "title": "Landon Swimwear",
+   "seo": {
+    "title": "Landon Swimwear - Landon Swimwear"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217487503612",
+   "handle": "ricky-jeans",
+   "title": "Ricky Jeans",
+   "seo": {
+    "title": "Ricky Light Jeans - Ricky Jeans"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217490387196",
+   "handle": "hunter-denim-shorts",
+   "title": "Hunter Denim Shorts",
+   "seo": {
+    "title": "Hunter Denim Shorts - Hunter Denim Shorts"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217492549884",
+   "handle": "fiona-pants-set",
+   "title": "Fiona Pants Set",
+   "seo": {
+    "title": "Fiona Pants Outfit in Wild Mushroom - Fiona Pants Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217492877564",
+   "handle": "nina-jacket-set",
+   "title": "Nina Jacket Set",
+   "seo": {
+    "title": "Nina Jacket Set - Nina Jacket Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217493926140",
+   "handle": "blessed-top",
+   "title": "Blessed Top",
+   "seo": {
+    "title": "Blessed Top Black - Blessed Top"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217494548732",
+   "handle": "riley-dress",
+   "title": "Riley Dress",
+   "seo": {
+    "title": "Riley Beige Dress - Riley Dress"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217495957756",
+   "handle": "furry-top-set",
+   "title": "Furry Top Set",
+   "seo": {
+    "title": "Furry Pants Set - Furry Pants Set"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217497268476",
+   "handle": "remi-jacket-set",
+   "title": "Remi Jacket Set",
+   "seo": {
+    "title": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217497432316",
+   "handle": "remi-bodysuit-set",
+   "title": "Remi Bodysuit Set",
+   "seo": {
+    "title": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217497530620",
+   "handle": "remi-pants-set",
+   "title": "Remi Pants Set",
+   "seo": {
+    "title": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217499398396",
+   "handle": "texture-top",
+   "title": "Texture Top",
+   "seo": {
+    "title": "Men'S Texture Top - Texture Top"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217351581948",
+   "handle": "lord-denim-shorts",
+   "title": "Lord Denim Shorts",
+   "seo": {
+    "title": "Lord Denim Shorts - Blue Washed, Frayed Hem"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217336312060",
+   "handle": "karina-crop-tank",
+   "title": "Karina Crop Set",
+   "seo": {
+    "title": "Karina Crop Tank - Stylish One Shoulder Top"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217351713020",
+   "handle": "mens-denim-shorts-k",
+   "title": "Camilo Denim Shorts",
+   "seo": {
+    "title": "Grey Denim Shorts - Mens Denim Shorts K"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217323794684",
+   "handle": "anklet-a",
+   "title": "Peace Anklet",
+   "seo": {
+    "title": "Golden Anklet A with Beaded Charm"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217492713724",
+   "handle": "adriana-sweater",
+   "title": "Adriana Top",
+   "seo": {
+    "title": "Adriana White Sweater - Chic Off-Shoulder Style"
+   }
+  }
+ ],
+ "translations": {
+  "gid://shopify/Product/9217322844412": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Braided Bracelet C",
+     "digest": "1593cec8af4a7be124db76436d6fdf620958bd9c5b2a6faf7ec72db5b1b327ef"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Braided Bracelet C is a sophisticated men's accessory, combining black and grey hues with a sleek braided design. It features ten round grey beads and three black square beads, all strung on a medium-thickness black elastic cord. The bracelet is secured with a rectangular black matte magnetic clasp, ensuring both style and convenience. This versatile piece is crafted with high-quality materials, making it a perfect addition to any outfit.</p>",
+     "digest": "a6324b017cf22612638489fc6fc4d579925d1d518ed825363719eae3c2cb0ae1"
+    },
+    {
+     "key": "handle",
+     "value": "braided-bracelet-c",
+     "digest": "974c6ee84baacd313b182f4005ce44135b2edc9f0121696c64ed93b6a7c490de"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> ACCESSORIES",
+     "digest": "cd1279f9161cbae6349d93f631b07e010a7b42a8f84500170abb23118217a01f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Braided Bracelet C - Braided Bracelet C",
+     "digest": "832d95f59da7d0b19d410f1a4e653c3657a5d2fc840faa152eb6b9db1ee70a67"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Braided Bracelet C, a stylish men's accessory featuring black and grey beads with a magnetic clasp. Perfect for any occasion.",
+     "digest": "43e050fe78022f3fb71f1d343e72ab183a6d7e38e28108f61bff0c1c23a518d5"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pulsera Trenzada C"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>La pulsera trenzada C es un accesorio sofisticado para hombre que combina tonos negros y grises con un elegante diseño trenzado. Cuenta con diez cuentas redondas grises y tres cuentas cuadradas negras, todas ensartadas en un cordón elástico negro de grosor medio. La pulsera se asegura con un cierre magnético rectangular de color negro mate, lo que garantiza estilo y comodidad. Esta pieza versátil está fabricada con materiales de alta calidad, lo que la convierte en el complemento perfecto para cualquier conjunto.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; ACCESORIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulsera Trenzada C - Pulsera Trenzada C"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre la pulsera trenzada C, un accesorio masculino elegante que presenta cuentas negras y grises con un cierre magnético. Perfecta para cualquier ocasión."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Pulseira Trançada C"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>A Pulseira Trançada C é um acessório masculino sofisticado, que combina tons de preto e cinza com um design trançado elegante. Possui dez contas redondas cinza e três contas quadradas pretas, todas enfiadas em um cordão elástico preto de espessura média. A pulseira é fechada com um fecho magnético retangular preto fosco, garantindo estilo e praticidade. Esta peça versátil é confeccionada com materiais de alta qualidade, tornando-se a adição perfeita para qualquer look.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMEM &gt;&gt; ACESSÓRIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulseira Trançada C - Pulseira Trançada C"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça a Pulseira Trançada C, acessório masculino elegante com contas pretas e cinza e fecho magnético. Perfeita para qualquer ocasião."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217323204860": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Braided Bracelet K",
+     "digest": "3413df5b4b39b6affe84ba86ea124c3b1408112910ab9903802cbbf8a7dc0a87"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Upgrade your style with the Braided Bracelet K. This sleek black bracelet features a braided cord and seven iridescent hexagonal beads in alternating purple and green. The adjustable sliding knot ensures a perfect fit for any wrist size. Ideal for any occasion, this versatile accessory adds a modern touch to your look.</p>",
+     "digest": "513e11cfb9bdea4c1ec2e3e122a7a8455ffaa360dc31467d1bd94c4e4740a119"
+    },
+    {
+     "key": "handle",
+     "value": "braided-bracelet-k",
+     "digest": "523a5a77c8b6378bdbf22b79f2a8fb091aa904cb093d23d06bb9f83e799eff09"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> ACCESSORIES",
+     "digest": "cd1279f9161cbae6349d93f631b07e010a7b42a8f84500170abb23118217a01f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Braided Bracelet K - Braided Bracelet K",
+     "digest": "58b99eb8cfac7a7fa4ba7d8acc3ac8ba2b3dcd043506e6097cc12f7e07421d2d"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Braided Bracelet K, a black adjustable men's accessory with iridescent hexagonal beads. Perfect for any occasion.",
+     "digest": "c60a141226ada91d8ea3da8fb13e90b40fb1fee1df67243d6585fbfb7b8100ec"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pulsera trenzada K"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Mejora tu estilo con la pulsera trenzada K. Esta elegante pulsera negra cuenta con un cordón trenzado y siete cuentas hexagonales iridiscentes que alternan entre morado y verde. El nudo corredizo ajustable garantiza un ajuste perfecto para cualquier tamaño de muñeca. Ideal para cualquier ocasión, este versátil accesorio añade un toque moderno a tu look.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; ACCESORIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulsera Trenzada K - Pulsera Trenzada K"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre la pulsera trenzada K, un accesorio ajustable para hombre en color negro con cuentas hexagonales iridiscentes. Perfecto para cualquier ocasión."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Pulseira Trançada K"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo com a Pulseira Trançada K. Esta pulseira preta elegante apresenta um cordão trançado e sete contas hexagonais iridescentes em roxo e verde alternados. O nó ajustável garante o encaixe perfeito para qualquer tamanho de pulso. Ideal para qualquer ocasião, este acessório versátil adiciona um toque moderno ao seu visual.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMEM &gt;&gt; ACESSÓRIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulseira Trançada K - Pulseira Trançada K"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra a Pulseira Trançada K, um acessório masculino preto ajustável com contas hexagonais iridescentes. Perfeita para qualquer ocasião."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217324122364": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Bracelet E",
+     "digest": "f0bd9e1b5c0bb1ddee1a69b61a46ca482b4c5f615648da1695440af2ad9d1048"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Introducing the elegant Bracelet E, a stunning women's accessory that combines a polished yellow gold curb chain with a striking red faceted stone. This bracelet features charming gold accents, including a small starfish and square charm. The lobster clasp and fine link extender ensure a secure and adjustable fit. Perfect for adding a touch of elegance to any outfit, this versatile bracelet is a must-have addition to your jewelry collection.</p>",
+     "digest": "f0b9f30c7087b82b55823b98ca7265b9e9e83fc4ddd252a20489193e54e4ff2e"
+    },
+    {
+     "key": "handle",
+     "value": "bracelet-e",
+     "digest": "417c8cc1a7cc148c5c0c2589b3ddb2ebc0288c70e6eab6b57ff75f9c5082ea86"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> ACCESSORIES",
+     "digest": "d6eedc295a75e00e2af14051f22502aa241f1e505a8606ba5db00cfbcc6d062d"
+    },
+    {
+     "key": "meta_title",
+     "value": "Bracelet E Accessory - Bracelet E",
+     "digest": "c0529577dc4ee35e22962c425c352b46cbe5091a322eddc732dc076da2eee362"
+    },
+    {
+     "key": "meta_description",
+     "value": "Bracelet E Accessory. Discover the Bracelet E, a stunning gold accessory featuring a red faceted stone and charming gold accents. Perfect for any occasion.",
+     "digest": "1557d363598dcb6b7f10fb8c8d40170cb02323feb47e28001236329c720c1db4"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pulsera E"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Presentamos la elegante pulsera E, un impresionante accesorio para mujer que combina una cadena de eslabones de oro amarillo pulido con una llamativa piedra roja facetada. Esta pulsera cuenta con encantadores detalles dorados, incluyendo una pequeña estrella de mar y un dije cuadrado. El cierre de langosta y la cadena extensible fina garantizan un ajuste seguro y regulable. Perfecta para añadir un toque de elegancia a cualquier conjunto, esta versátil pulsera es una incorporación imprescindible para su colección de joyas.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; ACCESORIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulsera E Accesorio - Pulsera E"
+    },
+    {
+     "key": "meta_description",
+     "value": "Pulsera E. Descubre la Pulsera E, un impresionante accesorio dorado que presenta una piedra roja facetada y encantadores detalles en oro. Perfecto para cualquier ocasión."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Pulseira E"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Apresentamos a elegante Pulseira E, um acessório feminino deslumbrante que combina uma corrente groumet de ouro amarelo polido com uma pedra vermelha facetada marcante. Esta pulseira conta com delicados detalhes dourados, incluindo um pequeno pingente de estrela-do-mar e um pingente quadrado. O fecho lagosta e o extensor de elos finos garantem um ajuste seguro e regulável. Perfeita para adicionar um toque de sofisticação a qualquer look, esta pulseira versátil é um item indispensável para sua coleção de joias.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; ACESSÓRIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Acessório Pulseira E - Bracelet E"
+    },
+    {
+     "key": "meta_description",
+     "value": "Acessório Pulseira E. Descubra a Pulseira E, um acessório dourado deslumbrante com pedra vermelha facetada e detalhes charmosos em dourado. Perfeita para qualquer ocasião."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217326874876": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Elodie Hoodie Set",
+     "digest": "4f0046dfe35803ebd675103ce0e8594e3ab6e1dc2c1a4c4d5f657c2a8491e448"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Elodie Sweatsuit offers a chic and comfortable fit, featuring a cropped hoodie and jogger pants. Available in versatile colors like white, black, lilac, pink, and stone, this set is perfect for lounging or casual outings. The hoodie includes a drawstring and ribbed cuffs, while the joggers have an elastic waistband and cuffs for a snug fit.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "eb6aa05b4104f4cd83c7ff504c8d6238d89fb675fe02b69e59b98b8c8d6c19d4"
+    },
+    {
+     "key": "handle",
+     "value": "elodie-hoodie-set",
+     "digest": "19c2df901f86bc45670a0a451747b2cf1e2a86bbe500e316636c23cf962dee47"
+    },
+    {
+     "key": "product_type",
+     "value": "SWEATSHIRTS",
+     "digest": "c88177dbf59be1d07ed42f4d45bc38c5b6cb212616fa794c0bd395a7b36901d5"
+    },
+    {
+     "key": "meta_title",
+     "value": "Elodie Hoodie Outfit - Elodie Hoodie Set",
+     "digest": "9779fabfbdf65eb527c057ae3f6a315144d7033651ed79e229a48ad1ed81f11a"
+    },
+    {
+     "key": "meta_description",
+     "value": "Elodie Hoodie Outfit. Discover the Elodie Sweatsuit, a perfect blend of style and comfort. Available in white, black, lilac, pink, and stone. Ideal for.",
+     "digest": "43d7b9db449e0dc8b29d52b6abc46ab2182e13447db19a78b366644bfa559754"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto Sudadera Elodie"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El Elodie Sweatsuit ofrece un ajuste elegante y cómodo, con una sudadera con capucha corta y pantalones de chándal. Disponible en colores versátiles como blanco, negro, lila, rosa y piedra, este conjunto es perfecto para descansar o para salidas casuales. La sudadera con capucha incluye un cordón y puños acanalados, mientras que los pantalones de chándal tienen una cintura elástica y puños para un ajuste ceñido.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "SUDADERAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Outfit con Sudadera Elodie - Conjunto Sudadera Elodie"
+    },
+    {
+     "key": "meta_description",
+     "value": "Outfit con Sudadera Elodie. Descubre el conjunto deportivo Elodie, la mezcla perfecta de estilo y comodidad. Disponible en blanco, negro, lila, rosa y piedra."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto de Moletom Elodie"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O conjunto de moletom Elodie oferece um caimento chique e confortável, apresentando um moletom com capuz cropped e calça jogger. Disponível em cores versáteis como branco, preto, lilás, rosa e pedra, este conjunto é perfeito para relaxar ou para passeios casuais. O moletom inclui um cordão e punhos canelados, enquanto a calça jogger possui cós e punhos elásticos para um ajuste firme.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MOLETONS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de Moletom Elodie - Conjunto de Moletom Elodie"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conjunto com Moletom Elodie. Descubra o agasalho Elodie, uma combinação perfeita de estilo e conforto. Disponível nas cores branco, preto, lilás, rosa e pedra. Ideal para."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217335197948": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Anya Bodysuit",
+     "digest": "3f87e4b51717472ba9ce55cfb20e35927f85d94c10c80ef8a03ad9244bb8140d"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Anya Bodysuit in White is a stylish addition to your wardrobe. It features a striking black and white geometric pattern with zigzags and ovals, applied as a sublimation print. Designed with a scoop neckline and sleeveless silhouette, it offers a slim fit that is both flattering and comfortable. The bodysuit is crafted from smooth, stretchy fabric and includes black binding at the neckline and armholes. Ideal for pairing with high-waisted shorts or jeans, this versatile piece is perfect for any occasion.</p>",
+     "digest": "79828ddd4558bdcc33ad260b4aa1a0ae2a4aa785e552196887ef1ffd2bd6cb69"
+    },
+    {
+     "key": "handle",
+     "value": "anya-bodysuit",
+     "digest": "87faf35b3624abf9d92779e1ebb4fcdbe8a40f0bf28fdd0a54937027db5b05fb"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> BODYSUIT",
+     "digest": "028ad4e2aeee3cffb32187c2071f05d4c3022d443135c82eb3604dd45c6aef4d"
+    },
+    {
+     "key": "meta_title",
+     "value": "Anya Bodysuit White - Anya Bodysuit",
+     "digest": "19207f7bad42e806a8bca24757df2ac7f3473d5611169a218bf7aa2cac289c56"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Anya Bodysuit White with a geometric pattern. This slim-fit, sleeveless piece pairs perfectly with high-waisted shorts or jeans.",
+     "digest": "04e0a56f23a5af5cabcf20737a821568e18c492e1104933baf6dadc6c0fd776e"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Body Anya"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El body Anya en color blanco es un añadido elegante para tu armario. Presenta un llamativo estampado geométrico en blanco y negro con zigzags y óvalos, aplicado mediante sublimación. Diseñado con un cuello redondo y una silueta sin mangas, ofrece un ajuste entallado que resulta favorecedor y cómodo a la vez. El body está confeccionado en un tejido suave y elástico, e incluye ribetes negros en el cuello y las sisas. Ideal para combinar con pantalones cortos de tiro alto o vaqueros, esta prenda versátil es perfecta para cualquier ocasión.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJERES &gt;&gt; BODIES"
+    },
+    {
+     "key": "meta_title",
+     "value": "Body Anya Blanco - Body Anya"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el body Anya blanco con estampado geométrico. Esta prenda sin mangas y de corte entallado combina a la perfección con pantalones cortos o vaqueros de tiro alto."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Body Anya"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>A Regata Body Anya Branca é uma adição estilosa ao seu guarda-roupa. Apresenta um padrão geométrico marcante em preto e branco, com ziguezagues e ovais, aplicado em estampa por sublimação. Com decote arredondado e modelagem sem mangas, oferece um caimento ajustado que valoriza e é confortável. O body é confeccionado em tecido liso e elástico, com acabamento em viés preto no decote e nas cavas. Ideal para combinar com shorts ou calça jeans de cintura alta, esta peça versátil é perfeita para qualquer ocasião.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; BODY"
+    },
+    {
+     "key": "meta_title",
+     "value": "Body Anya Branco - Body Anya"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Body Anya Branco com estampa geométrica. Slim fit, sem mangas, combina perfeitamente com shorts ou calça jeans de cintura alta."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217336148220": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Alia Shorts Set",
+     "digest": "a320a3f1ef148fba270d8ef05b06b204337ca59c9691b398a3a4956569ce00a1"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Alia Shorts Set is a stylish two-piece outfit available in classic black and vibrant pink. This set includes a sleeveless crop top with a scoop neckline and high-waisted shorts, both crafted from ribbed fabric for a form-fitting silhouette. With no visible pockets or closures, it offers a sleek look ideal for casual outings or lounging.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "b52baeb48b3ca38a709a1f6fc2eb6efb77d68890a85f8a35eeff6cff79df460b"
+    },
+    {
+     "key": "handle",
+     "value": "alia-shorts-set",
+     "digest": "e1aa6f5a5f5f30808e17a56be220162df59119af473e0cf509daf6e645a184a4"
+    },
+    {
+     "key": "product_type",
+     "value": "SHORTS",
+     "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+    },
+    {
+     "key": "meta_title",
+     "value": "Alia Shorts Set - Alia Shorts Set",
+     "digest": "49008cc6373f8e443b28f35a0d5e6f04381642fd2adb274129db6db2a0c1d6fa"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore the Alia Shorts Set, a chic two-piece with a sleeveless top and high-waisted shorts. Available in black and pink, ideal for casual outings.",
+     "digest": "dc75038119ca38d926e44476e6fb26eeb9bbcd4f915d9b5d7f3de681e28cfcd0"
+    }
+   ],
+   "es": [
+    {
+     "key": "body_html",
+     "value": "<p>El conjunto Alia Shorts es un elegante atuendo de dos piezas disponible en negro clásico y rosa vibrante. Este conjunto incluye un top corto sin mangas con escote redondo y pantalones cortos de talle alto, ambos confeccionados en tejido acanalado para una silueta ajustada. Sin bolsillos ni cierres visibles, ofrece un aspecto impecable, ideal para salidas informales o para estar en casa.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "PANTALONES CORTOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de shorts Alia - Conjunto de shorts Alia"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explora el conjunto de shorts Alia, una pieza chic de dos partes con top sin mangas y shorts de tiro alto. Disponible en negro y rosa, ideal para salidas casuales."
+    },
+    {
+     "key": "title",
+     "value": "Conjunto de shorts Alia"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto Alia Shorts"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O Conjunto Alia Shorts é um look estiloso de duas peças disponível em preto clássico e rosa vibrante. O conjunto inclui um top cropped sem mangas com decote arredondado e shorts de cintura alta, ambos confeccionados em tecido canelado para uma silhueta ajustada. Sem bolsos ou fechos aparentes, oferece um visual moderno ideal para passeios casuais ou momentos de relaxamento.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; SHORTS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Alia Shorts Set - Conjunto Alia Shorts"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça o Alia Shorts Set, um conjunto elegante com regata sem mangas e shorts de cintura alta. Disponível em preto e rosa, ideal para passeios casuais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217336738044": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Aleena Knot T-Shirt",
+     "digest": "06bbe348ef48d7b791f4c7cbcad0d3bb0a3336e5dc087bb288897ebab3a10be8"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your casual style with the Aleena Knot T-Shirt. This trendy crop top features a stylish front tie closure and a comfortable crew neckline. Made from smooth cotton, it offers a regular fit with short sleeves. Available in army, bronze, and white, this versatile piece is perfect for pairing with jeans or skirts. Available in sizes XS to XL, and machine washable for easy care.</p>",
+     "digest": "e70acbaeb66e1837dacb80897527b6459c3dbeaceec6c882c1c981370e0e820e"
+    },
+    {
+     "key": "handle",
+     "value": "aleena-knot-t-shirt",
+     "digest": "ee681e5f3d3b404c36e59c98884465fdcadd6dcc1e5122aa408041e8b1022f0e"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Aleena Knot T-Shirt - Aleena Knot T-Shirt",
+     "digest": "b88757d0528f3585248c4628bdc02f3eaa93bb56b4de9bd51d14724063392490"
+    },
+    {
+     "key": "meta_description",
+     "value": "Shop the Aleena Knot T-Shirt, a chic women's crop top with a front tie closure. Available in army, bronze, and white. Perfect for casual outings.",
+     "digest": "050692483983f8b9d0070b2b480e0a838d4a676571b19713e6f483279a8b1b87"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Camiseta con nudo Aleena"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo casual con la camiseta Aleena Knot. Este moderno top corto presenta un elegante cierre de nudo frontal y un cómodo cuello redondo. Confeccionada en algodón suave, ofrece un corte regular con mangas cortas. Disponible en colores militar, bronce y blanco, esta prenda versátil es perfecta para combinar con jeans o faldas. Disponible en tallas de la XS a la XL, y lavable a máquina para un fácil cuidado.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; CAMISETAS Y BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Camiseta con nudo Aleena - Camiseta con nudo Aleena"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compra la camiseta Aleena Knot, un elegante top corto para mujer con cierre de nudo frontal. Disponible en color militar, bronce y blanco. Perfecto para salidas informales."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Camiseta com Nó Aleena"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo casual com a Camiseta Aleena Knot. Este cropped moderno conta com um charmoso nó frontal e gola redonda confortável. Feita em algodão macio, oferece caimento regular com mangas curtas. Disponível nas cores army, bronze e branco, é uma peça versátil para combinar com calça jeans ou saias. Disponível nos tamanhos XS ao XL e pode ser lavada na máquina para facilitar o cuidado.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Aleena Knot T-Shirt - Aleena Knot T-Shirt"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compre a Aleena Knot T-Shirt, uma regata cropped feminina com nó frontal. Disponível nas cores army, bronze e branco. Perfeita para looks casuais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217337229564": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Alia Crop Tank",
+     "digest": "1751dcb176b7a1487566fab39afbdfd9784fa9e74404ed7f0c45e3ce192022fe"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Alia Shorts Set offers a stylish and comfortable look with its two-piece design. Available in classic black and vibrant pink, this set features a sleeveless crop top with a scoop neckline and high-waisted shorts. The form-fitting silhouette and ribbed fabric add a trendy touch, perfect for casual outings or lounging. With no visible pockets or closures, this set provides a sleek, streamlined appearance.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "c48d2fc1cc5fd3de6cf4fb46cb9db666e9a92411582503dbaed92d9d970b5158"
+    },
+    {
+     "key": "handle",
+     "value": "alia-crop-tank",
+     "digest": "8ba0f99832ceda20fdf48ef9209d54c9a2f559c48339c887583f8e8c33db4257"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Alia Shorts Set - Alia Shorts Set",
+     "digest": "49008cc6373f8e443b28f35a0d5e6f04381642fd2adb274129db6db2a0c1d6fa"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Alia Shorts Set, a chic two-piece in black and pink with a sleeveless top and high-waisted shorts. Perfect for a stylish, effortless look.",
+     "digest": "47da19de9139b9c3d8b5233337828b73e994426f42e2094a634aa07fe5efba9f"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Top corto Alia"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El conjunto de shorts Alia ofrece un look elegante y cómodo gracias a su diseño de dos piezas. Disponible en negro clásico y rosa vibrante, este conjunto cuenta con un top corto sin mangas con cuello redondo y shorts de talle alto. La silueta ajustada y el tejido acanalado añaden un toque moderno, perfecto para salidas informales o para estar en casa. Sin bolsillos ni cierres visibles, este conjunto proporciona una apariencia estilizada y uniforme.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; TOPS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de shorts Alia - Conjunto de shorts Alia"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto de shorts Alia, un elegante dos piezas en negro y rosa con top sin mangas y shorts de tiro alto. Perfecto para un look estiloso y sencillo."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Regata Cropped Alia"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O Conjunto de Shorts Alia oferece um visual estiloso e confortável com seu design de duas peças. Disponível em preto clássico e rosa vibrante, este conjunto conta com uma regata cropped sem mangas e shorts de cintura alta. A silhueta ajustada e o tecido canelado trazem um toque moderno, perfeito para passeios casuais ou momentos de relaxamento. Sem bolsos ou fechos aparentes, o conjunto garante um visual clean e elegante.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de Shorts Alia - Conjunto de Shorts Alia"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça o Conjunto de Shorts Alia, duas peças estilosas em preto e rosa com regata e shorts de cintura alta. Visual moderno e prático."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217339654396": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Ella Legging",
+     "digest": "46792a90846ce5b5f637a199d75bdc6a5a64a227edb9bcd2307804c073232053"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Introducing the Ella Legging in black, designed for a sleek and comfortable fit. These slim fit leggings are ankle length, perfect for both workouts and everyday wear. The wide, flat waistband ensures a secure fit, while the smooth, stretchy fabric offers maximum comfort. Made from a durable blend of Nylon and Spandex, these leggings are 100% squat-proof, making them ideal for any activity.</p>",
+     "digest": "dabefba51b70c6963b24ca73f47cdb106d46b8ef9d732daa802e8000864bfdab"
+    },
+    {
+     "key": "handle",
+     "value": "ella-legging",
+     "digest": "28d1490a033dc34b581cf299e7b9469f5f4e6c396e5e5c6345a087cdfd82d0a4"
+    },
+    {
+     "key": "product_type",
+     "value": "PANTS",
+     "digest": "3637ce56e03203a0f0b29b5ebbac570cfeeb32b40700c37d5a620c5f3eea7cad"
+    },
+    {
+     "key": "meta_title",
+     "value": "Ella Legging Black - Ella Legging",
+     "digest": "2f00588b9b2bca1b519b5383115d02ebcc69935a7a7f6398e7fa2200cd509ef3"
+    },
+    {
+     "key": "meta_description",
+     "value": "Ella Legging Black. Discover the Ella Legging in black, featuring a slim fit and ankle length design. Made from a stretchy, smooth fabric with a wide.",
+     "digest": "f7f68718ce75befa130b5d70085c29b3895bea4468d1d488cd3d51cbe1ad0bcc"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Legging Ella"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Presentamos los leggings Ella en negro, diseñados para un ajuste elegante y cómodo. Estos leggings de corte ajustado llegan hasta el tobillo, siendo perfectos tanto para hacer ejercicio como para el uso diario. La cintura ancha y plana garantiza un ajuste seguro, mientras que su tejido suave y elástico ofrece la máxima comodidad. Confeccionados con una mezcla duradera de nailon y elastano, estos leggings son 100% opacos, lo que los hace ideales para cualquier actividad.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "PANTALONES"
+    },
+    {
+     "key": "meta_title",
+     "value": "Legging Ella Negra - Ella Legging"
+    },
+    {
+     "key": "meta_description",
+     "value": "Leggings Ella Negros. Descubre los leggings Ella en color negro, que presentan un corte ajustado y diseño al tobillo. Confeccionados en un tejido elástico y suave con una cintura ancha."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Ella Legging"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Apresentamos a Ella Legging na cor preta, desenvolvida para um caimento elegante e confortável. Esta legging de modelagem justa tem comprimento até o tornozelo, perfeita tanto para treinos quanto para o dia a dia. O cós largo e plano garante ajuste seguro, enquanto o tecido liso e elástico oferece máximo conforto. Confeccionada em uma mistura resistente de Nylon e Spandex, é 100% à prova de agachamento, ideal para qualquer atividade.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; CALÇAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Ella Legging Preta - Ella Legging"
+    },
+    {
+     "key": "meta_description",
+     "value": "Ella Legging Preta. Descubra a Ella Legging preta, com modelagem justa e comprimento no tornozelo. Feita em tecido elástico e macio com cós largo."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217351090428": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Trent Denim Shorts",
+     "digest": "fb9e8dbd6a285f1588062077ff0e7ee761d647d7b6afb949fcbc6160eeae0aba"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Upgrade your casual style with the Trent Denim Shorts in a grey washed finish. These shorts offer a regular fit and feature a classic five-pocket design, complete with a button-zip closure. The distressed detailing adds a modern edge, making them perfect for everyday wear. Pair them with your favorite tee or a smart shirt for a versatile outfit.</p>",
+     "digest": "0a2f4c9ec43e37cfe3351584702228612bd852c530cad88bc03c9b7f1ef3d26a"
+    },
+    {
+     "key": "handle",
+     "value": "trent-denim-shorts",
+     "digest": "3d7f4f9ee81bb279636ee8f0f25da7e8d18a6897e408b9fdddb850a6239fa1a3"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> SHORTS",
+     "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+    },
+    {
+     "key": "meta_title",
+     "value": "Trent Denim Shorts - Trent Denim Shorts",
+     "digest": "c10d344e945df27da63c80d3da8d630d8aaa88c71862ffe8828903af4734d6da"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Trent Denim Shorts in grey washed. These men's shorts feature a distressed design, regular fit, and five-pocket style for a trendy look.",
+     "digest": "8ab8049f2f999279ddc007a4d0ca3e408909da132cd35a2fd7b0abf7d3d02e5e"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Trent Shorts vaqueros"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Mejora tu estilo casual con los pantalones cortos de mezclilla Trent en un acabado lavado gris. Estos pantalones cortos ofrecen un ajuste regular y cuentan con un diseño clásico de cinco bolsillos, completo con cierre de botón y cremallera. Los detalles desgastados añaden un toque moderno, haciéndolos perfectos para el uso diario. Combínalos con tu camiseta favorita o una camisa elegante para un atuendo versátil.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRE &gt;&gt; PANTALONES CORTOS"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre los pantalones cortos de mezclilla Trent en gris lavado. Estos shorts para hombre presentan un diseño desgastado, ajuste regular y estilo de cinco bolsillos para un look moderno."
+    },
+    {
+     "key": "meta_title",
+     "value": "Pantalones cortos de mezclilla Trent - Pantalones cortos de mezclilla Trent"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Shorts Jeans Trent"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renove seu estilo casual com o Trent Denim Shorts em acabamento cinza lavado. Este shorts oferece modelagem regular e apresenta o clássico design cinco bolsos, com fechamento por botão e zíper. Os detalhes desgastados adicionam um toque moderno, tornando-o perfeito para o dia a dia. Combine com sua camiseta favorita ou uma camisa para um visual versátil.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; SHORTS"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Trent Denim Shorts em cinza lavado. Shorts masculino com design desgastado, modelagem regular e estilo cinco bolsos para um visual moderno."
+    },
+    {
+     "key": "meta_title",
+     "value": "Trent Denim Shorts - Trent Denim Shorts"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217351745788": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Alex Denim Shorts",
+     "digest": "b2f5db1c70100d675a6146f590baba30409d76f4262442bf2b1e8a5748a8de24"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Upgrade your wardrobe with the Alex Denim Shorts, designed for style and comfort. These black denim shorts boast a regular fit and knee-length cut, perfect for summer outings. The distressed patches and frayed holes on the front add a trendy touch, while the back remains plain with a subtle 'CARBON JEANS' logo on the waistband. Complete with a zip fly, button closure, and standard pockets, these shorts offer practicality and fashion in one.</p>",
+     "digest": "7823b49e473da5af14a7eea733576af4571a807757cb81d8bd35fed73b3bfd55"
+    },
+    {
+     "key": "handle",
+     "value": "alex-denim-shorts",
+     "digest": "5a0de850ec8655a702b5dfcd8f3eb39f996632fb58d09a86ced1275d8e479db7"
+    },
+    {
+     "key": "product_type",
+     "value": "SHORTS",
+     "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+    },
+    {
+     "key": "meta_title",
+     "value": "Alex Denim Shorts - Alex Denim Shorts",
+     "digest": "e449b3c2585c5394599e6f540daed08f2c90e8aa57302d378c25f3b85a38db17"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore Alex Denim Shorts in black, regular fit with distressed front. Ideal for casual wear, featuring a zip fly and knee-length style.",
+     "digest": "823d1e3e99fe12ab46de76ae30a0eae65a665eb6162682fb60562607b5568df9"
+    }
+   ],
+   "es": [
+    {
+     "key": "meta_title",
+     "value": "Shorts de mezclilla Alex - Shorts de mezclilla Alex"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre los Shorts de mezclilla Alex en negro, ajuste regular y largo a la rodilla. Parches desgastados y agujeros deshilachados. ¡Compra ya!"
+    },
+    {
+     "key": "title",
+     "value": "Shorts de mezclilla Alex"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Los Shorts de mezclilla Alex en color negro están confeccionados con mezclilla resistente, con un ajuste regular y un largo hasta la rodilla. Estos shorts presentan parches desgastados y agujeros deshilachados en la parte frontal, que añaden un toque moderno a tu guardarropa casual. Incluyen bolsillos delanteros y traseros estándar, bragueta con cremallera y cierre de botón, y una pretina de 4 cm de alto con pasadores para cinturón. La pretina trasera está decorada con una etiqueta 'CARBON JEANS' y el logotipo hexagonal. Disponibles en tallas de cintura 29–36, estos shorts son versátiles y con estilo.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; PANTALONES CORTOS"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Shorts Jeans Alex"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O Shorts Jeans Alex em preto é confeccionado em jeans resistente, com modelagem regular e comprimento até o joelho. Este shorts apresenta partes desgastadas e rasgos propositais na frente, adicionando um toque despojado ao seu guarda-roupa casual. Conta com bolsos frontais e traseiros padrão, braguilha com zíper e botão de fechamento, e cintura alta de 4 cm com passadores para cinto. A parte de trás da cintura traz uma etiqueta 'CARBON JEANS' e o logo em formato de hexágono. Disponível nos tamanhos de cintura 29–36, este shorts é versátil e estiloso.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; SHORTS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts Jeans Alex - Shorts Jeans Alex"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Shorts Jeans Alex em preto, modelagem regular e comprimento até o joelho. Detalhes desgastados e rasgados. Compre agora!"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217360789756": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Bracelet Z",
+     "digest": "bd3f7f79015ff865af88e760547cb79a177b5880f584c2c99bc544de5eb472d6"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your style with the Bracelet Z, a sophisticated men's accessory crafted from premium black leather. This wrap-around bracelet features three distinct strands: flat, braided, and textured, all held together with a sleek black matte magnetic clasp. Perfect for both casual and formal occasions, this lightweight and comfortable bracelet is a must-have addition to your accessory collection.</p>",
+     "digest": "3f075b707c98c150d3e43021426f2f7c4bb8252b56c5f8da959f637b378d7c57"
+    },
+    {
+     "key": "handle",
+     "value": "bracelet-z",
+     "digest": "705315f9f4130a81a3143fc2d13917f3df4af6f77737fad45c4af010f35913db"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> ACCESSORIES",
+     "digest": "cd1279f9161cbae6349d93f631b07e010a7b42a8f84500170abb23118217a01f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Bracelet Z Leather - Bracelet Z",
+     "digest": "d6ef69ebee61305df5c89f3eb48b2aa146511f07daf42c03fbfaae3eb0f4a9de"
+    },
+    {
+     "key": "meta_description",
+     "value": "Bracelet Z Leather. Discover the Bracelet Z, a stylish black leather wrap-around bracelet for men with a sleek magnetic clasp. Perfect for any occasion.",
+     "digest": "6aa71b4dd35475630b7513f4135e44e1e631b21c42279cc6c4bf384457b90922"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pulsera Z"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo con la pulsera Z, un sofisticado accesorio para hombre confeccionado en piel negra de primera calidad. Esta pulsera envolvente presenta tres hilos distintos: plano, trenzado y texturizado, todos unidos por un elegante cierre magnético en negro mate. Perfecta tanto para ocasiones informales como formales, esta pulsera ligera y cómoda es una incorporación imprescindible para tu colección de accesorios.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; ACCESORIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulsera Z de piel - Pulsera Z"
+    },
+    {
+     "key": "meta_description",
+     "value": "Pulsera Z de piel. Descubre la pulsera Z, una elegante pulsera de piel negra de doble vuelta para hombre con un sofisticado cierre magnético. Perfecta para cualquier ocasión."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Pulseira Z"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo com a Pulseira Z, um acessório masculino sofisticado feito em couro preto premium. Esta pulseira envolvente apresenta três tiras distintas: lisa, trançada e texturizada, todas unidas por um fecho magnético preto fosco. Perfeita para ocasiões casuais e formais, esta pulseira leve e confortável é um item indispensável para sua coleção de acessórios.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMENS &gt;&gt; ACESSÓRIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulseira Z Couro - Bracelet Z"
+    },
+    {
+     "key": "meta_description",
+     "value": "Pulseira Z Couro. Descubra a Pulseira Z, uma pulseira masculina de couro preto envolvente com fecho magnético elegante. Perfeita para qualquer ocasião."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217433829628": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Edi Lobster Skirt",
+     "digest": "d6ad634aac008e72953c95d80b28065a3be73c00c1cdbb21197254dc94aaf45a"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your wardrobe with the Edi Lobster Skirt in camel. This mini skirt boasts a smooth fabric and a tailored fit, perfect for both casual and formal settings. The subtle side slit adds a touch of flair, making it a versatile piece for day or night wear. Pair it with your favorite tops and accessories for a chic ensemble.</p>",
+     "digest": "c61eaa954aaf479c25a581297ded4f79f0bac5e83490e54fc7ded9b148f1d381"
+    },
+    {
+     "key": "handle",
+     "value": "edi-lobster-skirt",
+     "digest": "6e4b0b65a01984dd33321a91d34fa4eab1975bb3e4a84124d83e1e231f46d42f"
+    },
+    {
+     "key": "product_type",
+     "value": "SKIRT",
+     "digest": "ddd4fd7bc962e90df3bd7c51801d1dc441557d347a81471fd6c3f59e884a7dc5"
+    },
+    {
+     "key": "meta_title",
+     "value": "Edi Lobster Skirt - Edi Lobster Skirt",
+     "digest": "a7f8263c5005697f3fddb28cc07ee0ffd19d0912a4288963983a65e14ecd93bd"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Edi Lobster Skirt in camel. This tailored mini skirt features a chic side slit, offering a stylish look for any occasion.",
+     "digest": "4e0b3fd44dec1adadba2b9db24af07067af1e64b5240da1096fb9ea221f592d0"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Falda de langosta Edi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu guardarropa con la falda Edi Lobster en color camel. Esta minifalda presenta una tela suave y un ajuste entallado, perfecta tanto para entornos casuales como formales. La sutil abertura lateral añade un toque de estilo, convirtiéndola en una prenda versátil para usar de día o de noche. Combínala con tus blusas y accesorios favoritos para un conjunto elegante.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FALDA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Falda Edi Lobster - Falda Edi Lobster"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre la falda Edi Lobster en color camel. Esta minifalda entallada presenta una elegante abertura lateral, ofreciendo un look con estilo para cualquier ocasión."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Saia Edi Lobster"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renove seu guarda-roupa com a Edi Lobster Saia em camel. Esta minissaia apresenta tecido suave e caimento ajustado, perfeita para ambientes casuais ou formais. A fenda lateral discreta traz um toque de estilo, tornando-a uma peça versátil para o dia ou a noite. Combine com seus tops e acessórios favoritos para um look sofisticado.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; SAIA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Edi Lobster Saia - Edi Lobster Saia"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra a Edi Lobster Saia em camel. Esta minissaia ajustada possui fenda lateral elegante, trazendo estilo para qualquer ocasião."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217435140348": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "River Top Set",
+     "digest": "97c889f0784c5a8abb8b12eb8b332754850b82fcfc7c2102b6c0001657251c53"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your style with the River Top Set in black. This chic crop top boasts a metallic shimmer and a fitted silhouette, complemented by a scoop neckline and delicate spaghetti straps. Perfect for evening outings, its sleek design ensures you make a statement. The smooth fabric and straight hem offer a comfortable yet stylish fit. Ideal for pairing with high-waisted skirts or pants, this top is a must-have addition to your wardrobe.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "f4f44e265e01ccc3a3773fd6b94b43f0ca875635a52ddebb946ff4b5a879d881"
+    },
+    {
+     "key": "handle",
+     "value": "river-top-set",
+     "digest": "be45b8f151b4c20654a578894bdda392bb43cd842c56ab7c01f04b8f54eee8b6"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Stylish River Top Outfit in Black - River Top Set",
+     "digest": "d9c8b77a32dc944205f115825b9dd1c0baee23211e7c767a6df5341fc9729143"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the River Top Set in black. This fitted crop top features a metallic shimmer, scoop neckline, and spaghetti straps, perfect for evening outings.",
+     "digest": "39c3ba4bc43b1cf94371cf8800820ed8289d9a241a2cda4197a9c4f3b843533f"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto River Top"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo con el conjunto River Top en negro. Este elegante top corto presume de un brillo metálico y una silueta ajustada, complementado con un escote redondo y delicados tirantes finos. Perfecto para salidas nocturnas, su diseño estilizado garantiza que marcarás tendencia. El tejido suave y el dobladillo recto ofrecen un ajuste cómodo y a la vez elegante. Ideal para combinar con faldas o pantalones de tiro alto, este top es una incorporación imprescindible en tu armario.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "ESPAÑOL &gt;&gt; TOPS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de top River elegante en negro - Conjunto de top River"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto River Top en color negro. Este crop top ajustado presenta un brillo metalizado, cuello redondo y tirantes finos, perfecto para salidas nocturnas."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto River Top"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu visual com o River Top Set em preto. Este top cropped sofisticado possui brilho metálico e modelagem ajustada, com decote arredondado e alças finas delicadas. Perfeito para saídas à noite, seu design elegante garante destaque. O tecido macio e a barra reta proporcionam conforto e estilo. Ideal para combinar com saias ou calças de cintura alta, é um item indispensável no seu guarda-roupa.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto River Top Estiloso em Preto - River Top Set"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o River Top Set em preto. Top cropped ajustado com brilho metálico, decote arredondado e alças finas, perfeito para a noite."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217468104956": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Philadelphia Tee",
+     "digest": "f936dd5e54030a238aacbc01d1aa89ef7950c855ad009ba5c22fffa722976187"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Embrace the spirit of Philadelphia with this acid washed tee. Featuring an oversized fit, this T-shirt showcases a bold 'Philadelphia' print with a baseball and tiger graphic at the front. The crew neck and soft, washed texture add comfort, making it perfect for casual outings or relaxing at home. Its plain back and straight hem offer a clean look, while the center back seam adds subtle detail. Pair with leggings or jeans for effortless style.</p>",
+     "digest": "f7ada47d9d9191f88f3f9578a235743606456fdd215748e64b58797691eac4cc"
+    },
+    {
+     "key": "handle",
+     "value": "philadelphia-tee",
+     "digest": "bfa0522c04c23e887dc6159df952ad3a809ec2494d6a9c3d693080e78d7894c6"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TEES",
+     "digest": "825768593c36f0ba5443542795edce80dce575d721a9b5813e689f744f8d56a8"
+    },
+    {
+     "key": "meta_title",
+     "value": "Philadelphia Tee - Philadelphia Tee",
+     "digest": "a3e0695475f99665ddc25c8669f227aa76761652c5e8c25e4e15613636b4fa1a"
+    },
+    {
+     "key": "meta_description",
+     "value": "Shop the Philadelphia Tee, an acid washed, oversized graphic T-shirt featuring bold prints. Perfect for casual outings or lounging in style.",
+     "digest": "0f2d92c393aed4c9ef9b299d984c7238f4a48ea7a2cdc91e59fc47aa5896ed93"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Camiseta Philadelphia"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Adopta el espíritu de Filadelfia con esta camiseta de lavado ácido. Con un corte oversized, esta camiseta luce un llamativo estampado de \"Philadelphia\" con un gráfico de una pelota de béisbol y un tigre en la parte delantera. El cuello redondo y la textura suave y lavada añaden comodidad, haciéndola perfecta para salidas informales o para relajarse en casa. Su espalda lisa y su dobladillo recto ofrecen un aspecto limpio, mientras que la costura central en la espalda añade un detalle sutil. Combínala con leggings o jeans para un estilo sin esfuerzo.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; CAMISETAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Camiseta Filadelfia - Camiseta Filadelfia"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compra la camiseta Philadelphia, una camiseta de corte extragrande con efecto lavado al ácido y estampados llamativos. Perfecta para salidas informales o para descansar con estilo."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Camiseta Philadelphia"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Entre no clima de Philadelphia com esta camiseta acid washed. Com modelagem oversized, esta t-shirt traz uma estampa marcante de 'Philadelphia' com gráfico de beisebol e tigre na frente. A gola careca e o toque macio lavado garantem conforto, perfeita para passeios casuais ou relaxar em casa. As costas lisas e a barra reta proporcionam um visual limpo, enquanto a costura central nas costas adiciona um detalhe sutil. Combine com leggings ou calça jeans para um estilo descomplicado.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; CAMISETAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Philadelphia Tee - Philadelphia Tee"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compre a Philadelphia Tee, camiseta oversized acid washed com estampa marcante. Perfeita para passeios casuais ou relaxar com estilo."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217473380604": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Bradley Jacket",
+     "digest": "d348f7cff2ce9ad003a252de5cd649fdaf43d4aad17017d03f5ea7331a613b06"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Bradley Jacket offers a sleek and modern look with its dark blue leather finish. Designed for a regular fit, this jacket features a band collar with a snap button and ribbed shoulder panels for added style. The central zipper closure and angled zippered chest pocket on the wearer's left provide functionality and flair. With zippered cuffs and a straight hem, this jacket is perfect for both casual and semi-formal occasions. Embrace the clean, undistressed look with smooth leather and silver hardware.</p>",
+     "digest": "92e4317f4c9f506ee2794b1bfe54512d3e79373774ea5a3cbc34fef71fb89977"
+    },
+    {
+     "key": "handle",
+     "value": "bradley-jacket",
+     "digest": "6f1b081d679642d7e9b6fa9f86934ded7071f0a971e9e96b86f9f01a4ef62aa3"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> JACKET",
+     "digest": "416b9eaaf0b3a5837edbf04b91a99f79d36850de40e7a4b399233e123b6397f0"
+    },
+    {
+     "key": "meta_title",
+     "value": "Bradley Jacket - Bradley Jacket",
+     "digest": "2e3f230b3ef0407ba02d41ba2b95c382a0b8fe5a65957d8c5575ac489f0ce9f3"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Bradley Jacket in dark blue. This men's leather biker jacket features a band collar, ribbed shoulder panels, and a sleek zippered design.",
+     "digest": "67928aed581d42d210b4d0fa7654b8b817cfdd7b6ac73e5772e04ed1d885d881"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Chaqueta Bradley"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>La chaqueta Bradley ofrece un aspecto elegante y moderno con su acabado de cuero azul oscuro. Diseñada con un corte regular, esta chaqueta presenta un cuello mao con botón a presión y paneles acanalados en los hombros para darle un toque de estilo. El cierre central de cremallera y el bolsillo diagonal con cremallera en el pecho, situado en el lado izquierdo del usuario, aportan funcionalidad y distinción. Con puños con cremallera y un dobladillo recto, esta chaqueta es perfecta tanto para ocasiones informales como semiformales. Apuesta por un estilo pulcro y sin desgaste con su cuero suave y herrajes plateados.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRE &gt;&gt; CHAQUETA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Chaqueta Bradley - Chaqueta Bradley"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre la Chaqueta Bradley en azul oscuro. Esta chaqueta biker de cuero para hombre cuenta con cuello tipo banda, paneles acanalados en los hombros y un diseño elegante con cierre de cremallera."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Jaqueta Bradley"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>A Bradley Jacket oferece um visual moderno e elegante com acabamento em couro azul escuro. Com modelagem regular, esta jaqueta possui gola padre com botão de pressão e ombros com detalhes canelados para mais estilo. O fechamento central em zíper e o bolso no peito com zíper inclinado do lado esquerdo do usuário trazem funcionalidade e charme. Com punhos com zíper e barra reta, é perfeita para ocasiões casuais ou semiformais. Aposte no visual limpo e sofisticado do couro liso com ferragens prateadas.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMENS &gt;&gt; JAQUETA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Bradley Jacket - Bradley Jacket"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra a Bradley Jacket em azul escuro. Jaqueta biker masculina em couro com gola padre, ombros canelados e design elegante com zíper."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217475903740": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Tim Swimwear",
+     "digest": "43207ebf68c04bf2a2e3d35e322e2ee0743c35215da2c7af0cb0a693901d603f"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your summer style with Tim Swimwear shorts, designed with striking blue stripes on a white background. These men's swim trunks offer a regular fit and mid-thigh length, perfect for beach outings and poolside relaxation. Crafted from smooth synthetic fabric, they feature a blue drawstring closure, silver eyelets, and side pockets for convenience. Enjoy the comfort and style of these quick-drying swim shorts, ideal for any sunny day adventure.</p>",
+     "digest": "fb0990db1fda623cce9220bb7879f94b462559e05e632cfeaa8802cbe8d05063"
+    },
+    {
+     "key": "handle",
+     "value": "tim-swimwear",
+     "digest": "ac200b55b90a80a1deb369b3b88af7d150672c44c434a7acf9b3b9840ee43b39"
+    },
+    {
+     "key": "product_type",
+     "value": "SWIMWEAR",
+     "digest": "e7d7527902878a00083f0d908cc3d56ef2d98debc1404271a2965262a01f006c"
+    },
+    {
+     "key": "meta_title",
+     "value": "Tim Swimwear Shorts - Tim Swimwear",
+     "digest": "c2e4d9d0078f0b6dfe1fc802adf87d1e7e39d1bfa99f001c1bb7723733f28ad8"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore Tim Swimwear Shorts with blue stripes. These stylish swim trunks offer comfort and a smooth fit for your summer adventures.",
+     "digest": "2239db056501bad25c9b6a9fc5da032e4d9853ec56b764bab3ed3650d5deb0f9"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Trajes de baño Tim"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo veraniego con los shorts de Tim Swimwear, diseñados con llamativas rayas azules sobre un fondo blanco. Estos bañadores para hombre ofrecen un corte regular y una longitud hasta la mitad del muslo, perfectos para salidas a la playa y relajarse en la piscina. Confeccionados en tejido sintético suave, cuentan con un cierre de cordón azul, ojales plateados y bolsillos laterales para mayor comodidad. Disfruta de la comodidad y el estilo de estos shorts de baño de secado rápido, ideales para cualquier aventura en un día soleado.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "TRAJE DE BAÑO"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explora los shorts de baño Tim con rayas azules. Estos elegantes bañadores ofrecen comodidad y un ajuste suave para tus aventuras de verano."
+    },
+    {
+     "key": "meta_title",
+     "value": "Bañador Tim - Tim Swimwear"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Short de banho Tim"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Realce seu estilo de verão com o Tim Swimwear, shorts com listras azuis marcantes sobre fundo branco. Esta bermuda de praia masculina tem modelagem regular e comprimento médio na coxa, perfeita para praia e piscina. Confeccionada em tecido sintético macio, conta com cordão azul, ilhós prateados e bolsos laterais para praticidade. Aproveite o conforto e estilo deste short de secagem rápida, ideal para qualquer aventura ensolarada.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; MODA PRAIA"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore os Shorts Tim Swimwear com listras azuis. Estes shorts de banho estilosos oferecem conforto e caimento suave para suas aventuras de verão."
+    },
+    {
+     "key": "meta_title",
+     "value": "Tim Swimwear Shorts - Tim Swimwear"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217476034812": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Hank Swimwear",
+     "digest": "54e7a141379bc05e31213224e5228326e468a851b35a86c81ce118c6af7e67c0"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Dive into style with the Hank Swimwear Shorts, designed for both comfort and flair. These navy blue swim shorts boast a striking white and light blue tropical leaf and dot pattern, perfect for any beach outing. With a regular fit and mid-thigh length, they ensure a relaxed wear. The smooth synthetic fabric provides durability, while the white drawstring waistband and two side pockets add functionality. Experience the perfect blend of style and practicality with Hank Swimwear.</p>",
+     "digest": "4b2427939bc55cc578a36692c4ad71d99151936869af9b80cfe2289821a7ccab"
+    },
+    {
+     "key": "handle",
+     "value": "hank-swimwear",
+     "digest": "642a3ea702a072fd68acc48027047f885e1ea06815b963425da106c4ff52cd31"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> SWIMWEAR",
+     "digest": "ba262f4e4e57c118d10fcc300856f06d390a93ca4e1a5ad91e5cf474bc4dc791"
+    },
+    {
+     "key": "meta_title",
+     "value": "Hank Swimwear Shorts - Hank Swimwear",
+     "digest": "0146374d4c70f89894bee4ad1200c983d50e9a8fb80411c76c41783d1434ad37"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore the beach with Hank Swimwear Shorts. Featuring a navy blue tropical leaf and dot pattern, these regular fit swim shorts offer style and comfort.",
+     "digest": "2a7e59f7119de080f49681bba8ebd90d5d6bd22b1bb1a61ab0caca39a80ccff9"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Trajes de baño Hank"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Sumérgete en el estilo con los pantalones cortos de baño Hank, diseñados tanto para la comodidad como para el buen gusto. Estos shorts de baño azul marino presentan un llamativo estampado de hojas tropicales y puntos en blanco y azul claro, perfecto para cualquier salida a la playa. Con un corte regular y un largo a medio muslo, aseguran un uso relajado. El tejido sintético suave proporciona durabilidad, mientras que la cintura con cordón blanco y los dos bolsillos laterales añaden funcionalidad. Experimenta la combinación perfecta de estilo y practicidad con Hank Swimwear.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRE &gt;&gt; TRAJES DE BAÑO"
+    },
+    {
+     "key": "meta_title",
+     "value": "Bañador tipo short Hank - Hank Swimwear"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explora la playa con los shorts de baño Hank. Con un estampado de hojas tropicales y puntos en azul marino, estos shorts de corte regular ofrecen estilo y comodidad."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Short de banho Hank"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Mergulhe no estilo com os Shorts Hank Swimwear, projetados para conforto e charme. Estes shorts de banho azul-marinho apresentam um padrão marcante de folhas tropicais e bolinhas em branco e azul-claro, perfeitos para qualquer passeio na praia. Com modelagem regular e comprimento até o meio da coxa, garantem um uso relaxado. O tecido sintético liso proporciona durabilidade, enquanto o cós com cordão branco e dois bolsos laterais adicionam funcionalidade. Experimente a combinação perfeita de estilo e praticidade com Hank Swimwear.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; MODA PRAIA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts Hank Swimwear - Hank Swimwear"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore a praia com os Shorts Hank Swimwear. Com estampa tropical azul-marinho de folhas e bolinhas, estes shorts de banho de modelagem regular oferecem estilo e conforto."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217476231420": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Jaxon Swimwear",
+     "digest": "0866159cbb05c43f39a0f57af38163a6d93799db67233ad8f3c738af2653393e"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Dive into summer with Jaxon Swimwear's black swim shorts, adorned with a stylish white leaf pattern. These regular fit shorts reach mid-thigh and feature a smooth synthetic fabric for a comfortable wear. The design includes side pockets and a secure black drawstring closure. Perfect for beach days or poolside lounging, these shorts offer both functionality and fashion.</p>",
+     "digest": "db5274696d0fe312ae1a55cbb2f048aa36bdc61e333b37cefc0740c3f99b0234"
+    },
+    {
+     "key": "handle",
+     "value": "jaxon-swimwear",
+     "digest": "7adcc59ab9c2baec10acbda130949f179e16ed05366a5372af04135b4dcd80a4"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> SWIMWEAR",
+     "digest": "ba262f4e4e57c118d10fcc300856f06d390a93ca4e1a5ad91e5cf474bc4dc791"
+    },
+    {
+     "key": "meta_title",
+     "value": "Jaxon Swimwear - Jaxon Swimwear",
+     "digest": "985692ef17013e6da01c03efffdef5405985f7aaf6df4f15e9c2743fb49a779f"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore Jaxon Swimwear's black swim shorts featuring a white leaf pattern. Regular fit with side pockets and a drawstring closure for comfort and style.",
+     "digest": "2bc746da91bf8b333e156b31adcb955844ff18948a17ba964ee3ca523117a1a7"
+    }
+   ],
+   "es": [
+    {
+     "key": "meta_description",
+     "value": "Explora los shorts de baño negros de Jaxon Swimwear con un estampado de hojas blancas. De corte regular, cuentan con bolsillos laterales y cierre de cordón para mayor comodidad y estilo."
+    },
+    {
+     "key": "title",
+     "value": "Jaxon Trajes de Baño"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Sumérgete en el verano con los shorts de baño negros de Jaxon Swimwear, decorados con un elegante estampado de hojas blancas. Estos shorts de corte regular llegan hasta la mitad del muslo y están confeccionados con un tejido sintético suave para una mayor comodidad. El diseño incluye bolsillos laterales y un cierre de cordón negro seguro. Perfectos para días de playa o para relajarse junto a la piscina, estos shorts ofrecen funcionalidad y estilo a partes iguales.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRE &gt;&gt; ROPA DE BAÑO"
+    },
+    {
+     "key": "meta_title",
+     "value": "Jaxon Swimwear - Jaxon Swimwear"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Short de banho Jaxon"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Mergulhe no verão com os shorts de banho pretos Jaxon Swimwear, decorados com uma elegante estampa de folhas brancas. Estes shorts de modelagem regular vão até o meio da coxa e contam com tecido sintético liso para um uso confortável. O design inclui bolsos laterais e fechamento seguro com cordão preto. Perfeitos para dias de praia ou relaxar à beira da piscina, esses shorts oferecem funcionalidade e estilo.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; MODA PRAIA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Jaxon Swimwear - Jaxon Swimwear"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore os shorts de banho pretos da Jaxon Swimwear com estampa de folhas brancas. Modelagem regular, bolsos laterais e cordão para conforto e estilo."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217476362492": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Landon Swimwear",
+     "digest": "868a98853c11aff2978f89dab235914267125573e2251d62fa8daa1d9bf2cffa"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Upgrade your summer wardrobe with the Landon Swimwear men's swim shorts. These stylish shorts feature a vibrant palm tree print in blue, green, and yellow on a white background. Designed for comfort, they offer a regular fit and mid-thigh length, perfect for beach outings or poolside lounging. The shorts come with a white drawstring closure with silver aglets and silver eyelets on the waistband for a secure fit. Made from smooth synthetic fabric, they ensure quick drying and feature two side pockets for convenience. Enjoy a clean, undistressed look with standard hems and white single topstitching on seams.</p>",
+     "digest": "d542f61dc4687abf8a201c90ceedec04cc11d5f8af941a581d45a33ead0f6a2a"
+    },
+    {
+     "key": "handle",
+     "value": "landon-swimwear",
+     "digest": "d05edaaf79d430b84d4d1fb872a32c08f1b773ca23d734379c5651aef4e8d7ba"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> SWIMWEAR",
+     "digest": "ba262f4e4e57c118d10fcc300856f06d390a93ca4e1a5ad91e5cf474bc4dc791"
+    },
+    {
+     "key": "meta_title",
+     "value": "Landon Swimwear - Landon Swimwear",
+     "digest": "a25042bcb5f30019b4436cac1b67c2534eb27df3502f5d886bd9c49af9966a1d"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover Landon Swimwear's men's swim shorts with a vibrant palm tree print. Featuring a regular fit, mid-thigh length, and quick-drying fabric.",
+     "digest": "bba9695e1b7cf5d10a77ec69fbe7cc7066075b39d62ab3c5d2ad6f846526ba25"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Trajes de baño Landon"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renueva tu armario de verano con los bañadores para hombre de Landon Swimwear. Estos elegantes pantalones cortos presentan un vibrante estampado de palmeras en azul, verde y amarillo sobre un fondo blanco. Diseñados para brindar comodidad, ofrecen un corte regular y un largo hasta la mitad del muslo, ideales para salidas a la playa o para relajarse junto a la piscina. Los pantalones incluyen un cierre de cordón blanco con herretes plateados y ojales plateados en la cintura para un ajuste seguro. Confeccionados en un tejido sintético suave, garantizan un secado rápido y cuentan con dos bolsillos laterales para mayor practicidad. Disfruta de un aspecto impecable y sin desgastes, con dobladillos estándar y pespuntes sencillos en color blanco en las costuras.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; TRAJES DE BAÑO"
+    },
+    {
+     "key": "meta_title",
+     "value": "Traje de Baño Landon - Traje de Baño Landon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre los bañadores para hombre de Landon Swimwear con un vibrante estampado de palmeras. Cuentan con un corte regular, largo a medio muslo y tejido de secado rápido."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Short de banho Landon"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renove seu guarda-roupa de verão com o Landon Swimwear, shorts de banho masculino. Estes shorts estilosos trazem estampa vibrante de coqueiros em azul, verde e amarelo sobre fundo branco. Projetados para conforto, possuem modelagem regular e comprimento até o meio da coxa, perfeitos para praia ou piscina. O fechamento é por cordão branco com ponteiras e ilhós prateados no cós para ajuste seguro. Feitos em tecido sintético liso, secam rapidamente e contam com dois bolsos laterais para praticidade. Visual limpo, sem desgaste, com barras padrão e pesponto branco nas costuras.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMEM &gt;&gt; MODA PRAIA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Landon Swimwear - Shorts de Banho Masculino Landon Swimwear"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra os shorts de banho masculinos Landon Swimwear com estampa vibrante de coqueiros. Modelagem regular, comprimento médio e tecido de secagem rápida."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217487503612": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Ricky Jeans",
+     "digest": "ae40028b78b8d3a3fd5d33fa49c9a53e2da3e3f5281a0f9dd8faea0512eecc75"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your casual wardrobe with the Ricky Jeans Light in light blue. These jeans feature a relaxed fit and eye-catching embellishments, making them a perfect choice for stylish comfort. Pair them with your favorite tee for a laid-back look. Designed for both comfort and style, the Ricky Jeans Light are crafted from high-quality materials that ensure durability and a great fit.</p><ul>\n<li>Relaxed fit for all-day comfort</li>\n<li>Stylish embellishments for a unique look</li>\n<li>High-quality materials for durability</li>\n<li>Perfect for casual outings and everyday wear</li>\n<li>Easy to pair with various tops and shoes</li>\n</ul><p>Whether you're heading out for a casual day with friends or running errands, the Ricky Jeans Light offer the perfect blend of style and comfort. Don't miss out on adding these versatile jeans to your collection!</p>",
+     "digest": "d652957fa8452b3054a31a9a48453aea8ec64733e31e59b8359cd6a370476239"
+    },
+    {
+     "key": "handle",
+     "value": "ricky-jeans",
+     "digest": "5ed964cea43469e51d9fcd41f9e56a18a458afeea28ec33779f5b8dd53c60d29"
+    },
+    {
+     "key": "product_type",
+     "value": "JEANS",
+     "digest": "14aaf9d340ed53cf000911ee7f1d83d57c51a511fa5505df8e3c88b3849697b2"
+    },
+    {
+     "key": "meta_title",
+     "value": "Ricky Light Jeans - Ricky Jeans",
+     "digest": "0a26af3a02e8dd6f04904c598a090ac62d6cc74d79622b186ada91a06f1bfcae"
+    },
+    {
+     "key": "meta_description",
+     "value": "Ricky Light Jeans. Shop CARBON Ricky Jeans in light blue. A relaxed fit, faded denim wash, and scattered stone embellishments give this everyday pair a.",
+     "digest": "7c623b062f415a51d62cb1ce3bfa495a775791b7f305648017733b44c9e86960"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Ricky Jeans"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu vestuario informal con los Ricky Jeans Light en azul claro. Estos jeans presentan un corte relajado y adornos llamativos, lo que los convierte en la elección perfecta para ir cómoda y con estilo. Combínalos con tu camiseta favorita para un look desenfadado. Diseñados tanto para la comodidad como para el estilo, los Ricky Jeans Light están confeccionados con materiales de alta calidad que garantizan durabilidad y un ajuste excelente.</p><ul>\n\n<li>Corte relajado para una comodidad durante todo el día</li>\n\n<li>Adornos elegantes para un look único</li>\n\n<li>Materiales de alta calidad para una mayor durabilidad</li>\n\n<li>Perfectos para salidas informales y el uso diario</li>\n\n<li>Fáciles de combinar con diversas prendas y calzado</li>\n\n\n</ul><p>Ya sea que salgas a pasar un día informal con amigos o a hacer recados, los Ricky Jeans Light ofrecen la combinación perfecta de estilo y comodidad. ¡No pierdas la oportunidad de añadir estos versátiles jeans a tu colección!</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "JEANS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Vaqueros Ricky claros - Vaqueros Ricky"
+    },
+    {
+     "key": "meta_description",
+     "value": "Jeans Ricky claros. Compra los jeans Ricky CARBON en azul claro. Un corte relajado, un lavado de mezclilla desteñido y adornos de piedras dispersas le dan a este par de uso diario un."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Ricky Jeans"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renove seu guarda-roupa casual com a Ricky Jeans Light em azul claro. Esta calça jeans possui modelagem relaxada e detalhes decorativos marcantes, tornando-a a escolha ideal para quem busca conforto com estilo. Combine com sua camiseta favorita para um visual despojado. Projetada para oferecer conforto e estilo, a Ricky Jeans Light é confeccionada com materiais de alta qualidade que garantem durabilidade e ótimo caimento.</p><ul>\n<li>Modelagem relaxada para conforto o dia todo</li>\n<li>Detalhes decorativos para um visual único</li>\n<li>Materiais de alta qualidade para maior durabilidade</li>\n<li>Perfeita para passeios casuais e uso diário</li>\n<li>Fácil de combinar com diferentes blusas e calçados</li>\n</ul><p>Seja para um dia casual com amigos ou para resolver tarefas do dia a dia, a Ricky Jeans Light oferece o equilíbrio ideal entre estilo e conforto. Não perca a chance de adicionar esta calça jeans versátil à sua coleção!</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; JEANS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Ricky Jeans Light - Ricky Jeans"
+    },
+    {
+     "key": "meta_description",
+     "value": "Ricky Jeans Light. Compre Ricky Jeans da CARBON em azul claro. Modelagem relaxada, lavagem jeans desbotada e detalhes em pedras para o dia a dia."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217490387196": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Hunter Denim Shorts",
+     "digest": "f417b4bf399f99929c7b275d660b350442588d37c2d279b1ba69e8cf8cbe340e"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your casual style with the Hunter Denim Shorts in light grey. These knee-length shorts offer a regular fit and feature distressed patches for a trendy look. The rolled cuffs add a touch of style, while the practical design includes two curved front pockets, a coin pocket, and two back patch pockets. A woven label with 'CARBON JEANS' and 'Premium Denim Since Now!' adds a signature touch. Made from durable denim, these shorts are perfect for everyday wear.</p>",
+     "digest": "a7f679a246db38e99515ea4f1427712187a2e51f18d4e12c7562478d1df98b3f"
+    },
+    {
+     "key": "handle",
+     "value": "hunter-denim-shorts",
+     "digest": "2e28a736e486a9499af23ff91a4e32df2973ba58e2ccf2adbf2baf62aa28408a"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> SHORTS",
+     "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+    },
+    {
+     "key": "meta_title",
+     "value": "Hunter Denim Shorts - Hunter Denim Shorts",
+     "digest": "837668fef40347dedaba74f06f99e6c57833e0202eb4bf70dd02e08322af14b8"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Hunter Denim Shorts in light grey, featuring a regular fit, distressed patches, and rolled cuffs. Perfect for casual outings.",
+     "digest": "2a98fac1df6caf8d5034efc69c84c5387b561ca404113ac496f1589c2d186a77"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pantalones cortos vaqueros Hunter"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo casual con los Shorts de mezclilla Hunter en gris claro. Estos shorts a la altura de la rodilla ofrecen un ajuste regular y cuentan con parches desgastados para un look moderno. Los dobladillos enrollados añaden un toque de estilo, mientras que el diseño práctico incluye dos bolsillos delanteros curvos, un bolsillo para monedas y dos bolsillos traseros de parche. Una etiqueta tejida con 'CARBON JEANS' y 'Premium Denim Since Now!' añade un toque distintivo. Elaborados con mezclilla duradera, estos shorts son perfectos para el uso diario.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; PANTALONES CORTOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts de mezclilla Hunter - Shorts de mezclilla Hunter"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre los pantalones cortos vaqueros Hunter en gris claro, con corte regular, parches desgastados y bajos vueltos. Perfectos para salidas informales."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Shorts Jeans Hunter"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo casual com o Short Jeans Hunter em cinza claro. Este short no comprimento joelho tem um caimento regular e apresenta remendos desfiados para um visual estiloso. As barras dobradas acrescentam um toque de estilo, enquanto o design prático inclui dois bolsos frontais curvos, um bolso moedeiro e dois bolsos traseiros tipo faca. Uma etiqueta tecida com 'CARBON JEANS' e 'Premium Denim Since Now!' adiciona um toque de assinatura. Feito de jeans resistente, este short é perfeito para o uso diário.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMENS &gt;&gt; SHORTS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Hunter Shorts Jeans - Hunter Shorts Jeans"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça o Hunter Shorts Jeans em cinza claro, com modelagem regular, detalhes desgastados e barras dobradas. Perfeito para ocasiões casuais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217492549884": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Fiona Pants Set",
+     "digest": "7e37f803fb7acb7fd1b1ac9a033962c7042fd4e80081931d329df63d3e374864"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Fiona Pants Set in Wild Mushroom offers a sophisticated look with its tailored blazer and straight-leg pants. The blazer features a notched lapel and single-breasted closure, complemented by two front pockets. The pants include a front zipper closure and belt loops for added style. Ideal for both professional and casual settings, this set combines elegance with versatility.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "4399aa5c5d6ef842a3ee11a9e1f09bf11c18fc293554a44b920f349783ddcb98"
+    },
+    {
+     "key": "handle",
+     "value": "fiona-pants-set",
+     "digest": "f3897024f1d8511a0cbb7a32dadd259db0b684b6b361faf3d559b3643b58f05a"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> PANTS",
+     "digest": "4112635dca2813f2f5dba543b5945bd9804c482b4fe9e6c51cfdada794a6030b"
+    },
+    {
+     "key": "meta_title",
+     "value": "Fiona Pants Outfit in Wild Mushroom - Fiona Pants Set",
+     "digest": "58e601cfd6e1897196d5026917327385028d3e404d10d3d735023b5364de0c88"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Fiona Pants Set in Wild Mushroom, featuring a tailored blazer and straight-leg pants. Perfect for professional and casual settings.",
+     "digest": "8f46c9c5765568c44df6d6c180946497761e3386d506772f27b070d8d9bfde15"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de pantalón Fiona"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El conjunto de pantalón Fiona en color Wild Mushroom ofrece un aspecto sofisticado con su americana entallada y sus pantalones de corte recto. La americana presenta una solapa de muesca y cierre de botonadura sencilla, complementada con dos bolsillos frontales. Los pantalones incluyen cierre de cremallera frontal y trabillas para el cinturón que añaden estilo. Ideal tanto para entornos profesionales como informales, este conjunto combina elegancia y versatilidad.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; PANTALONES"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de pantalón Fiona en color champiñón silvestre - Conjunto de pantalón Fiona"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto de pantalón Fiona en color Wild Mushroom, que incluye un blazer entallado y pantalones de corte recto. Perfecto tanto para entornos profesionales como informales."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto de Calça Fiona"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O Conjunto Fiona Calça em Wild Mushroom oferece um visual sofisticado com seu blazer alfaiatado e calça reta. O blazer possui lapela em V e fechamento com um botão, além de dois bolsos frontais. A calça conta com fechamento frontal em zíper e passantes para cinto, agregando estilo. Ideal tanto para ambientes profissionais quanto casuais, este conjunto une elegância e versatilidade.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; CALÇAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Fiona Calça Wild Mushroom - Conjunto Fiona Calça"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça o Conjunto Fiona Calça em Wild Mushroom, com blazer alfaiatado e calça reta. Perfeito para ambientes profissionais e casuais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217492877564": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Nina Jacket Set",
+     "digest": "505976cf226055b6ccebd06f79a6688aaf045e9ef81322357b29a039d318b515"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your style with the Nina Jacket Set in a sophisticated cream hue. This elegant set includes a tailored jacket with a single button closure and notched lapel, paired with a chic wrap-style skirt. Crafted from high-quality materials, it offers a smooth, structured look perfect for professional settings. The long sleeves and tailored fit of the jacket ensure a polished appearance. Ideal for business meetings or social events, this set combines style and functionality effortlessly.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "7b68442edded8963a7a36c82b3fff8e175bbb21630fa289878a48df630873ec1"
+    },
+    {
+     "key": "handle",
+     "value": "nina-jacket-set",
+     "digest": "cbb85529b07bae532e0095109c1ce8a7a756cab4182c08346bc67947d35d4eaa"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> JACKET",
+     "digest": "1a5e59e8a98a4bd137d86884ee3c533fe5acb79d395fd4c574bb5abf89889901"
+    },
+    {
+     "key": "meta_title",
+     "value": "Nina Jacket Set - Nina Jacket Set",
+     "digest": "8d534953a580d98fe033414db75d7b9d00aa46edc4d422eddab0c025ee2d51e0"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Nina Jacket Set in cream, featuring a tailored blazer with a notched lapel and a chic wrap-style skirt. Perfect for professional settings.",
+     "digest": "cca35b1df664a998513a9ad2d1810a3510ed5179c5b13c362a05afa2af43e9f7"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de chaqueta Nina"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo con el conjunto de chaqueta Nina en un sofisticado tono crema. Este elegante conjunto incluye una chaqueta entallada con cierre de un solo botón y solapa de muesca, combinada con una falda cruzada chic. Confeccionado con materiales de alta calidad, ofrece un aspecto liso y estructurado, perfecto para entornos profesionales. Las mangas largas y el corte entallado de la chaqueta garantizan una apariencia impecable. Ideal para reuniones de negocios o eventos sociales, este conjunto combina estilo y funcionalidad sin esfuerzo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; CHAQUETA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de chaqueta Nina - Conjunto de chaqueta Nina"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto de chaqueta Nina en color crema, que presenta una americana entallada con solapa de muesca y una elegante falda cruzada. Perfecto para entornos profesionales."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto Jaqueta Nina"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo com o Conjunto Jaqueta Nina em um sofisticado tom creme. Este conjunto elegante inclui uma jaqueta alfaiatada com fechamento por um botão e lapela em V, combinada com uma saia transpassada supercharmosa. Confeccionado com materiais de alta qualidade, oferece um visual liso e estruturado, perfeito para ambientes profissionais. As mangas longas e o caimento ajustado da jaqueta garantem uma aparência impecável. Ideal para reuniões de negócios ou eventos sociais, este conjunto une estilo e funcionalidade com facilidade.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; JAQUETA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Jaqueta Nina - Conjunto Jaqueta Nina"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Conjunto Jaqueta Nina em creme, com blazer alfaiatado de lapela em V e saia transpassada. Perfeito para ambientes profissionais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217493926140": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Blessed Top",
+     "digest": "afa1e7f37c0daf252b1608262e6078fb78f4f933185b17aa64bc1f38a85c54b7"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Blessed Top Black is an oversized mini sweatshirt dress designed for comfort and style. It features a bold, circular 'BLESSED NOT STRESSED' graphic at the center chest, making a statement. The dress is crafted from a soft, cotton-like material and includes a crew neckline, drop shoulders, and long sleeves with ribbed cuffs. Its plain back and ribbed hem add to the minimalist design. Ideal for casual outings or relaxing at home, this versatile top pairs well with jeans, leggings, or skirts.</p>",
+     "digest": "6ce1fcd494c47cd76b0214f46c59504b4217540d259827ab3a5574ec049fc415"
+    },
+    {
+     "key": "handle",
+     "value": "blessed-top",
+     "digest": "ea335606f6b63ea7332fc52a33b2e0b293abdb6481c2b1d9aef65a7e9ec97bea"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Blessed Top Black - Blessed Top",
+     "digest": "64fd6069afcde7391e780c706e20eaf486b8417de8a4bdde5d550369bb9753e2"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Blessed Top Black, an oversized mini sweatshirt dress featuring a bold 'BLESSED NOT STRESSED' graphic. Perfect for casual outings or lounging.",
+     "digest": "5774f400151ff94e8fdcc9399a07c068eacb8c6e3f54e717028945233d2b190e"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Top Blessed"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El Blessed Top Black es un vestido tipo sudadera mini de corte oversize diseñado para brindar comodidad y estilo. Presenta un llamativo gráfico circular con la frase 'BLESSED NOT STRESSED' en el centro del pecho, creando un impacto visual. El vestido está confeccionado en un material suave similar al algodón e incluye cuello redondo, hombros caídos y mangas largas con puños acanalados. Su parte posterior lisa y el dobladillo acanalado contribuyen a su diseño minimalista. Ideal para salidas informales o para relajarse en casa, esta prenda versátil combina bien con jeans, leggings o faldas.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJERES &gt;&gt; TOPS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Top Blessed Negro - Top Blessed"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el vestido sudadera corto y extragrande Blessed Top Black, que luce un llamativo gráfico con el lema \"BLESSED NOT STRESSED\". Perfecto para salidas informales o para estar en casa."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Top Blessed"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>A Blessed Top Black é uma minivestido moletom oversized, projetada para conforto e estilo. Possui um gráfico circular marcante 'BLESSED NOT STRESSED' no centro do peito, trazendo personalidade à peça. Feita em material macio com toque de algodão, conta com gola careca, ombros caídos e mangas longas com punhos canelados. As costas lisas e a barra canelada completam o design minimalista. Ideal para passeios casuais ou relaxar em casa, esta peça versátil combina com calça jeans, leggings ou saias.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Blessed Top Black - Blessed Top"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça a Blessed Top Black, minivestido moletom oversized com estampa marcante 'BLESSED NOT STRESSED'. Perfeita para passeios casuais ou relaxar."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217494548732": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Riley Dress",
+     "digest": "3022466638d3fb067624e5513957434fa525b009076956277db5bf37aedcc2a8"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The <strong>Riley Dress</strong> in beige is a stunning choice for any special occasion. This elegant dress features a one shoulder design, offering a modern twist on classic style. The fitted silhouette enhances your figure, while the subtle shimmer adds a touch of glamour. Perfect for cocktail parties and elegant gatherings, this dress is both sophisticated and stylish.</p>",
+     "digest": "e3a6340a0df21226d18e8287ee747f04375850514e1f35d3670e14c2279e94af"
+    },
+    {
+     "key": "handle",
+     "value": "riley-dress",
+     "digest": "b26483d03c664c8c1c711df24e100e9db846af1a8da6a5551c5ef6cebbdab2be"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> DRESS",
+     "digest": "0a5bb286bb1ba69097c6723a82f24fcd95236866b307274f85c222cf61b59bda"
+    },
+    {
+     "key": "meta_title",
+     "value": "Riley Beige Dress - Riley Dress",
+     "digest": "2daa7b18da897c7432304451b077de9db8db12544dbbade8df1ffd6c1c9b2d04"
+    },
+    {
+     "key": "meta_description",
+     "value": "Riley Beige Dress. Discover the chic Beige Riley Dress, featuring a one shoulder design and fitted silhouette. Perfect for elegant occasions and cocktail.",
+     "digest": "6193a3bc9d4f40d885c1a9b2280298b964a5a5f636e2ce0fbecd34183edcfb7e"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Vestido Riley"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El <strong>Vestido Riley</strong> en beige es una elección deslumbrante para cualquier ocasión especial. Este elegante vestido presenta un diseño de un solo hombro, ofreciendo un toque moderno al estilo clásico. La silueta ajustada realza tu figura, mientras que el sutil brillo añade un toque de glamour. Perfecto para cócteles y reuniones elegantes, este vestido es sofisticado y con estilo.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; VESTIDO"
+    },
+    {
+     "key": "meta_title",
+     "value": "Vestido Beige Riley - Vestido Riley"
+    },
+    {
+     "key": "meta_description",
+     "value": "Vestido Beige Riley. Descubre el chic vestido Riley en beige, con diseño de un hombro y silueta entallada. Perfecto para ocasiones elegantes y cócteles."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Vestido Riley"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O <strong>Vestido Riley</strong> em bege é uma escolha deslumbrante para qualquer ocasião especial. Este vestido elegante apresenta um design de um ombro só, oferecendo um toque moderno ao estilo clássico. A silhueta ajustada valoriza o seu corpo, enquanto o brilho sutil adiciona um toque de glamour. Perfeito para coquetéis e encontros elegantes, este vestido é sofisticado e estiloso.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; VESTIDO"
+    },
+    {
+     "key": "meta_title",
+     "value": "Vestido Riley Bege - Vestido Riley"
+    },
+    {
+     "key": "meta_description",
+     "value": "Vestido Riley Bege. Descubra o elegante Vestido Riley Bege, com design de um ombro só e silhueta ajustada. Perfeito para ocasiões elegantes e coquetéis."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217495957756": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Furry Top Set",
+     "digest": "bd76008ca3fba15a93d7c8db060077bd143cc637a1bda6007a916887a59fcb21"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Embrace ultimate comfort with our Furry Pants Set in Wild Mushroom. This two-piece ensemble includes a cozy hooded top with faux fur trim and a kangaroo pocket, paired with relaxed jogger pants. The soft, textured fabric and elastic waistband with drawstring ensure a perfect fit, making it ideal for lounging or casual outings.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "2d2c900c12f26d049be7b47f2069558c05e2157a5f757f7c86b03d77a4a88266"
+    },
+    {
+     "key": "handle",
+     "value": "furry-top-set",
+     "digest": "70214ec015c3bdb939cc9ee12d29e94f9056c139e06a1505e2fbbef2adb47358"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Furry Pants Set - Furry Pants Set",
+     "digest": "559ab269b6da653b8e617dea4d17fd1dbb8691d7a33d105cabb7b33168e4dd69"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Furry Pants Set in Wild Mushroom, featuring a plush hooded top and jogger pants. Perfect for lounging or casual outings.",
+     "digest": "a146d0f93113ba65179d69737776d1560968f040b4230f279d1f00fc6d34e183"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto Top Furry"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Disfruta de la máxima comodidad con nuestro conjunto de pantalones de pelo en color champiñón salvaje. Este conjunto de dos piezas incluye una cómoda parte superior con capucha y ribete de pelo sintético y un bolsillo tipo canguro, combinado con pantalones estilo jogger holgados. El tejido suave y texturizado y la cintura elástica con cordón garantizan un ajuste perfecto, lo que lo hace ideal para descansar o para salidas informales.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; TOPS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de pantalón peludo - Conjunto de pantalón peludo"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto de pantalones peludos en color champiñón silvestre, que incluye una sudadera con capucha de felpa y pantalones tipo jogger. Perfecto para estar en casa o para salidas informales."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto de Top Peludo"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Sinta o máximo conforto com nosso Conjunto Furry Pants na cor Wild Mushroom. Este conjunto de duas peças inclui um top com capuz, acabamento em pelo sintético e bolso canguru, combinado com uma calça jogger relaxada. O tecido macio e texturizado e o cós elástico com cordão garantem ajuste perfeito, ideal para relaxar ou sair com estilo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHER &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Furry Pants - Furry Pants Set"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Conjunto Furry Pants na cor Wild Mushroom, com top de pelúcia com capuz e calça jogger. Perfeito para relaxar ou passeios casuais."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217497268476": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Remi Jacket Set",
+     "digest": "24d138d42df6e6f6e68ba1a4d1481d4a05b5bc03458c1e625088f5da3f7e92d5"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Introducing the Remi Bodysuit Salmon Set, a stylish addition to your wardrobe. This women's bodysuit features a scoop neckline and cutout sides, offering a trendy look. The salmon color adds a touch of elegance, while the smooth, stretchy fabric ensures a comfortable fit. Perfect for both casual and formal occasions, this bodysuit is a versatile piece for any fashion-forward individual. Pair it with your favorite accessories for a complete look.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "75ad4aa7a5eaf5a5c93de59d24b626b6bf640754fb521f4a8e355c9f2e7de32b"
+    },
+    {
+     "key": "handle",
+     "value": "remi-jacket-set",
+     "digest": "d185f3b1854e82cfb3601e00cc3647036884c247f71828faf2d16bd119886c81"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> JACKET",
+     "digest": "1a5e59e8a98a4bd137d86884ee3c533fe5acb79d395fd4c574bb5abf89889901"
+    },
+    {
+     "key": "meta_title",
+     "value": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon",
+     "digest": "66021f42ea807212157f7d8e5aa5f1f04a3de97f1ce5d417e732a24feecdab07"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Remi Bodysuit Salmon Set, featuring a chic cutout design and smooth, stretchy fabric. Perfect for versatile styling.",
+     "digest": "3fca43666e565ab2b4f649645a2043a6243f9255bff38652dfcd138d0f4533b3"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de chaqueta Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Presentamos el conjunto Remi Bodysuit Salmon, una incorporación elegante a tu guardarropa. Este body para mujer presenta un escote redondo y aberturas laterales, ofreciendo un look moderno. El color salmón aporta un toque de elegancia, mientras que la tela suave y elástica asegura un ajuste cómodo. Perfecto tanto para ocasiones casuales como formales, este body es una pieza versátil para cualquier persona que siga las tendencias de la moda. Combínalo con tus accesorios favoritos para un look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; CHAMARRA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto elegante de body Remi en color salmón - Body Remi salmón"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto de body Remi en color salmón, que destaca por su elegante diseño con aberturas y su tejido suave y elástico. Perfecto para un estilo versátil."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto de Jaqueta Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Apresentamos o Conjunto Remi Bodysuit Salmon, uma adição estilosa ao seu guarda-roupa. Este body feminino possui decote arredondado e laterais vazadas, trazendo um visual moderno. A cor salmão adiciona um toque de elegância, enquanto o tecido macio e elástico garante conforto ao vestir. Perfeito para ocasiões casuais ou formais, é uma peça versátil para quem busca estilo. Combine com seus acessórios favoritos para um look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; JAQUETA"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Remi Bodysuit Salmon Estiloso - Remi Bodysuit Salmon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Conjunto Remi Bodysuit Salmon, com design moderno de recortes e tecido macio e elástico. Perfeito para looks versáteis."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217497432316": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Remi Bodysuit Set",
+     "digest": "04ff5ed217aa070792ad5106afd79a686916e964cb2a61721a59bc2a442268c9"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Introducing the Remi Bodysuit Salmon Set, a stylish addition to your wardrobe. This women's bodysuit features a scoop neckline and cutout sides, offering a trendy look. The salmon color adds a touch of elegance, while the smooth, stretchy fabric ensures a comfortable fit. Perfect for both casual and formal occasions, this bodysuit is a versatile piece for any fashion-forward individual. Pair it with your favorite accessories for a complete look.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "75ad4aa7a5eaf5a5c93de59d24b626b6bf640754fb521f4a8e355c9f2e7de32b"
+    },
+    {
+     "key": "handle",
+     "value": "remi-bodysuit-set",
+     "digest": "e219e5bab5933b900b527b5658fc569acf7a5d11899e9c92c4b7a1ac5f10c89d"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> BODYSUIT",
+     "digest": "028ad4e2aeee3cffb32187c2071f05d4c3022d443135c82eb3604dd45c6aef4d"
+    },
+    {
+     "key": "meta_title",
+     "value": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon",
+     "digest": "66021f42ea807212157f7d8e5aa5f1f04a3de97f1ce5d417e732a24feecdab07"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Remi Bodysuit Salmon Set, featuring a chic cutout design and smooth, stretchy fabric. Perfect for versatile styling.",
+     "digest": "3fca43666e565ab2b4f649645a2043a6243f9255bff38652dfcd138d0f4533b3"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de body Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Presentamos el Conjunto de Body Remi Salmon, una adición elegante para tu guardarropa. Este body para mujer cuenta con un escote redondo y laterales con aberturas, ofreciendo un look moderno. El color salmón aporta un toque de elegancia, mientras que la tela suave y elástica garantiza un ajuste cómodo. Perfecto tanto para ocasiones casuales como formales, este body es una prenda versátil para cualquier amante de la moda. Combínalo con tus accesorios favoritos para un look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJERES &gt;&gt; BODY"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de Body Remi en Salmón - Remi Bodysuit Salmon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el Conjunto de Body Remi Salmon, con diseño de aberturas chic y tela suave y elástica. Perfecto para estilos versátiles."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto Body Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Apresentamos o Conjunto Remi Bodysuit Salmon, uma adição estilosa ao seu guarda-roupa. Este body feminino possui decote arredondado e recortes laterais, trazendo um visual moderno. A cor salmão adiciona um toque de elegância, enquanto o tecido macio e elástico garante conforto ao vestir. Perfeito tanto para ocasiões casuais quanto formais, este body é uma peça versátil para quem valoriza moda. Combine com seus acessórios favoritos para um look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BODY"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Remi Bodysuit Salmon Estiloso - Remi Bodysuit Salmon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Conjunto Remi Bodysuit Salmon, com design moderno de recortes e tecido macio e elástico. Perfeito para looks versáteis."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217497530620": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Remi Pants Set",
+     "digest": "0c2da47e2b2aecaf4932c0bf9fcd8c770cd334075be72019ff9790375e25230a"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Introducing the Remi Bodysuit Salmon Set, a stylish addition to your wardrobe. This women's bodysuit features a scoop neckline and cutout sides, offering a trendy look. The salmon color adds a touch of elegance, while the smooth, stretchy fabric ensures a comfortable fit. Perfect for both casual and formal occasions, this bodysuit is a versatile piece for any fashion-forward individual. Pair it with your favorite accessories for a complete look.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_09_14_AM.png?v=1788767007\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "75ad4aa7a5eaf5a5c93de59d24b626b6bf640754fb521f4a8e355c9f2e7de32b"
+    },
+    {
+     "key": "handle",
+     "value": "remi-pants-set",
+     "digest": "6e4107662e7be57772c2ac5704ad4d98df00eba44bb86f770bbda6e9d0741801"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> SWEATPANTS",
+     "digest": "3632ddcddfd1ec73e599e63d42d3af31367378fc69097219d454dc2942070577"
+    },
+    {
+     "key": "meta_title",
+     "value": "Stylish Remi Bodysuit Set in Salmon - Remi Bodysuit Salmon",
+     "digest": "66021f42ea807212157f7d8e5aa5f1f04a3de97f1ce5d417e732a24feecdab07"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Remi Bodysuit Salmon Set, featuring a chic cutout design and smooth, stretchy fabric. Perfect for versatile styling.",
+     "digest": "3fca43666e565ab2b4f649645a2043a6243f9255bff38652dfcd138d0f4533b3"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de pantalón Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Presentamos el conjunto Remi Bodysuit en color salmón, una incorporación elegante a tu guardarropa. Este body para mujer presenta un escote redondo y aberturas laterales, ofreciendo un look moderno. El color salmón añade un toque de elegancia, mientras que la tela suave y elástica asegura un ajuste cómodo. Perfecto tanto para ocasiones informales como formales, este body es una prenda versátil para cualquier persona a la vanguardia de la moda. Combínalo con tus accesorios favoritos para un look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MUJER &gt;&gt; PANTALONES DEPORTIVOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto de body Remi con estilo en color salmón - Body Remi salmón"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el conjunto Remi Bodysuit Salmon, que presenta un elegante diseño con aberturas y un tejido suave y elástico. Perfecto para un estilo versátil."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto de Calça Remi"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Apresentamos o Conjunto Remi Bodysuit Salmon, uma adição estilosa ao seu guarda-roupa. Este body feminino possui decote arredondado e recortes laterais, trazendo um visual moderno. A cor salmão adiciona um toque de elegância, enquanto o tecido macio e elástico garante conforto ao vestir. Perfeito tanto para ocasiões casuais quanto formais, este body é uma peça versátil para quem valoriza moda. Combine com seus acessórios favoritos para um look completo.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "FEMININO &gt;&gt; CALÇAS DE MOLETOM"
+    },
+    {
+     "key": "meta_title",
+     "value": "Conjunto Remi Bodysuit Salmon Estiloso - Remi Bodysuit Salmon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra o Conjunto Remi Bodysuit Salmon, com design moderno de recortes e tecido macio e elástico. Perfeito para looks versáteis."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217499398396": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Texture Top",
+     "digest": "51a74a4d4e109fa8093304d544589a1a4b73d567eda9f8f5edbe033995f4d7c0"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Upgrade your wardrobe with the Men's Texture Top, available in beige. This top features a regular fit with long sleeves and a standard collar. The button-up design includes black matte buttons and two chest flap pockets. The fabric is textured with embossed geometric patterns, adding a unique style to your look. Perfect for layering or wearing on its own, this top suits both casual and formal settings.</p>",
+     "digest": "32b62fc5f37b40fccce191d20f97008c649981305d34d3fbb7531a77167db8df"
+    },
+    {
+     "key": "handle",
+     "value": "texture-top",
+     "digest": "e8cbf402d8456770af7aff2a87195e36338c942a65e905536e9febeab81e5628"
+    },
+    {
+     "key": "product_type",
+     "value": "MEN >> TOP",
+     "digest": "bc9c34ffb45c12b628360952dcd7f6a6b8cdec1c7b60a7c8a9af0e5a986ff514"
+    },
+    {
+     "key": "meta_title",
+     "value": "Men'S Texture Top - Texture Top",
+     "digest": "27b770feae86f8d74a38e1f1245bd6de192b9bd700596d6322b87f4c5cf868f9"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore the Men's Texture Top in beige with geometric patterns. This regular fit, button-up top is ideal for versatile styling.",
+     "digest": "ba26d7f813831268f85f3afaeff4a01da1007ee6493c5047ff0c343e93979619"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Top Texture"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renueva tu guardarropa con la camisa de textura para hombre, disponible en color beige. Esta prenda presenta un corte regular con mangas largas y cuello estándar. Su diseño de botones incluye botones negros mate y dos bolsillos con solapa en el pecho. El tejido cuenta con una textura de patrones geométricos en relieve, lo que añade un estilo único a tu look. Perfecta para llevar como capa extra o sola, esta camisa se adapta tanto a entornos casuales como formales.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; SUPERIOR"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explora la camisa de textura para hombre en color beige con estampados geométricos. Esta prenda de corte regular y cierre de botones es ideal para un estilo versátil."
+    },
+    {
+     "key": "meta_title",
+     "value": "Top de textura para hombre - Top de textura"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Top Texturizado"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Renove seu guarda-roupa com a Texture Top Masculina, disponível em bege. Esta camisa possui caimento regular, mangas longas e gola padrão. O fechamento é por botões pretos foscos e dois bolsos frontais com aba. O tecido apresenta textura com padrões geométricos em relevo, trazendo um toque único ao seu visual. Perfeita para sobreposição ou uso individual, combina com ambientes casuais e formais.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MASCULINO &gt;&gt; TOPO"
+    },
+    {
+     "key": "meta_description",
+     "value": "Explore a Camisa Texture Masculina bege com padrões geométricos. Modelagem regular, abotoamento frontal, ideal para looks versáteis."
+    },
+    {
+     "key": "meta_title",
+     "value": "Texture Top Masculina - Texture Top"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217351581948": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Lord Denim Shorts",
+     "digest": "6d5c11e432bad0f03825c62b3ac824e07f96ab73773959f7e0fac131c604c102"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Embrace casual style with the Lord Denim Shorts, featuring a blue washed finish and frayed hem. These regular fit shorts offer a comfortable knee-length cut, complete with classic front and back pockets. The waistband is flat with belt loops, and the shorts close with a zip fly and button. Distressed patches on the front add a trendy touch, while the contrast orange stitching enhances the design. Perfect for everyday wear.</p>",
+     "digest": "1c2b0fa2a3a85e372248a6b4534d642636ebfbe7d900f92f721e5c1583dfc54b"
+    },
+    {
+     "key": "handle",
+     "value": "lord-denim-shorts",
+     "digest": "c8be0aedcd7072485490736d39aad37ad5df044dff506885042f569446640e05"
+    },
+    {
+     "key": "product_type",
+     "value": "SHORTS",
+     "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+    },
+    {
+     "key": "meta_title",
+     "value": "Lord Denim Shorts - Blue Washed, Frayed Hem",
+     "digest": "491e83455482eceefed06f4b8efc2de494c9bf5ccb29ac1ec5e30c43b849b9ab"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Lord Denim Shorts in blue washed denim. Regular fit with frayed hem and distressed patches, perfect for a casual look.",
+     "digest": "9febe976102a92ecfd6ab7d0ed3c5cfe8f0ab965224b8dbbd8c1028789d5e7ea"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Shorts de mezclilla para hombre I"
+    },
+    {
+     "key": "body_html",
+     "value": "<div class=\"product-story\">\n\n<h3>Tu Nuevo Imprescindible de Verano Ha Llegado</h3>\n\n<p>Deja de buscar, la búsqueda del denim azul lavado definitivo ha terminado oficialmente. Estos shorts están diseñados para moverse contigo, ofreciendo esa estética de ropa urbana de alta gama sin la etiqueta de precio de lujo. Ya sea que vayas a una fiesta en la azotea o simplemente a disfrutar del ambiente en la ciudad, estos son los shorts que usarás toda la temporada. ✨</p>\n\n\n</div><div class=\"key-benefits\">\n\n<h4>Por qué te encantarán:</h4>\n\n<p><strong>Estilo listo para la calle:</strong> El acabado azul lavado proporciona un aspecto versátil y desgastado que combina perfectamente con tu camiseta extragrande favorita o una camisa impecable.</p>\n\n<p><strong>Corte ajustado moderno:</strong> Diseñados para ajustarse en los lugares correctos manteniendo una silueta cómoda para usar durante todo el día. Este corte recto ajustado es el ajuste de mezclilla moderno que les falta a las tiendas tradicionales.</p>\n\n<p><strong>Estética lista para el contenido:</strong> Diseñados pensando en las redes sociales, estos shorts ofrecen la calidad fotogénica necesaria para tu próxima publicación de OOTD.</p>\n\n<p><strong>Construcción duradera:</strong> Fabricados con mezclilla de alta calidad que mantiene su forma y color con cada lavado y uso.</p>\n\n\n</div><div class=\"specifications\">\n\n<h4>Detalles del producto:</h4>\n\n<p><strong>Material:</strong> Mezclilla duradera de mezcla de algodón para máxima comodidad. <strong>Color:</strong> Azul Lavado. <strong>Diseño:</strong> Clásico estilo de cinco bolsillos con un moderno corte recto ajustado. <strong>Cierre:</strong> Bragueta de botones segura y trabillas reforzadas.</p>\n\n\n</div><div class=\"usage-care\">\n\n<h4>Cómo peinar y cuidar:</h4>\n\n<p>Lavar a máquina en frío con colores similares y secar en secadora a baja temperatura para mantener ese lavado azul con un aspecto fresco. Para un look de máxima tendencia, combínalos con calcetines blancos y tus zapatillas más nuevas. 👟</p>\n\n\n</div><div class=\"brand-promise\"><p><strong>Edición limitada — ¡Se agotan rápido!</strong> Toca para añadir al carrito y mejorar tu OOTD. <em>En Carbon, no solo seguimos tendencias, las hacemos accesibles. Estilo de alta gama, compras sin estrés para la generación moderna. Tu mejor look comienza aquí. #ShopCarbon</em></p></div>"
+    },
+    {
+     "key": "product_type",
+     "value": "PANTALONES CORTOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pantalones cortos vaqueros azules lavados - Corte ajustado listos para la calle | Carbon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compra shorts vaqueros azules lavados en Carbon. Su construcción duradera se une a un corte ajustado listo para la calle para tu próximo OOTD. Colección limitada, ¡se agotan rápido! Compra el look. ✨"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Bermuda Jeans Masculina I"
+    },
+    {
+     "key": "body_html",
+     "value": "<div class=\"product-story\">\n\n<h3>Seu Novo Essencial de Verão Chegou</h3>\n\n<p>Pare de rolar a tela — a busca pelo jeans azul desbotado perfeito acabou oficialmente. Estes shorts foram projetados para se mover com você, entregando aquela estética de streetwear de alta qualidade sem o preço de luxo. Seja para uma festa na cobertura ou apenas para curtir a cidade, estes são os shorts que você vai querer usar durante toda a estação. ✨</p>\n\n\n</div><div class=\"key-benefits\">\n\n<h4>Por Que Você Vai Amá-los:</h4>\n\n<p><strong>Estilo Pronto para a Rua:</strong> O acabamento azul desbotado proporciona um visual versátil e desgastado que combina perfeitamente com sua camiseta oversized favorita ou uma camisa de botão impecável.</p>\n\n<p><strong>Corte Slim Moderno:</strong> Projetado para abraçar os lugares certos, mantendo uma silhueta confortável para uso durante todo o dia. Este corte slim-reto é o ajuste de jeans moderno que as lojas tradicionais não têm.</p>\n\n<p><strong>Estética Pronta para o Conteúdo:</strong> Projetado com as mídias sociais em mente, estes shorts oferecem a qualidade fotogênica necessária para sua próxima postagem de OOTD.</p>\n\n<p><strong>Construção Durável:</strong> Feito com denim de alta qualidade que mantém sua forma e cor a cada lavagem e uso.</p>\n\n\n</div><div class=\"specifications\">\n\n<h4>Detalhes do Produto:</h4>\n\n<p><strong>Material:</strong> Denim durável de mistura de algodão para máximo conforto. <strong>Cor:</strong> Azul Desbotado. <strong>Design:</strong> Estilo clássico de cinco bolsos com um corte slim-reto moderno. <strong>Fecho:</strong> Braguilha de botão segura e passantes de cinto reforçados.</p>\n\n\n</div><div class=\"usage-care\">\n\n<h4>Como Estilizar e Cuidar:</h4>\n\n<p>Lave à máquina com água fria e cores semelhantes e seque em temperatura baixa para manter aquele azul desbotado com aparência nova. Para um visual de alta cultura hype, combine-os com meias brancas e seu par de tênis mais novo. 👟</p>\n\n\n</div><div class=\"brand-promise\"><p><strong>Lançamento Limitado — Esgotando Rápido!</strong> Toque para adicionar ao carrinho e melhorar seu OOTD. <em>Na Carbon, não apenas seguimos tendências — nós as tornamos acessíveis. Compras de alto estilo e baixo estresse para a geração moderna. Seu melhor visual começa aqui. #ShopCarbon</em></p></div>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMENS &gt;&gt; SHORTS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts Jeans Azul Lavado - Ajuste Fino Pronto para a Rua | Carbon"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compre shorts jeans azul delavê na Carbon. Construção durável encontra um caimento slim pronto para as ruas para o seu próximo look do dia. Lançamento Limitado — Vendendo Rápido! Compre o look. ✨"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217336312060": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Karina Crop Set",
+     "digest": "2cf32eaa42d241e09bab77afba39e9f47c8f52a0b5bacf0e580c9f1ca4ae6493"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your style with the Karina Tank Top, featuring a trendy one shoulder design that stands out. Available in black, blue, and green, this tank top is perfect for casual outings or dressing up for a night out. Its sleek fit and vibrant colors make it a must-have addition to your wardrobe. The Karina Tank Top is crafted from high-quality materials, ensuring comfort and durability.</p><ul>\n<li>Available in three stunning colors: black, blue, and green.</li>\n<li>Trendy one shoulder design for a chic look.</li>\n<li>Perfect for both casual and dressy occasions.</li>\n<li>Made from high-quality materials for lasting wear.</li>\n<li>Sleek fit that complements any body type.</li>\n</ul><p>Whether you're heading to a casual brunch or a night out, the Karina Tank Top is your go-to choice for effortless style. Don't miss out on adding this versatile piece to your collection.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+     "digest": "1b04c67b8c6ae730b5f0ae7f8d36fcb9108968f02d609ffeb7c34bce79d5b5ba"
+    },
+    {
+     "key": "handle",
+     "value": "karina-crop-tank",
+     "digest": "d4e15d64d1f8e9fb37665251b5e6070076c1bc731d4e9c2d6df13505b69b505c"
+    },
+    {
+     "key": "product_type",
+     "value": "WOMEN >> TOPS",
+     "digest": "759fd8e539a5439e5d3281adf991d337478fabfe0968c4728104bd79b467771f"
+    },
+    {
+     "key": "meta_title",
+     "value": "Karina Crop Tank - Stylish One Shoulder Top",
+     "digest": "0cefefff161c736c302407dc7c175f10413e46399ae1e113f5c127cba974c3d5"
+    },
+    {
+     "key": "meta_description",
+     "value": "Shop the Karina Tank Top with a chic one shoulder design, available in black, blue, and green. Perfect for any occasion!",
+     "digest": "0536544493ff4a154a8d0850960de029c59367bd5f38583f2a23ea1b38637820"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Conjunto de top Karina"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu estilo con la camiseta sin mangas Karina, que presenta un moderno diseño de un solo hombro que destaca. Disponible en negro, azul y verde, esta camiseta es perfecta para salidas informales o para arreglarse para una salida nocturna. Su ajuste elegante y sus colores vibrantes la convierten en una incorporación imprescindible para tu guardarropa. La camiseta Karina está confeccionada con materiales de alta calidad, lo que garantiza comodidad y durabilidad.</p><ul>\n\n<li>Disponible en tres impresionantes colores: negro, azul y verde.</li>\n\n<li>Moderno diseño de un solo hombro para un look elegante.</li>\n\n<li>Perfecta tanto para ocasiones informales como elegantes.</li>\n\n<li>Hecha de materiales de alta calidad para un uso duradero.</li>\n\n<li>Ajuste elegante que complementa cualquier tipo de cuerpo.</li>\n\n\n</ul><p>Ya sea que te dirijas a un brunch informal o a una salida nocturna, la camiseta Karina es tu opción preferida para un estilo sin esfuerzo. No pierdas la oportunidad de añadir esta pieza versátil a tu colección.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-es.png?v=1791717743\" alt=\"Completa el look — este artículo forma parte de un conjunto. La pieza a juego en la misma talla y color se añade automáticamente a tu carrito. Las piezas no se pueden mezclar ni combinar y cada pieza tiene su propio precio.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "ESPAÑOL &gt;&gt; TOPS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Top Crop Karina - Elegante Top de Un Solo Hombro"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compra la camiseta sin mangas Karina con un elegante diseño de un solo hombro, disponible en negro, azul y verde. ¡Perfecta para cualquier ocasión!"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Conjunto Karina Crop"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu estilo com a Regata Karina, que traz um design moderno de um ombro só para se destacar. Disponível em preto, azul e verde, esta regata é perfeita tanto para ocasiões casuais quanto para produções noturnas. Seu caimento ajustado e as cores vibrantes tornam a peça indispensável no seu guarda-roupa. A Regata Karina é confeccionada com materiais de alta qualidade, garantindo conforto e durabilidade.</p><ul>\n<li>Disponível em três cores incríveis: preto, azul e verde.</li>\n<li>Design de um ombro só para um visual moderno.</li>\n<li>Ideal para ocasiões casuais ou mais sofisticadas.</li>\n<li>Feita com materiais de alta qualidade para maior durabilidade.</li>\n<li>Caimento ajustado que valoriza todos os tipos de corpo.</li>\n</ul><p>Seja para um brunch casual ou uma noite especial, a Regata Karina é sua escolha para um estilo prático e elegante. Não perca a chance de adicionar essa peça versátil à sua coleção.</p><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/carbon-set-note-pt.png?v=1791717744\" alt=\"Complete o look — este item faz parte de um conjunto. A peça correspondente no mesmo tamanho e cor é adicionada automaticamente ao seu carrinho. As peças não podem ser misturadas ou combinadas e cada peça tem seu próprio preço.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Regata Cropped Karina - Top Estiloso de Um Ombro Só"
+    },
+    {
+     "key": "meta_description",
+     "value": "Compre a Regata Karina com um design chique de um ombro só, disponível nas cores preta, azul e verde. Perfeita para qualquer ocasião!"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217351713020": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Camilo Denim Shorts",
+     "digest": "2ea7f230c2b676b39795cf54927b2e4615ec3ddff1f50bad14b00e108db8e20e"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Elevate your summer wardrobe with these Grey Washed Men's Denim Shorts. Crafted from durable denim, these shorts offer a regular fit and knee-length cut, ensuring comfort and style. The heavy front distressing and frayed hem add a trendy touch, while the plain back keeps it classic. Equipped with a zip fly and metal button closure, these shorts also feature two front slant pockets, a coin pocket, and two back patch pockets for practicality. A 'CARBON JEANS' label and logo adorn the back waistband, completing the look. For care, machine wash cold inside out and tumble dry low.</p>",
+     "digest": "c56b81f191c6083cc11c3f86f36398f0d38314ac8a95ee6d0b1a00013e44eb21"
+    },
+    {
+     "key": "handle",
+     "value": "mens-denim-shorts-k",
+     "digest": "a68dcc6c4bfc3a5ecfb6a1843f295554d67c9833511ef3b44d3ea84fae139558"
+    },
+    {
+     "key": "product_type",
+     "value": "SHORTS",
+     "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+    },
+    {
+     "key": "meta_title",
+     "value": "Grey Denim Shorts - Mens Denim Shorts K",
+     "digest": "5420728117d3e539d014b5ade27eabb21449c38ae8d53f8d8ec8802cc2c38237"
+    },
+    {
+     "key": "meta_description",
+     "value": "Grey Denim Shorts. Explore our Grey Washed Men's Denim Shorts, featuring a regular fit, heavy front distressing, and a frayed hem. Perfect for casual.",
+     "digest": "42f29aa48da8db8b5cd4b5a3838d03ffc168adead7422aca42d3907dfb1bbce2"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Shorts de mezclilla Camilo"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleva tu guardarropa de verano con estos Shorts de Mezclilla para Hombre en lavado gris. Confeccionados en mezclilla resistente, estos shorts ofrecen un corte regular y largo a la rodilla, garantizando comodidad y estilo. El desgaste intenso en el frente y el dobladillo deshilachado le dan un toque de tendencia, mientras que la parte trasera lisa mantiene un look clásico. Equipados con cierre de bragueta y botón metálico, estos shorts también cuentan con dos bolsillos delanteros al sesgo, un bolsillo para monedas y dos bolsillos traseros tipo parche para mayor practicidad. Una etiqueta 'CARBON JEANS' y el logo adornan la pretina trasera, completando el look. Para su cuidado, lavar a máquina con agua fría al revés y secar a baja temperatura.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMBRES &gt;&gt; PANTALONES CORTOS"
+    },
+    {
+     "key": "meta_description",
+     "value": "Shorts de Mezclilla Gris. Descubre nuestros Shorts de Mezclilla para Hombre en lavado gris, con corte regular, desgaste intenso y dobladillo deshilachado."
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts de Mezclilla Gris - Shorts de Mezclilla para Hombre K"
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Shorts Jeans Camilo"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Eleve seu guarda-roupa de verão com este Shorts Jeans Masculino Cinza Estonado. Confeccionado em jeans resistente, este shorts oferece um caimento regular e corte na altura do joelho, garantindo conforto e estilo. O desgaste acentuado na frente e a barra desfiada trazem um toque moderno, enquanto o fundo liso mantém o clássico. Equipado com zíper e fechamento de botão metálico, este shorts também conta com dois bolsos frontais diagonais, um bolso moedeiro e dois bolsos traseiros tipo faca para praticidade. Uma etiqueta 'CARBON JEANS' e logo adornam o cós traseiro, completando o visual. Para cuidados, lave à máquina com água fria do avesso e seque em máquina em temperatura baixa.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "HOMENS &gt;&gt; BERMUDAS"
+    },
+    {
+     "key": "meta_description",
+     "value": "Shorts Jeans Cinza. Conheça nosso Shorts Jeans Masculino Cinza Estonado, com caimento regular, desgaste acentuado na frente e barra desfiada. Perfeito para looks casuais."
+    },
+    {
+     "key": "meta_title",
+     "value": "Shorts Jeans Cinza - Shorts Jeans Masculino K"
+    }
+   ]
+  },
+  "gid://shopify/Product/9217323794684": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Peace Anklet",
+     "digest": "369f2d32f92d433456c8eb81995b86ac0378a01f8778f790e90f5fa57028c9a2"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Add a touch of elegance to your ensemble with the Golden Anklet A. This exquisite anklet features a delicate gold chain adorned with glossy black beads. A standout feature is the round flat polished gold disc charm, intricately cut with a peace symbol, adding a unique touch to your style. The anklet is adjustable, ensuring a comfortable fit with its extender chain, and is finished with a polished gold lobster clasp. Perfect for both casual and formal occasions, this anklet is a versatile addition to any jewelry collection.</p>",
+     "digest": "d8c7f41c434fd99c0347f1594e4b19db56105c19aaf4af60b42abc60c78cb0b8"
+    },
+    {
+     "key": "handle",
+     "value": "anklet-a",
+     "digest": "e83a4b9a113cca196861963b70253fa3ebdfa43d2d1a67958bf09d1d911fec74"
+    },
+    {
+     "key": "product_type",
+     "value": "ACCESSORIES",
+     "digest": "7f4143b45e255e7495a7f0eb4768d5d78e52068775a0f444e65f6be4b8b7278b"
+    },
+    {
+     "key": "meta_title",
+     "value": "Golden Anklet A with Beaded Charm",
+     "digest": "782c1e9293723ba872e946ee878bf1480f9a5d8d525fdcdd2fcabcc436fec1ed"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover elegance with the Golden Anklet A. Featuring a delicate gold chain, black beads, and a peace symbol charm. Adjustable for perfect fit.",
+     "digest": "81a4802fad419acdb5e35e06ace90eb6ce4eeb53a4fc29a0c2de567f94f89ae0"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Pulsera de tobillo Peace"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Añada un toque de elegancia a su conjunto con la pulsera de tobillo Golden Anklet A. Esta exquisita pulsera de tobillo presenta una delicada cadena de oro adornada con cuentas negras brillantes. Un elemento destacado es el dije de disco de oro pulido, redondo y plano, con un símbolo de la paz grabado de forma intrincada, que añade un toque único a su estilo. La pulsera de tobillo es ajustable, lo que garantiza un ajuste cómodo gracias a su cadena extensora, y cuenta con un cierre de langosta de oro pulido. Perfecta tanto para ocasiones informales como formales, esta pulsera de tobillo es un complemento versátil para cualquier colección de joyas.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "ACCESORIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Pulsera de tobillo Dorada A con Dije de Cuentas"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre la elegancia con la pulsera de tobillo Golden Anklet A. Presenta una delicada cadena de oro, cuentas negras y un dije con el símbolo de la paz. Ajustable para un ajuste perfecto."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Tornozeleira Peace"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>Adicione um toque de elegância ao seu visual com a Tornozeleira Dourada A. Esta tornozeleira requintada apresenta uma delicada corrente dourada adornada com contas pretas brilhantes. O destaque fica por conta do pingente redondo e plano em ouro polido, delicadamente recortado com o símbolo da paz, trazendo um toque único ao seu estilo. A tornozeleira é ajustável, garantindo conforto com sua corrente extensora, e finalizada com um fecho lagosta dourado polido. Perfeita para ocasiões casuais e formais, é uma adição versátil para qualquer coleção de joias.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHER &gt;&gt; ACESSÓRIOS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Tornozeleira Dourada A com Berloque de Miçangas"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubra elegância com a Tornozeleira Dourada A. Corrente dourada, contas pretas e pingente de símbolo da paz. Ajustável para o ajuste perfeito."
+    }
+   ]
+  },
+  "gid://shopify/Product/9217492713724": {
+   "translatableContent": [
+    {
+     "key": "title",
+     "value": "Adriana Top",
+     "digest": "44d752a0a898a1cc3298575acd6ff9dfe81c7bddab4854760ce26f7945d28d5e"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>The Adriana White Sweater is an essential addition to any fashion-forward wardrobe. This stylish off-shoulder crop top features long sleeves, offering a sleek and modern design that complements various outfits. Whether you're dressing up for a night out or keeping it casual, this sweater is versatile enough to suit any occasion.</p><ul>\n<li>Color: White</li>\n<li>Style: Off-shoulder crop top</li>\n<li>Sleeves: Long sleeves</li>\n<li>Material: Soft and comfortable fabric</li>\n<li>Perfect for: Casual and evening wear</li>\n</ul><p>With its chic design, the Adriana White Sweater is perfect for those who love to stay on-trend. Pair it with your favorite jeans or a stylish skirt to create a look that's uniquely yours. Don't miss out on this must-have piece for your collection.</p>",
+     "digest": "26fe5c5fe93d805151516c2028901409be9c52f5423bf013589371bf67d516a5"
+    },
+    {
+     "key": "handle",
+     "value": "adriana-sweater",
+     "digest": "4790b6f2a1bc9f9a4c0b11ff7a193e8f18748a8f59e2130e9a85b08c6063ca3a"
+    },
+    {
+     "key": "product_type",
+     "value": "TOPS",
+     "digest": "c2cdaed4c1ad95aca19258e636041c89db767fd7c64f3ae41ba2967905eedd33"
+    },
+    {
+     "key": "meta_title",
+     "value": "Adriana White Sweater - Chic Off-Shoulder Style",
+     "digest": "337ecdf9eee890c604c8b003964b50b95e693445bf1cedfedb27ed809aea03db"
+    },
+    {
+     "key": "meta_description",
+     "value": "Discover the Adriana White Sweater, featuring a chic off-shoulder design and long sleeves. Perfect for a stylish and modern look.",
+     "digest": "13a862bda214b044e82946e44d189c8587752562875452ffdf06e1ea666813a4"
+    }
+   ],
+   "es": [
+    {
+     "key": "title",
+     "value": "Adriana Top"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>El suéter blanco Adriana es un complemento esencial para cualquier guardarropa a la moda. Este elegante crop top con hombros descubiertos presenta mangas largas, ofreciendo un diseño elegante y moderno que complementa varios conjuntos. Ya sea que te vistas para una salida nocturna o lo uses de forma casual, este suéter es lo suficientemente versátil como para adaptarse a cualquier ocasión.</p><ul>\n\n<li>Color: Blanco</li>\n\n<li>Estilo: Crop top con hombros descubiertos</li>\n\n<li>Mangas: Mangas largas</li>\n\n<li>Material: Tejido suave y cómodo</li>\n\n<li>Perfecto para: Uso casual y de noche</li>\n\n\n</ul><p>Con su diseño chic, el suéter blanco Adriana es perfecto para aquellas que aman estar a la moda. Combínalo con tus jeans favoritos o una falda elegante para crear un look que sea únicamente tuyo. No te pierdas esta pieza imprescindible para tu colección.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "CAMISETAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Jersey Adriana Blanco - Estilo Chic con Hombros Descubiertos"
+    },
+    {
+     "key": "meta_description",
+     "value": "Descubre el suéter Adriana White, con un elegante diseño de hombros descubiertos y mangas largas. Perfecto para un look moderno y con estilo."
+    }
+   ],
+   "pt": [
+    {
+     "key": "title",
+     "value": "Top Adriana"
+    },
+    {
+     "key": "body_html",
+     "value": "<p>O Suéter Branco Adriana é uma adição essencial para qualquer guarda-roupa que acompanha as tendências da moda. Este elegante top cropped ombro a ombro possui mangas longas, oferecendo um design moderno e sofisticado que complementa diversos looks. Seja para uma saída à noite ou para um visual mais casual, este suéter é versátil o suficiente para qualquer ocasião.</p><ul>\n\n<li>Cor: Branco</li>\n\n<li>Estilo: Top cropped ombro a ombro</li>\n\n<li>Mangas: Mangas longas</li>\n\n<li>Material: Tecido macio e confortável</li>\n\n<li>Perfeito para: Uso casual e noturno</li>\n\n\n</ul><p>Com seu design chique, o Suéter Branco Adriana é perfeito para quem ama estar na moda. Combine-o com sua calça jeans favorita ou uma saia estilosa para criar um visual que seja exclusivamente seu. Não perca esta peça indispensável para a sua coleção.</p>"
+    },
+    {
+     "key": "product_type",
+     "value": "MULHERES &gt;&gt; BLUSAS"
+    },
+    {
+     "key": "meta_title",
+     "value": "Suéter Adriana Branco - Estilo Ombro a Ombro Chique"
+    },
+    {
+     "key": "meta_description",
+     "value": "Conheça o Suéter Adriana White, que apresenta um design elegante ombro a ombro e mangas longas. Perfeito para um visual estiloso e moderno."
+    }
+   ]
+  }
+ },
+ "partners": [
+  {
+   "id": "gid://shopify/Product/9217335820540",
+   "handle": "karina-short-legging",
+   "mf": {
+    "id": "gid://shopify/Metafield/190544144072956",
+    "type": "list.single_line_text_field",
+    "value": "[\"karina-crop-tank\"]"
+   }
+  },
+  {
+   "id": "gid://shopify/Product/9217336148220",
+   "handle": "alia-shorts-set",
+   "mf": {
+    "id": "gid://shopify/Metafield/190544344711420",
+    "type": "list.single_line_text_field",
+    "value": "[\"alia-crop-tank\"]"
+   }
+  }
+ ],
+ "redirects": [
+  [
+   "/products/carbon-classic-tee",
+   "/collections/t-shirts"
+  ],
+  [
+   "/products/startdust-denim-jacket",
+   "/collections/denim-shirts"
+  ],
+  [
+   "/products/brave-and-wild-top-set",
+   "/collections/summer-sets-men"
+  ]
+ ]
+}

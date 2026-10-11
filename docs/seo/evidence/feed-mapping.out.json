@@ -1,0 +1,43 @@
+{
+ "gmc_offers_total": 7320,
+ "language_feedlabel_source": {
+  "en/US/10723206162": 3660,
+  "es/US/10721703504": 3660
+ },
+ "primary_products": 568,
+ "title_starts_with_shopify_seo_title": "566/567",
+ "description_starts_with_shopify_seo_meta": "561/567",
+ "description_starts_with_short_desc": "2/567",
+ "offers_with_gtin": 0,
+ "identifierExists": {
+  "False": 3638,
+  "None": 22
+ },
+ "offers_with_mpn": 0,
+ "brand": {
+  "CARBON": 3660
+ },
+ "examples": [
+  {
+   "product": "9217473380604",
+   "shopify_seo_title": "Bradley Jacket - Bradley Jacket",
+   "gmc_title": "Bradley Jacket - Bradley Jacket DARK BLUE / M",
+   "shopify_meta_first60": "Discover the Bradley Jacket in dark blue. This men's leather",
+   "gmc_description_first120": "Discover the Bradley Jacket in dark blue. This men's leather biker jacket features a band collar, ribbed shoulder panels"
+  },
+  {
+   "product": "9217449525500",
+   "shopify_seo_title": "Keep On Moving Shirt - Stylish Black Graphic Tee",
+   "gmc_title": "Keep On Moving Shirt - Stylish Black Graphic Tee WHITE / L",
+   "shopify_meta_first60": "Discover the Keep On Moving Shirt in black. A stylish long s",
+   "gmc_description_first120": "Discover the Keep On Moving Shirt in black. A stylish long sleeve graphic tee perfect for casual wear. Shop now for a ve"
+  },
+  {
+   "product": "9438451859708",
+   "shopify_seo_title": "Millie Cutout Dress - Black & Beige Mini",
+   "gmc_title": "Millie Cutout Dress - Black & Beige Mini BEIGE / L",
+   "shopify_meta_first60": "Shop the Millie Cutout Dress in black and beige. This mini d",
+   "gmc_description_first120": "Shop the Millie Cutout Dress in black and beige. This mini dress features a stylish cutout design with spaghetti straps,"
+  }
+ ]
+}
