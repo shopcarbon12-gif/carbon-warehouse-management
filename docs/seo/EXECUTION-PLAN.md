@@ -87,10 +87,11 @@ The new proof uses one product and is fully reversible:
 
 ## 7. Product identifiers
 
-- **Active catalogue:** 570 products with vendor **CARBON** (private label) and 1 with vendor "Givy" (the gift card).
-- **No GTINs anywhere.** The 7-digit barcodes are internal style codes and are never sent as GTINs.
-- **Proposal, after the §4 writer exists:** send `brand: Carbon` + `mpn: <variant SKU>` for CARBON-made items, and reconcile `identifierExists` per Google's private-label guidance.
-- **Owner to confirm:** does any product come from a supplier with its own GTIN or part number? Those keep the supplier's identifier, and none is invented.
+- **Owner confirmed (2026-10-11):** every product is CARBON's own private-label product. No supplier GTINs or part numbers exist. The one exception is the gift card (vendor "Givy").
+- The 7-digit barcodes are internal style codes and are never sent as GTINs.
+- **Plan:** for each variant, send `brand: Carbon` + `mpn: <variant SKU>` (e.g. `1223303A7M`). CARBON is entitled to assign these as the manufacturer.
+- **Route:** Shopify's own `mm-google-shopping.mpn` variant metafield, the same namespace the WMS already writes for gender, age_group and condition. It does not use the supplemental source, so it cannot race Sync ads.
+- **Test first:** one product, then read back from Merchant Center that `mpn` arrived and what the app now sends as `identifierExists`. Reversible: delete the metafields. Roll out to all variants only after that read-back.
 
 ## 8. Implementation contracts for the small build (publish/revert, feed writer)
 
