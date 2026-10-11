@@ -56,7 +56,7 @@ const RULES: Rule[] = [
     kind: "fit",
     re: /\b(true to size|runs (?:small|large|big)|size (?:up|down)|fits? (?:true|perfectly|like a glove)|(?:slim|regular|relaxed|loose|skinny|tailored|oversized|athletic|straight)[- ]fit|(?:high|mid|low)[- ]rise|flattering fit|figure[- ]hugging)\b/gi,
   },
-  { kind: "measurement", re: /\b\d+(?:[.,]\d+)?\s?(?:in|inch|inches|cm|mm)\b|\b\d+(?:[.,]\d+)?["”]/gi },
+  { kind: "measurement", re: /\b\d+(?:[.,]\d+)?(?:\s?|-)(?:in|inch|inches|cm|mm)\b|\b\d+(?:[.,]\d+)?["”]/gi },
   { kind: "measurement", re: /\b(inseam|rise of|length of)\b/gi },
   { kind: "origin", re: /\b(made in|imported|handmade|hand[- ]made|handcrafted|hand[- ]crafted)\b/gi },
   /* The owner: labels are never mentioned (above all the CARBON JEANS waistband label). */

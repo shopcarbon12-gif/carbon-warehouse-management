@@ -44,6 +44,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "pg";
+import { stripClaimsFromText } from "@/lib/seo/claims";
 import {
   AGE_GROUPS,
   CONDITIONS,
@@ -284,7 +285,7 @@ async function askPhotoOnce(t: Target, imageUrl: string): Promise<{ fullDescript
     const text = await res.text();
     if (!res.ok) throw new Error(`OpenAI ${res.status}: ${text.slice(0, 200)}`);
     const parsed = JSON.parse(JSON.parse(text)?.choices?.[0]?.message?.content || "{}");
-    return { fullDescription: String(parsed.fullDescription || "").trim() };
+    return { fullDescription: stripClaimsFromText(String(parsed.fullDescription || "").trim(), { productTitle: t.title }) };
   }
   throw new Error("OpenAI: retries exhausted");
 }

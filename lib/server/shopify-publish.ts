@@ -19,6 +19,7 @@ import {
   setInventoryQuantitiesBulk,
   salesChannelPublicationIds,
   publishToPublication,
+  setMetafields,
   type SetVariant,
   type ShopVariant,
 } from "@/lib/server/shopify-write";
@@ -194,6 +195,27 @@ export async function pushMatrixToShopify(
         WHERE id = $1::uuid`,
       [v.id, sv.id, sv.inventoryItem?.id || null],
     );
+  }
+
+  // ---- Google part number (MPN) = the variant's own SKU -----------------
+  // Every product is CARBON private label, so CARBON assigns the MPN; with
+  // brand + MPN the Google app sends identifierExists=true. Written on every
+  // publish so new products and new sizes get it without a separate pass.
+  {
+    const mpn = variants
+      .map((v) => ({ sv: bySku.get((v.sku || "").trim().toLowerCase()), sku: (v.sku || "").trim() }))
+      .filter((x) => x.sv?.id && x.sku)
+      .map((x) => ({
+        ownerId: x.sv!.id,
+        namespace: "mm-google-shopping",
+        key: "mpn",
+        type: "single_line_text_field",
+        value: x.sku,
+      }));
+    if (mpn.length) {
+      const r = await setMetafields(ctx, mpn);
+      if (!r.ok) warnings.push(`Google MPN: ${r.error}`);
+    }
   }
 
   // ---- inventory (on-hand from WMS EPC counts) --------------------------

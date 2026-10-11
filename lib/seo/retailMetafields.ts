@@ -13,7 +13,16 @@
  *   mm-google-shopping.gender    → every variant. Google Shopping reads these
  *   mm-google-shopping.age_group   per variant, not per product, which is why
  *   mm-google-shopping.condition   they are written to each one.
+ *   mm-google-shopping.mpn       → every variant: its own SKU. Every product
+ *                                  is CARBON's own private label (owner,
+ *                                  2026-10-11), so CARBON assigns the part
+ *                                  number; with brand + MPN the Google app sends
+ *                                  identifierExists=true (tested on Alex Denim
+ *                                  Shorts). The 7-digit barcodes are internal
+ *                                  style codes and are never sent as GTINs.
  */
+
+import { CARBON_VOICE, claimRulesFor } from "./claims";
 
 export interface RetailMetafieldValues {
   fullDescription?: string;
@@ -112,8 +121,10 @@ export function buildRetailMetafieldInputs(args: {
   productId: string;
   variantIds: string[];
   values: RetailMetafieldValues;
+  /** Variant SKUs, for mm-google-shopping.mpn. Variants without a SKU get none. */
+  variantSkus?: Array<{ id: string; sku: string }>;
 }): MetafieldSetInput[] {
-  const { productId, variantIds, values } = args;
+  const { productId, variantIds, values, variantSkus } = args;
   const out: MetafieldSetInput[] = [];
 
   const desc = clean(values.fullDescription);
@@ -145,6 +156,11 @@ export function buildRetailMetafieldInputs(args: {
       });
     }
   }
+  for (const v of variantSkus || []) {
+    const sku = clean(v.sku);
+    if (!v.id || !sku) continue;
+    out.push({ ownerId: v.id, namespace: "mm-google-shopping", key: "mpn", type: "single_line_text_field", value: sku });
+  }
   return out;
 }
 
@@ -171,7 +187,9 @@ export function missingRetailFields(present: {
 }
 
 /** The instruction the photo model answers. Shared so the panel and the bulk
- *  pass describe a product the same way. */
+ *  pass describe a product the same way — and held to the same rules as the
+ *  product description (lib/seo/claims.ts): it used to ask for "fabric feel",
+ *  which put "soft", "comfortable" and fit claims on every Description tab. */
 export function buildDescriptionInstruction(args: {
   title: string;
   productType?: string;
@@ -182,16 +200,16 @@ export function buildDescriptionInstruction(args: {
     ? `{"fullDescription": string, "gender": "male" | "female" | "unisex"}`
     : `{"fullDescription": string}`;
   return [
+    CARBON_VOICE,
+    "",
     `Product name: "${title}"${productType ? `, category: ${productType}` : ""}.`,
     "From the photo and the name, return STRICT JSON only:",
     shape,
-    "fullDescription: 2-3 sentences of plain-text marketing copy describing the",
-    "garment that is actually visible — its cut, fabric feel, neckline or leg, and",
-    "when someone would wear it. No HTML, no bullet points, no size or care claims,",
-    "no price, and never invent a material you cannot see.",
-    askGender
-      ? "gender: who the garment is cut for, judged from its styling."
-      : "",
+    "fullDescription: 2-3 sentences of plain text about what is actually visible —",
+    "colour, print and its wording, neckline or leg, details — and one way to wear it.",
+    "No HTML, no bullet points, no price.",
+    claimRulesFor({ productTitle: title }),
+    askGender ? "gender: who the garment is cut for, judged from its styling." : "",
   ]
     .filter(Boolean)
     .join("\n");

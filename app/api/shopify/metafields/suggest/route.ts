@@ -1,3 +1,4 @@
+import { stripClaimsFromText } from "@/lib/seo/claims";
 import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from "next/server";
@@ -104,7 +105,11 @@ async function POST_handler(req: Request) {
       ],
     });
     const parsed = JSON.parse(c?.choices?.[0]?.message?.content || "{}");
-    const fullDescription = String(parsed.fullDescription || "").trim();
+    /* Same last word as the product description: a sentence with an
+       unverifiable claim (fabric, feel, fit, labels…) is deleted. */
+    const fullDescription = stripClaimsFromText(String(parsed.fullDescription || "").trim(), {
+      productTitle: m.description || "",
+    });
     /* An empty answer is a failure, not an empty field. Returning 200 with
        blanks is what made this look like a panel that quietly does nothing. */
     if (!fullDescription) {

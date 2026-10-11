@@ -373,6 +373,7 @@ async function publish(
   oldHandle = "",
   productType = "",
   variantIds: string[] = [],
+  variantSkus: Array<{ id: string; sku: string }> = [],
 ) {
   const input: Json = { id: productId };
   const seo: Json = {};
@@ -495,6 +496,7 @@ async function publish(
     productId,
     variantIds,
     values: { gender: gender || "", ageGroup: DEFAULT_AGE_GROUP, condition: DEFAULT_CONDITION },
+    variantSkus,
   });
   for (let i = 0; i < retail.length; i += 25) {
     const rf = await gql(
@@ -608,6 +610,7 @@ async function main() {
             String(p.handle || ""),
             String(p.productType || ""),
             (p.variants?.nodes || []).map((v: Json) => String(v?.id || "")).filter(Boolean),
+            (p.variants?.nodes || []).map((v: Json) => ({ id: String(v?.id || ""), sku: String(v?.sku || "") })),
           );
           doneIds.push(p.id);
           fs.writeFileSync(STATE, JSON.stringify({ done: doneIds }, null, 2));
