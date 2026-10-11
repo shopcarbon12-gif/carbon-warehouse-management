@@ -1,0 +1,64 @@
+{
+ "window": {
+  "startDate": "2026-07-12",
+  "endDate": "2026-10-09"
+ },
+ "searchType": "web",
+ "dataState": "final",
+ "propertyTotal": {
+  "clicks": 2223,
+  "impr": 85543
+ },
+ "byDate": {
+  "clicks": 2223,
+  "impr": 85543,
+  "rows": 90
+ },
+ "byPage": {
+  "clicks": 2259,
+  "impr": 117955,
+  "rows": 5249
+ },
+ "byQuery": {
+  "clicks": 1221,
+  "impr": 41919,
+  "rows": 3777
+ },
+ "byQueryPage": {
+  "clicks": 1243,
+  "impr": 62113,
+  "rows": 7019
+ },
+ "brandedInQueryRows": {
+  "clicks": 1164,
+  "impr": 19933,
+  "rows": 818
+ },
+ "homePageRows": [
+  {
+   "page": "https://shopcarbon.com/",
+   "clicks": 1220,
+   "impr": 25096
+  }
+ ],
+ "pilot56": {
+  "window": {
+   "startDate": "2026-08-15",
+   "endDate": "2026-10-09"
+  },
+  "productPageImpr_pageDim": {
+   "pages": 2239,
+   "ge50": 84,
+   "ge100": 37,
+   "ge200": 18,
+   "median": 3
+  },
+  "productPageNonbrandedImpr_queryPageRows": {
+   "pages": 808,
+   "ge50": 32,
+   "ge100": 24,
+   "ge200": 10,
+   "median": 2
+  }
+ }
+}

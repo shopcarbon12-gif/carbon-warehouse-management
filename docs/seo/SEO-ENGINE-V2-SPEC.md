@@ -1,5 +1,7 @@
 # CARBON SEO — Revision 3: Product Content Engine + Business SEO Plan
 
+**Execution is now tracked in `EXECUTION-PLAN.md`** (answers the rev-3 review; corrects §D11 G2, §D7 T2, §D1.2 and §D6).
+
 **Status:** DRAFT rev 3 — nothing implemented. Rev 1 and rev 2 (2026-10-11) were reviewed by Codex (`CARBON-SEO-V2-REVIEW.md`, `CARBON-SEO-REV2-REVIEW.md`). **Part D (rev 3) supersedes the sections it names**; where Part D and A–C disagree, Part D wins. Repo `carbon-warehouse-management` at `main` `2a7cb1c`.
 **Scope split (per review):** Part A is the *product content engine*. Part B is the *business SEO plan* the engine is one component of. Part C answers the review line by line.
 
