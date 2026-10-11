@@ -2,7 +2,7 @@
  * "Sync ads" worker job (job_type 'shopify_ads_sync'), started from
  * Integrations → Shopify.
  *
- *  1. Sales channels — every active product (gift cards aside) is published to
+ *  1. Sales channels — every active product (gift cards aside, by flag or title) is published to
  *     every Shopify sales channel except POS (Carbon POS is not Shopify POS).
  *  2. Google — every Merchant Center listing gets the custom labels of the ad
  *     product groups it belongs to, and loses labels of groups it left
@@ -132,7 +132,9 @@ export async function executeShopifyAdsSync(pool: Pool, jobId: string): Promise<
     let published = 0;
     let pubFailed = 0;
     for (const p of products) {
-      if (p.isGiftCard || p.pubs >= pubIds.length) continue;
+      // Gift cards keep the channels the owner chose — the store's "Gift Card" is a
+      // regular product (isGiftCard false) deliberately kept off the sales channels.
+      if (p.isGiftCard || /\bgift\s*card\b/i.test(p.title) || p.pubs >= pubIds.length) continue;
       const r = await publishToPublication(ctx, p.gid, pubIds);
       if (r.ok) published++;
       else {
