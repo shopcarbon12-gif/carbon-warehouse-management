@@ -20,6 +20,7 @@
  *   --only <id,id>   restrict to specific product ids (numeric or gid)
  *   --resume         skip products already recorded done in the state file
  *   --no-vision      skip photo analysis (cheaper, lower quality)
+ *   --active-only    only ACTIVE products (drafts are skipped)
  *   --from-photos    rewrite EVERY description from the photos (like the Matrix
  *                    SEO tab), not only fields that score low; no product is
  *                    skipped as "already optimized"
@@ -92,6 +93,10 @@ const OPENAI_KEY = (() => {
  */
 const EXCLUDED_HANDLES = new Set(["gifted-product", "gift-card"]);
 
+/* Optimised, but the URL is kept: "b-and-w-skirt" reads better than the
+   slug "b-w-skirt" the name would give (owner, 2026-10-11). */
+const KEEP_HANDLES = new Set(["b-and-w-skirt"]);
+
 /* ---------------------------------------------------------------- args ---- */
 
 const argv = process.argv.slice(2);
@@ -104,6 +109,7 @@ const LIMIT = Number(val("--limit") || 0) || 0;
 const CONCURRENCY = Math.max(1, Math.min(Number(val("--concurrency") || 4) || 4, 8));
 const WRITE = has("--write");
 const RESUME = has("--resume");
+const ACTIVE_ONLY = has("--active-only");
 const USE_VISION = !has("--no-vision");
 /* Rewrite every description from the photos (the Matrix SEO tab's behaviour)
    instead of only fields that score low. Off by default here: a catalog that
@@ -186,9 +192,9 @@ async function fetchActiveProducts(): Promise<Json[]> {
          photos worth writing SEO for, and optimizing it costs nothing extra.
          Archived is excluded — that is the bin. Status is never written by this
          script, so nothing here can publish a product. */
-      `query($cursor:String){ products(first:50, after:$cursor, query:"status:active OR status:draft"){
+      `query($cursor:String,$q:String){ products(first:50, after:$cursor, query:$q){
          pageInfo{hasNextPage endCursor} nodes{ ${PRODUCT_FIELDS} } } }`,
-      { cursor },
+      { cursor, q: ACTIVE_ONLY ? "status:active" : "status:active OR status:draft" },
     );
     out.push(...d.products.nodes);
     cursor = d.products.pageInfo.hasNextPage ? d.products.pageInfo.endCursor : null;
@@ -254,8 +260,12 @@ function toContext(p: Json): ProductContext {
     /* Drives the "Complete the Look" notice. The flag lives in the WMS, not on
        the Shopify product, so it is looked up once up front (see setFlags). */
     isSet: SET_PICTURES.has(String(p.id)),
+    setPartners: SET_PARTNERS.get(String(p.id)) || [],
   };
 }
+
+/** The other pieces of each set, by WMS name, keyed like SET_PICTURES. */
+const SET_PARTNERS = new Map<string, string[]>();
 
 /**
  * Shopify product ids flagged as part of a matching set.
@@ -280,6 +290,20 @@ async function loadSetFlags(): Promise<number> {
         WHERE m.is_set = true AND m.shopify_product_id IS NOT NULL
         GROUP BY m.id`,
     );
+    const pr = await client.query<{ shopify_product_id: string; partners: string[] | null }>(
+      `SELECT m.shopify_product_id,
+              array_agg(DISTINCT o.description) FILTER (WHERE o.description IS NOT NULL AND o.description <> m.description) AS partners
+         FROM matrices m
+         JOIN matrices o ON o.set_group_id = m.set_group_id AND o.id <> m.id AND o.is_set
+        WHERE m.is_set AND m.shopify_product_id IS NOT NULL AND m.set_group_id IS NOT NULL
+        GROUP BY m.id, m.shopify_product_id`,
+    );
+    for (const row of pr.rows) {
+      const raw = String(row.shopify_product_id);
+      const names = (row.partners || []).slice(0, 4);
+      SET_PARTNERS.set(raw, names);
+      SET_PARTNERS.set(raw.startsWith("gid://") ? raw : `gid://shopify/Product/${raw}`, names);
+    }
     for (const row of r.rows) {
       const picture = pictureForProduct(row.skus || [], row.upc);
       if (!picture) continue;
@@ -369,7 +393,7 @@ async function publish(
      optimizer only proposes one when the current slug does not match. Changing
      it rewrites a live URL, which is why the redirect below is not optional. */
   const wantHandle = String(fields.handle || "").trim().toLowerCase();
-  if (wantHandle && wantHandle !== String(oldHandle || "").trim().toLowerCase()) {
+  if (wantHandle && wantHandle !== String(oldHandle || "").trim().toLowerCase() && !KEEP_HANDLES.has(String(oldHandle || "").toLowerCase())) {
     input.handle = wantHandle;
   }
 
