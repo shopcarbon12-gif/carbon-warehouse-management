@@ -213,7 +213,7 @@ export function claimRulesFor(ctx: ClaimContext): string {
     lines.push(
       'THIS PAGE SELLS ONE PIECE OF A MATCHING SET. Each piece is sold separately at its own price. You may say it is part of the set and pairs with the matching piece; NEVER say it includes, comes with, or is a two-piece set.',
       ctx.setPartners?.length
-        ? `  The matching piece${ctx.setPartners.length > 1 ? "s are" : " is"}: ${ctx.setPartners.map((p) => `"${p}"`).join(", ")}. Name it exactly like that, never by a guessed garment type (do not call it a skirt, pants or shorts unless its name says so).`
+        ? `  The matching piece${ctx.setPartners.length > 1 ? "s are" : " is"}: ${ctx.setPartners.map((p) => `"${p}"`).join(", ")}. Write it as "Pair it with the ${ctx.setPartners[0]}." — that piece is NOT this set, so never write "part of the ${ctx.setPartners[0]}". Never call it by a guessed garment type (skirt, pants, shorts) unless its name says so.`
         : "  Do not say what kind of garment the matching piece is — you have not seen it.",
     );
   }
