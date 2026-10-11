@@ -67,6 +67,15 @@ const RULES: Rule[] = [
     kind: "label",
     re: /\b(labels?|woven tags?|neck tags?|brand tags?|hang ?tags?|(?:leather|leatherette|pu|jacron|rubber|woven|brand(?:ed)?|logo|waistband|back) patch(?:es)?|patch(?:es)? (?:reading|that reads|with the (?:brand|logo)))\b/gi,
   },
+  /* Branding ON the waistband is the jeans label in other words ("Carbon logo
+     at back waistband", "'CARBON' text on the front waistband"). Same
+     sentence, no comma between, within a few words; a plain "drawstring
+     waistband" or a logo elsewhere ("skull logo on the thigh") is fine. */
+  {
+    kind: "label",
+    re: /\bwaistband\b[^.,;\n]{0,35}\b(?:logo|text|lettering|branding|wording|reads|reading|embossed)\b|\b(?:logo|text|lettering|branding|wording|embossed)\b[^.,;\n]{0,35}\bwaistband\b/gi,
+    label: "branding on the waistband",
+  },
   { kind: "logo-shape", re: /\b(hexagon(?:al)?|hexagons|honeycomb|geometric (?:logo|emblem|mark)|abstract (?:logo|emblem|mark))\b/gi },
   { kind: "brand", re: /\bcarbon\s+jeans\b/gi, label: '"Carbon Jeans" as the brand' },
   { kind: "cliche", re: /\b(elevat(?:e|es|ed|ing)|versatil(?:e|ity)|must[- ]have|boasts?|adorn(?:s|ed|ing)?|wardrobe (?:staple|essential)|statement piece|trendy|look no further|step into|turn heads|perfect (?:for|blend|choice|addition)|standard)\b/gi },

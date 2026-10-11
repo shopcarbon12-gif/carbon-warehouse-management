@@ -47,6 +47,15 @@ test("a distressed patch is design; a label patch is not", () => {
   assert.ok(kinds("Standard slant front pockets.").includes("cliche"));
 });
 
+test("branding on the waistband is the label; a drawstring waistband is not", () => {
+  assert.ok(kinds("Carbon logo at back waistband.").includes("label"));
+  assert.ok(kinds("Features 'CARBON' text on the front waistband.").includes("label"));
+  assert.ok(kinds("Embossed text on waistband.").includes("label"));
+  assert.deepEqual(kinds("A drawstring waistband and cuffed ankles."), []);
+  assert.deepEqual(kinds("A drawstring waistband, cuffed ankles, and a white skull logo."), []);
+  assert.deepEqual(kinds("Swim trunks with an elastic waistband by Carbon."), []);
+});
+
 test("Carbon Jeans as the brand is caught", () => {
   assert.ok(kinds("Shop Carbon Jeans today.").includes("brand"));
 });
