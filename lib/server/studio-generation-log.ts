@@ -31,7 +31,7 @@ export type StudioGenerationLog = {
   itemRefCount?: number | null;
   promptBytes?: number | null;
   promptTrimmed?: boolean;
-  outcome: "ok" | "failed" | "blocked";
+  outcome: "ok" | "failed" | "blocked" | "aborted";
   durationMs?: number | null;
   /** The judge reached a verdict (vs. unavailable / unparsable). */
   qaDecisive?: boolean | null;

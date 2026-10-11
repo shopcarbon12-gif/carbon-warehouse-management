@@ -22,10 +22,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const VIEWS = new Set(["general", "front", "back"]);
+const VIEWS = new Set(["general", "front", "back", "styling"]);
 const MAX_REFS = 40;
 
-type StoredRef = { url: string; view: "general" | "front" | "back" };
+type StoredRef = { url: string; view: "general" | "front" | "back" | "styling" };
 
 function sanitizeRefs(v: unknown): StoredRef[] {
   if (!Array.isArray(v)) return [];

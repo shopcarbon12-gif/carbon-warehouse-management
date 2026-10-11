@@ -23,7 +23,7 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
-import { isValidJobId, runGenerateJob } from "@/lib/server/generate-jobs";
+import { isValidJobId, runGenerateJob, takeEarlyCancel } from "@/lib/server/generate-jobs";
 
 const FALLBACK_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAFx0lEQVR42u3UwQkAIBDAMHX/nc8lBK4jUZBkn2tmdgDg53YHAH4MIAgQCBAECAQIAgQCBAECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIhD8eQ9JCmqo2AAAAAElFTkSuQmCC";
@@ -576,19 +576,30 @@ function buildBackStateLine(backState: BackState, panelQa: PanelQaInput): string
 }
 
 /** Studio item-reference sections: General (any view — accessories, flats),
- *  Front (front of the garment), Back (back of the garment). */
-type ItemRefView = "general" | "front" | "back";
-type ItemRefViewLists = { general: string[]; front: string[]; back: string[] };
+ *  Front (front of the garment), Back (back of the garment), and Style with —
+ *  OTHER products (a shirt, shoes, a bracelet) the model wears WITH the item.
+ *  Style-with photos are never the product: no spec, no QA, no fidelity lock. */
+type ItemRefView = "general" | "front" | "back" | "styling";
+type ItemRefViewLists = { general: string[]; front: string[]; back: string[]; styling: string[] };
+
+/** OpenAI's edit endpoint takes 16 images; model refs (≤6) and the product come first. */
+const MAX_STYLING_REFS = 6;
 
 function parseItemRefViews(views: unknown, fallbackRefs: unknown): ItemRefViewLists {
   const strList = (v: unknown) =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
   if (views && typeof views === "object") {
     const o = views as Record<string, unknown>;
-    const lists = { general: strList(o.general), front: strList(o.front), back: strList(o.back) };
+    const lists = {
+      general: strList(o.general),
+      front: strList(o.front),
+      back: strList(o.back),
+      styling: strList(o.styling).slice(0, MAX_STYLING_REFS),
+    };
     if (lists.general.length || lists.front.length || lists.back.length) return lists;
+    return { general: strList(fallbackRefs), front: [], back: [], styling: lists.styling };
   }
-  return { general: strList(fallbackRefs), front: [], back: [] };
+  return { general: strList(fallbackRefs), front: [], back: [], styling: [] };
 }
 
 /** Which attached images are the FRONT and which are the BACK — so the
@@ -665,6 +676,38 @@ function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefVie
 }
 
 /**
+ * "Style with": the operator attached OTHER pieces for the model to wear with
+ * the product — denim shorts styled with that shirt, those shoes and that
+ * bracelet. They go to OpenAI after every product photo, so their numbers are
+ * known from the counts alone, and they replace the default styling lock for
+ * whatever they cover. Everything that keeps the product faithful (spec, view
+ * map, back lock, QA) describes the product only and never sees them.
+ */
+function buildStylingRefLines(args: { modelCount: number; itemViews: ItemRefView[] }): string[] {
+  const styling = args.itemViews.filter((v) => v === "styling").length;
+  if (!styling) return [];
+  const productCount = args.itemViews.length - styling;
+  const start = args.modelCount + productCount + 1;
+  const range = styling === 1 ? `Attached image ${start} is` : `Attached images ${start}–${start + styling - 1} are`;
+  return [
+    `STYLE-WITH PIECES (SERVER — chosen by the operator; authoritative): ${range} OTHER clothing / footwear / accessories the model wears WITH the product in this shoot. They are NOT the product.`,
+    "- The model wears every piece shown there, in every frame where that part of the body is in view, reproduced faithfully: the same colour, cut, fit, length, fabric, print, text and hardware as the photo shows.",
+    "- Several photos of one piece (its front and its back, say) are ONE piece: worn once, with its front content on its front and its back content on its back.",
+    "- They REPLACE the STYLING LOCK and any outfit read from the product photos for whatever they cover: a top here replaces that top, shoes here replace that footwear, and jewellery, a belt, a bag or a hat here is worn even where the lock says no accessories. The lock still supplies only what these pieces do not cover.",
+    "- The product is always worn and always the hero. A style-with piece never takes the product's place on the body, never covers its key details more than it naturally would, and never lends it a colour, print, text or detail — nor takes one from it. The item spec, the item view map and the garment-fidelity rules describe ONLY the product.",
+    "- Any person, mannequin or hanger in a style-with photo is a display fixture: never copy a face, body, skin tone, hair or pose from it.",
+  ];
+}
+
+/** Abort button: the operator cancelled this panel, so nothing more is spent on it. */
+function abortedGenerateResponse() {
+  return NextResponse.json(
+    { error: { type: "aborted", code: "aborted", message: "Aborted — generation was cancelled." } },
+    { status: 499 },
+  );
+}
+
+/**
  * Heartbeat wrapper. A panel generation holds an otherwise-idle HTTP
  * connection for 60–90 s while OpenAI renders; mobile carriers / iOS Safari
  * drop idle connections in that window ("Load failed"), even though the
@@ -689,8 +732,10 @@ async function POST_handler(req: NextRequest) {
    * No header → behaviour is exactly as before.
    */
   const jobId = req.headers.get("x-generate-job")?.trim() ?? "";
+  /* Abort pressed while this POST was still in transit: never start it. */
+  if (isValidJobId(jobId) && takeEarlyCancel(jobId)) return abortedGenerateResponse();
   const bodyPromise = isValidJobId(jobId)
-    ? runGenerateJob(jobId, async () => (await handleGenerate(req)).text())
+    ? runGenerateJob(jobId, async (signal) => (await handleGenerate(req, signal)).text())
     : null;
 
   if (req.headers.get("x-generate-stream") !== "1") {
@@ -737,7 +782,8 @@ async function POST_handler(req: NextRequest) {
   });
 }
 
-async function handleGenerate(req: NextRequest): Promise<Response> {
+/** `signal` = the Studio's Abort button (detached job runs only). */
+async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<Response> {
   // Wall clock for the generation log — OpenAI render time dominates it.
   const startedAt = Date.now();
   // Set once the request is parsed, so the outer catch can log what was asked for.
@@ -896,11 +942,13 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     }
 
     const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
-    const itemRefValues = [...viewLists.general, ...viewLists.front, ...viewLists.back];
+    // Style-with pieces go LAST, after every product photo (buildStylingRefLines counts on it).
+    const itemRefValues = [...viewLists.general, ...viewLists.front, ...viewLists.back, ...viewLists.styling];
     const itemRefViewTags: ItemRefView[] = [
       ...viewLists.general.map((): ItemRefView => "general"),
       ...viewLists.front.map((): ItemRefView => "front"),
       ...viewLists.back.map((): ItemRefView => "back"),
+      ...viewLists.styling.map((): ItemRefView => "styling"),
     ];
     const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
     const itemRefNormalization = normalizeReferenceUrls(itemRefValues, "Item");
@@ -923,7 +971,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         { status: 400 }
       );
     }
-    if (!normalizedItemRefs.length) {
+    if (!normalizedItemRefs.length || normalizedItemRefs.length === viewLists.styling.length) {
       return NextResponse.json(
         { error: "Missing item reference images" },
         { status: 400 }
@@ -1098,9 +1146,10 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
         ]
       : [];
 
-    const buildServerLockBlock = (modelCount: number, itemViewMapLines: string[]) => [
+    const buildServerLockBlock = (modelCount: number, itemViewMapLines: string[], stylingRefLines: string[]) => [
       buildServerLockPrompt(normalizedPanelQa, modelCount),
       ...itemViewMapLines,
+      ...stylingRefLines,
       ...(itemSpecText
         ? [
             "VERIFIED ITEM SPEC (read off the item photos — every line MUST appear exactly as stated, in every frame and every panel. It overrides generic styling, but NOT the ITEM INSTRUCTION above: that was written by the person holding the garment, so where the two disagree about a placement, finish or fit, the instruction wins and this line yields):",
@@ -1163,6 +1212,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const itemAnchorViews: ItemRefView[] =
       itemRefViewTags.length === itemAnchors.length ? itemRefViewTags : itemAnchors.map((): ItemRefView => "general");
 
+    if (signal?.aborted) return logged({ outcome: "aborted", errorCode: "aborted" }, abortedGenerateResponse());
+
     const allRefs = [...modelAnchors, ...itemAnchors];
     const downloaded = await Promise.allSettled(
       allRefs.map((url, idx) => downloadReferenceAsFile(url, idx))
@@ -1191,6 +1242,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const itemFilesCount = downloaded
       .slice(modelAnchors.length)
       .filter((r) => r.status === "fulfilled").length;
+    /* Style-with photos alone are not the product: at least one PRODUCT photo must have arrived. */
+    const productFilesCount = itemRefViewsForQa.filter((v) => v !== "styling").length;
 
     /* Which attached image is the colourway photo, counted the way the view map
        counts: model refs first, then the item photos that actually downloaded.
@@ -1207,7 +1260,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       return modelFilesCount + okBefore + 1;
     })();
 
-    if (!referenceFiles.length || modelFilesCount === 0 || itemFilesCount === 0) {
+    if (!referenceFiles.length || modelFilesCount === 0 || itemFilesCount === 0 || productFilesCount === 0) {
       const summary = buildReferenceDownloadErrorDetails({
         allRefs,
         downloaded,
@@ -1231,7 +1284,8 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
 
     const serverLockBlock = buildServerLockBlock(
       modelFilesCount,
-      buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa })
+      buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa }),
+      buildStylingRefLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa }),
     );
     const clamped = clampLockedPrompt(prompt, serverLockBlock);
     const lockedPrompt = clamped.prompt;
@@ -1296,17 +1350,22 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
       const overallDeadline = Date.now() + Math.min(imageTimeoutMs + 60_000, 285_000);
       let imageErr: any = null;
       for (let attempt = 1; attempt <= attemptsAllowed; attempt += 1) {
+        if (signal?.aborted) break;
         const remaining = overallDeadline - Date.now();
         try {
           const edited = await withTimeout(
-            openai.images.edit({
-              model: imageModel,
-              image: referenceFiles,
-              prompt: enforcePromptLength(lockedPrompt),
-              size: finalSize,
-              quality: imageQuality as any,
-              moderation: imageModeration as any,
-            } as any),
+            openai.images.edit(
+              {
+                model: imageModel,
+                image: referenceFiles,
+                prompt: enforcePromptLength(lockedPrompt),
+                size: finalSize,
+                quality: imageQuality as any,
+                moderation: imageModeration as any,
+              } as any,
+              // Abort button: cancels the request to OpenAI mid-render.
+              { signal },
+            ),
             Math.max(30_000, Math.min(imageTimeoutMs, remaining)),
             "OpenAI image generation"
           );
@@ -1318,7 +1377,7 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           const left = overallDeadline - Date.now();
           /* A generation takes ~90 s; retrying with less than that left just
              swaps one failure for a slower one. */
-          if (attempt >= attemptsAllowed || !isTransientNetworkError(e) || left < 95_000) break;
+          if (signal?.aborted || attempt >= attemptsAllowed || !isTransientNetworkError(e) || left < 95_000) break;
           console.warn(
             `[generate] panel ${normalizedPanelQa.panelNumber ?? "?"}: ${String(
               e?.message || e,
@@ -1329,8 +1388,14 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           await new Promise((r) => setTimeout(r, 1500 * attempt));
         }
       }
+      if (signal?.aborted) {
+        return logged({ ...logRefs, outcome: "aborted", errorCode: "aborted" }, abortedGenerateResponse());
+      }
       if (imageErr) throw imageErr;
     } catch (err: any) {
+      if (signal?.aborted) {
+        return logged({ ...logRefs, outcome: "aborted", errorCode: "aborted" }, abortedGenerateResponse());
+      }
       const code = String(err?.code || "");
       const type = String(err?.type || "");
       const message = String(err?.message || "");
@@ -1417,6 +1482,12 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
     const runQaActive = isValidRunId(runQaId);
     const logId = crypto.randomUUID();
     if (runQaActive) {
+      /* The judges check the PRODUCT against its photos. Style-with pieces are
+         styling — showing them as product references would read as a mismatch. */
+      const qaItemIdx = itemRefViewsForQa.map((v, i) => (v === "styling" ? -1 : i)).filter((i) => i >= 0);
+      const qaItemRefs = qaItemIdx.map((i) => itemRefDataUrls[i]);
+      const qaItemViews = qaItemIdx.map((i) => itemRefViewsForQa[i] as Exclude<ItemRefView, "styling">);
+      const productAnchorIdx = itemAnchorViews.map((v, i) => (v === "styling" ? -1 : i)).filter((i) => i >= 0);
       stashRunPanel(
         runQaId,
         {
@@ -1427,8 +1498,10 @@ async function handleGenerate(req: NextRequest): Promise<Response> {
           logId,
         },
         {
-          itemRefs: itemRefDataUrls.length ? itemRefDataUrls : itemAnchors,
-          itemRefViews: itemRefDataUrls.length ? itemRefViewsForQa : itemAnchorViews,
+          itemRefs: qaItemRefs.length ? qaItemRefs : productAnchorIdx.map((i) => itemAnchors[i]),
+          itemRefViews: qaItemRefs.length
+            ? qaItemViews
+            : productAnchorIdx.map((i) => itemAnchorViews[i] as Exclude<ItemRefView, "styling">),
           modelRefs: modelRefDataUrls.length ? modelRefDataUrls : modelAnchors,
           itemSpec: itemSpecText,
           itemType: String(normalizedPanelQa.itemType || ""),

@@ -27,9 +27,12 @@ export type StudioRefView = "general" | "front" | "back";
  * computed for a different set of photos as current fact. Shared so the two
  * can never drift into disagreeing about what "unchanged" means.
  */
-export function studioRefViewKey(refs: Array<{ url: string; view?: StudioRefView | null }>): string {
+export function studioRefViewKey(refs: Array<{ url: string; view?: StudioRefView | "styling" | null }>): string {
   const lists: Record<StudioRefView, string[]> = { general: [], front: [], back: [] };
   for (const r of refs || []) {
+    /* "Style with" photos are other products worn alongside this one. The spec
+       never describes them, so adding or removing one does not stale it. */
+    if (r?.view === "styling") continue;
     const view = (r?.view ?? "general") as StudioRefView;
     (lists[view] ?? lists.general).push(String(r?.url ?? ""));
   }

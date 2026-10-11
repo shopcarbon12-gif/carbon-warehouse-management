@@ -5,7 +5,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { claimGenerateJob, isValidJobId, releaseGenerateJob } from "@/lib/server/generate-jobs";
+import { cancelGenerateJob, claimGenerateJob, isValidJobId, releaseGenerateJob } from "@/lib/server/generate-jobs";
 
 /**
  * Claim the result of a detached Carbon Studio panel generation.
@@ -16,6 +16,7 @@ import { claimGenerateJob, isValidJobId, releaseGenerateJob } from "@/lib/server
  *
  * GET  ?id=<jobId> → { status: "running" } | { status: "missing" } | the panel body
  * DELETE ?id=<jobId> → drop a parked body the client already received.
+ * POST   ?id=<jobId> → Abort: cancel the render (the OpenAI request is aborted).
  */
 export const dynamic = "force-dynamic";
 
@@ -62,3 +63,14 @@ async function DELETE_handler(req: NextRequest) {
 }
 
 export const DELETE = withActivity("generate/job", DELETE_handler);
+
+/** The Studio's Abort button. One call per panel of the run being cancelled. */
+async function POST_handler(req: NextRequest) {
+  const denied = await guard(req);
+  if (denied) return denied;
+  const id = req.nextUrl.searchParams.get("id")?.trim() ?? "";
+  if (!isValidJobId(id)) return NextResponse.json({ error: "Invalid job id" }, { status: 400 });
+  return NextResponse.json({ ok: true, cancelled: cancelGenerateJob(id) });
+}
+
+export const POST = withActivity("generate/job/cancel", POST_handler);
