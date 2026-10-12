@@ -2079,7 +2079,9 @@ export function CarbonStudioTab({
       const r = await fetch("/api/shopify/media", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrixId, items }),
+        // The model these images were generated with: the server records it on
+        // the matrix and pushes the hidden "Model is … and wears size …" line.
+        body: JSON.stringify({ matrixId, items, studioModelName: model?.name ?? "" }),
       });
       const j = (await r.json().catch(() => ({}))) as {
         error?: string;
@@ -2114,7 +2116,7 @@ export function CarbonStudioTab({
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, mediaItems, colorOpts]);
+  }, [matrixId, mediaItems, colorOpts, model?.name]);
 
   const label = "block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =

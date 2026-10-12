@@ -58,6 +58,11 @@ type Matrix = {
   fabric_composition?: string | null;
   fabric_source?: string | null;
   care_instructions?: string | null;
+  /** The model in this product's photos — migration 0108. */
+  model_profile_id?: string | null;
+  model_size_worn?: string | null;
+  model_line?: string | null;
+  model_source?: string | null;
   archived: boolean;
   /** One piece of a multi-piece outfit — see migration 057. */
   is_set?: boolean;
@@ -1808,6 +1813,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       hint="Washing and care instructions"
                     />
                   </Section>
+                  <ModelSection
+                    matrixId={matrixId}
+                    matrix={data.matrix}
+                    editable={canManage}
+                    onSaved={() => void mutate()}
+                  />
                   </div>
 
                   <div className="space-y-4">
@@ -2540,6 +2551,133 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         />
       ) : null}
     </div>
+  );
+}
+
+type ModelProfile = {
+  id: string;
+  code: string;
+  label: string;
+  kind: "ai" | "real";
+  gender: "female" | "male";
+  height: string;
+  bust_or_chest_in: string | null;
+  waist_in: string | null;
+  hips_in: string | null;
+  size: string | null;
+  photos_being_replaced: boolean;
+};
+
+const MODEL_SOURCE_LABEL: Record<string, string> = {
+  studio: "set by Studio when its images were published",
+  photos: "matched from the product photos",
+  manual: "chosen here",
+};
+
+/**
+ * The model in this product's photos and the line kept for the product page
+ * ("Model is 5'8\" and wears size S"). Saved immediately — not with the form —
+ * because it also writes the hidden custom.model_info metafield on Shopify.
+ */
+function ModelSection({
+  matrixId,
+  matrix,
+  editable,
+  onSaved,
+}: {
+  matrixId: string;
+  matrix: Matrix;
+  editable: boolean;
+  onSaved: () => void;
+}) {
+  const { data } = useSWR<{ profiles: ModelProfile[] }>("/api/inventory/catalog/model-profiles", (u: string) =>
+    fetch(u).then((r) => r.json()),
+  );
+  const profiles = data?.profiles ?? [];
+  const current = profiles.find((p) => p.id === matrix.model_profile_id) ?? null;
+  const [size, setSize] = useState(matrix.model_size_worn ?? "");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => setSize(matrix.model_size_worn ?? ""), [matrix.model_size_worn]);
+
+  const save = async (body: Record<string, unknown>) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fetch(`/api/inventory/catalog/matrices/${matrixId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; model?: { pushed: boolean; warning?: string } };
+      if (!r.ok) throw new Error(j.error ?? "Save failed");
+      setMsg(j.model?.warning ? `Saved; Shopify: ${j.model.warning}` : j.model?.pushed ? "Saved and sent to Shopify (hidden)" : "Saved");
+      onSaved();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const measures = current
+    ? [
+        `Height ${current.height}`,
+        current.bust_or_chest_in ? `${current.gender === "female" ? "Bust" : "Chest"} ${Number(current.bust_or_chest_in)}"` : "",
+        current.waist_in ? `Waist ${Number(current.waist_in)}"` : "",
+        current.hips_in ? `Hips ${Number(current.hips_in)}"` : "",
+        current.size ? `Usual size ${current.size}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
+  return (
+    <Section title="Model">
+      <div className="space-y-2 px-3 py-2 text-[0.85rem]">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1"
+            value={matrix.model_profile_id ?? ""}
+            disabled={!editable || busy}
+            onChange={(e) => void save({ model_profile_id: e.target.value || null })}
+          >
+            <option value="">— none —</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.code} · {p.label} ({p.kind === "ai" ? "AI" : "real"}, {p.height})
+              </option>
+            ))}
+          </select>
+          {current ? (
+            <label className="flex items-center gap-1 text-[var(--wms-muted)]">
+              wears size
+              <input
+                className="w-16 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-[var(--wms-fg)]"
+                value={size}
+                disabled={!editable || busy}
+                onChange={(e) => setSize(e.target.value)}
+                onBlur={() => size !== (matrix.model_size_worn ?? "") && void save({ model_size_worn: size })}
+              />
+            </label>
+          ) : null}
+        </div>
+        {current ? <div className="text-[var(--wms-muted)]">{measures}</div> : null}
+        {matrix.model_line ? (
+          <div>
+            <span className="font-medium">{matrix.model_line}</span>
+            <span className="text-[var(--wms-muted)]">
+              {" "}
+              — {MODEL_SOURCE_LABEL[matrix.model_source ?? ""] ?? ""}; on Shopify as a hidden field
+            </span>
+          </div>
+        ) : null}
+        {current?.photos_being_replaced ? (
+          <div className="text-[0.78rem] text-amber-600">This model&apos;s photos are being replaced.</div>
+        ) : null}
+        {msg ? <div className="text-[0.78rem] text-[var(--wms-muted)]">{msg}</div> : null}
+      </div>
+    </Section>
   );
 }
 

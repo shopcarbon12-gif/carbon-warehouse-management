@@ -20,6 +20,7 @@ import {
   type StagedFile,
 } from "@/lib/server/shopify-write";
 import { syncShopifyImagesForMatrix } from "@/lib/server/shopify-catalog-images";
+import { profileForStudioModel, setMatrixModel } from "@/lib/server/model-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -88,6 +89,8 @@ async function POST_handler(req: Request) {
     matrixId?: string;
     items?: Item[];
     heroVariantId?: string;
+    /** Studio: the model the new images were generated with ("Latina", "Rico"…). */
+    studioModelName?: string;
   };
   const matrixId = body.matrixId?.trim();
   const items = Array.isArray(body.items) ? body.items : [];
@@ -221,11 +224,32 @@ async function POST_handler(req: Request) {
     warnings.push(`image writeback: ${e instanceof Error ? e.message : "failed"}`);
   }
 
+  /* Studio images carry their model: record it on the matrix (Matrix tab,
+     next to Fabric and Care) and push the hidden "Model is 5'8" and wears
+     size S" line to the product. Only when this publish added new images —
+     re-ordering existing photos says nothing about who is in them. */
+  let model: { line: string; pushed: boolean; warning?: string } | null = null;
+  const studioModelName = String(body.studioModelName || "").trim();
+  if (studioModelName && items.some((i) => i.kind === "new")) {
+    try {
+      const profile = await profileForStudioModel(pool, studioModelName);
+      if (profile) {
+        model = await setMatrixModel(pool, matrixId, profile, "studio");
+        if (model.warning) warnings.push(`model info: ${model.warning}`);
+      } else {
+        warnings.push(`model info: no measurements on file for "${studioModelName}"`);
+      }
+    } catch (e) {
+      warnings.push(`model info: ${e instanceof Error ? e.message : "failed"}`);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     media: await listProductMedia(ctx, productId),
     warnings,
     imageWriteback,
+    model,
   });
 }
 

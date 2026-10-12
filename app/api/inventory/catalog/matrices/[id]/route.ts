@@ -6,6 +6,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { sortVariantRows } from "@/lib/size-order";
+import { profileById, setMatrixModel } from "@/lib/server/model-profiles";
 
 /**
  * Matrix detail + bulk operations — powers the Lightspeed-style matrix
@@ -41,6 +42,11 @@ type MatrixHeader = {
   fabric_composition: string | null;
   fabric_source: string | null;
   care_instructions: string | null;
+  /** The model in this product's photos (migration 0108). */
+  model_profile_id: string | null;
+  model_size_worn: string | null;
+  model_line: string | null;
+  model_source: string | null;
   archived: boolean;
   /** One piece of a multi-piece outfit (see migration 057). */
   is_set: boolean;
@@ -100,6 +106,10 @@ export async function GET(req: Request, { params }: Ctx) {
        m.fabric_composition        AS fabric_composition,
        m.fabric_source             AS fabric_source,
        m.care_instructions         AS care_instructions,
+       m.model_profile_id::text    AS model_profile_id,
+       m.model_size_worn           AS model_size_worn,
+       m.model_line                AS model_line,
+       m.model_source              AS model_source,
        m.is_set                    AS is_set,
        m.set_group_id::text        AS set_group_id,
        m.shopify_product_id        AS shopify_product_id,
@@ -198,6 +208,10 @@ export async function GET(req: Request, { params }: Ctx) {
       fabric_composition: head.fabric_composition ?? null,
       fabric_source: head.fabric_source ?? null,
       care_instructions: head.care_instructions ?? null,
+      model_profile_id: head.model_profile_id ?? null,
+      model_size_worn: head.model_size_worn ?? null,
+      model_line: head.model_line ?? null,
+      model_source: head.model_source ?? null,
       archived: head.all_archived,
       is_set: Boolean(head.is_set),
       set_group_id: head.set_group_id ?? null,
@@ -249,6 +263,10 @@ const patchSchema = z
     upc: nullableText(100),
     fabric_composition: nullableText(300),
     care_instructions: nullableText(500),
+    /** The model in this product's photos; null clears it. */
+    model_profile_id: z.string().uuid().nullable().optional(),
+    /** The size the model wears in these photos (overrides the model's usual size). */
+    model_size_worn: nullableText(20),
     is_set: z.boolean().optional(),
     /** Matrix ids to pull into this product's set. */
     set_add_matrix_ids: z.array(z.string().uuid()).max(20).optional(),
@@ -390,7 +408,31 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
     updated += r.rowCount ?? 0;
   }
 
-  return NextResponse.json({ ok: true, updated });
+  /* Model: saved with its line and pushed to the Shopify product as hidden
+     metafields (see lib/server/model-profiles). */
+  let model: { line: string; pushed: boolean; warning?: string } | undefined;
+  if (d.model_profile_id === null) {
+    await pool.query(
+      `UPDATE matrices SET model_profile_id = NULL, model_size_worn = NULL, model_line = NULL, model_source = NULL WHERE id = $1::uuid`,
+      [id],
+    );
+    updated += 1;
+  } else if (d.model_profile_id !== undefined || d.model_size_worn !== undefined) {
+    let pid = d.model_profile_id ?? null;
+    if (!pid) {
+      const cur = await pool.query<{ model_profile_id: string | null }>(
+        `SELECT model_profile_id::text FROM matrices WHERE id = $1::uuid`,
+        [id],
+      );
+      pid = cur.rows[0]?.model_profile_id ?? null;
+    }
+    const profile = pid ? await profileById(pool, pid) : null;
+    if (!profile) return NextResponse.json({ error: "Pick a model first" }, { status: 400 });
+    model = await setMatrixModel(pool, id, profile, "manual", { sizeWorn: d.model_size_worn ?? null });
+    updated += 1;
+  }
+
+  return NextResponse.json({ ok: true, updated, model });
 }
 
 /**
