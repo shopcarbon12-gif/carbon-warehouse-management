@@ -106,3 +106,68 @@ export function mergeLines(
   for (const [k, l] of Object.entries(ai ?? {})) if (l && !out[k as PomKey]) out[k as PomKey] = { a: { ...l.a }, b: { ...l.b } };
   return out;
 }
+
+/** The AI's own measurement of the whole garment (lib/server/size-grading-agent.ts). */
+export type AiMeasurement = {
+  garment: GarmentType | null;
+  lines: Partial<Record<PomKey, Segment>>;
+  cm: Partial<Record<PomKey, number>>;
+  skipped: Partial<Record<PomKey, string>>;
+  remarks: string;
+  model: string;
+  /** In words for the status line: who measured, how closely, what it cost. */
+  how: string;
+};
+
+/**
+ * Send the squared-up picture (no grid — the server draws its own) and get
+ * every line back in this picture's pixels. Throws when the AI cannot run, so
+ * the caller can fall back to the phone's own cut-out.
+ */
+export async function measureWithAi(
+  picture: ImageData,
+  pxPerCm: number,
+  type: GarmentType | null,
+  view: "front" | "back",
+  keys: PomKey[],
+  signal?: AbortSignal,
+): Promise<AiMeasurement> {
+  const canvas = document.createElement("canvas");
+  canvas.width = picture.width;
+  canvas.height = picture.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+  ctx.putImageData(picture, 0, 0);
+  const image = canvas.toDataURL("image/jpeg", 0.92);
+  const r = await fetch("/api/inventory/size-grading/ai-measure", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image, pxPerCm, type, view, keys }),
+    signal,
+  });
+  type Wire = {
+    garment: GarmentType | null;
+    lines: Partial<Record<PomKey, Segment>>;
+    cm: Partial<Record<PomKey, number>>;
+    skipped: Partial<Record<PomKey, string>>;
+    remarks: string;
+    model: string;
+    zooms: number;
+    costUsd: number;
+    ms: number;
+  };
+  const j = (await r.json().catch(() => ({}))) as { result?: Wire; error?: string };
+  if (!r.ok || !j.result) throw new Error(j.error || `the AI request failed (${r.status})`);
+  const m = j.result;
+  if (!Object.keys(m.lines).length) throw new Error("the AI placed no lines");
+  const cents = Number.isFinite(m.costUsd) ? ` · ${(m.costUsd * 100).toFixed(1)}¢` : "";
+  return {
+    garment: m.garment,
+    lines: m.lines,
+    cm: m.cm,
+    skipped: m.skipped ?? {},
+    remarks: m.remarks ?? "",
+    model: m.model,
+    how: `Measured by the AI (${m.model}, ${m.zooms} close-ups, ${Math.round(m.ms / 1000)} s${cents})`,
+  };
+}

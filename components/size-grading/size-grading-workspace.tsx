@@ -27,7 +27,7 @@ import { GuidePanel } from "./guide-panel";
 import { type Point, type ShirtMask } from "@/lib/size-grading/measure";
 import { segmentGarment } from "@/lib/size-grading/segment";
 import { findGarmentOffThread, warmUpFinder } from "@/lib/size-grading/garment-finder";
-import { aiKeysFor, chooseWithAi, mergeLines, readWithAi } from "@/lib/size-grading/ai-client";
+import { aiKeysFor, chooseWithAi, measureWithAi, mergeLines, readWithAi, type AiMeasurement } from "@/lib/size-grading/ai-client";
 import type { Segment } from "@/lib/size-grading/measure";
 import { focusReading, sampleForFocus, type FocusReading } from "@/lib/size-grading/sharpness";
 import { familyForCategory } from "@/lib/size-grading/catalog-family";
@@ -169,11 +169,13 @@ export function SizeGradingWorkspace() {
   const [modelMask, setModelMask] = useState<ShirtMask | null>(null);
   const [finding, setFinding] = useState(false);
   /** Which pass the finder is on — the slow ones say so. */
-  const [findStage, setFindStage] = useState<"ai" | "salience" | "segments">("ai");
+  const [findStage, setFindStage] = useState<"measure" | "ai" | "salience" | "segments">("measure");
   /* The AI's reading of this photo: its lines (snapped onto the picture), the
      garment it saw, and how the cut-out was chosen — in words, for the status. */
   const [aiLines, setAiLines] = useState<Partial<Record<PomKey, Segment>> | null>(null);
   const [aiType, setAiType] = useState<GarmentType | null>(null);
+  /** The AI's own measurement — every line, placed from close-ups. Wins over the outline. */
+  const [agent, setAgent] = useState<AiMeasurement | null>(null);
   const [findHow, setFindHow] = useState<string | null>(null);
   /** Why the finder gave up on this photo, in words — shown, not swallowed. */
   const [modelFailed, setModelFailed] = useState<string | null>(null);
@@ -272,7 +274,7 @@ export function SizeGradingWorkspace() {
          guess on a dark garment on a dark table is the table, and on a phone
          the finder takes long enough that its wrong lines were what got
          photographed and reported as the result. */
-      if (!modelMask && (finding || aiLines)) {
+      if (!modelMask && (finding || aiLines || agent)) {
         setMask(null);
         setResult(null);
         setFocus(null);
@@ -289,7 +291,7 @@ export function SizeGradingWorkspace() {
       setBusy(false);
     }, 30);
     return () => window.clearTimeout(id);
-  }, [image, pxPerCm, bias, seed, typeOverride, rectFrame, modelMask, finding, aiLines, aiType]);
+  }, [image, pxPerCm, bias, seed, typeOverride, rectFrame, modelMask, finding, aiLines, aiType, agent]);
 
   /** Every point this family is measured on, whatever the photo managed. */
   const activeType: GarmentType = (typeOverride || (result?.ok ? result.type : null) || aiType || "top") as GarmentType;
@@ -333,7 +335,9 @@ export function SizeGradingWorkspace() {
       setSelectedPom(null);
       return;
     }
-    const merged = mergeLines(result?.ok ? result.points : null, aiLines);
+    /* The AI's measurement first, for every point it placed; the outline and the
+       older AI reading only fill in what it skipped. */
+    const merged = { ...mergeLines(result?.ok ? result.points : null, aiLines), ...(agent?.lines ?? {}) };
     setHandles((prev) => {
       const next: HandleMap = {};
       pomKeys.forEach((key, i) => {
@@ -362,7 +366,7 @@ export function SizeGradingWorkspace() {
       return next;
     });
     setSelectedPom((cur) => (cur && pomKeys.includes(cur as PomKey) ? cur : (pomKeys[0] ?? null)));
-  }, [image, result, pomKeys, aiLines]);
+  }, [image, result, pomKeys, aiLines, agent]);
 
   /* Find the garment the moment a photo exists. Nothing is asked of the
      operator: no tap, no sensitivity, no second button. The colour model has
@@ -385,6 +389,7 @@ export function SizeGradingWorkspace() {
     setFindStage("ai");
     setAiLines(null);
     setAiType(null);
+    setAgent(null);
     setFindHow(null);
     const started = performance.now();
     const secs = () => ((performance.now() - started) / 1000).toFixed(1);
@@ -395,6 +400,26 @@ export function SizeGradingWorkspace() {
        the AI then cuts the garment out from its own reading. A plain-background
        photo never reaches the AI; its waistband and pocket lines are then left
        for the operator to place. */
+    /* The AI measures (~1 min): it places every line itself and checks each end
+       in close-up. Only when it cannot run — no key, offline, it failed — does
+       the phone's own cut-out take over, as before. */
+    setFindStage("measure");
+    void measureWithAi(image, rectFrame.pxPerCm, type, side, type ? pomsFor(type, side) : [])
+      .then((m) => {
+        if (!alive) return;
+        setAiType(m.garment);
+        setAgent(m);
+        setFindHow(m.how);
+        setFinding(false);
+        console.info(`[size-grading] ${m.how}`);
+      })
+      .catch((e: unknown) => {
+        if (!alive) return;
+        const why = e instanceof Error ? e.message : String(e);
+        console.warn("[size-grading] AI measurement unavailable, using the on-device cut-out:", why);
+        runCutOut();
+      });
+    const runCutOut = () => {
     setFindStage("salience");
     void findGarmentOffThread({ ...input, quickOnly: true })
       .then(async (q) => {
@@ -441,6 +466,7 @@ export function SizeGradingWorkspace() {
       .finally(() => {
         if (alive) setFinding(false);
       });
+    };
     return () => {
       alive = false;
     };
@@ -473,12 +499,15 @@ export function SizeGradingWorkspace() {
   /* The size chart is a tee chart, so grading only applies to a top. Everything
      else is measured and reported — inventing a chart for it would be worse
      than saying nothing. */
+  /* Graded from the lines on screen — whoever placed them, and after any drag —
+     not from the outline's first guess. */
   const measured: Measured | null = useMemo(() => {
-    if (!result?.ok || result.type !== "top") return null;
-    const { chest, length, hem } = result.points;
+    if (activeType !== "top") return null;
+    const get = (k: PomKey) => (handles[k]?.set ? cmOf(k) : null);
+    const chest = get("chest"), length = get("length"), hem = get("hem");
     if (!chest || !length || !hem) return null;
-    return { chest: chest.cm, length: length.cm, hem: hem.cm };
-  }, [result]);
+    return { chest, length, hem };
+  }, [activeType, handles, cmOf]);
 
   const grade = useMemo(() => (measured ? gradeShirt(measured, chart) : null), [measured, chart]);
 
@@ -1337,11 +1366,18 @@ export function SizeGradingWorkspace() {
               {finding && !modelMask ? (
                 <span className="flex items-center gap-2 text-[var(--wms-muted)]">
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                  {findStage === "segments"
+                  {findStage === "measure"
+                    ? "The AI is measuring — it checks every point in close-up, about a minute…"
+                    : findStage === "segments"
                     ? "Looking closer for the garment on this device — this takes up to a minute on a phone…"
                     : findStage === "ai"
                       ? "The phone could not pick the garment out on its own — the AI is reading the photo…"
                       : "Finding the garment…"}
+                </span>
+              ) : agent ? (
+                <span className="text-[var(--wms-status-success-fg)]">
+                  {agent.how}. Check each line and drag any that is off.
+                  {agent.remarks ? <span className="block text-[var(--wms-muted)]">AI note: {agent.remarks}</span> : null}
                 </span>
               ) : modelMask ? (
                 <span className="text-[var(--wms-status-success-fg)]">
@@ -1407,21 +1443,21 @@ export function SizeGradingWorkspace() {
             ) : finding && !modelMask ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                {findStage === "segments" ? "Looking closer for the garment…" : findStage === "ai" ? "The AI is reading the photo…" : "Finding the garment…"}
+                {findStage === "measure" ? "The AI is measuring…" : findStage === "segments" ? "Looking closer for the garment…" : findStage === "ai" ? "The AI is reading the photo…" : "Finding the garment…"}
               </p>
             ) : busy ? (
               <p className="mt-1 flex items-center gap-2 text-sm text-[var(--wms-muted)]">
                 <Loader2 className="h-4 w-4 animate-spin" /> Measuring…
               </p>
-            ) : result && !result.ok ? (
+            ) : result && !result.ok && !agent ? (
               <p className="mt-1 text-sm text-[var(--wms-status-danger-fg)]">{result.error}</p>
-            ) : result?.ok ? (
+            ) : result?.ok || agent ? (
               <>
                 {/* What it thinks this is, always correctable. A guess shown as
                     a fact is how a wrong measurement reaches the size chart. */}
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <select
-                    value={typeOverride || result.type}
+                    value={activeType}
                     onChange={(e) => setTypeOverride(e.target.value as GarmentType)}
                     className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-medium text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
                   >
@@ -1446,11 +1482,11 @@ export function SizeGradingWorkspace() {
                     </span>
                   ) : (
                     <span className="font-mono text-xs text-[var(--wms-muted)]">
-                      detected · {result.classification.why}
+                      {agent ? `read by the AI · ${agent.model}` : result?.ok ? `detected · ${result.classification.why}` : ""}
                     </span>
                   )}
                 </div>
-                {!typeOverride && result.classification.confidence < 0.6 ? (
+                {!typeOverride && !agent && result?.ok && result.classification.confidence < 0.6 ? (
                   <p className="mt-1 text-xs text-[var(--wms-status-warning-fg)]">
                     Not certain of the type — check it above before trusting the numbers.
                   </p>
@@ -1610,7 +1646,7 @@ export function SizeGradingWorkspace() {
                 </div>
               </>
             ) : null}
-            {result?.ok && measured && grade?.best ? (
+            {measured && grade?.best ? (
               <div className="mt-4 border-t border-[var(--wms-border)] pt-3">
                 <div className="flex items-baseline gap-3">
                   <span className="text-3xl font-bold text-[var(--wms-fg)]">{grade.best.size}</span>

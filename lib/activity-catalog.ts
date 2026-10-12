@@ -58,6 +58,7 @@ const ROUTES: Record<string, Entry> = {
   "inventory/categories/[id]": { module: "Catalog", label: { PATCH: "Edited category", DELETE: "Deleted category", POST: "Changed category" } },
   "inventory/size-grading": { module: "Catalog", label: "Saved size grading" },
   "inventory/size-grading/ai-read": { module: "Catalog", label: "Measured garment from photo" },
+  "inventory/size-grading/ai-measure": { module: "Catalog", label: "AI measured garment from photo" },
   "collection-mapping": { module: "Shopify", label: "Changed collection mapping" },
 
   "generate": { module: "Studio", label: "Generated Studio panel" },
@@ -356,6 +357,7 @@ export const NOT_A_CHANGE_ROUTES: readonly string[] = [
   "shopify/seo/audit",
   "shopify/seo/optimize",
   "inventory/size-grading/ai-read",
+  "inventory/size-grading/ai-measure",
   "inventory/sync/preview",
   "inventory/bulk-import/scan",
   "compare/runs",
