@@ -14,13 +14,16 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 /// Store Replenishment (Find & Locate) — refill the showroom from the back.
 ///
-/// 1. Sales: the showroom's POS sales (completed; refunds hidden), newest
-///    first, grouped by day — number, time, employee, customer, and the
-///    number of items sold on the right. A sale turns GREEN once every item
-///    that has stock has been picked.
-/// 2. Tap a sale → its sold items, Cloud + Geiger style: SKU, name, colour,
-///    size, bin, and the LIVE stock count on the right. Only items with
-///    stock are listed; SHOW ALL adds the rest, greyed out, no checkbox.
+/// 1. Sales: the showroom's POS sales (completed; refunds hidden), TODAY by
+///    default (date range top-left), newest first, grouped by day — number,
+///    then time · customer · employee, and the number of items sold on the
+///    right. Day and time are the STORE's (Orlando), from the server, so a
+///    phone with a wrong clock zone still shows the right time. A sale turns
+///    GREEN once every item that has stock has been picked.
+/// 2. Tap a sale → its sold items, Cloud + Geiger style, in pick order (bin,
+///    then name): SKU, name, colour, size, BIN and SOLD (large), and the LIVE
+///    stock count on the right. Only items with stock are listed; SHOW ALL
+///    adds the rest, greyed out, no checkbox.
 /// 3. Tap the stock count → the live EPCs of that item (bin per EPC, SKU /
 ///    item / variant / price on top); the radio icon opens Locate Tag.
 /// 4. The checkbox = found and pulled to the showroom. It changes NO stock;
@@ -38,16 +41,11 @@ const List<String> _kMonths = [
   'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
 ];
-const List<String> _kDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-String _dayLabel(DateTime d) =>
-    '${_kDays[d.weekday - 1]} ${_kMonths[d.month - 1]} ${d.day}, ${d.year}';
-
-String _time(DateTime d) {
-  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
-  final m = d.minute.toString().padLeft(2, '0');
-  return '$h:$m ${d.hour < 12 ? 'AM' : 'PM'}';
-}
+/// Calendar day as the server's YYYY-MM-DD (the picker's dates are plain
+/// calendar days, so no time zone is involved).
+String _ymd(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
 String? _s(Map<String, dynamic> m, String k) {
   final v = m[k];
@@ -83,7 +81,7 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _sales = const [];
-  DateTimeRange? _range; // null = last 30 days
+  DateTimeRange? _range; // null = today (in the store's time zone)
 
   @override
   void initState() {
@@ -100,9 +98,8 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
       final api = context.read<WmsApiClient>();
       final r = _range;
       final rows = await api.fetchReplenishmentSales(
-        from: r?.start,
-        // End of the last picked day, inclusive.
-        to: r?.end.add(const Duration(days: 1)),
+        fromDate: r == null ? null : _ymd(r.start),
+        toDate: r == null ? null : _ymd(r.end),
       );
       if (!mounted) return;
       setState(() {
@@ -126,8 +123,7 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
       lastDate: DateTime(now.year, now.month, now.day),
       initialDateRange: _range ??
           DateTimeRange(
-            start: DateTime(now.year, now.month, now.day)
-                .subtract(const Duration(days: 29)),
+            start: DateTime(now.year, now.month, now.day),
             end: DateTime(now.year, now.month, now.day),
           ),
     );
@@ -151,7 +147,7 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
 
   String get _rangeLabel {
     final r = _range;
-    if (r == null) return 'LAST 30 DAYS';
+    if (r == null) return 'TODAY';
     String d(DateTime x) => '${_kMonths[x.month - 1]} ${x.day}';
     return r.start == r.end ? d(r.start) : '${d(r.start)} – ${d(r.end)}';
   }
@@ -209,15 +205,14 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
     final children = <Widget>[];
     String? lastDay;
     for (final sale in _sales) {
-      final at = DateTime.tryParse(_s(sale, 'createdAt') ?? '')?.toLocal();
-      final day = at == null ? '' : _dayLabel(at);
+      final day = _s(sale, 'localDay') ?? '';
       if (day != lastDay) {
         children.add(_DayHeader(day));
         lastDay = day;
       }
       children.add(Padding(
         padding: EdgeInsets.only(bottom: 12.h),
-        child: _SaleCard(sale: sale, at: at, onTap: () => _openSale(sale)),
+        child: _SaleCard(sale: sale, onTap: () => _openSale(sale)),
       ));
     }
     return RefreshIndicator(
@@ -231,10 +226,9 @@ class _StoreReplenishmentScreenState extends State<StoreReplenishmentScreen> {
 }
 
 class _SaleCard extends StatelessWidget {
-  const _SaleCard({required this.sale, required this.at, required this.onTap});
+  const _SaleCard({required this.sale, required this.onTap});
 
   final Map<String, dynamic> sale;
-  final DateTime? at;
   final VoidCallback onTap;
 
   @override
@@ -243,10 +237,11 @@ class _SaleCard extends StatelessWidget {
     final sold = _i(sale, 'soldQty');
     final pickable = _i(sale, 'pickableLines');
     final picked = _i(sale, 'pickedLines');
+    // Owner's order: time · customer · employee.
     final people = [
-      if (at != null) _time(at!),
-      _s(sale, 'employee') ?? 'No employee',
+      if (_s(sale, 'localTime') != null) _s(sale, 'localTime')!,
       _s(sale, 'customer') ?? 'No customer',
+      _s(sale, 'employee') ?? 'No employee',
     ].join(' · ');
     final progress = pickable == 0
         ? 'NOTHING IN STOCK TO PICK'
@@ -597,24 +592,36 @@ class _LineCard extends StatelessWidget {
                             height: 1.2,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
+                        // Where to walk and how many — large and black.
                         Text(
-                          [
-                            'BIN ${bin ?? '—'}',
-                            'SOLD $sold',
-                            if (!pickable) 'OUT OF STOCK',
-                            if (picked && pickedBy != null)
-                              'PICKED BY ${pickedBy.toUpperCase()}',
-                          ].join(' · '),
-                          maxLines: 2,
+                          'BIN ${bin ?? '—'}   ·   SOLD $sold',
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.spaceGrotesk(
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.0,
-                            color: picked ? _kGreen : _kTextMuted,
+                            fontSize: 18.sp,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.4,
+                            color: pickable ? Colors.black : _kTextMuted,
+                            height: 1.15,
                           ),
                         ),
+                        if (!pickable || (picked && pickedBy != null)) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            !pickable
+                                ? 'OUT OF STOCK'
+                                : 'PICKED BY ${pickedBy!.toUpperCase()}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.0,
+                              color: picked ? _kGreen : _kTextMuted,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -707,7 +714,7 @@ class _HeaderStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = leftColor ?? const Color(0xFF334466);
+    final c = leftColor ?? Colors.black;
     return Container(
       width: double.infinity,
       color: const Color(0xFFF0F5F4),
@@ -717,14 +724,14 @@ class _HeaderStrip extends StatelessWidget {
           GestureDetector(
             onTap: onLeftTap,
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-              color: c.withValues(alpha: 0.2),
+              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 5.h),
+              color: c.withValues(alpha: 0.12),
               child: Text(
                 left,
                 style: GoogleFonts.spaceGrotesk(
-                  fontSize: 10.sp,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
                   color: c,
                 ),
               ),
@@ -736,10 +743,10 @@ class _HeaderStrip extends StatelessWidget {
               right,
               textAlign: TextAlign.right,
               style: GoogleFonts.spaceGrotesk(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.6,
-                color: const Color(0xFF3D4949),
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: Colors.black,
               ),
             ),
           ),
@@ -756,14 +763,14 @@ class _DayHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(top: 10.h, bottom: 8.h),
+      padding: EdgeInsets.only(top: 12.h, bottom: 8.h),
       child: Text(
         label,
         style: GoogleFonts.spaceGrotesk(
-          fontSize: 11.sp,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 1.6,
-          color: _kTextMuted,
+          fontSize: 16.sp,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 1.2,
+          color: Colors.black,
         ),
       ),
     );

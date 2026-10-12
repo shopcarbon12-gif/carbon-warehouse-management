@@ -18,6 +18,11 @@ export type ReplenishmentSale = {
   id: number;
   saleNumber: string;
   createdAt: string;
+  /** In the STORE's time zone (Orlando), so a phone with a wrong clock zone
+   *  still shows the right time: "2026-10-12", "MON OCT 12, 2026", "3:58 PM". */
+  localDate: string;
+  localDay: string;
+  localTime: string;
   employee: string | null;
   customer: string | null;
   soldQty: number;
@@ -53,15 +58,24 @@ const SALE_LINE_FACTS = `
     LEFT JOIN store_replenishment_picks p ON p.sale_line_id = l.id
    WHERE coalesce(l.line_type, 'product') = 'product' AND l.quantity > 0`;
 
+/**
+ * `range`: store-local calendar days (fromDate/toDate, YYYY-MM-DD, inclusive;
+ * both omitted = TODAY in the store's time zone), or — for 1.2.163 handhelds —
+ * instants (from/to). `saleId` narrows to one sale.
+ */
 export async function listReplenishmentSales(
   pool: Pool,
   locationId: string,
-  range: { from: string; to: string; saleId?: number },
+  range: { from?: string | null; to?: string | null; fromDate?: string | null; toDate?: string | null; saleId?: number },
 ): Promise<ReplenishmentSale[]> {
+  const byInstant = !!(range.from || range.to);
   const r = await pool.query<{
     id: number;
     sale_number: string;
     created_at: Date;
+    local_date: string;
+    local_day: string;
+    local_time: string;
     employee: string | null;
     customer: string | null;
     sold_qty: number;
@@ -70,6 +84,9 @@ export async function listReplenishmentSales(
   }>(
     `WITH facts AS (${SALE_LINE_FACTS.replace(/\$LID/g, "$1")})
      SELECT s.id, s.sale_number, s.created_at,
+            to_char(s.created_at AT TIME ZONE pl.timezone, 'YYYY-MM-DD') AS local_date,
+            upper(to_char(s.created_at AT TIME ZONE pl.timezone, 'Dy Mon FMDD, YYYY')) AS local_day,
+            to_char(s.created_at AT TIME ZONE pl.timezone, 'FMHH12:MI AM') AS local_time,
             nullif(trim(coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')), '') AS employee,
             nullif(trim(coalesce(c.first_name, '') || ' ' || coalesce(c.last_name, '')), '') AS customer,
             coalesce(sum(f.quantity), 0)::int AS sold_qty,
@@ -82,18 +99,35 @@ export async function listReplenishmentSales(
        LEFT JOIN pos_customers c ON c.id = s.customer_id
        LEFT JOIN facts f ON f.sale_id = s.id
       WHERE s.status = 'completed' AND s.voided_at IS NULL
-        AND s.created_at >= $2::timestamptz AND s.created_at < $3::timestamptz
+        AND ($4::int IS NOT NULL OR (
+              CASE WHEN $5::boolean
+                THEN s.created_at >= coalesce($2::timestamptz, '-infinity') AND s.created_at < coalesce($3::timestamptz, 'infinity')
+                ELSE (s.created_at AT TIME ZONE pl.timezone)::date
+                       BETWEEN coalesce($6::date, (now() AT TIME ZONE pl.timezone)::date)
+                           AND coalesce($7::date, $6::date, (now() AT TIME ZONE pl.timezone)::date)
+              END))
         AND ($4::int IS NULL OR s.id = $4::int)
-      GROUP BY s.id, u.first_name, u.last_name, c.first_name, c.last_name
+      GROUP BY s.id, pl.timezone, u.first_name, u.last_name, c.first_name, c.last_name
      HAVING coalesce(sum(f.quantity), 0) > 0 -- misc-charge-only sales have nothing to pick
       ORDER BY s.created_at DESC
       LIMIT 500`,
-    [locationId, range.from, range.to, range.saleId ?? null],
+    [
+      locationId,
+      range.from ?? null,
+      range.to ?? null,
+      range.saleId ?? null,
+      byInstant,
+      range.fromDate ?? null,
+      range.toDate ?? null,
+    ],
   );
   return r.rows.map((x) => ({
     id: x.id,
     saleNumber: x.sale_number,
     createdAt: x.created_at.toISOString(),
+    localDate: x.local_date,
+    localDay: x.local_day,
+    localTime: x.local_time,
     employee: x.employee,
     customer: x.customer,
     soldQty: x.sold_qty,
@@ -108,7 +142,7 @@ export async function getReplenishmentLines(
   locationId: string,
   saleId: number,
 ): Promise<{ sale: ReplenishmentSale | null; lines: ReplenishmentLine[] }> {
-  const [sale] = await listReplenishmentSales(pool, locationId, { from: "-infinity", to: "infinity", saleId });
+  const [sale] = await listReplenishmentSales(pool, locationId, { saleId });
   if (!sale) return { sale: null, lines: [] };
 
   const r = await pool.query<{
@@ -141,7 +175,9 @@ export async function getReplenishmentLines(
        LEFT JOIN custom_skus cs ON cs.id = f.sku_id
        LEFT JOIN matrices m ON m.id = cs.matrix_id
        LEFT JOIN bins ab ON ab.id = cs.assigned_bin_id
-      ORDER BY (f.sku_id IS NOT NULL AND f.in_stock > 0) DESC, f.line_id`,
+      -- Pick order: lines with stock first, then by bin (walk the aisles in
+      -- order; no bin last), then by product name.
+      ORDER BY (f.sku_id IS NOT NULL AND f.in_stock > 0) DESC, bin NULLS LAST, name NULLS LAST, f.line_id`,
     [locationId, saleId],
   );
   return {

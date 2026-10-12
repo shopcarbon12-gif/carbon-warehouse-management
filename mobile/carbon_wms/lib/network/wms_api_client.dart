@@ -1073,16 +1073,19 @@ class WmsApiClient {
   // /api/mobile/store-replenishment/* (lib/server/store-replenishment.ts).
 
   /// Completed showroom sales at the signed-in location, newest first.
-  /// [from]/[to] are instants; the server defaults to the last 30 days.
+  /// [fromDate]/[toDate] are store-local calendar days (YYYY-MM-DD,
+  /// inclusive); omitted = TODAY in the store's time zone (Orlando). The
+  /// server also returns the store-local day/time to display, so a handheld
+  /// with a wrong clock zone still shows Orlando time.
   Future<List<Map<String, dynamic>>> fetchReplenishmentSales({
-    DateTime? from,
-    DateTime? to,
+    String? fromDate,
+    String? toDate,
   }) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/mobile/store-replenishment/sales').replace(
       queryParameters: {
-        if (from != null) 'from': from.toUtc().toIso8601String(),
-        if (to != null) 'to': to.toUtc().toIso8601String(),
+        if (fromDate != null) 'fromDate': fromDate,
+        if (toDate != null) 'toDate': toDate,
       },
     );
     final res = await _http.get(uri, headers: await sessionAuthHeaders());
