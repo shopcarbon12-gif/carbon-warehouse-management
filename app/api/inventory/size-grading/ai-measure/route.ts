@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 export const maxDuration = 180;
 
 /** A 1400 px JPEG is ~300–600 kB as a data URL; this refuses anything silly. */
-const MAX_DATA_URL = 6_000_000;
+const MAX_DATA_URL = 12_000_000;
 
 const Body = z.object({
   image: z.string().startsWith("data:image/").max(MAX_DATA_URL),

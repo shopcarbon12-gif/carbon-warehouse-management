@@ -131,6 +131,8 @@ export async function measureWithAi(
   view: "front" | "back",
   keys: PomKey[],
   signal?: AbortSignal,
+  /** The picture is this many times the on-screen one; lines come back ÷ this. */
+  scale = 1,
 ): Promise<AiMeasurement> {
   const canvas = document.createElement("canvas");
   canvas.width = picture.width;
@@ -160,6 +162,13 @@ export async function measureWithAi(
   if (!r.ok || !j.result) throw new Error(j.error || `the AI request failed (${r.status})`);
   const m = j.result;
   if (!Object.keys(m.lines).length) throw new Error("the AI placed no lines");
+  if (scale !== 1) {
+    for (const l of Object.values(m.lines)) {
+      if (!l) continue;
+      l.a = { x: l.a.x / scale, y: l.a.y / scale };
+      l.b = { x: l.b.x / scale, y: l.b.y / scale };
+    }
+  }
   const cents = Number.isFinite(m.costUsd) ? ` · ${(m.costUsd * 100).toFixed(1)}¢` : "";
   return {
     garment: m.garment,

@@ -52,10 +52,10 @@ export const POM_RULE: Record<PomKey, string> = {
  * below the real crotch, so inseam and rise were both 7 cm wrong.
  */
 export const LANDMARK_RULES = [
-  "CROTCH SEAM POINT: where the centre-front seam meets the two inside leg seams — on the photo the seam line bends or forks there. The legs of a flat garment often lie touching BELOW it, so the gap between the legs usually starts lower than the crotch: never use the start of the gap; follow the centre seam down to where it meets the inseams.",
+  "CROTCH SEAM POINT: where the centre-front seam ENDS and meets the inside leg seams. On jeans: follow the fly's J-shaped stitching down; the crotch point is just below where the fly stitching ends (usually 2–5 cm below the bottom of the zip). Below that point a single seam line often seems to continue straight down for 5–10 cm until the legs separate — that line is the two INSEAMS lying pressed together, not the centre seam. Never use the point where the legs separate (both test garments, 2026-10-12: leggings 7 cm low, jeans 8 cm low). Check: front rise (waistband top to crotch) is almost always 20–30 cm; back rise 30–40 cm.",
   "ARMPIT POINT: the corner where the sleeve's underside meets the body's side edge.",
   "SHOULDER HIGH POINT: where the shoulder seam meets the collar (neckline), not the top of the collar.",
-  "SHOULDER SEAM POINT: where the sleeve seam meets the shoulder seam at the outer shoulder.",
+  "SHOULDER SEAM POINT: where the ARMHOLE seam — the stitched line joining sleeve to body, which runs from the top edge down towards the armpit, often only a faint line or crease on dark fabric — meets the top edge. Find that seam line in a close-up and follow it up to the edge. It is NOT a bump, step or kink in the outline: on a drop-shoulder tee the seam sits a few cm inside the point where the outline bends (first T-shirt test, 2026-10-12: the bend read the shoulder 3 cm wide).",
   "EDGES: an end point lies on the outermost edge of the fabric, the fold line, not on a shadow beside it or on stitching just inside it.",
 ];
 
@@ -67,4 +67,18 @@ export const LANDMARKS: Record<GarmentType, string> = {
   shorts: "both top corners of the waistband, the waistband seam, the crotch seam point, both corners of each leg's hem, the outside edge of each leg at hip/thigh height, the pocket corners.",
   skirt: "both top corners of the waistband, the waistband seam, both hem corners, the side edges 18 cm below the waistband.",
   onepiece: "both shoulder high points, both shoulder seam points, both armpit points, the collar seam at centre front/back, both sleeve-end corners, the waist, the crotch seam point, both corners of each leg's hem.",
+};
+
+/**
+ * Plausible ranges for adult garments, in cm. A final answer outside one is
+ * sent back once with the number, so the AI looks again instead of the
+ * operator finding it. Ranges are wide on purpose — they catch a wrong
+ * landmark (crotch at the leg gap: front rise 34 cm), not a size.
+ */
+export const PLAUSIBLE: Partial<Record<PomKey, { front?: [number, number]; back?: [number, number]; why: string }>> = {
+  rise: {
+    front: [17, 31],
+    back: [27, 43],
+    why: "front rise is almost always 20–30 cm (back rise 30–40 cm); a longer one means the crotch was put where the legs separate — move it up to where the centre seam ends, just below the fly",
+  },
 };

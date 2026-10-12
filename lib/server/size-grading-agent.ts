@@ -25,7 +25,7 @@ import sharp from "sharp";
 import OpenAI from "openai";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { POM_LABEL, pomsFor, type GarmentType, type PomKey } from "@/lib/size-grading/garment";
-import { LANDMARK_RULES, LANDMARKS, POM_RULE } from "@/lib/size-grading/pom-definitions";
+import { LANDMARK_RULES, LANDMARKS, PLAUSIBLE, POM_RULE } from "@/lib/size-grading/pom-definitions";
 
 export type Provider = "claude" | "openai";
 type Pt = { x: number; y: number };
@@ -147,7 +147,12 @@ async function overview(img: Buffer, w: number, h: number): Promise<string> {
 type Zoom = { id: string; x: number; y: number; size: number };
 const ZOOM_PX = 720;
 
-async function closeUp(img: Buffer, w: number, h: number, z: Zoom) {
+/* Close-ups are cut from the FULL-resolution picture (f = its pixels per
+   overview pixel), while every coordinate stays in the overview's pixels. On
+   black fabric a shoulder seam is invisible at the overview's ~10 px/cm and
+   visible at the photo's ~25 px/cm — that was the shoulder error on the first
+   T-shirt (2026-10-12). */
+async function closeUp(img: Buffer, f: number, w: number, h: number, z: Zoom) {
   const size = Math.round(Math.max(40, Math.min(600, z.size || 160)));
   // Shift the window inside the picture rather than pad it: no fake background.
   const left = Math.round(Math.max(0, Math.min(w - size, z.x - size / 2)));
@@ -172,8 +177,15 @@ async function closeUp(img: Buffer, w: number, h: number, z: Zoom) {
   const cx = (z.x - left) * k, cy = (z.y - top) * k;
   svg += `<path d="M${cx - 12},${cy}H${cx - 4}M${cx + 4},${cy}H${cx + 12}M${cx},${cy - 12}V${cy - 4}M${cx},${cy + 4}V${cy + 12}" stroke="#ff2a2a" stroke-width="2"/>`;
   const over = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${svg}</svg>`);
+  const meta = await sharp(img).metadata();
+  const X = Math.min(Math.round(left * f), (meta.width ?? 1) - 1), Y = Math.min(Math.round(top * f), (meta.height ?? 1) - 1);
   const out = await sharp(img)
-    .extract({ left, top, width: sw, height: shh })
+    .extract({
+      left: X,
+      top: Y,
+      width: Math.max(1, Math.min(Math.round(sw * f), (meta.width ?? 1) - X)),
+      height: Math.max(1, Math.min(Math.round(shh * f), (meta.height ?? 1) - Y)),
+    })
     .resize(W, H, { kernel: "lanczos3" })
     .composite([{ input: over, top: 0, left: 0 }])
     .jpeg({ quality: 90 })
@@ -345,8 +357,14 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
   const started = Date.now();
   const log = opts.log ?? (() => {});
   const meta = await sharp(inp.image).metadata();
-  const w = meta.width ?? 0, h = meta.height ?? 0;
-  if (!w || !h) throw new Error("The picture could not be read");
+  const W0 = meta.width ?? 0, H0 = meta.height ?? 0;
+  if (!W0 || !H0) throw new Error("The picture could not be read");
+  /* The AI works on an overview of at most 1400 px; a larger picture is kept
+     for the close-ups. Lines come back in the INPUT picture's pixels. */
+  const f = Math.max(1, Math.max(W0, H0) / 1400);
+  const w = Math.round(W0 / f), h = Math.round(H0 / f);
+  const small = f > 1 ? await sharp(inp.image).resize(w, h).jpeg({ quality: 92 }).toBuffer() : inp.image;
+  const ovPxPerCm = inp.pxPerCm / f;
   const maxRounds = opts.maxRounds ?? 5;
   const maxZooms = opts.maxZooms ?? 32;
   const deadline = started + (opts.deadlineMs ?? 150_000);
@@ -358,18 +376,18 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
       ? claudeTurns(opts.model, usage, opts.thinkingBudget ?? 0, ac.signal)
       : openAiTurns(opts.model, usage, opts.effort, ac.signal);
   try {
-    const ov = await overview(inp.image, w, h);
+    const ov = await overview(small, w, h);
     let parts: Part[] = [
-      { kind: "text", text: buildPrompt(inp, w, h, maxRounds, maxZooms) },
+      { kind: "text", text: buildPrompt({ ...inp, pxPerCm: ovPxPerCm }, w, h, maxRounds, maxZooms) },
       { kind: "image", b64: ov },
     ];
-    let zooms = 0, rounds = 0, repaired = false, pushedBack = false;
+    let zooms = 0, rounds = 0, repaired = false, pushedBack = false, rechecked = false;
     for (;;) {
       const text = await turns.send(parts);
       const j = parseJson(text);
       const final = j?.final as Record<string, unknown> | undefined;
       const ask = Array.isArray(j?.zoom) ? (j!.zoom as Zoom[]) : [];
-      const outOfBudget = rounds >= maxRounds || zooms >= maxZooms || Date.now() > deadline - 25_000;
+      const outOfBudget = rounds >= maxRounds + (rechecked ? 1 : 0) || zooms >= maxZooms + (rechecked ? 8 : 0) || Date.now() > deadline - 25_000;
       /* An answer from the overview alone is a guess (Haiku did exactly that:
          thigh 4 cm off). The ends are checked in close-up at least once. */
       if (final && typeof final === "object" && zooms === 0 && maxRounds > 0 && !pushedBack) {
@@ -388,8 +406,24 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
           if (!a || !b) continue;
           const len = Math.hypot(b.x - a.x, b.y - a.y);
           if (len < 2) continue;
-          lines[k as PomKey] = { a, b };
-          cm[k as PomKey] = Math.round((len / inp.pxPerCm) * 10) / 10;
+          lines[k as PomKey] = { a: { x: a.x * f, y: a.y * f }, b: { x: b.x * f, y: b.y * f } };
+          cm[k as PomKey] = Math.round((len / ovPxPerCm) * 10) / 10;
+        }
+        /* One look again when a number is implausible for its point — the
+           AI is told which and why, and keeps its close-up budget. */
+        const bad = (Object.keys(cm) as PomKey[])
+          .map((k) => ({ k, p: PLAUSIBLE[k], v: cm[k]! }))
+          .filter(({ p, v }) => p && p[inp.view] && (v < p[inp.view]![0] || v > p[inp.view]![1]));
+        if (bad.length && !rechecked && Date.now() < deadline - 30_000) {
+          rechecked = true;
+          parts = [{
+            kind: "text",
+            text:
+              bad.map(({ k, v, p }) => `"${k}" came out ${v} cm, outside the usual ${p![inp.view]![0]}–${p![inp.view]![1]} cm: ${p!.why}.`).join(" ") +
+              ' Check those points in close-up again ({"zoom":[...]}) and then give the full final answer again.',
+          }];
+          log(`re-check: ${bad.map((b) => `${b.k} ${b.v}`).join(", ")}`);
+          continue;
         }
         const skipped = (final.skipped ?? {}) as AgentResult["skipped"];
         log(`final after ${rounds} rounds, ${zooms} close-ups: ${Object.keys(lines).length} lines`);
@@ -421,19 +455,20 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
         rounds++;
         continue;
       }
-      const take = ask.slice(0, Math.min(8, maxZooms - zooms));
+      const cap = maxZooms + (rechecked ? 8 : 0);
+      const take = ask.slice(0, Math.min(8, cap - zooms));
       zooms += take.length;
       rounds++;
       log(`round ${rounds}: ${take.map((z) => z.id).join(", ")}`);
       parts = [];
       for (const z of take) {
-        const c = await closeUp(inp.image, w, h, { id: String(z.id ?? "spot"), x: Number(z.x), y: Number(z.y), size: Number(z.size) });
+        const c = await closeUp(inp.image, f, w, h, { id: String(z.id ?? "spot"), x: Number(z.x), y: Number(z.y), size: Number(z.size) });
         parts.push({ kind: "text", text: c.caption }, { kind: "image", b64: c.b64 });
       }
-      const left = maxZooms - zooms;
+      const left = cap - zooms;
       parts.push({
         kind: "text",
-        text: rounds >= maxRounds || left <= 0
+        text: rounds >= maxRounds + (rechecked ? 1 : 0) || left <= 0
           ? 'That was the last round of close-ups. Give the final answer now, as {"final":{...}} JSON.'
           : `${left} close-ups left. Ask for more, or give the final answer.`,
       });

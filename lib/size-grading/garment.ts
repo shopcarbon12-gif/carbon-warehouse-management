@@ -116,16 +116,13 @@ export function pomLabel(key: string, view: "front" | "back" = "front"): string 
 
 /** Which points each family is measured on, in the order they are shown. */
 export const POMS_FOR: Record<GarmentType, PomKey[]> = {
-  top: [
-    "chest", "waist", "hem", "length", "shoulder", "armhole",
-    "sleeve", "sleeveInseam", "bicep", "cuff",
-    "neck", "neckDrop", "collarHeight", "shoulderSlope",
-  ],
-  trousers: [
-    "waist", "hip", "thigh", "knee", "calf", "legOpening",
-    "inseam", "outseam", "rise",
-    "waistbandHeight", "frontPocketOpening", "backPocketWidth", "backPocketLength",
-  ],
+  /* Owner, 2026-10-12: only what the shop shows — chest, body length, shoulder,
+     sleeve (must), hem (optional). The rest of a tech pack (armhole, bicep,
+     neck…) is not asked for. Order = guide/tee.webp and longsleeve.webp. */
+  top: ["chest", "length", "shoulder", "sleeve", "hem"],
+  /* Owner, 2026-10-12: waist, hip, thigh, leg opening, inseam, front rise
+     (sketch A B C F G I). Order = guide/trousers-front.webp. */
+  trousers: ["waist", "hip", "thigh", "legOpening", "inseam", "rise"],
   shorts: [
     "waist", "hip", "thigh", "legOpening", "inseam", "outseam", "rise",
     "waistbandHeight", "frontPocketOpening", "backPocketWidth", "backPocketLength",
@@ -159,6 +156,10 @@ const BACK_ONLY: ReadonlySet<string> = new Set(["backPocketWidth", "backPocketLe
  * pictures with it.
  */
 export function pomsFor(type: GarmentType, view: "front" | "back"): PomKey[] {
+  // A top's back adds one thing the front cannot give: the centre back length.
+  if (type === "top" && view === "back") return ["length"];
+  // Trousers need only the front; a back photo re-measures the same widths (no back rise asked for).
+  if (type === "trousers" && view === "back") return ["waist", "hip", "thigh", "legOpening", "inseam"];
   return POMS_FOR[type].filter((k) => (view === "front" ? !BACK_ONLY.has(k) : !FRONT_ONLY.has(k)));
 }
 

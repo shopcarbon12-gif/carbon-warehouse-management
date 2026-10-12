@@ -27,10 +27,18 @@ function arg(name: string, def?: string): string | undefined {
   return i > 0 ? process.argv[i + 1] : def;
 }
 
-async function squaredUp(file: string) {
-  const img = sharp(file).rotate();
-  const meta = await img.metadata();
-  const scale = Math.min(1, 1800 / Math.max(meta.width ?? 1, meta.height ?? 1));
+/* Phone photos are stored sideways with an EXIF turn; metadata() reports the
+   stored size, so read the upright size or the resize squashes the picture
+   (it did, 2026-10-12: a portrait tee measured as a 1400×1050 landscape). */
+async function upright(file: string) {
+  const meta = await sharp(file).metadata();
+  const turned = (meta.orientation ?? 1) >= 5;
+  return { img: sharp(file).rotate(), meta: { width: turned ? meta.height : meta.width, height: turned ? meta.width : meta.height } };
+}
+
+async function squaredUp(file: string, hires = false) {
+  const { img, meta } = await upright(file);
+  const scale = Math.min(1, (hires ? 4000 : 1800) / Math.max(meta.width ?? 1, meta.height ?? 1));
   const { data, info } = await img
     .resize(Math.round((meta.width ?? 1) * scale), Math.round((meta.height ?? 1) * scale))
     .ensureAlpha()
@@ -39,12 +47,20 @@ async function squaredUp(file: string) {
   const rgba = new Uint8ClampedArray(data.buffer, data.byteOffset, data.length);
   const det = detectTarget(rgba, info.width, info.height);
   if (!det) throw new Error(`${file}: no printed target found`);
-  const rect = rectify(rgba, info.width, info.height, det.quad, { maxPx: 1400, upright: true });
+  const rect = rectify(rgba, info.width, info.height, det.quad, { maxPx: hires ? 3200 : 1400, upright: true });
   if (!rect) throw new Error(`${file}: could not square the photo up`);
   const jpg = await sharp(Buffer.from(rect.data), { raw: { width: rect.width, height: rect.height, channels: 4 } })
     .jpeg({ quality: 92 })
     .toBuffer();
   return { jpg, width: rect.width, height: rect.height, pxPerCm: rect.pxPerCm, confidence: det.confidence };
+}
+
+async function rawPicture(file: string, pxPerCm: number) {
+  const { img, meta } = await upright(file);
+  const scale = Math.min(1, 1400 / Math.max(meta.width ?? 1, meta.height ?? 1));
+  const width = Math.round((meta.width ?? 1) * scale), height = Math.round((meta.height ?? 1) * scale);
+  const jpg = await img.resize(width, height).jpeg({ quality: 92 }).toBuffer();
+  return { jpg, width, height, pxPerCm, confidence: 0 };
 }
 
 const COLORS = ["#e6194b", "#f58231", "#d4a000", "#3cb44b", "#0aa5a5", "#4363d8", "#911eb4", "#f032e6", "#808000", "#9a6324", "#008080", "#e6005c", "#5a5aff", "#2f8f2f", "#c71585", "#ff6f00"];
@@ -80,10 +96,13 @@ async function main() {
   const tape: Partial<Record<PomKey, number>> = {};
   for (const [k, v] of Object.entries(tapeRaw)) if (k !== "unit" && typeof v === "number") tape[k as PomKey] = v * toCm;
 
-  const pic = await squaredUp(photo);
+  /* --raw: a photo with no printed target. Nothing can be in cm, so the run
+     uses a nominal scale and --fit then finds the ONE scale that best matches
+     the tape: what is left is placement error (plus the photo's perspective). */
+  const pic = process.argv.includes("--raw") ? await rawPicture(photo, Number(arg("pxpercm", "15"))) : await squaredUp(photo, process.argv.includes("--hires"));
   fs.writeFileSync(path.join(out, "squared.jpg"), pic.jpg);
   console.log(`squared up: ${pic.width}×${pic.height}, 1 cm = ${pic.pxPerCm.toFixed(3)} px (target confidence ${pic.confidence.toFixed(2)})`);
-  const keys = type ? pomsFor(type, view) : [];
+  const keys = arg("keys") ? (arg("keys")!.split(",") as PomKey[]) : type ? pomsFor(type, view) : [];
 
   const all: Record<string, AgentResult[]> = {};
   for (const m of models) {
@@ -105,6 +124,17 @@ async function main() {
     }
   }
 
+  if (process.argv.includes("--fit")) {
+    for (const [t, rs] of Object.entries(all)) {
+      for (const r of rs) {
+        const ks = (Object.keys(tape) as PomKey[]).filter((k) => r.cm[k] !== undefined);
+        const num = ks.reduce((a, k) => a + r.cm[k]! * tape[k]!, 0), den = ks.reduce((a, k) => a + r.cm[k]! ** 2, 0);
+        const f = den ? num / den : 1;
+        for (const k of Object.keys(r.cm) as PomKey[]) r.cm[k] = Math.round(r.cm[k]! * f * 10) / 10;
+        console.log(`  [${t}] fitted scale: 1 cm = ${(pic.pxPerCm / f).toFixed(2)} px`);
+      }
+    }
+  }
   const rowKeys = (keys.length ? keys : [...new Set(Object.values(all).flat().flatMap((r) => Object.keys(r.lines)))]) as PomKey[];
   const unit = tapeRaw.unit === "in" ? "in" : "cm";
   const show = (cm: number | undefined) => (cm === undefined ? "—" : (cm / toCm).toFixed(unit === "in" ? 2 : 1));

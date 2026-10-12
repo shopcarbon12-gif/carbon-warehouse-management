@@ -65,6 +65,11 @@ import {
 const WORK_MAX_PX = 1000;
 /** The photo is kept this big for target detection and un-warping. */
 const SRC_MAX_PX = 1800;
+/* The AI's close-ups are cut from a larger copy: on black fabric a seam is
+   invisible at the working image's ~10 px/cm and visible at ~25 px/cm (first
+   T-shirt test, 2026-10-12: sleeve 2 cm short → right). */
+const AI_SRC_MAX_PX = 3600;
+const AI_RECT_MAX_PX = 3200;
 const CHART_KEY = "wms.sizeGrading.chart";
 
 function readLocal(key: string): string | null {
@@ -148,6 +153,8 @@ export function SizeGradingWorkspace() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** The photo as decoded, before any un-warping — what rectify samples from. */
   const srcRef = useRef<ImageData | null>(null);
+  /** The same photo at up to AI_SRC_MAX_PX, for the AI's close-ups only. */
+  const hiSrcRef = useRef<ImageData | null>(null);
 
   const [image, setImage] = useState<ImageData | null>(null);
   const [chart, setChart] = useState<SizeChart>(SAMPLE_CHART);
@@ -404,7 +411,24 @@ export function SizeGradingWorkspace() {
        in close-up. Only when it cannot run — no key, offline, it failed — does
        the phone's own cut-out take over, as before. */
     setFindStage("measure");
-    void measureWithAi(image, rectFrame.pxPerCm, type, side, type ? pomsFor(type, side) : [])
+    /* The same squared-up view, k times larger, from the full-size photo:
+       same frame, scale × k, so the AI's lines map back by ÷ k exactly. */
+    let aiPicture = image, k = 1;
+    const hi = hiSrcRef.current;
+    if (hi && hi.width > src.width) {
+      const ratio = hi.width / src.width;
+      k = Math.min(ratio, AI_RECT_MAX_PX / Math.max(rectFrame.width, rectFrame.height));
+      if (k > 1.15) {
+        const big = rectify(hi.data, hi.width, hi.height, quad.map((q) => ({ x: q.x * ratio, y: q.y * ratio })) as Quad, {
+          frame: { ...rectFrame, pxPerCm: rectFrame.pxPerCm * k, width: Math.round(rectFrame.width * k), height: Math.round(rectFrame.height * k) },
+        });
+        if (big) {
+          aiPicture = new ImageData(big.width, big.height);
+          aiPicture.data.set(big.data);
+        } else k = 1;
+      } else k = 1;
+    }
+    void measureWithAi(aiPicture, rectFrame.pxPerCm * k, type, side, type ? pomsFor(type, side) : [], undefined, k)
       .then((m) => {
         if (!alive) return;
         setAiType(m.garment);
@@ -799,6 +823,17 @@ export function SizeGradingWorkspace() {
       const ctx = off.getContext("2d");
       if (!ctx) throw new Error("Canvas unavailable");
       ctx.drawImage(bmp, 0, 0, w, h);
+      {
+        const hs = Math.min(1, AI_SRC_MAX_PX / Math.max(bmp.width, bmp.height));
+        const hc = document.createElement("canvas");
+        hc.width = Math.round(bmp.width * hs);
+        hc.height = Math.round(bmp.height * hs);
+        const hctx = hc.getContext("2d");
+        if (hctx && hc.width > w) {
+          hctx.drawImage(bmp, 0, 0, hc.width, hc.height);
+          hiSrcRef.current = hctx.getImageData(0, 0, hc.width, hc.height);
+        } else hiSrcRef.current = null;
+      }
       bmp.close();
       const src = ctx.getImageData(0, 0, w, h);
       srcRef.current = src;
