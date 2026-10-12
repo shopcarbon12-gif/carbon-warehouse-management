@@ -9,12 +9,16 @@
  *     (sold out, renamed, re-typed). Any Google campaign filtering on a label
  *     picks the products up automatically.
  *  3. Meta — each group's catalog product set is created / its filter updated.
- *  4. Report — per group: products, listings, Meta count, and which Google
+ *  4. Product details — fabric, care and model height to Shopify metafields
+ *     (the theme's Details tab) and to Google `material` / `productDetails`
+ *     (lib/server/product-details-sync).
+ *  5. Report — per group: products, listings, Meta count, and which Google
  *     campaigns / Meta ad sets advertise it.
  */
 import type { Pool } from "pg";
 import { resolveShopContext, salesChannelPublicationIds, publishToPublication, type ShopCtx } from "@/lib/server/shopify-write";
 import { runShopifyGraphql } from "@/lib/shopify";
+import { syncProductDetails } from "@/lib/server/product-details-sync";
 import {
   loadAdGroups,
   groupMatchesProduct,
@@ -109,6 +113,7 @@ export type AdsSyncResult = {
   google: { configured: boolean; listings: number; labelled: number; cleared: number; failed: number; errors: string[] };
   meta: { configured: boolean; catalog: number | null };
   groups: Array<{ slug: string; name: string } & GroupSyncResult>;
+  details?: Awaited<ReturnType<typeof syncProductDetails>> | null;
   warnings: string[];
 };
 
@@ -281,12 +286,22 @@ export async function executeShopifyAdsSync(pool: Pool, jobId: string): Promise<
       groupResults.push({ slug: g.slug, name: g.name, ...res });
     }
 
+    let details: AdsSyncResult["details"] = null;
+    try {
+      details = await syncProductDetails(pool, (m) => {
+        if (warnings.length < 40) warnings.push(`Details: ${m}`);
+      });
+    } catch (e) {
+      warnings.push(`Details: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
     const result: AdsSyncResult = {
       products: products.length,
       channels: { names: pubs.map((p) => p.name), published, failed: pubFailed },
       google,
       meta,
       groups: groupResults,
+      details,
       warnings,
     };
     const summary = [

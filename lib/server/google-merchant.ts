@@ -72,6 +72,8 @@ export type GmcListing = {
   dataSource: string;
   /** customLabel0..4 as Google currently has them (merged from all sources). */
   labels: Array<string | null>;
+  material: string | null;
+  productDetails: Array<{ sectionName?: string; attributeName?: string; attributeValue?: string }>;
 };
 
 /** Every listing in the Merchant Center account. */
@@ -107,6 +109,8 @@ export async function listGmcListings(): Promise<GmcListing[]> {
           const v = a[`customLabel${i}`];
           return typeof v === "string" && v ? v : null;
         }),
+        material: typeof a.material === "string" ? a.material : null,
+        productDetails: Array.isArray(a.productDetails) ? (a.productDetails as GmcListing["productDetails"]) : [],
       });
     }
     pageToken = j.nextPageToken || "";
@@ -114,38 +118,67 @@ export async function listGmcListings(): Promise<GmcListing[]> {
   return out;
 }
 
-/** Write (replace) our supplemental custom labels for one listing. */
-export async function setGmcLabels(
-  l: Pick<GmcListing, "offerId" | "contentLanguage" | "feedLabel">,
-  labels: Record<number, string>,
+type ListingKey = Pick<GmcListing, "offerId" | "contentLanguage" | "feedLabel">;
+
+/**
+ * Field-scoped write into our supplemental data source.
+ *
+ * Several writers share this source — ad labels (Sync ads) and product details
+ * (fabric / care / model). productInputs:insert REPLACES the whole input, so
+ * each writer patches only its own fields (updateMask); a field in the mask
+ * with no value is removed. When the listing has no input in this source yet,
+ * patch 404s and the input is created with just these fields.
+ */
+async function patchSupplemental(
+  l: ListingKey,
+  attrs: Record<string, unknown>,
+  fields: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  const productAttributes: Record<string, string> = {};
-  for (const [slot, v] of Object.entries(labels)) productAttributes[`customLabel${slot}`] = v;
+  const id = `${l.contentLanguage}~${l.feedLabel}~${l.offerId}`;
+  const mask = fields.map((f) => `productAttributes.${f}`).join(",");
   const res = await gfetch(
+    `${MERCHANT}/products/v1/accounts/${merchantId()}/productInputs/${encodeURIComponent(id)}?dataSource=${encodeURIComponent(labelsDataSource())}&updateMask=${encodeURIComponent(mask)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ offerId: l.offerId, contentLanguage: l.contentLanguage, feedLabel: l.feedLabel, productAttributes: attrs }),
+    },
+  );
+  if (res.ok) return { ok: true };
+  if (res.status !== 404) return { ok: false, error: (await res.text()).slice(0, 200) };
+  const values = Object.fromEntries(Object.entries(attrs).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+  if (!Object.keys(values).length) return { ok: true }; // nothing to clear on a missing input
+  const ins = await gfetch(
     `${MERCHANT}/products/v1/accounts/${merchantId()}/productInputs:insert?dataSource=${encodeURIComponent(labelsDataSource())}`,
     {
       method: "POST",
-      body: JSON.stringify({
-        offerId: l.offerId,
-        contentLanguage: l.contentLanguage,
-        feedLabel: l.feedLabel,
-        productAttributes,
-      }),
+      body: JSON.stringify({ offerId: l.offerId, contentLanguage: l.contentLanguage, feedLabel: l.feedLabel, productAttributes: values }),
     },
   );
-  return res.ok ? { ok: true } : { ok: false, error: (await res.text()).slice(0, 200) };
+  return ins.ok ? { ok: true } : { ok: false, error: (await ins.text()).slice(0, 200) };
+}
+
+/** Write our supplemental custom labels for one listing (other fields kept). */
+export async function setGmcLabels(l: ListingKey, labels: Record<number, string>): Promise<{ ok: boolean; error?: string }> {
+  const productAttributes: Record<string, string> = {};
+  for (const [slot, v] of Object.entries(labels)) productAttributes[`customLabel${slot}`] = v;
+  return patchSupplemental(l, productAttributes, Object.keys(productAttributes));
 }
 
 /** Remove our supplemental labels for one listing (it no longer belongs to any group). */
-export async function clearGmcLabels(
-  l: Pick<GmcListing, "offerId" | "contentLanguage" | "feedLabel">,
+export async function clearGmcLabels(l: ListingKey, slots: number[] = [0, 1, 2, 3, 4]): Promise<{ ok: boolean; error?: string }> {
+  return patchSupplemental(l, {}, slots.map((s) => `customLabel${s}`));
+}
+
+/** Product details for one listing: `material` + `productDetails` (fabric, care, model height). */
+export async function setGmcDetails(
+  l: ListingKey,
+  d: { material: string | null; productDetails: Array<{ sectionName: string; attributeName: string; attributeValue: string }> },
 ): Promise<{ ok: boolean; error?: string }> {
-  const id = `${l.contentLanguage}~${l.feedLabel}~${l.offerId}`;
-  const res = await gfetch(
-    `${MERCHANT}/products/v1/accounts/${merchantId()}/productInputs/${encodeURIComponent(id)}?dataSource=${encodeURIComponent(labelsDataSource())}`,
-    { method: "DELETE" },
+  return patchSupplemental(
+    l,
+    { material: d.material || undefined, productDetails: d.productDetails.length ? d.productDetails : undefined },
+    ["material", "productDetails"],
   );
-  return res.ok || res.status === 404 ? { ok: true } : { ok: false, error: (await res.text()).slice(0, 200) };
 }
 
 export function googleAdsConfigured(): boolean {

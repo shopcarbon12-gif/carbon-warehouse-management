@@ -1,0 +1,50 @@
+{%- comment -%}
+  CARBON product Details — fabric, care and the model's height.
+  Values come from the WMS (Matrix → Fabric Composition / Care / Model) as
+  product metafields custom.fabric_composition / care_instructions / model_height,
+  already translated for es and pt-BR. The size the model wears is NOT shown
+  (owner, 2026-10-11: it waits for each item's measurements).
+  Rendered by a custom_liquid block in main-product (templates/product*.json).
+{%- endcomment -%}
+{%- liquid
+  assign cd_fabric = product.metafields.custom.fabric_composition.value
+  assign cd_care = product.metafields.custom.care_instructions.value
+  assign cd_model = product.metafields.custom.model_height.value
+  case request.locale.iso_code
+    when 'es'
+      assign cd_title = 'Detalles'
+      assign cd_l_fabric = 'Tejido'
+      assign cd_l_care = 'Cuidado'
+      assign cd_l_model = 'Modelo'
+    when 'pt-BR', 'pt-PT', 'pt'
+      assign cd_title = 'Detalhes'
+      assign cd_l_fabric = 'Tecido'
+      assign cd_l_care = 'Cuidados'
+      assign cd_l_model = 'Modelo'
+    else
+      assign cd_title = 'Details'
+      assign cd_l_fabric = 'Fabric'
+      assign cd_l_care = 'Care'
+      assign cd_l_model = 'Model'
+  endcase
+-%}
+{%- if cd_fabric != blank or cd_care != blank or cd_model != blank -%}
+<style>
+  .carbon-details .carbon-details__list { margin: 0; display: grid; gap: 10px; }
+  .carbon-details .carbon-details__row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; align-items: baseline; }
+  .carbon-details dt { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .7; }
+  .carbon-details dd { margin: 0; }
+</style>
+<collapsible-row class="product__accordion accordion carbon-details">
+  <details id="Details-carbon-details-{{ section.id }}" open>
+    <summary>{{ cd_title }}<span></span></summary>
+    <div class="collapsible__content accordion__content rte">
+      <dl class="carbon-details__list">
+        {%- if cd_fabric != blank -%}<div class="carbon-details__row"><dt>{{ cd_l_fabric }}</dt><dd>{{ cd_fabric | escape }}</dd></div>{%- endif -%}
+        {%- if cd_care != blank -%}<div class="carbon-details__row"><dt>{{ cd_l_care }}</dt><dd>{{ cd_care | escape | newline_to_br }}</dd></div>{%- endif -%}
+        {%- if cd_model != blank -%}<div class="carbon-details__row"><dt>{{ cd_l_model }}</dt><dd>{{ cd_model | escape }}</dd></div>{%- endif -%}
+      </dl>
+    </div>
+  </details>
+</collapsible-row>
+{%- endif -%}

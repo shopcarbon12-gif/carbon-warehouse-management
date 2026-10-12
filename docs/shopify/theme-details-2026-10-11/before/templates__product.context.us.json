@@ -1,0 +1,151 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
+{
+  "parent": "product.json",
+  "context": {
+    "market": "us"
+  },
+  "sections": {
+    "tabbed_content_Rk4ft": {
+      "type": "tabbed-content",
+      "disabled": true,
+      "settings": {
+        "heading": "",
+        "description": "",
+        "text_width": "medium",
+        "tab_alignment": "left",
+        "text_alignment": "left",
+        "header-865d086e9074a7c98a12fd1199e61f10": null,
+        "color_bg": "#ffffff",
+        "color_tabs": "#151515",
+        "color_text": "#151515",
+        "color_border": "#e2e2e2",
+        "header-feb6e07204d2bec32e3e3887e6775715": null,
+        "disable_top_spacing": false,
+        "disable_bottom_spacing": false
+      },
+      "blocks": {
+        "tab_R6DQa": {
+          "type": "tab",
+          "disabled": false,
+          "settings": {
+            "tab_label": "Description",
+            "icon": "gluten_free",
+            "text": "<p>{{ product.metafields.custom.short_descriptions_ | metafield_tag }}</p>",
+            "text_columns": "1",
+            "page": "",
+            "custom_liquid": ""
+          }
+        },
+        "tab_GFnkg": {
+          "type": "tab",
+          "disabled": false,
+          "settings": {
+            "tab_label": "Reviews",
+            "icon": "star",
+            "text": "",
+            "text_columns": "1",
+            "page": "reviews",
+            "custom_liquid": ""
+          }
+        }
+      },
+      "block_order": [
+        "tab_R6DQa",
+        "tab_GFnkg"
+      ]
+    },
+    "1769510016a6f7debb": {
+      "type": "apps",
+      "disabled": false,
+      "settings": {},
+      "blocks": {},
+      "block_order": []
+    },
+    "main-product": {
+      "custom_css": [
+        ".product-short-description.rte p {font-size: 19px;}"
+      ],
+      "settings": {
+        "full_width": false,
+        "media_layout": "grid",
+        "display_slider_pagination": true,
+        "media_aspect_ratio": "adapt",
+        "display_captions": false
+      },
+      "blocks": {
+        "variant_picker": {
+          "settings": {
+            "picker_type": "dropdown",
+            "color_picker": false,
+            "color_picker_size": "xlarge",
+            "color_picker_use_variants": true,
+            "variant_is_disabled": true,
+            "sizing_guide_page": "men-clothing"
+          }
+        },
+        "95b7e00a-0453-4eb0-9cf0-1dae84d8b822": {
+          "disabled": false,
+          "settings": {
+            "side_panel_1_label": "Store Pickup",
+            "side_panel_1_icon": "map_pin",
+            "side_panel_1_content": "<p>Pickup is available on select items and locations when<br/>shown above. <br/>You’ll receive a confirmation when your order is ready.</p>",
+            "side_panel_2_content": "<p>Orders ship in 1-2 business days. <br/>Standard delivery<br/>usually arrives in 3-7 business days after processing. <br/>Eligible returns may be<br/>exchanged or returned for store credit within 14 days of delivery. <br/>First<br/>purchases qualify for easy exchanges within 14 days of delivery. <br/>For help,<br/>contact support@shopcarbon.com.</p>",
+            "side_panel_3_content": "<p>Follow the care label inside the<br/>garment for the most accurate instructions.<br/>Machine wash cold with like colors. Do not bleach.<br/>Tumble dry low or hang dry when possible. </p>"
+          }
+        }
+      },
+      "block_order": [
+        "e431a79e-9c7b-4a53-a79a-0cb918617ecf",
+        "title",
+        "0b3e272b-c86a-4dba-946c-c6912251371c",
+        "variant_picker",
+        "buy_buttons",
+        "95b7e00a-0453-4eb0-9cf0-1dae84d8b822",
+        "4fd23485-293f-46a0-8a4c-34d0e25ea41b"
+      ]
+    },
+    "166237435211863a49": {
+      "disabled": true,
+      "settings": {
+        "desktop_height": "desktop-height-full",
+        "subheading": "",
+        "heading": "CARBON JEANS",
+        "video": "",
+        "fallback_image": "{{ product.featured_image }}"
+      },
+      "blocks": {}
+    },
+    "1663667029efc274af": {
+      "disabled": true,
+      "settings": {},
+      "blocks": {}
+    },
+    "166366868377cd57e4": {
+      "disabled": true,
+      "settings": {
+        "image": "{{ product.featured_image }}"
+      },
+      "blocks": {}
+    }
+  },
+  "order": [
+    "breadcrumbs",
+    "main-product",
+    "16623877721f33fb14",
+    "tabbed_content_Rk4ft",
+    "166237435211863a49",
+    "1663667029efc274af",
+    "166366868377cd57e4",
+    "1662552569cce2536d",
+    "product-recommendations",
+    "1769510016a6f7debb"
+  ]
+}
