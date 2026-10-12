@@ -929,11 +929,16 @@ class CatalogEpcListScreen extends StatefulWidget {
     required this.customSkuId,
     required this.row,
     required this.api,
+    this.liveOnly = false,
   });
 
   final String customSkuId;
   final Map<String, dynamic> row;
   final WmsApiClient api;
+
+  /// Show only LIVE (in-stock) tags — Store Replenishment opens this list to
+  /// pick stock, so sold / killed / unknown tags are left out.
+  final bool liveOnly;
 
   @override
   State<CatalogEpcListScreen> createState() => _CatalogEpcListScreenState();
@@ -960,8 +965,11 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
       if (!mounted) return;
       // Sort by serial number ascending so EPCs read in the order they were
       // commissioned — matches the catalog web view's default ordering.
-      final sorted = List<Map<String, dynamic>>.from(res)
-        ..sort((a, b) {
+      final sorted = List<Map<String, dynamic>>.from(
+        widget.liveOnly
+            ? res.where((e) => e['status']?.toString() == 'in-stock')
+            : res,
+      )..sort((a, b) {
           final sa = int.tryParse(a['serial_number']?.toString() ?? '') ?? 0;
           final sb = int.tryParse(b['serial_number']?.toString() ?? '') ?? 0;
           return sa.compareTo(sb);
@@ -1042,7 +1050,9 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                         child: Padding(
                           padding: EdgeInsets.all(24.r),
                           child: Text(
-                            'No EPCs commissioned for this SKU.',
+                            widget.liveOnly
+                                ? 'No live tags in stock for this SKU.'
+                                : 'No EPCs commissioned for this SKU.',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.manrope(
                               fontSize: 14.sp,

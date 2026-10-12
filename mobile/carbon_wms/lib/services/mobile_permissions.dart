@@ -246,6 +246,7 @@ abstract final class ScreenIds {
   // Find Tags
   static const String geigerSearch = 'geiger_search';
   static const String cloudGeiger = 'cloud_geiger';
+  static const String storeReplenishment = 'store_replenishment';
   static const String locateTag = 'locate_tag';
   static const String epcDetail = 'epc_detail';
 

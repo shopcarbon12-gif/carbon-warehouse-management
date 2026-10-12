@@ -1068,6 +1068,66 @@ class WmsApiClient {
     return decoded.whereType<Map<String, dynamic>>().toList();
   }
 
+  // ── Store Replenishment (Find & Locate) ──────────────────────────────────
+  // POS showroom sales → a pick list from the back. Server:
+  // /api/mobile/store-replenishment/* (lib/server/store-replenishment.ts).
+
+  /// Completed showroom sales at the signed-in location, newest first.
+  /// [from]/[to] are instants; the server defaults to the last 30 days.
+  Future<List<Map<String, dynamic>>> fetchReplenishmentSales({
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/sales').replace(
+      queryParameters: {
+        if (from != null) 'from': from.toUtc().toIso8601String(),
+        if (to != null) 'to': to.toUtc().toIso8601String(),
+      },
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    final sales = decoded['sales'];
+    if (sales is! List) return const [];
+    return sales.whereType<Map<String, dynamic>>().toList();
+  }
+
+  /// One sale: `{ sale: {...}, lines: [...] }` with stock and picked state.
+  Future<Map<String, dynamic>> fetchReplenishmentSale(int saleId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/sales/$saleId');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw WmsApiException(res.statusCode, 'Unexpected response');
+    }
+    return decoded;
+  }
+
+  /// Tick / untick one sale line as found and pulled. Stock is not changed.
+  Future<void> setReplenishmentPicked(int lineId, bool picked) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/lines/$lineId');
+    final res = await _http.put(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        ...await sessionAuthHeaders(),
+      },
+      body: jsonEncode({'picked': picked}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
   /// Multi-result catalog search across all fields (name, UPC, SKU, asset ID).
   /// Returns up to [limit] rows from `/api/inventory/catalog?view=grid`.
   Future<List<Map<String, dynamic>>> catalogSearch(String q, {int limit = 10}) async {

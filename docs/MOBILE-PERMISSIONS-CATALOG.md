@@ -119,6 +119,7 @@ Legend per row: **Tiers** = which capability tiers make sense • **Action gates
 |--------|----------|-------|--------------|-------------|
 | Geiger Search | `geiger_search` | hidden/view | `locate` | `show_on_hand` |
 | Cloud + Geiger | `cloud_geiger` | hidden/view/edit | `bulk_find`, `dismiss_row`, `dismiss_all`, `upload_csv`, `adjust_rfid_power` | — |
+| Store Replenishment | `store_replenishment` | hidden/view/edit | — (ticking an item as picked) | — |
 | Locate Tag (Geiger) | `locate_tag` | hidden/view | `take_action` (opens Status/Encode/Re-Encode — each still gated by its own screen), `adjust_rfid_power` | `show_retail_price`, `show_system_ids` |
 
 ### TRANSFERS

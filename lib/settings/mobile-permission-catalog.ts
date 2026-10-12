@@ -183,6 +183,7 @@ const MOBILE_GROUPS: MobileGroupDef[] = [
           { id: "export_csv", label: "Export CSV" },
         ],
       },
+      { id: "store_replenishment", label: "Store Replenishment", editable: true },
       { id: "locate_tag", label: "Locate tag (Geiger)" },
     ],
   },
