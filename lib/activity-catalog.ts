@@ -169,6 +169,7 @@ const ROUTES: Record<string, Entry> = {
   "devices/[id]/epc-queue": { module: "Handheld", label: "Sent EPCs to a handheld" },
   "mobile/barcode-intake": { module: "Handheld", label: "Barcode intake" },
   "mobile/store-replenishment/lines/[lineId]": { module: "Handheld", label: "Store replenishment — ticked / unticked an item" },
+  "mobile/store-replenishment/lines/[lineId]/units": { module: "Handheld", label: { POST: "Store replenishment — pulled a unit", DELETE: "Store replenishment — undid a pulled unit" } },
   "mobile/releases/set-active": { module: "Handheld", label: "Set active app version" },
   "mobile/upload-apk": { module: "Handheld", label: "Uploaded app version" },
 

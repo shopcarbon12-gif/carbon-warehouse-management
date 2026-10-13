@@ -50,6 +50,7 @@ const SKIP_ROUTES = new Set<string>([
   "rfid/bulk-geiger/parse",
   "inventory/putaway-preview",
   "shopify/metafields/suggest",
+  "mobile/locate-sessions", // telemetry, one row per Locate use — not a change
 ]);
 
 const MAX_BODY_BYTES = 256 * 1024;

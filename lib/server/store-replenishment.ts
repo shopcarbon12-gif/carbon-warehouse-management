@@ -47,6 +47,8 @@ export type ReplenishmentLine = {
   picked: boolean;
   pickedBy: string | null;
   pickedAt: string | null;
+  /** Units (EPCs) pulled for this line via "Find any unit" — see pickUnit. */
+  pickedUnits: number;
 };
 
 const SALE_LINE_FACTS = `
@@ -161,9 +163,11 @@ export async function getReplenishmentLines(
     upc: string | null;
     retail_price: string | null;
     bin: string | null;
+    picked_units: number;
   }>(
     `WITH facts AS (${SALE_LINE_FACTS.replace(/\$LID/g, "$1")} AND l.sale_id = $2)
      SELECT f.*, cs.sku, m.description AS name, cs.color_code AS color, cs.size,
+            (SELECT count(*)::int FROM store_replenishment_units u WHERE u.sale_line_id = f.line_id) AS picked_units,
             coalesce(cs.upc, m.upc) AS upc, cs.retail_price::text AS retail_price,
             coalesce(
               (SELECT b.code FROM items i JOIN bins b ON b.id = i.bin_id
@@ -198,6 +202,7 @@ export async function getReplenishmentLines(
       picked: x.picked,
       pickedBy: x.picked_by_name,
       pickedAt: x.picked_at ? x.picked_at.toISOString() : null,
+      pickedUnits: x.picked_units,
     })),
   };
 }
@@ -233,4 +238,184 @@ export async function setLinePicked(
     [lineId, line.sale_id, by.userId, by.name],
   );
   return { ok: true };
+}
+
+// ── Per-unit picking (Locate 2.0 stage D) ───────────────────────────────────
+
+type LineOwner = { sale_id: number; sku_id: string | null; quantity: number };
+
+async function lineAtLocation(
+  q: Pick<Pool, "query">,
+  locationId: string,
+  lineId: number,
+): Promise<LineOwner | null> {
+  const r = await q.query<LineOwner>(
+    `SELECT l.sale_id, l.sku_id, l.quantity
+       FROM pos_sale_lines l
+       JOIN pos_sales s ON s.id = l.sale_id AND s.status = 'completed' AND s.voided_at IS NULL
+       JOIN pos_locations pl ON pl.id = s.pos_location_id AND pl.wms_location_id = $1::uuid
+      WHERE l.id = $2 AND coalesce(l.line_type, 'product') = 'product'`,
+    [locationId, lineId],
+  );
+  return r.rows[0] ?? null;
+}
+
+export type EligibleUnits = {
+  lineId: number;
+  customSkuId: string;
+  sku: string | null;
+  name: string | null;
+  color: string | null;
+  size: string | null;
+  retailPrice: number | null;
+  required: number;
+  pickedUnits: number;
+  pickedEpcs: string[];
+  /** LIVE units of the exact SKU at this location not already pulled for any line. */
+  candidates: { epc: string; bin: string | null }[];
+  checkedAt: string;
+};
+
+/** What "Find any unit" may search for on one sale line. */
+export async function getEligibleUnits(
+  pool: Pool,
+  locationId: string,
+  lineId: number,
+): Promise<EligibleUnits | null> {
+  const line = await lineAtLocation(pool, locationId, lineId);
+  if (!line || !line.sku_id) return null;
+  const [info, picked, cands] = await Promise.all([
+    pool.query<{ sku: string | null; name: string | null; color: string | null; size: string | null; retail_price: string | null }>(
+      `SELECT cs.sku, m.description AS name, cs.color_code AS color, cs.size, cs.retail_price::text
+         FROM custom_skus cs LEFT JOIN matrices m ON m.id = cs.matrix_id WHERE cs.id = $1::uuid`,
+      [line.sku_id],
+    ),
+    pool.query<{ epc: string }>(`SELECT epc FROM store_replenishment_units WHERE sale_line_id = $1 ORDER BY picked_at`, [lineId]),
+    pool.query<{ epc: string; bin: string | null }>(
+      `SELECT i.epc, b.code AS bin
+         FROM items i
+         LEFT JOIN bins b ON b.id = i.bin_id
+        WHERE i.custom_sku_id = $1::uuid AND i.location_id = $2::uuid AND i.status = 'in-stock'
+          AND NOT EXISTS (SELECT 1 FROM store_replenishment_units u WHERE u.epc = i.epc)
+        ORDER BY b.code NULLS LAST, i.epc
+        LIMIT 500`,
+      [line.sku_id, locationId],
+    ),
+  ]);
+  const x = info.rows[0];
+  return {
+    lineId,
+    customSkuId: line.sku_id,
+    sku: x?.sku ?? null,
+    name: x?.name ?? null,
+    color: x?.color ?? null,
+    size: x?.size ?? null,
+    retailPrice: x?.retail_price == null ? null : Number(x.retail_price),
+    required: line.quantity,
+    pickedUnits: picked.rowCount ?? 0,
+    pickedEpcs: picked.rows.map((p) => p.epc),
+    candidates: cands.rows,
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+export type UnitPickResult =
+  | { ok: true; pickedUnits: number; required: number; linePicked: boolean }
+  | { ok: false; error: string; status: number };
+
+/**
+ * Record one physically pulled unit for a line. Re-validates at the moment of
+ * the pick: the line is this location's completed sale, the EPC is LIVE here
+ * and is the line's exact SKU (colour + size), and no line/operator already
+ * counted it (UNIQUE epc). Reaching the sold quantity completes the line.
+ * Stock is not changed.
+ */
+export async function pickUnit(
+  pool: Pool,
+  locationId: string,
+  lineId: number,
+  epcRaw: string,
+  by: { userId: string; name: string | null; method: string | null },
+): Promise<UnitPickResult> {
+  const epc = epcRaw.trim().toUpperCase();
+  if (!/^[0-9A-F]{24}$/.test(epc)) return { ok: false, error: "Not a valid EPC", status: 400 };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext('repl-line:' || $1))", [String(lineId)]);
+    const line = await lineAtLocation(client, locationId, lineId);
+    if (!line || !line.sku_id) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "Line not found", status: 404 };
+    }
+    const item = await client.query<{ custom_sku_id: string | null; status: string }>(
+      `SELECT custom_sku_id::text, status FROM items WHERE epc = $1 AND location_id = $2::uuid`,
+      [epc, locationId],
+    );
+    const it = item.rows[0];
+    if (!it) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "This tag is not at this location", status: 409 };
+    }
+    if (it.custom_sku_id !== line.sku_id) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "Wrong item — this tag is a different SKU / colour / size", status: 409 };
+    }
+    if (it.status !== "in-stock") {
+      await client.query("ROLLBACK");
+      return { ok: false, error: `This tag is not live (${it.status})`, status: 409 };
+    }
+    const ins = await client.query(
+      `INSERT INTO store_replenishment_units (sale_line_id, sale_id, epc, custom_sku_id, picked_by, picked_by_name, method)
+       VALUES ($1, $2, $3, $4::uuid, $5, $6, $7) ON CONFLICT (epc) DO NOTHING`,
+      [lineId, line.sale_id, epc, line.sku_id, by.userId, by.name, by.method],
+    );
+    if (!ins.rowCount) {
+      await client.query("ROLLBACK");
+      return { ok: false, error: "This unit was already pulled", status: 409 };
+    }
+    const n = await client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM store_replenishment_units WHERE sale_line_id = $1`,
+      [lineId],
+    );
+    const picked = n.rows[0]?.n ?? 0;
+    const done = picked >= line.quantity;
+    if (done) {
+      await client.query(
+        `INSERT INTO store_replenishment_picks (sale_line_id, sale_id, picked_by, picked_by_name, source)
+         VALUES ($1, $2, $3, $4, 'units') ON CONFLICT (sale_line_id) DO NOTHING`,
+        [lineId, line.sale_id, by.userId, by.name],
+      );
+    }
+    await client.query("COMMIT");
+    return { ok: true, pickedUnits: picked, required: line.quantity, linePicked: done };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** Undo one pulled unit; reopens the line only if the units had completed it. */
+export async function unpickUnit(
+  pool: Pool,
+  locationId: string,
+  lineId: number,
+  epcRaw: string,
+): Promise<UnitPickResult> {
+  const epc = epcRaw.trim().toUpperCase();
+  const line = await lineAtLocation(pool, locationId, lineId);
+  if (!line) return { ok: false, error: "Line not found", status: 404 };
+  await pool.query(`DELETE FROM store_replenishment_units WHERE sale_line_id = $1 AND epc = $2`, [lineId, epc]);
+  const n = await pool.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM store_replenishment_units WHERE sale_line_id = $1`,
+    [lineId],
+  );
+  const picked = n.rows[0]?.n ?? 0;
+  if (picked < line.quantity) {
+    await pool.query(`DELETE FROM store_replenishment_picks WHERE sale_line_id = $1 AND source = 'units'`, [lineId]);
+  }
+  const still = await pool.query(`SELECT 1 FROM store_replenishment_picks WHERE sale_line_id = $1`, [lineId]);
+  return { ok: true, pickedUnits: picked, required: line.quantity, linePicked: (still.rowCount ?? 0) > 0 };
 }
