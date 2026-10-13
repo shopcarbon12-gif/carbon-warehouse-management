@@ -34,6 +34,7 @@ import {
 import { computeCollectionAutoMap } from "@/lib/shopifyCollectionAutoMapper";
 import { readSession } from "@/lib/userAuth";
 import { resolvePublicAppOrigin } from "@/lib/resolvePublicAppOrigin";
+import { orlandoDate } from "@/lib/orlando-time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -236,7 +237,7 @@ function resolveDraftActorScope(req: NextRequest): DraftActorScope {
 }
 
 function getWorksheetDayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return orlandoDate();
 }
 
 function getWorksheetState(shop: string) {

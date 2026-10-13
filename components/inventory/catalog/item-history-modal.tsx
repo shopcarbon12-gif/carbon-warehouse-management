@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import useSWR from "swr";
 import { History, RefreshCw, X } from "lucide-react";
+import { STORE_TZ, orlandoDate } from "@/lib/orlando-time";
 import {
   cellTruncate,
   pickTableLayout,
@@ -51,8 +52,8 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const hm = d.toLocaleTimeString("en-GB", { timeZone: STORE_TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  return `${orlandoDate(d)} ${hm}`;
 }
 
 function sourceLabel(s: string): string {

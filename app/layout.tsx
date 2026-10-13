@@ -1,8 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, JetBrains_Mono } from "next/font/google";
 import { WMS_THEME_BOOT_SCRIPT } from "@/lib/theme-boot";
+import { ORLANDO_TIME_PATCH } from "@/lib/orlando-time";
 import { TextSelectionClickGuard } from "@/components/text-selection-click-guard";
 import "./globals.css";
+
+// Orlando is the default display time zone on the server too.
+// eslint-disable-next-line no-new-func
+new Function(ORLANDO_TIME_PATCH)();
 
 const wmsSans = Outfit({
   variable: "--font-wms-sans",
@@ -43,6 +48,8 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        {/* Orlando time for every date/time display, before any app code runs. */}
+        <script dangerouslySetInnerHTML={{ __html: ORLANDO_TIME_PATCH }} />
         <script
           suppressHydrationWarning
           dangerouslySetInnerHTML={{ __html: WMS_THEME_BOOT_SCRIPT }}

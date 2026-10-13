@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { getTransferDetail } from "@/lib/server/operations-transfers";
+import { orlandoDate } from "@/lib/orlando-time";
 
 /**
  * GET /api/operations/transfers/<uuid>/csv — download a transfer slip as CSV.
@@ -72,7 +73,7 @@ export async function GET(
     if (!detail.created_at) return "";
     const d = new Date(detail.created_at);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toISOString().slice(0, 10);
+    return orlandoDate(d);
   })();
 
   const header = [

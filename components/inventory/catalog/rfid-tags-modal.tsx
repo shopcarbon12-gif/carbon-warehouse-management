@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { Eye, EyeOff, Pin, Radio, Send, Tag, X } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import type { CatalogItemRow } from "@/lib/queries/catalog";
+import { STORE_TZ } from "@/lib/orlando-time";
 
 type StatusLabelRow = {
   id: number;
@@ -55,16 +56,18 @@ function formatLastSeen(iso: string | null): string {
   if (!iso) return "Never";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "Never";
-  /* MM/DD/YY hh:mm AM/PM */
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yy = String(d.getFullYear()).slice(-2);
-  let h = d.getHours();
-  const ampm = h >= 12 ? "PM" : "AM";
-  h = h % 12;
-  if (h === 0) h = 12;
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${mm}/${dd}/${yy} ${String(h).padStart(2, "0")}:${mi} ${ampm}`;
+  /* MM/DD/YY hh:mm AM/PM, Orlando time */
+  return d
+    .toLocaleString("en-US", {
+      timeZone: STORE_TZ,
+      month: "2-digit",
+      day: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(", ", " ");
 }
 
 function statusPillClasses(status: string): string {

@@ -22,6 +22,7 @@ import { randomInt } from "node:crypto";
 import type { Pool } from "pg";
 import { runShopifyGraphql } from "@/lib/shopify";
 import { resolveShopContext } from "@/lib/server/shopify-write";
+import { orlandoDate } from "@/lib/orlando-time";
 
 export const THANK_YOU_PERCENT = 15;
 export const THANK_YOU_VALID_DAYS = 45;
@@ -146,7 +147,7 @@ export async function ensureThankYouCode(
           opts.tenantId,
           `order:${orderLegacyId}`,
           JSON.stringify({
-            summary: `${created.code} · ${THANK_YOU_PERCENT}% off · order ${order.name} · until ${endsAt.toISOString().slice(0, 10)}`,
+            summary: `${created.code} · ${THANK_YOU_PERCENT}% off · order ${order.name} · until ${orlandoDate(endsAt)}`,
             order: order.name,
             code: created.code,
             customer: order.customer.id,

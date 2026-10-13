@@ -1,3 +1,5 @@
+import { STORE_TZ } from "@/lib/orlando-time";
+
 /**
  * Display timezone for human-readable timestamps (US Eastern, observes DST).
  * Override with NEXT_PUBLIC_APP_TIME_ZONE or APP_TIME_ZONE (IANA), e.g. America/Chicago.
@@ -5,7 +7,7 @@
 const raw =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_APP_TIME_ZONE?.trim()) ||
   (typeof process !== "undefined" && process.env.APP_TIME_ZONE?.trim()) ||
-  "America/New_York";
+  STORE_TZ;
 
 export const APP_TIME_ZONE = raw;
 

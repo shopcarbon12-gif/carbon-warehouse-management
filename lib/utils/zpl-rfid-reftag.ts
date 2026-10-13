@@ -1,3 +1,5 @@
+import { orlandoDate } from "@/lib/orlando-time";
+
 /**
  * Zebra ZPL for RFID REFTAG — matches Carbon WMS `generateSGTIN96` (12 hex bytes in ^RFW).
  * `includeDfr` true only for the first label in a batch to avoid printer buffer issues.
@@ -36,7 +38,7 @@ export function buildRfidReftagZpl(
   const dfrLine = includeDfr ? "^DFR:REFTAG.ZPL^FS\n" : "";
   const pw = data.pw ?? 812;
   const ll = data.ll ?? 594;
-  const dateStr = data.dateStr ?? new Date().toISOString().slice(0, 10);
+  const dateStr = data.dateStr ?? orlandoDate();
 
   return `^XA
 ${dfrLine}^PR1,1^FS

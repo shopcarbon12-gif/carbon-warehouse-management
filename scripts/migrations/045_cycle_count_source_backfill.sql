@@ -72,8 +72,8 @@ BEGIN
                CASE WHEN rh.epc IS NOT NULL THEN rh.reader_name
                     ELSE 'mobile (pre-tracking)' END AS name,
                CASE WHEN rh.epc IS NOT NULL
-                    THEN to_char(rh.read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
-                    ELSE to_char(s.started_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                    THEN to_char(rh.read_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                    ELSE to_char(s.started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
                END AS ts
           FROM missing m
           LEFT JOIN reader_hits rh ON rh.epc = m.epc

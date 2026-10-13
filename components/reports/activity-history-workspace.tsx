@@ -9,6 +9,7 @@ import type { ActivityRow } from "@/lib/server/activity-feed";
 import { useUrlParam } from "@/lib/use-url-param";
 import { useDebouncedValue } from "@/components/reports/use-debounced-value";
 import { DataTableContainer } from "@/components/shared/data-table";
+import { STORE_TZ } from "@/lib/orlando-time";
 
 type Page = { rows: ActivityRow[]; nextCursor: string | null };
 type Facets = { users: { id: string; email: string; name: string | null }[] };
@@ -26,12 +27,18 @@ const fieldCls =
   "rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-xs text-[var(--wms-fg)] focus:outline-none focus:ring-2 focus:ring-[var(--wms-accent)]/40 max-md:min-h-11 max-md:w-full max-md:text-base";
 const labelCls = "font-mono text-[0.6rem] uppercase tracking-wider text-[var(--wms-muted)] max-md:text-xs";
 
-/** Local calendar day → ISO instant (start of that day; `next` = start of the following day). */
+/** Orlando calendar day → ISO instant (start of that day; `next` = start of the following day). */
 function dayIso(day: string, next = false): string | null {
   const m = day.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + (next ? 1 : 0));
-  return d.toISOString();
+  const utcMidnight = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + (next ? 1 : 0));
+  // Orlando's UTC offset just after that midnight (05:00 UTC is before the 2 AM DST switch).
+  const off = new Intl.DateTimeFormat("en-US", { timeZone: STORE_TZ, timeZoneName: "longOffset" })
+    .formatToParts(utcMidnight + 5 * 3_600_000)
+    .find((p) => p.type === "timeZoneName")?.value;
+  const om = /GMT([+-])(\d{2}):(\d{2})/.exec(off ?? "");
+  const offMin = om ? (om[1] === "-" ? -1 : 1) * (Number(om[2]) * 60 + Number(om[3])) : 0;
+  return new Date(utcMidnight - offMin * 60_000).toISOString();
 }
 
 function when(iso: string): { date: string; time: string } {

@@ -23,6 +23,7 @@ const SQUARE_BTN =
 import { useUrlParam } from "@/lib/use-url-param";
 import { refreshShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { RfidTagsModal } from "@/components/inventory/catalog/rfid-tags-modal";
+import { STORE_TZ, orlandoDate } from "@/lib/orlando-time";
 import {
   ShipScanOutWorkspace,
   statusClass,
@@ -175,12 +176,13 @@ function shopifyDate(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
   const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).toLowerCase();
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  // Orlando calendar days, so "Today" / "Yesterday" follow the store's clock.
+  const day = (x: Date) => Date.parse(`${orlandoDate(x)}T00:00:00Z`);
   const diff = Math.round((day(now) - day(d)) / 86_400_000);
   if (diff === 0) return `Today at ${time}`;
   if (diff === 1) return `Yesterday at ${time}`;
   if (diff > 1 && diff < 7) return `${d.toLocaleDateString("en-US", { weekday: "long" })} at ${time}`;
-  const sameYear = d.getFullYear() === now.getFullYear();
+  const sameYear = orlandoDate(d).slice(0, 4) === orlandoDate(now).slice(0, 4);
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) })} at ${time}`;
 }
 
@@ -399,7 +401,7 @@ export function SalesWorkspace() {
     if (cursor?.after) sp.set("after", cursor.after);
     if (cursor?.before) sp.set("before", cursor.before);
     try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const tz = STORE_TZ;
       const [r, t] = await Promise.all([
         fetch(`/api/shopify/sales?${sp}`, { cache: "no-store" }),
         fetch(`/api/shopify/sales?today=1&tz=${encodeURIComponent(tz)}`, { cache: "no-store" }),

@@ -20,6 +20,7 @@ import {
 } from "./commissioning-status-bar";
 import { PrintLogsModal } from "./print-logs-modal";
 import { useUrlFlag } from "@/lib/use-url-param";
+import { orlandoDate } from "@/lib/orlando-time";
 
 type BinRow = { id: string; code: string };
 
@@ -314,7 +315,7 @@ export function CommissioningWorkspace() {
     setError(null);
     try {
       const rows: RfidReftagZplLabel[] = [];
-      const dateStr = new Date().toISOString().slice(0, 10);
+      const dateStr = orlandoDate();
       for (let i = 0; i < qty; i += 1) {
         const sn = nextSerial + i;
         const epc = generateSGTIN96(settings.companyPrefix, ls, sn);

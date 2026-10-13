@@ -88,7 +88,7 @@ async function backfillFromCdmReads(
             upper(cr.epc_hex)                         AS epc,
             COALESCE(d.name, 'reader')                AS reader_name,
             (a.config->>'antenna_number')             AS antenna_number,
-            to_char(cr.read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS first_seen_at
+            to_char(cr.read_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS first_seen_at
        FROM cdm_reads cr
        JOIN devices d ON d.id = cr.reader_id
        LEFT JOIN devices a ON a.id = cr.antenna_id

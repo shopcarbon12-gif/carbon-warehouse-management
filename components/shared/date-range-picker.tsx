@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar as CalIcon } from "lucide-react";
+import { orlandoDate } from "@/lib/orlando-time";
 
 /**
  * Lightspeed-style date-range picker: a "FROM to TO" trigger that opens a
@@ -93,7 +94,8 @@ export function DateRangePicker({
     setPickStart(null);
     setOpen(false);
   };
-  const today = () => new Date();
+  // Today in Orlando, whatever the viewer's clock zone is.
+  const today = () => parse(orlandoDate()) ?? new Date();
 
   return (
     <div className="relative" ref={wrapRef}>
