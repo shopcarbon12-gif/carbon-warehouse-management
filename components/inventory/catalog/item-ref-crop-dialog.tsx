@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *
  * Hence the default action is one drag of a horizontal line — everything above
  * it goes — with a free rectangle available when a side or hem needs trimming
- * too. Cropping happens at the image's natural resolution, so a crop never
+ * too. A photo lying sideways or upside down can be turned here first. Cropping happens at the image's natural resolution, so a crop never
  * costs detail beyond what it removes.
  */
 
@@ -60,6 +60,24 @@ async function croppableImage(src: string): Promise<{ img: HTMLImageElement; rev
   }
 }
 
+/** Draw [img] turned [deg] degrees clockwise onto a fresh canvas. */
+function rotatedCanvas(img: HTMLImageElement, deg: number): HTMLCanvasElement {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const quarter = deg === 90 || deg === 270;
+  const canvas = document.createElement("canvas");
+  canvas.width = quarter ? h : w;
+  canvas.height = quarter ? w : h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not process this image — try a JPG or PNG.");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(img, -w / 2, -h / 2);
+  return canvas;
+}
+
 export function ItemRefCropDialog({
   src,
   busy,
@@ -88,6 +106,52 @@ export function ItemRefCropDialog({
      failing with no way to tell WHICH step, so each one now announces itself
      before it runs. */
   const [step, setStep] = useState<string | null>(null);
+  /* Manual rotation (clockwise degrees). A flat lay shot from above often comes
+     out sideways or upside down; turning it here saves it upright. The preview
+     shows the rotated photo, and the crop box is drawn on that. */
+  const [rotation, setRotation] = useState(0);
+  const [rotatedSrc, setRotatedSrc] = useState<string | null>(null);
+  useEffect(() => {
+    return () => {
+      if (rotatedSrc) URL.revokeObjectURL(rotatedSrc);
+    };
+  }, [rotatedSrc]);
+
+  const rotateBy = async (delta: 90 | -90) => {
+    if (busy) return;
+    const next = (rotation + delta + 360) % 360;
+    setErr(null);
+    let revoke = () => {};
+    try {
+      setStep("Rotating…");
+      const safe = await croppableImage(src);
+      revoke = safe.revoke;
+      if (next === 0) {
+        setRotatedSrc(null);
+      } else {
+        const canvas = rotatedCanvas(safe.img, next);
+        const blob = await new Promise<Blob | null>((res, rej) => {
+          try {
+            canvas.toBlob(res, "image/png");
+          } catch (e) {
+            rej(e);
+          }
+        });
+        if (!blob) throw new Error("The browser could not rotate this photo.");
+        setRotatedSrc(URL.createObjectURL(blob));
+      }
+      setRotation(next);
+      // The old box was drawn on the unrotated photo — start from the whole
+      // picture, so Apply can also save just the rotation.
+      setRect({ x: 0, y: 0, w: 1, h: 1 });
+      setStep(null);
+    } catch (e) {
+      setStep(null);
+      setErr(e instanceof Error ? e.message : "Rotate failed — please try again.");
+    } finally {
+      revoke();
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -161,7 +225,8 @@ export function ItemRefCropDialog({
     let revoke = () => {};
     try {
       setStep("Reading the photo…");
-      const safe = await croppableImage(src);
+      // The rotated preview is a same-origin blob: — crop from it directly.
+      const safe = await croppableImage(rotatedSrc ?? src);
       revoke = safe.revoke;
       const el = safe.img;
       const nw = el.naturalWidth || 0;
@@ -233,7 +298,7 @@ export function ItemRefCropDialog({
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:p-0 max-md:items-stretch">
         <div className="flex max-h-[min(92vh,900px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--wms-border)] px-4 py-3">
-            <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">Crop reference photo</h3>
+            <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">Crop / rotate reference photo</h3>
             <button
               type="button"
               onClick={() => !busy && onCancel()}
@@ -263,6 +328,12 @@ export function ItemRefCropDialog({
               <button type="button" onClick={() => setRect(null)} disabled={busy || !rect} className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-muted)] disabled:opacity-40 max-md:min-h-11 max-md:px-3">
                 Reset
               </button>
+              <button type="button" onClick={() => void rotateBy(-90)} disabled={busy} title="Rotate 90° counter-clockwise" className="wms-btn-ghost rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3">
+                ⟲ Rotate left
+              </button>
+              <button type="button" onClick={() => void rotateBy(90)} disabled={busy} title="Rotate 90° clockwise" className="wms-btn-ghost rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3">
+                ⟳ Rotate right
+              </button>
             </div>
 
             {/* The inner box SHRINK-WRAPS the image. Previously the <img> was
@@ -276,7 +347,7 @@ export function ItemRefCropDialog({
             <div className="relative select-none overflow-hidden leading-none">
               <img
                 ref={imgRef}
-                src={src}
+                src={rotatedSrc ?? src}
                 alt="reference to crop"
                 draggable={false}
                 onPointerDown={onPointerDown}
@@ -323,7 +394,7 @@ export function ItemRefCropDialog({
               disabled={busy || !rect || rect.w < 0.02 || rect.h < 0.02}
               className="wms-btn-accent-soft rounded px-3 py-2 font-mono text-xs disabled:opacity-50 max-md:min-h-11 max-md:px-4"
             >
-              {busy ? "Saving…" : "Apply crop"}
+              {busy ? "Saving…" : rotation && rect && rect.w >= 0.99 && rect.h >= 0.99 ? "Apply rotation" : "Apply crop"}
             </button>
           </div>
         </div>

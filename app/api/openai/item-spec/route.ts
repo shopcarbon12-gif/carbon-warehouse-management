@@ -32,6 +32,7 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { classifyBackView } from "@/lib/studio-item-spec";
+import { detectUprightTurns } from "@/lib/server/studio-upright";
 import { buildLockText, buildSpecInstruction, isAccessoryItemType, text } from "@/lib/server/item-spec-build";
 
 /* Every photo the operator sorted is analysed. The old cap of 6 silently dropped
@@ -106,12 +107,12 @@ async function POST_handler(req: NextRequest) {
     // operator sees), so a photo warning can name "FRONT photo 2".
     const sectionPos = entries.map((e, i) => entries.slice(0, i + 1).filter((x) => x.view === e.view).length);
     const loaded = resolved
-      .map((r, i) => ({ r, view: entries[i].view, pos: sectionPos[i] }))
+      .map((r, i) => ({ r, view: entries[i].view, pos: sectionPos[i], ref: entries[i].url }))
       .filter(
-        (e): e is { r: PromiseFulfilledResult<string>; view: "general" | "front" | "back"; pos: number } =>
+        (e): e is { r: PromiseFulfilledResult<string>; view: "general" | "front" | "back"; pos: number; ref: string } =>
           e.r.status === "fulfilled" && !!e.r.value,
       )
-      .map((e) => ({ url: e.r.value, view: e.view, pos: e.pos }));
+      .map((e) => ({ url: e.r.value, view: e.view, pos: e.pos, ref: e.ref }));
     const images = loaded.map((e) => e.url);
     if (!images.length) {
       return NextResponse.json({ error: "None of the item reference images could be loaded." }, { status: 400 });
@@ -132,19 +133,24 @@ async function POST_handler(req: NextRequest) {
     };
     const imageContent: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
     // Every image gets an "Image N" heading so photo_checks can point at it.
-    const numbered: Array<{ view: "general" | "front" | "back"; pos: number }> = [];
+    const numbered: Array<{ view: "general" | "front" | "back"; pos: number; ref: string; data: string }> = [];
     for (const view of ["back", "front", "general"] as const) {
       const shots = loaded.filter((e) => e.view === view);
       if (!shots.length) continue;
       if (sortedViews) imageContent.push({ type: "text", text: viewHeading[view] });
       for (const shot of shots) {
-        numbered.push({ view, pos: shot.pos });
+        numbered.push({ view, pos: shot.pos, ref: shot.ref, data: shot.url });
         imageContent.push({ type: "text", text: `Image ${numbered.length}${sortedViews ? ` (${view.toUpperCase()} photo ${shot.pos})` : ""}:` });
         imageContent.push({ type: "image_url" as const, image_url: { url: shot.url, detail: "high" as const } });
       }
     }
 
     const client = new OpenAI({ apiKey });
+    // Which way is up, per photo — runs alongside the analysis, never fails it.
+    const uprightTurns = detectUprightTurns(client, model, numbered).catch((e) => {
+      console.warn("[item-spec] upright check failed", e);
+      return new Map<number, 90 | 180 | 270>();
+    });
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
     let raw = "";
@@ -191,9 +197,15 @@ async function POST_handler(req: NextRequest) {
     }
     const lockText = buildLockText(spec, { accessory: isAccessoryItemType(itemType) });
     if (!lockText) return NextResponse.json({ error: "Item analysis found nothing to lock. Add clearer item photos." }, { status: 422 });
-    const photoWarnings = buildPhotoWarnings(spec?.photo_checks, numbered);
+    const { warnings: photoWarnings } = buildPhotoChecks(spec?.photo_checks, numbered);
+    const turns = await uprightTurns;
+    const photoRotations = numbered.flatMap((x, i) => {
+      const degrees = turns.get(i + 1);
+      return degrees ? [{ url: x.ref, view: x.view, degrees }] : [];
+    });
     return NextResponse.json({
       photoWarnings,
+      photoRotations,
       spec,
       lockText,
       backView: classifyBackView(spec?.back_view, spec?.back_state).state,
@@ -210,39 +222,28 @@ async function POST_handler(req: NextRequest) {
 }
 
 /**
- * Turn the analysis' per-image photo_checks into operator warnings: a FRONT or
- * BACK section made only of close-ups (sizes and positions come out wrong — a
- * close-up makes a chest print look like the back artwork), and photos shot
- * upside down. Lesson from 2026-10-13: one shirt's front had three upside-down
- * close-ups and the renders put the large back print on the front.
+ * Photo problems only the operator can fix: a FRONT or BACK section made of
+ * close-ups alone, where print sizes and positions cannot be read (2026-10-13:
+ * a close-up-only front put the back-sized artwork on the chest).
  */
-function buildPhotoWarnings(
+function buildPhotoChecks(
   checks: unknown,
   numbered: Array<{ view: "general" | "front" | "back"; pos: number }>,
-): string[] {
-  if (!Array.isArray(checks)) return [];
-  const byImage = new Map<number, { closeup: boolean; upside: boolean }>();
-  for (const c of checks as Array<{ image?: unknown; closeup?: unknown; upside_down?: unknown }>) {
+): { warnings: string[] } {
+  const warnings: string[] = [];
+  if (!Array.isArray(checks)) return { warnings };
+  const closeup = new Set<number>();
+  for (const c of checks as Array<{ image?: unknown; closeup?: unknown }>) {
     const n = Number(c?.image);
-    if (!Number.isInteger(n) || n < 1 || n > numbered.length) continue;
-    byImage.set(n, { closeup: c?.closeup === true, upside: c?.upside_down === true });
+    if (Number.isInteger(n) && c?.closeup === true) closeup.add(n);
   }
-  const out: string[] = [];
   for (const view of ["front", "back"] as const) {
     const idx = numbered.map((x, i) => ({ ...x, n: i + 1 })).filter((x) => x.view === view);
-    if (!idx.length) continue;
-    if (idx.every((x) => byImage.get(x.n)?.closeup === true)) {
-      out.push(`${view.toUpperCase()} has only close-ups — add one photo of the whole ${view} (collar to hem) so print sizes and positions come out right.`);
+    if (idx.length && idx.every((x) => closeup.has(x.n))) {
+      warnings.push(`${view.toUpperCase()} has only close-ups — add one photo of the whole ${view} (collar to hem) so print sizes and positions come out right.`);
     }
   }
-  const upside = numbered
-    .map((x, i) => ({ ...x, n: i + 1 }))
-    .filter((x) => byImage.get(x.n)?.upside === true)
-    .map((x) => `${x.view.toUpperCase()} photo ${x.pos}`);
-  if (upside.length) {
-    out.push(`${upside.join(", ")} ${upside.length === 1 ? "looks" : "look"} upside down — re-take ${upside.length === 1 ? "it" : "them"} the right way up (collar at the top), or remove ${upside.length === 1 ? "it" : "them"}.`);
-  }
-  return out;
+  return { warnings };
 }
 
 export const POST = withActivity("openai/item-spec", POST_handler);

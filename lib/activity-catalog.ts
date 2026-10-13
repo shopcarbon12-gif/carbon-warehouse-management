@@ -80,6 +80,7 @@ const ROUTES: Record<string, Entry> = {
   "openai/color-check": { module: "Studio", label: "Checked colourway photo" },
   "openai/image-alt": { module: "Studio", label: "Wrote image alt text" },
   "models/upload": { module: "Studio", label: "Uploaded model photo" },
+  "studio/rotate-ref": { module: "Studio", label: "Rotated a reference photo" },
 
   "shopify/publish": { module: "Shopify", label: "Published to Shopify" },
   "shopify/sales/[id]/thank-you-code": { module: "Shopify", label: { PUT: "Switched thank-you code on/off" } },

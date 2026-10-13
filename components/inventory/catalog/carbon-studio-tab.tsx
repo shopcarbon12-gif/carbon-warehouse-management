@@ -607,6 +607,11 @@ export function CarbonStudioTab({
   const [stateLoaded, setStateLoaded] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /** Photo problems only the operator can fix (a close-ups-only side) — amber,
+   *  not red: nothing failed. */
+  const [photoWarn, setPhotoWarn] = useState<string | null>(null);
+  /** Reference photo being turned upright on the server (thumbnail ⟳). */
+  const [rotatingUrl, setRotatingUrl] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [zoom, setZoom] = useState<string | null>(null);
   /* The item reference behind the zoomed image, when there is one — so the
@@ -1323,6 +1328,51 @@ export function CarbonStudioTab({
 
   /** High-detail vision pass over the item reference photos → numbered lock
    *  list (see /api/openai/item-spec). Stores the spec + the refs it covers. */
+  /** Turn a stored reference upright on the server; resolves to the new URL. */
+  const rotateStoredRef = useCallback(async (url: string, degrees: 90 | 180 | 270): Promise<string> => {
+    const r = await fetch("/api/studio/rotate-ref", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, degrees }),
+    });
+    const j = (await r.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!r.ok || !j.url) throw new Error(j.error ?? `Rotate failed (HTTP ${r.status})`);
+    return j.url;
+  }, []);
+
+  /** Swap rotated copies in for their originals (every section a photo is in).
+   *  Turning a photo upright does not change what it shows, so a spec that
+   *  covered the old photos still covers the new ones — no re-analysis. */
+  const swapRefUrls = useCallback((swaps: Map<string, string>) => {
+    const prev = itemRefsRef.current;
+    const next = prev.map((x) => {
+      const url = swaps.get(x.url);
+      return url ? { url, preview: previewFor(url), view: x.view } : x;
+    });
+    const oldKey = refViewKey(groupRefs(prev));
+    const newKey = refViewKey(groupRefs(next));
+    itemRefsRef.current = next;
+    setItemRefs(next);
+    setSpecRefsKey((k) => (k === oldKey ? newKey : k));
+  }, []);
+
+  /** Thumbnail ⟳ — 90° clockwise per click. */
+  const rotateRefByHand = useCallback(
+    async (url: string) => {
+      setRotatingUrl(url);
+      setErr(null);
+      try {
+        const rotated = await rotateStoredRef(url, 90);
+        swapRefUrls(new Map([[url, rotated]]));
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Rotate failed");
+      } finally {
+        setRotatingUrl(null);
+      }
+    },
+    [rotateStoredRef, swapRefUrls],
+  );
+
   const analyzeItem = useCallback(
     async (views: RefViewLists, signal?: AbortSignal): Promise<{ lockText: string; dropped: number } | null> => {
       const refUrls = orderedRefUrls(views);
@@ -1345,8 +1395,10 @@ export function CarbonStudioTab({
           imagesDropped?: number;
           imagesFailed?: number;
           failedViews?: RefView[];
-          /** Close-up-only sections and upside-down photos (see the route). */
+          /** A FRONT/BACK section made of close-ups only (see the route). */
           photoWarnings?: string[];
+          /** Photos lying sideways / upside down, with the clockwise turn. */
+          photoRotations?: Array<{ url: string; degrees: 90 | 180 | 270 }>;
         };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
@@ -1356,16 +1408,33 @@ export function CarbonStudioTab({
         const failed = Number(j.imagesFailed) || 0;
         // A photo the analysis could not open is a photo the spec knows nothing
         // about — say so, loudly, instead of letting the spec look complete.
-        // Close-ups-only sections and upside-down photos are why a chest print
-        // comes back the size of the back artwork — say so before generating.
-        const photoWarnings = (j.photoWarnings ?? []).filter(Boolean);
         setErr(
           failed
             ? `${failed} photo${failed === 1 ? "" : "s"} (${(j.failedViews ?? []).join(", ") || "unknown section"}) could not be opened by the analysis — the spec does not cover ${failed === 1 ? "it" : "them"}. Re-upload and re-analyze, or check the spec by hand.`
-            : photoWarnings.length
-              ? `Check the photos before generating: ${photoWarnings.join(" ")}`
-              : null,
+            : null,
         );
+        // A close-ups-only side is why a chest print comes back the size of the
+        // back artwork — the one photo problem only the operator can fix.
+        const photoWarnings = (j.photoWarnings ?? []).filter(Boolean);
+        setPhotoWarn(photoWarnings.length ? photoWarnings.join(" ") : null);
+        // Flat lays shot from above come out sideways / upside down (the phone
+        // cannot tell which way is up). Straighten them here; nothing to re-take.
+        const turns = (j.photoRotations ?? []).filter((t) => t?.url && [90, 180, 270].includes(t.degrees));
+        if (turns.length) {
+          const swaps = new Map<string, string>();
+          for (const t of turns) {
+            if (swaps.has(t.url)) continue;
+            try {
+              swaps.set(t.url, await rotateStoredRef(t.url, t.degrees));
+            } catch (e) {
+              console.warn("[studio] auto-rotate failed", t.url, e);
+            }
+          }
+          if (swaps.size) {
+            swapRefUrls(swaps);
+            setMsg(`Straightened ${swaps.size} photo${swaps.size === 1 ? "" : "s"} that ${swaps.size === 1 ? "was" : "were"} lying sideways or upside down.`);
+          }
+        }
         const dropped = Number(j.imagesDropped) || 0;
         if (dropped) setMsg(`Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).`);
         return { lockText: j.lockText, dropped };
@@ -1380,7 +1449,7 @@ export function CarbonStudioTab({
         setSpecBusy(false);
       }
     },
-    [itemType],
+    [itemType, rotateStoredRef, swapRefUrls],
   );
 
   const generate = useCallback(async () => {
@@ -2370,6 +2439,20 @@ export function CarbonStudioTab({
                       >
                         ✕
                       </button>
+                      {canManage && /r2\.cloudflarestorage\.com/i.test(ref.url) ? (
+                        <button
+                          type="button"
+                          title="Rotate 90° clockwise"
+                          disabled={rotatingUrl !== null}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void rotateRefByHand(ref.url);
+                          }}
+                          className="absolute -left-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-fg)] hover:text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-9 max-md:min-w-9"
+                        >
+                          {rotatingUrl === ref.url ? "…" : "⟳"}
+                        </button>
+                      ) : null}
                       {ref.preview ? (
                         <button
                           type="button"
@@ -2824,6 +2907,7 @@ export function CarbonStudioTab({
         ) : null}
         {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
         {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
+        {photoWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{photoWarn}</span> : null}
         {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
 
