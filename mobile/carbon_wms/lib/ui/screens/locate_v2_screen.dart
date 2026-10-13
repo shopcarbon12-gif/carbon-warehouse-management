@@ -75,14 +75,11 @@ enum _Stage { find, sweep, narrow, confirm }
 
 enum _Power { unknown, confirmed, adjusting, fixed }
 
-class _LocateV2ScreenState extends State<LocateV2Screen> {
+class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProviderStateMixin {
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
   static const int _tickMs = 16; // beep cadence needs ~16 ms granularity
 
-  /// Same Geiger cadence as the classic screen: geometric from 650 ms (far)
-  /// to 45 ms (on top of the tag), louder as it gets closer.
-  static const double _beepSlowMs = 650;
-  static const double _beepFastMs = 45;
+
   static const int _searchDbm = 30;
 
   RfidManager? _rfid;
@@ -94,6 +91,12 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
 
   final ValueNotifier<LocateReading> _reading = ValueNotifier(LocateReading.idle);
   final ValueNotifier<bool> _radioLive = ValueNotifier(false);
+
+  /// Gliding 0..1 for the radar halo/sweep (every tick, smooth); the % number
+  /// itself comes from the calmer [_reading].
+  final ValueNotifier<double> _prox = ValueNotifier(0);
+  late final AnimationController _sweepAnim =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
   final ValueNotifier<SweepResult> _sweepView =
       ValueNotifier(const SweepResult(SweepStatus.calibrating));
 
@@ -202,6 +205,8 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     unawaited(RfidVendorChannel.open2dBarcode());
     unawaited(_postSession());
+    _sweepAnim.dispose();
+    _prox.dispose();
     _reading.dispose();
     _radioLive.dispose();
     _sweepView.dispose();
@@ -309,6 +314,7 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
       await _startSignal(engine);
     }
     _readyMs ??= _clock.elapsedMilliseconds;
+    unawaited(_sweepAnim.repeat());
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(milliseconds: _tickMs), (_) => _tick());
     if (_stage == _Stage.sweep) _startYaw();
@@ -366,6 +372,10 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
     _trial = null;
     _engine?.clearEvidence();
     _reading.value = LocateReading.idle;
+    _sweepAnim.stop();
+    _prox.value = 0;
+    _beepLevel = 0;
+    _lastBeepTickMs = 0;
     _displaySignal = null;
     _lastDisplayMs = 0;
     _shownPresence = LocatePresence.searching;
@@ -450,14 +460,25 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
       }
     }
 
-    // Audio: classic Geiger — closer = faster and louder, decided every tick
-    // against the CURRENT level so closing in speeds up immediately.
-    if (_powerState == _Power.adjusting) return;
+    // Audio: the original Locate beep, faster and louder as it gets closer
+    // (classic cadence 650 ms → 45 ms). Once found it keeps beeping through
+    // short read gaps — holds 0.6 s, then fades over ~0.8 s — instead of
+    // cutting off the moment one read is missed.
+    final dt = _lastBeepTickMs == 0 ? 0 : now - _lastBeepTickMs;
+    _lastBeepTickMs = now;
     final level = reading.relativeProximity != null
         ? reading.relativeProximity! / 100.0
         : reading.signal;
-    if (reading.presence == LocatePresence.detected && level != null && level > 0.02) {
-      final p = level.clamp(0.0, 1.0);
+    if (reading.presence == LocatePresence.detected && level != null) {
+      _beepLevel = level.clamp(0.0, 1.0);
+      _beepHeardMs = now;
+    } else if (now - _beepHeardMs > 600) {
+      _beepLevel *= math.exp(-dt / 800.0);
+      if (_beepLevel < 0.02) _beepLevel = 0;
+    }
+    if (_powerState == _Power.adjusting) return;
+    if (_beepLevel > 0.02) {
+      final p = _beepLevel;
       final interval = (_beepSlowMs * math.pow(_beepFastMs / _beepSlowMs, p)).round();
       if (now - _lastBeepMs >= interval) {
         _lastBeepMs = now;
@@ -468,6 +489,12 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
       ScanSounds.instance.play(ScanCue.read, volume: 0.5);
     }
   }
+
+  static const double _beepSlowMs = 650;
+  static const double _beepFastMs = 45;
+  double _beepLevel = 0;
+  int _beepHeardMs = 0;
+  int _lastBeepTickMs = 0;
 
   /// Calm view of [r]: the bar/number glide (≈0.35 s), the status words only
   /// change once a new state has held (0.3 s up, 0.8 s down), and the screen
@@ -483,6 +510,8 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
       final a = dt <= 0 ? 1.0 : 1 - math.exp(-dt / 350.0);
       _displaySignal = cur + (raw - cur) * a;
     }
+
+    _prox.value = r.presence == LocatePresence.detected ? (_displaySignal ?? 0).clamp(0.0, 1.0) : 0.0;
 
     if (r.presence != _pendingPresence) {
       _pendingPresence = r.presence;
@@ -779,7 +808,25 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
               connected: _caps.connected || _radioLive.value,
             ),
             SizedBox(height: 8.h),
-            _SignalPanel(reading: _reading, zebra: _engineMode == _Engine.zebra),
+            Center(
+              child: RepaintBoundary(
+                child: _Radar(
+                  sweep: _sweepAnim,
+                  proximity: _prox,
+                  reading: _reading,
+                  scanning: _scanning,
+                  zebra: _engineMode == _Engine.zebra,
+                ),
+              ),
+            ),
+            SizedBox(height: 4.h),
+            Text(
+              _engineMode == _Engine.zebra
+                  ? 'Zebra\'s relative value — higher is closer. Not a distance.'
+                  : 'Signal strength at the current range — higher is stronger. Not a distance.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+            ),
             SizedBox(height: 6.h),
             _HistoryStrip(engine: engine, reading: _reading),
             SizedBox(height: 6.h),
@@ -1185,62 +1232,167 @@ class _StatusLine extends StatelessWidget {
   }
 }
 
-class _SignalPanel extends StatelessWidget {
-  const _SignalPanel({required this.reading, required this.zebra});
+/// The classic round radar with the big percentage (owner's preference):
+/// halo grows with the signal, a sweep cone orbits while scanning.
+class _Radar extends StatelessWidget {
+  const _Radar({
+    required this.sweep,
+    required this.proximity,
+    required this.reading,
+    required this.scanning,
+    required this.zebra,
+  });
 
+  final AnimationController sweep;
+  final ValueListenable<double> proximity;
   final ValueListenable<LocateReading> reading;
+  final bool scanning;
   final bool zebra;
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<LocateReading>(
-      valueListenable: reading,
-      builder: (_, r, __) {
-        final v = zebra
-            ? (r.relativeProximity == null ? null : r.relativeProximity! / 100.0)
-            : r.signal;
-        final pct = v == null ? null : (v * 100).round();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(zebra ? 'ZEBRA PROXIMITY' : 'SIGNAL', style: _label()),
-                const Spacer(),
-                Text(
-                  pct == null ? '—' : '$pct',
-                  style: GoogleFonts.spaceGrotesk(fontSize: 34.sp, fontWeight: FontWeight.w900, color: Colors.black, height: 1),
-                ),
-              ],
-            ),
-            SizedBox(height: 4.h),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                height: 28,
-                child: Stack(
-                  children: [
-                    Container(color: const Color(0xFFE2E7E7)),
-                    FractionallySizedBox(
-                      widthFactor: (v ?? 0).clamp(0.0, 1.0),
-                      child: Container(color: v == null ? Colors.transparent : AppColors.primary),
-                    ),
-                  ],
+    return LayoutBuilder(
+      builder: (context, c) {
+        final size = math.min(c.maxWidth, 320.w);
+        return SizedBox(
+          width: size,
+          height: size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.primary.withValues(alpha: 0.04),
                 ),
               ),
-            ),
-            SizedBox(height: 2.h),
-            Text(
-              zebra
-                  ? 'Zebra\'s relative value — higher is closer. Not a distance.'
-                  : 'Signal strength at the current range — higher is stronger. Not a distance.',
-              style: GoogleFonts.manrope(fontSize: 11.sp, color: AppColors.textMuted, fontWeight: FontWeight.w600),
-            ),
-          ],
+              for (final scale in const [0.85, 0.65, 0.45])
+                SizedBox(
+                  width: size * scale,
+                  height: size * scale,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
+                    ),
+                  ),
+                ),
+              ValueListenableBuilder<double>(
+                valueListenable: proximity,
+                builder: (_, p, __) => Container(
+                  width: size * (0.55 + 0.30 * p),
+                  height: size * (0.55 + 0.30 * p),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.primary.withValues(alpha: 0.10 + 0.20 * p),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.25 + 0.40 * p),
+                        blurRadius: 20 + 28 * p,
+                        spreadRadius: 3 + 7 * p,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (scanning)
+                RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([sweep, proximity]),
+                    builder: (_, __) => CustomPaint(
+                      size: Size(size, size),
+                      painter: _RadarSweepPainter(
+                        angle: sweep.value * 2 * math.pi,
+                        proximity: proximity.value,
+                      ),
+                    ),
+                  ),
+                ),
+              ValueListenableBuilder<LocateReading>(
+                valueListenable: reading,
+                builder: (_, r, __) {
+                  final v = zebra
+                      ? (r.relativeProximity == null ? null : r.relativeProximity! / 100.0)
+                      : r.signal;
+                  final pct = ((v ?? 0) * 100).round().clamp(0, 100);
+                  return Container(
+                    width: size * 0.53,
+                    height: size * 0.53,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      border: Border.all(color: AppColors.primary, width: 4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '$pct%',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 50.sp,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textMain,
+                            height: 1.0,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        SizedBox(height: 4.h),
+                        Text(
+                          zebra ? 'ZEBRA' : 'PROXIMITY',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 11.sp,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2.4,
+                            color: const Color(0xFF6D7979),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
         );
       },
     );
   }
+}
+
+class _RadarSweepPainter extends CustomPainter {
+  _RadarSweepPainter({required this.angle, required this.proximity});
+
+  final double angle;
+  final double proximity;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final gradient = SweepGradient(
+      transform: GradientRotation(angle - math.pi / 2),
+      colors: [
+        AppColors.primary.withValues(alpha: 0.0),
+        AppColors.primary.withValues(alpha: 0.08 + 0.40 * proximity),
+        AppColors.primary.withValues(alpha: 0.0),
+        AppColors.primary.withValues(alpha: 0.0),
+      ],
+      stops: const [0.0, 0.10, 0.25, 1.0],
+    );
+    canvas.drawCircle(center, radius, Paint()..shader = gradient.createShader(rect));
+  }
+
+  @override
+  bool shouldRepaint(covariant _RadarSweepPainter old) =>
+      old.angle != angle || old.proximity != proximity;
 }
 
 class _HistoryStrip extends StatelessWidget {
