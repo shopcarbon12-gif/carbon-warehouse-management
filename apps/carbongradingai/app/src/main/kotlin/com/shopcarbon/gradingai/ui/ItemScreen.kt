@@ -30,6 +30,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.shopcarbon.gradingai.App
+import com.shopcarbon.gradingai.measure.LabelCheck
 import com.shopcarbon.gradingai.measure.MeasureTarget
 import com.shopcarbon.gradingai.model.Lookup
 import kotlinx.coroutines.Dispatchers
@@ -130,33 +131,5 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
             }
         }
         if (labelFlag?.startsWith("care label says") == true) Notice("The care label shows another size. Pick the size on the label — or check the label again.", Palette.warn)
-    }
-}
-
-/** Reads a care label: the size printed on it, and fabric percentages against the WMS's fabric line. */
-object LabelCheck {
-    data class Result(val summary: String, val flag: String?, val sizeOnLabel: String?)
-
-    fun compare(text: String, sizes: List<String>, chosen: String?, wmsFabric: String?): Result {
-        val up = text.uppercase()
-        val tokens = Regex("[A-Z0-9]+").findAll(up).map { it.value }.toSet()
-        val onLabel = sizes.filter { it in tokens }.sortedByDescending { it.length }
-        val notes = mutableListOf<String>()
-        var flag: String? = null
-        val labelSize = onLabel.firstOrNull()
-        when {
-            labelSize == null -> notes += "No size found on the label."
-            chosen != null && labelSize != chosen -> { notes += "Label says $labelSize — you picked $chosen."; flag = "care label says $labelSize, measured as $chosen" }
-            else -> notes += "Size $labelSize matches."
-        }
-        val pct = Regex("(\\d{1,3})\\s*%\\s*([A-Z]+)").findAll(up).map { it.groupValues[2] to it.groupValues[1].toInt() }.toMap()
-        if (pct.isNotEmpty()) {
-            val wms = Regex("(\\d{1,3})\\s*%\\s*([A-Za-z]+)").findAll(wmsFabric.orEmpty().uppercase()).map { it.groupValues[2] to it.groupValues[1].toInt() }.toMap()
-            val read = pct.entries.joinToString { "${it.value}% ${it.key.lowercase()}" }
-            if (wms.isEmpty()) notes += "Fabric on label: $read (none in the WMS)."
-            else if (wms != pct) { notes += "Fabric on label ($read) differs from the WMS ($wmsFabric)."; flag = flag ?: "care label fabric differs from WMS: $read" }
-            else notes += "Fabric matches the WMS."
-        }
-        return Result(notes.joinToString(" "), flag, labelSize)
     }
 }
