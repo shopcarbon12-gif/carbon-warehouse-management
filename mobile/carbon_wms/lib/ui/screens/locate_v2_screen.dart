@@ -77,7 +77,12 @@ enum _Power { unknown, confirmed, adjusting, fixed }
 
 class _LocateV2ScreenState extends State<LocateV2Screen> {
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
-  static const int _tickMs = 50;
+  static const int _tickMs = 16; // beep cadence needs ~16 ms granularity
+
+  /// Same Geiger cadence as the classic screen: geometric from 650 ms (far)
+  /// to 45 ms (on top of the tag), louder as it gets closer.
+  static const double _beepSlowMs = 650;
+  static const double _beepFastMs = 45;
   static const int _searchDbm = 30;
 
   RfidManager? _rfid;
@@ -109,6 +114,17 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
   bool _confirmed = false;
   DateTime _lastToggle = DateTime.fromMillisecondsSinceEpoch(0);
   int _lastBeepMs = 0;
+
+  // Display pacing — the engine and the beep run every tick (16 ms); what the
+  // operator READS changes at a calm pace so nothing jumps.
+  static const int _publishMs = 200;
+  int _lastPublishMs = 0;
+  int _lastSweepPublishMs = 0;
+  int _lastDisplayMs = 0;
+  double? _displaySignal;
+  LocatePresence _shownPresence = LocatePresence.searching;
+  LocatePresence _pendingPresence = LocatePresence.searching;
+  int _pendingSinceMs = 0;
 
   // Any-unit mode.
   bool _loadingUnits = false;
@@ -350,6 +366,10 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
     _trial = null;
     _engine?.clearEvidence();
     _reading.value = LocateReading.idle;
+    _displaySignal = null;
+    _lastDisplayMs = 0;
+    _shownPresence = LocatePresence.searching;
+    _pendingPresence = LocatePresence.searching;
     await _yawSub?.cancel();
     _yawSub = null;
     if (mounted) setState(() => _scanning = false);
@@ -401,14 +421,16 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
     if (!_scanning || engine == null) return;
     final now = _clock.elapsedMilliseconds;
     final reading = engine.tick(now);
-    _reading.value = reading;
+    _publish(reading, now);
 
     if (_stage == _Stage.sweep) {
       _sweep.calibrate();
-      final res = _sweep.result();
-      // A fresh instance every tick (no ==), so the "left/right of where you
-      // point now" wording stays live.
-      _sweepView.value = res;
+      if (now - _lastSweepPublishMs >= 250) {
+        _lastSweepPublishMs = now;
+        // A fresh instance (no ==), so the "left/right of where you point
+        // now" wording follows the operator — 4× a second, not 60.
+        _sweepView.value = _sweep.result();
+      }
     }
 
     final trial = _trial;
@@ -428,21 +450,66 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
       }
     }
 
-    // Audio: one question — is the signal stronger at this setting?
+    // Audio: classic Geiger — closer = faster and louder, decided every tick
+    // against the CURRENT level so closing in speeds up immediately.
     if (_powerState == _Power.adjusting) return;
     final level = reading.relativeProximity != null
         ? reading.relativeProximity! / 100.0
         : reading.signal;
-    int? interval;
-    if (reading.presence == LocatePresence.detected && level != null) {
-      interval = (1000 / (1 + 5 * level.clamp(0.0, 1.0))).round(); // 1–6 pulses/s
-    } else if (reading.presence == LocatePresence.detectedNoStrength) {
-      interval = 1000;
-    }
-    if (interval != null && now - _lastBeepMs >= interval) {
+    if (reading.presence == LocatePresence.detected && level != null && level > 0.02) {
+      final p = level.clamp(0.0, 1.0);
+      final interval = (_beepSlowMs * math.pow(_beepFastMs / _beepSlowMs, p)).round();
+      if (now - _lastBeepMs >= interval) {
+        _lastBeepMs = now;
+        ScanSounds.instance.play(ScanCue.read, volume: (0.40 + 0.60 * p).clamp(0.0, 1.0));
+      }
+    } else if (reading.presence == LocatePresence.detectedNoStrength && now - _lastBeepMs >= 1000) {
       _lastBeepMs = now;
-      ScanSounds.instance.play(ScanCue.read, volume: 0.85);
+      ScanSounds.instance.play(ScanCue.read, volume: 0.5);
     }
+  }
+
+  /// Calm view of [r]: the bar/number glide (≈0.35 s), the status words only
+  /// change once a new state has held (0.3 s up, 0.8 s down), and the screen
+  /// is repainted 5× a second instead of 60.
+  void _publish(LocateReading r, int now) {
+    final dt = _lastDisplayMs == 0 ? 0 : now - _lastDisplayMs;
+    _lastDisplayMs = now;
+    final raw = r.relativeProximity != null ? r.relativeProximity! / 100.0 : r.signal;
+    if (raw == null) {
+      _displaySignal = null;
+    } else {
+      final cur = _displaySignal ?? raw;
+      final a = dt <= 0 ? 1.0 : 1 - math.exp(-dt / 350.0);
+      _displaySignal = cur + (raw - cur) * a;
+    }
+
+    if (r.presence != _pendingPresence) {
+      _pendingPresence = r.presence;
+      _pendingSinceMs = now;
+    }
+    final hold = _pendingPresence == LocatePresence.searching ? 800 : 300;
+    var changed = false;
+    if (_pendingPresence != _shownPresence && now - _pendingSinceMs >= hold) {
+      _shownPresence = _pendingPresence;
+      changed = true;
+    }
+    if (!changed && now - _lastPublishMs < _publishMs) return;
+    _lastPublishMs = now;
+    final shownSignal = _shownPresence == LocatePresence.detected ? _displaySignal : null;
+    _reading.value = LocateReading(
+      presence: _shownPresence,
+      followedEpc: r.followedEpc,
+      signal: r.relativeProximity == null ? shownSignal : r.signal,
+      medianRssi: r.medianRssi,
+      relativeProximity: r.relativeProximity == null
+          ? null
+          : (shownSignal == null ? r.relativeProximity : (shownSignal * 100).round()),
+      readsPerSec: r.readsPerSec,
+      windowsHit: r.windowsHit,
+      lastSeenAgeMs: r.lastSeenAgeMs,
+      candidatesHeard: r.candidatesHeard,
+    );
   }
 
   // ── Stage actions ────────────────────────────────────────────────────────
@@ -716,11 +783,17 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
             SizedBox(height: 6.h),
             _HistoryStrip(engine: engine, reading: _reading),
             SizedBox(height: 6.h),
-            _PowerLine(state: _powerState, dbm: _powerDbm, minDbm: _minPowerDbm, zebra: _engineMode == _Engine.zebra),
-            if (_notice != null) ...[
-              SizedBox(height: 8.h),
-              _Notice(_notice!),
-            ],
+            SizedBox(
+              height: 36.h,
+              child: _PowerLine(state: _powerState, dbm: _powerDbm, minDbm: _minPowerDbm, zebra: _engineMode == _Engine.zebra),
+            ),
+            SizedBox(height: 8.h),
+            // Always reserves its space — a message arriving never pushes the
+            // buttons down under the operator's thumb.
+            SizedBox(
+              height: 58.h,
+              child: _notice == null ? null : _Notice(_notice!),
+            ),
             if (_stage == _Stage.sweep) ...[
               SizedBox(height: 10.h),
               _SweepPanel(view: _sweepView, sweep: _sweep, scanning: _scanning),
@@ -933,13 +1006,16 @@ class _AnyUnitPanel extends StatelessWidget {
             valueListenable: reading,
             builder: (_, r, __) {
               final epc = r.followedEpc;
-              if (epc == null) return const SizedBox.shrink();
-              final bin = binByEpc[epc];
+              final bin = epc == null ? null : binByEpc[epc];
               return Padding(
                 padding: EdgeInsets.only(top: 6.h),
                 child: Text(
-                  'FOLLOWING UNIT …${epc.substring(epc.length - 6)}${bin != null ? ' · BIN $bin' : ''}'
-                  '  ·  ${r.candidatesHeard} heard',
+                  epc == null
+                      ? 'NO UNIT HEARD YET'
+                      : 'FOLLOWING UNIT …${epc.substring(epc.length - 6)}${bin != null ? ' · BIN $bin' : ''}'
+                          '  ·  ${r.candidatesHeard} heard',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.robotoMono(fontSize: 13.sp, fontWeight: FontWeight.w800),
                 ),
               );
@@ -1097,6 +1173,8 @@ class _StatusLine extends StatelessWidget {
             Expanded(
               child: Text(
                 text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.spaceGrotesk(fontSize: 16.sp, fontWeight: FontWeight.w900, color: color),
               ),
             ),
@@ -1249,6 +1327,8 @@ class _PowerLine extends StatelessWidget {
     }
     return Text(
       minDbm == null ? text : '$text · lowest heard $minDbm dBm',
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
       style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w800, color: Colors.black),
     );
   }
@@ -1283,8 +1363,10 @@ class _SweepPanel extends StatelessWidget {
                   color: res.status == SweepStatus.found ? const Color(0xFF16A34A) : Colors.black,
                 ),
               ),
-              if (scanning && sweep.turningTooFast)
-                Text('Slower — too fast to read', style: GoogleFonts.manrope(fontSize: 13.sp, fontWeight: FontWeight.w800, color: const Color(0xFFBF2E2E))),
+              Opacity(
+                opacity: scanning && sweep.turningTooFast ? 1 : 0,
+                child: Text('Slower — too fast to read', style: GoogleFonts.manrope(fontSize: 13.sp, fontWeight: FontWeight.w800, color: const Color(0xFFBF2E2E))),
+              ),
               SizedBox(height: 8.h),
               SizedBox(
                 height: 90,
