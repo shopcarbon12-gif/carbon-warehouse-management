@@ -1114,6 +1114,69 @@ class WmsApiClient {
     return decoded;
   }
 
+  /// "Find any unit": the line's SKU, sold qty, units pulled, and the LIVE
+  /// units of that exact SKU here not yet pulled for any line.
+  Future<Map<String, dynamic>> fetchReplenishmentUnits(int lineId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/lines/$lineId/units');
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw WmsApiException(res.statusCode, 'Unexpected response');
+    }
+    return decoded;
+  }
+
+  /// Record one physically pulled unit (re-validated on the server). Returns
+  /// `{pickedUnits, required, linePicked}`; throws with the server's reason.
+  Future<Map<String, dynamic>> pickReplenishmentUnit(
+    int lineId,
+    String epc, {
+    String? method,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/lines/$lineId/units');
+    final res = await _http.post(
+      uri,
+      headers: {'Content-Type': 'application/json', ...await sessionAuthHeaders()},
+      body: jsonEncode({'epc': epc, if (method != null) 'method': method}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : const {};
+  }
+
+  Future<Map<String, dynamic>> unpickReplenishmentUnit(int lineId, String epc) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/store-replenishment/lines/$lineId/units')
+        .replace(queryParameters: {'epc': epc});
+    final res = await _http.delete(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : const {};
+  }
+
+  /// Locate 2.0 session log (engine comparison / rollout). Best-effort.
+  Future<void> postLocateSession(Map<String, dynamic> body) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/mobile/locate-sessions');
+    final res = await _http.post(
+      uri,
+      headers: {'Content-Type': 'application/json', ...await sessionAuthHeaders()},
+      body: jsonEncode(body),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+  }
+
   /// Tick / untick one sale line as found and pulled. Stock is not changed.
   Future<void> setReplenishmentPicked(int lineId, bool picked) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');

@@ -3,6 +3,7 @@ package com.shopcarbon.wms
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.zebra.rfid.api3.BEEPER_VOLUME
 import com.zebra.rfid.api3.ENUM_TRANSPORT
@@ -54,6 +55,18 @@ class CarbonZebraRfidController(
   private val mainHandler = Handler(Looper.getMainLooper())
 
   @Volatile private var tagSink: EventChannel.EventSink? = null
+
+  /**
+   * Locate measurement contract (Locate 2.0, 2026-10-12).
+   * [readGeneration] increments on every acknowledged power change and every
+   * native-locate start, and is stamped on each emitted read, so the Locate
+   * engine can discard reads taken under the PREVIOUS settings (the SDK
+   * flushes buffered tags for up to ~1 s after a stop).
+   * [nativeLocateActive] is Zebra's own TagLocationing mode — mutually
+   * exclusive with filtered inventory.
+   */
+  @Volatile private var readGeneration = 0
+  @Volatile private var nativeLocateActive = false
   @Volatile private var triggerSink: EventChannel.EventSink? = null
   @Volatile private var readerNameHint: String? = null
   @Volatile private var barcodeRelay: CarbonHardwareBarcodeRelay? = null
@@ -687,7 +700,12 @@ class CarbonZebraRfidController(
     // immediately. The actual SDK .stop() call runs on the executor as before but no
     // longer needs to win the race against in-flight tag-read callbacks.
     inventoryActive = false
+    val wasLocating = nativeLocateActive
+    nativeLocateActive = false
     executor.execute {
+      if (wasLocating) {
+        reader?.takeIf { it.isConnected }?.let { r -> runCatching { r.Actions.TagLocationing.Stop() } }
+      }
       try {
         reader?.takeIf { it.isConnected }?.let { stopInventoryWithRetry(it) }
       } catch (_: Exception) {
@@ -1588,6 +1606,162 @@ class CarbonZebraRfidController(
     }
   }
 
+  // ── Locate 2.0: acknowledged power, capabilities, native TagLocationing ──
+
+  private fun powerLevelsDbm(r: RFIDReader): Pair<IntArray, Int>? {
+    val levels = r.ReaderCapabilities.transmitPowerLevelValues ?: return null
+    if (levels.isEmpty()) return null
+    val maxRaw = levels.maxOrNull() ?: 0
+    val divisor = when {
+      maxRaw <= 33 -> 1
+      maxRaw <= 330 -> 10
+      else -> 100
+    }
+    return levels to divisor
+  }
+
+  /**
+   * Apply transmit power and ANSWER WITH WHAT THE RADIO ACTUALLY HAS.
+   * Unlike [setAntennaPowerDbm] (fire-and-forget, deduped), this always
+   * writes, reads the antenna config back, bumps [readGeneration] so reads
+   * from the old power can be discarded, and reports whether inventory was
+   * resumed. Used only by Locate 2.0; other screens keep the old path.
+   */
+  fun setAntennaPowerAck(dbm: Int, result: MethodChannel.Result) {
+    executor.execute {
+      val reply = HashMap<String, Any?>()
+      val clamped = dbm.coerceIn(0, 30)
+      reply["requestedDbm"] = clamped
+      try {
+        val r = reader
+        if (r == null || !r.isConnected) {
+          reply["ok"] = false
+          reply["error"] = "not_connected"
+          mainHandler.post { result.success(reply) }
+          return@execute
+        }
+        requestedPowerDbm.set(clamped)
+        val wasRunning = inventoryActive
+        if (wasRunning) {
+          inventoryActive = false
+          stopInventoryWithRetry(r)
+        }
+        currentPowerIdx = -1 // force the write past the cache
+        val ok = applyTransmitPowerDbm(r)
+        var appliedIdx = -1
+        var appliedDbm: Int? = null
+        try {
+          appliedIdx = r.Config.Antennas.getAntennaRfConfig(1).transmitPowerIndex
+          val pl = powerLevelsDbm(r)
+          if (pl != null && appliedIdx in pl.first.indices) appliedDbm = pl.first[appliedIdx] / pl.second
+        } catch (e: Exception) {
+          Log.w(TAG, "setAntennaPowerAck: read-back failed: ${e.message}")
+        }
+        readGeneration += 1
+        val resumed = if (wasRunning) resumeInventoryWithRetry(r) else false
+        reply["ok"] = ok && appliedDbm != null
+        reply["appliedDbm"] = appliedDbm
+        reply["appliedIdx"] = appliedIdx
+        reply["generation"] = readGeneration
+        reply["wasRunning"] = wasRunning
+        reply["resumed"] = resumed
+        reply["atMs"] = SystemClock.elapsedRealtime()
+        if (!ok) reply["error"] = lastError ?: "apply_failed"
+        Log.d(TAG, "setAntennaPowerAck: $reply")
+      } catch (e: Exception) {
+        reply["ok"] = false
+        reply["error"] = e.message ?: e.javaClass.simpleName
+      }
+      mainHandler.post { result.success(reply) }
+    }
+  }
+
+  /** Reader identity + what Locate can rely on, read live. */
+  fun locateCapabilities(result: MethodChannel.Result) {
+    executor.execute {
+      val reply = HashMap<String, Any?>()
+      try {
+        val r = reader
+        reply["connected"] = r?.isConnected == true
+        if (r != null && r.isConnected) {
+          val caps = r.ReaderCapabilities
+          reply["model"] = runCatching { caps.modelName }.getOrNull()
+          reply["firmware"] = runCatching { caps.firwareVersion }.getOrNull()
+          reply["serial"] = runCatching { caps.serialNumber }.getOrNull()
+          reply["locationingSupported"] = runCatching { caps.isTagLocationingSupported }.getOrDefault(false)
+          val pl = powerLevelsDbm(r)
+          if (pl != null) {
+            reply["powerLevelsDbm"] = pl.first.map { it / pl.second }.distinct().sorted()
+          }
+          reply["generation"] = readGeneration
+        }
+      } catch (e: Exception) {
+        reply["error"] = e.message ?: e.javaClass.simpleName
+      }
+      mainHandler.post { result.success(reply) }
+    }
+  }
+
+  /**
+   * Zebra's own TagLocationing for one exact EPC. Mutually exclusive with
+   * inventory: inventory is stopped first. Reads arrive through the normal
+   * read event with LocationInfo (relative 0-100 — NOT a distance).
+   */
+  fun startNativeLocate(epcHex: String?, result: MethodChannel.Result) {
+    executor.execute {
+      val reply = HashMap<String, Any?>()
+      try {
+        val r = reader
+        val epc = epcHex?.trim()?.uppercase()
+        if (r == null || !r.isConnected) {
+          reply["ok"] = false; reply["error"] = "not_connected"
+        } else if (epc == null || !epc.matches(EPC96)) {
+          reply["ok"] = false; reply["error"] = "invalid_epc"
+        } else if (runCatching { r.ReaderCapabilities.isTagLocationingSupported }.getOrDefault(false) != true) {
+          reply["ok"] = false; reply["error"] = "not_supported"
+        } else {
+          if (inventoryActive) {
+            inventoryActive = false
+            stopInventoryWithRetry(r)
+          }
+          if (nativeLocateActive) {
+            runCatching { r.Actions.TagLocationing.Stop() }
+            nativeLocateActive = false
+          }
+          readGeneration += 1
+          setBeeperVolumeCached(r, BEEPER_VOLUME.QUIET_BEEP)
+          r.Actions.TagLocationing.Perform(epc, null, null)
+          nativeLocateActive = true
+          reply["ok"] = true
+          reply["generation"] = readGeneration
+        }
+      } catch (e: Exception) {
+        nativeLocateActive = false
+        reply["ok"] = false
+        reply["error"] = "${e.javaClass.simpleName}: ${e.message} ${describeZebraError(e)}"
+        Log.w(TAG, "startNativeLocate failed: ${reply["error"]}")
+      }
+      mainHandler.post { result.success(reply) }
+    }
+  }
+
+  fun stopNativeLocate(result: MethodChannel.Result?) {
+    val was = nativeLocateActive
+    nativeLocateActive = false // gate late reads immediately
+    executor.execute {
+      try {
+        val r = reader
+        if (was && r != null && r.isConnected) {
+          runCatching { r.Actions.TagLocationing.Stop() }
+            .onFailure { Log.w(TAG, "stopNativeLocate: ${it.message}") }
+          setBeeperVolumeCached(r, BEEPER_VOLUME.HIGH_BEEP)
+        }
+      } catch (_: Exception) { /* ignore */ }
+      readGeneration += 1
+      result?.let { res -> mainHandler.post { res.success(true) } }
+    }
+  }
+
   /**
    * Best-effort full teardown. Every step is guarded and every step is always
    * attempted, regardless of [RFIDReader.isConnected] — the earlier "only
@@ -1600,6 +1774,7 @@ class CarbonZebraRfidController(
    */
   private fun disconnectSync() {
     inventoryActive = false
+    nativeLocateActive = false
     // Drop every cached belief about the radio — a re-paired sled starts from
     // firmware defaults, so trusting the old cache would skip config writes the
     // new link genuinely needs.
@@ -1691,6 +1866,8 @@ class CarbonZebraRfidController(
    */
   private fun emitTags(tags: Array<TagData>) {
     val sink = tagSink ?: return
+    val gen = readGeneration
+    val now = SystemClock.elapsedRealtime()
     val payload = ArrayList<Map<String, Any?>>(tags.size)
     for (t in tags) {
       val id = t.getTagID() ?: continue
@@ -1710,7 +1887,24 @@ class CarbonZebraRfidController(
       // wait on Dart scheduling. Falls back to -56 for volume only; the WIRE
       // payload keeps null so the Locate screen can take its own no-RSSI path.
       ScanSoundPool.shared?.playTagBeep(normalizeRssi(rssi ?: -56))
-      payload.add(mapOf("epc" to id.trim().uppercase(), "rssi" to rssi))
+      val clean = id.trim().uppercase()
+      // Native relative proximity (0-100) — only present in TagLocationing mode.
+      val loc: Int? = try {
+        if (t.isContainsLocationInfo) t.LocationInfo?.getRelativeDistance()?.toInt() else null
+      } catch (_: Exception) {
+        null
+      }
+      val m = HashMap<String, Any?>(6)
+      m["epc"] = clean
+      m["rssi"] = rssi
+      m["gen"] = gen
+      m["t"] = now
+      if (loc != null) m["loc"] = loc
+      // Exact-EPC contract: anything that is not a clean 24-hex-digit EPC is
+      // passed through raw so Locate can report an identity/format error
+      // instead of guessing (no suffix matching).
+      if (!clean.matches(EPC96)) m["raw"] = id
+      payload.add(m)
     }
     if (payload.isEmpty()) return
     mainHandler.post { sink.success(payload) }
@@ -1736,6 +1930,7 @@ class CarbonZebraRfidController(
 
   companion object {
     private const val TAG = "CarbonZebra"
+    private val EPC96 = Regex("^[0-9A-F]{24}$")
   }
 
   private inner class ZebraEventHandler : RfidEventsListener {
@@ -1743,7 +1938,7 @@ class CarbonZebraRfidController(
       // Drop late reads that arrive after the user stopped: RFD8500 sometimes flushes
       // buffered tags for up to 1s after .stop() is called, which on Samsung looked
       // like "EPCs keep scanning after Stop already gone."
-      if (!inventoryActive) return
+      if (!inventoryActive && !nativeLocateActive) return
       val r = reader ?: return
       val tags: Array<TagData>? =
         try {

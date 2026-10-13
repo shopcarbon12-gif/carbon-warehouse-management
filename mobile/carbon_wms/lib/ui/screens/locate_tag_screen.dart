@@ -16,7 +16,9 @@ import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
+import 'package:carbon_wms/locate/locate_prefs.dart';
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
+import 'package:carbon_wms/ui/screens/locate_v2_screen.dart';
 import 'package:carbon_wms/ui/screens/search_and_encode_screen.dart';
 import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
@@ -72,8 +74,70 @@ import 'package:carbon_wms/hardware/hardware_trigger.dart';
 ///     showing "hot" a full second later, which reads as lag even when the
 ///     radio is perfect. Now: [_holdMs] grace, then a time-based exponential
 ///     with a [_decayTauMs] constant — about a second from pinned to cold.
-class LocateTagScreen extends StatefulWidget {
+/// Entry point every caller uses. Picks Locate 2.0 ([LocateV2Screen]) or the
+/// classic screen per handheld ([LocatePrefs], default = 2.0).
+class LocateTagScreen extends StatelessWidget {
   const LocateTagScreen({
+    super.key,
+    this.targetEpc,
+    this.targetBin,
+    this.targetSku,
+    this.targetName,
+    this.targetColor,
+    this.targetSize,
+    this.targetPriceText,
+    this.cloudGeigerMode = false,
+    this.anyUnitLineId,
+  });
+
+  final String? targetEpc;
+  final String? targetBin;
+  final String? targetSku;
+  final String? targetName;
+  final String? targetColor;
+  final String? targetSize;
+  final String? targetPriceText;
+  final bool cloudGeigerMode;
+
+  /// Store Replenishment line → "find any unit" (Locate 2.0 only).
+  final int? anyUnitLineId;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: LocatePrefs.useNewLocate(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Scaffold(body: SizedBox.shrink());
+        if (snap.data! || anyUnitLineId != null) {
+          return LocateV2Screen(
+            targetEpc: targetEpc,
+            targetBin: targetBin,
+            targetSku: targetSku,
+            targetName: targetName,
+            targetColor: targetColor,
+            targetSize: targetSize,
+            targetPriceText: targetPriceText,
+            cloudGeigerMode: cloudGeigerMode,
+            anyUnitLineId: anyUnitLineId,
+          );
+        }
+        return ClassicLocateTagScreen(
+          targetEpc: targetEpc,
+          targetBin: targetBin,
+          targetSku: targetSku,
+          targetName: targetName,
+          targetColor: targetColor,
+          targetSize: targetSize,
+          targetPriceText: targetPriceText,
+          cloudGeigerMode: cloudGeigerMode,
+        );
+      },
+    );
+  }
+}
+
+class ClassicLocateTagScreen extends StatefulWidget {
+  const ClassicLocateTagScreen({
     super.key,
     this.targetEpc,
     this.targetBin,
@@ -106,7 +170,7 @@ class LocateTagScreen extends StatefulWidget {
   final bool cloudGeigerMode;
 
   @override
-  State<LocateTagScreen> createState() => _LocateTagScreenState();
+  State<ClassicLocateTagScreen> createState() => _LocateTagScreenState();
 }
 
 /// What the direction panel is currently able to tell the operator.
@@ -209,7 +273,7 @@ class _Diag {
   final bool otherFresh;
 }
 
-class _LocateTagScreenState extends State<LocateTagScreen>
+class _LocateTagScreenState extends State<ClassicLocateTagScreen>
     with SingleTickerProviderStateMixin {
   static final RegExp _epc24 = RegExp(r'^[0-9A-F]{24}$');
 
@@ -1422,6 +1486,18 @@ class _LocateTagScreenState extends State<LocateTagScreen>
                 _TakeActionButton(onPressed: _showActionPicker),
                 SizedBox(height: 8.h),
               ],
+              if (!_scanning)
+                TextButton(
+                  onPressed: () async {
+                    await LocatePrefs.setUseNewLocate(true);
+                    if (!context.mounted) return;
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                      const SnackBar(content: Text('New Locate is on for this handheld. Open Locate again.')),
+                    );
+                  },
+                  child: const Text('Switch to the new Locate'),
+                ),
               // Direction guidance, directly above the start/stop control.
               // Tapping it toggles guidance on/off.
               if (_scanning) ...[

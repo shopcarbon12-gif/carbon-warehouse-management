@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
+import 'package:carbon_wms/util/format_user_name.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
     show CatalogEpcListScreen;
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
@@ -241,7 +243,7 @@ class _SaleCard extends StatelessWidget {
     final people = [
       if (_s(sale, 'localTime') != null) _s(sale, 'localTime')!,
       _s(sale, 'customer') ?? 'No customer',
-      _s(sale, 'employee') ?? 'No employee',
+      _s(sale, 'employee') != null ? shortStaffName(_s(sale, 'employee')) : 'No employee',
     ].join(' · ');
     final progress = pickable == 0
         ? 'NOTHING IN STOCK TO PICK'
@@ -393,6 +395,26 @@ class _ReplenishmentSaleScreenState extends State<ReplenishmentSaleScreen> {
     }
   }
 
+  /// Locate 2.0 "any unit": walk to any live unit of this exact SKU here,
+  /// then "Pulled this unit" records it (server re-validates each EPC).
+  Future<void> _findAnyUnit(Map<String, dynamic> line) async {
+    final lineId = _i(line, 'lineId');
+    if (lineId == 0) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => LocateTagScreen(
+          anyUnitLineId: lineId,
+          targetSku: _s(line, 'sku'),
+          targetName: _s(line, 'name'),
+          targetColor: _s(line, 'color'),
+          targetSize: _s(line, 'size'),
+          targetBin: _s(line, 'bin'),
+        ),
+      ),
+    );
+    if (mounted) unawaited(_load());
+  }
+
   Future<void> _openEpcs(Map<String, dynamic> line) async {
     final skuId = _s(line, 'customSkuId');
     if (skuId == null) return;
@@ -464,6 +486,7 @@ class _ReplenishmentSaleScreenState extends State<ReplenishmentSaleScreen> {
                                 saving: _saving.contains(_i(line, 'lineId')),
                                 onPicked: (v) => _togglePicked(line, v),
                                 onStockTap: () => _openEpcs(line),
+                                onFindAny: () => _findAnyUnit(line),
                               );
                             },
                           ),
@@ -496,12 +519,14 @@ class _LineCard extends StatelessWidget {
     required this.saving,
     required this.onPicked,
     required this.onStockTap,
+    required this.onFindAny,
   });
 
   final Map<String, dynamic> line;
   final bool saving;
   final ValueChanged<bool> onPicked;
   final VoidCallback onStockTap;
+  final VoidCallback onFindAny;
 
   @override
   Widget build(BuildContext context) {
@@ -516,8 +541,10 @@ class _LineCard extends StatelessWidget {
       _s(line, 'size'),
     ].whereType<String>().join(' · ').toUpperCase();
     final bin = _s(line, 'bin');
-    final pickedBy = _s(line, 'pickedBy');
+    final pickedByRaw = _s(line, 'pickedBy');
+    final pickedBy = pickedByRaw == null ? null : shortStaffName(pickedByRaw);
     final textColor = pickable ? AppColors.textMain : _kTextMuted;
+    final pulled = _i(line, 'pickedUnits');
 
     return Opacity(
       opacity: pickable ? 1 : 0.55,
@@ -606,6 +633,36 @@ class _LineCard extends StatelessWidget {
                             height: 1.15,
                           ),
                         ),
+                        if (pickable && pulled > 0) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            'PULLED $pulled / $sold',
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
+                        if (pickable && !picked) ...[
+                          const SizedBox(height: 6),
+                          SizedBox(
+                            height: 36,
+                            child: OutlinedButton.icon(
+                              onPressed: onFindAny,
+                              icon: const Icon(Icons.radar, size: 18),
+                              label: const Text(
+                                'FIND ANY UNIT',
+                                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.8),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(color: AppColors.primary, width: 1.5),
+                                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                              ),
+                            ),
+                          ),
+                        ],
                         if (!pickable || (picked && pickedBy != null)) ...[
                           const SizedBox(height: 3),
                           Text(

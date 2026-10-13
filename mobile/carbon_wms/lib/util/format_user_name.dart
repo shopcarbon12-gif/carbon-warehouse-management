@@ -18,3 +18,14 @@ String formatUserDisplayName(String? first, String? last, [String? email]) {
   }
   return '';
 }
+
+/// Same "First L." rule for a name that arrives as ONE string (POS employee,
+/// "picked by"): first word + initial of the last word. "Julian Perez" →
+/// "Julian P."; a single word stays as is. Reports keep full names — don't
+/// use this there.
+String shortStaffName(String? full) {
+  final parts = (full ?? '').trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return '';
+  if (parts.length == 1) return parts.first;
+  return '${parts.first} ${parts.last[0].toUpperCase()}.';
+}

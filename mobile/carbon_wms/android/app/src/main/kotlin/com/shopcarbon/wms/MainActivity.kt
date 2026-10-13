@@ -308,6 +308,24 @@ class MainActivity : FlutterFragmentActivity() {
           zebra.setTriggerModeRfid()
           result.success(null)
         }
+        // Locate 2.0 — acknowledged power, capabilities, Zebra TagLocationing.
+        // Chainway answers "unsupported" so Locate falls back to fixed power.
+        "locate.setPowerAck" -> {
+          val dbm = (call.argument<Number>("dbm"))?.toInt() ?: 30
+          if (zebra.isReady()) zebra.setAntennaPowerAck(dbm, result)
+          else result.success(mapOf("ok" to false, "error" to "unsupported", "requestedDbm" to dbm))
+        }
+        "locate.capabilities" -> {
+          if (zebra.isReady()) zebra.locateCapabilities(result)
+          else result.success(mapOf("connected" to false, "stack" to "other"))
+        }
+        "locate.nativeStart" -> {
+          if (zebra.isReady()) zebra.startNativeLocate(call.argument<String>("epc"), result)
+          else result.success(mapOf("ok" to false, "error" to "unsupported"))
+        }
+        "locate.nativeStop" -> {
+          if (zebra.isReady()) zebra.stopNativeLocate(result) else result.success(true)
+        }
         "zebra.stopInventory" -> {
           zebra.stopInventoryAsync()
           result.success(null)

@@ -403,7 +403,66 @@ class RfidVendorChannel {
     if (hex.isEmpty) return null;
     final raw = m['rssi'];
     final rssi = raw is num ? raw.round() : null;
-    return RfidTagRead.tryParse(hex, rssi: rssi);
+    int? n(String k) => m[k] is num ? (m[k] as num).toInt() : null;
+    final rawId = m['raw']?.toString();
+    return RfidTagRead.tryParse(
+      hex,
+      rssi: rssi,
+      generation: n('gen'),
+      nativeMs: n('t'),
+      relativeProximity: n('loc'),
+      // A raw value is only sent when the SDK id was not a clean EPC; keep it
+      // even if the hex cleanup below would have "fixed" it.
+      rawReported: rawId,
+    );
+  }
+
+  // ── Locate 2.0 (acknowledged power, capabilities, Zebra TagLocationing) ──
+
+  /// Apply transmit power and wait for the radio to say what it actually
+  /// set. `ok` is false on Chainway / no reader → Locate uses fixed power.
+  static Future<LocatePowerAck> setPowerAck(int dbm) async {
+    if (!_isAndroid) return LocatePowerAck.unsupported(dbm);
+    try {
+      final m = await _method.invokeMapMethod<String, dynamic>(
+          'locate.setPowerAck', <String, dynamic>{'dbm': dbm.clamp(0, 30)});
+      return LocatePowerAck.fromMap(m ?? const {}, dbm);
+    } catch (_) {
+      return LocatePowerAck.unsupported(dbm);
+    }
+  }
+
+  static Future<LocateReaderCaps> locateCapabilities() async {
+    if (!_isAndroid) return const LocateReaderCaps();
+    try {
+      final m = await _method.invokeMapMethod<String, dynamic>('locate.capabilities');
+      return LocateReaderCaps.fromMap(m ?? const {});
+    } catch (_) {
+      return const LocateReaderCaps();
+    }
+  }
+
+  /// Start Zebra's own TagLocationing for one exact EPC. On success returns
+  /// the new read generation; otherwise the reason (not_supported, …).
+  static Future<({String? error, int? generation})> nativeLocateStart(String epc) async {
+    if (!_isAndroid) return (error: 'unsupported', generation: null);
+    try {
+      final m = await _method.invokeMapMethod<String, dynamic>(
+          'locate.nativeStart', <String, dynamic>{'epc': epc});
+      if (m?['ok'] == true) {
+        return (error: null, generation: (m?['generation'] as num?)?.toInt());
+      }
+      return (error: m?['error']?.toString() ?? 'failed', generation: null);
+    } catch (e) {
+      return (error: e.toString(), generation: null);
+    }
+  }
+
+  static Future<void> nativeLocateStop() async {
+    if (!_isAndroid) return;
+    try {
+      await _method.invokeMethod<dynamic>('locate.nativeStop');
+    } catch (_) {}
   }
 
   static Stream<String> hardwareBarcodeStream() {
@@ -460,4 +519,70 @@ class RfidVendorChannel {
 
   static bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+}
+
+/// Result of an acknowledged power change (Locate 2.0).
+class LocatePowerAck {
+  const LocatePowerAck({
+    required this.ok,
+    required this.requestedDbm,
+    this.appliedDbm,
+    this.generation,
+    this.resumed = false,
+    this.error,
+  });
+
+  factory LocatePowerAck.unsupported(int dbm) =>
+      LocatePowerAck(ok: false, requestedDbm: dbm, error: 'unsupported');
+
+  factory LocatePowerAck.fromMap(Map<String, dynamic> m, int dbm) => LocatePowerAck(
+        ok: m['ok'] == true,
+        requestedDbm: (m['requestedDbm'] as num?)?.toInt() ?? dbm,
+        appliedDbm: (m['appliedDbm'] as num?)?.toInt(),
+        generation: (m['generation'] as num?)?.toInt(),
+        resumed: m['resumed'] == true,
+        error: m['error']?.toString(),
+      );
+
+  final bool ok;
+  final int requestedDbm;
+  final int? appliedDbm;
+  final int? generation;
+  final bool resumed;
+  final String? error;
+
+  bool get unsupported => error == 'unsupported';
+}
+
+/// What the connected reader can do, read live (Zebra only).
+class LocateReaderCaps {
+  const LocateReaderCaps({
+    this.connected = false,
+    this.model,
+    this.firmware,
+    this.serial,
+    this.locationingSupported = false,
+    this.powerLevelsDbm = const [],
+  });
+
+  factory LocateReaderCaps.fromMap(Map<String, dynamic> m) => LocateReaderCaps(
+        connected: m['connected'] == true,
+        model: m['model']?.toString(),
+        firmware: m['firmware']?.toString(),
+        serial: m['serial']?.toString(),
+        locationingSupported: m['locationingSupported'] == true,
+        powerLevelsDbm: (m['powerLevelsDbm'] is List)
+            ? (m['powerLevelsDbm'] as List).whereType<num>().map((e) => e.toInt()).toList()
+            : const [],
+      );
+
+  final bool connected;
+  final String? model;
+  final String? firmware;
+  final String? serial;
+  final bool locationingSupported;
+  final List<int> powerLevelsDbm;
+
+  /// Zebra stack answered (Chainway / none return connected=false here).
+  bool get isZebra => connected && (model != null || powerLevelsDbm.isNotEmpty);
 }
