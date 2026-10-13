@@ -4,7 +4,13 @@ import OpenAI, { toFile } from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
-import { LOCK_TEXT_MAX_BYTES, parseSpecBackState, specListsBackDesign, withCanonicalBackLine } from "@/lib/studio-item-spec";
+import {
+  LOCK_TEXT_MAX_BYTES,
+  parseSpecBackState,
+  specListsBackDesign,
+  withCanonicalBackLine,
+  withInstructionFit,
+} from "@/lib/studio-item-spec";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import {
   recordStudioGeneration,
@@ -915,7 +921,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     /* The spec's own BACK line is replaced with the resolved state, so the
        prompt (and the judge) can never carry "not photographed" next to "the
        back carries the design listed above". */
-    const itemSpecText = itemSpecRaw ? withCanonicalBackLine(itemSpecRaw, backState) : "";
+    const itemSpecText = itemSpecRaw
+      ? withInstructionFit(withCanonicalBackLine(itemSpecRaw, backState), operatorInstruction)
+      : "";
     const normalizedPanelQa = normalizePanelQa(panelQa);
     /* Accessory shots are numbered 1-8 like poses but are not poses: Shot 4 is
        a clasp close-up, not "Pose 4, the back view". Every rule keyed on a

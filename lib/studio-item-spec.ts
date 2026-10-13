@@ -140,3 +140,28 @@ export function withCanonicalBackLine(lockText: string, state: "present" | "abse
   if (/^\s*(?:\d+\.\s*)?BACK:.*$/im.test(src)) return src.replace(/^(\s*(?:\d+\.\s*)?)BACK:.*$/im, `$1${canon}`);
   return src ? `${src}\n${canon}` : canon;
 }
+
+/* Fit words an operator writes in the item instruction ("RELAXED FIT",
+   "oversized", "slim-fit"). A bare adjective only counts with a fit noun after
+   it, except the ones that only ever describe a fit. */
+const INSTRUCTION_FIT =
+  /\b(?:(oversized|boxy|baggy)|(relaxed|regular|slim|skinny|loose|fitted|tight|tapered|straight|wide|cropped|longline|classic|athletic|muscle)[\s-]+(?:fit|fitting|cut|leg|silhouette))\b/i;
+const SPEC_FIT_WORDS =
+  /\b(?:oversized|boxy|baggy|relaxed|regular|slim|skinny|loose|fitted|tight|tapered|classic|athletic|muscle)(?:[\s-]+(?:fit|fitting|cut))?\b,?\s*/gi;
+
+/**
+ * The item instruction is written by the person holding the garment, so its
+ * fit wins over the photo analysis' guess. The spec's own FIT/SILHOUETTE line
+ * is rewritten to say so — a rule placed elsewhere in the prompt loses to the
+ * line it contradicts (2026-10-13: instruction "RELAXED FIT", spec "regular
+ * fit"; the renders swung between the two). Sleeves, neckline etc. stay.
+ */
+export function withInstructionFit(specText: string, instruction: string): string {
+  const m = (instruction || "").match(INSTRUCTION_FIT);
+  if (!m || !specText) return specText;
+  const fit = m[0].toLowerCase().replace(/\s+/g, " ").trim();
+  return specText.replace(/^(\s*\d+\.\s*FIT\/SILHOUETTE:\s*)(.*)$/m, (_line, head: string, rest: string) => {
+    const kept = rest.replace(SPEC_FIT_WORDS, "").replace(/^[\s,;—-]+/, "").trim();
+    return `${head}${fit} (set by the item instruction — overrides the photos)${kept ? `, ${kept}` : "."}`;
+  });
+}

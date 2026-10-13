@@ -1345,6 +1345,8 @@ export function CarbonStudioTab({
           imagesDropped?: number;
           imagesFailed?: number;
           failedViews?: RefView[];
+          /** Close-up-only sections and upside-down photos (see the route). */
+          photoWarnings?: string[];
         };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
@@ -1354,10 +1356,15 @@ export function CarbonStudioTab({
         const failed = Number(j.imagesFailed) || 0;
         // A photo the analysis could not open is a photo the spec knows nothing
         // about — say so, loudly, instead of letting the spec look complete.
+        // Close-ups-only sections and upside-down photos are why a chest print
+        // comes back the size of the back artwork — say so before generating.
+        const photoWarnings = (j.photoWarnings ?? []).filter(Boolean);
         setErr(
           failed
             ? `${failed} photo${failed === 1 ? "" : "s"} (${(j.failedViews ?? []).join(", ") || "unknown section"}) could not be opened by the analysis — the spec does not cover ${failed === 1 ? "it" : "them"}. Re-upload and re-analyze, or check the spec by hand.`
-            : null,
+            : photoWarnings.length
+              ? `Check the photos before generating: ${photoWarnings.join(" ")}`
+              : null,
         );
         const dropped = Number(j.imagesDropped) || 0;
         if (dropped) setMsg(`Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).`);
