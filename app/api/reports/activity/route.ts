@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { listActivity, type ActivityRow } from "@/lib/server/activity-feed";
+import { orlandoDate } from "@/lib/orlando-time";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export async function GET(req: Request) {
     return new Response(toCsv(all), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="activity-${new Date().toISOString().slice(0, 10)}.csv"`,
+        "Content-Disposition": `attachment; filename="activity-${orlandoDate()}.csv"`,
         "Cache-Control": "no-store",
       },
     });

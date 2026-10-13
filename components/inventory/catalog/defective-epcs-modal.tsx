@@ -321,7 +321,7 @@ export function DefectiveEpcsModal({ onClose }: { onClose: () => void }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = orlandoDate();
     a.download = `defective-epcs-${today}.csv`;
     document.body.appendChild(a);
     a.click();

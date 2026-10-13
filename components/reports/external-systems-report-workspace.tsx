@@ -6,6 +6,7 @@ import { downloadCsv, rowsToCsv } from "@/lib/csv-export";
 import { ReportToolbar } from "@/components/reports/report-toolbar";
 import { useDebouncedValue } from "@/components/reports/use-debounced-value";
 import { useMemo, useState } from "react";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -43,7 +44,7 @@ export function ExternalSystemsReportWorkspace() {
       status: r.status,
       payload_summary: r.payload_summary ?? "",
     }));
-    downloadCsv(`external-systems-${new Date().toISOString().slice(0, 10)}`, rowsToCsv(headers, rows));
+    downloadCsv(`external-systems-${orlandoDate()}`, rowsToCsv(headers, rows));
   };
 
   if (error) {

@@ -23,6 +23,7 @@ import {
   ThickScrollbars,
   useColResize as useSharedColResize,
 } from "@/components/shared/data-table";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const PAGE_SIZE_OPTIONS = [100, 300, 500, 1000, "ALL"] as const;
 const DEFAULT_PAGE_SIZE = 300;
@@ -126,7 +127,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `lightspeed-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `lightspeed-catalog-${orlandoDate()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

@@ -8,6 +8,7 @@ import {
   listCountSessionReports,
 } from "@/lib/queries/inventory-reports";
 import { enrichEpcsByCatalog } from "@/lib/server/catalog-enrich";
+import { orlandoParts } from "@/lib/orlando-time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,18 +81,10 @@ function buildCsvFromRows(rows: z.infer<typeof reportRowSchema>[]): string {
   return lines.join("\n");
 }
 
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
 function buildFilename(activity: string, when: Date): string {
   const a = activity.toUpperCase().replace(/[^A-Z0-9_-]/g, "_") || "REPORT";
-  const y = when.getUTCFullYear();
-  const mo = pad2(when.getUTCMonth() + 1);
-  const d = pad2(when.getUTCDate());
-  const h = pad2(when.getUTCHours());
-  const mi = pad2(when.getUTCMinutes());
-  const s = pad2(when.getUTCSeconds());
+  // Orlando time, so the name matches the date/time staff see on screen.
+  const { y, mo, d, h, mi, s } = orlandoParts(when);
   return `${a}_${y}${mo}${d}_${h}${mi}${s}.csv`;
 }
 

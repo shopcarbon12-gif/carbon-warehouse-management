@@ -11,6 +11,7 @@ import {
   markSourceCompleted,
   type ScanSourceType,
 } from "@/lib/queries/scan-sources";
+import { orlandoParts } from "@/lib/orlando-time";
 
 /**
  * Shared SAVE/UPLOAD pipeline for both Count and Add-On Count.
@@ -139,13 +140,8 @@ function buildAuditCsv(rows: ScanFinalizeRow[]): string {
 
 function buildFilename(screen: ScanFinalizeScreen, when: Date): string {
   const a = screen.toUpperCase();
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  const y = when.getUTCFullYear();
-  const mo = pad(when.getUTCMonth() + 1);
-  const d = pad(when.getUTCDate());
-  const h = pad(when.getUTCHours());
-  const mi = pad(when.getUTCMinutes());
-  const s = pad(when.getUTCSeconds());
+  // Orlando time, so the name matches the date/time staff see on screen.
+  const { y, mo, d, h, mi, s } = orlandoParts(when);
   return `${a}_${y}${mo}${d}_${h}${mi}${s}.csv`;
 }
 

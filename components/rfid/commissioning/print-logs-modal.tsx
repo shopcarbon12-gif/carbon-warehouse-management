@@ -8,6 +8,7 @@ import {
   ResizeHandle,
   useColResize,
 } from "@/components/shared/data-table";
+import { orlandoDate } from "@/lib/orlando-time";
 
 type LogRow = {
   id: string;
@@ -93,7 +94,7 @@ export function PrintLogsModal({ open, onClose }: Props) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `rfid-print-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `rfid-print-log-${orlandoDate()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }, [rows]);

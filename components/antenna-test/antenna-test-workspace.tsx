@@ -12,6 +12,7 @@ import {
   buildSightings,
   useReferenceEpcs,
 } from "./reference-epcs-panel";
+import { orlandoStamp } from "@/lib/orlando-time";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -495,7 +496,7 @@ export function AntennaTestWorkspace() {
       type: "text/csv;charset=utf-8",
     });
     const url = URL.createObjectURL(blob);
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const stamp = orlandoStamp();
     const safeReader = picked.readerName.replace(/[^a-z0-9]+/gi, "_");
     const a = document.createElement("a");
     a.href = url;

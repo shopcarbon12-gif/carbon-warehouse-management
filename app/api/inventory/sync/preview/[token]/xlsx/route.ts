@@ -6,6 +6,7 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { computeLightspeedSyncDiff } from "@/lib/server/lightspeed-sync-diff";
 import type { CatalogSyncMatrixPayload } from "@/lib/types/catalog-sync";
+import { orlandoStamp } from "@/lib/orlando-time";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,7 +128,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
   }
 
   const buf = await wb.xlsx.writeBuffer();
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  const stamp = orlandoStamp();
   return new Response(buf as ArrayBuffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

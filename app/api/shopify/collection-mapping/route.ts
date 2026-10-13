@@ -3081,7 +3081,7 @@ async function POST_handler(req: NextRequest) {
         status: 200,
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
-          "Content-Disposition": `attachment; filename="collection-mapping-logs-${new Date().toISOString().slice(0, 10)}.csv"`,
+          "Content-Disposition": `attachment; filename="collection-mapping-logs-${orlandoDate()}.csv"`,
           "Cache-Control": "no-store",
         },
       });

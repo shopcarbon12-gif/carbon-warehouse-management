@@ -16,6 +16,7 @@ import {
 import { PosAccessPanel } from "./pos-access-panel";
 import { RewardsAccessPanel } from "./rewards-access-panel";
 import { MobileAccessPanel } from "./mobile-access-panel";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -120,7 +121,7 @@ export function UsersSettingsWorkspace() {
     const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `wms-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `wms-users-${orlandoDate()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, [users]);
@@ -137,7 +138,7 @@ export function UsersSettingsWorkspace() {
     const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `wms-users-selected-emails-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `wms-users-selected-emails-${orlandoDate()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     setBulkOpen(false);

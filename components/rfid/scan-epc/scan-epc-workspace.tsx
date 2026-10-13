@@ -12,6 +12,7 @@ import type {
   HardwareConfigTree,
   HardwareAntennaRow,
 } from "@/lib/server/hardware-config";
+import { orlandoStamp } from "@/lib/orlando-time";
 
 const fetcher = async (url: string): Promise<HardwareConfigTree> => {
   const r = await fetch(url, { cache: "no-store" });
@@ -440,7 +441,7 @@ export function ScanEpcWorkspace() {
         .join(" | "),
     }));
     const csv = rowsToCsv(CSV_HEADERS, data);
-    downloadCsv(`scan-epc-${new Date().toISOString().slice(0, 19)}`, csv);
+    downloadCsv(`scan-epc-${orlandoStamp()}`, csv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sortedRows, readerById, antennaLabel]);
 

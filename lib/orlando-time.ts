@@ -43,3 +43,28 @@ export function orlandoDate(d: Date = new Date()): string {
     day: "2-digit",
   }).format(d);
 }
+
+/** Orlando date/time parts (zero-padded) for a moment (default: now). */
+export function orlandoParts(d: Date = new Date()) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: STORE_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  );
+  return { y: p.year, mo: p.month, d: p.day, h: p.hour, mi: p.minute, s: p.second };
+}
+
+/** "YYYY-MM-DD-HH-MM-SS" in Orlando time — for download file names. */
+export function orlandoStamp(d: Date = new Date()): string {
+  const t = orlandoParts(d);
+  return `${t.y}-${t.mo}-${t.d}-${t.h}-${t.mi}-${t.s}`;
+}

@@ -13,6 +13,7 @@ import {
   ResizeHandle,
   useColResize,
 } from "@/components/shared/data-table";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -51,7 +52,7 @@ export function ReplenishmentsReportWorkspace() {
       to_bin: r.to_bin,
       status: r.status,
     }));
-    downloadCsv(`replenishments-${new Date().toISOString().slice(0, 10)}`, rowsToCsv(headers, rows));
+    downloadCsv(`replenishments-${orlandoDate()}`, rowsToCsv(headers, rows));
   };
 
   if (error) {

@@ -12,6 +12,7 @@ import {
   setSectionMode,
 } from "@/lib/settings/permission-catalog";
 import { POS_APPROVABLE_SECTIONS, POS_PERMISSION_PAGES } from "@/lib/settings/pos-permission-catalog";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -149,7 +150,7 @@ function PosUsersTab() {
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `pos-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `pos-users-${orlandoDate()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, [users]);
@@ -166,7 +167,7 @@ function PosUsersTab() {
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `pos-users-selected-emails-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `pos-users-selected-emails-${orlandoDate()}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     setBulkOpen(false);

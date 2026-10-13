@@ -13,6 +13,7 @@ import {
   ResizeHandle,
   useColResize,
 } from "@/components/shared/data-table";
+import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
   const res = await fetch(url);
@@ -50,7 +51,7 @@ export function AssetMovementsWorkspace() {
       to_location: r.to_location,
       user_id: r.user_id ?? "",
     }));
-    downloadCsv(`asset-movements-${new Date().toISOString().slice(0, 10)}`, rowsToCsv(headers, rows));
+    downloadCsv(`asset-movements-${orlandoDate()}`, rowsToCsv(headers, rows));
   };
 
   if (error) {
