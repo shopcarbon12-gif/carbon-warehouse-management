@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show File, HttpClient, Platform, exit;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:carbon_wms/services/handheld_device_identity.dart';
@@ -2322,6 +2323,44 @@ class WmsApiClient {
     final epcs = decoded['epcs'];
     if (epcs is! List) return const [];
     return epcs.whereType<String>().map((e) => e.toUpperCase()).toList();
+  }
+
+  /* ---------- Live catalog (Add-On Catalog / Add-On Count local copy) ---------- */
+
+  /// GET /api/handheld/live-catalog/snapshot — the tenant's full live catalog.
+  /// Returns the (already gunzipped — dart:io HttpClient sends Accept-Encoding: gzip and
+  /// auto-uncompresses) JSON bytes so the caller can decode off the UI isolate.
+  Future<Uint8List> fetchLiveCatalogSnapshotBytes({
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/live-catalog/snapshot').replace(
+      queryParameters: <String, String>{'deviceId': deviceId},
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders()).timeout(timeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    return res.bodyBytes;
+  }
+
+  /// `GET /api/handheld/live-catalog/delta?since=<cursor>` — what changed since
+  /// the cursor of the previous snapshot/delta. Same byte contract as the snapshot.
+  Future<Uint8List> fetchLiveCatalogDeltaBytes(
+    String cursor, {
+    Duration timeout = const Duration(seconds: 6),
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/handheld/live-catalog/delta').replace(
+      queryParameters: <String, String>{'deviceId': deviceId, 'since': cursor},
+    );
+    final res = await _http.get(uri, headers: await handheldAuthHeaders()).timeout(timeout);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    return res.bodyBytes;
   }
 
   Future<Map<String, dynamic>> startAddOnSession({

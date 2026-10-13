@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState;
 
 import 'package:carbon_wms/hardware/chainway_scanner.dart';
 import 'package:carbon_wms/hardware/manual_csv_row.dart';
@@ -33,10 +34,63 @@ class RfidManager extends ChangeNotifier {
     try {
       unawaited(ScanSounds.instance.init());
     } catch (_) {}
+    _lifecycle = AppLifecycleListener(onStateChange: _onAppLifecycle);
   }
 
   final WmsApiClient _api;
   final MobileSettingsRepository _settings;
+
+  late final AppLifecycleListener _lifecycle;
+  bool _backgrounded = false;
+
+  /// Bumped once each time the app goes to the background or the phone screen turns off
+  /// (AppLifecycleState.hidden / .paused — NOT .inactive) and the radio was stopped for it.
+  /// Screens listen and drop their own "scanning" UI state. They must NOT restart the radio.
+  final ValueNotifier<int> lifecycleStopTick = ValueNotifier<int>(0);
+
+  bool get isBackgrounded => _backgrounded;
+
+  /// App-wide radio guard: a sled left transmitting behind a locked screen or in
+  /// the background drains its battery and keeps feeding reads to a screen nobody
+  /// is looking at. `inactive` is deliberately ignored — the notification shade,
+  /// a permission dialog or the app switcher animation pass through it and must
+  /// not kill a running scan. Android goes hidden → paused on screen-off/home, so
+  /// [_backgrounded] makes it one stop + one tick per trip to the background.
+  void _onAppLifecycle(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        if (_backgrounded) return;
+        _backgrounded = true;
+        unawaited(stopAllRadio(reason: 'lifecycle:${state.name}'));
+        lifecycleStopTick.value++;
+      case AppLifecycleState.resumed:
+        _backgrounded = false;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  /// Stops every radio path: native Zebra locate, Zebra inventory, Chainway inventory and
+  /// the active scanner. Idempotent, never throws, safe when nothing is running.
+  Future<void> stopAllRadio({required String reason}) async {
+    debugPrint('[RfidManager] stopAllRadio reason=$reason');
+    // Each stop is wrapped on its own: one path failing (no sled, channel gone)
+    // must not keep the others from running.
+    Future<void> guard(Future<void> Function() stop) async {
+      try {
+        await stop();
+      } catch (_) {}
+    }
+
+    await Future.wait(<Future<void>>[
+      guard(RfidVendorChannel.nativeLocateStop),
+      guard(RfidVendorChannel.stopZebraInventory),
+      guard(RfidVendorChannel.stopChainwayInventory),
+      guard(() => _active?.stopScanning() ?? Future<void>.value()),
+    ]);
+  }
 
   RfidScanner? _active;
   StreamSubscription<RfidTagRead>? _epcSub;
@@ -486,6 +540,8 @@ class RfidManager extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
+    lifecycleStopTick.dispose();
     _settings.removeListener(_onSettingsChanged);
     _flushTimer?.cancel();
     _epcSub?.cancel();

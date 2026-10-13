@@ -5,12 +5,13 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_runtime_config.dart'
+    show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/services/transfer_slip_printer.dart';
@@ -51,9 +52,10 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   static const Color _primary = AppColors.primary;
   static const Color _transit = Color(0xFFE08A2C);
   static const Color _red = Color(0xFFD9534F);
-  static const String _powerPrefsKey = 'transfer_out_power_dbm_v1';
 
-  int _powerDbm = 27;
+  /// Bulk module: always the RFD8500 maximum. There is no gear on this
+  /// screen (the old `transfer_out_power_dbm_v1` pref was never written).
+  final int _powerDbm = kAntennaPowerDbmMax;
 
   // ── locations ───────────────────────────────────────────────────────────
   List<Map<String, String>> _locations = [];
@@ -96,7 +98,6 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     super.initState();
     unawaited(ScanSounds.instance.init());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _loadPower();
       await _loadLocations();
       await _initScanner();
     });
@@ -105,11 +106,22 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) setState(() => _scanning = false);
   }
 
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _enrichDebounce?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
@@ -117,6 +129,12 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     _barcodeSub?.cancel();
     _triggerSub?.cancel();
     final r = _rfid;
+    if (_scanning) {
+      // _startScan drives the native channel directly; pauseScanning below only
+      // reaches it when RfidManager's scanner thinks the sled is linked.
+      unawaited(RfidVendorChannel.stopZebraInventory());
+      unawaited(RfidVendorChannel.stopChainwayInventory());
+    }
     if (r != null) {
       unawaited(r.pauseScanning());
       unawaited(r.setSessionPowerOverrideDbm(null));
@@ -126,12 +144,6 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
   }
 
   // ── loaders ───────────────────────────────────────────────────────────────
-  Future<void> _loadPower() async {
-    final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getInt(_powerPrefsKey);
-    if (v != null && mounted) setState(() => _powerDbm = v.clamp(0, 30));
-  }
-
   Future<void> _loadLocations() async {
     try {
       final locs = await context.read<WmsApiClient>().fetchSessionLocations();
@@ -209,9 +221,15 @@ class _TransferOutScreenState extends State<TransferOutScreen> {
     try {
       ScanSounds.instance.play(ScanCue.start);
     } catch (_) {}
+    // Re-assert max power on every start: another screen (Locate, Status
+    // Change…) may have left the radio low since this screen was opened.
+    unawaited(_rfid?.setSessionPowerOverrideDbm(_powerDbm));
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}

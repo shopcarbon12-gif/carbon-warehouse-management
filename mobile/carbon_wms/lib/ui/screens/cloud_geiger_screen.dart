@@ -86,6 +86,25 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   int _maxDbm = 30;
   int _powerDbm = 23;
 
+  RfidManager? _lifecycleRfid;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lifecycleRfid == null) {
+      _lifecycleRfid = context.read<RfidManager>();
+      _lifecycleRfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart. (The
+  /// queue poller is a server refresh, not a scan timer — it keeps running.)
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) setState(() => _scanning = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -167,6 +186,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
 
   @override
   void dispose() {
+    _lifecycleRfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _poller?.cancel();
     _poller = null;
     _powerApplyTimer?.cancel();
@@ -204,6 +224,8 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}

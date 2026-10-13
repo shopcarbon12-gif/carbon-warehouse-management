@@ -466,6 +466,17 @@ class MainActivity : FlutterFragmentActivity() {
     }
   }
 
+  override fun onStop() {
+    super.onStop()
+    // Screen off / app backgrounded: never leave the sled transmitting. The Dart side
+    // (RfidManager lifecycle guard) does the same and resets each screen's UI; this
+    // covers a detached/slow Flutter engine. onStop, not onPause (onPause = "inactive",
+    // e.g. notification shade — must keep scanning).
+    val z = zebraController ?: return
+    if (z.isReady()) z.stopInventoryAsync() else chainwayController?.stopInventoryAsync()
+    Log.d("CarbonZebra", "lifecycle: onStop → stopInventory")
+  }
+
   override fun onDestroy() {
     // Intentionally no SessionPrefsBridge.clearWmsSessionToken call here.
     // The previous condition (`!isChangingConfigurations && isFinishing`) was

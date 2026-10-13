@@ -99,6 +99,23 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   Timer? _powerApplyTimer;
 
   RfidManager? _rfid;
+  RfidManager? _lifecycleRfid;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lifecycleRfid == null) {
+      _lifecycleRfid = context.read<RfidManager>();
+      _lifecycleRfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) setState(() => _scanning = false);
+  }
 
   @override
   void initState() {
@@ -148,6 +165,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
 
   @override
   void dispose() {
+    _lifecycleRfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _powerApplyTimer?.cancel();
     unawaited(_uhfSub?.cancel());
     unawaited(_directSub?.cancel());
@@ -185,9 +203,12 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}
+    if (!mounted || !_scanning) return;
     // Start via the manager path too — this is what actually feeds reads to
     // the RfidManager streams and keeps its driver state consistent. Without
     // it the trigger started the radio but no reads arrived.

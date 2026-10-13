@@ -553,6 +553,7 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
     if (_rfid == null) {
       final m = context.read<RfidManager>();
       _rfid = m;
+      m.lifecycleStopTick.addListener(_onLifecycleStop);
       // Claim the power BEFORE switching scan context. The context setter
       // triggers reapplyHandheldHardwareSettings(), which honours the session
       // override when one is set — so claiming first means the radio takes a
@@ -562,8 +563,16 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
     }
   }
 
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) unawaited(_stopScan(silent: true));
+  }
+
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     // Close the read path first. A tag event already queued on the platform
     // channel can still be delivered after cancel(), and _onGeigerRead only
     // touches plain fields — but flipping this makes it an explicit no-op
@@ -785,12 +794,16 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
     // encode screen drove the radio via RfidVendorChannel directly). Listening
     // to the vendor stream guarantees reads reach _onGeigerRead regardless.
     await _readSub?.cancel();
+    // A stop (screen left, app backgrounded) can land during any await here:
+    // once _scanning is false, never start the engine or the radio again.
+    if (!mounted || !_scanning) return;
     _readSub =
         RfidVendorChannel.tagReadStream().listen(_onGeigerRead, onError: (_) {});
 
     // Re-assert the radio configuration on EVERY start, forcing it past the
     // native cache. See _armRadio for why arming once was a mistake.
     await _armRadio(force: true);
+    if (!mounted || !_scanning) return;
 
     _startYaw();
     _startEngine();
@@ -824,14 +837,15 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
     _yawDeg = null;
   }
 
-  Future<void> _stopScan() async {
+  /// [silent] skips only the stop cue (app backgrounded / screen off).
+  Future<void> _stopScan({bool silent = false}) async {
     // Everything the operator can SEE or HEAR happens first, synchronously.
     // Previously the screen didn't flip out of SCANNING until three awaited
     // platform calls had come back, so a stop looked frozen for a few hundred
     // milliseconds. The radio calls below don't need to gate the UI: the
     // native stop flips its read gate inline, so tags stop reaching us the
     // instant the call is dispatched.
-    ScanSounds.instance.play(ScanCue.stop);
+    if (!silent) ScanSounds.instance.play(ScanCue.stop);
     _engine?.cancel();
     _engine = null;
     _stopYaw();

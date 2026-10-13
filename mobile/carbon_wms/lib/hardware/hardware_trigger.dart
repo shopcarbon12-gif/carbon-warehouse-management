@@ -58,6 +58,15 @@ Stream<String> hardwareTriggerFor(State<StatefulWidget> state) {
       _stack.add(entry);
       upstream = RfidVendorChannel.hardwareTriggerStream().listen(
         (event) {
+          // The sled's trigger still reaches Dart while the phone screen is off
+          // or the app is in the background — exactly when RfidManager has
+          // stopped the radio. A pull there must not start it again behind the
+          // operator's back. Fails open like the rest of this file: only a
+          // definite hidden/paused state drops the event (null = not known yet).
+          final life = WidgetsBinding.instance.lifecycleState;
+          if (life == AppLifecycleState.hidden || life == AppLifecycleState.paused) {
+            return;
+          }
           // Drop any screen that was disposed without cancelling, so a leak
           // can never permanently block the screens beneath it.
           _stack.removeWhere((e) => !e.state.mounted);

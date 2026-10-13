@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/services/add_on_session_state.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/widgets/item_line_format.dart';
 
 /// One-row container that renders ONE EPC's full identity card. Used by
 /// both the Add-On scan screen (live new-EPC list) and the review screen.
 /// Each EPC stays separate — no grouping, no per-SKU quantity counter.
 ///
-/// Layout mirrors `_CountItemContainer` in count_inventory_screen.dart so
-/// the two screens read consistently:
-///   Row 1: SKU (mono)               · price (right, optional)
-///   Row 2: name · color · size      (catalog-resolved; falls back to "—")
-///   Row 3: EPC (mono small)         · bin (right, optional)
+/// Layout mirrors `_CountItemContainer` in count_inventory_screen.dart (and
+/// uses the same item_line_format.dart helpers) so the two screens read
+/// consistently:
+///   Row 1: SKU (mono)               · price (right; role-gated)
+///   Row 2: name · color · size      (from the phone's live catalog copy)
+///   Row 3: EPC (mono small)         · BIN (right, optional)
 class AddOnEpcCard extends StatelessWidget {
   const AddOnEpcCard({super.key, required this.entry});
 
@@ -25,21 +29,27 @@ class AddOnEpcCard extends StatelessWidget {
     final name = (entry.itemName ?? '').trim();
     final color = (entry.color ?? '').trim();
     final size = (entry.size ?? '').trim();
-    final bin = (entry.bin ?? '').trim();
+    final bin = formatBinDisplay(entry.bin);
     final systemId = (entry.systemId ?? '').trim();
-    final priceText = entry.retailPrice == null ? '' : '\$${entry.retailPrice}';
+    // RBAC: hide retail price for roles with the show_retail_price flag off.
+    final priceText =
+        context.read<MobilePermissions>().showField(FieldFlags.showRetailPrice)
+            ? formatRetailPrice(entry.retailPrice)
+            : '';
 
     // Primary row identifier — what the operator reads at a glance.
-    // Order of preference: SKU (catalog-resolved, post-upload) > System ID
-    // (client-side decode, available immediately) > raw EPC. The Add-On
-    // scan loop is offline w/r/t the catalog, so during a live scan the
-    // System ID is what shows.
+    // Order of preference: SKU (from the local catalog copy, filled in at
+    // read time or as soon as the copy is ready) > System ID (client-side
+    // decode, always available) > raw EPC.
     final primaryLabel = sku.isNotEmpty
         ? sku
         : (systemId.isNotEmpty ? 'System ID $systemId' : entry.epc);
 
+    // The matrix description can bake in a variant's colour + size; strip
+    // that tail so it isn't shown twice (same rule as Count).
+    final cleanName = stripNameSizeSuffix(name, size: size, color: color);
     final descLine = [
-      if (name.isNotEmpty) name,
+      if (cleanName.isNotEmpty) cleanName,
       if (color.isNotEmpty) color,
       if (size.isNotEmpty) size,
     ].join(' · ');
@@ -112,15 +122,17 @@ class AddOnEpcCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (bin.isNotEmpty)
+                if (bin.isNotEmpty) ...[
+                  SizedBox(width: 8.w),
                   Text(
-                    'bin $bin',
+                    'BIN $bin',
                     style: GoogleFonts.manrope(
                       fontSize: 11.sp,
                       fontWeight: FontWeight.w700,
                       color: const Color(0xFF3F4A4A),
                     ),
                   ),
+                ],
               ],
             ),
           ],

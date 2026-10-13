@@ -8,6 +8,9 @@ import {
 import { ingestEpcs } from "@/lib/server/epc-ingress";
 import { resolveHandheldDeviceId } from "@/lib/server/devices-lookup";
 
+/** Edge scan contexts the firehose accepts (202) but never ingests. */
+export const EDGE_INGEST_IGNORED_CONTEXTS: ReadonlySet<string> = new Set(["ADD-ON COUNT"]);
+
 export type ReconcilerBatchInput = {
   tenantId: string;
   locationId: string;
@@ -111,6 +114,10 @@ export async function reconcileInventoryFromEdge(
   }
 
   const ctx = input.scanContext.trim().toUpperCase();
+  // Add-On Count is local-first: its EPCs reach the catalog only through the
+  // session ledger + scan-finalize. A stray firehose batch would overwrite
+  // status/location via ingestEpcs, so drop it before touching the DB.
+  if (EDGE_INGEST_IGNORED_CONTEXTS.has(ctx)) return { rowsAffected: 0 };
   const client = await pool.connect();
 
   try {

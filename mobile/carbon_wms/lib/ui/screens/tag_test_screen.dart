@@ -187,6 +187,11 @@ class _TagTestScreenState extends State<TagTestScreen> {
   final Map<String, int> _captureHits = <String, int>{};
   bool _capturing = false;
 
+  /// Set when the screen is left or the app goes to the background / screen
+  /// off mid-run: the capture pass and the power ladder must not start the
+  /// radio again after that. Cleared when a new capture/measure starts.
+  bool _abortRadio = false;
+
   String _deviceModel = '';
   String _appVersion = '';
 
@@ -208,11 +213,23 @@ class _TagTestScreenState extends State<TagTestScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// A running capture/ladder sees the flag, stops starting the radio and
+  /// discards the interrupted pass — no cue, no restart.
+  void _onLifecycleStop() {
+    _abortRadio = true;
   }
 
   @override
   void dispose() {
+    _abortRadio = true;
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     unawaited(_readSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopZebraInventory());
@@ -280,19 +297,24 @@ class _TagTestScreenState extends State<TagTestScreen> {
       _status = 'Hold the tag ON the gun… capturing at $_captureDbm dBm';
     });
     ScanSounds.instance.play(ScanCue.start);
+    _abortRadio = false;
     _captureHits.clear();
     _capturing = true;
     try {
       await RfidVendorChannel.setEpcInventoryFilter(null);
       await _rfid?.setSessionPowerOverrideDbm(_captureDbm);
       await Future<void>.delayed(const Duration(milliseconds: 400));
-      try {
-        await RfidVendorChannel.startZebraInventory();
-      } catch (_) {}
-      try {
-        await RfidVendorChannel.startChainwayInventory();
-      } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 2500));
+      if (mounted && !_abortRadio) {
+        try {
+          await RfidVendorChannel.startZebraInventory();
+        } catch (_) {}
+        if (mounted && !_abortRadio) {
+          try {
+            await RfidVendorChannel.startChainwayInventory();
+          } catch (_) {}
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 2500));
+      }
     } finally {
       _capturing = false;
       try {
@@ -304,6 +326,13 @@ class _TagTestScreenState extends State<TagTestScreen> {
     }
 
     if (!mounted) return;
+    if (_abortRadio) {
+      setState(() {
+        _busy = false;
+        _status = 'Capture stopped (screen off or app in the background). Pull the trigger to capture again.';
+      });
+      return;
+    }
     if (_captureHits.isEmpty) {
       ScanSounds.instance.play(ScanCue.error);
       setState(() {
@@ -352,6 +381,7 @@ class _TagTestScreenState extends State<TagTestScreen> {
           '${(kTagTestPowerLadderDbm.length * (_sampleWindowMs + _powerSettleMs) / 1000).round()}s)…';
     });
     ScanSounds.instance.play(ScanCue.start);
+    _abortRadio = false;
 
     final samples = <_PowerSample>[];
     try {
@@ -359,16 +389,20 @@ class _TagTestScreenState extends State<TagTestScreen> {
       // and keep the tag answering every round rather than going quiet after
       // its first reply.
       await RfidVendorChannel.setEpcInventoryFilter(epc);
-      await RfidVendorChannel.setSingulationSession(useSessionZero: true);
+      if (mounted && !_abortRadio) {
+        await RfidVendorChannel.setSingulationSession(useSessionZero: true);
+      }
 
       for (final power in kTagTestPowerLadderDbm) {
-        if (!mounted) break;
+        if (!mounted || _abortRadio) break;
         setState(() => _status =
             'Step $step ($distanceFt ft) — $power dBm settling…');
         await _rfid?.setSessionPowerOverrideDbm(power);
+        if (!mounted || _abortRadio) break;
         try {
           await RfidVendorChannel.startZebraInventory();
         } catch (_) {}
+        if (!mounted || _abortRadio) break;
         try {
           await RfidVendorChannel.startChainwayInventory();
         } catch (_) {}
@@ -390,7 +424,7 @@ class _TagTestScreenState extends State<TagTestScreen> {
             const Duration(milliseconds: _progressTickMs),
           );
           elapsed += _progressTickMs;
-          if (!mounted) break;
+          if (!mounted || _abortRadio) break;
           final left = ((_sampleWindowMs - elapsed) / 1000).ceil();
           setState(() {
             _status = 'Step $step ($distanceFt ft) · $power dBm '
@@ -425,6 +459,16 @@ class _TagTestScreenState extends State<TagTestScreen> {
     }
 
     if (!mounted) return;
+    if (_abortRadio) {
+      // A partial ladder would read as "nothing heard past level N" — a false
+      // range limit. Drop it; the operator re-runs the step.
+      setState(() {
+        _busy = false;
+        _status = 'Step $step stopped (screen off or app in the background) — nothing saved. '
+            'Pull the trigger to measure it again.';
+      });
+      return;
+    }
     final result = _StepResult(
       step: step,
       distanceFt: distanceFt,

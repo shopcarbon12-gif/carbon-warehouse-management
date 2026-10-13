@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_realtime.dart';
+import 'package:carbon_wms/services/live_catalog_cache.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_screen.dart';
@@ -48,6 +49,12 @@ class _AddOnCountSourcePickerScreenState
     super.initState();
     _loadCurrentUserEmail();
     _refresh();
+    // Pre-warm the phone's live catalog copy while the operator picks a
+    // source, so item info is ready (or nearly) when scanning starts.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(context.read<LiveCatalogCache>().ensureFresh());
+    });
   }
 
   Future<void> _loadCurrentUserEmail() async {

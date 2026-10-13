@@ -112,6 +112,11 @@ export type ZeroOutResult = {
  * atomic. Tables not present in this database are skipped (returns
  * `before: 0, deleted: 0`) so a misaligned schema doesn't abort the wipe.
  */
+async function regclassExists(client: PoolClient, name: string): Promise<boolean> {
+  const r = await client.query<{ t: string | null }>(`SELECT to_regclass($1)::text AS t`, [name]);
+  return !!r.rows[0]?.t;
+}
+
 export async function zeroOutRfidData(
   client: PoolClient,
   args: { tenantId: string; userId: string; confirmPhrase: string },
@@ -158,6 +163,17 @@ export async function zeroOutRfidData(
     const deleted = del.rowCount ?? 0;
     counts.push({ table: spec.name, before, after: before - deleted, deleted });
     totalDeleted += deleted;
+  }
+
+  // session_replication_role='replica' above also silences the live-catalog
+  // delete triggers, so no per-EPC tombstones were written. One tenant-wide
+  // 'reset' row tells every handheld to re-download its catalog copy instead of
+  // silently ignoring the wiped EPCs as their old status (migration 0112).
+  if ((await regclassExists(client, "public.live_catalog_tombstones"))) {
+    await client.query(
+      `INSERT INTO live_catalog_tombstones (tenant_id, kind, key) VALUES ($1::uuid, 'reset', '*')`,
+      [args.tenantId],
+    );
   }
 
   const ins = await client.query<{ id: string }>(

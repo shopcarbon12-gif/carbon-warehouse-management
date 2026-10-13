@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
@@ -62,6 +63,24 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
   StreamSubscription<RfidTagRead>? _tagSub;
   StreamSubscription<String>? _triggerSub;
 
+  RfidManager? _lifecycleRfid;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_lifecycleRfid == null) {
+      _lifecycleRfid = context.read<RfidManager>();
+      _lifecycleRfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) setState(() => _scanning = false);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -76,6 +95,7 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
 
   @override
   void dispose() {
+    _lifecycleRfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _tagSub?.cancel();
     _triggerSub?.cancel();
     _powerPushTimer?.cancel();
@@ -135,6 +155,8 @@ class _EncodeTestTagScreenState extends State<EncodeTestTagScreen> {
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}

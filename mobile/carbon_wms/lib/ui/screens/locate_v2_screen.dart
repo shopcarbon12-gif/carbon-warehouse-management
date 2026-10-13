@@ -181,13 +181,22 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     if (_rfid == null) {
       final m = context.read<RfidManager>();
       _rfid = m;
+      m.lifecycleStopTick.addListener(_onLifecycleStop);
       unawaited(m.setSessionPowerOverrideDbm(_powerDbm));
       m.scanContext = 'GEIGER_FIND';
     }
   }
 
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) unawaited(_stop(silent: true));
+  }
+
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _scanning = false;
     _ticker?.cancel();
     _radioPoll?.cancel();
@@ -293,11 +302,24 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     });
     _log('start', {'engine': _engineMode.name});
     await _readSub?.cancel();
+    // Every await below can span a stop (screen left, app backgrounded, line
+    // done): once _scanning is false, never send another start to the radio.
+    if (!mounted || !_scanning) return;
     _readSub = RfidVendorChannel.tagReadStream().listen(_onRead, onError: (_) {});
 
     if (_engineMode == _Engine.zebra) {
       await RfidVendorChannel.stopZebraInventory();
+      if (!mounted || !_scanning) return;
       final r = await RfidVendorChannel.nativeLocateStart(_epc);
+      if (r.error == 'superseded') {
+        // The native side saw a stop asked for after this start — the stop
+        // wins. Not a failure: no Signal fallback. Drop the UI state if the
+        // stop came from outside this screen.
+        _log('native_superseded', {});
+        if (mounted && _scanning) unawaited(_stop(silent: true));
+        return;
+      }
+      if (!mounted || !_scanning) return;
       if (r.error != null) {
         _log('native_failed', {'error': r.error});
         if (!mounted) return;
@@ -313,6 +335,7 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     } else {
       await _startSignal(engine);
     }
+    if (!mounted || !_scanning) return;
     _readyMs ??= _clock.elapsedMilliseconds;
     unawaited(_sweepAnim.repeat());
     _ticker?.cancel();
@@ -323,12 +346,17 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
   Future<void> _startSignal(LocateEngine engine) async {
     // Exact single target → reader pre-filter; any-unit → exact set in
     // software (a pre-filter cannot express "one of these 23 EPCs").
+    if (!mounted || !_scanning) return;
     await RfidVendorChannel.setEpcInventoryFilter(_anyUnit ? null : _epc, force: true);
+    if (!mounted || !_scanning) return;
     await RfidVendorChannel.setSingulationSession(useSessionZero: true, force: true);
+    if (!mounted || !_scanning) return;
     await _applyPower(_powerDbm, engine, reason: 'start');
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
+    if (!mounted || !_scanning) return;
     unawaited(RfidVendorChannel.startChainwayInventory().catchError((_) {}));
     unawaited(_rfid?.startLocateScanning());
   }
@@ -365,8 +393,9 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     return false;
   }
 
-  Future<void> _stop() async {
-    ScanSounds.instance.play(ScanCue.stop);
+  /// [silent] skips only the stop cue (app backgrounded / screen off).
+  Future<void> _stop({bool silent = false}) async {
+    if (!silent) ScanSounds.instance.play(ScanCue.stop);
     _ticker?.cancel();
     _ticker = null;
     _trial = null;

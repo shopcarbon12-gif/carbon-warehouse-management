@@ -195,11 +195,22 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_running) setState(() => _running = false);
   }
 
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     unawaited(_directTagSub?.cancel());
     unawaited(_barcodeSub?.cancel());
     unawaited(_triggerSub?.cancel());
@@ -368,6 +379,12 @@ class _SearchAndEncodeScreenState extends State<SearchAndEncodeScreen> {
       await m.startLocateScanning();
     } catch (_) {/* simulated reads still deliver via broadcast */}
     if (!mounted) return;
+    // _running only flips after the awaits above, so a background/screen-off
+    // stop that landed in between was not seen by _onLifecycleStop.
+    if (m.isBackgrounded) {
+      unawaited(m.stopLocateScanning());
+      return;
+    }
     setState(() => _running = true);
     _sounds.play(ScanCue.start);
   }

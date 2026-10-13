@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:carbon_wms/services/epc/epc_codec.dart';
+
 /// In-memory mirror of the server's add_on_sessions row + the EPC ledger
 /// driving the Add-On Count scan screen.
 ///
@@ -84,6 +86,25 @@ class AddOnSessionState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fill in item info on every row that still has none (`customSku == null`)
+  /// — rows counted or hydrated before the phone's catalog copy was ready.
+  /// [enrich] returns the replacement row, or null to leave it as is. One
+  /// notify for the whole pass; returns how many rows changed.
+  int enrichMissing(NewEpcEntry? Function(NewEpcEntry e) enrich) {
+    if (_disposed) return 0;
+    var changed = 0;
+    for (var i = 0; i < _newEntries.length; i++) {
+      final e = _newEntries[i];
+      if (e.customSku != null) continue;
+      final next = enrich(e);
+      if (next == null) continue;
+      _newEntries[i] = next;
+      changed++;
+    }
+    if (changed > 0) notifyListeners();
+    return changed;
+  }
+
   /// Caller learned the EPC was already counted by another device — don't
   /// surface to the operator but keep the dedup mark so we don't re-submit.
   void recordRemoteDuplicate(String epc) {
@@ -119,9 +140,15 @@ class AddOnSessionState extends ChangeNotifier {
   /// loop won't re-POST it to /epc.
   ///
   /// Server format (from lib/server/add-on-sessions.ts:getSession):
-  ///   epc_ledger:    Map<epc, {u, d, at}>
-  ///   failed_ledger: Map<epc, {u, d, at, r}>
-  void hydrateFromServer(Map<String, dynamic> serverSession) {
+  ///   epc_ledger:    `Map<epc, {u, d, at}>`
+  ///   failed_ledger: `Map<epc, {u, d, at, r}>`
+  ///
+  /// The ledger carries no system id, so with [epcConfig] each hydrated row
+  /// gets one from a local decode (null when the EPC doesn't decode) — the
+  /// card then shows "System ID …" instead of a bare EPC until item info
+  /// lands, and the catalog lookup by system id can resolve it.
+  void hydrateFromServer(Map<String, dynamic> serverSession, {EpcConfig? epcConfig}) {
+    if (_disposed) return;
     final newLedger = serverSession['epc_ledger'];
     if (newLedger is Map) {
       for (final e in newLedger.entries) {
@@ -134,7 +161,13 @@ class AddOnSessionState extends ChangeNotifier {
           at = DateTime.now().toUtc();
         }
         if (_newSeen.add(epcKey)) {
-          _newEntries.add(NewEpcEntry(epc: epcKey, scannedAtUtc: at));
+          _newEntries.add(NewEpcEntry(
+            epc: epcKey,
+            scannedAtUtc: at,
+            systemId: epcConfig == null
+                ? null
+                : decodeEpc(epcKey, epcConfig).systemId?.toString(),
+          ));
         }
         _submitted.add(epcKey);
       }
@@ -195,6 +228,27 @@ class NewEpcEntry {
   final String? size;
   final String? bin;
   final num? retailPrice;
+
+  NewEpcEntry copyWith({
+    String? systemId,
+    String? customSku,
+    String? itemName,
+    String? color,
+    String? size,
+    String? bin,
+    num? retailPrice,
+  }) =>
+      NewEpcEntry(
+        epc: epc,
+        scannedAtUtc: scannedAtUtc,
+        systemId: systemId ?? this.systemId,
+        customSku: customSku ?? this.customSku,
+        itemName: itemName ?? this.itemName,
+        color: color ?? this.color,
+        size: size ?? this.size,
+        bin: bin ?? this.bin,
+        retailPrice: retailPrice ?? this.retailPrice,
+      );
 
   Map<String, dynamic> toFinalizeRow({int seenCount = 1}) => <String, dynamic>{
         'epc': epc,

@@ -89,6 +89,10 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   bool _scanning = false;
   int _powerDbm = 30;
 
+  /// True only after the app went to the background / screen off mid-scan
+  /// (see [_onLifecycleStop]); the next trigger pull re-arms the scan.
+  bool _lifecyclePaused = false;
+
   /// 0 = minting EPC, 1 = writing + verifying chip. Drives the Step-2
   /// progress ticks while [_busy].
   int _encodeStage = 0;
@@ -162,7 +166,9 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     _triggerSub?.cancel();
     _triggerSub = hardwareTriggerFor(this).listen((event) {
       if (event == 'down' && _step == _Step.encode && !_busy) {
-        unawaited(_runEncode());
+        // After a background/screen-off pause the pull re-arms the live scan
+        // rather than encoding a tag seen before the pause.
+        unawaited(_lifecyclePaused ? _startScan() : _runEncode());
       }
     }, onError: (_) {});
   }
@@ -199,11 +205,32 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart. The
+  /// nearest tag is forgotten too: it may not be the one in hand on return.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    _lookupTimer?.cancel();
+    if (!_scanning) return;
+    setState(() {
+      _scanning = false;
+      _lifecyclePaused = true;
+      _nearestEpc = null;
+      _nearestRssi = null;
+      _nearestInfo = null;
+      _infoEpc = null;
+    });
   }
 
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _debounce?.cancel();
     _lookupTimer?.cancel();
     _searchCtrl.dispose();
@@ -350,7 +377,17 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
     // nearest-tag scan must be silent.
     unawaited(_sounds.setTagBeepSuppressed(true));
     if (!mounted) return;
-    setState(() => _scanning = true);
+    // _scanning only flips after the await above, so a background/screen-off
+    // stop that landed in between was not seen by _onLifecycleStop.
+    if (_rfid?.isBackgrounded ?? false) {
+      unawaited(_rfid?.stopLocateScanning());
+      setState(() => _lifecyclePaused = true);
+      return;
+    }
+    setState(() {
+      _scanning = true;
+      _lifecyclePaused = false;
+    });
   }
 
   Future<void> _stopScan() async {
@@ -687,6 +724,7 @@ class _EncodeAndPrintScreenState extends State<EncodeAndPrintScreen> {
         return 'Pull the trigger to scan the product barcode';
       case _Step.encode:
         if (_busy) return 'Hold the tag steady…';
+        if (_lifecyclePaused) return 'Scanning paused — pull the trigger to resume';
         return _nearestEpc == null
             ? 'Bring a tag close, then pull the trigger'
             : 'Tag in range — pull the trigger to encode';

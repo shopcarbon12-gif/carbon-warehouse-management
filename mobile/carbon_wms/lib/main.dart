@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/live_catalog_cache.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/theme_notifier.dart';
@@ -57,6 +58,9 @@ class _CarbonWmsRootState extends State<CarbonWmsRoot> {
     return MultiProvider(
       providers: [
         Provider<WmsApiClient>(create: (_) => WmsApiClient()),
+        ChangeNotifierProvider<LiveCatalogCache>(
+          create: (context) => LiveCatalogCache(api: context.read<WmsApiClient>()),
+        ),
         ChangeNotifierProvider<MobileSettingsRepository>(
           create: (_) => MobileSettingsRepository()..loadFromPrefs(),
         ),

@@ -15,14 +15,21 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/beep_pacer.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
+import 'package:carbon_wms/services/handheld_runtime_config.dart'
+    show kAntennaPowerDbmMax;
+import 'package:carbon_wms/services/live_catalog_cache.dart';
+import 'package:carbon_wms/services/live_catalog_models.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/ui/widgets/item_line_format.dart';
+import 'package:carbon_wms/ui/widgets/rfid_reading_indicator.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
@@ -37,109 +44,18 @@ const _assetCachePrefsKey = 'count_inventory_asset_cache_v1';
 // ignore: unused_element
 const _countEpcPrefixFilter = 'F0A0B';
 
-/// When true, strip a trailing `<COLOR> <SIZE>` or `<SIZE>` suffix from the
-/// catalog `name` before rendering. Some catalogs store the variant's color
-/// and size baked into the matrix description (e.g., `m.description` comes
-/// back as "ELODIE TOP SWEATSUIT BLACK S" for every variant of that matrix),
-/// which visually duplicates catalog-sourced `color` and `size` fields when
-/// rendered as `name · size / color`.
-///
-/// Strategy: data-driven strip — we only remove the trailing segment when it
-/// exactly matches the catalog's own color/size values. No blind regex over
-/// unrelated words. Generic "S"/"M"/"L" letter fallback is also applied when
-/// no explicit size hint is available, guarded by the flag.
-///
-/// Cosmetic only — does not mutate the catalog or any stored data, only the
-/// rendered string. Default true for this tenant's data shape; flip to false
-/// on any catalog where the matrix description is already variant-clean.
-const bool kStripNameSizeSuffix = true;
-final RegExp _nameSizeLetterSuffix = RegExp(r'\s+(XXL|XXS|XL|XS|S|M|L)\s*$');
-
-/// Normalize a bin code to the canonical `X-X-XX-X` shape used by the Bin
-/// Assign screen. Strips any existing separators, uppercases, and re-inserts
-/// dashes at the fixed positions when the compacted code is exactly 5 chars.
-/// Other lengths pass through uppercased so older / malformed codes still
-/// render (without silently dropping characters).
-String _formatBinCode(String raw) {
-  final s = raw.trim().toUpperCase().replaceAll(RegExp(r'[-\s]'), '');
-  if (s.length == 5) {
-    return '${s[0]}-${s[1]}-${s.substring(2, 4)}-${s[4]}';
-  }
-  return raw.trim().toUpperCase();
-}
-
-/// Render a SKU's bin location for the UI.
-///
-/// The catalog endpoint returns `bin_location` as a comma-joined list of all
-/// bins that hold the SKU (string_agg on the server side). When a SKU lives
-/// in multiple bins we surface the alphabetically-first one followed by an
-/// `xN` counter (e.g. `3-C-05-R x4`) so the row stays single-line. A single
-/// bin renders without the suffix. Empty input renders empty.
-String _formatBinDisplay(String? raw) {
-  if (raw == null) return '';
-  final parts = raw
-      .split(',')
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return '';
-  final first = _formatBinCode(parts.first);
-  if (parts.length == 1) return first;
-  return '$first x${parts.length}';
-}
-
-/// Strip any trailing `<color> <size>`, `<size>`, or `<color>` tail from [name]
-/// when [kStripNameSizeSuffix] is true. Matching is case-insensitive against
-/// the catalog values. Generic letter-size regex is also applied (S/M/L/XL/XS/
-/// XXL/XXS), to catch cases where the matrix description embeds a variant
-/// that differs from the current variant (e.g., description baked with
-/// "BLACK S" but the current variant row is "BLACK L").
-///
-/// Iterates until no more tails peel — this handles the common pattern where
-/// the description is `<NAME> <COLOR> <SIZE>` and we need to remove both in
-/// sequence regardless of which layer matches first.
-String _stripNameSizeSuffix(String name, {String? size, String? color}) {
-  if (!kStripNameSizeSuffix) return name;
-  var out = name.trimRight();
-  final sz = size?.trim() ?? '';
-  final cl = color?.trim() ?? '';
-
-  bool stripTail(String tail) {
-    if (tail.isEmpty) return false;
-    final lower = out.toLowerCase();
-    final t = tail.toLowerCase();
-    if (lower.endsWith(' $t')) {
-      out = out.substring(0, out.length - (t.length + 1)).trimRight();
-      return true;
-    }
-    return false;
-  }
-
-  // Iterate: peel the longest matching tail first, then retry. Up to 4 passes
-  // (color+size, size alone, color alone, generic letter-size) to converge.
-  var changed = true;
-  var guard = 0;
-  while (changed && guard < 4) {
-    changed = false;
-    guard++;
-    if (sz.isNotEmpty && cl.isNotEmpty && stripTail('$cl $sz')) { changed = true; continue; }
-    if (sz.isNotEmpty && stripTail(sz)) { changed = true; continue; }
-    if (cl.isNotEmpty && stripTail(cl)) { changed = true; continue; }
-    if (_nameSizeLetterSuffix.hasMatch(out)) {
-      out = out.replaceFirst(_nameSizeLetterSuffix, '').trimRight();
-      changed = true;
-      continue;
-    }
-  }
-  return out;
-}
+// Item-line text helpers (formatBinCode / formatBinDisplay / stripNameSizeSuffix,
+// kStripNameSizeSuffix) live in ui/widgets/item_line_format.dart, shared with
+// Add-On Count's lines.
 
 /// Drives the two modes this screen serves:
 ///  - [count]        : standard Count Inventory — counts LIVE / no-row EPCs.
 ///  - [addOnCatalog] : Add-On Catalog — counts ONLY EPCs that pass the formula
-///    and are NOT already in the catalog (no items row, or status='tag_killed').
-///    In-stock EPCs are ignored entirely. Upload adds them to the catalog as
-///    LIVE (and flips tag_killed → in-stock). No override option.
+///    and are NOT already in the catalog (no items row, or status='unknown').
+///    Every other status (in-stock, tag_killed, damaged, stolen, sold, …) is
+///    ignored entirely — silent, not shown, not uploaded. Each tag is decided
+///    on the phone from the local catalog copy ([LiveCatalogCache]). Upload
+///    adds the qualifying EPCs to the catalog as LIVE. No override option.
 enum CountMode { count, addOnCatalog }
 
 class CountInventoryScreen extends StatefulWidget {
@@ -232,6 +148,40 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   int _displayDefectiveCount = 0;
   String? _previousScanContext;
 
+  // ── Add-On Catalog only ────────────────────────────────────────────────
+  /// Local copy of the catalog (EPC statuses + item info). Every read is
+  /// decided against it on the phone — no network wait between a read and
+  /// its beep / line. Null in Count mode.
+  LiveCatalogCache? _catalog;
+  /// EPCs decided "ignore" this session (live / killed / damaged / sold …).
+  /// They never enter [_epcRows], so the Total EPCs tile only counts tags
+  /// that qualify. Decisions are final for the session.
+  final Set<String> _ignoredEpcs = <String>{};
+  /// Reads that arrived before the catalog copy was ready, in read order,
+  /// with their first-read time + RSSI (null = none reported). Drained by
+  /// [_onCatalogChanged] the moment it is ready; nothing is ever dropped.
+  final Map<String, ({DateTime at, int? rssi})> _addOnPendingEpcs =
+      <String, ({DateTime at, int? rssi})>{};
+  /// One paced beep per new qualifying / defective EPC (the native per-read
+  /// beep stays suppressed in this mode).
+  final BeepPacer _beepPacer = BeepPacer();
+  /// Marked on every raw read so the "reading" chip shows the radio is
+  /// working while it passes known (silent) stock.
+  final RfidReadPulse _readPulse = RfidReadPulse();
+  /// True while this screen holds one of the cache's 3 s auto-refresh refs.
+  bool _autoRefreshHeld = false;
+  bool _openingContinue = false;
+
+  /// Add-On Catalog is a bulk module: always the RFD8500 maximum. Count keeps
+  /// its gear setting.
+  int get _effectivePowerDbm =>
+      _isAddOnCatalog ? kAntennaPowerDbmMax : _moduleSettings.rfidPowerDbm;
+
+  /// Location the BIN line is computed for: the picked session location,
+  /// else the one the catalog server reported.
+  String? get _binLocationId =>
+      _currentLocationId.isNotEmpty ? _currentLocationId : _catalog?.locationId;
+
   /// Saved login email — used to derive the operator's first name for
   /// the auto-generated CSV filename on the Continue screen. Loaded
   /// once on screen entry; null until then. Mirrors the same pattern
@@ -276,7 +226,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     unawaited(ScanSounds.instance.init());
     // Add-On Catalog suppresses the native per-tag beep: most reads are
     // already-in-catalog tags we ignore, and beeping on them is wrong. We beep
-    // (ScanCue.read) ourselves only when an EPC qualifies (not in catalog).
+    // (ScanCue.read) ourselves only when an EPC is new (qualifies, or is a new
+    // defective tag) — paced by [_beepPacer].
     if (_isAddOnCatalog) {
       unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     }
@@ -289,11 +240,29 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfidManager ??= context.read<RfidManager>();
+    if (_rfidManager == null) {
+      _rfidManager = context.read<RfidManager>();
+      _rfidManager!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+    if (_isAddOnCatalog && _catalog == null) {
+      _catalog = context.read<LiveCatalogCache>();
+      _catalog!.addListener(_onCatalogChanged);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanOn) unawaited(_stopScan(silent: true));
   }
 
   @override
   void dispose() {
+    _rfidManager?.lifecycleStopTick.removeListener(_onLifecycleStop);
+    _catalog?.removeListener(_onCatalogChanged);
+    _releaseAutoRefresh();
+    _beepPacer.dispose();
     if (_isAddOnCatalog) {
       unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     }
@@ -327,6 +296,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _initModule() async {
+    // Add-On Catalog: start bringing the local catalog copy up to date now,
+    // overlapping the prefs + location load (reads that land before it is
+    // ready queue in _addOnPendingEpcs).
+    if (_isAddOnCatalog) unawaited(_catalog?.ensureFresh());
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_countInvPrefsKey);
     final cacheRaw = prefs.getString(_assetCachePrefsKey);
@@ -466,9 +439,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // Count gear settings override global settings while inside Count.
       // The override survives any reapplyHandheldHardwareSettings() call so
       // mobile-sync / scan-context flips can't silently reset to the
-      // handheld-config power. Cleared on dispose.
-      await rfid.setSessionPowerOverrideDbm(_moduleSettings.rfidPowerDbm);
-      await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
+      // handheld-config power. Cleared on dispose. (Add-On Catalog: locked
+      // to the maximum, see _effectivePowerDbm.)
+      await rfid.setSessionPowerOverrideDbm(_effectivePowerDbm);
+      await RfidVendorChannel.setAntennaPowerDbm(_effectivePowerDbm);
 
       // Use only the direct vendor stream — RfidManager unified stream duplicates the same tags.
       await _readsSub?.cancel();
@@ -517,7 +491,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final next =
         await Navigator.of(context).push<_CountInventoryModuleSettings>(
       MaterialPageRoute<_CountInventoryModuleSettings>(
-        builder: (_) => _CountInventorySettingsScreen(initial: _moduleSettings),
+        builder: (_) => _CountInventorySettingsScreen(
+          initial: _moduleSettings,
+          powerLocked: _isAddOnCatalog,
+        ),
       ),
     );
     if (next == null) return;
@@ -528,9 +505,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // change, scan-context flip) keeps using the gear value, not config.
     if (mounted) {
       final rfid = context.read<RfidManager>();
-      await rfid.setSessionPowerOverrideDbm(_moduleSettings.rfidPowerDbm);
+      await rfid.setSessionPowerOverrideDbm(_effectivePowerDbm);
     }
-    await RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm);
+    await RfidVendorChannel.setAntennaPowerDbm(_effectivePowerDbm);
   }
 
   // _playBeep removed — read-cue beep is fired from native controllers.
@@ -547,6 +524,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   void _onTagRead(RfidTagRead read) {
     if (!_scanOn) return;
+    // Add-On Catalog is silent on known stock; the reading chip shows that
+    // reads are still arriving. Every raw read counts, repeats included.
+    if (_isAddOnCatalog) _readPulse.mark();
     final rssi = read.rssi ?? 0;
     // Count is inventory mode — accept all signal levels (rssiDistance filter is for locate/proximity, not count).
     final epc = read.epcHex24.toUpperCase();
@@ -567,6 +547,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     if (row != null) {
       // Hard lock: once an EPC is scanned in Count, repeat sightings are ignored.
       // Do NOT setState here — the flush timer repaints at 150ms intervals.
+      return;
+    }
+    if (_isAddOnCatalog) {
+      _ingestAddOnCatalog(normalized, now, rssi);
       return;
     }
     if (kDebugMode) {
@@ -600,17 +584,6 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // them; the server's ingestEpcs decoder runs the same classification
     // and writes them to items.status='tag_killed', which is what makes
     // them show up under Catalog → Defective EPCs on the desktop.
-    // Add-On Catalog: defer ALL classification to the status batch so an
-    // already-cataloged (in-stock) or formula-fail EPC NEVER groups, shows,
-    // beeps, or reports. lookupEpcs decides — only formula-passing EPCs that
-    // are not yet in the catalog (no items row, or tag_killed) get grouped +
-    // beeped there.
-    if (_isAddOnCatalog) {
-      if (!_epcStatusFetched.contains(normalized)) {
-        _epcStatusPending.add(normalized);
-      }
-      return;
-    }
 
     final cfg = context.read<MobileSettingsRepository>().epcConfig;
     final systemId = decodeSystemId(normalized, cfg);
@@ -654,6 +627,131 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // UI update happens via _uiFlushTimer at 150ms cadence; no per-tag setState.
   }
 
+  // ── Add-On Catalog: local per-tag decision ─────────────────────────────
+
+  /// Decides one new EPC against the local catalog copy — synchronous, no
+  /// network between the read and its beep / line. A read that lands before
+  /// the copy is ready waits in [_addOnPendingEpcs] (drained by
+  /// [_onCatalogChanged]). UI repaints via the 150 ms flush, as in Count.
+  void _ingestAddOnCatalog(String epc, DateTime now, int rssi) {
+    if (_ignoredEpcs.contains(epc) || _addOnPendingEpcs.containsKey(epc)) {
+      return;
+    }
+    // Count's callers pass 0 for "no RSSI" (`read.rssi ?? 0`, the barcode
+    // path); never store 0 as a reading.
+    final readRssi = rssi != 0 ? rssi : null;
+    final decision =
+        _catalog?.classifyForAddOnCatalog(epc, locationId: _binLocationId);
+    if (decision == null) {
+      _addOnPendingEpcs[epc] = (at: now, rssi: readRssi);
+      return;
+    }
+    _applyAddOnDecision(epc, decision, now, readRssi);
+  }
+
+  /// ignore → remembered for the session; never shown, counted or uploaded.
+  /// qualify → grouped by system id with item info from the local copy
+  ///   (no catalog request); uploads as LIVE.
+  /// defective (no items row, SKU unresolved) → DEFECTIVE tile; uploads as
+  ///   tag_killed through scan-finalize, as before.
+  /// One paced beep per qualifying / defective EPC.
+  void _applyAddOnDecision(
+    String epc,
+    AddOnCatalogDecision d,
+    DateTime firstSeen,
+    int? rssi, {
+    bool beep = true,
+  }) {
+    if (d.verdict == AddOnCatalogVerdict.ignore) {
+      _ignoredEpcs.add(epc);
+      return;
+    }
+    final row = _SessionEpcRow(
+      epc: epc,
+      assetId: epc,
+      prefixHex: '',
+      serial: 0,
+      firstSeen: firstSeen,
+      lastSeen: firstSeen,
+    );
+    if (rssi != null) row.rssi = rssi; // else keeps the -99 "none" default
+    _epcRows[epc] = row;
+    final info = d.info;
+    if (d.verdict == AddOnCatalogVerdict.qualify && info != null) {
+      // systemId is always set when the SKU resolved; the fallbacks only
+      // keep the group key non-null.
+      final sysId = d.systemId ?? info.systemId ?? info.skuId;
+      final group = _groupedRows.putIfAbsent(
+        sysId,
+        () => _GroupedRow(assetId: sysId),
+      );
+      group.epcs.add(epc);
+      group.qty = group.epcs.length;
+      if (rssi != null) group.lastRssi = rssi;
+      _applyCatalogToGroup(group, <String, dynamic>{
+        'sku': info.sku,
+        'name': info.name,
+        'size': info.size,
+        'color': info.color,
+        'retail_price': info.retailPrice,
+        'bin_location': info.binDisplay,
+      });
+    } else {
+      _defectiveEpcs.add(epc);
+    }
+    if (beep) _beepPacer.request();
+  }
+
+  /// Decides every read that was waiting for the catalog copy, in read
+  /// order. Returns true when anything was decided.
+  bool _drainAddOnPending({required bool beep}) {
+    final catalog = _catalog;
+    if (catalog == null || !catalog.isReady || _addOnPendingEpcs.isEmpty) {
+      return false;
+    }
+    final waiting = _addOnPendingEpcs.entries.toList();
+    _addOnPendingEpcs.clear();
+    var decided = false;
+    for (final e in waiting) {
+      final d =
+          catalog.classifyForAddOnCatalog(e.key, locationId: _binLocationId);
+      if (d == null) {
+        _addOnPendingEpcs[e.key] = e.value;
+        continue;
+      }
+      _applyAddOnDecision(e.key, d, e.value.at, e.value.rssi, beep: beep);
+      decided = true;
+    }
+    return decided;
+  }
+
+  /// Catalog copy changed (became ready, or a refresh brought new data).
+  /// EPCs already decided stay decided — final for the session; the upload
+  /// re-checks them server-side (scan-finalize) — so only reads still
+  /// waiting for the copy are decided here.
+  void _onCatalogChanged() {
+    if (!mounted) return;
+    if (!_drainAddOnPending(beep: _scanOn)) return;
+    // While scanning the 150 ms UI flush repaints; otherwise repaint now.
+    if (!_scanOn) {
+      setState(() {});
+      _syncDisplayedCounters();
+    }
+  }
+
+  void _holdAutoRefresh() {
+    final catalog = _catalog;
+    if (_autoRefreshHeld || catalog == null) return;
+    catalog.startAutoRefresh();
+    _autoRefreshHeld = true;
+  }
+
+  void _releaseAutoRefresh() {
+    if (!_autoRefreshHeld) return;
+    _autoRefreshHeld = false;
+    _catalog?.stopAutoRefresh();
+  }
+
   // ── Per-EPC status batch fetch ─────────────────────────────────────────
 
   /// Periodic batch lookup of items.status for the EPCs we've ingested
@@ -668,6 +766,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _fetchEpcStatusesBatch() async {
+    // Add-On Catalog decides every tag locally (_ingestAddOnCatalog) and
+    // never queues here; its branches below are no longer reached.
+    if (_isAddOnCatalog) return;
     if (!mounted) return;
     if (_epcStatusPending.isEmpty) return;
     // Take a chunk, leave the rest for the next tick. The server caps
@@ -890,7 +991,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   String _binText(_GroupedRow g) {
     if (!g.catalogResolved || g.catalogMissing || g.epcInvalid) return '';
-    final formatted = _formatBinDisplay(g.binLocation);
+    final formatted = formatBinDisplay(g.binLocation);
     if (formatted.isEmpty) return '';
     return 'BIN $formatted';
   }
@@ -904,6 +1005,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openGroupEpcList(_GroupedRow g) async {
+    // Add-On Catalog: Locate (reachable from the EPC list) takes over the
+    // tag / trigger / barcode streams and turns the per-read beep back on
+    // when it closes — which made every live tag beep after coming back.
+    // Stop first, then re-arm this screen on the way back.
+    if (_isAddOnCatalog && _scanOn) await _stopScan();
+    if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
         builder: (_) => _CountEpcListScreen(
@@ -917,6 +1024,17 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         ),
       ),
     );
+    if (!_isAddOnCatalog || !mounted) return;
+    // The EPC list doesn't take the trigger, so a pull there starts this
+    // screen underneath; _ensureScannerReady resets the UI to "not
+    // scanning", so stop properly first (radio + auto-refresh).
+    if (_scanOn) await _stopScan();
+    if (!mounted) return;
+    await ScanSounds.instance.setTagBeepSuppressed(true);
+    if (!mounted) return;
+    // Re-subscribes the streams Locate took over and re-asserts MOBILE COUNT,
+    // edge suppression, trigger mode and power.
+    await _ensureScannerReady();
   }
 
   Future<void> _persistAssetCache() async {
@@ -1023,11 +1141,35 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // the inventory start. Power + seen-epc reset land within a few ms either way
     // and the reader tolerates racing with the first reads.
     unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
-    unawaited(RfidVendorChannel.setAntennaPowerDbm(_moduleSettings.rfidPowerDbm));
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_effectivePowerDbm));
+    if (_isAddOnCatalog) {
+      // Re-assert on every start: a Locate opened from the EPC list restores
+      // the per-read beep and clears the power override in its dispose, which
+      // can land after _openGroupEpcList re-armed this screen (fast double
+      // back). Silent-on-known-stock and max power must hold for every pass.
+      unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+      unawaited(_rfidManager?.setSessionPowerOverrideDbm(_effectivePowerDbm));
+    }
+    final lifecycleTickAtStart = _rfidManager?.lifecycleStopTick.value;
     try { await _rfidManager?.startLocateScanning(); } catch (_) {}
     if (!mounted) return;
+    // App went to the background / screen off while the radio was starting:
+    // RfidManager stopped the radio for it, and _onLifecycleStop saw
+    // _scanOn=false. Don't flip the UI to "scanning"; make sure it's off.
+    if (lifecycleTickAtStart != null &&
+        _rfidManager?.lifecycleStopTick.value != lifecycleTickAtStart) {
+      try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
+      return;
+    }
     setState(() { _scanOn = true; });
     _startUiFlushTimer();
+    if (_isAddOnCatalog) {
+      // No per-tag server lookups here: tags are decided against the local
+      // copy, which pulls a tiny "what changed" delta every ~3 s while
+      // scanning (released on stop / leave).
+      _holdAutoRefresh();
+      return;
+    }
     // Begin draining accumulated EPCs through the bulk
     // /api/handheld/epc-lookup so we learn each EPC's items.status as
     // they're scanned. Reclassifies any EPC whose status is something
@@ -1047,17 +1189,34 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     return matches.first.group(1);
   }
 
-  Future<void> _stopScan() async {
+  /// [silent] skips the stop cue (app-lifecycle stop: the app is going to
+  /// the background, nobody is pressing STOP).
+  Future<void> _stopScan({bool silent = false}) async {
     if (!_scanOn) return;
     _scanInactivityTimer?.cancel();
     _rfidKeepAliveTimer?.cancel();
     _stopUiFlushTimer();
     // Kill any in-flight read beeps so they don't trail past the stop event.
     ScanSounds.instance.stopAll();
+    if (_isAddOnCatalog) {
+      _beepPacer.cancel();
+      _releaseAutoRefresh();
+    }
     try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
-    unawaited(_playStopTone());
+    if (!silent) unawaited(_playStopTone());
+    if (_isAddOnCatalog) {
+      // Reads that raced the radio stop can have queued beeps since the
+      // cancel above.
+      _beepPacer.cancel();
+      _syncDisplayedCounters();
+      // Every pause refreshes the local copy. Decided tags stay decided;
+      // a read still waiting for the copy is decided when it lands
+      // (_onCatalogChanged) — nothing read is dropped.
+      unawaited(_catalog?.refresh());
+      return;
+    }
     // Final pass on whatever was still pending in the status queue, so
     // the Continue / Upload screen sees the operator's final defective
     // count rather than a partially-classified intermediate state.
@@ -1104,7 +1263,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       _epcStatus.clear();
       _epcStatusPending.clear();
       _epcStatusFetched.clear();
+      // Add-On Catalog (empty in Count): a reset re-decides every tag
+      // against the current copy on its next read.
+      _ignoredEpcs.clear();
+      _addOnPendingEpcs.clear();
     });
+    _beepPacer.cancel();
+    _readPulse.reset();
     _syncDisplayedCounters();
     unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
   }
@@ -1172,7 +1337,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // in this function appends the rest.
       final systemId = int.tryParse(g.assetId);
       final bin = (g.binLocation != null && g.binLocation!.trim().isNotEmpty)
-          ? _formatBinCode(g.binLocation!)
+          ? formatBinCode(g.binLocation!)
           : '';
       final retailPrice = g.retailPriceStr != null && g.retailPriceStr!.trim().isNotEmpty
           ? double.tryParse(g.retailPriceStr!.trim())
@@ -1290,17 +1455,27 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           : (overrideCatalog ? 'count_inventory_override' : 'count_inventory'),
       rows: rows,
       // Add-On Catalog never overrides — it only adds the scanned not-yet-
-      // cataloged EPCs to the catalog as LIVE (server ingest flips tag_killed).
+      // cataloged EPCs to the catalog as LIVE. The server re-checks each EPC
+      // inside the upload and skips any the catalog already holds (another
+      // handheld may have added it since this phone decided).
       overrideCatalog: _isAddOnCatalog ? false : overrideCatalog,
       clientFilename: _autoReportFilename(),
     );
+    // The tags just went live: pull them into the local copy now rather
+    // than on the next pause.
+    if (_isAddOnCatalog) unawaited(_catalog?.refresh());
     final valid = result['rowsValid'] ?? 0;
     final failed = result['rowsFailed'] ?? 0;
     final wiped = result['wipedCount'] ?? 0;
+    // Add-On Catalog only (0 / absent everywhere else, and from older servers).
+    final skipped = result['rowsSkipped'] ?? 0;
     if (mounted) {
       final extras = <String>[];
       if (failed != 0) extras.add('$failed defective');
       if (wiped != 0) extras.add('$wiped wiped');
+      if (_isAddOnCatalog && skipped != 0) {
+        extras.add('$skipped already in catalog');
+      }
       final suffix = extras.isEmpty ? '' : ' (${extras.join(', ')})';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Uploaded · $valid live$suffix')),
@@ -1327,6 +1502,43 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   }
 
   Future<void> _openContinue() async {
+    // One Continue at a time: the catalog wait below can take seconds, and a
+    // second tap must not push a second Continue / Upload screen.
+    if (_openingContinue) return;
+    _openingContinue = true;
+    try {
+      await _openContinueGuarded();
+    } finally {
+      _openingContinue = false;
+    }
+  }
+
+  Future<void> _openContinueGuarded() async {
+    if (_isAddOnCatalog && _addOnPendingEpcs.isNotEmpty) {
+      // Reads are still waiting for the catalog copy: give it a moment to
+      // land so they make it into the upload. Never open Continue without
+      // them — nothing read is dropped.
+      await _catalog
+          ?.ensureFresh()
+          .timeout(const Duration(seconds: 10), onTimeout: () {});
+      if (!mounted) return;
+      _drainAddOnPending(beep: false);
+      setState(() {});
+      _syncDisplayedCounters();
+      final waiting = _addOnPendingEpcs.length;
+      if (waiting > 0) {
+        final failed = _catalog?.isReady != true && _catalog?.lastError != null;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            failed
+                ? "Can't load the catalog from the server — $waiting tags waiting. Check Wi-Fi and try again."
+                : 'Catalog still loading — $waiting tags waiting. Try again in a moment.',
+          ),
+        ));
+        return;
+      }
+    }
+    if (!mounted) return;
     final groups = _groupedRows.values.toList()
       ..sort((a, b) => a.assetId.compareTo(b.assetId));
     await Navigator.of(context).push<void>(
@@ -1429,6 +1641,18 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     ),
                   ),
                 ),
+                // Add-On Catalog stays silent while passing known stock; this
+                // chip shows the radio is reading (and the catalog copy's
+                // state). Visual only. The indicator pads 12w itself → 20w.
+                if (_isAddOnCatalog)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(8.w, 2.h, 8.w, 0),
+                    child: RfidReadingIndicator(
+                      scanning: _scanOn,
+                      pulse: _readPulse,
+                      catalogSync: _catalog?.syncState,
+                    ),
+                  ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0.h),
                   child: LayoutBuilder(
@@ -1519,6 +1743,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                       _epcRows.remove(e);
                                     }
                                     _groupedRows.remove(g.assetId);
+                                    // Add-On Catalog: a deleted line stays
+                                    // gone for the session (no re-add + beep
+                                    // on the next read); RESET clears it.
+                                    if (_isAddOnCatalog) {
+                                      _ignoredEpcs.addAll(g.epcs);
+                                    }
                                   });
                                   _syncDisplayedCounters();
                                 },
@@ -1869,9 +2099,9 @@ class _CountItemContainerState extends State<_CountItemContainer> {
     // SKU, so it is not repeated here. Embedded color+size in `itemName` (the
     // catalog's matrix description is shared across variants and can bake in
     // a representative variant's color+size, e.g. "ELODIE TOP SWEATSUIT BLACK
-    // S") visually duplicates catalog color/size. `_stripNameSizeSuffix`
+    // S") visually duplicates catalog color/size. `stripNameSizeSuffix`
     // trims that tail when it matches the catalog's own color/size values.
-    final cleanName = _stripNameSizeSuffix(
+    final cleanName = stripNameSizeSuffix(
       widget.itemName,
       size: widget.size,
       color: widget.color,
@@ -2047,7 +2277,7 @@ class _CountEpcListScreen extends StatelessWidget {
     final skuValue = skuLine.startsWith('SKU: ')
         ? skuLine.substring(5).trim()
         : skuLine;
-    // Caller passes "BIN xxxxx" (already formatted via _formatBinCode). For the
+    // Caller passes "BIN xxxxx" (already formatted via formatBinCode). For the
     // drilldown we render under a "BIN" label, so drop the "BIN " prefix and
     // keep just the code — the label + value render as "BIN  1-A-03-C".
     final binValue = binText.startsWith('BIN ')
@@ -2113,12 +2343,12 @@ class _CountEpcListScreen extends StatelessWidget {
 
     // Drilldown header: 4 labelled rows; BIN row hidden when unassigned.
     //   Row 1 — SKU: <value>   $price
-    //   Row 2 — ITEM: <name>   (size+color stripped by _stripNameSizeSuffix so
+    //   Row 2 — ITEM: <name>   (size+color stripped by stripNameSizeSuffix so
     //                          the name doesn't visually repeat row 3)
     //   Row 3 — color: "<color>"   size: "<size>"  (two labeled inline chunks;
     //                                               whole row hidden when both empty)
     //   Row 4 — BIN# <value>   (hidden entirely when bin is empty/null)
-    final cleanName = _stripNameSizeSuffix(itemName, size: size, color: color);
+    final cleanName = stripNameSizeSuffix(itemName, size: size, color: color);
     final hasColorSize = color.isNotEmpty || size.isNotEmpty;
 
     return CarbonScaffold(
@@ -2873,9 +3103,18 @@ class _CountInventoryContinueScreenState
 
 /// Count gear → RFID settings (Count-only prefs). Stitch reference: stitch_carbonwms_project_requirements (11)/code.html
 class _CountInventorySettingsScreen extends StatefulWidget {
-  const _CountInventorySettingsScreen({required this.initial});
+  const _CountInventorySettingsScreen({
+    required this.initial,
+    this.powerLocked = false,
+  });
 
   final _CountInventoryModuleSettings initial;
+
+  /// Add-On Catalog: power is fixed at [kAntennaPowerDbmMax] (bulk module).
+  /// The slider is shown locked, restart re-applies the maximum, and SAVE
+  /// hands back [initial]'s power so Count's saved gear is never changed
+  /// from here.
+  final bool powerLocked;
 
   @override
   State<_CountInventorySettingsScreen> createState() =>
@@ -2901,7 +3140,9 @@ class _CountInventorySettingsScreenState
   @override
   void initState() {
     super.initState();
-    _power = widget.initial.rfidPowerDbm;
+    _power = widget.powerLocked
+        ? kAntennaPowerDbmMax
+        : widget.initial.rfidPowerDbm;
     _rssi = widget.initial.rssiDistance;
     _loadDeviceMeta();
     _refreshDiagnostics();
@@ -3020,7 +3261,10 @@ class _CountInventorySettingsScreenState
                     onPressed: () {
                       Navigator.of(context).pop(
                         _CountInventoryModuleSettings(
-                            rfidPowerDbm: _power, rssiDistance: _rssi),
+                            rfidPowerDbm: widget.powerLocked
+                                ? widget.initial.rfidPowerDbm
+                                : _power,
+                            rssiDistance: _rssi),
                       );
                     },
                     style: FilledButton.styleFrom(
@@ -3146,35 +3390,48 @@ class _CountInventorySettingsScreenState
                   min: 0,
                   max: 30,
                   divisions: 30,
-                  onChanged: (v) {
-                    setState(() => _power = v.round());
-                    _schedulePowerApply();
-                  },
+                  // null = disabled (Add-On Catalog runs at the maximum).
+                  onChanged: widget.powerLocked
+                      ? null
+                      : (v) {
+                          setState(() => _power = v.round());
+                          _schedulePowerApply();
+                        },
                 ),
               ),
             ),
             SizedBox(height: 8.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '0 dBm',
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w700,
-                    color: _outline,
-                  ),
+            if (widget.powerLocked)
+              Text(
+                '$kAntennaPowerDbmMax dBm · locked for Add-On Catalog',
+                style: GoogleFonts.robotoMono(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                  color: _outline,
                 ),
-                Text(
-                  '30 dBm',
-                  style: GoogleFonts.robotoMono(
-                    fontSize: 10.sp,
-                    fontWeight: FontWeight.w700,
-                    color: _outline,
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '0 dBm',
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _outline,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  Text(
+                    '30 dBm',
+                    style: GoogleFonts.robotoMono(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w700,
+                      color: _outline,
+                    ),
+                  ),
+                ],
+              ),
             // 1.2.39: dropped the "RSSI SENSITIVITY" slider from this popup.
             // Count is inventory mode — _onTagRead accepts every read regardless
             // of signal strength, so the slider had no path to hardware and

@@ -63,8 +63,9 @@ export type ScanFinalizeScreen =
   | "count_inventory_override"
   | "add_on_count"
   // Add-On Catalog: only EPCs not already in the catalog (no items row or
-  // tag_killed). UPLOAD ingests them at in-stock (LIVE) and flips tag_killed →
-  // in-stock. No override. Standard ingest path (no add-on session/ledger).
+  // 'unknown'). UPLOAD ingests them at in-stock (LIVE); every other existing
+  // status (incl. tag_killed / damaged / stolen) is skipped server-side too.
+  // No override. Standard ingest path (no add-on session/ledger).
   | "add_on_catalog";
 
 export type ScanFinalizeInput = {
@@ -105,6 +106,9 @@ export type ScanFinalizeResult = {
   rowsFailed: number;
   wipedCount: number;
   defectiveRowCount: number;
+  /** Add-On Catalog UPLOAD: scanned EPCs not ingested because the catalog
+   *  already holds them (status other than 'unknown'). 0 everywhere else. */
+  rowsSkipped: number;
 };
 
 const AUDIT_HEADER =
@@ -405,6 +409,7 @@ export async function finalizeScanSession(
         rowsFailed: savedDefectiveCount,
         wipedCount: 0,
         defectiveRowCount: savedDefectiveCount,
+        rowsSkipped: 0,
       };
     }
 
@@ -431,12 +436,37 @@ export async function finalizeScanSession(
       );
     }
 
+    // Add-On Catalog only adds tags the catalog doesn't already hold. Re-checked
+    // here, inside the upload transaction, because the phone decided from a copy
+    // that can be a few seconds old (another handheld may have uploaded the same
+    // tag since). Mirrors the phone's decision table: only "no row" and 'unknown'
+    // may be ingested. Covers in-stock / sold / tag_killed / damaged / stolen
+    // (owner rule; 0089 keeps killed tags dead) plus return / in-transit /
+    // pending_* which the phone has always ignored.
+    let epcsToIngest = epcsScanned;
+    let rowsSkipped = 0;
+    if (input.screen === "add_on_catalog" && epcsScanned.length > 0) {
+      const cur = await client.query<{ epc: string; status: string }>(
+        `SELECT i.epc, i.status
+           FROM items i
+           INNER JOIN locations l ON l.id = i.location_id
+          WHERE l.tenant_id = $1::uuid
+            AND i.epc = ANY($2::text[])`,
+        [input.tenantId, epcsScanned],
+      );
+      const blocked = new Set(
+        cur.rows.filter((r) => r.status !== "unknown").map((r) => r.epc.toUpperCase()),
+      );
+      epcsToIngest = epcsScanned.filter((e) => !blocked.has(e));
+      rowsSkipped = epcsScanned.length - epcsToIngest.length;
+    }
+
     /* ---- 4. Per-EPC ingest. Decode → custom_sku lookup → in-stock or tag_killed. ---- */
     const epcSource = sourceForScreen(input.screen);
     // Resolve the operator's handheld to a devices.id for FK attribution.
     // null when the alias doesn't match a single authorized handheld.
     const sourceDeviceId = await resolveHandheldDeviceId(client, input.deviceId, input.tenantId);
-    const ingressInputs = epcsScanned.map((epc) => ({
+    const ingressInputs = epcsToIngest.map((epc) => ({
       tenantId: input.tenantId,
       epc,
       source: epcSource,
@@ -452,7 +482,7 @@ export async function finalizeScanSession(
     const failures: DefectiveEpcRow[] = [];
     for (let i = 0; i < ingressResults.length; i++) {
       const result = ingressResults[i]!;
-      const epc = epcsScanned[i]!;
+      const epc = epcsToIngest[i]!;
       if (result.status === "in-stock") {
         rowsValid++;
       } else {
@@ -596,6 +626,7 @@ export async function finalizeScanSession(
       rowsFailed: combinedFailures.length,
       wipedCount,
       defectiveRowCount: combinedFailures.length,
+      rowsSkipped,
     };
   } catch (e) {
     try {

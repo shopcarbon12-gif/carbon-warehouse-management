@@ -116,17 +116,36 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own reading state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    _rfidWindow?.cancel();
+    if (_rfidReading) setState(() => _rfidReading = false);
   }
 
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _rfidWindow?.cancel();
     _suggestTimer?.cancel();
     _barcodeSub?.cancel();
     _tagSub?.cancel();
     _triggerSub?.cancel();
     final r = _rfid;
+    if (_rfidReading) {
+      // Left mid-read: the window timer that would have stopped the radio was
+      // just cancelled, and pauseScanning below only reaches the native channel
+      // when RfidManager's scanner thinks the sled is linked.
+      unawaited(RfidVendorChannel.stopZebraInventory());
+      unawaited(RfidVendorChannel.stopChainwayInventory());
+    }
     if (r != null) {
       unawaited(r.pauseScanning());
       unawaited(r.setSessionPowerOverrideDbm(null));
@@ -253,9 +272,12 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {}
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_rfidReading) return;
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {}
+    if (!mounted || !_rfidReading) return;
     // Single-shot window — collect the strongest tag, then resolve it.
     _rfidWindow = Timer(const Duration(milliseconds: 700), () async {
       try {

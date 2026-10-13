@@ -12,6 +12,8 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/handheld_runtime_config.dart'
+    show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/services/transfer_slip_printer.dart';
@@ -54,10 +56,12 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   static const Color _accent = Color(0xFF1B7D7D); // primary teal
   static const Color _missing = Color(0xFFD9534F); // red
   static const String _powerPrefsKey = 'transfer_in_power_dbm_v1';
+  static const String _powerMaxMigratedKey = 'transfer_in_power_max_migrated_v1';
 
   /// Per-screen power persisted across sessions; mirrors the count gear
-  /// pattern. Default 27 dBm (matches the cloud TRANSFER profile midpoint).
-  int _powerDbm = 27;
+  /// pattern. Default is the RFD8500 maximum (bulk module); the gear can
+  /// still lower it for a narrow aisle.
+  int _powerDbm = kAntennaPowerDbmMax;
 
   StreamSubscription<RfidTagRead>? _tagSub;
   StreamSubscription<String>? _barcodeSub;
@@ -122,15 +126,32 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _rfid ??= context.read<RfidManager>();
+    if (_rfid == null) {
+      _rfid = context.read<RfidManager>();
+      _rfid!.lifecycleStopTick.addListener(_onLifecycleStop);
+    }
+  }
+
+  /// App went to background / screen off: RfidManager already stopped the radio.
+  /// Only drop this screen's own scanning state — no cue, no restart.
+  void _onLifecycleStop() {
+    if (!mounted) return;
+    if (_scanning) setState(() => _scanning = false);
   }
 
   @override
   void dispose() {
+    _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _tagSub?.cancel();
     _barcodeSub?.cancel();
     _triggerSub?.cancel();
     final r = _rfid;
+    if (_scanning) {
+      // _startScan drives the native channel directly; pauseScanning below only
+      // reaches it when RfidManager's scanner thinks the sled is linked.
+      unawaited(RfidVendorChannel.stopZebraInventory());
+      unawaited(RfidVendorChannel.stopChainwayInventory());
+    }
     if (r != null) {
       unawaited(r.pauseScanning());
       unawaited(r.setSessionPowerOverrideDbm(null));
@@ -144,6 +165,15 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
 
   Future<void> _loadPower() async {
     final prefs = await SharedPreferences.getInstance();
+    // One-shot move to max power (bulk module, 2026-10-13): devices that saved
+    // a lower gear value before this release start again at 30. Later gear
+    // changes are kept as before.
+    if (prefs.getBool(_powerMaxMigratedKey) != true) {
+      await prefs.setInt(_powerPrefsKey, kAntennaPowerDbmMax);
+      await prefs.setBool(_powerMaxMigratedKey, true);
+      if (mounted) setState(() => _powerDbm = kAntennaPowerDbmMax);
+      return;
+    }
     final v = prefs.getInt(_powerPrefsKey);
     if (v != null && mounted) {
       setState(() => _powerDbm = v.clamp(0, 30));
@@ -277,11 +307,17 @@ class _TransferInReceiveScreenState extends State<TransferInReceiveScreen> {
     try {
       ScanSounds.instance.play(ScanCue.start);
     } catch (_) {}
+    // Re-assert the gear power on every start: another screen (Locate, Status
+    // Change…) may have left the radio low since this screen was opened.
+    unawaited(_rfid?.setSessionPowerOverrideDbm(_powerDbm));
+    unawaited(RfidVendorChannel.setAntennaPowerDbm(_powerDbm));
     try {
       await RfidVendorChannel.startZebraInventory();
     } catch (_) {
       /* optional */
     }
+    // A background/screen-off stop can land during the await above.
+    if (!mounted || !_scanning) return;
     try {
       await RfidVendorChannel.startChainwayInventory();
     } catch (_) {

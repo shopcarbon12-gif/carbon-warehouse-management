@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getPool } from "@/lib/db";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
 import { enqueueEdgeIngestJob } from "@/lib/server/edge-ingest-queue";
+import { EDGE_INGEST_IGNORED_CONTEXTS } from "@/lib/server/inventory-reconciler";
 import { filterIgnoredEpcs } from "@/lib/server/ignored-epcs";
 
 export const runtime = "nodejs";
@@ -48,6 +49,15 @@ async function POST_handler(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
   const device = auth.device;
+
+  // Accepted but never queued: Add-On Count reaches the catalog only through
+  // its session ledger + scan-finalize (see EDGE_INGEST_IGNORED_CONTEXTS).
+  if (EDGE_INGEST_IGNORED_CONTEXTS.has(parsed.data.scanContext.trim().toUpperCase())) {
+    return NextResponse.json(
+      { accepted: true, queued_epcs: 0, ignored: "add_on_count_context" },
+      { status: 202 },
+    );
+  }
 
   const epcsDeduped = filterIgnoredEpcs([
     ...new Set(

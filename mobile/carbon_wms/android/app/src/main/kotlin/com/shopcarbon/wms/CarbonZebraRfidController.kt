@@ -29,10 +29,12 @@ import com.zebra.scannercontrol.DCSSDKDefs
 import com.zebra.scannercontrol.DCSScannerInfo
 import com.zebra.scannercontrol.FirmwareUpdateEvent
 import com.zebra.scannercontrol.IDcsSdkApiDelegate
+import com.zebra.scannercontrol.RMDAttributes
 import com.zebra.scannercontrol.SDKHandler
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
 
@@ -77,6 +79,30 @@ class CarbonZebraRfidController(
   // fires dcssdkEventCommunicationSessionEstablished.
   @Volatile private var sdkHandler: SDKHandler? = null
   @Volatile private var barcodeScannerId: Int = -1
+  // Name + serial of the scanner behind [barcodeScannerId], captured with it, so
+  // the 2D-arm backup hook can apply the same RFD filter / log line as the
+  // session-established hook.
+  @Volatile private var barcodeScannerName: String? = null
+  @Volatile private var barcodeScannerSerial: String? = null
+
+  // Code 93 ensure (every RFD8500 must read the hang tag's Code 93 SKU). Runs on
+  // its OWN thread: an RSM attribute call blocks up to ~8 s + 5 s on a silent
+  // sled, which must never stall the shared executor (stop / start / trigger).
+  private val scannerCfgExec = Executors.newSingleThreadExecutor()
+  /** Scanner ID whose Code 93 was confirmed ON this session; -1 = not yet. */
+  @Volatile private var code93OkForScannerId = -1
+  private val code93InFlight = AtomicBoolean(false)
+
+  /** Bumped INLINE (caller's thread) by every stop request. Start/resume jobs capture it when
+   *  they are queued and skip (or undo) themselves if it moved — a stop asked for later wins. */
+  private val stopSeq = AtomicInteger(0)
+  /** stopSeq value captured by the start/resume that last set inventoryActive=true. */
+  @Volatile private var activeSinceSeq = -1
+  /** True while [performWriteEpc] owns the radio. A stop that lands then (screen off,
+   *  app backgrounded) must not call Inventory.stop() over the write's verify window —
+   *  verifyEpcWrite's finally stops the radio itself, and the stopSeq bump already
+   *  keeps the write from resuming inventory afterwards. */
+  private val writeInFlight = AtomicBoolean(false)
 
   /** Requested output power in dBm (0–30), forwarded to the reader’s transmit power table. */
   private val requestedPowerDbm = AtomicInteger(30)
@@ -245,6 +271,15 @@ class CarbonZebraRfidController(
         Log.w(TAG, "setTriggerModeBarcode failed: ${e.message}")
         lastError = e.message ?: e.javaClass.simpleName
       }
+      // Code 93 backup hook: the session-established hook can miss (inventory was
+      // streaming, a call timed out). Queued after the mode-switch writes so it
+      // doesn't compete with them; fire-and-forget on its own thread.
+      val sid = barcodeScannerId
+      if (sid >= 0 && code93OkForScannerId != sid &&
+        barcodeScannerName.orEmpty().uppercase().startsWith("RFD")
+      ) {
+        scheduleCode93Ensure(sid, barcodeScannerSerial)
+      }
     }
   }
 
@@ -323,13 +358,12 @@ class CarbonZebraRfidController(
    *
    * Best-effort: failures here do NOT fail the API3 RFID connect. UHF still
    * works even if the barcode side never comes up.
+   *
+   * Booted even when no relay is set yet: the session also carries the Code 93
+   * ensure, and [BarcodeDelegate] reads [barcodeRelay] at decode time.
    */
   private fun initBarcodeSdkOnce() {
     if (sdkHandler != null) return
-    val relay = barcodeRelay ?: run {
-      Log.d(TAG, "barcode SDK: no relay set, skipping init")
-      return
-    }
     try {
       val handler = SDKHandler(context.applicationContext)
       // BT_NORMAL = Bluetooth Classic SSI, the mode RFD8500 uses when paired
@@ -338,7 +372,7 @@ class CarbonZebraRfidController(
       // logical channels on the same physical BT link, which is the same
       // combination Zebra's own 123RFID app uses.
       handler.dcssdkSetOperationalMode(DCSSDKDefs.DCSSDK_MODE.DCSSDK_OPMODE_BT_NORMAL)
-      handler.dcssdkSetDelegate(BarcodeDelegate(relay))
+      handler.dcssdkSetDelegate(BarcodeDelegate())
       val mask = (
         DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_BARCODE.value or
           DCSSDKDefs.DCSSDK_EVENT.DCSSDK_EVENT_SCANNER_APPEARANCE.value or
@@ -422,9 +456,7 @@ class CarbonZebraRfidController(
    * scanner appearances by name so only RFD-class devices ever get a
    * communication session — paired Galaxy Watches and the like are ignored.
    */
-  private inner class BarcodeDelegate(
-    private val relay: CarbonHardwareBarcodeRelay,
-  ) : IDcsSdkApiDelegate {
+  private inner class BarcodeDelegate : IDcsSdkApiDelegate {
     override fun dcssdkEventScannerAppeared(scanner: DCSScannerInfo) {
       val name = scanner.scannerName.orEmpty()
       val id = scanner.scannerID
@@ -450,13 +482,24 @@ class CarbonZebraRfidController(
       if (barcodeScannerId == scannerID) {
         barcodeScannerId = -1
       }
+      // The sled may come back factory-reset / power-cycled: re-verify Code 93.
+      if (code93OkForScannerId == scannerID) code93OkForScannerId = -1
     }
 
     override fun dcssdkEventCommunicationSessionEstablished(scanner: DCSScannerInfo) {
-      barcodeScannerId = scanner.scannerID
+      val sid = scanner.scannerID
+      val name = scanner.scannerName.orEmpty()
+      val serial = runCatching { scanner.scannerHWSerialNumber }.getOrNull()
+      barcodeScannerName = name
+      barcodeScannerSerial = serial
+      barcodeScannerId = sid
       // Session is live — stop paying the rediscovery cost on subsequent arms.
       needsBarcodeRebind = false
-      Log.d(TAG, "barcode SDK: sessionEstablished id=${scanner.scannerID} name='${scanner.scannerName}'")
+      Log.d(TAG, "barcode SDK: sessionEstablished id=$sid name='$name'")
+      // Every RFD8500 must read Code 93. Queued, never run inside this callback.
+      if (name.uppercase().startsWith("RFD") && code93OkForScannerId != sid) {
+        scheduleCode93Ensure(sid, serial)
+      }
     }
 
     override fun dcssdkEventCommunicationSessionTerminated(scannerID: Int) {
@@ -465,6 +508,7 @@ class CarbonZebraRfidController(
       if (barcodeScannerId == scannerID) {
         barcodeScannerId = -1
       }
+      if (code93OkForScannerId == scannerID) code93OkForScannerId = -1
     }
 
     override fun dcssdkEventBarcode(barcodeData: ByteArray?, barcodeType: Int, fromScannerID: Int) {
@@ -477,7 +521,7 @@ class CarbonZebraRfidController(
       val cleaned = raw.trim().trimEnd(' ', '\r', '\n', ' ')
       if (cleaned.isEmpty()) return
       Log.d(TAG, "barcode SDK: decode id=$fromScannerID type=$barcodeType bytes=${barcodeData.size} value='$cleaned'")
-      relay.emitExternal(cleaned)
+      barcodeRelay?.emitExternal(cleaned)
     }
 
     override fun dcssdkEventImage(imageData: ByteArray?, fromScannerID: Int) { /* not subscribed */ }
@@ -486,6 +530,107 @@ class CarbonZebraRfidController(
     override fun dcssdkEventFirmwareUpdate(event: FirmwareUpdateEvent?) { /* not subscribed */ }
     override fun dcssdkEventAuxScannerAppeared(newTopology: DCSScannerInfo?, auxScanner: DCSScannerInfo?) { /* not used */ }
   }
+
+  /**
+   * Queue [ensureCode93Persisted] on [scannerCfgExec] — never the shared
+   * executor, never inline in an SDK callback. Fire-and-forget.
+   */
+  private fun scheduleCode93Ensure(sid: Int, serial: String?) {
+    // De-duplicate at schedule time: tasks on one thread never overlap, so a
+    // run-time guard would let repeated 2D arms queue N x ~13 s of RSM calls on a
+    // silent sled. Released in ensureCode93Persisted's finally.
+    if (!code93InFlight.compareAndSet(false, true)) return
+    try {
+      scannerCfgExec.execute { ensureCode93Persisted(sid, serial) }
+    } catch (_: java.util.concurrent.RejectedExecutionException) {
+      // dispose() already shut the config thread down.
+      code93InFlight.set(false)
+    }
+  }
+
+  /**
+   * Every RFD8500 must read Code 93: the hang tag prints the full SKU in it
+   * (lib/utils/zpl-carbon-tag.ts). A sled that was factory-reset, or set up in
+   * 123RFID without "Persist Settings" ticked (that screen sends a temporary
+   * RSM_ATTR_SET), loses Code 93 on its next power cycle.
+   *
+   * Reads attribute 9 and writes it ONLY when it reads back off: RSM_ATTR_STORE
+   * (kept by the sled across power cycles), falling back to RSM_ATTR_SET (this
+   * session only — re-applied on the next session). Never writes blind: a failed
+   * or unreadable GET leaves the sled untouched. Best-effort throughout — never
+   * touches [lastError], never emits to Dart, never fails or delays a connect.
+   */
+  private fun ensureCode93Persisted(sid: Int, serial: String?) {
+    try {
+      val h = sdkHandler ?: return
+      // Session already re-established under another ID, or already confirmed.
+      if (barcodeScannerId != sid || code93OkForScannerId == sid) return
+      if (inventoryActive || nativeLocateActive) {
+        // Stay off the link while UHF streams (inventory or native locate); the
+        // next 2D arm retries.
+        Log.d(TAG, "code93: sid=$sid deferred (radio active)")
+        return
+      }
+      val a = RMDAttributes.RMD_ATTR_SYM_CODE_93 // 9
+      val getXml = "<inArgs><scannerID>$sid</scannerID><cmdArgs><arg-xml><attrib_list>$a</attrib_list></arg-xml></cmdArgs></inArgs>"
+      val setXml = "<inArgs><scannerID>$sid</scannerID><cmdArgs><arg-xml><attrib_list><attribute><id>$a</id><datatype>F</datatype><value>true</value></attribute></attrib_list></arg-xml></cmdArgs></inArgs>"
+      val ok = DCSSDKDefs.DCSSDK_RESULT.DCSSDK_RESULT_SUCCESS
+
+      val (beforeRes, beforeOut) = rsmCommand(h, DCSSDKDefs.DCSSDK_COMMAND_OPCODE.DCSSDK_RSM_ATTR_GET, getXml, sid)
+      if (beforeRes != ok) {
+        Log.w(TAG, "code93: sid=$sid serial=$serial GET failed res=$beforeRes out=$beforeOut")
+        return
+      }
+      val before = rsmAttrValue(beforeOut, a)
+      if (before == null) {
+        Log.w(TAG, "code93: sid=$sid serial=$serial GET reply has no value, not writing: $beforeOut")
+        return
+      }
+      if (isRsmOn(before)) {
+        code93OkForScannerId = sid
+        Log.d(TAG, "code93: sid=$sid serial=$serial before=$before/$beforeRes (already on)")
+        return
+      }
+
+      val storeRes = rsmCommand(h, DCSSDKDefs.DCSSDK_COMMAND_OPCODE.DCSSDK_RSM_ATTR_STORE, setXml, sid).first
+      val setRes = if (storeRes != ok) {
+        rsmCommand(h, DCSSDKDefs.DCSSDK_COMMAND_OPCODE.DCSSDK_RSM_ATTR_SET, setXml, sid).first
+      } else {
+        null
+      }
+      val (afterRes, afterOut) = rsmCommand(h, DCSSDKDefs.DCSSDK_COMMAND_OPCODE.DCSSDK_RSM_ATTR_GET, getXml, sid)
+      val after = if (afterRes == ok) rsmAttrValue(afterOut, a) else null
+      if (after != null && isRsmOn(after)) code93OkForScannerId = sid
+      Log.i(
+        TAG,
+        "code93: sid=$sid serial=$serial before=$before/$beforeRes store=$storeRes" +
+          (if (setRes != null) " set=$setRes" else "") + " after=$after/$afterRes",
+      )
+    } catch (t: Throwable) {
+      Log.w(TAG, "code93: failed", t)
+    } finally {
+      code93InFlight.set(false)
+    }
+  }
+
+  /** One CoreScanner RSM command (4-arg overload, non-null out buffer). Blocking. */
+  private fun rsmCommand(
+    h: SDKHandler,
+    op: DCSSDKDefs.DCSSDK_COMMAND_OPCODE,
+    inXml: String,
+    sid: Int,
+  ): Pair<DCSSDKDefs.DCSSDK_RESULT?, String> {
+    val out = StringBuilder()
+    val res = h.dcssdkExecuteCommandOpCodeInXMLForScanner(op, inXml, out, sid)
+    return res to out.toString()
+  }
+
+  /** `<value>` of attribute [attr] in an RSM GET reply, or null when absent. */
+  private fun rsmAttrValue(xml: String, attr: Int): String? =
+    Regex("<id>\\s*$attr\\s*</id>.*?<value>\\s*([^<]*?)\\s*</value>", RegexOption.DOT_MATCHES_ALL)
+      .find(xml)?.groupValues?.get(1)
+
+  private fun isRsmOn(v: String): Boolean = v.equals("true", ignoreCase = true) || v == "1"
 
   fun connectAsync(onDone: (Throwable?) -> Unit) {
     executor.execute {
@@ -521,6 +666,7 @@ class CarbonZebraRfidController(
   }
 
   fun setAntennaPowerDbm(dbm: Int) {
+    val seqAtCall = stopSeq.get()
     executor.execute {
       val clamped = dbm.coerceIn(0, 30)
       val prior = requestedPowerDbm.getAndSet(clamped)
@@ -562,18 +708,28 @@ class CarbonZebraRfidController(
       if (wasRunning) {
         // Retry the resume so a single transient RFD8500 perform() rejection
         // can't strand the radio stopped with the screen still "scanning".
-        resumeInventoryWithRetry(r)
+        resumeInventoryWithRetry(r, seqAtCall)
       }
     }
   }
 
   fun startInventoryFlutterResult(result: MethodChannel.Result) {
     Log.d("LAT", "TRIGGER_ACK ts=${System.currentTimeMillis()} stack=zebra")
+    // Captured before queueing: a stop requested after this call (second trigger
+    // pull, leaving the screen, app backgrounded) must win over this start.
+    val seqAtCall = stopSeq.get()
     executor.execute {
       try {
         val r = reader
         if (r == null || !r.isConnected) {
           mainHandler.post { result.error("NOT_CONNECTED", "Zebra reader not connected", null) }
+          return@execute
+        }
+        if (stopSeq.get() != seqAtCall) {
+          // Superseded before it ran. Answer success (Dart treats it as a no-op);
+          // starting now would leave the sled transmitting after the stop.
+          Log.d(TAG, "radioSeq: start superseded (seq $seqAtCall -> ${stopSeq.get()})")
+          mainHandler.post { result.success(null) }
           return@execute
         }
         // Idempotent — Dart sometimes drives both
@@ -586,10 +742,20 @@ class CarbonZebraRfidController(
         // streaming. The visible symptom on the floor was a "the slider
         // does nothing" / "scan beep is wrong" log pattern with the
         // operator's previous power index stuck.
+        //
+        // The flag alone is not proof the radio runs: a stop that raced an
+        // earlier start used to leave it true with the radio off, and every
+        // later pull then no-op'd here ("dead trigger"). Only trust it when the
+        // start/resume that set it happened after the most recent stop.
         if (inventoryActive) {
-          Log.d(TAG, "startInventoryFlutterResult: already active, no-op")
-          mainHandler.post { result.success(null) }
-          return@execute
+          if (activeSinceSeq == stopSeq.get()) {
+            Log.d(TAG, "startInventoryFlutterResult: already active, no-op")
+            mainHandler.post { result.success(null) }
+            return@execute
+          }
+          Log.w(TAG, "radioSeq: stale inventoryActive (since=$activeSinceSeq now=${stopSeq.get()}), restarting")
+          stopInventoryWithRetry(r)
+          inventoryActive = false
         }
         // Force the antenna config write on the start path rather than
         // trusting the cache. The cache is a latency optimisation for the
@@ -609,7 +775,15 @@ class CarbonZebraRfidController(
         // hit intermittently: their stop→60ms→start clean-restart and the
         // post-chip-write power-cycle re-arm land inside the RFD8500's settle
         // window, where perform() throws OperationFailureException.
-        if (resumeInventoryWithRetry(r)) {
+        if (stopSeq.get() == seqAtCall && resumeInventoryWithRetry(r, seqAtCall)) {
+          mainHandler.post { result.success(null) }
+        } else if (stopSeq.get() != seqAtCall) {
+          // A stop arrived during the power / beeper writes or mid-perform; the
+          // resume already backed out. Put the sled back at its resting volume
+          // (the superseding stop may have been a native-locate stop, which
+          // leaves the beeper alone) and answer as a no-op.
+          Log.d(TAG, "radioSeq: start superseded (seq $seqAtCall -> ${stopSeq.get()})")
+          setBeeperVolumeCached(r, BEEPER_VOLUME.HIGH_BEEP)
           mainHandler.post { result.success(null) }
         } else {
           mainHandler.post {
@@ -634,12 +808,29 @@ class CarbonZebraRfidController(
    * gate then turned into a permanently FROZEN geiger/scan (reads dropped, screen
    * still "scanning"). Retry a few times with a short settle; only give up — and
    * record lastError — after every attempt fails. Sets inventoryActive on success.
+   *
+   * [expectedSeq] is the [stopSeq] the caller captured when it was queued. If a
+   * stop was requested since, the resume is abandoned (or undone, when perform()
+   * already ran) and returns false without touching lastError — the stop wins.
    */
-  private fun resumeInventoryWithRetry(r: RFIDReader, attempts: Int = 4): Boolean {
+  private fun resumeInventoryWithRetry(r: RFIDReader, expectedSeq: Int, attempts: Int = 4): Boolean {
     for (i in 0 until attempts) {
+      if (stopSeq.get() != expectedSeq) {
+        inventoryActive = false
+        Log.d(TAG, "radioSeq: resume superseded (seq $expectedSeq -> ${stopSeq.get()})")
+        return false
+      }
       try {
         r.Actions.Inventory.perform()
+        if (stopSeq.get() != expectedSeq) {
+          // The stop landed while perform() was on the wire — turn it back off.
+          stopInventoryWithRetry(r)
+          inventoryActive = false
+          Log.d(TAG, "radioSeq: resume undone, stop arrived mid-perform (seq $expectedSeq -> ${stopSeq.get()})")
+          return false
+        }
         inventoryActive = true
+        activeSinceSeq = expectedSeq
         if (i > 0) Log.d(TAG, "resumeInventoryWithRetry: perform ok on attempt ${i + 1}")
         return true
       } catch (e: Exception) {
@@ -700,17 +891,33 @@ class CarbonZebraRfidController(
     // immediately. The actual SDK .stop() call runs on the executor as before but no
     // longer needs to win the race against in-flight tag-read callbacks.
     inventoryActive = false
+    // Bump before reading nativeLocateActive: a native-locate start that is mid-
+    // Perform either sees this bump and undoes itself, or set its flag before the
+    // read below (so wasLocating is true and the job stops it).
+    val seq = stopSeq.incrementAndGet()
     val wasLocating = nativeLocateActive
     nativeLocateActive = false
     executor.execute {
-      if (wasLocating) {
-        reader?.takeIf { it.isConnected }?.let { r -> runCatching { r.Actions.TagLocationing.Stop() } }
+      if (writeInFlight.get()) {
+        // A tag write is mid-verify on writeExec. Stopping inventory now would cut
+        // its verify short and roll back a tag that may already hold the new EPC.
+        Log.d(TAG, "radioSeq: stop seq=$seq skipped SDK stop (write in flight)")
+      } else {
+        if (wasLocating) {
+          reader?.takeIf { it.isConnected }?.let { r -> runCatching { r.Actions.TagLocationing.Stop() } }
+        }
+        try {
+          reader?.takeIf { it.isConnected }?.let { stopInventoryWithRetry(it) }
+        } catch (_: Exception) {
+          /* ignore */
+        }
       }
-      try {
-        reader?.takeIf { it.isConnected }?.let { stopInventoryWithRetry(it) }
-      } catch (_: Exception) {
-        /* ignore */
-      }
+      // Clear again AFTER the real stop. A start/resume queued before this stop
+      // has already run (single FIFO executor) and may have set the flags true
+      // after the inline clear above — that was the stuck "radio off, flag on"
+      // state that made the next trigger pull a silent no-op.
+      inventoryActive = false
+      nativeLocateActive = false
       // Restore the sled's resting volume so subsequent firmware chimes
       // (mode change → done elsewhere, disconnect, power) fire audibly,
       // including after a force-close because NVRAM is now HIGH. This
@@ -718,10 +925,12 @@ class CarbonZebraRfidController(
       reader?.takeIf { it.isConnected }?.let {
         setBeeperVolumeCached(it, BEEPER_VOLUME.HIGH_BEEP)
       }
+      Log.d(TAG, "radioSeq: stop seq=$seq done")
     }
   }
 
   fun dispose() {
+    scannerCfgExec.shutdownNow()
     executor.execute { disconnectSync() }
   }
 
@@ -742,11 +951,19 @@ class CarbonZebraRfidController(
     // past writeHardTimeoutMs, we answer Dart `false`, abandon + recreate the
     // write thread, and force a link recovery — so a wedged write can no longer
     // brick the radio and force the operator to restart the app.
+    // A stop requested during the write (operator left, app backgrounded) must
+    // not be undone by the write's own resume on exit.
+    val seqAtWrite = stopSeq.get()
     val future = writeExec.submit(
       java.util.concurrent.Callable {
-        runCatching { performWriteEpc(tgt, new) }.getOrElse {
-          lastError = it.message ?: it.javaClass.simpleName
-          false
+        writeInFlight.set(true)
+        try {
+          runCatching { performWriteEpc(tgt, new, seqAtWrite) }.getOrElse {
+            lastError = it.message ?: it.javaClass.simpleName
+            false
+          }
+        } finally {
+          writeInFlight.set(false)
         }
       },
     )
@@ -842,7 +1059,7 @@ class CarbonZebraRfidController(
     }
   }
 
-  private fun performWriteEpc(targetEpc: String, newEpc: String): Boolean {
+  private fun performWriteEpc(targetEpc: String, newEpc: String, seqAtWrite: Int): Boolean {
     val r = reader ?: return false
     if (!r.isConnected) return false
 
@@ -966,7 +1183,7 @@ class CarbonZebraRfidController(
 
       // Multi-sighting verify after power cycle. Additionally requires oldSightings==0 —
       // see verifyEpcWrite for rationale.
-      val verified = verifyEpcWrite(r, targetEpc, newEpc)
+      val verified = verifyEpcWrite(r, targetEpc, newEpc, seqAtWrite)
 
       // Always restore the operator's power, whether verify succeeded
       // or not, so the next inventory in this screen behaves as the
@@ -1106,8 +1323,14 @@ class CarbonZebraRfidController(
           currentPowerIdx = prevPowerIdx
         }.onFailure { Log.w(TAG, "performWriteEpc finally: restore power failed: ${it.message}") }
       }
-      if (wasRunning) {
-        try { r.Actions.Inventory.perform() } catch (_: Exception) { /* ignore */ }
+      if (wasRunning && stopSeq.get() == seqAtWrite) {
+        try {
+          r.Actions.Inventory.perform()
+        } catch (_: Exception) {
+          // Radio did not come back: never leave the flag claiming it did, or
+          // the next start would no-op on it.
+          inventoryActive = false
+        }
       }
     }
   }
@@ -1132,6 +1355,7 @@ class CarbonZebraRfidController(
     r: RFIDReader,
     oldEpc: String,
     newEpc: String,
+    seqAtWrite: Int,
     timeoutMs: Long = 1500,
     minNewSightings: Int = 1,
   ): Boolean {
@@ -1196,7 +1420,8 @@ class CarbonZebraRfidController(
       }
     } finally {
       try { r.Actions.Inventory.stop() } catch (_: Exception) { /* ignore */ }
-      inventoryActive = previousInventoryActive
+      // A stop requested during the write wins: don't resurrect the flag.
+      inventoryActive = previousInventoryActive && stopSeq.get() == seqAtWrite
     }
     // Post-power-cycle, any sighting of oldEpc means the tag booted from EEPROM still holding
     // the legacy value — the write did not commit to silicon. Reject regardless of newSightings.
@@ -1294,6 +1519,10 @@ class CarbonZebraRfidController(
       maxRaw <= 330 -> 10
       else -> 100
     }
+    // A max-power request (bulk modules ask for 30) takes the top of the table.
+    // Truncating each level to whole dBm made a table that doesn't end exactly
+    // on X.0 resolve to the first X.0 entry below the real maximum.
+    if (tgt >= maxRaw / divisor) return levels.indexOf(maxRaw)
     var bestIdx = 0
     var bestErr = Int.MAX_VALUE
     for (i in levels.indices) {
@@ -1487,6 +1716,7 @@ class CarbonZebraRfidController(
     result: MethodChannel.Result,
     force: Boolean = false,
   ) {
+    val seqAtCall = stopSeq.get()
     executor.execute {
       try {
         val r = reader
@@ -1536,7 +1766,7 @@ class CarbonZebraRfidController(
           addedOk = true
         }
         if (wasActive) {
-          resumeInventoryWithRetry(r)
+          resumeInventoryWithRetry(r, seqAtCall)
         }
         mainHandler.post { result.success(addedOk) }
       } catch (e: Exception) {
@@ -1563,6 +1793,7 @@ class CarbonZebraRfidController(
     result: MethodChannel.Result,
     force: Boolean = false,
   ) {
+    val seqAtCall = stopSeq.get()
     executor.execute {
       try {
         val r = reader
@@ -1596,7 +1827,7 @@ class CarbonZebraRfidController(
           Log.w(TAG, "setSingulationSession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
         }
         if (wasActive) {
-          resumeInventoryWithRetry(r)
+          resumeInventoryWithRetry(r, seqAtCall)
         }
         mainHandler.post { result.success(ok) }
       } catch (e: Exception) {
@@ -1628,6 +1859,7 @@ class CarbonZebraRfidController(
    * resumed. Used only by Locate 2.0; other screens keep the old path.
    */
   fun setAntennaPowerAck(dbm: Int, result: MethodChannel.Result) {
+    val seqAtCall = stopSeq.get()
     executor.execute {
       val reply = HashMap<String, Any?>()
       val clamped = dbm.coerceIn(0, 30)
@@ -1658,7 +1890,7 @@ class CarbonZebraRfidController(
           Log.w(TAG, "setAntennaPowerAck: read-back failed: ${e.message}")
         }
         readGeneration += 1
-        val resumed = if (wasRunning) resumeInventoryWithRetry(r) else false
+        val resumed = if (wasRunning) resumeInventoryWithRetry(r, seqAtCall) else false
         reply["ok"] = ok && appliedDbm != null
         reply["appliedDbm"] = appliedDbm
         reply["appliedIdx"] = appliedIdx
@@ -1708,6 +1940,9 @@ class CarbonZebraRfidController(
    * read event with LocationInfo (relative 0-100 — NOT a distance).
    */
   fun startNativeLocate(epcHex: String?, result: MethodChannel.Result) {
+    // Same stop-wins rule as inventory starts. Dart reads error "superseded" as
+    // "the operator already stopped" — not a reason to fall back to Signal.
+    val seqAtCall = stopSeq.get()
     executor.execute {
       val reply = HashMap<String, Any?>()
       try {
@@ -1715,6 +1950,9 @@ class CarbonZebraRfidController(
         val epc = epcHex?.trim()?.uppercase()
         if (r == null || !r.isConnected) {
           reply["ok"] = false; reply["error"] = "not_connected"
+        } else if (stopSeq.get() != seqAtCall) {
+          reply["ok"] = false; reply["error"] = "superseded"
+          Log.d(TAG, "radioSeq: native locate start superseded (seq $seqAtCall -> ${stopSeq.get()})")
         } else if (epc == null || !epc.matches(EPC96)) {
           reply["ok"] = false; reply["error"] = "invalid_epc"
         } else if (runCatching { r.ReaderCapabilities.isTagLocationingSupported }.getOrDefault(false) != true) {
@@ -1730,10 +1968,26 @@ class CarbonZebraRfidController(
           }
           readGeneration += 1
           setBeeperVolumeCached(r, BEEPER_VOLUME.QUIET_BEEP)
-          r.Actions.TagLocationing.Perform(epc, null, null)
-          nativeLocateActive = true
-          reply["ok"] = true
-          reply["generation"] = readGeneration
+          if (stopSeq.get() == seqAtCall) {
+            r.Actions.TagLocationing.Perform(epc, null, null)
+            // Flag first, then re-check: a stop that bumps after this check reads
+            // the flag as true and its own job stops TagLocationing.
+            nativeLocateActive = true
+          }
+          if (stopSeq.get() != seqAtCall) {
+            if (nativeLocateActive) {
+              runCatching { r.Actions.TagLocationing.Stop() }
+              nativeLocateActive = false
+            }
+            // Back to the resting volume; a native-locate stop that saw no
+            // active locate leaves the beeper alone.
+            setBeeperVolumeCached(r, BEEPER_VOLUME.HIGH_BEEP)
+            reply["ok"] = false; reply["error"] = "superseded"
+            Log.d(TAG, "radioSeq: native locate start superseded (seq $seqAtCall -> ${stopSeq.get()})")
+          } else {
+            reply["ok"] = true
+            reply["generation"] = readGeneration
+          }
         }
       } catch (e: Exception) {
         nativeLocateActive = false
@@ -1746,6 +2000,9 @@ class CarbonZebraRfidController(
   }
 
   fun stopNativeLocate(result: MethodChannel.Result?) {
+    // Supersede any start still queued (bump before reading the flag — see
+    // stopInventoryAsync).
+    stopSeq.incrementAndGet()
     val was = nativeLocateActive
     nativeLocateActive = false // gate late reads immediately
     executor.execute {
@@ -1810,6 +2067,7 @@ class CarbonZebraRfidController(
       sdkHandler = null
     }
     barcodeScannerId = -1
+    code93OkForScannerId = -1
 
     // 1. Detach the RFIDReaderEventHandler (process-wide listener slot).
     if (readersAttached) {
