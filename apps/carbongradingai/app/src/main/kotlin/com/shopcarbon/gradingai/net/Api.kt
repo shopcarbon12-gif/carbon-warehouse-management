@@ -77,6 +77,18 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     suspend fun lookupMatrix(matrixId: String): Lookup = Lookup.parse(getJson("/api/grading-app/lookup?matrixId=${enc(matrixId)}"))
     suspend fun queue(): Queue = Queue.parse(getJson("/api/grading-app/queue"))
 
+    /** The scan's photo → the product's Carbon Studio, FRONT section. */
+    suspend fun sendToStudio(scanId: String): JSONObject = withContext(Dispatchers.IO) {
+        call { Request.Builder().url("$origin/api/grading-app/scans/${enc(scanId)}/studio").post(ByteArray(0).toRequestBody(null)) }
+    }
+
+    /** Fabric / care read off a care label → the WMS (fills gaps only). Returns what the WMS now holds. */
+    suspend fun saveLabel(matrixId: String, fabric: String?, care: String?): JSONObject = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("matrixId", matrixId).put("fabric", fabric ?: JSONObject.NULL).put("care", care ?: JSONObject.NULL)
+            .toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/label").post(body) }
+    }
+
     /** AI assist: the squared-up photo and the points to place. */
     suspend fun assist(photo: File, profile: String, pxPerCm: Double, keys: List<String>): JSONObject {
         val meta = JSONObject().put("profile", profile).put("pxPerCm", pxPerCm).put("keys", org.json.JSONArray(keys))

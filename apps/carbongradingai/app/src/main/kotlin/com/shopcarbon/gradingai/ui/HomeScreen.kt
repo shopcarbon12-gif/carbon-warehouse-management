@@ -87,6 +87,7 @@ fun HomeScreen(nav: Nav) {
         actions = { IconButton(onClick = { nav.go(Screen.Settings) }) { Icon(Icons.Filled.Settings, "Settings", tint = Palette.muted) } },
         bottom = { BottomTabs(Tab.Measure) { onTab(nav, it, app) } },
     ) {
+        com.shopcarbon.gradingai.update.Updater.note.value?.let { Notice(it, Palette.ai) }
         if (!phoneSupported(app)) {
             Notice(
                 if (app.prefs.testMode) "Test mode: this ${Build.MODEL} has no time-of-flight depth sensor. Scans are saved for review only, never written to the item."

@@ -43,6 +43,15 @@ class Prefs(ctx: Context) {
         get() = sp.getBoolean("autoCapture", true)
         set(v) = sp.edit().putBoolean("autoCapture", v).apply()
 
+    /** Unlock the app with the fingerprint (or the phone's PIN) when it opens. */
+    var biometricLock: Boolean
+        get() = sp.getBoolean("biometricLock", false)
+        set(v) = sp.edit().putBoolean("biometricLock", v).apply()
+
+    /** Points the operator removed for a product — the other sizes usually need the same ones. */
+    fun skippedFor(matrixId: String): Set<String> = sp.getStringSet("skip.$matrixId", emptySet()) ?: emptySet()
+    fun setSkippedFor(matrixId: String, keys: Set<String>) = sp.edit().putStringSet("skip.$matrixId", keys).apply()
+
     /** Last config JSON, so the app opens offline with the last known lists. */
     var configJson: String?
         get() = sp.getString("configJson", null)

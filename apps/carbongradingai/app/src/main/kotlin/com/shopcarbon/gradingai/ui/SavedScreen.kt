@@ -55,7 +55,19 @@ fun SavedScreen(nav: Nav, s: MeasureSession, r: SaveResult?, offline: Boolean) {
         }
         val studio = (app.config?.studioLink ?: "/inventory/catalog?matrix={matrixId}&mtab=studio").replace("{matrixId}", item.matrixId)
         val seo = (app.config?.seoLink ?: "/inventory/catalog?matrix={matrixId}&mtab=seo").replace("{matrixId}", item.matrixId)
-        Secondary("Make product photos (Studio)") { nav.go(Screen.Web("Carbon Studio", studio)) }
+        var studioBusy by remember { mutableStateOf(false) }
+        Secondary(if (studioBusy) "Sending the photo to Studio…" else "Make product photos (Studio)", enabled = !studioBusy) {
+            /* The scan's photo goes into Studio's FRONT item photos first (owner,
+               2026-10-13); a scan still waiting to upload opens Studio as it is. */
+            val id = r?.scanId
+            if (id == null) { nav.go(Screen.Web("Carbon Studio", studio)); return@Secondary }
+            studioBusy = true
+            scope.launch {
+                try { app.api.sendToStudio(id) } catch (e: Exception) { err = "Photo not sent to Studio: ${e.message}" }
+                studioBusy = false
+                nav.go(Screen.Web("Carbon Studio", studio))
+            }
+        }
         Secondary("Write description (SEO)") { nav.go(Screen.Web("SEO writer", seo)) }
         err?.let { Notice(it, Palette.bad) }
         Primary("Next in the queue") {

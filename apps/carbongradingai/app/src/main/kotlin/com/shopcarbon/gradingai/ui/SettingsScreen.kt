@@ -32,6 +32,8 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
     var origin by remember { mutableStateOf(app.prefs.origin) }
     var testMode by remember { mutableStateOf(app.prefs.testMode) }
     var auto by remember { mutableStateOf(app.prefs.autoCapture) }
+    var finger by remember { mutableStateOf(app.prefs.biometricLock) }
+    val canFinger = remember { (ctx as? androidx.fragment.app.FragmentActivity)?.let { com.shopcarbon.gradingai.auth.Biometric.available(it) } == true }
     var msg by remember { mutableStateOf<String?>(null) }
     var progress by remember { mutableStateOf<Float?>(null) }
     val pending = remember { ScanStore.pending(ctx).size }
@@ -40,6 +42,10 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
         Card {
             Label("Account")
             KeyValue("Signed in as", app.vault.email() ?: "—")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (canFinger) "Unlock with fingerprint" else "Fingerprint not set up on this phone", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Palette.text)
+                Switch(finger, { finger = it; app.prefs.biometricLock = it }, enabled = canFinger)
+            }
             Secondary("Sign out") { app.vault.clear(); onSignOut() }
         }
         Card {
@@ -79,13 +85,13 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
             val rel = cfg?.app
             if (rel != null && Updater.newer(rel.latestVersion)) {
                 Notice("Version ${rel.latestVersion} is ready.${rel.notes?.let { " $it" } ?: ""}", Palette.accent)
-                Primary(progress?.let { "Downloading ${(it * 100).toInt()}%" } ?: "Update now", enabled = progress == null) {
+                Primary(progress?.let { "Updating…" } ?: "Update now", enabled = progress == null) {
                     progress = 0f
                     scope.launch {
-                        try { Updater.downloadAndInstall(ctx, rel.downloadUrl) { progress = it } } catch (e: Exception) { msg = e.message } finally { progress = null }
+                        try { Updater.run(ctx, rel) { s -> msg = s } } finally { progress = null }
                     }
                 }
-            } else Muted("Up to date.")
+            } else Muted("Up to date. New versions install by themselves when you open the app.")
         }
         msg?.let { Notice(it, Palette.accent) }
     }

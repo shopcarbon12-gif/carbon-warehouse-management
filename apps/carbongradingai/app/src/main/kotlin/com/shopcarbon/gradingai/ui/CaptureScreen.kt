@@ -105,7 +105,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
             try {
                 processing = "Finding the garment…"
                 val scan = Pipeline.process(ctx, b, target.profile, app.prefs.calibration)
-                val session = MeasureSession(target, scan, testPhone)
+                val session = MeasureSession(target, scan, testPhone, app.prefs.skippedFor(target.lookup.matrixId))
                 session.startAi(app)
                 nav.replace(Screen.Result(session))
             } catch (e: Exception) {

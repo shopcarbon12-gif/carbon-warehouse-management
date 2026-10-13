@@ -28,6 +28,10 @@ data class Profile(
     val lay: String,
     val aiKeys: List<String>,
     val guide: GuideImage?,
+    /** sleeves | sleeveless | bottoms | onepiece — how the type picker groups it. */
+    val group: String,
+    /** For a sleeved type: the type to offer when the photo shows no sleeves. */
+    val sleeveless: String?,
 )
 
 data class CaptureParams(
@@ -58,6 +62,11 @@ data class AppConfig(
 ) {
     fun profile(id: String?): Profile? = profiles.firstOrNull { it.id == id }
 
+    /** The type picker's sections, in order. */
+    fun groupedProfiles(): List<Pair<String, List<Profile>>> = listOf(
+        "With sleeves" to "sleeves", "Without sleeves" to "sleeveless", "Bottoms" to "bottoms", "One-piece" to "onepiece",
+    ).map { (label, g) -> label to profiles.filter { it.group == g } }.filter { it.second.isNotEmpty() }
+
     companion object {
         fun parse(j: JSONObject): AppConfig {
             val profiles = j.optJSONArray("profiles").objects().map { p ->
@@ -75,6 +84,8 @@ data class AppConfig(
                     },
                     lay = p.optString("lay"),
                     aiKeys = p.optJSONArray("aiKeys").strings(),
+                    group = p.optString("group", when (p.optString("family")) { "trousers", "shorts", "skirt" -> "bottoms"; "onepiece" -> "onepiece"; else -> "sleeves" }),
+                    sleeveless = p.optStringOrNull("sleeveless"),
                     guide = p.optJSONObject("guide")?.let { g ->
                         val lines = mutableMapOf<String, List<Pair<Float, Float>>>()
                         g.optJSONObject("lines")?.let { l ->

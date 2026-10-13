@@ -2,6 +2,7 @@ package com.shopcarbon.gradingai.measure
 
 import android.os.Build
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -36,9 +37,11 @@ sealed class AiState {
  * replacing the seam-based ones when it answers), every drag the operator
  * makes (each becomes training data), and the save.
  */
-class MeasureSession(val target: MeasureTarget, val scan: Scan, private val testPhone: Boolean) {
+class MeasureSession(val target: MeasureTarget, val scan: Scan, private val testPhone: Boolean, initiallyRemoved: Set<String> = emptySet()) {
     val profile get() = target.profile
     val lines = mutableStateMapOf<String, MLine>().apply { putAll(scan.outline) }
+    /** Points left out of this save (owner: "not all measurements will always be required"). */
+    val removed = mutableStateListOf<String>().apply { addAll(initiallyRemoved.filter { k -> target.profile.points.any { it.key == k } }) }
     var ai by mutableStateOf<AiState>(AiState.Idle)
         private set
     private var aiLines: Map<String, MLine> = emptyMap()
@@ -49,12 +52,30 @@ class MeasureSession(val target: MeasureTarget, val scan: Scan, private val test
     var labelFlag by mutableStateOf(target.labelFlag)
     val canUndo get() = undo.isNotEmpty()
 
-    fun cm(): Map<String, Double> = pointsCm(profile, lines, scan.pxPerCm)
+    fun cm(): Map<String, Double> = pointsCm(profile, kept(), scan.pxPerCm)
+
+    /** The lines that will be saved. */
+    fun kept(): Map<String, MLine> = lines.filterKeys { it !in removed }
+
+    /** Leave a point (or an L/R pair) out, or bring it back; remembered for the product's other sizes. */
+    fun toggleRemoved(app: App, keys: List<String>) {
+        if (keys.all { it in removed }) removed.removeAll(keys) else keys.forEach { if (it !in removed) removed.add(it) }
+        app.prefs.setSkippedFor(target.lookup.matrixId, removed.toSet())
+    }
+
+    /** The same photo, measured as another garment type. */
+    fun switchTo(app: App, other: Profile): MeasureSession {
+        cancelAi()
+        val next = MeasureSession(target.copy(profile = other), Pipeline.remeasure(scan, other), testPhone, app.prefs.skippedFor(target.lookup.matrixId))
+        next.labelFlag = labelFlag
+        next.startAi(app)
+        return next
+    }
 
     fun startAi(app: App) {
         val cfg = app.config
-        // The seam points, plus anything the outline was unsure of on this photo.
-        val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } }
+        // The seam points, plus anything the outline was unsure of on this photo — not the ones left out.
+        val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } && k !in removed }
         if (cfg?.aiEnabled != true) { ai = AiState.Off("AI assist is off on the WMS — place the seam points by hand."); return }
         if (keys.isEmpty()) { ai = AiState.Off("This garment has no seam points for the AI."); return }
         ai = AiState.Running(System.currentTimeMillis())
@@ -102,6 +123,7 @@ class MeasureSession(val target: MeasureTarget, val scan: Scan, private val test
         val cmNow = cm()
         out += pairWarnings(profile, cmNow, app.config?.capture?.pairLimitCm ?: 1f)
         for ((k, a) in aiLines) {
+            if (k in removed) continue
             val o = scan.outline[k] ?: continue
             val d = abs(a.lengthPx() - o.lengthPx()) / scan.pxPerCm
             if (d > 3) out += "AI and outline differ on ${profile.points.firstOrNull { it.key == k }?.label ?: k} by ${Units.cm(d)} cm"
@@ -119,7 +141,8 @@ class MeasureSession(val target: MeasureTarget, val scan: Scan, private val test
             .put("profile", profile.id)
             .put("view", "front")
             .put("pointsCm", JSONObject().apply { cm().forEach { (k, v) -> put(k, v) } })
-            .put("lines", linesJson(lines))
+            .put("lines", linesJson(kept()))
+            .put("skipped", JSONArray(removed.toList()))
             .put("aiLines", if (aiLines.isEmpty()) JSONObject.NULL else linesJson(aiLines))
             .put("outlineLines", linesJson(scan.outline))
             .put("pxPerCm", scan.pxPerCm)

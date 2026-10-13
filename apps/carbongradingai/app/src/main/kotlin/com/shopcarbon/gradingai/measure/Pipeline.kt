@@ -58,6 +58,12 @@ class MeasureFailure(message: String) : Exception(message)
 class Flat(val photo: Bitmap, val pxPerCm: Double, val plane: com.shopcarbon.gradingai.ar.Plane, val depthPoints: Int)
 
 object Pipeline {
+    /** The same photo measured as another garment type (no new capture). */
+    fun remeasure(scan: Scan, profile: Profile): Scan {
+        val o = Outline.measure(scan.mask, scan.pxPerCm, profile)
+        return Scan(scan.id, scan.photo, scan.photoFile, scan.mask, scan.pxPerCm, o.lines, o.unsure, scan.depth, scan.warnings, scan.capturedAt)
+    }
+
     suspend fun flatten(b: CaptureBundle): Flat = withContext(Dispatchers.Default) {
         val src = b.yuv.toBitmap()
         val pts = b.depth?.points(step = 1, minConf = if (b.tof) 128 else 64)

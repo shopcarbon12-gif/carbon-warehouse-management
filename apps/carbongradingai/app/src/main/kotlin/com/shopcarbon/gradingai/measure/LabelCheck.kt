@@ -73,6 +73,25 @@ object LabelCheck {
         return out
     }
 
+    /** {polyester=90, elastane=10} → "90% Polyester, 10% Elastane" (the WMS's own format). */
+    fun fabricText(fibres: Map<String, Int>): String =
+        fibres.entries.sortedByDescending { it.value }.joinToString(", ") { "${it.value}% ${it.key.replaceFirstChar(Char::uppercase)}" }
+
+    private val CARE_WORDS = Regex("\\b(WASH|WASHING|DRY|DRYING|IRON|BLEACH|TUMBLE|DRY CLEAN|CLEAN|HAND WASH|LINE DRY|LAY FLAT|COLD|WARM|INSIDE OUT|SIMILAR COLORS|LIKE COLORS|DO NOT)\\b")
+
+    /**
+     * The English care lines on a label, as one short sentence the WMS can keep
+     * ("Machine wash cold, do not bleach, tumble dry low."). Other languages
+     * on the same label are skipped; symbols cannot be read as text.
+     */
+    fun careText(text: String): String? {
+        val lines = text.uppercase().lines().map { it.trim() }.filter { it.length in 4..80 && CARE_WORDS.containsMatchIn(it) && !it.contains('%') }
+        if (lines.isEmpty()) return null
+        val phrases = lines.flatMap { it.split(Regex("[.;/•·]")) }.map { it.trim().lowercase() }.filter { it.length >= 4 && CARE_WORDS.containsMatchIn(it.uppercase()) }.distinct().take(6)
+        if (phrases.isEmpty()) return null
+        return phrases.joinToString(", ").replaceFirstChar(Char::uppercase) + "."
+    }
+
     fun compare(text: String, sizes: List<String>, chosen: String?, wmsFabric: String?): Result {
         val up = text.uppercase()
         val tokens = Regex("[A-Z0-9]+").findAll(up).map { it.value }.toSet()

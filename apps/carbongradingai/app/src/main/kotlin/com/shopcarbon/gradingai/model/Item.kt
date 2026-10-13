@@ -9,6 +9,8 @@ data class SizeRow(
     val color: String?,
     val upc: String?,
     val lastMeasuredAt: String?,
+    /** This colour's current photo on Shopify. */
+    val image: String? = null,
 )
 
 data class CutGroup(val id: String, val name: String, val profile: String?, val products: Int)
@@ -31,6 +33,7 @@ data class Lookup(
     val sizes: List<SizeRow>,
     val picked: String?,
     val candidates: List<String>,
+    val lastProfile: String? = null,
 ) {
     /** Sizes by label, every colour of one size together (one reading covers them all). */
     fun sizeLabels(): List<String> = sizes.mapNotNull { it.size?.trim()?.uppercase() }.distinct()
@@ -57,10 +60,11 @@ data class Lookup(
                 measurable = profile.optBoolean("measurable", true),
                 cutGroup = cg?.let { CutGroup(it.getString("id"), it.optString("name"), it.optStringOrNull("profile"), it.optInt("products")) },
                 sizes = j.optJSONArray("sizes").objects().map {
-                    SizeRow(it.getString("customSkuId"), it.optString("sku"), it.optStringOrNull("size"), it.optStringOrNull("color"), it.optStringOrNull("upc"), it.optStringOrNull("lastMeasuredAt"))
+                    SizeRow(it.getString("customSkuId"), it.optString("sku"), it.optStringOrNull("size"), it.optStringOrNull("color"), it.optStringOrNull("upc"), it.optStringOrNull("lastMeasuredAt"), it.optStringOrNull("image"))
                 },
                 picked = j.optStringOrNull("picked"),
                 candidates = j.optJSONArray("candidates").strings(),
+                lastProfile = j.optStringOrNull("lastProfile"),
             )
         }
     }

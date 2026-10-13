@@ -8,7 +8,7 @@ plugins {
 }
 
 /** Dotted-only version (X.Y.Z). versionCode is derived — same scheme as the other Carbon apps. */
-val appVersionName = "1.0.3"
+val appVersionName = "1.0.4"
 
 fun computeVersionCode(versionName: String): Int {
     val parts = versionName.trim().split('.')
@@ -103,6 +103,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")

@@ -35,6 +35,9 @@ fun LoginScreen(onDone: () -> Unit) {
     var pw by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
+    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+    val canFinger = remember { activity?.let { com.shopcarbon.gradingai.auth.Biometric.available(it) } == true }
+    var useFinger by remember { mutableStateOf(canFinger) }
     Column(
         Modifier.fillMaxSize().padding(24.dp).imePadding(),
         verticalArrangement = Arrangement.spacedBy(14.dp, androidx.compose.ui.Alignment.CenterVertically),
@@ -46,12 +49,17 @@ fun LoginScreen(onDone: () -> Unit) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
         OutlinedTextField(pw, { pw = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true,
             visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        if (canFinger) androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("Unlock with fingerprint next time", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = Palette.text)
+            androidx.compose.material3.Switch(useFinger, { useFinger = it })
+        }
         err?.let { Notice(it, Palette.bad) }
         Primary(if (busy) "Signing in…" else "Sign in", enabled = !busy && email.isNotBlank() && pw.isNotBlank()) {
             busy = true; err = null
             scope.launch {
                 try {
                     app.api.login(email.trim(), pw)
+                    app.prefs.biometricLock = canFinger && useFinger
                     runCatching { app.config = app.api.config() }
                     onDone()
                 } catch (e: Exception) {

@@ -50,6 +50,9 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- PackageInstaller's result for over-the-air updates. -->
+        <receiver android:name=".update.InstallResultReceiver" android:exported="false" />
+
         <!-- WorkManager is started by App with its own configuration. -->
         <provider
             android:name="androidx.startup.InitializationProvider"
