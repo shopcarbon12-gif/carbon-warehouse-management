@@ -17,8 +17,9 @@ export type ReaderWakeKind =
  * Keep a set of readers WARM while `active` is true, by pre-warming them on
  * the server (scan-sessions) and heart-beating every 15 s. When `active` goes
  * false or the component unmounts (operator leaves the page), the heartbeat
- * stops and the server janitor ends the session(s) ~30 s later → readers go
- * cold. That 30 s grace means a quick navigate-away-and-back keeps them warm.
+ * stops and the server janitor ends the session(s) ~90 s later → readers go
+ * cold. That grace means a quick navigate-away-and-back keeps them warm, and
+ * it outlasts the browser's ~1/min timer throttle on background tabs.
  *
  * Targeting — pick ONE (omit all → ALL non-POS readers at the location):
  *   - networkAddresses: e.g. ["192.168.1.16"]
@@ -74,12 +75,19 @@ export function useReaderWake(opts: {
 
     void prewarm(); // warm immediately on activate
     const hb = setInterval(() => void prewarm(), 15_000); // heartbeat + re-warm
+    // Background tabs throttle the interval; beat as soon as the tab is back
+    // in view so the readers never wait for the next throttled tick.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void prewarm();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       clearInterval(hb);
+      document.removeEventListener("visibilitychange", onVisible);
       // Deliberately DO NOT end the session here. Stopping the heartbeat lets
-      // the server janitor end it ~30 s later (the leave-grace), so briefly
+      // the server janitor end it ~90 s later (the leave-grace), so briefly
       // navigating away and back doesn't cold the readers.
       sessionIdsRef.current = [];
     };

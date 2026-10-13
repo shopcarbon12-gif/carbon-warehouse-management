@@ -85,7 +85,7 @@ export type ScanSession = {
   startedAt: number;
   /** ms-since-epoch of the last page heartbeat (/touch or idempotent start).
    *  When a page is closed/navigated-away the heartbeat stops; the janitor
-   *  ends the session GRACE_MS later → reader goes cold ~30s after you leave. */
+   *  ends the session GRACE_MS later → reader goes cold ~90s after you leave. */
   lastSeenAt: number;
   /** ms-since-epoch of the last tag read on this reader (bumped from the
    *  read-ingest path). Drives the 10-min no-movement auto-stop for
@@ -93,8 +93,12 @@ export type ScanSession = {
   lastReadAt: number;
 };
 
-/** Reader goes cold this long after the page stops heart-beating (left/closed). */
-export const SCAN_SESSION_GRACE_MS = 30_000;
+/** Reader goes cold this long after the page stops heart-beating (left/closed).
+ *  Must exceed the browser's background-tab timer throttle (~60 s in Chrome
+ *  and Firefox): at 30 s, a backgrounded page's 15 s heartbeat landed once a
+ *  minute and every reader cycled 30 s off / 30 s on (2026-10-13, 2:50–3:32
+ *  AM), and each forced reconnect risked wedging a WIZnet bridge (.229, .30). */
+export const SCAN_SESSION_GRACE_MS = 90_000;
 /** Non-cycle-count sessions auto-end after this long with no tag movement. */
 export const SCAN_SESSION_IDLE_MS = 10 * 60_000;
 
@@ -105,7 +109,7 @@ const byId = new Map<string, ScanSession>();
  * Prune sessions that have gone stale. Called on every read of the active set
  * (the agent polls /api/cdm-agents/active-sessions constantly, so this runs
  * far more often than any setInterval would survive in serverless):
- *   - left/closed page: now − lastSeenAt > GRACE_MS  → end (~30s after leave)
+ *   - left/closed page: now − lastSeenAt > GRACE_MS  → end (~90s after leave)
  *   - idle, non-cycle-count: now − lastReadAt > IDLE_MS → end (10-min no reads)
  * Cycle counts are EXEMPT from the idle rule (a 2-hour count can sit with no
  * movement between bins) — they end only via the leave-grace or explicit stop.

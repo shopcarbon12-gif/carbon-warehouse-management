@@ -379,6 +379,21 @@ export async function updateSession(
     params.push(JSON.stringify(nextScanned));
   }
 
+  // A full replace (Clear scans sends `scannedEpcs: []`) must drop the
+  // first-sighting credits for EPCs that left the list. Otherwise the old
+  // credit survives, and when the tag is read again first-sighting-wins
+  // keeps the stale reader — count #029 (2026-10-13) showed ~45% of
+  // Aisle 6/2's tags credited to readers that saw them a month earlier.
+  if (patch.scannedEpcs) {
+    const keep = new Set(nextScanned ?? []);
+    const pruned: SessionDetail["scanned_epc_sources"] = {};
+    for (const [epc, src] of Object.entries(cur.scanned_epc_sources)) {
+      if (keep.has(epc.toUpperCase())) pruned[epc] = src;
+    }
+    sets.push(`scanned_epc_sources = $${params.length + 1}::jsonb`);
+    params.push(JSON.stringify(pruned));
+  }
+
   if (patch.notes !== undefined) {
     sets.push(`notes = $${params.length + 1}`);
     params.push(patch.notes);

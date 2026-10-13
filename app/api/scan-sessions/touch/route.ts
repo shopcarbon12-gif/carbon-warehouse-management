@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  * Heartbeat for scan-sessions. A scanning page pings this every ~15s while it
  * is open so the readers it woke stay alive. When the page is closed or
  * navigated away the heartbeat stops, and the session janitor ends the
- * session(s) ~30s later (SCAN_SESSION_GRACE_MS) → the readers go cold.
+ * session(s) ~90s later (SCAN_SESSION_GRACE_MS) → the readers go cold.
  *
  * Body: { sessionIds: string[] }   (the ids the page got back from /start or /prewarm)
  * Response: { ok: true, refreshed: number }
