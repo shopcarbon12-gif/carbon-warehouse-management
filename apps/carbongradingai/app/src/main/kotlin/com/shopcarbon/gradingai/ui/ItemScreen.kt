@@ -1,5 +1,7 @@
 package com.shopcarbon.gradingai.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -69,6 +72,18 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
             } finally { labelBusy = false }
         }
     }
+    /* The phone's camera app refuses an app that declares the camera
+       permission without holding it (crash on the S25, 2026-10-13): ask first. */
+    fun openLabelCamera() {
+        try { takeLabel.launch(labelUri) } catch (e: Exception) { labelNote = "The camera could not open: ${e.message}" }
+    }
+    val askCamera = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) openLabelCamera() else labelNote = "Allow the camera to photograph the care label."
+    }
+    fun checkLabel() {
+        if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openLabelCamera()
+        else askCamera.launch(Manifest.permission.CAMERA)
+    }
     val profile = cfg?.profile(profileId)
 
     Page(item.name, onBack = { nav.back() }, bottom = { BottomTabs(null) { onTab(nav, it, app) } }) {
@@ -104,7 +119,7 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
             Label("Care label (optional)")
             Muted("Photograph the care label: the app reads the size and fabric and flags a wrong-size save.")
             labelNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (labelFlag != null) Palette.warn else Palette.accent) }
-            Secondary(if (labelBusy) "Reading…" else "Check care label", enabled = !labelBusy) { takeLabel.launch(labelUri) }
+            Secondary(if (labelBusy) "Reading…" else "Check care label", enabled = !labelBusy) { checkLabel() }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Secondary("How to lay it", Modifier.weight(1f), enabled = profile != null) { nav.go(Screen.Guide(profileId)) }
