@@ -500,12 +500,12 @@ export type QueueResult = {
 export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
   const rows = await pool.query<{
     matrix_id: string; name: string | null; category: string | null; subcategory_1: string | null;
-    size: string; measured: boolean; sku: string; cut_group_id: string | null; group_name: string | null; group_profile: string | null;
+    size: string; measured: boolean; sku: string; skus: number; cut_group_id: string | null; group_name: string | null; group_profile: string | null;
   }>(
     `SELECT m.id AS matrix_id, m.description AS name, m.category, m.subcategory_1,
             upper(trim(cs.size)) AS size,
             bool_or(EXISTS (SELECT 1 FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id)) AS measured,
-            min(cs.sku) AS sku,
+            min(cs.sku) AS sku, count(*)::int AS skus,
             mm.cut_group_id, cg.name AS group_name, cg.profile AS group_profile
        FROM matrices m
        JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = false AND cs.size IS NOT NULL AND trim(cs.size) <> ''
@@ -516,7 +516,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
   );
   let measured = 0, total = 0;
   const groups = new Map<string, { name: string; profile: string | null; sizes: Map<string, { measured: boolean; matrices: Set<string>; sample: { matrixId: string; sku: string } }> }>();
-  const loose: QueueEntry[] = [];
+  const loose: (QueueEntry & { skus: number })[] = [];
   const looseCount = new Map<string, number>();
   for (const r of rows.rows) {
     const guess = profileForProduct(r.category, r.subcategory_1, r.name);
@@ -534,7 +534,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
       looseCount.set(r.matrix_id, (looseCount.get(r.matrix_id) ?? 0) + 1);
       loose.push({
         kind: "product", cutGroupId: null, name: r.name ?? "Item", size: r.size, products: 1,
-        profile: guess.kind === "profile" ? guess.profile : null, matrixId: r.matrix_id, sampleSku: r.sku,
+        profile: guess.kind === "profile" ? guess.profile : null, matrixId: r.matrix_id, sampleSku: r.sku, skus: r.skus,
       });
     }
   }
@@ -551,7 +551,11 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
     }
   }
   cutEntries.sort((a, b) => b.products - a.products || a.name.localeCompare(b.name) || sizeRank(a.size) - sizeRank(b.size));
-  loose.sort((a, b) => a.name.localeCompare(b.name) || sizeRank(a.size) - sizeRank(b.size));
+  /* Outside a cut, the reading that covers the most SKUs (colours) first; a
+     product's sizes stay together so one garment rail can be worked through. */
+  const productSkus = new Map<string, number>();
+  for (const e of loose) productSkus.set(e.matrixId, (productSkus.get(e.matrixId) ?? 0) + e.skus);
+  loose.sort((a, b) => (productSkus.get(b.matrixId)! - productSkus.get(a.matrixId)!) || a.name.localeCompare(b.name) || sizeRank(a.size) - sizeRank(b.size));
 
   const flagged = await pool.query<{ id: string; name: string | null; size: string | null; flags: string[]; created_at: string }>(
     `SELECT s.id, m.description AS name, s.size, s.flags, s.created_at
@@ -560,7 +564,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
   );
   return {
     progress: { measured, total },
-    entries: [...cutEntries, ...loose].slice(0, limit),
+    entries: [...cutEntries, ...loose.map((e): QueueEntry => ({ kind: e.kind, cutGroupId: e.cutGroupId, name: e.name, size: e.size, products: e.products, profile: e.profile, matrixId: e.matrixId, sampleSku: e.sampleSku }))].slice(0, limit),
     needsCheck: flagged.rows.map((f) => ({ scanId: f.id, name: f.name, size: f.size, flags: f.flags ?? [], createdAt: f.created_at })),
     groups: groups.size,
   };

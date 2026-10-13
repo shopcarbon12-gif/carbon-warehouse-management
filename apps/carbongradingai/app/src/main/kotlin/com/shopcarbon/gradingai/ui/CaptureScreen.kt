@@ -86,7 +86,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
     var fired by remember { mutableStateOf(false) }
     var installRequested by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { if (!granted) ask.launch(Manifest.permission.CAMERA) }
+    // Only ask for the camera where the app can measure (a supported phone, or test mode).
+    LaunchedEffect(Unit) { if (!granted && (supported || app.prefs.testMode)) ask.launch(Manifest.permission.CAMERA) }
     if (!supported && !app.prefs.testMode) {
         Page("Capture", onBack = { nav.back() }) {
             Notice("This phone has no time-of-flight depth sensor, so it cannot set the scale. CarbonGradingAI measures on the Galaxy Note10+, Note10+ 5G, S20+ and S20 Ultra. Test mode (Settings) lets you try the app here without writing to the item.")

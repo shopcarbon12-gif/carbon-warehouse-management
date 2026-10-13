@@ -97,7 +97,7 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (p in cfg?.profiles.orEmpty()) Pill(p.label, if (p.id == profileId) Palette.accent else Palette.muted, filled = p.id == profileId) { profileId = p.id }
         }
-        if (item.profileId != null) Muted("Suggested from ${item.profileWhy}.")
+        if (item.profileId != null) Muted("Suggested — ${item.profileWhy}.")
         profile?.let { p -> Muted("${p.points.size} points: ${p.points.joinToString { it.label }}") }
 
         Card {
