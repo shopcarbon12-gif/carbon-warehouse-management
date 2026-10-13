@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { staffLabel } from "@/lib/staff-name";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +43,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     id: string;
     at: string;
     employee: string | null;
+    employee_first: string | null;
+    employee_last: string | null;
     reason: string | null;
     delta_qty: string | null;
     delta_value: string | null;
@@ -55,6 +58,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
          'sale-' || s.id::text                  AS id,
          COALESCE(s.completed_at, s.created_at)  AS at,
          'Carbon POS'                            AS employee,
+         NULL::text                              AS employee_first,
+         NULL::text                              AS employee_last,
          'Sold'                                  AS reason,
          (-SUM(sl.quantity))::numeric            AS delta_qty,
          (-SUM(sl.line_total))::numeric          AS delta_value,
@@ -78,6 +83,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
          'mh-' || h.id::text                     AS id,
          h.changed_at                            AS at,
          h.changed_by_user_name                  AS employee,
+         hu.first_name                           AS employee_first,
+         hu.last_name                            AS employee_last,
          h.source                                AS reason,
          h.delta_qty::numeric                    AS delta_qty,
          NULL::numeric                           AS delta_value,
@@ -86,6 +93,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
          NULL::text                              AS sale_id,
          NULL::text                              AS store_code
        FROM manual_item_qty_history h
+       LEFT JOIN users hu ON hu.id = h.changed_by_user_id
        WHERE h.custom_sku_id = $1::uuid
          AND h.location_id = $4::uuid
          AND h.changed_at >= $2::date
@@ -100,7 +108,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const rows = r.rows.map((row) => ({
     id: row.id,
     at: row.at,
-    employee: row.employee,
+    // Employees show as "First L." outside Reports (owner rule 2026-10-12);
+    // the stored snapshot (usually the email) is only the fallback.
+    employee: row.sale_id ? row.employee : staffLabel(row.employee_first, row.employee_last, row.employee),
     reason: row.reason,
     delta_qty: num(row.delta_qty),
     delta_value: num(row.delta_value),

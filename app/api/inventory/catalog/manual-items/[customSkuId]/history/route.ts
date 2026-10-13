@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { SCOPES } from "@/lib/auth/roles";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { staffLabel } from "@/lib/staff-name";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 
 /**
@@ -68,6 +69,8 @@ export async function GET(
     delta_qty: number | null;
     changed_by_user_id: string | null;
     changed_by_user_name: string | null;
+    changed_by_first: string | null;
+    changed_by_last: string | null;
     changed_at: string;
     transfer_slip_number: string | null;
     transfer_from_code: string | null;
@@ -82,6 +85,8 @@ export async function GET(
             h.delta_qty,
             h.changed_by_user_id::text AS changed_by_user_id,
             h.changed_by_user_name,
+            cu.first_name AS changed_by_first,
+            cu.last_name AS changed_by_last,
             h.changed_at,
             h.transfer_slip_number,
             lf.code AS transfer_from_code,
@@ -91,6 +96,7 @@ export async function GET(
        FROM manual_item_qty_history h
        LEFT JOIN locations lf ON lf.id = h.transfer_from_location_id
        LEFT JOIN locations lt ON lt.id = h.transfer_to_location_id
+       LEFT JOIN users cu ON cu.id = h.changed_by_user_id
       WHERE h.custom_sku_id = $1::uuid
         AND h.location_id = $2::uuid
       ORDER BY h.changed_at DESC, h.id DESC
@@ -117,7 +123,9 @@ export async function GET(
         new_qty: Number(row.new_qty),
         delta_qty: row.delta_qty == null ? null : Number(row.delta_qty),
         changed_by_user_id: row.changed_by_user_id,
-        changed_by_user_name: row.changed_by_user_name,
+        // Display label: "First L." (owner rule 2026-10-12 — not a report).
+        // The stored snapshot (usually the email) is only the fallback.
+        changed_by_user_name: staffLabel(row.changed_by_first, row.changed_by_last, row.changed_by_user_name),
         changed_at: row.changed_at,
         transfer_slip_number: row.transfer_slip_number,
         transfer_from_code: row.transfer_from_code,

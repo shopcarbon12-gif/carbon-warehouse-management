@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import { shortStaffName } from "@/lib/staff-name";
 
 /**
  * Store Replenishment — the handheld's Find & Locate module that turns POS
@@ -130,7 +131,7 @@ export async function listReplenishmentSales(
     localDate: x.local_date,
     localDay: x.local_day,
     localTime: x.local_time,
-    employee: x.employee,
+    employee: shortStaffName(x.employee) ?? null, // "First L." — not a report
     customer: x.customer,
     soldQty: x.sold_qty,
     pickableLines: x.pickable_lines,
@@ -200,7 +201,7 @@ export async function getReplenishmentLines(
       inStock: x.in_stock,
       pickable: !!x.sku_id && x.in_stock > 0,
       picked: x.picked,
-      pickedBy: x.picked_by_name,
+      pickedBy: shortStaffName(x.picked_by_name) ?? null, // stored full; shown "First L."
       pickedAt: x.picked_at ? x.picked_at.toISOString() : null,
       pickedUnits: x.picked_units,
     })),

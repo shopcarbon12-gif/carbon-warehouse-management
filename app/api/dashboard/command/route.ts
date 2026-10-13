@@ -3,6 +3,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { getCommandCenterKpis } from "@/lib/queries/dashboard-command";
 import { listActivity, type ActivityRow } from "@/lib/server/activity-feed";
+import { shortStaffName } from "@/lib/staff-name";
 
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -43,7 +44,17 @@ export async function GET(req: Request) {
  * Every signed-in user sees the dashboard, so the full request record (IP,
  * body) is dropped; it stays on the manager-only Activity history page.
  */
-function groupRuns(rows: ActivityRow[]): (ActivityRow & { groupCount: number })[] {
+function groupRuns(input: ActivityRow[]): (ActivityRow & { groupCount: number })[] {
+  // The dashboard is not a report: employees show as "First L." (owner rule,
+  // 2026-10-12). Only actors that ARE a user's full name are shortened —
+  // "Carbon POS", "System", reader names etc. are left alone. Reports →
+  // Activity history keeps the full names (it calls listActivity directly).
+  const fullNames = new Set(input.map((r) => r.user?.name).filter((n): n is string => !!n));
+  const rows = input.map((r) => ({
+    ...r,
+    actor: fullNames.has(r.actor) ? (shortStaffName(r.actor) ?? r.actor) : r.actor,
+    user: r.user ? { ...r.user, name: shortStaffName(r.user.name) ?? null } : null,
+  }));
   const out: (ActivityRow & { groupCount: number })[] = [];
   const keyOf = (r: ActivityRow) =>
     [r.actor, r.module, r.action, r.change?.from, r.change?.to, r.change ? "" : r.summary, r.source, r.sourceDetail].join("|");
