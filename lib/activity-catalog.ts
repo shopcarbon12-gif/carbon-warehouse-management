@@ -68,6 +68,8 @@ const ROUTES: Record<string, Entry> = {
     label: { PATCH: "Edited a cut group", POST: "Changed cut group products", DELETE: "Deleted a cut group" },
   },
   "grading-app/releases": { module: "Settings", label: "Uploaded a CarbonGradingAI release" },
+  "grading-app/label": { module: "Catalog", label: "CarbonGradingAI: fabric from care label" },
+  "grading-app/scans/[id]/studio": { module: "Studio", label: "CarbonGradingAI: scan photo sent to Studio (front)" },
   "collection-mapping": { module: "Shopify", label: "Changed collection mapping" },
 
   "generate": { module: "Studio", label: "Generated Studio panel" },

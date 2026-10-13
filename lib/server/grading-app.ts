@@ -19,6 +19,8 @@ import {
 } from "@/lib/size-grading/grading-app-profiles";
 import { downloadStorageObject, isR2StorageConfigured, uploadBytesToStorage } from "@/lib/storageProvider";
 import { dropboxSafe, dropboxUpload, gradingDropboxRoot, isDropboxConfigured } from "@/lib/server/dropbox-upload";
+import { resolveShopContext } from "@/lib/server/shopify-write";
+import { runShopifyGraphql, toProductGid } from "@/lib/shopify";
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,6 +48,8 @@ export type SizeRow = {
   color: string | null;
   upc: string | null;
   lastMeasuredAt: string | null;
+  /** This colour's current photo on Shopify (live), when it has one. */
+  image?: string | null;
 };
 
 export type CutGroupInfo = { id: string; name: string; profile: string | null; products: number } | null;
@@ -59,6 +63,8 @@ export type LookupResult = {
   picked: string | null;
   /** When the code fits several sizes (old hang tags drop the size letters): the ones it fits. */
   candidates: string[];
+  /** The type this product was last measured as on the phone. */
+  lastProfile: string | null;
 };
 
 async function itemInfo(pool: Pool, matrixId: string): Promise<ItemInfo | null> {
@@ -158,19 +164,88 @@ export async function lookupCode(pool: Pool, raw: string): Promise<LookupResult 
   return describeMatrix(pool, matrixId, picked, candidates);
 }
 
+/**
+ * The product's photos as they are on Shopify NOW. The WMS's own copy
+ * (matrices.shopify_featured_image_url, custom_skus.shopify_image_url) is only
+ * refreshed by the manual image sync, so on products re-shot since it shows
+ * old pictures (owner, 2026-10-13). Read live, never written back; falls back
+ * to the stored copy when Shopify is slow or unreachable.
+ */
+type LiveProduct = {
+  featuredMedia?: { preview?: { image?: { url?: string } | null } | null } | null;
+  variants?: { nodes?: Array<{ sku?: string | null; image?: { url?: string } | null; media?: { nodes?: Array<{ preview?: { image?: { url?: string } | null } | null }> } }> };
+};
+
+async function liveImages(productId: string | null): Promise<{ featured: string | null; bySku: Map<string, string> } | null> {
+  if (!productId) return null;
+  const ctx = await resolveShopContext();
+  if (!ctx) return null;
+  const timeout = new Promise<null>((res) => setTimeout(() => res(null), 3500));
+  const call = runShopifyGraphql<{ product?: LiveProduct | null }>({
+    shop: ctx.shop, token: ctx.token, apiVersion: ctx.apiVersion,
+    query: `query($id: ID!) { product(id: $id) {
+      featuredMedia { preview { image { url } } }
+      variants(first: 250) { nodes { sku image { url } media(first: 1) { nodes { preview { image { url } } } } } }
+    } }`,
+    variables: { id: toProductGid(productId) },
+  }).then((r) => {
+    const prod = (r as { data?: { product?: LiveProduct | null } | null }).data?.product ?? null;
+    if (!prod) return null;
+    const bySku = new Map<string, string>();
+    for (const v of prod.variants?.nodes ?? []) {
+      const url = v.image?.url || v.media?.nodes?.[0]?.preview?.image?.url;
+      if (v.sku && url) bySku.set(v.sku.trim().toUpperCase(), url);
+    }
+    return { featured: prod.featuredMedia?.preview?.image?.url ?? null, bySku };
+  }).catch(() => null);
+  return Promise.race([call, timeout]);
+}
+
 export async function describeMatrix(pool: Pool, matrixId: string, picked: string | null = null, candidates: string[] = []): Promise<LookupResult | null> {
   const item = await itemInfo(pool, matrixId);
   if (!item) return null;
-  const [cutGroup, sizes] = await Promise.all([cutGroupFor(pool, matrixId), sizesOf(pool, matrixId)]);
+  const [cutGroup, sizes, live, last] = await Promise.all([
+    cutGroupFor(pool, matrixId),
+    sizesOf(pool, matrixId),
+    liveImages(item.shopifyProductId),
+    pool.query<{ profile: string }>(`SELECT profile FROM size_grading_scans WHERE matrix_id = $1::uuid AND status <> 'redo' ORDER BY created_at DESC LIMIT 1`, [matrixId]),
+  ]);
+  if (live) {
+    if (live.featured) item.image = live.featured;
+    for (const s of sizes) s.image = live.bySku.get(s.sku.trim().toUpperCase()) ?? null;
+  }
+  const lastProfile = last.rows[0]?.profile && PROFILE_BY_ID[last.rows[0].profile as GradingProfileId] ? last.rows[0].profile : null;
   const guess = profileForProduct(item.category, item.subcategory, item.name);
-  /* A cut group with its own type wins over the catalogue words: the owner set it. */
+  /* A cut group with its own type wins over the catalogue words: the owner set it.
+     Next, the type this product was last measured as — the owner's own choice
+     (a "dress" in the catalogue may well have sleeves). */
   const groupProfile = cutGroup?.profile && PROFILE_BY_ID[cutGroup.profile as GradingProfileId] ? (cutGroup.profile as GradingProfileId) : null;
   const profile = groupProfile
     ? { id: groupProfile, why: `cut group "${cutGroup!.name}"`, measurable: true }
+    : lastProfile
+    ? { id: lastProfile as GradingProfileId, why: "last measured as this", measurable: true }
     : guess.kind === "profile"
     ? { id: guess.profile, why: guess.why, measurable: true }
     : { id: null, why: guess.why, measurable: guess.kind !== "not-measured" };
-  return { item, profile, cutGroup, sizes, picked, candidates };
+  return { item, profile, cutGroup, sizes, picked, candidates, lastProfile };
+}
+
+/**
+ * Fabric (and care) read off a care label on the phone, for a product the WMS
+ * has none for. Never overwrites what the WMS already holds — those come from
+ * the purchase orders; the phone only fills gaps.
+ */
+export async function saveLabelDetails(pool: Pool, matrixId: string, fabric: string | null, care: string | null) {
+  const r = await pool.query<{ fabric: string | null; care: string | null }>(
+    `UPDATE matrices
+        SET fabric_composition = COALESCE(fabric_composition, $2),
+            fabric_source = CASE WHEN fabric_composition IS NULL AND $2::text IS NOT NULL THEN 'care label (CarbonGradingAI)' ELSE fabric_source END,
+            care_instructions = COALESCE(care_instructions, $3)
+      WHERE id = $1::uuid
+      RETURNING fabric_composition AS fabric, care_instructions AS care`,
+    [matrixId, fabric, care],
+  );
+  return r.rows[0] ?? null;
 }
 
 /* ──────────────────────────────── save ──────────────────────────────── */

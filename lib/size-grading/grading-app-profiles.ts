@@ -59,6 +59,10 @@ export type GradingProfile = {
   points: GradingPoint[];
   /** How to lay it, shown on the guide page and above the capture screen. */
   lay: string;
+  /** Where it sits in the phone's type picker: sleeved and sleeveless garments are kept apart (owner, 2026-10-13). */
+  group: "sleeves" | "sleeveless" | "bottoms" | "onepiece";
+  /** For a sleeved type: the type to offer when the photo shows no sleeves. */
+  sleeveless?: GradingProfileId;
   /** Guide picture (generated from the ChatGPT prompts), with line ends as fractions of its size. */
   guide?: { image: string; lines: Partial<Record<GradingPointKey, [[number, number], [number, number]]>> };
 };
@@ -144,55 +148,55 @@ const LAY = {
 
 export const GRADING_PROFILES: GradingProfile[] = [
   {
-    id: "tee", label: "T-shirt / top / shirt / hoodie", family: "top", silhouette: "tee", lay: LAY.top,
+    id: "tee", label: "T-shirt / top / shirt / hoodie", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "tee", lay: LAY.top,
     points: [P.chest, P.length, P.shoulder, P.waistTop, P.hem, P.sleeveL, P.sleeveR, P.cuffL, P.cuffR],
   },
   {
-    id: "jacket", label: "Jacket / coat", family: "top", silhouette: "jacket", lay: LAY.jacket,
+    id: "jacket", label: "Jacket / coat", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "jacket", lay: LAY.jacket,
     points: [P.chest, P.length, P.shoulder, P.sleeve, P.cuff, P.hem],
   },
   {
-    id: "campshirt", label: "Short-sleeve jacket / camp shirt", family: "top", silhouette: "tee", lay: LAY.top,
+    id: "campshirt", label: "Short-sleeve jacket / camp shirt", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "tee", lay: LAY.top,
     points: [P.chest, P.length, P.shoulder, P.waistTop, P.hem, P.sleeve, P.cuff],
   },
   {
-    id: "tank", label: "Tank / vest", family: "top", silhouette: "tank", lay: LAY.sleeveless,
+    id: "tank", label: "Tank / vest", family: "top", group: "sleeveless", silhouette: "tank", lay: LAY.sleeveless,
     points: [P.chest, P.length, P.waistTop, P.hem, P.shoulderSleeveless],
   },
   {
-    id: "camisole", label: "Camisole", family: "top", silhouette: "camisole", lay: LAY.sleeveless,
+    id: "camisole", label: "Camisole", family: "top", group: "sleeveless", silhouette: "camisole", lay: LAY.sleeveless,
     points: [P.chest, P.lengthStrap, P.waistTop, P.hem, P.strap],
   },
   {
-    id: "trousers", label: "Trousers / jeans / leggings / joggers", family: "trousers", silhouette: "trousers", lay: LAY.trousers,
+    id: "trousers", label: "Trousers / jeans / leggings / joggers", family: "trousers", group: "bottoms", silhouette: "trousers", lay: LAY.trousers,
     points: [P.waistBottom, P.rise, P.thighL, P.thighR, P.kneeL, P.kneeR, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
   },
   {
-    id: "shorts", label: "Shorts / swim shorts", family: "shorts", silhouette: "shorts", lay: LAY.shorts,
+    id: "shorts", label: "Shorts / swim shorts", family: "shorts", group: "bottoms", silhouette: "shorts", lay: LAY.shorts,
     points: [P.waistBottom, P.hipShorts, P.rise, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
   },
   {
-    id: "skirt", label: "Skirt", family: "skirt", silhouette: "skirt", lay: LAY.skirt,
+    id: "skirt", label: "Skirt", family: "skirt", group: "bottoms", silhouette: "skirt", lay: LAY.skirt,
     points: [P.waistBottom, P.hipShorts, P.lengthSkirt, P.sideLength, P.hem],
   },
   {
-    id: "dress-sleeves-short", label: "Dress, short sleeves", family: "dress", silhouette: "dress", lay: LAY.dress,
+    id: "dress-sleeves-short", label: "Dress, short sleeves", family: "dress", group: "sleeves", sleeveless: "dress-sleeveless", silhouette: "dress", lay: LAY.dress,
     points: [P.chest, P.length, P.waistTop, P.hipDress, P.shoulder, P.hem, P.sleeveL, P.sleeveR, P.cuffL, P.cuffR],
   },
   {
-    id: "dress-sleeves-long", label: "Dress, long sleeves", family: "dress", silhouette: "dress", lay: LAY.dress,
+    id: "dress-sleeves-long", label: "Dress, long sleeves", family: "dress", group: "sleeves", sleeveless: "dress-sleeveless", silhouette: "dress", lay: LAY.dress,
     points: [P.chest, P.length, P.waistTop, P.hipDress, P.shoulder, P.hem, P.sleeve, P.cuff],
   },
   {
-    id: "dress-sleeveless", label: "Dress, sleeveless", family: "dress", silhouette: "dress", lay: LAY.dress,
+    id: "dress-sleeveless", label: "Dress, sleeveless", family: "dress", group: "sleeveless", silhouette: "dress", lay: LAY.dress,
     points: [P.chest, P.length, P.waistTop, P.hipDress, P.hem, P.shoulderSleeveless],
   },
   {
-    id: "dress-slip", label: "Slip dress", family: "dress", silhouette: "slipdress", lay: LAY.dress,
+    id: "dress-slip", label: "Slip dress", family: "dress", group: "sleeveless", silhouette: "slipdress", lay: LAY.dress,
     points: [P.chest, P.lengthStrap, P.waistTop, P.hipDress, P.hem, P.strap],
   },
   {
-    id: "onepiece", label: "Bodysuit / romper / overall", family: "onepiece", silhouette: "onepiece", lay: LAY.onepiece,
+    id: "onepiece", label: "Bodysuit / romper / overall", family: "onepiece", group: "onepiece", silhouette: "onepiece", lay: LAY.onepiece,
     points: [P.chest, P.lengthOnepiece, P.waistTop, P.hipOnepiece, P.inseamOnepiece],
   },
 ];
