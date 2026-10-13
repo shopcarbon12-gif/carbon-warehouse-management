@@ -113,7 +113,7 @@ class LocateEngine {
   LocateEngine({
     required Iterable<String> targets,
     this.freshMs = 700,
-    this.signalWindowMs = 300,
+    this.signalWindowMs = 200,
     this.floorDbm = -82,
     this.ceilDbm = -32,
   }) : _targets = {for (final t in targets) t.trim().toUpperCase()};
@@ -139,6 +139,7 @@ class LocateEngine {
   int otherTagReads = 0;
   int targetReads = 0;
   int nullRssiTargetReads = 0;
+  int locReads = 0; // target reads carrying Zebra relative proximity
 
   /// Smoothed display signal 0..1 for the followed tag (EMA).
   double _smoothed = 0;
@@ -204,6 +205,7 @@ class LocateEngine {
       nullRssiTargetReads++;
     }
     if (o.relativeProximity != null) {
+      locReads++;
       ev.relativeProximity = o.relativeProximity!.clamp(0, 100);
       ev.relativeAtMs = o.receivedMs;
     }

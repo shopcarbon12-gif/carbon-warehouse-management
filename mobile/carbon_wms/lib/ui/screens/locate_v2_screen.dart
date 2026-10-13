@@ -120,7 +120,7 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
 
   // Display pacing — the engine and the beep run every tick (16 ms); what the
   // operator READS changes at a calm pace so nothing jumps.
-  static const int _publishMs = 200;
+  static const int _publishMs = 100;
   int _lastPublishMs = 0;
   int _lastSweepPublishMs = 0;
   int _lastDisplayMs = 0;
@@ -466,28 +466,37 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     // cutting off the moment one read is missed.
     final dt = _lastBeepTickMs == 0 ? 0 : now - _lastBeepTickMs;
     _lastBeepTickMs = now;
-    final level = reading.relativeProximity != null
-        ? reading.relativeProximity! / 100.0
-        : reading.signal;
-    if (reading.presence == LocatePresence.detected && level != null) {
+    final level = _levelOf(reading);
+    if (level != null) {
       _beepLevel = level.clamp(0.0, 1.0);
       _beepHeardMs = now;
     } else if (now - _beepHeardMs > 600) {
       _beepLevel *= math.exp(-dt / 800.0);
       if (_beepLevel < 0.02) _beepLevel = 0;
     }
-    if (_powerState == _Power.adjusting) return;
     if (_beepLevel > 0.02) {
       final p = _beepLevel;
       final interval = (_beepSlowMs * math.pow(_beepFastMs / _beepSlowMs, p)).round();
       if (now - _lastBeepMs >= interval) {
         _lastBeepMs = now;
         ScanSounds.instance.play(ScanCue.read, volume: (0.40 + 0.60 * p).clamp(0.0, 1.0));
+        _beepsPlayed++;
       }
     } else if (reading.presence == LocatePresence.detectedNoStrength && now - _lastBeepMs >= 1000) {
       _lastBeepMs = now;
       ScanSounds.instance.play(ScanCue.read, volume: 0.5);
     }
+  }
+
+  int _beepsPlayed = 0;
+
+  /// The one 0..1 level used for the dial AND the beep: Zebra's relative
+  /// proximity when the reader sends it, otherwise the RSSI signal (so Zebra
+  /// mode never sits at 0 % just because the reader omits proximity).
+  double? _levelOf(LocateReading r) {
+    if (r.relativeProximity != null) return r.relativeProximity! / 100.0;
+    if (r.presence == LocatePresence.detected) return r.signal;
+    return null;
   }
 
   static const double _beepSlowMs = 650;
@@ -502,22 +511,24 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
   void _publish(LocateReading r, int now) {
     final dt = _lastDisplayMs == 0 ? 0 : now - _lastDisplayMs;
     _lastDisplayMs = now;
-    final raw = r.relativeProximity != null ? r.relativeProximity! / 100.0 : r.signal;
+    final raw = _levelOf(r);
     if (raw == null) {
-      _displaySignal = null;
+      // Hold the last value through short gaps; clear once "searching" shows.
+      if (_shownPresence == LocatePresence.searching) _displaySignal = null;
     } else {
       final cur = _displaySignal ?? raw;
-      final a = dt <= 0 ? 1.0 : 1 - math.exp(-dt / 350.0);
+      // Fast up (closing in must feel instant), a little slower down.
+      final a = dt <= 0 ? 1.0 : 1 - math.exp(-dt / (raw > cur ? 70.0 : 180.0));
       _displaySignal = cur + (raw - cur) * a;
     }
 
-    _prox.value = r.presence == LocatePresence.detected ? (_displaySignal ?? 0).clamp(0.0, 1.0) : 0.0;
+    _prox.value = (_displaySignal ?? 0).clamp(0.0, 1.0);
 
     if (r.presence != _pendingPresence) {
       _pendingPresence = r.presence;
       _pendingSinceMs = now;
     }
-    final hold = _pendingPresence == LocatePresence.searching ? 800 : 300;
+    final hold = _pendingPresence == LocatePresence.searching ? 700 : 150;
     var changed = false;
     if (_pendingPresence != _shownPresence && now - _pendingSinceMs >= hold) {
       _shownPresence = _pendingPresence;
@@ -525,15 +536,15 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
     }
     if (!changed && now - _lastPublishMs < _publishMs) return;
     _lastPublishMs = now;
-    final shownSignal = _shownPresence == LocatePresence.detected ? _displaySignal : null;
+    final shown = _displaySignal;
     _reading.value = LocateReading(
-      presence: _shownPresence,
+      presence: _shownPresence == LocatePresence.searching && shown != null
+          ? LocatePresence.detected
+          : _shownPresence,
       followedEpc: r.followedEpc,
-      signal: r.relativeProximity == null ? shownSignal : r.signal,
+      signal: shown,
       medianRssi: r.medianRssi,
-      relativeProximity: r.relativeProximity == null
-          ? null
-          : (shownSignal == null ? r.relativeProximity : (shownSignal * 100).round()),
+      relativeProximity: r.relativeProximity == null || shown == null ? null : (shown * 100).round(),
       readsPerSec: r.readsPerSec,
       windowsHit: r.windowsHit,
       lastSeenAgeMs: r.lastSeenAgeMs,
@@ -926,6 +937,7 @@ class _LocateV2ScreenState extends State<LocateV2Screen> with SingleTickerProvid
                 powerDbm: _powerDbm,
                 powerState: _powerState,
                 onUseClassic: _useClassic,
+                beepsPlayed: () => _beepsPlayed,
               ),
           ],
         ),
@@ -1311,9 +1323,7 @@ class _Radar extends StatelessWidget {
               ValueListenableBuilder<LocateReading>(
                 valueListenable: reading,
                 builder: (_, r, __) {
-                  final v = zebra
-                      ? (r.relativeProximity == null ? null : r.relativeProximity! / 100.0)
-                      : r.signal;
+                  final v = r.signal;
                   final pct = ((v ?? 0) * 100).round().clamp(0, 100);
                   return Container(
                     width: size * 0.53,
@@ -1345,7 +1355,7 @@ class _Radar extends StatelessWidget {
                         ),
                         SizedBox(height: 4.h),
                         Text(
-                          zebra ? 'ZEBRA' : 'PROXIMITY',
+                          zebra && r.relativeProximity != null ? 'ZEBRA' : 'PROXIMITY',
                           style: GoogleFonts.spaceGrotesk(
                             fontSize: 11.sp,
                             fontWeight: FontWeight.w700,
@@ -1652,8 +1662,10 @@ class _Details extends StatelessWidget {
     required this.powerDbm,
     required this.powerState,
     required this.onUseClassic,
+    required this.beepsPlayed,
   });
 
+  final int Function() beepsPlayed;
   final LocateEngine? engine;
   final ValueListenable<LocateReading> reading;
   final LocateReaderCaps caps;
@@ -1678,6 +1690,8 @@ class _Details extends StatelessWidget {
           ('Target reads / no-RSSI', '${e?.targetReads ?? 0} / ${e?.nullRssiTargetReads ?? 0}'),
           ('Other tags / stale dropped', '${e?.otherTagReads ?? 0} / ${e?.staleDropped ?? 0}'),
           ('ID format errors', '${e?.formatErrors ?? 0}'),
+          ('Zebra proximity reads', '${e?.locReads ?? 0}'),
+          ('Beeps played', '${beepsPlayed()}'),
           ('Reader', '${caps.model ?? '—'} · fw ${caps.firmware ?? '—'}'),
           ('Zebra Locate supported', caps.locationingSupported ? 'yes' : 'no'),
           ('Power steps', caps.powerLevelsDbm.isEmpty ? '—' : '${caps.powerLevelsDbm.first}–${caps.powerLevelsDbm.last} dBm'),
