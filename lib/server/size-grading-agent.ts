@@ -39,6 +39,14 @@ export type AgentInput = {
   view: "front" | "back";
   /** Points to measure. Empty with type null = whatever the AI's family uses. */
   keys: PomKey[];
+  /**
+   * CarbonGradingAI: the points as the phone app defines them (sleeveL,
+   * thighR, strap, …), each with its own standard rule. When given, these are
+   * measured instead of `keys`, and only these keys are accepted back.
+   */
+  points?: { key: string; label: string; rule: string }[];
+  /** Where the scale came from: the printed target (default) or the phone's depth sensor. */
+  scale?: "target" | "depth";
 };
 
 export type AgentOptions = {
@@ -57,9 +65,10 @@ export type AgentOptions = {
 export type AgentResult = {
   garment: GarmentType | null;
   view: "front" | "back";
-  lines: Partial<Record<PomKey, AgentLine>>;
-  cm: Partial<Record<PomKey, number>>;
-  skipped: Partial<Record<PomKey, string>>;
+  /* Keyed by PomKey on the web page, by the app's own point keys for CarbonGradingAI. */
+  lines: Partial<Record<string, AgentLine>>;
+  cm: Partial<Record<string, number>>;
+  skipped: Partial<Record<string, string>>;
   remarks: string;
   provider: Provider;
   model: string;
@@ -84,6 +93,12 @@ const PRICES: Record<string, [number, number, number, number]> = {
   "gpt-5.5": [5, 30, 0.5, 5],
   "gpt-5.4": [2.5, 15, 0.25, 2.5],
   "gpt-5.4-mini": [0.75, 4.5, 0.075, 0.75],
+  "gpt-5.6-sol": [4, 20, 0.4, 4],
+  "gpt-6-sol": [2, 10, 0.2, 2],
+  "gpt-6.1-sol": [2, 10, 0.1, 2],
+  "gpt-6-astra": [10, 50, 1, 10],
+  "gpt-6-luna": [0.1, 0.5, 0.01, 0.1],
+  "claude-opus-5": [5, 25, 0.5, 6.25],
 };
 
 function costOf(model: string, u: AgentResult["usage"]): number {
@@ -208,14 +223,22 @@ function buildPrompt(inp: AgentInput, w: number, h: number, maxRounds: number, m
   const cm = inp.pxPerCm;
   const pointList = (keys: PomKey[]) =>
     keys.map((k) => `- "${k}" (${POM_LABEL[k]}): ${POM_RULE[k]}`).join("\n");
-  const what = inp.type
+  const appList = inp.points?.length
+    ? inp.points.map((p) => `- "${p.key}" (${p.label}): ${p.rule}`).join("\n") +
+      `\n"L" / "R" in a point name means the sleeve or leg on the LEFT / RIGHT of the photo as you see it.`
+    : null;
+  const what = inp.type && appList
+    ? `The garment is a ${inp.type} (family "${inp.type}"), photographed from the ${inp.view.toUpperCase()}.\n\nMeasure these points:\n${appList}\n\nLandmarks to find first: ${LANDMARKS[inp.type]}`
+    : inp.type
     ? `The garment is a ${inp.type} (family "${inp.type}"), photographed from the ${inp.view.toUpperCase()}.\n\nMeasure these points:\n${pointList(inp.keys.length ? inp.keys : keysFor(inp.type, inp.view))}\n\nLandmarks to find first: ${LANDMARKS[inp.type]}`
     : `First decide the garment family — one of ${FAMILIES.join(", ")} — photographed from the ${inp.view.toUpperCase()}. Then measure the points of THAT family:\n` +
       FAMILIES.map((f) => `\nFamily "${f}": ${keysFor(f, inp.view).join(", ")}. Landmarks: ${LANDMARKS[f]}`).join("") +
       `\n\nThe rules for every point:\n${pointList([...new Set(FAMILIES.flatMap((f) => keysFor(f, inp.view)))])}`;
   return `You are a garment technician taking flat measurements of a garment laid on a table, from a photo.
 
-THE PHOTO. It has been squared up from a printed scale target, so it is as if shot from straight above, at one exact scale everywhere: 1 cm = ${cm.toFixed(3)} px (1 inch = ${(cm * 2.54).toFixed(2)} px). It is ${w} × ${h} px. Coordinates are pixels from the top-left corner: x to the right, y down. The overview carries a labelled grid every 100 px (blue = x, pink = y). The black-bordered printed card is the scale target — it is never part of the garment and must never be measured.
+THE PHOTO. ${inp.scale === "depth"
+    ? "It has been squared up from the phone's depth sensor (which measured the table plane), so it is as if shot from straight above"
+    : "It has been squared up from a printed scale target, so it is as if shot from straight above"}, at one exact scale everywhere: 1 cm = ${cm.toFixed(3)} px (1 inch = ${(cm * 2.54).toFixed(2)} px). It is ${w} × ${h} px. Coordinates are pixels from the top-left corner: x to the right, y down. The overview carries a labelled grid every 100 px (blue = x, pink = y).${inp.scale === "depth" ? "" : " The black-bordered printed card is the scale target — it is never part of the garment and must never be measured."}
 
 ${what}
 
@@ -315,7 +338,7 @@ function openAiTurns(model: string, usage: AgentResult["usage"], effort: AgentOp
       const res = await client.responses.create(
         {
           model,
-          ...(model.startsWith("gpt-5") ? { reasoning: { effort: effort ?? "low" } } : {}),
+          ...(/^(gpt-5|gpt-6|o\d)/.test(model) ? { reasoning: { effort: effort ?? "low" } } : {}),
           text: { format: { type: "json_object" } },
           ...(previous ? { previous_response_id: previous } : {}),
           store: true,
@@ -400,8 +423,9 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
         const lines: AgentResult["lines"] = {};
         const cm: AgentResult["cm"] = {};
         const rawLines = (final.lines ?? {}) as Record<string, { a?: unknown; b?: unknown } | null>;
+        const allowed = inp.points?.length ? new Set(inp.points.map((p) => p.key)) : null;
         for (const [k, v] of Object.entries(rawLines)) {
-          if (!v || !(k in POM_RULE)) continue;
+          if (!v || !(allowed ? allowed.has(k) : k in POM_RULE)) continue;
           const a = asPt(v.a, w, h), b = asPt(v.b, w, h);
           if (!a || !b) continue;
           const len = Math.hypot(b.x - a.x, b.y - a.y);
@@ -411,8 +435,8 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
         }
         /* One look again when a number is implausible for its point — the
            AI is told which and why, and keeps its close-up budget. */
-        const bad = (Object.keys(cm) as PomKey[])
-          .map((k) => ({ k, p: PLAUSIBLE[k], v: cm[k]! }))
+        const bad = Object.keys(cm)
+          .map((k) => ({ k, p: PLAUSIBLE[k as PomKey], v: cm[k]! }))
           .filter(({ p, v }) => p && p[inp.view] && (v < p[inp.view]![0] || v > p[inp.view]![1]));
         if (bad.length && !rechecked && Date.now() < deadline - 30_000) {
           rechecked = true;
@@ -476,6 +500,27 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * CarbonGradingAI's AI assist: its own model setting, so the phone can run on
+ * the model that placed the hard points best in the 2026-10-13 test
+ * (gpt-6-astra) without changing the desktop page. GRADING_APP_AI_MODEL may be
+ * any Claude or OpenAI model name; "off" turns the assist off.
+ */
+export function gradingAppAgentConfig(): { provider: Provider; model: string; maxRounds: number; thinkingBudget: number; effort: AgentOptions["effort"] } | null {
+  const model = (process.env.GRADING_APP_AI_MODEL || "gpt-6-astra").trim();
+  if (!model || model === "off") return null;
+  const provider: Provider = model.startsWith("claude") ? "claude" : "openai";
+  if (provider === "claude" && !(process.env.ANTHROPIC_API_KEY || "").trim()) return agentConfig();
+  if (provider === "openai" && !getOpenAiApiKey().trim()) return agentConfig();
+  return {
+    provider,
+    model,
+    maxRounds: Number(process.env.GRADING_APP_AI_ROUNDS || process.env.SIZE_GRADING_ROUNDS || 5),
+    thinkingBudget: Number(process.env.SIZE_GRADING_THINKING || 0),
+    effort: ((process.env.GRADING_APP_AI_EFFORT || process.env.SIZE_GRADING_AI_EFFORT || "low").trim() as AgentOptions["effort"]),
+  };
 }
 
 /** Which provider and model the app uses, from the environment. */

@@ -1,0 +1,16 @@
+# Gradle / build output
+.gradle/
+build/
+app/build/
+.kotlin/
+*.iml
+.idea/
+
+# Machine-specific
+local.properties
+
+# Signing — never commit. Backed up per AGENT_CREDENTIALS.md.
+key.properties
+keys/
+**/*.jks
+**/*.keystore

@@ -259,7 +259,13 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
   // Two real tabs: "matrix" (pictures, shared values, color/size, variant tree)
   // and "setup" (the Group Items grid). State below is shared, so adding a
   // color/size on the Matrix tab shows up as new Group-Item rows in Setup.
-  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "collections" | "studio">("matrix");
+  /* `?mtab=studio|seo` opens straight on that tab — CarbonGradingAI links here
+     to make photos or write the description for the product just measured. */
+  const [tab, setTab] = useState<"matrix" | "setup" | "images" | "seo" | "collections" | "studio">(() => {
+    if (typeof window === "undefined") return "matrix";
+    const t = new URLSearchParams(window.location.search).get("mtab");
+    return t === "studio" || t === "seo" ? t : "matrix";
+  });
 
   useEffect(() => {
     // Studio / Images publishes change the gallery + per-colour images on the

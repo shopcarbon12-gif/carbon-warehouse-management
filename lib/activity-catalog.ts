@@ -59,6 +59,15 @@ const ROUTES: Record<string, Entry> = {
   "inventory/size-grading": { module: "Catalog", label: "Saved size grading" },
   "inventory/size-grading/ai-read": { module: "Catalog", label: "Measured garment from photo" },
   "inventory/size-grading/ai-measure": { module: "Catalog", label: "AI measured garment from photo" },
+  "grading-app/assist": { module: "Catalog", label: "CarbonGradingAI: AI placed points" },
+  "grading-app/scans": { module: "Catalog", label: "CarbonGradingAI: saved measurement" },
+  "grading-app/scans/[id]": { module: "Catalog", label: "Reviewed a CarbonGradingAI scan" },
+  "grading-app/cut-groups": { module: "Catalog", label: "Created a cut group" },
+  "grading-app/cut-groups/[id]": {
+    module: "Catalog",
+    label: { PATCH: "Edited a cut group", POST: "Changed cut group products", DELETE: "Deleted a cut group" },
+  },
+  "grading-app/releases": { module: "Settings", label: "Uploaded a CarbonGradingAI release" },
   "collection-mapping": { module: "Shopify", label: "Changed collection mapping" },
 
   "generate": { module: "Studio", label: "Generated Studio panel" },
@@ -360,6 +369,7 @@ export const NOT_A_CHANGE_ROUTES: readonly string[] = [
   "shopify/seo/optimize",
   "inventory/size-grading/ai-read",
   "inventory/size-grading/ai-measure",
+  "grading-app/assist",
   "inventory/sync/preview",
   "inventory/bulk-import/scan",
   "compare/runs",

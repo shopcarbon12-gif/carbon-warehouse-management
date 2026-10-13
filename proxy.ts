@@ -87,6 +87,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/image-handoff/image") return true;
   /* OTA: handheld downloads APK with plain GET (no cookies). Else proxy redirects to /login HTML. */
   if (pathname.startsWith("/uploads/mobile-apk/")) return true;
+  /* CarbonGradingAI updates: the phone's installer downloads with a plain GET. */
+  if (pathname.startsWith("/uploads/grading-apk/")) return true;
   return false;
 }
 

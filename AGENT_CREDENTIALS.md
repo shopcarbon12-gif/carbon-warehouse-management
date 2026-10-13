@@ -38,6 +38,8 @@ The actual secret values live on this developer machine in gitignored files (see
 | `~/.ssh/id_ed25519_loyalty` | GitHub key for the **Loyalty** repo, via the `github-loyalty` alias |
 | `192.168.1.219:/opt/carbon-cdm/.env` | **Production CDM agent env** — `CARBON_CDM_TOKEN` (prod), `CARBON_WMS_URL` |
 | `apps/carbonwms-pc/key.properties` + `apps/carbonwms-pc/keys/carbonwms-pc-release.jks` | **CarbonWMS-PC release signing key** (Android shell app, package `com.shopcarbon.wmspc`). Created 2026-08-25 by `scripts/build-release.sh`; every future APK must use it. Backup: `~/CarbonWmsPcRelease/keys-backup/`; values also mirrored in `.env.agent-secrets` |
+| `apps/carbongradingai/key.properties` + `apps/carbongradingai/keys/carbongradingai-release.jks` | **CarbonGradingAI release signing key** (garment-measuring app, package `com.shopcarbon.gradingai`). Created 2026-10-13 by `apps/carbongradingai/scripts/build-release.sh`; every future APK must use it. Backup: `~/CarbonGradingAIRelease/keys-backup/`; values also mirrored in `.env.agent-secrets` |
+| Dropbox (carbon-gen's Dropbox app) | `DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET` in `../carbon-gen/.env.local`; the owner's refresh token lives in carbon-gen's DB table `dropbox_tokens` and is set on the WMS as `DROPBOX_REFRESH_TOKEN` (CarbonGradingAI scan photos → `/Carbon/Elior/CarbonGradingAI`, i.e. "elior perez › Carbon › Elior › CarbonGradingAI") |
 
 ### Variable name reference
 
