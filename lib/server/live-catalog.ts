@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { gzip } from "node:zlib";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
+import { loadGhostWmsStatuses } from "@/lib/server/status-label-enforcement";
 
 /**
  * Live catalog for the handheld (Add-On Catalog / Add-On Count).
@@ -79,6 +80,9 @@ export type LiveCatalogPayload = {
   tombstones: { items: string[]; skus: string[] };
   /** Rows in THIS payload (diagnostics). */
   counts: { items: number; skus: number };
+  /** items.status values ghosted on the Statuses page — scanners ignore these
+   *  tags (no beep, no count). Older phones ignore this field. */
+  ghostStatuses: string[];
 };
 
 type ParsedCursor = { issuedAt: number; xmax: string; xip: string[] };
@@ -201,6 +205,7 @@ function emptyPayload(
     },
     items: { epc: [], status: [], sku: [], bin: [], loc: [] },
     tombstones: { items: [], skus: [] },
+    ghostStatuses: [],
     counts: { items: 0, skus: 0 },
   };
 }
@@ -380,6 +385,7 @@ export async function buildLiveCatalogSnapshot(
       items: items.rows,
       epcCfg,
     });
+    p.ghostStatuses = await loadGhostWmsStatuses(client);
     return p;
   });
   console.info("[live-catalog] snapshot", {
@@ -514,6 +520,7 @@ export async function buildLiveCatalogDelta(
       else deadSkus.add(t.key);
     }
     p.tombstones = { items: [...deadItems], skus: [...deadSkus] };
+    p.ghostStatuses = await loadGhostWmsStatuses(client);
     return p;
   });
 

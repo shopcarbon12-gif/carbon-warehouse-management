@@ -51,7 +51,7 @@ function StatusRuleIcons({ row }: { row: StatusLabelRow }) {
         )}
         {slot(
           ghost ? <span aria-hidden>👻</span> : null,
-          "Ghost — handheld ignores reads (no beep, no count)",
+          "Ghost — scanners ignore reads (no beep, no count, no status change): handheld app AND desktop scans (cycle count, fixed readers). Does not hide the tag in the UI.",
         )}
         {slot(
           row.is_system_only ? <span aria-hidden>🤖</span> : null,
@@ -73,10 +73,10 @@ function RuleSummary({ row }: { row: StatusLabelRow }) {
           <strong>Web sellable:</strong> {yn(row.is_sellable)} — quantity sync follows this flag.
         </li>
         <li>
-          <strong>Handheld / antenna:</strong>{" "}
+          <strong>Scans (handheld app, desktop cycle count, fixed readers, counts):</strong>{" "}
           {row.is_visible_to_scanner
             ? "Reads are processed (beeps, counts, sessions)."
-            : "Ghost mode — hardware IGNORES reads (no beep, no count)."}
+            : "Ghost — reads are IGNORED (no beep, no count, no status change). Transfer receive, scan-out, returns and manual status changes still work."}
         </li>
         <li>
           <strong>Search & reporting (UI):</strong> {row.is_visible_in_ui ? "Visible" : "Hidden"}.
@@ -98,7 +98,7 @@ function RuleSummary({ row }: { row: StatusLabelRow }) {
   );
 }
 
-export function StatusLabelsWorkspace() {
+export function StatusLabelsWorkspace({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   const { data, error, isLoading, mutate } = useSWR<StatusLabelRow[]>(
     "/api/settings/status-labels",
     fetcher,
@@ -113,6 +113,7 @@ export function StatusLabelsWorkspace() {
   }, [data, statusParam]);
   const [displayLabel, setDisplayLabel] = useState("");
   const [legacyId, setLegacyId] = useState("");
+  const [ghost, setGhost] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formBusy, setFormBusy] = useState(false);
 
@@ -120,6 +121,7 @@ export function StatusLabelsWorkspace() {
     if (editRow) {
       setDisplayLabel(editRow.display_label ?? "");
       setLegacyId(editRow.legacy_id != null ? String(editRow.legacy_id) : "");
+      setGhost(!editRow.is_visible_to_scanner);
     }
   }, [editRow]);
 
@@ -150,6 +152,8 @@ export function StatusLabelsWorkspace() {
           id: editRow.id,
           displayLabel: displayLabel.trim(),
           legacyId: leg,
+          // Only a Super Admin may change the ghost rule (enforced server-side too).
+          ...(isSuperAdmin && ghost !== !editRow.is_visible_to_scanner ? { ghost } : {}),
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -176,7 +180,8 @@ export function StatusLabelsWorkspace() {
   return (
     <div className="flex flex-col gap-4">
       <p className="font-mono text-xs text-[var(--wms-muted)]">
-        Clean 10 — flags are fixed in the database seed. Edit display text and legacy system ID only.
+        Clean 10 — flags are fixed in the database seed. Edit display text and legacy system ID; the Ghost rule
+        can be changed by a Super Admin only.
       </p>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--wms-border)] max-md:max-h-[70dvh] max-md:overflow-y-auto">
@@ -258,6 +263,22 @@ export function StatusLabelsWorkspace() {
                   onChange={(e) => setDisplayLabel(e.target.value)}
                 />
               </label>
+              <label
+                className={`flex items-start gap-2 font-mono text-xs ${isSuperAdmin && editRow.name !== "LIVE" ? "text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"}`}
+                title={isSuperAdmin ? undefined : "Only a Super Admin can change the Ghost rule"}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={ghost}
+                  disabled={!isSuperAdmin || editRow.name === "LIVE"}
+                  onChange={(e) => setGhost(e.target.checked)}
+                />
+                <span>
+                  👻 Ghost — scanners ignore this status (no beep, no count, no status change), in the handheld app
+                  and desktop scans. {isSuperAdmin ? "" : "Super Admin only."}
+                </span>
+              </label>
               <label className="flex flex-col gap-1 font-mono text-xs text-[var(--wms-muted)]">
                 Legacy system ID
                 <input
@@ -285,7 +306,7 @@ export function StatusLabelsWorkspace() {
                 className="rounded-md bg-emerald-600 px-4 py-2 font-mono text-sm font-semibold text-white disabled:opacity-50"
                 onClick={() => void submitEdit()}
               >
-                {formBusy ? "Saving…" : "Save presentation"}
+                {formBusy ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { ORDER_HOLD_STATUS } from "@/lib/server/order-hold-status";
 
 /**
  * Phase 3 — operator-confirmed re-encode finalisation.
@@ -81,20 +82,71 @@ async function POST_handler(req: Request) {
     // (e.g. operator manually flipped to TAG KILLED via the post-encode
     // dropdown) wins over the auto-promotion. tenant_id check via the
     // join prevents cross-tenant promotion if the EPC happens to collide.
+    // Re-encoding a tag that an online order is holding (owner, 2026-10-13):
+    // the hold moves to the new chip ID. The old EPC is listed in the order's
+    // shopify_sale_events.detail and was neither released (LIVE again) nor
+    // shipped (SOLD) — it may already be TAG KILLED by the operator. The new
+    // EPC then takes the hold status instead of going LIVE, and the order's
+    // record points at the new EPC, so the order still holds one unit.
+    let heldBy: string[] = [];
+    if (promoteNew && oldEpc && oldEpc !== newEpc) {
+      const h = await client.query<{ order_id: string }>(
+        `SELECT s.order_id
+           FROM shopify_sale_events s
+           JOIN items i ON i.epc = $1
+           JOIN locations l ON l.id = i.location_id AND l.tenant_id = $2::uuid
+          WHERE i.status NOT IN ('in-stock', 'sold')
+            AND EXISTS (
+              SELECT 1
+                FROM jsonb_array_elements(CASE WHEN jsonb_typeof(s.detail) = 'array' THEN s.detail ELSE '[]'::jsonb END) e,
+                     jsonb_array_elements_text(CASE WHEN jsonb_typeof(e->'epcs') = 'array' THEN e->'epcs' ELSE '[]'::jsonb END) x
+               WHERE upper(x) = $1
+            )`,
+        [oldEpc, session.tid],
+      );
+      heldBy = h.rows.map((r) => r.order_id);
+    }
+
     let livePromoted = false;
     if (promoteNew) {
       const livePromote = await client.query(
         `UPDATE items i
-            SET status = 'in-stock'
+            SET status = $4
            FROM locations l
           WHERE i.location_id = l.id
             AND l.tenant_id = $1::uuid
             AND i.location_id = $2::uuid
             AND i.epc = $3
             AND i.status = 'unknown'`,
-        [session.tid, session.lid, newEpc],
+        [session.tid, session.lid, newEpc, heldBy.length ? ORDER_HOLD_STATUS : "in-stock"],
       );
       livePromoted = (livePromote.rowCount ?? 0) > 0;
+    }
+
+    if (heldBy.length && oldEpc) {
+      for (const orderId of heldBy) {
+        await client.query(
+          `UPDATE shopify_sale_events s
+              SET detail = (
+                SELECT jsonb_agg(
+                         CASE WHEN jsonb_typeof(e.v->'epcs') = 'array'
+                              THEN jsonb_set(e.v, '{epcs}', (
+                                     SELECT COALESCE(jsonb_agg(CASE WHEN upper(x.t) = $2 THEN to_jsonb($3::text) ELSE to_jsonb(x.t) END ORDER BY x.n), '[]'::jsonb)
+                                       FROM jsonb_array_elements_text(e.v->'epcs') WITH ORDINALITY x(t, n)))
+                              ELSE e.v END
+                         ORDER BY e.n)
+                  FROM jsonb_array_elements(s.detail) WITH ORDINALITY e(v, n))
+            WHERE s.order_id = $1 AND jsonb_typeof(s.detail) = 'array'`,
+          [orderId, oldEpc, newEpc],
+        );
+      }
+      if (livePromoted) {
+        await client.query(
+          `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
+           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'unknown', $3, $4, NULL, $5::uuid, NULL)`,
+          [session.tid, newEpc, ORDER_HOLD_STATUS, `re-encode of ${oldEpc}: order hold moved to the new tag`, session.sub ?? null],
+        );
+      }
     }
 
     // Is the NEW EPC live for this tenant+location right now? True when we
@@ -109,9 +161,11 @@ async function POST_handler(req: Request) {
         WHERE l.tenant_id = $1::uuid
           AND i.location_id = $2::uuid
           AND i.epc = $3
-          AND i.status = 'in-stock'`,
-      [session.tid, session.lid, newEpc],
+          AND i.status = $4`,
+      [session.tid, session.lid, newEpc, heldBy.length ? ORDER_HOLD_STATUS : "in-stock"],
     );
+    // "Live" here means the replacement row is in its final state: LIVE, or
+    // held for the order it inherited.
     const newIsLive = Number(newLiveR.rows[0]?.n ?? 0) > 0;
 
     // DELETE the old EPC's items row entirely, but ONLY once the new EPC is

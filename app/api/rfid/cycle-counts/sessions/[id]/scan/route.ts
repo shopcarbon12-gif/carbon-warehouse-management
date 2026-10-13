@@ -113,11 +113,14 @@ async function POST_handler(req: Request, { params }: Ctx) {
     // Append new EPCs to the session's running scanned_epcs list so the
     // expected/variance views (and the commit step) see them. Dedup happens
     // in updateSession via dedupeEpcs.
-    if (results.length > 0) {
+    // Ghosted statuses ("Ignore" on the Statuses page) are not counted: they
+    // never enter the session's scanned list or its source attribution.
+    const counted = results.filter((r) => r.outcome !== "ghost");
+    if (counted.length > 0) {
       const merged = [
         ...new Set([
           ...cur.scanned_epcs.map((e) => e.toUpperCase()),
-          ...results.map((r) => r.epc),
+          ...counted.map((r) => r.epc),
         ]),
       ];
       await client.query(
@@ -138,7 +141,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
         await appendSourceSightings(
           client,
           id,
-          results.map((r) => ({
+          counted.map((r) => ({
             epc: r.epc,
             kind: src.kind,
             name: src.name,

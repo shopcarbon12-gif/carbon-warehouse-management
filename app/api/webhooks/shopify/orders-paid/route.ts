@@ -2,6 +2,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
+import { ORDER_HOLD_STATUS } from "@/lib/server/order-hold-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,9 +124,12 @@ async function POST_handler(req: Request) {
       manualDec += r.rowCount ?? 0;
       detail.push({ sku, qty, kind: "manual", rows: r.rowCount, newQty: r.rows[0]?.current_qty ?? null });
     } else {
-      // Flip the OLDEST N in-stock EPCs → unknown.
+      // Hold the OLDEST N in-stock EPCs for this order → pending_transaction
+      // (was 'unknown' until 2026-10-13: scans may revive 'unknown', so a
+      // count re-listed paid-but-unshipped items as LIVE). Every downstream
+      // order flow accepts both (lib/server/order-hold-status.ts).
       const r = await pool.query<{ epc: string }>(
-        `UPDATE items SET status = 'unknown', last_seen_at = last_seen_at
+        `UPDATE items SET status = '${ORDER_HOLD_STATUS}', last_seen_at = last_seen_at
           WHERE id IN (
             SELECT id FROM items
              WHERE custom_sku_id = $1::uuid AND status = 'in-stock'

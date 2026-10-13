@@ -9,6 +9,7 @@ import {
   updateSession,
 } from "@/lib/server/rfid-cycle-count-sessions";
 import { ingestCycleCountEpcs } from "@/lib/server/rfid-cycle-count-scan";
+import { resolveEpcVisibilityForTenant } from "@/lib/server/status-label-enforcement";
 import { appendSourceSightings } from "@/lib/server/cycle-count-source-attribution";
 
 export const runtime = "nodejs";
@@ -141,10 +142,19 @@ async function backfillFromCdmReads(
   // live-scan POST no longer stamps a generic "desktop-scan" source, so each
   // tag gets its true reader+antenna here regardless of which path first
   // appended the EPC to scanned_epcs. Idempotent (first-sighting wins).
+  // Ghosted statuses ("Ignore" on the Statuses page) are not counted: no
+  // reader credit, never appended to scanned_epcs.
+  const visibility = await resolveEpcVisibilityForTenant(
+    client,
+    tenantId,
+    r.rows.map((row) => row.epc),
+  );
+  const ghostEpcs = new Set(visibility.filter((v) => !v.visible).map((v) => v.epc));
+  const countedRows = r.rows.filter((row) => !ghostEpcs.has(row.epc));
   await appendSourceSightings(
     client,
     sessionId,
-    r.rows.map((row) => ({
+    countedRows.map((row) => ({
       epc: row.epc,
       kind: "reader" as const,
       name: sourceName(row),
@@ -155,7 +165,7 @@ async function backfillFromCdmReads(
   // Append any EPCs the live SSE path missed into scanned_epcs (for the
   // count + variance). Source is already stamped above.
   const haveSet = new Set(detail.scanned_epcs.map((e) => e.toUpperCase()));
-  const missedRows = r.rows.filter((row) => !haveSet.has(row.epc));
+  const missedRows = countedRows.filter((row) => !haveSet.has(row.epc));
   if (missedRows.length === 0) return;
   const missed = missedRows.map((row) => row.epc);
   // Process through the same pipeline as live SSE-fed scans.
@@ -171,7 +181,7 @@ async function backfillFromCdmReads(
   const merged = [
     ...new Set([
       ...detail.scanned_epcs.map((e) => e.toUpperCase()),
-      ...results.map((res) => res.epc),
+      ...results.filter((res) => res.outcome !== "ghost").map((res) => res.epc),
     ]),
   ];
   await client.query(

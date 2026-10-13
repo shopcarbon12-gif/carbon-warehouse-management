@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { ORDER_HOLD_STATUSES } from "@/lib/server/order-hold-status";
 
 /**
  * Shopify refund → WMS qty reconciliation: the inverse of the orders/paid
@@ -151,17 +152,21 @@ export async function applyShopifyRefund(
     const epcs = soldEpcs.get(sku);
     if (epcs) {
       const candidates = epcs.filter((e) => !restoredBefore.has(e));
-      const r = await client.query<{ epc: string; tenant_id: string | null }>(
-        `UPDATE items i SET status = 'in-stock'
-          WHERE i.id IN (
-            SELECT id FROM items
-             WHERE epc = ANY($1::text[]) AND status = 'unknown'
-             ORDER BY array_position($1::text[], epc)
-             LIMIT $2
-             FOR UPDATE
-          )
-          RETURNING i.epc, (SELECT l.tenant_id::text FROM locations l WHERE l.id = i.location_id) AS tenant_id`,
-        [candidates, qty],
+      // Still-held tags (pending_transaction, or legacy 'unknown' holds).
+      const r = await client.query<{ epc: string; tenant_id: string | null; old_status: string }>(
+        `WITH held AS (
+           SELECT id, status FROM items
+            WHERE epc = ANY($1::text[]) AND status = ANY($3::text[])
+            ORDER BY array_position($1::text[], epc)
+            LIMIT $2
+            FOR UPDATE
+         )
+         UPDATE items i SET status = 'in-stock'
+           FROM held
+          WHERE i.id = held.id
+          RETURNING i.epc, held.status AS old_status,
+                    (SELECT l.tenant_id::text FROM locations l WHERE l.id = i.location_id) AS tenant_id`,
+        [candidates, qty, ORDER_HOLD_STATUSES],
       );
       for (const row of r.rows) {
         if (!row.tenant_id) continue;
@@ -170,19 +175,19 @@ export async function applyShopifyRefund(
              tenant_id, log_type, entity_type, entity_reference, old_value, new_value,
              reason, user_id, user_uuid, device_id
            )
-           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'unknown', 'in-stock', $3, NULL, NULL, NULL)`,
-          [row.tenant_id, row.epc, `Shopify refund ${refundId} (order ${orderName ?? orderId})`],
+           VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $4, 'in-stock', $3, NULL, NULL, NULL)`,
+          [row.tenant_id, row.epc, `Shopify refund ${refundId} (order ${orderName ?? orderId})`, row.old_status],
         );
       }
       const restoredEpcs = r.rows.map((x) => x.epc);
       // When the refund came up short, name the sale's tags that were skipped
-      // because they are no longer `unknown` (usually `sold` — shipped).
+      // because they are no longer held (usually `sold` — shipped).
       const leftAlone =
         restoredEpcs.length < qty
           ? (
               await client.query<{ epc: string; status: string | null }>(
-                `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND status <> 'unknown'`,
-                [candidates.filter((e) => !restoredEpcs.includes(e))],
+                `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND NOT (status = ANY($2::text[]))`,
+                [candidates.filter((e) => !restoredEpcs.includes(e)), ORDER_HOLD_STATUSES],
               )
             ).rows
           : [];

@@ -2,6 +2,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
+import { ORDER_HOLD_STATUSES } from "@/lib/server/order-hold-status";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,18 +47,26 @@ async function POST_handler(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const r = await client.query<{ epc: string; tenant_id: string }>(
-      `UPDATE items i SET status = 'in-stock'
-         FROM locations l
-        WHERE i.epc = ANY($1::text[]) AND i.status = 'unknown' AND l.id = i.location_id
-        RETURNING i.epc, l.tenant_id::text`,
-      [epcs],
+    // Still-held tags (pending_transaction, or legacy 'unknown' holds) go back
+    // to LIVE; anything else (already shipped / changed by hand) is skipped.
+    const r = await client.query<{ epc: string; tenant_id: string; old_status: string }>(
+      `WITH held AS (
+         SELECT i.id, l.tenant_id, i.status
+           FROM items i JOIN locations l ON l.id = i.location_id
+          WHERE i.epc = ANY($1::text[]) AND i.status = ANY($2::text[])
+          FOR UPDATE OF i
+       )
+       UPDATE items SET status = 'in-stock'
+         FROM held
+        WHERE items.id = held.id
+        RETURNING items.epc, held.tenant_id::text AS tenant_id, held.status AS old_status`,
+      [epcs, ORDER_HOLD_STATUSES],
     );
     for (const row of r.rows) {
       await client.query(
         `INSERT INTO inventory_audit_logs (tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id, user_uuid, device_id)
-         VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, 'unknown', 'in-stock', $3, NULL, NULL, 'shopify')`,
-        [row.tenant_id, row.epc, `shopify_fulfilled ${name}`],
+         VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $4, 'in-stock', $3, NULL, NULL, 'shopify')`,
+        [row.tenant_id, row.epc, `shopify_fulfilled ${name}`, row.old_status],
       );
     }
     await client.query("COMMIT");

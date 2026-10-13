@@ -3,7 +3,10 @@ import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
-import { loadStatusLabelBrainMap } from "@/lib/server/status-label-enforcement";
+import {
+  loadStatusLabelBrainMap,
+  shouldGhostDropLabel,
+} from "@/lib/server/status-label-enforcement";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 
 /**
@@ -18,12 +21,14 @@ import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
  * Per-EPC outcome (also written to audit_log on every state change):
  *  - live_added         first-time scan, decoded + catalog matched → in-stock
  *  - live_moved         existed in-stock at another location → moved here
- *  - live_revived       existed in unlocked non-in-stock status (return,
- *                       in-transit, pending_transaction) → in-stock at here
+ *  - live_revived       existed as 'unknown' → in-stock here (the ONLY status a
+ *                       scan may revive — owner rule 2026-10-13)
  *  - live_already_here  no-op: already in-stock at this location
- *  - defective_decode_fail  decode failed → tag_killed
- *  - defective_no_match     decoded but no catalog hit → tag_killed
- *  - locked            super_admin_locked status; left untouched
+ *  - defective_decode_fail  first-time scan, decode failed → tag_killed
+ *  - defective_no_match     first-time scan, no catalog hit → tag_killed
+ *  - locked            any other status, or an existing tag that no longer
+ *                      decodes; left untouched
+ *  - ghost             status set to "Ignore" on the Statuses page; dropped
  */
 
 export type CycleCountScanOutcome =
@@ -33,7 +38,8 @@ export type CycleCountScanOutcome =
   | "live_already_here"
   | "defective_decode_fail"
   | "defective_no_match"
-  | "locked";
+  | "locked"
+  | "ghost";
 
 export type CycleCountScanResult = {
   epc: string;
@@ -43,7 +49,7 @@ export type CycleCountScanResult = {
   from_location_id: string | null;
 };
 
-const LOCKED_OUTCOMES = new Set<CycleCountScanOutcome>(["locked"]);
+const LOCKED_OUTCOMES = new Set<CycleCountScanOutcome>(["locked", "ghost"]);
 
 export async function ingestCycleCountEpcs(
   client: PoolClient,
@@ -94,19 +100,21 @@ export async function ingestCycleCountEpcs(
   for (const epc of norm) {
     const prior = existingByEpc.get(epc) ?? null;
 
-    // 1. Locked statuses are untouchable — no formula, no DB write.
-    if (prior) {
+    // 1. Scan rule (owner, 2026-10-13): a cycle-count read may only bring an
+    //    UNKNOWN tag, or a brand-new tag that decodes to a catalog SKU, to LIVE.
+    //    Every other status is untouchable — no formula, no DB write. A status
+    //    ghosted on the Statuses page ("Ignore") is dropped outright: not
+    //    counted, not credited to a reader (the scan route filters 'ghost').
+    if (prior && prior.status !== "in-stock" && prior.status !== "unknown") {
       const flags = labelMap.get(labelNameForWmsStatus(prior.status).toLowerCase());
-      if (flags?.super_admin_locked) {
-        results.push({
-          epc,
-          outcome: "locked",
-          previous_status: prior.status,
-          new_status: null,
-          from_location_id: prior.location_id,
-        });
-        continue;
-      }
+      results.push({
+        epc,
+        outcome: shouldGhostDropLabel(flags) ? "ghost" : "locked",
+        previous_status: prior.status,
+        new_status: null,
+        from_location_id: prior.location_id,
+      });
+      continue;
     }
 
     // 2. Run the primary formula, then the LEGACY catalog-entrance fallback.
@@ -134,6 +142,18 @@ export async function ingestCycleCountEpcs(
       }
     }
 
+    if (!resolvedCustomSkuId && prior) {
+      // An existing LIVE / UNKNOWN tag that no longer decodes: a read never
+      // kills a tag the system already knows — leave it as it is.
+      results.push({
+        epc,
+        outcome: "locked",
+        previous_status: prior.status,
+        new_status: null,
+        from_location_id: prior.location_id,
+      });
+      continue;
+    }
     if (!resolvedCustomSkuId) {
       // Neither formula placed it → defective (decode-fail vs no-catalog-match).
       const failOutcome: CycleCountScanOutcome =

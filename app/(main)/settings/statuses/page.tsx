@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/get-session";
 import { StatusLabelsWorkspace } from "@/components/settings/status-labels-workspace";
+import { isSuperAdminRole } from "@/lib/auth/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,12 @@ export default async function StatusLabelsSettingsPage() {
       <div className="border-b border-[var(--wms-border)] pb-3 dark:border-[var(--wms-border)]">
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Manage asset status (Clean 10)</h1>
         <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
-          Hard-wired Carbon WMS rules — only display text and legacy system IDs are editable. Data lives in{" "}
+          Carbon WMS status rules — display text and legacy system IDs are editable; the Ghost rule by a Super Admin
+          only. Data lives in{" "}
           <code className="text-[var(--wms-fg)]/80">status_labels</code>.
         </p>
       </div>
-      <StatusLabelsWorkspace />
+      <StatusLabelsWorkspace isSuperAdmin={isSuperAdminRole(session.role)} />
     </div>
   );
 }

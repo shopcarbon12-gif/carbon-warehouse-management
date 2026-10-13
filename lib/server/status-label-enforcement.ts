@@ -1,5 +1,8 @@
 import type { Pool, PoolClient } from "pg";
-import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
+import {
+  WMS_STATUS_TO_LABEL_NAME,
+  labelNameForWmsStatus,
+} from "@/lib/server/wms-status-to-label-name";
 
 export type StatusLabelBrainRow = {
   name: string;
@@ -119,4 +122,12 @@ export async function resolveEpcVisibilityForTenant(
     const flags = flagsForWmsStatus(map, st);
     return { epc, visible: !shouldGhostDropLabel(flags) };
   });
+}
+
+/** Every items.status whose label is ghosted ("Ignore" on the Statuses page). */
+export async function loadGhostWmsStatuses(db: Pool | PoolClient): Promise<string[]> {
+  const map = await loadStatusLabelBrainMap(db);
+  return Object.keys(WMS_STATUS_TO_LABEL_NAME).filter((st) =>
+    shouldGhostDropLabel(flagsForWmsStatus(map, st)),
+  );
 }

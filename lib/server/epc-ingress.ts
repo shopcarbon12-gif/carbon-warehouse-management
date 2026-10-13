@@ -1,6 +1,11 @@
 import type { PoolClient } from "pg";
 import { decodeEpc, type EpcConfig } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
+import {
+  loadStatusLabelBrainMap,
+  shouldGhostDropLabel,
+} from "@/lib/server/status-label-enforcement";
+import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 
 /**
  * Unified EPC ingress — every EPC entering the WMS (fixed reader, handheld,
@@ -58,6 +63,10 @@ export type EpcIngressInput = {
   locationId: string;
   /** When the read happened (for first_scanned_at + last_seen_at). */
   receivedAt: Date;
+  /** users.id behind the scan, for the STATUS_CHANGE audit row. */
+  auditUserId?: string | null;
+  /** Free text for the STATUS_CHANGE audit row (module / session). */
+  auditReason?: string | null;
 };
 
 export type EpcIngressResult = {
@@ -71,7 +80,68 @@ export type EpcIngressResult = {
   customSkuId: string | null;
   /** Decoded serial that we wrote to items.serial_number. */
   serialNumber: string | null; // bigint stringified for safe JSON
+  /**
+   * Scan rule (owner, 2026-10-13): the tag already exists with a status a scan
+   * may not change. Nothing was written; `status` above is meaningless — read
+   * `kept.status` (the tag's current status). `ghost` = its status label is set
+   * to "Ignore" on the Statuses page (scanners ignore the read entirely).
+   */
+  kept?: { status: string; ghost: boolean };
 };
+
+/**
+ * Sources that are SCANS: a read here may only bring an 'unknown' tag, or a
+ * brand-new tag that decodes to a catalog SKU, to LIVE — it never changes any
+ * other status, and tags whose status is ghosted ("Ignore" on the Statuses
+ * page) are ignored outright. Owner rule, 2026-10-13. 'transfer' (receiving
+ * slip EPCs that have no row yet) and 'manual' keep their own behaviour.
+ */
+const SCAN_SOURCES: ReadonlySet<EpcSource> = new Set<EpcSource>([
+  "fixed_reader",
+  "handheld",
+  "cycle_count",
+  "count_inventory",
+  "count_inventory_override",
+  "add_on_count",
+]);
+
+export function isScanSource(source: EpcSource): boolean {
+  return SCAN_SOURCES.has(source);
+}
+
+type PriorItem = { status: string; customSkuId: string | null };
+
+/** Per-batch state: each EPC's current row + the ghost rule, loaded once. */
+export type EpcIngressContext = {
+  prior: Map<string, PriorItem>;
+  isGhost: (status: string) => boolean;
+};
+
+/**
+ * Lock + load the current rows for [epcs] and the Statuses-page ghost flags.
+ * FOR UPDATE so a concurrent ingest of the same EPC can't slip a status change
+ * between this read and the write.
+ */
+export async function loadEpcIngressContext(
+  client: PoolClient,
+  epcs: string[],
+): Promise<EpcIngressContext> {
+  const upper = [...new Set(epcs.map((e) => e.trim().toUpperCase()))];
+  const prior = new Map<string, PriorItem>();
+  if (upper.length > 0) {
+    const r = await client.query<{ epc: string; status: string; custom_sku_id: string | null }>(
+      `SELECT epc, status, custom_sku_id::text FROM items WHERE epc = ANY($1::text[]) FOR UPDATE`,
+      [upper],
+    );
+    for (const row of r.rows) {
+      prior.set(row.epc.toUpperCase(), { status: row.status, customSkuId: row.custom_sku_id });
+    }
+  }
+  const labels = await loadStatusLabelBrainMap(client);
+  const isGhost = (status: string) =>
+    shouldGhostDropLabel(labels.get(labelNameForWmsStatus(status).trim().toLowerCase()));
+  return { prior, isGhost };
+}
 
 // Per-tenant config cache. The brain is small (one row per tenant) and rarely
 // changes — caching for 60s avoids slamming the DB during read floods.
@@ -145,12 +215,13 @@ async function tryLegacyCatalogEntrance(
   client: PoolClient,
   input: EpcIngressInput,
   primarySerial: bigint | null,
+  prior: PriorItem | null,
 ): Promise<EpcIngressResult | null> {
   const legacySystemId = legacyEpcSystemId(input.epc);
   if (legacySystemId === null) return null;
   const legacyCustomSkuId = await lookupCatalogBySystemId(client, legacySystemId);
   if (!legacyCustomSkuId) return null;
-  return await writeItem(client, input, {
+  return await writeItem(client, input, prior, {
     status: "in-stock",
     customSkuId: legacyCustomSkuId,
     serial: primarySerial ?? legacyEpcSerial(input.epc),
@@ -168,15 +239,33 @@ async function tryLegacyCatalogEntrance(
 export async function ingestEpc(
   client: PoolClient,
   input: EpcIngressInput,
+  ctx?: EpcIngressContext,
 ): Promise<EpcIngressResult> {
+  const c = ctx ?? (await loadEpcIngressContext(client, [input.epc]));
+  const prior = c.prior.get(input.epc.trim().toUpperCase()) ?? null;
+
+  // Scan rule: an existing tag whose status is not LIVE or UNKNOWN is left
+  // exactly as it is — ghosted statuses are ignored outright, and nothing a
+  // scan reads can move sold / return / in-transit / pending / damaged /
+  // stolen / killed tags.
+  if (prior && isScanSource(input.source) && prior.status !== "in-stock" && prior.status !== "unknown") {
+    return {
+      itemId: null,
+      status: "tag_killed",
+      customSkuId: prior.customSkuId,
+      serialNumber: null,
+      kept: { status: prior.status, ghost: c.isGhost(prior.status) },
+    };
+  }
+
   const config = await loadEpcConfig(client, input.tenantId);
   if (!config) {
     // Tenant has no EPC config row — should not happen post-migration 032.
     // Try the legacy fallback before giving up; else tag_killed so the EPC is
     // at least visible in Defective EPCs.
-    const legacy = await tryLegacyCatalogEntrance(client, input, null);
+    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior);
     if (legacy) return legacy;
-    return await writeItem(client, input, {
+    return await writeItem(client, input, prior, {
       status: "tag_killed",
       reason: "decode_failed",
       customSkuId: null,
@@ -188,9 +277,9 @@ export async function ingestEpc(
   if (!decoded.valid) {
     // Primary formula rejected it (wrong prefix / bad bits). Legacy fallback:
     // if int(epc[5:15],16) maps to a catalog SKU, bring it in LIVE.
-    const legacy = await tryLegacyCatalogEntrance(client, input, null);
+    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior);
     if (legacy) return legacy;
-    return await writeItem(client, input, {
+    return await writeItem(client, input, prior, {
       status: "tag_killed",
       reason: "decode_failed",
       customSkuId: null,
@@ -201,9 +290,9 @@ export async function ingestEpc(
   const customSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
   if (!customSkuId) {
     // Primary system_id isn't in the catalog. Legacy fallback before tag_killed.
-    const legacy = await tryLegacyCatalogEntrance(client, input, decoded.serial);
+    const legacy = await tryLegacyCatalogEntrance(client, input, decoded.serial, prior);
     if (legacy) return legacy;
-    return await writeItem(client, input, {
+    return await writeItem(client, input, prior, {
       status: "tag_killed",
       reason: "unknown_system_id",
       customSkuId: null,
@@ -211,7 +300,7 @@ export async function ingestEpc(
     });
   }
 
-  return await writeItem(client, input, {
+  return await writeItem(client, input, prior, {
     status: "in-stock",
     customSkuId,
     serial: decoded.serial,
@@ -241,10 +330,33 @@ type WriteItemArgs = {
 async function writeItem(
   client: PoolClient,
   input: EpcIngressInput,
+  prior: PriorItem | null,
   args: WriteItemArgs,
 ): Promise<EpcIngressResult> {
   const epcUpper = input.epc.trim().toUpperCase();
   const serialAsText = args.serial !== null ? args.serial.toString() : "0";
+
+  // Status this write lands on. Scans reaching here only see LIVE / UNKNOWN /
+  // brand-new tags (everything else returned `kept` in ingestEpc): a tag that
+  // already exists is never turned into a defective by a read that fails to
+  // decode — it keeps its status, SKU and serial and only its last-seen /
+  // location move. Non-scan sources keep the long-standing rule that a killed,
+  // damaged or stolen tag is never revived here.
+  let finalStatus: string = args.status;
+  let keepIdentity = false;
+  if (prior) {
+    if (isScanSource(input.source)) {
+      if (args.status !== "in-stock") {
+        finalStatus = prior.status;
+        keepIdentity = true;
+      }
+    } else if (
+      (prior.status === "tag_killed" || prior.status === "damaged" || prior.status === "stolen") &&
+      args.status === "in-stock"
+    ) {
+      finalStatus = prior.status;
+    }
+  }
 
   const r = await client.query<{ id: string }>(
     `INSERT INTO items (
@@ -259,8 +371,8 @@ async function writeItem(
        $9::uuid, $10::uuid
      )
      ON CONFLICT (epc) DO UPDATE SET
-       serial_number       = EXCLUDED.serial_number,
-       custom_sku_id       = EXCLUDED.custom_sku_id,
+       serial_number       = CASE WHEN $11::boolean THEN items.serial_number ELSE EXCLUDED.serial_number END,
+       custom_sku_id       = CASE WHEN $11::boolean THEN items.custom_sku_id ELSE EXCLUDED.custom_sku_id END,
        -- A tag written off as destroyed, ruined or gone stays written off. No
        -- amount of re-reading it changes the physical fact, and this upsert is
        -- where every scan module converges — Count, Add-On Catalog, Add-On
@@ -293,20 +405,52 @@ async function writeItem(
       serialAsText,
       args.customSkuId,
       input.locationId,
-      args.status,
+      finalStatus,
       input.receivedAt.toISOString(),
       input.source,
       input.sourceDeviceLabel,
       input.sourceDeviceId ?? null,
       input.sourceAntennaId ?? null,
+      keepIdentity,
     ],
   );
 
+  // Record the BEFORE status whenever a scan / ingest actually changes one, so
+  // "who flipped this tag, and from what?" is always answerable.
+  if (prior && prior.status !== finalStatus) {
+    await client.query(
+      `INSERT INTO inventory_audit_logs (
+         tenant_id, log_type, entity_type, entity_reference, old_value, new_value,
+         reason, user_id, user_uuid, device_id
+       ) VALUES ($1::uuid, 'STATUS_CHANGE', 'EPC', $2, $3, $4, $5, NULL, $6::uuid, $7)`,
+      [
+        input.tenantId,
+        epcUpper,
+        prior.status,
+        finalStatus,
+        (input.auditReason ?? `scan: ${input.source}`).slice(0, 500),
+        input.auditUserId ?? null,
+        input.sourceDeviceLabel,
+      ],
+    );
+  }
+
+  const itemId = r.rowCount && r.rows[0] ? r.rows[0].id : null;
+  if (keepIdentity && prior && prior.status !== "in-stock") {
+    // An existing non-LIVE tag the read could not decode: untouched status.
+    return {
+      itemId,
+      status: "tag_killed",
+      customSkuId: prior.customSkuId,
+      serialNumber: null,
+      kept: { status: prior.status, ghost: false },
+    };
+  }
   return {
-    itemId: r.rowCount && r.rows[0] ? r.rows[0].id : null,
-    status: args.status,
-    reason: args.reason,
-    customSkuId: args.customSkuId,
+    itemId,
+    status: keepIdentity ? "in-stock" : args.status,
+    reason: keepIdentity ? undefined : args.reason,
+    customSkuId: keepIdentity ? (prior?.customSkuId ?? null) : args.customSkuId,
     serialNumber: args.serial !== null ? args.serial.toString() : null,
   };
 }
@@ -324,8 +468,21 @@ export async function ingestEpcs(
   inputs: EpcIngressInput[],
 ): Promise<EpcIngressResult[]> {
   const out: EpcIngressResult[] = [];
+  if (inputs.length === 0) return out;
+  const ctx = await loadEpcIngressContext(
+    client,
+    inputs.map((i) => i.epc),
+  );
   for (const i of inputs) {
-    out.push(await ingestEpc(client, i));
+    const r = await ingestEpc(client, i, ctx);
+    // Later inputs in this batch see this write (same EPC twice in one batch).
+    if (!r.kept && r.itemId) {
+      ctx.prior.set(i.epc.trim().toUpperCase(), {
+        status: r.status,
+        customSkuId: r.customSkuId,
+      });
+    }
+    out.push(r);
   }
   return out;
 }

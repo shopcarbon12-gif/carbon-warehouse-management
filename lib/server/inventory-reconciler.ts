@@ -149,6 +149,7 @@ export async function reconcileInventoryFromEdge(
           sourceDeviceId,
           locationId: input.locationId,
           receivedAt: input.timestamp ? new Date(input.timestamp) : new Date(),
+          auditReason: `handheld scan: ${ctx}`,
         })),
       );
     }

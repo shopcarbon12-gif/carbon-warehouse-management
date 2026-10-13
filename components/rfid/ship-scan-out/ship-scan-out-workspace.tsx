@@ -64,6 +64,7 @@ export function statusClass(s: string | null): string {
     case "in-stock":
       return "border-emerald-500/40 bg-emerald-500/15 text-emerald-500 dark:text-emerald-300";
     case "unknown":
+    case "pending_transaction":
       return "border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-300";
     case "sold":
       return "border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-300";
@@ -73,9 +74,11 @@ export function statusClass(s: string | null): string {
       return "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-muted)]";
   }
 }
-const canScanOut = (s: string | null) => s === "in-stock" || s === "unknown";
-/** A returned piece comes back IN TRANSIT (set when the return was approved), or SOLD / UNKNOWN / RETURN. */
-const canScanIn = (s: string | null) => s === "in-transit" || s === "sold" || s === "unknown" || s === "return";
+// An order holds its tags as PENDING TRANSACTION (legacy holds: UNKNOWN) until they ship.
+const isOrderHold = (s: string | null) => s === "pending_transaction" || s === "unknown";
+const canScanOut = (s: string | null) => s === "in-stock" || isOrderHold(s);
+/** A returned piece comes back IN TRANSIT (set when the return was approved), or SOLD / a held tag / RETURN. */
+const canScanIn = (s: string | null) => s === "in-transit" || s === "sold" || isOrderHold(s) || s === "return";
 
 export function ShipScanOutWorkspace({
   order,

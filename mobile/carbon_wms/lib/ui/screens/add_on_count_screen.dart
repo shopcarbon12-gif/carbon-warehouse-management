@@ -499,6 +499,12 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   }
 
   void _decideEpc(String clean) {
+    // Ghost (Statuses page "Ignore": sold, return, damaged, in-transit,
+    // pending transaction, …): scanners ignore the tag — no beep, no count.
+    // Checked before shouldSubmit so the EPC isn't reserved for the session.
+    final known = _catalog.isReady ? _catalog.statusForEpc(clean) : null;
+    if (known != null && _catalog.isGhostStatus(known)) return;
+
     // _session.shouldSubmit returns false for any EPC already in the chosen
     // source list (silent skip per Q16) AND for any EPC already reserved this
     // session — so anything past here is a NEW-to-device, not-in-source tag.

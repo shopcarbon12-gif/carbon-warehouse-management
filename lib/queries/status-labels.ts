@@ -111,3 +111,17 @@ export async function updateStatusLabelPresentation(
   );
   return (r.rowCount ?? 0) > 0;
 }
+
+/** Ghost rule (Super Admin only — gate in the route): scanners ignore reads of
+ *  this status. Stored as is_visible_to_scanner = NOT ghost. */
+export async function updateStatusLabelGhost(
+  pool: Pool,
+  id: number,
+  ghost: boolean,
+): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE status_labels SET is_visible_to_scanner = $2::boolean, updated_at = now() WHERE id = $1::int`,
+    [id, !ghost],
+  );
+  return (r.rowCount ?? 0) > 0;
+}

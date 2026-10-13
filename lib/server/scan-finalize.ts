@@ -474,6 +474,8 @@ export async function finalizeScanSession(
       sourceDeviceId,
       locationId: input.locationId,
       receivedAt: now,
+      auditUserId: input.userId,
+      auditReason: `scan upload: ${input.screen}`,
     }));
 
     const ingressResults = await ingestEpcs(client, ingressInputs);
@@ -483,6 +485,13 @@ export async function finalizeScanSession(
     for (let i = 0; i < ingressResults.length; i++) {
       const result = ingressResults[i]!;
       const epc = epcsToIngest[i]!;
+      // Scan rule: an existing tag whose status a scan may not change (sold,
+      // return, in-transit, pending, damaged, ghosted…) is left untouched — not
+      // live, and not a defective either.
+      if (result.kept) {
+        rowsSkipped++;
+        continue;
+      }
       if (result.status === "in-stock") {
         rowsValid++;
       } else {

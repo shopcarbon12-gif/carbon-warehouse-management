@@ -29,6 +29,7 @@
 import type { Pool, PoolClient } from "pg";
 import { runShopifyGraphql } from "@/lib/shopify";
 import { resolveShopContext } from "@/lib/server/shopify-write";
+import { ORDER_HOLD_STATUS, ORDER_HOLD_STATUSES } from "@/lib/server/order-hold-status";
 
 /** Find a Shopify gid of the given type anywhere in a webhook payload. */
 export function findGid(payload: unknown, type: string): string | null {
@@ -143,14 +144,14 @@ export async function onReturnProcessed(pool: Pool, returnGid: string) {
       } else {
         // Same choice as orders/paid: the oldest LIVE tags of the item.
         const r = await client.query<{ epc: string }>(
-          `UPDATE items SET status = 'unknown', last_seen_at = last_seen_at
+          `UPDATE items SET status = $3, last_seen_at = last_seen_at
             WHERE id IN (SELECT id FROM items WHERE custom_sku_id = $1::uuid AND status = 'in-stock'
                           ORDER BY first_scanned_at ASC NULLS FIRST, serial_number ASC LIMIT $2 FOR UPDATE SKIP LOCKED)
             RETURNING epc`,
-          [cs.id, need],
+          [cs.id, need, ORDER_HOLD_STATUS],
         );
         epcs = r.rows.map((x) => x.epc);
-        for (const e of epcs) await audit(client, e, "in-stock", "unknown", `shopify_exchange ${ret.name}`);
+        for (const e of epcs) await audit(client, e, "in-stock", ORDER_HOLD_STATUS, `shopify_exchange ${ret.name}`);
       }
       const marked = cs.manual ? need : epcs.length;
       await client.query(
@@ -277,8 +278,8 @@ export async function onReturnDisposed(pool: Pool, rfoGid: string, returnGid: st
         const ordered = [...transit, ...shipped.rows.map((r) => r.epc), ...marked].filter((e, i, a) => a.indexOf(e) === i && !used.has(e));
         const cand = ordered.length
           ? await client.query<{ epc: string; status: string }>(
-              `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND custom_sku_id = $2::uuid AND status IN ('in-transit','sold','unknown') FOR UPDATE`,
-              [ordered, cs.id],
+              `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND custom_sku_id = $2::uuid AND (status IN ('in-transit','sold') OR status = ANY($3::text[])) FOR UPDATE`,
+              [ordered, cs.id, ORDER_HOLD_STATUSES],
             )
           : { rows: [] as Array<{ epc: string; status: string }> };
         const byEpc = new Map(cand.rows.map((r) => [r.epc, r.status]));
@@ -376,14 +377,14 @@ export async function onReturnApproved(pool: Pool, returnGid: string) {
         await client.query(`UPDATE manual_item_qty SET current_qty = GREATEST(0, current_qty - $2), updated_at = now() WHERE custom_sku_id = $1::uuid`, [cs.id, need]);
       } else {
         const r = await client.query<{ epc: string }>(
-          `UPDATE items SET status = 'unknown', last_seen_at = last_seen_at
+          `UPDATE items SET status = $3, last_seen_at = last_seen_at
             WHERE id IN (SELECT id FROM items WHERE custom_sku_id = $1::uuid AND status = 'in-stock'
                           ORDER BY first_scanned_at ASC NULLS FIRST, serial_number ASC LIMIT $2 FOR UPDATE SKIP LOCKED)
             RETURNING epc`,
-          [cs.id, need],
+          [cs.id, need, ORDER_HOLD_STATUS],
         );
         epcs = r.rows.map((x) => x.epc);
-        for (const e of epcs) await audit(client, e, "in-stock", "unknown", `shopify_exchange ${ret.name}`);
+        for (const e of epcs) await audit(client, e, "in-stock", ORDER_HOLD_STATUS, `shopify_exchange ${ret.name}`);
       }
       const marked = cs.manual ? need : epcs.length;
       await client.query(
@@ -429,13 +430,16 @@ export async function onReturnApproved(pool: Pool, returnGid: string) {
       const order = [...shipped.rows.map((r) => r.epc), ...placeholders].filter((e, i, a) => a.indexOf(e) === i && !taken.has(e));
       const cand = order.length
         ? await client.query<{ epc: string; status: string }>(
-            `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND custom_sku_id = $2::uuid AND status IN ('sold','unknown') FOR UPDATE`,
-            [order, cs.id],
+            `SELECT epc, status FROM items WHERE epc = ANY($1::text[]) AND custom_sku_id = $2::uuid AND (status = 'sold' OR status = ANY($3::text[])) FOR UPDATE`,
+            [order, cs.id, ORDER_HOLD_STATUSES],
           )
         : { rows: [] as Array<{ epc: string; status: string }> };
       const st = new Map(cand.rows.map((r) => [r.epc, r.status]));
       // SOLD first — those are pieces the WMS knows went out; then placeholders.
-      const pick = [...order.filter((e) => st.get(e) === "sold"), ...order.filter((e) => st.get(e) === "unknown")].slice(0, qty);
+      const pick = [
+        ...order.filter((e) => st.get(e) === "sold"),
+        ...order.filter((e) => ORDER_HOLD_STATUSES.includes(st.get(e) ?? "")),
+      ].slice(0, qty);
       for (const e of pick) {
         taken.add(e);
         await client.query(`UPDATE items SET status = 'in-transit' WHERE epc = $1`, [e]);

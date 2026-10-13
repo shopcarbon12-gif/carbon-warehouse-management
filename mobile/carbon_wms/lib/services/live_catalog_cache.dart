@@ -475,6 +475,16 @@ class LiveCatalogCache extends ChangeNotifier {
   /// null = no items row (check [isReady] first).
   String? statusForEpc(String epc) => _state?.items[_key(epc)]?.status;
 
+  /// True when scanners must ignore a tag in [status] (ghosted on the Statuses
+  /// page). Uses the server's list; before it arrives (or from an older server),
+  /// every status other than LIVE and UNKNOWN counts as ghost — the 2026-10-13
+  /// owner rule: only those two may ever be picked up by a scan.
+  bool isGhostStatus(String status) {
+    final g = _state?.ghostStatuses;
+    if (g != null) return g.contains(status);
+    return status != 'in-stock' && status != 'unknown';
+  }
+
   bool hasItemRow(String epc) => _state?.items.containsKey(_key(epc)) ?? false;
 
   /// Via items.custom_sku_id.
@@ -654,6 +664,9 @@ class _CatalogState {
   final Map<String, Set<String>> epcsBySku = {}; // skuId → EPCs (every status)
   final Map<String, Set<String>> skusByColour = {}; // colour prefix → skuIds
   final Map<String, String> statusIntern = {};
+  /// items.status values the server marks as ghost (Statuses page "Ignore"):
+  /// scanners ignore these tags. null until a payload carrying it lands.
+  Set<String>? ghostStatuses;
 }
 
 /// Port of lib/server/inventory-catalog.ts skuPrefix: a colour is the SKU's
@@ -728,6 +741,8 @@ class _ParsedPayload {
   final String? locationId;
   final EpcConfig? epcCfg;
 
+  /// Statuses ghosted on the server's Statuses page; null on older servers.
+  List<String>? ghostStatuses;
   List<dynamic> statuses = const [];
   List<dynamic> locId = const [];
   List<dynamic> binId = const [], binCode = const [], binLoc = const [], binArchived = const [];
@@ -816,6 +831,8 @@ _ParsedPayload _parsePayload(Object? decoded) {
     locationId: locationId as String?,
     epcCfg: _parseEpcCfg(j['epcCfg']),
   );
+  final ghost = j['ghostStatuses'];
+  if (ghost is List) p.ghostStatuses = ghost.whereType<String>().toList();
   // A reset carries empty tables and must not be applied anyway.
   if (p.reset) return p;
 
@@ -1086,6 +1103,14 @@ bool _applyPayload(_CatalogState st, _ParsedPayload p) {
   if (st.locationId != p.locationId) {
     st.locationId = p.locationId;
     changed = true;
+  }
+  final ghost = p.ghostStatuses;
+  if (ghost != null) {
+    final next = ghost.toSet();
+    if (st.ghostStatuses == null || !setEquals(st.ghostStatuses, next)) {
+      st.ghostStatuses = next;
+      changed = true;
+    }
   }
   st.tenantId = p.tenantId;
   st.cursor = p.cursor;

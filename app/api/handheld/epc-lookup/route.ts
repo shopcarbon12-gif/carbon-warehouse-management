@@ -5,6 +5,7 @@ import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
 import { decodeEpc, type EpcConfig } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId } from "@/lib/server/legacy-epc-catalog";
+import { loadGhostWmsStatuses } from "@/lib/server/status-label-enforcement";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,6 +165,10 @@ async function POST_handler(req: Request) {
     for (const row of r.rows) itemStatus.set(row.epc, row.status);
   }
 
+  // Statuses ghosted on the Statuses page: the handheld ignores these tags
+  // (no count). Older apps ignore the field.
+  const ghostStatuses = new Set(await loadGhostWmsStatuses(pool));
+
   const rows = decoded.map((d) => {
     const primaryCat = d.systemId ? catalog.get(d.systemId) : undefined;
     // Fall back to the legacy resolution when the primary formula couldn't
@@ -187,6 +192,7 @@ async function POST_handler(req: Request) {
       // this EPC under this tenant — handheld treats that as "fresh,
       // count as valid (upload promotes to in-stock)".
       status: itemStatus.get(d.epcHex) ?? null,
+      ghost: ghostStatuses.has(itemStatus.get(d.epcHex) ?? ""),
     };
   });
 

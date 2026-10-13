@@ -4,8 +4,12 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
-import { SCOPES } from "@/lib/auth/roles";
-import { listStatusLabels, updateStatusLabelPresentation } from "@/lib/queries/status-labels";
+import { SCOPES, isSuperAdminRole } from "@/lib/auth/roles";
+import {
+  listStatusLabels,
+  updateStatusLabelGhost,
+  updateStatusLabelPresentation,
+} from "@/lib/queries/status-labels";
 
 async function requireAdmin(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -39,13 +43,16 @@ const patchSchema = z.object({
   id: z.number().int().positive(),
   displayLabel: z.string().max(512).optional(),
   legacyId: z.union([z.number().int().positive(), z.null()]).optional(),
+  /** Ghost = scanners ignore reads of this status. Super Admin only. */
+  ghost: z.boolean().optional(),
 });
 
-/** Clean 10: only presentation fields (display label + legacy id) are editable. */
+/** Clean 10: presentation fields (display label + legacy id) for admins; the
+ *  Ghost rule for a Super Admin only. */
 async function PATCH_handler(req: Request) {
   const gate = await requireAdmin(req);
   if ("response" in gate) return gate.response;
-  const { pool } = gate;
+  const { pool, session } = gate;
 
   let raw: unknown;
   try {
@@ -58,14 +65,20 @@ async function PATCH_handler(req: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
   const b = parsed.data;
-  if (b.displayLabel === undefined && b.legacyId === undefined) {
+  if (b.displayLabel === undefined && b.legacyId === undefined && b.ghost === undefined) {
     return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+  if (b.ghost !== undefined && !isSuperAdminRole(session.role)) {
+    return NextResponse.json({ error: "Only a Super Admin can change the Ghost rule." }, { status: 403 });
   }
 
   const rows = await listStatusLabels(pool);
   const row = rows.find((r) => r.id === b.id);
   if (!row) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (b.ghost === true && row.name.trim().toUpperCase() === "LIVE") {
+    return NextResponse.json({ error: "LIVE can't be ghosted — scanners would ignore all stock." }, { status: 400 });
   }
 
   const displayLabel = b.displayLabel !== undefined ? b.displayLabel : row.display_label;
@@ -78,6 +91,9 @@ async function PATCH_handler(req: Request) {
     });
     if (!ok) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (b.ghost !== undefined) {
+      await updateStatusLabelGhost(pool, b.id, b.ghost);
     }
     const next = await listStatusLabels(pool);
     const out = next.find((r) => r.id === b.id);

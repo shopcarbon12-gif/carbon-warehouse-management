@@ -837,10 +837,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           // resurrect protected stock back to live.
           drop.add(epc);
         }
+      } else if (r['ghost'] == true) {
+        // Ghosted on the Statuses page ("Ignore": sold, return, damaged,
+        // in-transit, pending transaction, …): scanners ignore the tag — erase
+        // it from the session, no count, no defective, no upload.
+        drop.add(epc);
       } else {
-        // Count: null (no items row) and 'in-stock' (LIVE) are valid;
-        // everything else is a defective scan that drops out of the group.
-        if (status != null && status != 'in-stock') {
+        // Count: null (no items row), 'in-stock' (LIVE) and 'unknown' (a scan
+        // brings it back LIVE on upload) are valid; everything else is a
+        // defective scan that drops out of the group.
+        if (status != null && status != 'in-stock' && status != 'unknown') {
           reclassify.add(epc);
         }
       }
