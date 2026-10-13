@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.shopcarbon.gradingai.App
 import com.shopcarbon.gradingai.model.Queue
 import com.shopcarbon.gradingai.sync.ScanStore
@@ -63,10 +65,21 @@ fun HomeScreen(nav: Nav) {
             try { nav.go(Screen.Item(app.api.lookupCode(code))) } catch (e: Exception) { err = e.message } finally { busy = null }
         }
     }
+    val activity = LocalContext.current
     val scanner = remember {
-        GmsBarcodeScanning.getClient(app, GmsBarcodeScannerOptions.Builder()
+        GmsBarcodeScanning.getClient(activity, GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(Barcode.FORMAT_CODE_93, Barcode.FORMAT_CODE_128, Barcode.FORMAT_CODE_39, Barcode.FORMAT_UPC_A, Barcode.FORMAT_EAN_13, Barcode.FORMAT_QR_CODE)
             .enableAutoZoom().build())
+    }
+    fun scan() {
+        fun start() = scanner.startScan()
+            .addOnSuccessListener { b -> b.rawValue?.trim()?.takeIf { it.isNotEmpty() }?.let { open(it) } }
+            .addOnFailureListener { err = "Scanner unavailable: ${it.message}" }
+        // The scanner lives in Play services; ask for its module first (as CarbonWMS-PC does).
+        runCatching {
+            ModuleInstall.getClient(activity).installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
+                .addOnSuccessListener { start() }.addOnFailureListener { start() }
+        }.onFailure { start() }
     }
 
     Page(
@@ -97,9 +110,7 @@ fun HomeScreen(nav: Nav) {
             }
             if (pending > 0) Muted("$pending saved on the phone, waiting to upload.")
         }
-        Primary(busy ?: "Scan hang tag", enabled = busy == null) {
-            scanner.startScan().addOnSuccessListener { b -> b.rawValue?.let { open(it) } }.addOnFailureListener { err = it.message }
-        }
+        Primary(busy ?: "Scan hang tag", enabled = busy == null) { scan() }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(typed, { typed = it }, Modifier.weight(1f), label = { Text("Type SKU or UPC") }, singleLine = true)
             Secondary("Find", Modifier.height(56.dp), enabled = typed.isNotBlank() && busy == null) { open(typed.trim()) }
