@@ -194,6 +194,14 @@ type GenExtras = {
   verifiedFacts: string;
 };
 
+/* From the owner-approved answer key (2026-10-13, 12 products reviewed against
+   ChatGPT and the photos). One denim, one set piece, one accessory. */
+const APPROVED_EXAMPLES = [
+  `Vick Jeans → titleDescriptor "Men's Ripped Knee Skinny Jeans" | metaDescription "Men's skinny jeans in faded mid-blue denim with wide ripped knees, whiskered thighs, copper contrast stitching and one cream belt loop." | bodyHtml "<p>Mid-blue denim, faded and whiskered across the thighs, with both knees torn wide open. Small scuffs run down each leg, and copper stitching outlines the pockets and seams.</p><p>The detail you notice up close: one cream belt loop at the front. Wear them with a black boxy tee and black sneakers.</p><ul><li>Skinny leg, full length</li><li>Ripped and frayed knees</li><li>Faded, whiskered mid-blue wash</li><li>Copper contrast stitching</li><li>Cream front belt loop</li><li>Button and zip fly</li></ul>"`,
+  `Thank You Hoodie Set (set piece; partner Thank You Pants Set) → titleDescriptor "Men's Graphic Hoodie" | metaDescription "Men's pullover hoodie with "thank you for loving me as your own" in small script on the chest and a large text print on the back. Black or white." | bodyHtml "<p>A small script line on the chest reads "thank you for loving me as your own". Turn around and the back says it bigger: "EVERYTHING YOU CAN Imagine is Real".</p><p>Part of the Thank You set: pair it with the <a href="/products/thank-you-pants-set">Thank You Pants Set</a>, which carries the same line down the leg.</p><ul><li>Script print on the chest</li><li>Large text print on the back</li><li>Drawstring hood</li><li>Kangaroo pocket</li><li>Ribbed cuffs and hem</li><li>In black or white</li></ul>"`,
+  `Braided Bracelet C → titleDescriptor "Men's Double Strand Beaded Bracelet" | metaDescription "Men's double strand bracelet: speckled grey matte beads with glossy black cubes on one strand, a flat black band on the other, and a black block clasp." | bodyHtml "<p>Two strands that sit together on the wrist: one of speckled grey matte beads broken up by glossy black cubes, and one flat black band.</p><p>A matte black block clasp joins them. Wear it on its own or stack it next to a watch.</p><ul><li>Speckled grey matte beads</li><li>Glossy black cube beads</li><li>Flat black band</li><li>Matte black block clasp</li></ul>"`,
+];
+
 function buildGenInstruction(
   context: ProductContext,
   fieldsToGenerate: SeoFieldKey[],
@@ -201,8 +209,11 @@ function buildGenInstruction(
   altImageIds: string[],
   extras: GenExtras,
 ) {
-  const colors = (context.colors || []).join(", ") || "(not specified)";
-  const multiColour = (context.colors || []).length > 1;
+  const onSale = context.colorsOnSale?.length ? context.colorsOnSale : context.colors || [];
+  const colors = onSale.join(", ") || "(not specified)";
+  const multiColour = onSale.length > 1;
+  const gender = context.gender === "men" ? "Men's" : context.gender === "women" ? "Women's" : "";
+  const partners = (context.setPartnerDetails || []).filter((p) => p.live);
   /* The model never writes the SEO title itself: it suggests a short
      descriptor and finishSeoTitle builds "Name – Descriptor | Carbon". Every
      doubled "Alex Denim Shorts - Alex Denim Shorts" title came from free-text
@@ -215,7 +226,12 @@ function buildGenInstruction(
     "",
     "Inputs:",
     `  • Product name: "${context.title}" (fixed — never change it, never repeat it twice)`,
-    `  • Color(s): ${colors}`,
+    `  • Colours on sale: ${colors} (the only colour names you may use; if the photos clearly show another colour, name none)`,
+    gender ? `  • Gender: ${gender}` : "  • Gender: not given — decide from the photos or leave it out",
+    context.fabric ? `  • Fabric (VERIFIED, from purchase orders): ${context.fabric}` : "  • Fabric: not recorded",
+    ...(partners.length
+      ? [`  • Set partner(s), sold separately: ${partners.map((p) => `"${p.name}" — store type ${p.type || "unknown"} — link /products/${p.handle}`).join("; ")}`]
+      : []),
     useVision
       ? "  • The product PHOTOS in this message — the SOURCE OF TRUTH for every claim. The first photos are attached at full detail: read printed text letter by letter, count pockets and buttons, look at seams, hardware, hems and texture."
       : "  • (No photos provided — use the name and color only, and keep it short.)",
@@ -236,18 +252,21 @@ function buildGenInstruction(
         ]
       : []),
     "",
-    claimRulesFor({ productTitle: context.title, isSet: context.isSet, setPartners: context.setPartners }),
+    claimRulesFor({ productTitle: context.title, isSet: context.isSet, setPartners: context.setPartners, fabric: context.fabric }),
     "",
     useVision
       ? 'FIRST fill "observed": 6-15 short facts you can actually SEE — garment type, colour and wash, neckline or collar, sleeves, closures, pockets, prints/text/graphics with their exact wording and placement, distressing, hardware, hem, silhouette. Then write every field FROM that list. If you cannot see it, leave it out: a short true description beats a long invented one.'
       : 'Leave "observed" empty.',
     "",
     "FIELDS:",
-    '  • titleDescriptor: 0-3 words that tell a shopper what kind of item this is beyond its name, e.g. "Men\'s Ripped", "Women\'s Mini", "Graphic". Never words already in the name, never a fabric or feel word' +
+    `  • titleDescriptor: 2-6 words, "${gender || "<Men's|Women's>"} <what a shopper types>" — the key visible attribute(s) + the garment type, e.g. "Men's Ripped Knee Skinny Jeans", "Men's Black Ripped Denim Shorts", "Women's Metallic Ruched Mini Dress", "Men's Double Strand Beaded Bracelet", "Women's Faux Fur Slides". The garment type may repeat a word of the name ("Women's Dark Wash Flare Jeans" for Nora Flare Jeans); never the whole name, never a feel word` +
       (multiColour ? ", and NO colour (this product comes in several colours)." : ".") +
-      " Empty is fine.",
-    "  • metaDescription: 1-2 sentences, at most 155 characters, about THIS item's look from the observed list. It is also the Google Shopping description. No filler, no \"shop now\".",
-    "  • bodyHtml: <p> 1-3 sentences: what it is and its standout visible details</p>, optionally <p> one styling line</p> when it adds something, optionally <ul> 0-5 <li> real visible details</li>. Length follows the evidence — a simple bracelet needs two sentences, a detailed jacket more. Never pad.",
+      " It becomes \"Name – Descriptor | Carbon\", which is also the Google Shopping title, so it names ONLY this item.",
+    "  • metaDescription: 110-155 characters, one or two plain sentences. Start with the gender + garment phrase (the name is already in the title), then the most distinctive visible details; end with the colours on sale when there are 2-3 (\"In black or white.\"). Never open with Shop, Discover, Explore, Meet. It is also the Google Shopping description.",
+    "  • bodyHtml: <p> 1-2 sentences: the look and its most distinctive details, concrete (colour, wash, print with its exact wording, distressing, neckline, cut)</p><p> 1-2 sentences: one more detail and how to wear it — a specific outfit (\"Black tee, black sneakers, done.\")</p><ul> 3-6 short <li> spec bullets a shopper scans: cut/length, wash or colour, print wording, neckline/sleeves, pockets, closures, hardware, colours on sale — no periods, not a repeat of the paragraphs</ul>. About 45-80 words in the paragraphs. For a set piece, the second paragraph may say \"Part of the <X> set: pair it with the <a href=\\\"/products/<partner handle>\\\">Partner Name</a>.\" Only <p>, <ul>, <li>, <a>.",
+    "",
+    "Three approved examples (match this standard, never copy their words):",
+    ...APPROVED_EXAMPLES.map((e) => `  ${e}`),
     "  • tags: 3-8 lowercase shopper words for what it is and how it looks (category, colour, style). No fabric or feel words, no brand.",
     "",
     "Do NOT change or output the product title or the URL handle.",
@@ -258,7 +277,7 @@ function buildGenInstruction(
       ? `Also write alt text in "imageAlts" for ONLY these photo ids: ${altImageIds.join(", ")} — what that photo shows (the item, its colour, how it is worn or shown), 5-15 words, no claims from the NEVER list.`
       : `Leave "imageAlts" empty.`,
     "",
-    `The "focusKeyword" is a concise 2-4 word search phrase containing the core word(s) of the product name "${context.title}".`,
+    `The "focusKeyword" is the 2-4 word phrase a shopper would search for this item — its garment type and key attribute ("men's skinny jeans", "beaded bracelet", "faux fur slides"). It does not have to contain the product name; the title, meta description and description must contain it.`,
     useVision && altImageIds.length ? `Photos are attached in order.` : "",
     "",
     "Return STRICT JSON only, no prose, with this exact shape:",
@@ -271,6 +290,7 @@ function buildProposed(
   current: SeoFields,
   focusKeyword: string,
   secondaryKeywords: string[],
+  fabric = "",
 ): SeoFields {
   const p = parsed?.proposed || {};
   return {
@@ -278,7 +298,7 @@ function buildProposed(
     handle: String(current.handle || "").trim().toLowerCase(),
     seoTitle:
       typeof p.titleDescriptor === "string"
-        ? finishSeoTitle(p.titleDescriptor, focusKeyword, current.title)
+        ? finishSeoTitle(p.titleDescriptor, focusKeyword, current.title, "", fabric)
         : String(current.seoTitle || "").trim(),
     metaDescription: String(p.metaDescription || current.metaDescription || "").trim(),
     bodyHtml: String(p.bodyHtml || current.bodyHtml || "").trim(),
@@ -380,30 +400,38 @@ export function finishSeoTitle(
   _keyword: string,
   productTitle: string,
   _productType = "",
+  fabric = "",
 ): string {
   const max = SEO_LIMITS.seoTitleMax;
   const name = String(productTitle || "").replace(/\s+/g, " ").trim();
   const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  let d = String(value || "")
-    .replace(/\s*\|\s*carbon\s*$/i, "")
-    .replace(name ? new RegExp(esc(name), "ig") : /$^/, " ")
-    .replace(/\bcarbon\b/gi, " ");
+  let d = String(value || "").replace(/\s*\|\s*carbon\s*$/i, "");
+  /* A finished title passed back in ("Name – Descriptor") keeps its descriptor. */
+  if (name) d = d.replace(new RegExp(`^\\s*${esc(name)}\\s*[–—-]\\s*`, "i"), "");
+  d = d.replace(name ? new RegExp(esc(name), "ig") : /$^/, " ").replace(/\bcarbon\b/gi, " ");
   const own = new Set(name.toLowerCase().split(/[^a-z0-9']+/).filter(Boolean));
   const claimTerms = new Set(
-    findClaims(d, { productTitle: name }).flatMap((f) => f.term.toLowerCase().split(/[^a-z0-9%']+/).filter(Boolean)),
+    findClaims(d, { productTitle: name, fabric }).flatMap((f) => f.term.toLowerCase().split(/[^a-z0-9%']+/).filter(Boolean)),
   );
   /* Split on spaces and stand-alone dashes only: "Off-Shoulder" is one word. */
   let words = d
     .split(/[\s,;:|]+|\s[–—-]\s/)
     .map((w) => w.replace(/^[–—-]+|[–—-]+$/g, "").trim())
     .filter(Boolean)
-    .filter((w) => !own.has(w.toLowerCase()) && !claimTerms.has(w.toLowerCase()));
-  /* Cutting a long descriptor leaves half a phrase ("Women's Floral Off"):
-     a descriptor that does not fit in three words is left out. */
-  if (words.length > 3) words = [];
-  d = words.map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
-  const withDesc = d ? `${name} – ${d} | Carbon` : "";
-  if (withDesc && withDesc.length <= max) return withDesc;
+    .filter((w) => !claimTerms.has(w.toLowerCase()));
+  /* The search phrase may repeat the garment word of the name ("Nora Flare
+     Jeans – Women's Dark Wash Flare Jeans"), but a descriptor made only of the
+     name's own words adds nothing ("Alex Denim Shorts – Denim Shorts"). */
+  if (words.length && words.every((w) => own.has(w.toLowerCase()))) words = [];
+  if (words.length > 7) words = [];
+  words = words.map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w));
+  /* Too long: drop the attribute right after the gender word, keep the garment type at the end. */
+  while (words.length) {
+    const t = `${name} – ${words.join(" ")} | Carbon`;
+    if (t.length <= max) return t;
+    if (words.length <= 2) break;
+    words.splice(/'s$/i.test(words[0]) ? 1 : 0, 1);
+  }
   const plain = `${name} | Carbon`;
   return plain.length <= max ? plain : cut(name, max);
 }
@@ -428,8 +456,8 @@ export function finishMetaDescription(
   let v = String(value || "").replace(/\s+/g, " ").trim();
   if (!v) v = name ? `${name}.` : "";
   if (v && !/[.!?]$/.test(v)) v = `${v}.`;
-  if (name && !hasText(v, name) && `${name}: ${v}`.length <= max) v = `${name}: ${v}`;
-  if (v.length < SEO_LIMITS.metaDescriptionMin && `${v} Shop it at Carbon.`.length <= max) v = `${v} Shop it at Carbon.`;
+  /* The name is already in the title right above it in search and Shopping;
+     the meta leads with what the item is. Short is fine — padding is not. */
   if (v.length > max) {
     v = cut(v, max - 1);
     if (!/[.!?]$/.test(v)) v = `${v}.`;
@@ -599,7 +627,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     const out: SeoFields = { ...target, tags: [...(target.tags || [])] };
     for (const f of fields) {
       if (f === "seoTitle") {
-        if (typeof src?.titleDescriptor === "string") out.seoTitle = finishSeoTitle(src.titleDescriptor, "", cur.title);
+        if (typeof src?.titleDescriptor === "string") out.seoTitle = finishSeoTitle(src.titleDescriptor, "", cur.title, "", ctx.fabric || "");
         continue;
       }
       if (src?.[f] == null) continue;
@@ -646,7 +674,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
     for (const [k, v] of Object.entries(parsed.rationale)) rationale[k as SeoFieldKey] = String(v || "").trim();
   }
 
-  let proposed = buildProposed(parsed, cur, focusKeyword, secondaryKeywords);
+  let proposed = buildProposed(parsed, cur, focusKeyword, secondaryKeywords, ctx.fabric || "");
   for (const f of GEN_FIELDS) {
     if (!fieldsToGen.includes(f)) {
       if (f === "tags") proposed.tags = cur.tags || [];
@@ -751,7 +779,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
      a raw value that the finisher was about to bring up to 100, and throw a
      photo-grounded meta description away on a score it never really had. */
   if (fieldsToGen.includes("seoTitle")) {
-    proposed.seoTitle = finishSeoTitle(proposed.seoTitle, focusKeyword, cur.title, cur.productType);
+    proposed.seoTitle = finishSeoTitle(proposed.seoTitle, focusKeyword, cur.title, cur.productType, ctx.fabric || "");
   }
   proposed.metaDescription = finishMetaDescription(
     proposed.metaDescription,
@@ -783,7 +811,7 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
      rewrite with the exact findings; whatever survives is deleted sentence by
      sentence. After the clamp on purpose — a clamp that restored the live
      text would otherwise restore its claims with it. */
-  const claimCtx: ClaimContext = { productTitle: cur.title, isSet: Boolean(ctx.isSet), setPartners: ctx.setPartners };
+  const claimCtx: ClaimContext = { productTitle: cur.title, isSet: Boolean(ctx.isSet), setPartners: ctx.setPartners, fabric: ctx.fabric };
   const claimsIn = () => ({
     bodyHtml: findClaimsInHtml(proposed.bodyHtml, claimCtx),
     metaDescription: findClaims(proposed.metaDescription, claimCtx),

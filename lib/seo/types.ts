@@ -66,6 +66,14 @@ export interface ProductContext {
   isSet?: boolean;
   /** The other pieces of the set, by their WMS names ("River Bottom Set"). */
   setPartners?: string[];
+  /** The partners as live Shopify products: handle for the link, store type for what they are. */
+  setPartnerDetails?: Array<{ name: string; handle: string; type: string; live: boolean }>;
+  /** Verified composition (custom.fabric_composition, from purchase orders). Its fibre words may be used. */
+  fabric?: string;
+  /** "men" / "women" from the store type, empty when the type does not say. */
+  gender?: "men" | "women" | "";
+  /** Colours with at least one variant for sale — the only colours copy may name. */
+  colorsOnSale?: string[];
 }
 
 /** Human-friendly labels for each field key (used by the UI). */
@@ -84,7 +92,9 @@ export const SEO_FIELD_LABELS: Record<SeoFieldKey, string> = {
 /** Ideal character ranges Google/ecom best practice targets. */
 export const SEO_LIMITS = {
   seoTitleMin: 20,
-  seoTitleMax: 60,
+  /* Shopping shows ~70 characters and the title IS the Shopping title; search
+     shows ~60, so the search phrase goes first after the name. */
+  seoTitleMax: 70,
   /* A short true snippet beats a padded one; below this it is merely thin. */
   metaDescriptionMin: 70,
   metaDescriptionMax: 155,

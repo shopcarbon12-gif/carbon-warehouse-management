@@ -22,9 +22,11 @@ const PRODUCT_FIELDS = `
   seo { title description }
   focusKeyword: metafield(namespace: "carbon_seo", key: "focus_keyword") { value }
   secondaryKeywords: metafield(namespace: "carbon_seo", key: "secondary_keywords") { value }
+  fabric: metafield(namespace: "custom", key: "fabric_composition") { value }
+  setPartnerHandles: metafield(namespace: "carbon_set", key: "partners") { value }
   priceRangeV2 { minVariantPrice { amount currencyCode } }
   media(first: 50) { nodes { ... on MediaImage { id image { url altText } } } }
-  variants(first: 50) { nodes { id sku barcode price selectedOptions { name value } } }
+  variants(first: 50) { nodes { id sku barcode price availableForSale selectedOptions { name value } } }
 `;
 
 interface AuditProduct {
@@ -39,6 +41,8 @@ interface AuditProduct {
   seo: { title: string | null; description: string | null } | null;
   focusKeyword?: { value: string | null } | null;
   secondaryKeywords?: { value: string | null } | null;
+  fabric?: { value: string | null } | null;
+  setPartnerHandles?: { value: string | null } | null;
   priceRangeV2?: { minVariantPrice?: { amount?: string; currencyCode?: string } };
   media?: { nodes: Array<{ id?: string; image?: { url?: string; altText?: string | null } }> };
   variants?: {
@@ -47,6 +51,7 @@ interface AuditProduct {
       sku?: string | null;
       barcode?: string | null;
       price?: string | null;
+      availableForSale?: boolean | null;
       selectedOptions?: Array<{ name?: string | null; value?: string | null }>;
     }>;
   };
@@ -185,6 +190,39 @@ async function POST_handler(req: Request) {
     /* A lookup failure must not fail the audit — it only means no notice. */
   }
 
+  /* The partners as live Shopify products (carbon_set.partners holds their
+     handles): the copy links to them and names them by their store type
+     ("the matching mini skirt") instead of guessing. */
+  let setPartnerDetails: NonNullable<ProductContext["setPartnerDetails"]> = [];
+  try {
+    const handles: string[] = JSON.parse(product.setPartnerHandles?.value || "[]");
+    if (Array.isArray(handles) && handles.length) {
+      const q = handles.slice(0, 4).map((h) => `handle:${String(h).replace(/[^a-z0-9-]/gi, "")}`).join(" OR ");
+      type PartnerNode = { handle: string; title: string; productType: string; status: string };
+      const pr = await runShopifyGraphql<{ products?: { nodes: PartnerNode[] } }>({
+        shop: ctx.shop,
+        token: ctx.token,
+        apiVersion: ctx.apiVersion,
+        query: `query Partners($q: String!) { products(first: 4, query: $q) { nodes { handle title productType status } } }`,
+        variables: { q },
+      });
+      const nodes: PartnerNode[] = pr.data?.products?.nodes || [];
+      setPartnerDetails = nodes.map((n: PartnerNode) => ({
+        name: n.title,
+        handle: n.handle,
+        type: n.productType || "",
+        live: n.status === "ACTIVE",
+      }));
+      if (!setPartners.length) setPartners = setPartnerDetails.map((p) => p.name);
+    }
+  } catch {
+    /* Same as above: no partner details, the copy just names no partner type. */
+  }
+
+  const colourOf = (v: (typeof variantNodes)[number]) =>
+    String((v.selectedOptions || []).find((o) => /colou?r/i.test(String(o?.name || "")))?.value || "").trim();
+  const typeUpper = String(product.productType || "").toUpperCase();
+
   const context: ProductContext = {
     productId: product.id,
     handle: product.handle || "",
@@ -209,6 +247,10 @@ async function POST_handler(req: Request) {
     onlineStoreUrl: product.onlineStoreUrl || undefined,
     isSet,
     setPartners,
+    setPartnerDetails,
+    fabric: String(product.fabric?.value || "").trim() || undefined,
+    gender: /^WOMEN\b/.test(typeUpper) ? "women" : /^MEN\b/.test(typeUpper) ? "men" : "",
+    colorsOnSale: Array.from(new Set(variantNodes.filter((v) => v.availableForSale).map(colourOf).filter(Boolean))).slice(0, 12),
   };
 
   return NextResponse.json({

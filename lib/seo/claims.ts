@@ -45,7 +45,7 @@ const RULES: Rule[] = [
   { kind: "material", re: /\b\d{1,3}(?:[.,]\d+)?\s?%/gi, label: "fabric percentage" },
   {
     kind: "material",
-    re: /\b(cotton|polyester|poly|elastane|spandex|lycra|linen|wool|woolen|cashmere|silk|silky|viscose|rayon|modal|nylon|acrylic|leather|leatherette|suede|faux|vegan|recycled|organic|bamboo|hemp|fleece|polyamide)\b/gi,
+    re: /\b(cotton|polyester|poly|elastane|spandex|lycra|linen|wool|woolen|cashmere|silk|silky|viscose|rayon|modal|nylon|acrylic|leather|leatherette|suede|faux|fur|vegan|recycled|organic|bamboo|hemp|fleece|polyamide)\b/gi,
   },
   {
     kind: "feel",
@@ -78,7 +78,7 @@ const RULES: Rule[] = [
   },
   { kind: "logo-shape", re: /\b(hexagon(?:al)?|hexagons|honeycomb|geometric (?:logo|emblem|mark)|abstract (?:logo|emblem|mark))\b/gi },
   { kind: "brand", re: /\bcarbon\s+jeans\b/gi, label: '"Carbon Jeans" as the brand' },
-  { kind: "cliche", re: /\b(elevat(?:e|es|ed|ing)|versatil(?:e|ity)|must[- ]have|boasts?|adorn(?:s|ed|ing)?|wardrobe (?:staple|essential)|statement piece|trendy|look no further|step into|turn heads|perfect (?:for|blend|choice|addition)|standard)\b/gi },
+  { kind: "cliche", re: /\b(elevat(?:e|es|ed|ing)|versatil(?:e|ity)|must[- ]have|boasts?|adorn(?:s|ed|ing)?|wardrobe (?:staple|essential)|statement piece|make a statement|trendy|stylish|chic|sleek|timeless|iconic|edgy|vibes?|effortless(?:ly)?|flattering|own the night|add a touch|you'll love|game[- ]changer|look no further|step into|turn heads|perfect (?:for|blend|choice|addition)|standard)\b/gi },
 ];
 
 const SET_RULE: Rule = {
@@ -116,11 +116,30 @@ export function sentences(text: string): string[] {
     .filter(Boolean);
 }
 
-export type ClaimContext = { productTitle: string; isSet?: boolean; setPartners?: string[] };
+export type ClaimContext = {
+  productTitle: string;
+  isSet?: boolean;
+  setPartners?: string[];
+  /** Verified composition (purchase orders). A fibre word it contains is a fact, not a claim. */
+  fabric?: string;
+};
+
+/** Fibre words the verified composition backs ("Upper: Faux Fur" → faux, fur). */
+function fabricWords(fabric: string | undefined): Set<string> {
+  return new Set(
+    String(fabric || "")
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length > 2 && !["upper", "sole", "lining", "shell", "and", "with"].includes(w)),
+  );
+}
 
 /** Every unsupported claim in a piece of plain text. */
 export function findClaims(text: string, ctx: ClaimContext): ClaimFinding[] {
   const own = nameWords(ctx.productTitle);
+  const fibres = fabricWords(ctx.fabric);
+  /* A faux-fur or fleece item LOOKS plush and thick — that is its design, not a feel claim. */
+  const pile = /\b(fur|fleece|sherpa|terry|teddy|plush)\b/i.test(`${ctx.fabric || ""} ${ctx.productTitle}`);
   const rules = ctx.isSet ? [...RULES, SET_RULE] : RULES;
   const out: ClaimFinding[] = [];
   for (const sentence of sentences(text)) {
@@ -131,6 +150,9 @@ export function findClaims(text: string, ctx: ClaimContext): ClaimFinding[] {
         const words = term.toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean);
         /* Part of the product's own name → the owner said it, not the model. */
         if (words.length && words.every((w) => own.has(w))) continue;
+        /* Backed by the verified fabric: "faux fur slides" when the upper is faux fur. Percentages stay out. */
+        if (rule.kind === "material" && !/%/.test(term) && words.length && words.every((w) => fibres.has(w))) continue;
+        if (rule.kind === "feel" && pile && /^(plush|thick)$/i.test(term)) continue;
         /* "a relaxed look", "looks oversized": appearance, not a fit promise. */
         if (rule.kind === "fit" && /\blooks?\b/i.test(sentence.slice(Math.max(0, (m.index ?? 0) - 30), (m.index ?? 0) + term.length + 30))) continue;
         out.push({ kind: rule.kind, term: rule.label ?? term, sentence });
@@ -201,16 +223,20 @@ export const CARBON_VOICE = [
   "Carbon is a streetwear-led fashion brand for men and women (shopcarbon.com, Orlando FL). Write like Carbon talks:",
   "- Short, confident, specific. Say what it is, how it looks and how to wear it.",
   '- Concrete over hype: "ripped and frayed across the front" beats "edgy distressed detailing".',
-  '- Second person sparingly ("Wear them with…"), never "you\'ll love". One idea per sentence. Plain US English. No exclamation marks.',
-  '- The brand is "Carbon" — never "Carbon Jeans". The Carbon logo is called "the Carbon logo", never described by its shape.',
-  "- No clichés: elevate, versatile, must-have, boasts, adorned, wardrobe staple/essential, statement piece, trendy, perfect for, step into, turn heads, standard.",
+  '- Second person sparingly ("Wear them with…"), never "you\'ll love". One idea per sentence. Plain US English. No exclamation marks, no questions.',
+  '- The brand is "Carbon" — never "Carbon Jeans", never "CARBON". The Carbon logo is called "the Carbon logo", never described by its shape.',
+  '- Open each description with the product itself (its colour, print, cut) — never "<Name> features…" or "The <Name> is a…", and never end on "completes the design/look".',
+  "- No clichés: elevate, versatile, must-have, boasts, adorned, wardrobe staple/essential, statement piece, make a statement, trendy, stylish, chic, sleek, timeless, iconic, edgy, vibe, effortless, flattering, perfect for, step into, turn heads, own the night, add a touch, standard.",
 ].join("\n");
 
 /** The rules every prompt states, matching what findClaims enforces. */
 export function claimRulesFor(ctx: ClaimContext): string {
+  const fabric = String(ctx.fabric || "").trim();
   const lines = [
     "NEVER STATE (the photos cannot show it and nobody has verified it — such a sentence is deleted):",
-    "  - what it is made of: cotton, polyester, leather, faux, recycled, any fibre or percentage",
+    fabric
+      ? `  - what it is made of, beyond the VERIFIED fabric "${fabric}": you may name those fibres where a shopper searches them (faux fur slides, linen shirt, satin dress) — never a percentage, never a fibre that is not in it`
+      : "  - what it is made of: cotton, polyester, leather, faux, recycled, any fibre or percentage",
     "  - how it feels or performs: soft, stretchy, breathable, lightweight, warm, comfortable, durable, premium quality",
     "  - how it fits: true to size, slim fit, relaxed fit, high-rise (\"a relaxed look\" — describing the look — is fine)",
     "  - measurements, lengths or sizes, care instructions, where it was made",
@@ -222,8 +248,9 @@ export function claimRulesFor(ctx: ClaimContext): string {
     lines.push(
       'THIS PAGE SELLS ONE PIECE OF A MATCHING SET. Each piece is sold separately at its own price. You may say it is part of the set and pairs with the matching piece; NEVER say it includes, comes with, or is a two-piece set.',
       ctx.setPartners?.length
-        ? `  The matching piece${ctx.setPartners.length > 1 ? "s are" : " is"}: ${ctx.setPartners.map((p) => `"${p}"`).join(", ")}. Write it as "Pair it with the ${ctx.setPartners[0]}." — that piece is NOT this set, so never write "part of the ${ctx.setPartners[0]}". Never call it by a guessed garment type (skirt, pants, shorts) unless its name says so.`
+        ? `  The matching piece${ctx.setPartners.length > 1 ? "s are" : " is"}: ${ctx.setPartners.map((p) => `"${p}"`).join(", ")}. Write it as "Pair it with the ${ctx.setPartners[0]}." (or "Part of the <set name> set: pair it with the ${ctx.setPartners[0]}.") — that piece is NOT this set, so never write "part of the ${ctx.setPartners[0]}". Call it by a garment type only when its store type below says so; never guess.`
         : "  Do not say what kind of garment the matching piece is — you have not seen it.",
+      "  Never put both pieces in the title or the meta description — they describe only this piece.",
     );
   }
   return lines.join("\n");

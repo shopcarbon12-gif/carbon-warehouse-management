@@ -102,11 +102,47 @@ test("SEO title is the name, an optional descriptor and the brand — never doub
   assert.equal(finishSeoTitle("Denim Shorts", "x", "Alex Denim Shorts"), "Alex Denim Shorts | Carbon");
   /* Claim words in the descriptor are dropped. */
   assert.equal(finishSeoTitle("Soft Stretch", "x", "Ella Legging"), "Ella Legging | Carbon");
-  /* Too long for 60 characters → the name and brand alone. */
+  /* Too long for 70 characters → the attribute after the gender word goes first. */
   assert.equal(
-    finishSeoTitle("Women's Floral Off-Shoulder Ruffled", "x", "Sapphire Tropics Midi Dress"),
-    "Sapphire Tropics Midi Dress | Carbon",
+    finishSeoTitle("Women's Floral Off-Shoulder Ruffled Midi Dress", "x", "Sapphire Tropics Midi Dress"),
+    "Sapphire Tropics Midi Dress – Women's Ruffled Midi Dress | Carbon",
   );
+});
+
+test("SEO title carries the search phrase (owner-approved answer key, 2026-10-13)", () => {
+  /* The garment words may repeat the name when they are the search term. */
+  assert.equal(
+    finishSeoTitle("Men's Black Ripped Denim Shorts", "", "Alex Denim Shorts"),
+    "Alex Denim Shorts – Men's Black Ripped Denim Shorts | Carbon",
+  );
+  assert.equal(
+    finishSeoTitle("Women's Dark Wash Flare Jeans", "", "Nora Flare Jeans"),
+    "Nora Flare Jeans – Women's Dark Wash Flare Jeans | Carbon",
+  );
+  /* Idempotent: a finished title passed back in comes out unchanged. */
+  const done = "Vick Jeans – Men's Ripped Knee Skinny Jeans | Carbon";
+  assert.equal(finishSeoTitle(done, "", "Vick Jeans"), done);
+  /* A fibre word stays only when the verified fabric backs it. */
+  assert.equal(
+    finishSeoTitle("Women's Faux Fur Slides", "", "Furry Slippers", "", "Upper: Faux Fur, Sole: EVA"),
+    "Furry Slippers – Women's Faux Fur Slides | Carbon",
+  );
+  assert.equal(finishSeoTitle("Women's Faux Fur Slides", "", "Furry Slippers"), "Furry Slippers – Women's Slides | Carbon");
+});
+
+test("verified fabric words are facts; percentages and unbacked fibres are not", () => {
+  const ctx = { productTitle: "Furry Slippers", fabric: "Upper: Faux Fur, Sole: EVA" };
+  assert.deepEqual(kinds("Women's faux fur slides with a thick plush sole.", ctx), []);
+  assert.ok(kinds("A 100% faux fur upper.", ctx).includes("material"));
+  assert.ok(kinds("Soft cotton lining.", ctx).includes("material"));
+  assert.ok(kinds("Soft cotton lining.", ctx).includes("feel"));
+  const linen = { productTitle: "Ralph Shirt", fabric: "55% Linen, 45% Cotton" };
+  assert.deepEqual(kinds("A men's linen shirt with a camp collar.", linen), []);
+});
+
+test("new clichés are caught", () => {
+  assert.ok(kinds("A sleek, stylish jacket.").includes("cliche"));
+  assert.ok(kinds("Effortlessly chic.").includes("cliche"));
 });
 
 test("Studio spec lines about labels and patches never reach the copywriter", () => {
