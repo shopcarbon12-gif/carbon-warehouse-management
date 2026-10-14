@@ -69,7 +69,8 @@ export async function GET(req: NextRequest) {
      the whole Studio restore. */
   const r = await a.pool.query(
     `SELECT item_refs, item_type, instruction, item_spec, spec_refs_key, spec_confirmed, back_is_plain, updated_at,
-            to_jsonb(s) -> 'look_anchors' AS look_anchors
+            to_jsonb(s) -> 'look_anchors' AS look_anchors,
+            to_jsonb(s) ->> 'jeans_label_id' AS jeans_label_id
        FROM studio_matrix_state s WHERE matrix_id = $1::uuid`,
     [matrixId]
   );
@@ -87,6 +88,8 @@ export async function GET(req: NextRequest) {
       updatedAt: row.updated_at,
       /* Panel 1 of earlier runs, per "<modelId>|<COLOUR>" (lib/server/studio-look-anchors.ts). */
       lookAnchors: sanitizeLookAnchors(row.look_anchors),
+      /* The jeans label chosen for this product (studio_jeans_labels), or null. */
+      jeansLabelId: UUID_RE.test(String(row.jeans_label_id || "")) ? row.jeans_label_id : null,
     },
   });
 }
@@ -102,6 +105,10 @@ async function PUT_handler(req: NextRequest) {
   // Only for a product that exists — no rows for made-up ids.
   const exists = await a.pool.query(`SELECT 1 FROM matrices WHERE id = $1::uuid LIMIT 1`, [matrixId]);
   if (!exists.rowCount) return NextResponse.json({ error: "Unknown product" }, { status: 404 });
+  /* Saved only when the client sends the field, so an older open tab never
+     clears it; written separately so a database without migration 0115 still saves. */
+  const labelGiven = Object.prototype.hasOwnProperty.call(body ?? {}, "jeansLabelId");
+  const jeansLabelId = labelGiven && UUID_RE.test(String(body?.jeansLabelId || "")) ? String(body.jeansLabelId) : null;
   await a.pool.query(
     `INSERT INTO studio_matrix_state
        (matrix_id, tenant_id, updated_by, item_refs, item_type, instruction, item_spec, spec_refs_key, spec_confirmed, back_is_plain, updated_at)
@@ -132,6 +139,11 @@ async function PUT_handler(req: NextRequest) {
       body?.backIsPlain === true,
     ]
   );
+  if (labelGiven) {
+    await a.pool
+      .query(`UPDATE studio_matrix_state SET jeans_label_id = $2::uuid WHERE matrix_id = $1::uuid`, [matrixId, jeansLabelId])
+      .catch((e) => console.warn("[studio/state] jeans_label_id not saved:", (e as Error)?.message || e));
+  }
   return NextResponse.json({ ok: true, refs: itemRefs.length });
 }
 

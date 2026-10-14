@@ -360,7 +360,7 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
       instrTuck ??
       `${over}${
         labelPose
-          ? ` — except in Pose ${labelPose}, where only the back hem is lifted just enough to show the label on the back of the waistband (in every other back view the top covers it)`
+          ? ` — except in Pose ${labelPose}, the zoomed-in back crop, where only the back hem is folded up just enough to show the label on the back of the waistband (the full-body back view keeps the top over it)`
           : ""
       }; it always covers the stomach and the lower back — no skin shows between the top and the waistband in any frame; only a close-up of the waistband may raise the hem a little, just clear of it`;
     put("top", "TOP", renderPiece("top", top, input, { tuck }));

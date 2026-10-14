@@ -13,6 +13,7 @@ import {
 } from "@/lib/accessoryShots";
 import {
   needsBackWaistbandTuck,
+  specHasBackWaistbandLabel,
   parseOutfitFromSpec,
   type OutfitSlot,
   buildMasterPanelPrompt,
@@ -141,7 +142,13 @@ type StudioState = {
   backIsPlain: boolean;
   /** Read-only here: written by /api/generate after a successful panel 1. */
   lookAnchors?: Record<string, LookAnchor>;
+  /** The jeans label picked for this product (studio_jeans_labels id), or null. */
+  jeansLabelId?: string | null;
 };
+/** A photo of a real back-waistband label in the Studio's jeans-label library. */
+type JeansLabel = { id: string; name: string; url: string };
+/** The jeans-label box shows only for these item types (owner, 2026-10-14). */
+const JEANS_LABEL_TYPES = /\bjeans\b|\bdenim\s+shorts?\b/i;
 /** A media-manager row: an existing Shopify image or a new crop to add.
  * `color` = the variant colour this image is the MAIN pic for (all sizes). */
 type MediaItem = {
@@ -636,6 +643,12 @@ export function CarbonStudioTab({
   /** Panel 1 was held by its accuracy check: the other panels wait for the operator. */
   const [heldRun, setHeldRun] = useState<{ runTag: string; sourcePanel: number; followers: number[]; findings: string[] } | null>(null);
   const forceFollowersRef = useRef<(() => Promise<void>) | null>(null);
+  /* Jeans labels: photos of the real back-waistband patches, uploaded once and
+     shared by every product; one is picked per product and attached to the
+     panels with Pose 4 / Pose 7 so the patch is copied, not invented. */
+  const [jeansLabels, setJeansLabels] = useState<JeansLabel[]>([]);
+  const [jeansLabelId, setJeansLabelId] = useState<string | null>(null);
+  const [labelBusy, setLabelBusy] = useState(false);
   const [aborting, setAborting] = useState(false);
   const abortGeneration = useCallback(() => {
     const live = abortRef.current;
@@ -893,6 +906,7 @@ export function CarbonStudioTab({
           setSpecConfirmed(s.specConfirmed === true);
           setBackIsPlain(s.backIsPlain === true);
           setLookAnchors(s.lookAnchors && typeof s.lookAnchors === "object" ? s.lookAnchors : {});
+          setJeansLabelId(typeof s.jeansLabelId === "string" && s.jeansLabelId ? s.jeansLabelId : null);
         }
         setStateLoaded(true);
       } catch {
@@ -930,11 +944,80 @@ export function CarbonStudioTab({
       specRefsKey,
       specConfirmed,
       backIsPlain,
+      jeansLabelId,
     };
     pendingSaveRef.current = JSON.stringify(body);
     const t = setTimeout(flushSave, 800);
     return () => clearTimeout(t);
-  }, [stateLoaded, canManage, matrixId, itemRefs, itemType, instruction, itemSpec, specRefsKey, specConfirmed, backIsPlain, flushSave]);
+  }, [stateLoaded, canManage, matrixId, itemRefs, itemType, instruction, itemSpec, specRefsKey, specConfirmed, backIsPlain, jeansLabelId, flushSave]);
+
+  /* The label library is shared by every product — loaded once. */
+  useEffect(() => {
+    if (!canManage) return;
+    let alive = true;
+    void fetch("/api/studio/labels", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { labels: [] }))
+      .then((j: { labels?: JeansLabel[] }) => {
+        if (alive && Array.isArray(j.labels)) setJeansLabels(j.labels);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [canManage]);
+  const isJeansType = JEANS_LABEL_TYPES.test(itemType);
+  const chosenLabel = useMemo(() => jeansLabels.find((l) => l.id === jeansLabelId) ?? null, [jeansLabels, jeansLabelId]);
+  /** Upload label photos into the shared library (each stored like a model reference). */
+  const uploadLabelPhotos = useCallback(async (files: File[]) => {
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (!images.length) return;
+    setLabelBusy(true);
+    setErr(null);
+    const added: JeansLabel[] = [];
+    try {
+      for (const file of images) {
+        const { blob, name } = await downscaleForUpload(file);
+        const fd = new FormData();
+        fd.append("file", blob, name);
+        const up = await fetch("/api/models/upload", { method: "POST", body: fd });
+        const uj = (await up.json().catch(() => ({}))) as { url?: string; error?: string };
+        if (!up.ok || !uj.url) throw new Error(uj.error ?? `Upload failed (HTTP ${up.status})`);
+        const r = await fetch("/api/studio/labels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: uj.url, name: file.name.replace(/\.[^.]+$/, "") }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { label?: JeansLabel; error?: string };
+        if (!r.ok || !j.label) throw new Error(j.error ?? `Could not save the label (HTTP ${r.status})`);
+        added.push(j.label);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Label upload failed.");
+    } finally {
+      if (added.length) {
+        setJeansLabels((prev) => [...added, ...prev]);
+        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} to the library.`);
+      }
+      setLabelBusy(false);
+    }
+  }, []);
+  const removeLabel = useCallback(
+    async (label: JeansLabel) => {
+      if (!window.confirm(`Remove "${label.name || "this label"}" from the label library? Products that use it will have no label picked.`)) return;
+      setLabelBusy(true);
+      try {
+        const r = await fetch(`/api/studio/labels/${encodeURIComponent(label.id)}`, { method: "DELETE" });
+        if (!r.ok) throw new Error(`Could not remove the label (HTTP ${r.status})`);
+        setJeansLabels((prev) => prev.filter((l) => l.id !== label.id));
+        if (jeansLabelId === label.id) setJeansLabelId(null);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not remove the label.");
+      } finally {
+        setLabelBusy(false);
+      }
+    },
+    [jeansLabelId],
+  );
   useEffect(() => {
     window.addEventListener("pagehide", flushSave);
     return () => {
@@ -1897,6 +1980,9 @@ export function CarbonStudioTab({
             itemColour: lookColour,
             ...(anchored ? { anchor: { runId: runTag, role: panel === 1 ? "source" : "follower", ...(opts.force ? { force: true } : {}) } } : {}),
             ...(lookAnchorUrl ? { lookAnchorUrl } : {}),
+            /* The picked jeans label: the server attaches it to the Pose 4 / Pose 7
+               panels when the spec puts a label on the back waistband. */
+            ...(isJeansType && jeansLabelId && !runAccessory ? { jeansLabelId } : {}),
             /* A colourway on file turns this into a dye change: same analysis,
                same construction, new cloth colour, with that colour's own photo
                attached. */
@@ -2144,7 +2230,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, specBlocked, analyzeItem, colorRun, color, accessoryKind, productName, keepStylingPrints, matchPanel1, keepLook, lookAnchors]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, specBlocked, analyzeItem, colorRun, color, accessoryKind, productName, keepStylingPrints, matchPanel1, keepLook, lookAnchors, isJeansType, jeansLabelId]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -2990,6 +3076,97 @@ export function CarbonStudioTab({
           </div>
         ) : null}
       </div>
+
+      {/* Jeans label — only for JEANS / DENIM SHORTS. The library is shared by
+          every product; the pick is this product's, and the Pose 4 / Pose 7
+          panels carry it so the back patch is copied, not invented. */}
+      {canManage && isJeansType ? (
+        <div
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3"
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const files = imageFilesFromTransfer(e.dataTransfer);
+            if (!files.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            void uploadLabelPhotos(files);
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={`${label} mb-0`}>
+              Jeans label{chosenLabel ? <span className="text-[var(--wms-fg)]"> · {chosenLabel.name || "picked"}</span> : null}
+            </span>
+            <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
+              {labelBusy ? "uploading…" : "＋ upload label photos"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={labelBusy}
+                onChange={(e) => {
+                  void uploadLabelPhotos(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
+            Pick the patch sewn on the back of this product&apos;s waistband. It is copied into Pose 4 and Pose 7: Pose 7 (the
+            zoomed-in back) folds the shirt up just enough to show it; Pose 4 (the full-body back) keeps the shirt over the
+            jeans. Upload every label once — they are kept for all products.
+          </p>
+          {jeansLabelId && !specHasBackWaistbandLabel(itemSpec) ? (
+            <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+              The item spec has no label on the back waistband, so the label is not attached. Add a LABEL/PATCH line for the
+              back waistband if this product has one.
+            </p>
+          ) : null}
+          {jeansLabels.length ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setJeansLabelId(null)}
+                className={`flex h-20 w-20 items-center justify-center rounded border font-mono text-[0.68rem] ${
+                  !jeansLabelId ? "border-[var(--wms-accent)] text-[var(--wms-fg)]" : "border-[var(--wms-border)] text-[var(--wms-muted)]"
+                }`}
+              >
+                none
+              </button>
+              {jeansLabels.map((l) => (
+                <div key={l.id} className="relative">
+                  <button
+                    type="button"
+                    title={l.name || "label"}
+                    onClick={() => setJeansLabelId(l.id)}
+                    className={`block h-20 w-20 overflow-hidden rounded border-2 ${
+                      jeansLabelId === l.id ? "border-[var(--wms-accent)]" : "border-[var(--wms-border)]"
+                    }`}
+                  >
+                    <img src={previewFor(l.url)} alt={l.name || "jeans label"} className="h-full w-full object-cover" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${l.name || "label"} from the library`}
+                    disabled={labelBusy}
+                    onClick={() => void removeLabel(l)}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--wms-status-danger-fg)]/60 bg-[var(--wms-surface)] text-[0.7rem] leading-none text-[var(--wms-status-danger-fg)] max-md:h-7 max-md:w-7"
+                  >
+                    ×
+                  </button>
+                  <span className="mt-0.5 block w-20 truncate text-center font-mono text-[0.62rem] text-[var(--wms-muted)]">{l.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+              No label photos yet — upload or drop photos of your back-waistband labels here.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       {/* Item spec — what the render is locked to. Visible and editable:
           a wrong line here is a wrong garment in every paid panel. */}

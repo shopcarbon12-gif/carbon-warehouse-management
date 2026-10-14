@@ -577,6 +577,23 @@ function buildServerLockPrompt(panelQa: PanelQaInput, modelCount: number) {
  * the front rips round onto the back of the legs (the spec says that zone is
  * plain). Naming the elements — and that nothing else is there — closes it.
  */
+/** Same test as lib/panelGeneration.ts specHasBackWaistbandLabel (kept local: that module draws on a canvas). */
+function specHasBackWaistbandLabelLine(spec: string): boolean {
+  return String(spec || "")
+    .split("\n")
+    .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
+}
+
+/** The operator's label photo, named inside the one line about it (owner: only
+ *  the zoomed-in back crop folds the shirt up; the full-body back keeps it over). */
+function buildJeansLabelLine(imageNumber: number, poses: number[]): string {
+  const p7 = poses.includes(7);
+  const p4 = poses.includes(4);
+  return `- BACK-WAISTBAND LABEL — attached image ${imageNumber} is a photograph of THIS product's real label, the patch on the back of the waistband. It is not a product photo for anything else and contains no person. Wherever the label shows, it is EXACTLY the one in image ${imageNumber}: the same shape and proportions, colour and material, border stitching, logo and every letter, at the position and size the item spec gives against the waistband — never a different, simplified or re-lettered patch.${
+    p7 ? " Pose 7 is the zoomed-in back crop that shows it: there, and only there, the back hem of the top is folded up just enough to uncover the whole label." : ""
+  }${p4 ? " Pose 4 is the full-body back view: the top hangs over the waistband and covers the label." : ""}`;
+}
+
 const BACK_DISTRESS = /\b(?:rips?|ripped|tears?|torn|holes?|distress\w*|fray\w*|abrasions?|whisker\w*|faded|fading|destroyed)\b/i;
 
 function backElementsFromSpec(spec: string): { elements: string[]; plainZones: string[]; distress: string[] } {
@@ -1059,6 +1076,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       lookSheet: lookSheetRaw,
       modelId: modelIdRaw,
       itemColour: itemColourRaw,
+      jeansLabelId: jeansLabelIdRaw,
     } = await req.json();
     /* The operator's own words about this garment and this shoot. */
     const operatorInstruction =
@@ -1133,6 +1151,30 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        pose number — the back lock, the side mapping, the pose variation —
        stands down for them. */
     const accessoryMode = Boolean(normalizedPanelQa.accessoryKind);
+    /* The operator's jeans label (studio_jeans_labels, picked in the Studio for
+       JEANS / DENIM SHORTS). Attached only to the panels holding male Pose 4 or
+       Pose 7, and only when the spec itself puts a label on the back waistband:
+       the generator drew a different patch in each of those poses, so it is
+       copied from a photo instead of invented. */
+    const jeansLabelPoses =
+      !accessoryMode && normalizedPanelQa.modelGender !== "female"
+        ? [normalizedPanelQa.poseA, normalizedPanelQa.poseB].filter((p): p is number => p === 4 || p === 7)
+        : [];
+    let jeansLabelUrl = "";
+    if (
+      jeansLabelPoses.length &&
+      typeof jeansLabelIdRaw === "string" &&
+      UUID_RE.test(jeansLabelIdRaw) &&
+      specHasBackWaistbandLabelLine(itemSpecText)
+    ) {
+      const r = await authPool
+        .query<{ image_url: string }>(
+          `SELECT image_url FROM studio_jeans_labels WHERE id = $1::uuid AND tenant_id = $2::uuid AND archived_at IS NULL`,
+          [jeansLabelIdRaw, session.tid],
+        )
+        .catch(() => ({ rows: [] as { image_url: string }[] }));
+      jeansLabelUrl = r.rows[0]?.image_url ?? "";
+    }
     const backLockActive =
       !accessoryMode &&
       (isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA) ||
@@ -1281,7 +1323,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       modelCount: modelRefNormalization.urls.length,
       lists: parsedViewLists,
       hasColorPhoto: Boolean(colorRun?.refUrl),
-      anchorSlots: anchorRole === "follower" || anchorRole === "stored" ? 1 : 0,
+      anchorSlots: (anchorRole === "follower" || anchorRole === "stored" ? 1 : 0) + (jeansLabelUrl ? 1 : 0),
     });
     const viewLists = capped.lists;
     /* Appended LAST among the general photos, so its position in the item list
@@ -1500,6 +1542,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       itemViewMapLines: string[],
       stylingRefLines: string[],
       sameShootLines: string[],
+      labelLines: string[] = [],
     ) => [
       buildServerLockPrompt(normalizedPanelQa, modelCount),
       ...itemViewMapLines,
@@ -1515,6 +1558,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
           ]
         : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
+      ...labelLines,
       buildBrandSafetyLock(normalizedPanelQa.itemType),
       /* THE LOOK SHEET: what is worn, resolved once for the whole run and
          byte-identical in every panel. It comes after the product (the spec)
@@ -1836,11 +1880,37 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       }
     }
 
+    /* The jeans label rides after the references and before the same-shoot
+       anchor, so every image number above it is unchanged. A label that will not
+       download stops the panel: rendering on would draw an invented patch. */
+    let labelFile: Awaited<ReturnType<typeof toFile>> | null = null;
+    if (jeansLabelUrl) {
+      try {
+        labelFile = (await downloadReferenceAsFile(jeansLabelUrl, referenceFiles.length)).file;
+      } catch (e) {
+        return logged(
+          { ...refCounts, outcome: "failed", errorCode: "ref_download_failed", errorMessage: `jeans label: ${(e as Error)?.message || e}` },
+          NextResponse.json(
+            {
+              error: {
+                type: "ref_download_failed",
+                code: "ref_download_failed",
+                message:
+                  "The jeans label photo could not be downloaded, so this panel was not rendered and nothing was charged for it. Pick the label again (or another one) and generate again.",
+                failed: [],
+              },
+            },
+            { status: 400 },
+          ),
+        );
+      }
+    }
+    const labelLines = labelFile ? [buildJeansLabelLine(referenceFiles.length + 1, jeansLabelPoses)] : [];
     const sameShootLines = anchorFile
       ? [
           buildSameShootLine({
             // Attached LAST: every image number above is unchanged.
-            imageNumber: referenceFiles.length + 1,
+            imageNumber: referenceFiles.length + (labelFile ? 1 : 0) + 1,
             modelCount: modelFilesCount,
             stored: anchorRole === "stored",
             hasSpec: Boolean(itemSpecText),
@@ -1848,12 +1918,13 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           }),
         ]
       : [];
-    const editImages = anchorFile ? [...referenceFiles, anchorFile] : referenceFiles;
+    const editImages = [...referenceFiles, ...(labelFile ? [labelFile] : []), ...(anchorFile ? [anchorFile] : [])];
     const serverLockBlock = buildServerLockBlock(
       modelFilesCount,
       buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa }),
       buildStylingRefLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa, hasLookSheet: Boolean(lookSheet) }),
       sameShootLines,
+      labelLines,
     );
     const clamped = clampLockedPrompt(prompt, serverLockBlock);
     const lockedPrompt = clamped.prompt;
