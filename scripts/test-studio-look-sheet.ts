@@ -126,12 +126,17 @@ test("the sheet stays inside its byte budget even with 500-character Style-with 
   }
 });
 
-test("every slot is concrete: accessories are a closed list, the back-waistband tuck is ONE TOP line", () => {
+test("owner styling rules: photographed accessories worn, top always over the pants, label only in Pose 7, no skin", () => {
   const sheet = resolveLookSheet(base());
   assert.match(sheet.text, /^LOOK SHEET/);
-  assert.match(sheet.slots.accessories, /^none at all/);
-  assert.match(sheet.slots.top, /tucked in loosely all round/);
-  assert.equal((sheet.text.match(/label on its back/g) ?? []).length, 1);
+  assert.match(sheet.slots.accessories, /^exactly the accessories the item photos show the model wearing/);
+  assert.match(sheet.slots.top, /worn untucked over the waistband in every frame/);
+  assert.ok(!/tucked in loosely/.test(sheet.text), sheet.slots.top);
+  assert.match(sheet.slots.top, /except in Pose 7, where only the back hem is lifted/);
+  assert.match(sheet.slots.top, /no skin shows between the top and the waistband/);
+  assert.equal((sheet.text.match(/label on the back of the waistband/g) ?? []).length, 1);
+  const her = resolveLookSheet(base({ gender: "female" }));
+  assert.ok(!/Pose 7/.test(her.text), "a female sheet never names a male pose");
   assert.match(sheet.slots.footwear, /white sneakers/);
   assert.ok(sheet.slots.socks && sheet.slots.hair && sheet.slots.outerwear);
   const def = resolveLookSheet(base({ specOutfit: {}, backWaistbandLabel: false }));
@@ -200,7 +205,8 @@ test("different panels share one sheet: the prompt carries no outfit of its own 
           lookSheetInServer: true,
           variationSeed: 1234 + p,
         });
-        assert.ok(!/STYLING LOCK|OUTFIT FROM THE PHOTOS|^- TOP:|back hem sits/m.test(prompt), `${gender} ${itemType} P${p} still carries its own outfit`);
+        assert.ok(!/STYLING LOCK|^- TOP:|back hem sits/m.test(prompt), `${gender} ${itemType} P${p} still carries its own outfit`);
+        assert.match(prompt, /OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit/, "photographed outfit must be worn (owner rule 1)");
         assert.equal((prompt.match(/LOOK SHEET/g) ?? []).length >= 1, true);
         const lines = prompt.split("\n").filter((l) => /^(?:OUTFIT|FOOTWEAR|- Foot styling)/.test(l));
         for (const l of lines) assert.ok(!CHOICE.test(l), `choice word in styling line: ${l}`);

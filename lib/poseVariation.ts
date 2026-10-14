@@ -21,7 +21,7 @@
 // no shared server state and no round-trip. `strength` controls how much
 // variation is applied.
 
-import { isLegsCropPose, isUpperBodyProductCategory, itemTypeCategory } from "@/lib/panelGeneration";
+import { isLegsCropPose, isLowerBodyProductCategory, isTorsoCropPose, isUpperBodyProductCategory, itemTypeCategory } from "@/lib/panelGeneration";
 import { pose8OptionFor, type Pose8Option } from "@/lib/panelPoseLibraries";
 
 export type VariationStrength = "subtle" | "natural" | "editorial";
@@ -152,12 +152,17 @@ const HEAD_TILT = [
   "a tiny chin dip (2-3°)",
 ];
 
+/* Owner (2026-10-14): "it shouldn't be a robot catalog — natural, yet the
+   required professional poses". Each pose of a run gets a different one. */
 const EXPRESSION = [
-  "neutral premium expression",
-  "relaxed jaw with a faint, assured confidence",
-  "calm expression with soft eyes",
-  "composed, lips relaxed, quietly confident",
-  "subtle editorial poise (not posed-stiff)",
+  "a relaxed, natural look with soft, warm eyes and lips gently closed",
+  "a subtle closed-mouth smile, calm and quietly confident",
+  "a light, easy half-smile with relaxed brows, caught mid-moment",
+  "a composed, self-assured expression with a faint smile in the eyes",
+  "an approachable soft smile, no teeth, eyes softly engaged",
+  "a calm, thoughtful look slightly past the lens, jaw relaxed",
+  "a warm, friendly expression with softly smiling eyes",
+  "a cool, confident look with a hint of attitude, never stern",
 ];
 
 const WEIGHT = [
@@ -208,10 +213,25 @@ function rotate(seed: number, offset: number, len: number): number {
   return m;
 }
 
+/* The torso crops reframed as bottoms crops (no face, head out of frame). */
+const BOTTOMS_FRONT_CROP_BODY = [
+  "weight on the back leg, the front knee softly bent",
+  "one thumb resting at the front pocket edge, never over the hardware",
+  "a 20° turn so the outseam and the thigh fit read together",
+];
+const BOTTOMS_BACK_CROP_BODY = [
+  "weight even on both feet, hands relaxed at the sides",
+  "a small weight shift to one hip, back pockets level",
+  "a slight 10° turn so one back pocket and the side seam read",
+];
+
 function bodyPool(gender: string, pose: number | null, itemType: string): string[] {
   if (pose == null) return [];
   if (pose === 8) return POSE8_BODY[pose8OptionFor(gender, itemTypeCategory(itemType))];
   if (isLegsCropPose(gender, pose) && isUpperBodyProductCategory(itemType)) return UPPER_BODY_CROP_BODY;
+  if (isTorsoCropPose(gender, pose) && isLowerBodyProductCategory(itemType)) {
+    return String(gender || "").toLowerCase() !== "female" && pose === 7 ? BOTTOMS_BACK_CROP_BODY : BOTTOMS_FRONT_CROP_BODY;
+  }
   const table = String(gender || "").toLowerCase() === "female" ? FEMALE_BODY : MALE_BODY;
   return table[pose] || [];
 }
@@ -225,9 +245,18 @@ function describePoseVariation(
   itemType: string
 ): string | null {
   if (pose == null) return null;
-  const offset = side === "LEFT" ? 0 : 7; // de-sync the two halves of a panel
+  /* One seed serves the whole run (so the outfit and styling stay identical),
+     so each pick is keyed on the POSE, not on the side: keyed on the side alone,
+     every left-hand frame of the run got the same gaze, tilt and expression and
+     every right-hand frame the same — a robot catalog. Expressions step by 3
+     (coprime with the 8 options: all 8 poses differ); gaze, tilt and weight
+     step by 2 (coprime with 5 and 3: the two frames of any panel — poses 1 or 2
+     apart — never match). */
+  const p = Number(pose);
+  const offset = p;
   const closeUp = isCloseUpPose(gender, pose);
-  const lowerBody = isLowerBodyPose(gender, pose);
+  // A torso crop reframed for a bottom (lib/panelGeneration.ts) has no face either.
+  const lowerBody = isLowerBodyPose(gender, pose) || (isTorsoCropPose(gender, pose) && isLowerBodyProductCategory(itemType));
 
   const body = bodyPool(gender, pose, itemType);
   const bodyPick = body.length ? body[rotate(seed, offset, body.length)] : null;
@@ -237,10 +266,10 @@ function describePoseVariation(
     return bodyPick ? `${side} (Pose ${pose}): ${bodyPick}.` : null;
   }
 
-  const gaze = GAZE[rotate(seed, offset + 1, GAZE.length)];
-  const tilt = HEAD_TILT[rotate(seed, offset + 2, HEAD_TILT.length)];
-  const expr = EXPRESSION[rotate(seed, offset + 3, EXPRESSION.length)];
-  const weight = WEIGHT[rotate(seed, offset + 4, WEIGHT.length)];
+  const gaze = GAZE[rotate(seed, p * 2, GAZE.length)];
+  const tilt = HEAD_TILT[rotate(seed, p * 2 + 3, HEAD_TILT.length)];
+  const expr = EXPRESSION[rotate(seed, p * 3, EXPRESSION.length)];
+  const weight = WEIGHT[rotate(seed, p * 2 + 1, WEIGHT.length)];
 
   const parts: string[] = [];
   if (bodyPick) parts.push(bodyPick);
@@ -250,8 +279,8 @@ function describePoseVariation(
   } else if (strength === "editorial") {
     parts.push(gaze, tilt, expr, weight);
   } else {
-    // natural (default)
-    parts.push(gaze, tilt, expr);
+    // natural (default): a living moment — gaze, head, face AND a small weight shift
+    parts.push(gaze, tilt, expr, weight);
   }
 
   return `${side} (Pose ${pose}): ${parts.join("; ")}.`;
@@ -291,7 +320,7 @@ export function buildPoseVariationDirective(args: {
     `- Vary ONLY expression, gaze direction, head angle and subtle stance/weight — never the identity, the framing or crop, or the ${itemLabel} and the rest of the outfit.`,
     editorial
       ? "- Editorial energy: an in-between, natural moment (not posed-stiff), still storefront-clean."
-      : "- Keep it premium, calm, and storefront-clean.",
+      : "- A natural, relaxed moment — professional and storefront-clean, never posed-stiff or robotic; each pose of the run reads as a different moment.",
   ].filter(Boolean);
 
   return lines.join("\n");

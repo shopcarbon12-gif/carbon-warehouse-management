@@ -230,7 +230,6 @@ const APPAREL_SLOTS = new Set(["top", "top_under", "bottom", "outerwear"]);
 const REFERS_TO_PHOTOS = /\b(?:item photos?|the photos?|photographed|style-with)\b/i;
 
 const TUCK_WORDS = /\b(?:tucked|untucked|tuck|front[- ]tuck(?:ed)?|half[- ]tuck(?:ed)?|french tuck)\b/i;
-const CROPPED = /\bcrop(?:ped)?\b/i;
 
 /** One slot's line, from where its piece came from. `tuck` (top only) is the one tuck state
  *  the sheet imposes; a tuck word in the photographed description would contradict it. */
@@ -330,7 +329,7 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
           "plain black rubber flip-flops with a thin black thong strap and a flat black sole — the same pair in every frame, both feet identical",
           "none — naturally bare feet in every frame",
         ])
-      : "chunky white leather low-top sneakers with a thick plain white rubber sole, flat white laces, no visible branding, no contrast panels — the exact same pair in every frame, both feet identical",
+      : "the shoes the item photos show the model wearing, exactly as photographed; when no photo shows shoes: chunky white leather low-top sneakers with a thick plain white rubber sole, flat white laces, no visible branding, no contrast panels — the exact same pair in every frame, both feet identical",
   };
   const resolved: Partial<Record<OutfitSlot, Piece>> = {};
   for (const slot of OUTFIT_SLOTS) {
@@ -346,24 +345,24 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
   let tuck: string | null = null;
   const top = resolved.top;
   if (top) {
-    /* ONE tuck state for every panel. It used to change only in the back-facing
-       panels (to keep a back-waistband label in view), so the same top was
-       tucked in one panel and loose in the next. The instruction's word wins,
-       then the label, then the photographed description, then untucked. */
+    /* Owner rules (2026-10-14): the top is ALWAYS over the pants / shorts, in
+       every frame; only the label pose (male Pose 7) lifts the back hem, just
+       enough to show a back-waistband label — Pose 4 keeps the top over it.
+       Never bare skin between top and waistband; a close-up may raise the hem
+       a little. The carve-outs sit inside this one line, so every panel reads
+       the same words. The item instruction's own word on tucking still wins. */
+    const labelPose = !female && input.backWaistbandLabel ? 7 : null;
+    const over =
+      top.source === "default" && female
+        ? "worn untucked over the waistband in every frame, the slightly cropped hem ending at the waistband"
+        : "worn untucked over the waistband in every frame, the hem hanging straight over it";
     tuck =
       instrTuck ??
-      (input.backWaistbandLabel
-        ? CROPPED.test(top.text)
-          ? "its hem ends above the waistband all round, so the label on the back of the waistband stays fully visible"
-          : "tucked in loosely all round, so the whole waistband and the label on its back stay fully visible"
-        : null);
-    const described = !tuck && TUCK_WORDS.test(top.text);
-    if (!tuck && !described) {
-      tuck =
-        top.source === "default" && female
-          ? "worn untucked, the cropped hem ending at the waistband"
-          : "worn untucked, the hem hanging straight over the waistband";
-    }
+      `${over}${
+        labelPose
+          ? ` — except in Pose ${labelPose}, where only the back hem is lifted just enough to show the label on the back of the waistband (in every other back view the top covers it)`
+          : ""
+      }; it always covers the stomach and the lower back — no skin shows between the top and the waistband in any frame; only a close-up of the waistband may raise the hem a little, just clear of it`;
     put("top", "TOP", renderPiece("top", top, input, { tuck }));
   }
   if (resolved.top_under) put("top_under", "TOP UNDERNEATH", renderPiece("top_under", resolved.top_under, input));
@@ -397,14 +396,14 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
       ? renderPiece("accessories", resolved.accessories, input)
       : cat === "accessory"
         ? "nothing besides the product — no watch, no jewellery, no belt, no hat, no sunglasses, no bag"
-        : "none at all — no watch, no jewellery, no belt, no hat, no sunglasses, no bag",
+        : "exactly the accessories the item photos show the model wearing (bracelets, rings, a watch), the same pieces in the same places in every frame, and nothing else — none when the photos show none",
   );
   put("hair", "HAIR", HAIR_DEFAULT);
   /* The product's own hem, when it is a top: tucked in one panel and loose in
      the next reads as two different garments. A bodysuit has no loose hem. */
   if (cat === "top" && !/\b(?:body ?suits?|leotards?)\b/i.test(`${input.itemType} ${input.productName ?? ""}`)) {
-    const photographedTucked = OUTFIT_SLOTS.some((s) => /\btucked\b/i.test(input.specOutfit?.[s] ?? "") && !/\buntucked\b/i.test(input.specOutfit?.[s] ?? ""));
-    tuck = instrTuck ?? (photographedTucked ? "worn tucked in" : "worn untucked — its hem falls free at its own length");
+    /* Owner rule: a shirt is always worn over the pants / shorts. */
+    tuck = instrTuck ?? "worn untucked — its hem falls over the waistband at its own length";
     put("tuck", "TUCK", `the product is ${tuck}, in every frame`);
   }
   return { lines, tuck };

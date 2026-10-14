@@ -307,13 +307,61 @@ export function getUpperBodyCropPoseBlock(poseNumber: number) {
   ].join("\n");
 }
 
+/* Poses belong to the ITEM TYPE in the Studio box, not to the product (owner,
+   2026-10-14: "some poses are full body and some poses should be dedicated to
+   what we are actually filming"). Full-body poses stay full body; the crops
+   frame the item type. The library's torso crops — male Pose 3 (front) and
+   Pose 7 (back), female Pose 4 — photograph the styling top, so on a bottom
+   they frame the bottoms instead (Dax Jeans: Pose 3 came back as a tee shot). */
+export function isLowerBodyProductCategory(itemTypeValue: string) {
+  return inferItemTypeCategory(itemTypeValue) === "bottom";
+}
+
+export function isTorsoCropPose(gender: string, pose: number) {
+  const p = Number(pose);
+  return String(gender || "").trim().toLowerCase() === "female" ? p === 4 : p === 3 || p === 7;
+}
+
+export function getBottomsCropPoseBlock(gender: string, poseNumber: number) {
+  const female = String(gender || "").trim().toLowerCase() === "female";
+  const back = !female && Number(poseNumber) === 7;
+  if (back) {
+    return [
+      `POSE ${poseNumber} - Back Bottoms Crop (BOTTOMS VARIANT — replaces the library's Torso Back crop because the locked item is a bottom)`,
+      "Base",
+      "- Crop: from the lower back, just above the waistband, to just below the knees. Back-facing, body square to the camera, no twist. The head and shoulders are OUT of frame.",
+      "- The back of the product fills the frame: waistband, back yoke, back pockets, seat fit and the back of the thighs, with the back-waistband label or patch exactly as the item photos show it.",
+      "- Arms relaxed at the sides; hands never cover the back pockets, the waistband or the label.",
+      "- Even weight on both feet; fabric relaxed, no pulling.",
+    ].join("\n");
+  }
+  return [
+    `POSE ${poseNumber} - Front Bottoms Crop (BOTTOMS VARIANT — replaces the library's ${female ? "Upper Body" : "Torso + Head"} crop because the locked item is a bottom)`,
+    "Base",
+    "- Crop: from just above the waistband to just below the knees. The head, face and chest are OUT of frame; the top shows only as its hem over the waistband.",
+    "- Front three-quarter angle (15-25 deg) so the front, the side seam and the fit read together; weight on one leg, the other knee relaxed.",
+    "- Hands relaxed at the sides or one thumb resting at a front pocket edge — never covering the waistband button, the fly, the pockets or any hardware.",
+    "- The product fills the frame: waistband, button and fly, front pockets, rise, thigh fit, front distressing and every piece of hardware exactly as the item photos show it.",
+  ].join("\n");
+}
+
 /** The active pose block for a prompt: the library text, except that the legs
- *  crop becomes the upper-body product crop for tops / outerwear. */
+ *  crop becomes the upper-body product crop for tops / outerwear, and the torso
+ *  crops become bottoms crops for bottoms. */
 export function getEffectivePoseBlock(library: string, gender: string, poseNumber: number, itemTypeValue: string) {
   if (isLegsCropPose(gender, poseNumber) && isUpperBodyProductCategory(itemTypeValue)) {
     return getUpperBodyCropPoseBlock(poseNumber);
   }
+  if (isTorsoCropPose(gender, poseNumber) && isLowerBodyProductCategory(itemTypeValue)) {
+    return getBottomsCropPoseBlock(gender, poseNumber);
+  }
   return extractPoseBlock(library, poseNumber);
+}
+
+function bottomsCropLockLine(side: "LEFT" | "RIGHT", poseNumber: number, back: boolean) {
+  return back
+    ? `- ${side} Pose ${poseNumber} is a BACK BOTTOMS crop of the locked item (from the lower back, just above the waistband, to just below the knees), back-facing. HARD CROP LOCK: the head and shoulders are OUT of frame; the back of the product fills the frame — waistband, yoke, back pockets, seat, the label as photographed. A torso-and-head crop or a full standing body is WRONG.`
+    : `- ${side} Pose ${poseNumber} is a FRONT BOTTOMS crop of the locked item (from just above the waistband to just below the knees), front three-quarter. HARD CROP LOCK: the head, face and chest are OUT of frame; the product fills the frame — waistband, fly, front pockets, thighs. A torso-and-head crop or a full standing body is WRONG.`;
 }
 
 function upperBodyCropLockLine(poseNumber: number) {
@@ -330,6 +378,7 @@ function upperBodyCropLockLine(poseNumber: number) {
 export function getPanelCriticalLockLines(gender: string, panelNumber: number, itemTypeValue = "") {
   const lockedItemType = String(itemTypeValue || "").trim();
   const upperBodyItem = isUpperBodyProductCategory(lockedItemType);
+  const lowerBodyItem = isLowerBodyProductCategory(lockedItemType);
   const normalizedItemType =
     String(gender || "").trim().toLowerCase() === "female" && isSwimwearItemType(lockedItemType)
       ? "swimwear"
@@ -360,7 +409,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
       return [
         "PANEL 2 (Pose 3 + Pose 4):",
         "- LEFT Pose 3: full-body 3/4 front angle (25-35 degrees).",
-        "- RIGHT Pose 4: upper body with the face visible, cropped exactly as the pose defines.",
+        lowerBodyItem ? bottomsCropLockLine("RIGHT", 4, false) : "- RIGHT Pose 4: upper body with the face visible, cropped exactly as the pose defines.",
         "- Do not swap sides and do not replace either side with another pose.",
       ];
     }
@@ -391,7 +440,7 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
   if (panelNumber === 2) {
     return [
       "PANEL 2 (Pose 3 + Pose 4):",
-      "- LEFT Pose 3: torso + head front crop (mid-thigh to head).",
+      lowerBodyItem ? bottomsCropLockLine("LEFT", 3, false) : "- LEFT Pose 3: torso + head front crop (mid-thigh to head).",
       "- RIGHT Pose 4: full-body BACK view with the full head and feet visible.",
       "- Do not swap sides.",
     ];
@@ -408,7 +457,9 @@ export function getPanelCriticalLockLines(gender: string, panelNumber: number, i
   }
   return [
     "PANEL 4 (Pose 7 + Pose 8):",
-    "- LEFT Pose 7 is a TORSO-BACK crop (mid-thigh to head), back-facing, with an over-the-shoulder head turn — NOT a full body. HARD CROP LOCK: crop the frame at mid-thigh; the lower legs and feet MUST be OUT of frame. If a full head-to-toe standing body appears, it is WRONG and must be re-framed as a mid-thigh-to-head crop.",
+    lowerBodyItem
+      ? bottomsCropLockLine("LEFT", 7, true)
+      : "- LEFT Pose 7 is a TORSO-BACK crop (mid-thigh to head), back-facing, with an over-the-shoulder head turn — NOT a full body. HARD CROP LOCK: crop the frame at mid-thigh; the lower legs and feet MUST be OUT of frame. If a full head-to-toe standing body appears, it is WRONG and must be re-framed as a mid-thigh-to-head crop.",
     "- RIGHT Pose 8: one controlled creative pose of this same look.",
   ];
 }
@@ -725,6 +776,9 @@ export function buildMasterPanelPrompt(args: {
   const legsCropOverrideActive =
     upperBodyItem &&
     (isLegsCropPose(args.modelGender, args.poseA) || isLegsCropPose(args.modelGender, args.poseB));
+  const bottomsCropOverrideActive =
+    isLowerBodyProductCategory(args.itemType) &&
+    (isTorsoCropPose(args.modelGender, args.poseA) || isTorsoCropPose(args.modelGender, args.poseB));
   const criticalLockLines = getPanelCriticalLockLines(
     args.modelGender,
     args.panelNumberForLocks ?? args.panelNumber,
@@ -742,13 +796,17 @@ export function buildMasterPanelPrompt(args: {
     "a natural, relaxed premium expression with soft, warm eyes";
   const modelLabel = `${args.modelName || "the locked model"} (${args.modelGender || "model"})`;
 
-  /* With the look sheet in the server block every panel reads the same outfit,
-     word for word. The open-ended "wear the outfit in the photos" sentence is
-     exactly what let each panel pick its own pieces from 13 photos of different
-     shoots, so it goes — the photographed pieces are already named on the sheet. */
+  /* Owner rule (2026-10-14): when the uploaded photos show the item in a full
+     outfit, the model wears ALL of it — top, shoes, accessories. The look sheet
+     names those pieces and decides only what no photo shows; it never strips a
+     photographed piece it did not name (that dropped the Dax bracelets). */
   const outfitLines = lookSheet
     ? [
-        `OUTFIT: everything the model wears that is not the product is the LOOK SHEET given with this prompt — the model wears exactly the pieces it lists, in every frame of every panel of this run. Nothing else is worn; nothing on it is left out. A piece an item photo shows that the LOOK SHEET does not list is not worn.`,
+        `OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit, the model wears that exact whole outfit — every piece, colour, layer, shoe and accessory, exactly as photographed — unchanged in every frame of every panel.${
+          args.hasStyleWith
+            ? " The STYLE-WITH photos (numbered in the STYLE-WITH PIECES line) are pieces the operator chose for this shoot: the model wears every one of them, exactly as photographed, and they replace any other piece for the same part of the body."
+            : ""
+        } The LOOK SHEET given with this prompt names these pieces and decides only what no photo shows. Nothing is invented beyond the photos and the LOOK SHEET.`,
       ]
     : [
         `OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit, the model wears that exact whole outfit — every piece, colour, layer and accessory — unchanged in every frame.${
@@ -761,7 +819,7 @@ export function buildMasterPanelPrompt(args: {
   const footwearLine = lookSheet
     ? footwearCategory
       ? "FOOTWEAR: the product is the footwear — the exact pair from the item photos, on both feet, in every full-body frame; never a different pair."
-      : "FOOTWEAR: every full-body frame shows exactly the FOOTWEAR of the LOOK SHEET, on both feet — never socks-only, never a pair the LOOK SHEET does not name, never a different pair from the other panels."
+      : "FOOTWEAR: every full-body frame shows the FOOTWEAR of the LOOK SHEET — the exact pair the item photos show, when they show one — on both feet, the same pair seen from the front, the side and behind (same upper, same sole colour all round, same heel, same laces), never a different pair from the other panels, never socks-only."
     : swimwearActive
       ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
       : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock (the photographed pair when it says so), on both feet. Never barefoot, never socks-only, never a different pair from the other panels.";
@@ -791,7 +849,11 @@ export function buildMasterPanelPrompt(args: {
         ]
       : []),
     footwearLine,
-    `EXPRESSION for this generation: ${expressionDirective}. The face looks alive and human, with subtle natural variation between the two frames; expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline.`,
+    resolvePoses
+      ? /* Owner (2026-10-14): natural, not a robot catalog. The server's POSE
+           VARIATION gives every pose its own gaze, head angle and expression. */
+        "EXPRESSION AND MOMENT: every frame is its own natural moment of a professional shoot — its own expression, gaze and head angle exactly as the POSE VARIATION line gives that pose, its own body angle and weight as its pose defines. The face looks alive and human; the two frames of this panel are clearly different moments, never two copies of one stance or one frozen face. Relaxed shoulders and hands, believable posture, never stiff. Expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline."
+      : `EXPRESSION for this generation: ${expressionDirective}. The face looks alive and human, with subtle natural variation between the two frames; expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline.`,
     "Photorealistic: real human anatomy and skin texture; no CGI, plastic or mannequin look.",
     ...(globalRules
       ? [`${gender === "female" ? "FEMALE" : "MALE"} POSE GLOBAL RULES (apply to both poses):`, globalRules]
@@ -803,6 +865,11 @@ export function buildMasterPanelPrompt(args: {
     ...(legsCropOverrideActive
       ? [
           "TOPS OVERRIDE (this generation): the locked item is a top / outerwear, so the library's 'Lower Body / Legs' definition for the active crop pose is REPLACED by the 'Upper Body / Torso Product Crop' block given as the ACTIVE POSE above. Do NOT photograph the legs, shorts or pants in that frame — the product is the top.",
+        ]
+      : []),
+    ...(bottomsCropOverrideActive
+      ? [
+          `BOTTOMS OVERRIDE (this generation): the locked item is ${itemLabel}, so the library's torso crop for the active crop pose is REPLACED by the 'Bottoms Crop' block given as the ACTIVE POSE above. That frame photographs the ${itemLabel}, not the top: the head and chest stay out of frame.`,
         ]
       : []),
     "FRAMING: a full-body pose shows the whole body from the top of the hair to the soles of the shoes with white margin above and below — zoom out rather than crop. A crop pose follows its crop exactly as defined above, and the out-of-frame body parts stay out of frame. Keep each pose centred in its own half; each half is a 3:4 portrait.",

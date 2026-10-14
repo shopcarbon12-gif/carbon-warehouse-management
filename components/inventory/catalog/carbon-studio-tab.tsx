@@ -623,13 +623,15 @@ export function CarbonStudioTab({
   }>({ style: {}, styling: {} });
   /* Panel 1 sets the look: panels 2–4 wait for it on the server and render
      with it attached, so the outfit, shoes and garment read as one shoot. */
-  const [matchPanel1, setMatchPanel1] = useState(() => readPref("wms_studio_match_p1", true));
+  /* Off by default (owner, 2026-10-14: the wait doubled every run). */
+  const [matchPanel1, setMatchPanel1] = useState(() => readPref("wms_studio_match_p1_v2", false));
   /* A re-render without panel 1 attaches this product's saved panel 1 for the
      same model and colour, so new crops match the ones already kept. */
   const [keepLook, setKeepLook] = useState(() => readPref("wms_studio_keep_look", true));
   /* Photographed styling pieces are worn print-free unless asked: a full-body
      frame cannot letter a tee's print and draws pseudo-letters instead. */
-  const [keepStylingPrints, setKeepStylingPrints] = useState(() => readPref("wms_studio_keep_prints", false));
+  /* On by default (owner rule: every piece uploaded is worn as photographed, prints included). */
+  const [keepStylingPrints, setKeepStylingPrints] = useState(() => readPref("wms_studio_keep_prints_v2", true));
   const [lookAnchors, setLookAnchors] = useState<Record<string, LookAnchor>>({});
   /** Panel 1 was held by its accuracy check: the other panels wait for the operator. */
   const [heldRun, setHeldRun] = useState<{ runTag: string; sourcePanel: number; followers: number[]; findings: string[] } | null>(null);
@@ -3146,10 +3148,10 @@ export function CarbonStudioTab({
               matchPanel1,
               (v: boolean) => {
                 setMatchPanel1(v);
-                writePref("wms_studio_match_p1", v);
+                writePref("wms_studio_match_p1_v2", v);
               },
               "Match panel 1 (consistent, slower)",
-              "Panel 1 renders first; the other panels wait for it and render with it attached, so the outfit, shoes and garment read as one shoot. About 3 minutes instead of 1½. If panel 1's check flags it, the others are held before anything is paid for.",
+              "Off (default): all panels render at once, about 1½ minutes. On: panel 1 renders first and the other panels wait for it and render with it attached — about 3 minutes; if panel 1's check flags it, the others are held before anything is paid for.",
             ],
             [
               keepLook,
@@ -3164,10 +3166,10 @@ export function CarbonStudioTab({
               keepStylingPrints,
               (v: boolean) => {
                 setKeepStylingPrints(v);
-                writePref("wms_studio_keep_prints", v);
+                writePref("wms_studio_keep_prints_v2", v);
               },
               "Keep prints on styling pieces",
-              "Off: a tee or tank worn WITH the product is drawn without its printed text (a full-body frame cannot letter it and draws pseudo-letters). On: its print is copied from the photo.",
+              "On: every styling piece you uploaded is worn exactly as photographed, prints included. Off: a tee or tank worn WITH the product is drawn without its printed text (small lettering can come out garbled).",
             ],
           ] as const
         ).map(([on, set, text, hint]) => (
