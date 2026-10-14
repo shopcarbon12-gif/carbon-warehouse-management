@@ -47,6 +47,14 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
+import { isLowerBodyProductCategory } from "@/lib/panelGeneration";
+import {
+  compositeLabelIntoKey,
+  labelProportions,
+  pickLabelKey,
+  readLabelPhoto,
+  type LabelKey,
+} from "@/lib/server/studio-label-composite";
 import { isValidJobId, runGenerateJob, takeEarlyCancel } from "@/lib/server/generate-jobs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -584,14 +592,25 @@ function specHasBackWaistbandLabelLine(spec: string): boolean {
     .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
 }
 
-/** The operator's label photo, named inside the one line about it (owner: only
- *  the zoomed-in back crop folds the shirt up; the full-body back keeps it over). */
-function buildJeansLabelLine(imageNumber: number, poses: number[]): string {
-  const p7 = poses.includes(7);
-  const p4 = poses.includes(4);
-  return `- BACK-WAISTBAND LABEL — attached image ${imageNumber} is a photograph of THIS product's real label, the patch on the back of the waistband. It is not a product photo for anything else and contains no person. Wherever the label shows, it is EXACTLY the one in image ${imageNumber}: the same shape and proportions, colour and material, border stitching, logo and every letter, at the position and size the item spec gives against the waistband — never a different, simplified or re-lettered patch.${
-    p7 ? " Pose 7 is the zoomed-in back crop that shows it: there, and only there, the back hem of the top is folded up just enough to uncover the whole label." : ""
-  }${p4 ? " Pose 4 is the full-body back view: the top hangs over the waistband and covers the label." : ""}`;
+/** The operator's label photo as a reference — used only when no key colour is
+ *  safe for this shoot (the mask below is the normal path). */
+function buildJeansLabelLine(imageNumber: number, side: string): string {
+  return `- BACK-WAISTBAND LABEL — attached image ${imageNumber} is a photograph of THIS product's real label, the patch on the back of the waistband. It is not a product photo for anything else and contains no person. In ${side} Pose 7, the zoomed-in back crop, the back hem of the top is folded up just enough to uncover it, and it is EXACTLY the one in image ${imageNumber}: the same shape and proportions, colour and material, border stitching, logo and every letter, at the position and size the item photos show it on the waistband — never a different, simplified or re-lettered patch.`;
+}
+
+/**
+ * The label is not drawn at all: the renderer leaves a flat key-colour shape
+ * where it sits, and lib/server/studio-label-composite.ts paints the operator's
+ * photo into it. Asked to copy the photo, the renderer re-lettered it
+ * ("CARRON JEANS") and drew a different patch in each pose.
+ */
+function buildLabelMaskLine(side: string, key: LabelKey, proportions: string): string {
+  return `- LABEL MASK — ${side} Pose 7 (HARD LOCK; it overrides every other line about how the back-waistband label looks): the label on the back of the waistband is NOT drawn. In ${side} Pose 7, exactly where the label sits on the back of the waistband — at the position and size the item photos show it — paint ONE flat, solid, pure ${key.name} (${key.hex}) shape, ${proportions}, lying flat on the waistband: no letters, no logo, no border, no stitching, no texture, no highlight, nothing on it and nothing in front of it. It is a placeholder: the real label photograph is placed into it after rendering. The back hem of the top is folded up just enough to uncover it completely. Pure ${key.name} appears nowhere else in the image — not in the other pose, the garment, the outfit or the background.`;
+}
+
+/** Owner's hard lock: the full-body back view never shows the label — the top is over it. */
+function buildPose4CoverLine(side: string, itemType: string): string {
+  return `- POSE 4 HARD LOCK — THE TOP COVERS THE BACK OF THE WAISTBAND: in ${side} Pose 4, the full-body back view, the top hangs straight down over the waistband all the way round — never tucked, lifted, folded or bunched up. The back of the waistband, the back belt loops and any label or patch on them are completely hidden under it: no label, patch, tag, text or logo shows at the back of the waistband in Pose 4. Below the hem, the back of the ${itemType || "product"} shows exactly as photographed. No skin shows.`;
 }
 
 const BACK_DISTRESS = /\b(?:rips?|ripped|tears?|torn|holes?|distress\w*|fray\w*|abrasions?|whisker\w*|faded|fading|destroyed)\b/i;
@@ -635,7 +654,14 @@ function backDistressClause(distress: string[]): string {
   return distress.length ? ` It keeps the rips and distressing the spec places on the back — ${distress.join(" | ")} — and nothing more.` : "";
 }
 
-function buildBackStateLine(backState: BackState, panelQa: PanelQaInput, spec = ""): string[] {
+/** `waistbandCarve`: what the back waistband shows in this panel's back frames
+ *  (covered by the top in Pose 4, a label placeholder in Pose 7) — said inside
+ *  the back line, which otherwise asks for every back element in every back frame. */
+function buildBackStateLine(backState: BackState, panelQa: PanelQaInput, spec = "", waistbandCarve = ""): string[] {
+  return buildBackStateLineBase(backState, panelQa, spec).map((l) => l + waistbandCarve);
+}
+
+function buildBackStateLineBase(backState: BackState, panelQa: PanelQaInput, spec = ""): string[] {
   const frames = backFacingFramesLabel(panelQa);
   if (!frames) return [];
   const { elements, plainZones, distress } = backElementsFromSpec(spec);
@@ -1151,29 +1177,38 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        pose number — the back lock, the side mapping, the pose variation —
        stands down for them. */
     const accessoryMode = Boolean(normalizedPanelQa.accessoryKind);
+    /* Bottoms on a male model (owner's rules): Pose 4, the full-body back, ALWAYS
+       has the top over the waistband — hard lock, label or not; Pose 7, the
+       zoomed-in back crop, is the one frame that shows the label. */
+    const maleBottomShoot =
+      !accessoryMode &&
+      normalizedPanelQa.modelGender !== "female" &&
+      isLowerBodyProductCategory(String(normalizedPanelQa.itemType || ""));
+    const poseSide = (pose: number) =>
+      normalizedPanelQa.poseA === pose ? "LEFT" : normalizedPanelQa.poseB === pose ? "RIGHT" : null;
+    const pose4Side = maleBottomShoot ? poseSide(4) : null;
+    const pose7Side = maleBottomShoot ? poseSide(7) : null;
     /* The operator's jeans label (studio_jeans_labels, picked in the Studio for
-       JEANS / DENIM SHORTS). Attached only to the panels holding male Pose 4 or
-       Pose 7, and only when the spec itself puts a label on the back waistband:
-       the generator drew a different patch in each of those poses, so it is
-       copied from a photo instead of invented. */
-    const jeansLabelPoses =
-      !accessoryMode && normalizedPanelQa.modelGender !== "female"
-        ? [normalizedPanelQa.poseA, normalizedPanelQa.poseB].filter((p): p is number => p === 4 || p === 7)
-        : [];
+       JEANS / DENIM SHORTS), for the panel holding Pose 7, and only when the
+       spec itself puts a label on the back waistband. */
     let jeansLabelUrl = "";
+    /* Only a label cropped to the patch alone can be pasted: an uncropped photo
+       is a picture of a whole waistband. */
+    let jeansLabelCropped = false;
     if (
-      jeansLabelPoses.length &&
+      pose7Side &&
       typeof jeansLabelIdRaw === "string" &&
       UUID_RE.test(jeansLabelIdRaw) &&
       specHasBackWaistbandLabelLine(itemSpecText)
     ) {
       const r = await authPool
-        .query<{ image_url: string }>(
-          `SELECT image_url FROM studio_jeans_labels WHERE id = $1::uuid AND tenant_id = $2::uuid AND archived_at IS NULL`,
+        .query<{ image_url: string; cropped: boolean }>(
+          `SELECT image_url, source_url IS NOT NULL AS cropped FROM studio_jeans_labels WHERE id = $1::uuid AND tenant_id = $2::uuid AND archived_at IS NULL`,
           [jeansLabelIdRaw, session.tid],
         )
-        .catch(() => ({ rows: [] as { image_url: string }[] }));
+        .catch(() => ({ rows: [] as { image_url: string; cropped: boolean }[] }));
       jeansLabelUrl = r.rows[0]?.image_url ?? "";
+      jeansLabelCropped = Boolean(r.rows[0]?.cropped);
     }
     const backLockActive =
       !accessoryMode &&
@@ -1315,6 +1350,13 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
+    /* A key colour nothing in this shoot wears; without one the label photo is
+       attached as a reference instead (the old, redrawn path). */
+    const labelKey = jeansLabelUrl && jeansLabelCropped
+      ? pickLabelKey([itemSpecText, String(itemColourRaw ?? ""), colorRun?.name ?? "", lookSheet, operatorInstruction].join("\n"))
+      : null;
+    const labelAttach = Boolean(jeansLabelUrl) && !labelKey;
+
     const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
     const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
     /* Inside the 16-image limit before anything is downloaded; the anchor's
@@ -1323,7 +1365,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       modelCount: modelRefNormalization.urls.length,
       lists: parsedViewLists,
       hasColorPhoto: Boolean(colorRun?.refUrl),
-      anchorSlots: (anchorRole === "follower" || anchorRole === "stored" ? 1 : 0) + (jeansLabelUrl ? 1 : 0),
+      anchorSlots: (anchorRole === "follower" || anchorRole === "stored" ? 1 : 0) + (labelAttach ? 1 : 0),
     });
     const viewLists = capped.lists;
     /* Appended LAST among the general photos, so its position in the item list
@@ -1537,6 +1579,18 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ]
       : [];
 
+    /* What the back waistband shows in this panel, said inside the spec and back
+       lines that would otherwise ask for the label in every back frame. */
+    const labelMasked = Boolean(jeansLabelUrl && labelKey && pose7Side);
+    const waistbandCarves = [
+      ...(pose4Side ? [`in ${pose4Side} Pose 4 the top hangs over the waistband, so the label or patch on the back of the waistband is hidden under it there`] : []),
+      ...(labelMasked && labelKey
+        ? [`in ${pose7Side} Pose 7 the back-waistband label is the flat ${labelKey.name} placeholder of the LABEL MASK line, never drawn or lettered`]
+        : []),
+    ];
+    const waistbandBackCarve = waistbandCarves.length ? ` The back waistband: ${waistbandCarves.join("; ")}.` : "";
+    const waistbandTextCarve = waistbandCarves.length ? ` The exception is the back-waistband label: ${waistbandCarves.join("; ")}.` : "";
+
     const buildServerLockBlock = (
       modelCount: number,
       itemViewMapLines: string[],
@@ -1551,14 +1605,13 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ? [
             "VERIFIED ITEM SPEC (read off the item photos — every line MUST appear exactly as stated, in every frame and every panel. It overrides generic styling, but NOT the ITEM INSTRUCTION above: that was written by the person holding the garment, so where the two disagree about a placement, finish or fit, the instruction wins and this line yields):",
             clarifySideWords(itemSpecText),
-            "- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position. Anything NOT CLEARLY VISIBLE stays plain — never invented.",
+            `- Every TEXT line is rendered letter-perfect (words, spelling, case, letterforms, colour, size) at its listed placement and side only — never a back print on the front or vice versa, never merged or swapped words, never extra text. Print effects (blurred / ghosted / faded / gradient / halftone / cracked) are part of the design and are rendered as such, never as a crisp clean version. The FIT/SILHOUETTE line is absolute: oversized reads clearly oversized, slim stays slim. HARDWARE / STITCHING / POCKET / MATERIAL lines match in kind, count, colour, finish and position. Anything NOT CLEARLY VISIBLE stays plain — never invented.${waistbandTextCarve}`,
             "- A PIECE OF HARDWARE KEEPS THE FORM ITS LINE GIVES IT, AT THE SIZE ITS LINE GIVES IT, IN EVERY FRAME THAT SHOWS IT — full-body frames included. A button described with a diameter, a hole count and a size against its waistband is drawn that big with those holes, not shrunk into the small plain disc these garments usually have; the same goes for the way a waistband fastens, a tab that reaches past the fly, the shape of a zip pull and the links of a chain. Far away it may be less sharp. It is never a simpler object.",
             "- Small chest / sleeve / neck text keeps its true garment size but is still spelled letter-perfect in crisp, clean letterforms, even in full-body frames — never pseudo-letters, scribbles or a smudge.",
             "- A ZONE line is a complete account of that part of the garment: build it exactly as written and add nothing else there. Where a ZONE line says a zone is flat, plain or has none, that zone STAYS empty — no crease, no pleat, no pocket, no stripe, no topstitch that the line does not name.",
-            ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
+            ...(accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText, waistbandBackCarve)),
           ]
-        : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
-      ...labelLines,
+        : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText, waistbandBackCarve)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
       /* THE LOOK SHEET: what is worn, resolved once for the whole run and
          byte-identical in every panel. It comes after the product (the spec)
@@ -1611,6 +1664,10 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             }the side directions, the pose directions and the background. Where it disagrees with any of them, do what it says and drop the conflicting part. Where it says nothing, everything above still applies.`,
           ]
         : []),
+      /* The owner's hard locks on the back waistband, after everything — the
+         operator included — because nothing may undo them. */
+      ...(pose4Side ? [buildPose4CoverLine(pose4Side, String(normalizedPanelQa.itemType || ""))] : []),
+      ...labelLines,
     ].join("\n");
 
     // Keep model identity anchors bounded (≤6, fewer when the 16-image cap needed the room).
@@ -1880,13 +1937,19 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       }
     }
 
-    /* The jeans label rides after the references and before the same-shoot
-       anchor, so every image number above it is unchanged. A label that will not
-       download stops the panel: rendering on would draw an invented patch. */
+    /* The jeans label photo. Normally it is never shown to the renderer — it is
+       painted into the Pose 7 placeholder after rendering. Only without a safe
+       key colour does it ride as a reference, after the references and before
+       the same-shoot anchor, so every image number above it is unchanged. A
+       label that will not download stops the panel: rendering on would leave an
+       empty placeholder or an invented patch. */
     let labelFile: Awaited<ReturnType<typeof toFile>> | null = null;
+    let labelPhoto: Awaited<ReturnType<typeof readLabelPhoto>> | null = null;
     if (jeansLabelUrl) {
       try {
-        labelFile = (await downloadReferenceAsFile(jeansLabelUrl, referenceFiles.length)).file;
+        const dl = await downloadReferenceAsFile(jeansLabelUrl, referenceFiles.length);
+        labelPhoto = await readLabelPhoto(Buffer.from(dl.dataUrl.replace(/^data:[^,]*,/, ""), "base64"));
+        if (labelAttach) labelFile = dl.file;
       } catch (e) {
         return logged(
           { ...refCounts, outcome: "failed", errorCode: "ref_download_failed", errorMessage: `jeans label: ${(e as Error)?.message || e}` },
@@ -1905,7 +1968,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         );
       }
     }
-    const labelLines = labelFile ? [buildJeansLabelLine(referenceFiles.length + 1, jeansLabelPoses)] : [];
+    const labelLines =
+      labelMasked && labelKey && labelPhoto && pose7Side
+        ? [buildLabelMaskLine(pose7Side, labelKey, labelProportions(labelPhoto.width, labelPhoto.height))]
+        : labelFile && pose7Side
+          ? [buildJeansLabelLine(referenceFiles.length + 1, pose7Side)]
+          : [];
     const sameShootLines = anchorFile
       ? [
           buildSameShootLine({
@@ -2106,6 +2174,23 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
+    /* The real label into the Pose 7 placeholder — before anything sees the
+       image (followers, the run-QA stash, the stored look, the response). */
+    let jeansLabel: { pose: 7; placed: boolean } | null = null;
+    if (labelMasked && labelKey && labelPhoto) {
+      try {
+        const r = await compositeLabelIntoKey({ imageB64: b64, label: labelPhoto, key: labelKey });
+        b64 = r.b64;
+        jeansLabel = { pose: 7, placed: r.placed > 0 };
+        console.info(
+          `[generate] panel ${normalizedPanelQa.panelNumber ?? "?"}: jeans label ${r.placed ? `placed in ${r.placed} ${labelKey.name} shape(s)` : `NOT placed — no ${labelKey.name} placeholder in the render`}; ${r.keyPixelsLeft} key px left.`,
+        );
+      } catch (e) {
+        jeansLabel = { pose: 7, placed: false };
+        console.warn(`[generate] jeans label composite failed: ${(e as Error)?.message || e}`);
+      }
+    }
+
     /* Panel 1 is in: release every follower waiting on it NOW, before the
        stash, the log or the R2 upload below. */
     const source = anchorSource;
@@ -2184,6 +2269,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ...(anchorRole ? { anchor: { role: anchorRole, gate: anchorGate, waitMs: anchorWaitMs } } : {}),
         ...(storedLook ? { lookAnchor: { url: storedLook.url, key: storedLook.key, gate: storedLook.gate } } : {}),
         ...(droppedAny ? { imagesDropped } : {}),
+        ...(jeansLabel ? { jeansLabel } : {}),
       }),
     );
   } catch (err: unknown) {

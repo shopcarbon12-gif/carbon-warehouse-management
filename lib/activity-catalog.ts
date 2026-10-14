@@ -76,7 +76,7 @@ const ROUTES: Record<string, Entry> = {
   "generate/job/cancel": { module: "Studio", label: "Aborted Studio generation" },
   "studio/color-run": { module: "Studio", label: { PUT: "Saved colourway run", DELETE: "Deleted colourway run", POST: "Started colourway run" } },
   "studio/labels": { module: "Studio", label: "Added a jeans label" },
-  "studio/labels/[id]": { module: "Studio", label: "Removed a jeans label" },
+  "studio/labels/[id]": { module: "Studio", label: { DELETE: "Removed a jeans label", PATCH: "Cropped a jeans label" } },
   "openai/item-spec": { module: "Studio", label: "Analysed item photos" },
   "openai/style-pieces": { module: "Studio", label: "Read the Style with photos" },
   "openai/look-resolve": { module: "Studio", label: "Turned the item instruction's styling into a look" },
