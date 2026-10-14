@@ -1001,6 +1001,35 @@ export function CarbonStudioTab({
       setLabelBusy(false);
     }
   }, []);
+  /** Phone photos of labels → the shared library (one POST each, like an upload). */
+  const adoptLabelPhotos = useCallback(async (urls: string[]) => {
+    if (!urls.length) return;
+    setLabelBusy(true);
+    const added: JeansLabel[] = [];
+    try {
+      for (const [i, url] of urls.entries()) {
+        const r = await fetch("/api/studio/labels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url, name: `phone label ${new Date().toISOString().slice(5, 16).replace("T", " ")}${urls.length > 1 ? ` #${i + 1}` : ""}` }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { label?: JeansLabel; error?: string };
+        if (!r.ok || !j.label) throw new Error(j.error ?? `Could not save the label (HTTP ${r.status})`);
+        added.push(j.label);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not save the phone label photos.");
+    } finally {
+      if (added.length) {
+        setJeansLabels((prev) => [...added, ...prev.filter((p) => !added.some((a) => a.id === p.id))]);
+        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} from the phone to the library.`);
+      }
+      setLabelBusy(false);
+    }
+  }, []);
+  useEffect(() => {
+    adoptLabelPhotosRef.current = adoptLabelPhotos;
+  }, [adoptLabelPhotos]);
   const removeLabel = useCallback(
     async (label: JeansLabel) => {
       if (!window.confirm(`Remove "${label.name || "this label"}" from the label library? Products that use it will have no label picked.`)) return;
@@ -1083,10 +1112,14 @@ export function CarbonStudioTab({
      colourway's single photo. A ref, not state, because addHandoffBatch holds
      no dependencies on purpose — a verdict that lands after the panel closed
      must still be delivered. */
-  const handoffTargetRef = useRef<"refs" | "colour">("refs");
+  const handoffTargetRef = useRef<"refs" | "colour" | "label">("refs");
+  /* Shown in the jeans-label box while its phone session is the one open. */
+  const [labelPhoneOpen, setLabelPhoneOpen] = useState(false);
   /* Late-bound for the same reason: addHandoffBatch is created once, and must
      call the CURRENT adopt function rather than the one that existed then. */
   const adoptColorPhotoRef = useRef<(url: string) => void | Promise<void>>(() => {});
+  /* Same late binding for the jeans-label library (phone photos of labels). */
+  const adoptLabelPhotosRef = useRef<(urls: string[]) => void | Promise<void>>(() => {});
   /* When the server will drop the session — refreshed from every poll (each
      phone upload extends it), so the panel's lifetime follows the phone's
      activity instead of a fixed timer that ran out mid-upload. */
@@ -1103,6 +1136,12 @@ export function CarbonStudioTab({
     );
     if (!fresh.length) return 0;
     for (const im of fresh) handoffSeenRef.current.add(im.imageUrl);
+    /* Opened from the jeans-label box: every photo of this session is a label
+       for the shared library (several labels in one go), never a product photo. */
+    if (handoffTargetRef.current === "label") {
+      void adoptLabelPhotosRef.current(fresh.map((im) => im.imageUrl));
+      return fresh.length;
+    }
     /* The operator opened the QR from the colourway row, so the next photo is
        the colour sample, not another product reference. One photo is all that
        slot holds; the target resets immediately so a second shot behaves
@@ -1168,6 +1207,9 @@ export function CarbonStudioTab({
         return;
       }
       setQr(null);
+      // The next phone session feeds the item photos again.
+      handoffTargetRef.current = "refs";
+      setLabelPhoneOpen(false);
     } finally {
       setQrBusy(false);
     }
@@ -2899,6 +2941,8 @@ export function CarbonStudioTab({
                     onClick={(e) => {
                       e.stopPropagation();
                       selectView(zone.view);
+                      handoffTargetRef.current = "refs";
+                      setLabelPhoneOpen(false);
                       void startPhoneCamera();
                     }}
                     title={`Phone camera (QR) — photos land in ${zone.title}`}
@@ -3029,6 +3073,7 @@ export function CarbonStudioTab({
                   type="button"
                   onClick={() => {
                     handoffTargetRef.current = "colour";
+                    setLabelPhoneOpen(false);
                     void startPhoneCamera();
                   }}
                   className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2"
@@ -3099,7 +3144,7 @@ export function CarbonStudioTab({
               Jeans label{chosenLabel ? <span className="text-[var(--wms-fg)]"> · {chosenLabel.name || "picked"}</span> : null}
             </span>
             <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
-              {labelBusy ? "uploading…" : "＋ upload label photos"}
+              {labelBusy ? "saving…" : "＋ upload label photos"}
               <input
                 type="file"
                 accept="image/*"
@@ -3118,6 +3163,26 @@ export function CarbonStudioTab({
             zoomed-in back) folds the shirt up just enough to show it; Pose 4 (the full-body back) keeps the shirt over the
             jeans. Upload every label once — they are kept for all products.
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={labelBusy}
+              onClick={() => {
+                handoffTargetRef.current = "label";
+                setLabelPhoneOpen(true);
+                void startPhoneCamera();
+              }}
+              title="Phone camera (QR) — every photo goes into the jeans-label library"
+              className="rounded border border-dashed border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
+            >
+              📱 phone camera
+            </button>
+            {labelPhoneOpen && qr ? (
+              <span className="font-mono text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+                Scan the QR code in the photo area above — every photo the phone sends now goes into this label library. Press Done there when finished.
+              </span>
+            ) : null}
+          </div>
           {jeansLabelId && !specHasBackWaistbandLabel(itemSpec) ? (
             <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
               The item spec has no label on the back waistband, so the label is not attached. Add a LABEL/PATCH line for the

@@ -50,9 +50,10 @@ async function POST_handler(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const url = typeof body?.url === "string" ? body.url.trim() : "";
   const name = typeof body?.name === "string" ? body.name.replace(/\s+/g, " ").trim().slice(0, 120) : "";
-  /* Only a photo this tenant just uploaded through the Studio's own upload. */
+  /* Only a photo uploaded through the Studio itself: its upload, or the phone
+     camera hand-off (those objects are kept; see /api/image-handoff). */
   const path = url ? tryGetStoragePathFromUrl(url) : "";
-  if (!path || !path.startsWith(`carbon-studio/item-refs/${a.session.tid}/`)) {
+  if (!path || !(path.startsWith(`carbon-studio/item-refs/${a.session.tid}/`) || path.startsWith("carbon-studio/handoff/"))) {
     return NextResponse.json({ error: "Upload the label photo first." }, { status: 400 });
   }
   const r = await a.pool.query(
