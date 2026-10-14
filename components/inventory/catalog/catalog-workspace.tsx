@@ -132,6 +132,19 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * One grid row by custom SKU id, regardless of the current page / filters
+ * (the variant may be archived). Searched by its SKU text, matched by id.
+ */
+async function fetchGridRow(variant: { id: string; sku: string }): Promise<CatalogGridRow | null> {
+  const res = await fetch(
+    `/api/inventory/catalog?view=grid&q=${encodeURIComponent(variant.sku)}&showArchived=1&limit=100`,
+  );
+  if (!res.ok) return null;
+  const j = (await res.json()) as { rows?: CatalogGridRow[] };
+  return j.rows?.find((r) => r.custom_sku_id === variant.id) ?? null;
+}
+
 type SortKey =
   | "system_id" | "name" | "sku" | "upc"
   | "color" | "size" | "default_cost" | "retail_price" | "bin"
@@ -291,10 +304,13 @@ export function CatalogWorkspace({
   void autoFitDoneRef;
   void autoFit;
 
-  const modalSku = useMemo(
-    () => (tagsSkuId ? rows.find((r) => r.custom_sku_id === tagsSkuId) ?? null : null),
-    [rows, tagsSkuId],
-  );
+  const modalSku = useMemo(() => {
+    if (!tagsSkuId) return null;
+    const local = rows.find((r) => r.custom_sku_id === tagsSkuId);
+    if (local) return local;
+    // Opened from an item window whose row is not on this grid page.
+    return detailsRowOverride?.custom_sku_id === tagsSkuId ? detailsRowOverride : null;
+  }, [rows, tagsSkuId, detailsRowOverride]);
   const closeModal = useCallback(() => setTagsSkuId(null), [setTagsSkuId]);
 
   const detailsRow = useMemo(() => {
@@ -321,12 +337,7 @@ export function CatalogWorkspace({
         return;
       }
       try {
-        const res = await fetch(
-          `/api/inventory/catalog?view=grid&q=${encodeURIComponent(variant.sku)}&showArchived=1&limit=100`,
-        );
-        if (!res.ok) return;
-        const j = (await res.json()) as { rows?: CatalogGridRow[] };
-        const found = j.rows?.find((r) => r.custom_sku_id === variant.id);
+        const found = await fetchGridRow(variant);
         if (found) {
           closeMatrix();
           setDetailsRowOverride(found);
@@ -338,6 +349,24 @@ export function CatalogWorkspace({
     },
     [rows, closeMatrix, setDetailsSkuId],
   );
+
+  // Refresh the grid after an edit / EPC status change. An off-page item
+  // window holds its own fetched row, so re-fetch that row too — otherwise its
+  // on-hand number would stay stale.
+  const onCatalogMutated = useCallback(() => {
+    void mutate();
+    const cur = detailsRowOverride;
+    if (!cur) return;
+    void fetchGridRow({ id: cur.custom_sku_id, sku: cur.sku })
+      .then((fresh) => {
+        if (fresh) {
+          setDetailsRowOverride((prev) =>
+            prev?.custom_sku_id === fresh.custom_sku_id ? fresh : prev,
+          );
+        }
+      })
+      .catch((e) => console.error("[catalog] refresh off-page item failed", e));
+  }, [mutate, detailsRowOverride]);
 
   const submitManualCatalogLine = useCallback(async () => {
     setManualErr(null);
@@ -1436,14 +1465,6 @@ export function CatalogWorkspace({
         </>
       ) : null}
 
-      {modalSku ? (
-        <RfidTagsModal
-          modalSku={modalSku}
-          onClose={closeModal}
-          onMutated={() => void mutate()}
-        />
-      ) : null}
-
       {defectiveOpen ? (
         <DefectiveEpcsModal onClose={() => setDefectiveOpen(false)} />
       ) : null}
@@ -1455,21 +1476,38 @@ export function CatalogWorkspace({
         />
       ) : null}
 
+      {detailsRow ? (
+        <CatalogItemDetailsModal
+          // Keyed so switching to a sibling SKU (from its matrix window)
+          // re-seeds the edit form instead of keeping the previous SKU's.
+          key={detailsRow.custom_sku_id}
+          row={detailsRow}
+          canManage={canManageCatalog}
+          onClose={closeDetails}
+          onMutated={onCatalogMutated}
+          onOpenSku={openSkuFromMatrix}
+          onOpenTags={setTagsSkuId}
+          onOpenHistory={setHistoryForSku}
+        />
+      ) : null}
+
+      {/* Opened from the item window's on-hand number: the "top" layer puts
+          the backdrop over the item window too, not only the page behind it. */}
+      {modalSku ? (
+        <RfidTagsModal
+          modalSku={modalSku}
+          onClose={closeModal}
+          onMutated={onCatalogMutated}
+          layer={detailsRow ? "top" : "default"}
+        />
+      ) : null}
+
       {historyForSku ? (
         <ItemHistoryModal
           customSkuId={historyForSku}
           onClose={() => setHistoryForSku(null)}
           onMutated={() => void mutate()}
-        />
-      ) : null}
-
-      {detailsRow ? (
-        <CatalogItemDetailsModal
-          row={detailsRow}
-          canManage={canManageCatalog}
-          onClose={closeDetails}
-          onMutated={() => void mutate()}
-          onOpenSku={openSkuFromMatrix}
+          layer={detailsRow ? "top" : "default"}
         />
       ) : null}
 

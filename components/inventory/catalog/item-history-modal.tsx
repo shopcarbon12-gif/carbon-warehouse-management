@@ -94,16 +94,27 @@ const COLUMNS = [
  * "MANUAL" badge opens this. Qty changes happen only via cycle count /
  * Lightspeed sync / transfers / POS — no direct adjust action here.
  */
+/* "top" lifts the window above the Matrix window (z-[80]/[90]) while staying
+   under the sync floater (z-[120]). */
+const LAYERS = {
+  default: { backdrop: "z-[60]", panel: "z-[70]" },
+  top: { backdrop: "z-[100]", panel: "z-[101]" },
+} as const;
+
 export function ItemHistoryModal({
   customSkuId,
   onClose,
+  layer = "default",
 }: {
   customSkuId: string;
   onClose: () => void;
   /** Kept for prop compatibility with existing callers; unused now that
    *  the Adjust button is gone. */
   onMutated?: () => void;
+  /** "top" when opened from inside the Matrix window. */
+  layer?: keyof typeof LAYERS;
 }) {
+  const z = LAYERS[layer];
   const { data, error, isLoading, mutate } = useSWR<HistoryResponse>(
     `/api/inventory/catalog/manual-items/${customSkuId}/history`,
     fetcher,
@@ -130,11 +141,11 @@ export function ItemHistoryModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-[60] bg-black/70"
+        className={`fixed inset-0 ${z.backdrop} bg-black/70`}
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+      <div className={`fixed inset-0 ${z.panel} flex items-center justify-center p-4 max-md:items-stretch max-md:p-0`}>
         <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
             <div className="flex items-center gap-3">

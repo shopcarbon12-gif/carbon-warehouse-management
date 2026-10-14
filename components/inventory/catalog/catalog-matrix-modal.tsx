@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { printRfidLabel } from "./print-label";
 import { CatalogImageLightbox } from "./catalog-image-lightbox";
+import { RfidTagsModal } from "./rfid-tags-modal";
+import { ItemHistoryModal } from "./item-history-modal";
 /* The scorer is isomorphic on purpose — scoring what is actually being saved
    here avoids recording a number the user never applied. */
 import { scoreAll } from "@/lib/seo/deterministic";
@@ -93,6 +95,12 @@ type Variant = {
 
 type MatrixDetailResp = { matrix: Matrix; variants: Variant[] };
 
+/** GET …/matrices/[id]/on-hand — every variant incl. archived, active location. */
+type OnHandResp = {
+  is_manual_only: boolean;
+  rows: Array<{ custom_sku_id: string; on_hand: number; live_epcs: number; manual_qty: number | null }>;
+};
+
 type Props = {
   matrixId: string;
   canManage: boolean;
@@ -143,6 +151,29 @@ const fetcher = async (url: string) => {
   }
   return res.json() as Promise<MatrixDetailResp>;
 };
+const onHandFetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json() as Promise<OnHandResp>;
+};
+
+/** A colour / size in the Matrix tab lists: "live" while any of its rows stays,
+ *  "pending" when every remaining row is staged for archiving (struck through,
+ *  undoable), "archived" when it only has already-archived rows. */
+type AttrState = "live" | "pending" | "archived";
+const ATTR_RANK: Record<AttrState, number> = { archived: 0, pending: 1, live: 2 };
+function attrList(rows: RowState[], field: "color" | "size"): Array<{ name: string; state: AttrState }> {
+  const seen = new Map<string, AttrState>();
+  for (const r of rows) {
+    const name = r[field].trim();
+    if (!name) continue;
+    const s: AttrState = r.markedDelete ? "pending" : r.origArchived ? "archived" : "live";
+    const prev = seen.get(name);
+    if (!prev || ATTR_RANK[s] > ATTR_RANK[prev]) seen.set(name, s);
+  }
+  return Array.from(seen, ([name, state]) => ({ name, state }));
+}
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function parseMoney(raw: string | null): number | null {
   if (raw == null || raw.trim() === "") return null;
@@ -225,6 +256,36 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     fetcher,
     { revalidateOnFocus: false },
   );
+  /* Qty on hand per SKU rides on its OWN key: the draft below re-seeds whenever
+     the matrix payload changes, so refreshing stock must never go through it. */
+  const { data: onHand, error: onHandError, mutate: mutateOnHand } = useSWR<OnHandResp>(
+    `/api/inventory/catalog/matrices/${matrixId}/on-hand`,
+    onHandFetcher,
+    { refreshInterval: 30_000 },
+  );
+  const onHandBySku = useMemo(
+    () => new Map((onHand?.rows ?? []).map((r) => [r.custom_sku_id, r])),
+    [onHand],
+  );
+  const manualOnly = onHand?.is_manual_only === true;
+  /* `?mtags=<custom_sku_id>` — the EPC list (manual-qty history for manual-only
+     matrices) of one SKU. Not `tags`: the catalog page owns that key and would
+     mount its own window underneath this one. */
+  const [epcSkuId, setEpcSkuId] = useUrlParam("mtags");
+  const epcVariant = useMemo(
+    () => (epcSkuId ? (data?.variants.find((v) => v.id === epcSkuId) ?? null) : null),
+    [epcSkuId, data],
+  );
+  const closeMatrix = useCallback(() => {
+    setEpcSkuId(null);
+    onClose();
+  }, [setEpcSkuId, onClose]);
+  /* Admin URLs take the store HANDLE — the myshopify id 403s there.
+     shopify_product_id is either a gid or the bare number. */
+  const shopifyAdminUrl = useMemo(() => {
+    const num = String(data?.matrix.shopify_product_id ?? "").split("/").pop() ?? "";
+    return /^\d+$/.test(num) ? `https://admin.shopify.com/store/shopcarbon1/products/${num}` : null;
+  }, [data?.matrix.shopify_product_id]);
   const [busy, setBusy] = useState<string | null>(null);
   // Phone-only chrome: "More actions" sheet + tab strip ref for keeping the
   // active tab scrolled into view. Desktop never renders either surface.
@@ -318,6 +379,14 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
      overrides that for this product and is pushed to Shopify on save. */
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [orderDirty, setOrderDirty] = useState(false);
+  /* Setup-tab row selection (row keys). Bulk print / archive / move act on it,
+     and dragging a selected row's grip carries the whole selection. */
+  const [selKeys, setSelKeys] = useState<Set<string>>(() => new Set());
+  const [bulkPrint, setBulkPrint] = useState<{ done: number; total: number } | null>(null);
+  /* Row keys each colour / size X staged ("color:Red" → keys), so its ↺ puts
+     back exactly what that X changed — a row archived on its own in Setup
+     before the X stays staged. */
+  const [attrStaged, setAttrStaged] = useState<Record<string, string[]>>({});
   const [defPrice, setDefPrice] = useState("");
   const [defCost, setDefCost] = useState("");
   const [newColor, setNewColor] = useState("");
@@ -328,6 +397,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     if (!data) return;
     setMForm(matrixForm(data.matrix));
     setRows(data.variants.map(rowFromVariant));
+    setSelKeys(new Set());
+    setAttrStaged({});
     let p: number | null = null;
     let c: number | null = null;
     for (const v of data.variants) {
@@ -398,6 +469,8 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
        in — "L, M, S, XL". Show them the way they are worn. */
     return sortSizes(out, (v) => v);
   }, [rows]);
+  const colorList = useMemo(() => attrList(rows, "color"), [rows]);
+  const sizeList = useMemo(() => sortSizes(attrList(rows, "size"), (e) => e.name), [rows]);
 
   const blankRow = (color: string, size: string): RowState => ({
     key: nextTempKey(),
@@ -451,18 +524,47 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     setPrintingId(null);
   };
 
-  /** Move the dragged row so it sits where the row it was dropped on is now. */
+  /** Rows a drag of `fromKey` carries: the whole selection when it is part of it. */
+  const movingKeysFor = (fromKey: string) => (selKeys.has(fromKey) ? selKeys : new Set([fromKey]));
+
+  /** Move the dragged row (or the selection it belongs to, kept in its current
+   *  order) so it sits where the row it was dropped on is now. */
   const moveRow = (fromKey: string, toKey: string) => {
-    if (fromKey === toKey) return;
+    const moving = movingKeysFor(fromKey);
+    if (moving.has(toKey)) return;
     setRows((prev) => {
       const from = prev.findIndex((r) => r.key === fromKey);
       const to = prev.findIndex((r) => r.key === toKey);
       if (from === -1 || to === -1) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
+      const moved = prev.filter((r) => moving.has(r.key));
+      const rest = prev.filter((r) => !moving.has(r.key));
+      const ti = rest.findIndex((r) => r.key === toKey);
+      const at = to > from ? ti + 1 : ti;
+      return [...rest.slice(0, at), ...moved, ...rest.slice(at)];
     });
+    setOrderDirty(true);
+  };
+  /** Drop on the tail zone: a row drop can never place anything after the last row. */
+  const moveRowToEnd = (fromKey: string) => {
+    const moving = movingKeysFor(fromKey);
+    setRows((prev) => [...prev.filter((r) => !moving.has(r.key)), ...prev.filter((r) => moving.has(r.key))]);
+    setOrderDirty(true);
+  };
+  /** Phones have no HTML5 drag: step every selected row one place, a selected
+   *  run moving as a block. */
+  const moveSelection = (dir: -1 | 1) => {
+    const next = [...rows];
+    let moved = false;
+    for (let n = 0; n < next.length; n += 1) {
+      const i = dir < 0 ? n : next.length - 1 - n;
+      const j = i + dir;
+      if (j < 0 || j >= next.length) continue;
+      if (!selKeys.has(next[i].key) || selKeys.has(next[j].key)) continue;
+      [next[i], next[j]] = [next[j], next[i]];
+      moved = true;
+    }
+    if (!moved) return;
+    setRows(next);
     setOrderDirty(true);
   };
 
@@ -475,6 +577,121 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
         return [{ ...r, markedDelete: !r.markedDelete }];
       }),
     );
+  };
+
+  const liveTagsFor = (id: string | null) =>
+    id ? (onHandBySku.get(id)?.live_epcs ?? data?.variants.find((v) => v.id === id)?.active_epc_count ?? 0) : 0;
+
+  /* The colour / size X is the Setup X on every row of it: existing rows are
+     staged for archiving (Save PATCHes each one), unsaved rows are dropped. */
+  const archiveAttr = (field: "color" | "size", value: string) => {
+    const toArchive = rows.filter(
+      (r) => r[field].trim() === value && !r.isNew && !r.markedDelete && !r.origArchived,
+    );
+    if (toArchive.length > 0) {
+      const where = field === "color" ? value : `size ${value}`;
+      const tags = toArchive.reduce((n, r) => n + liveTagsFor(r.id), 0);
+      const kept = manualOnly
+        ? "Their manual qty stays on the archived SKUs."
+        : `${plural(tags, "Live tag")} ${tags === 1 ? "stays" : "stay"} Live on the archived SKUs.`;
+      if (
+        !window.confirm(
+          `Archive ${plural(toArchive.length, "SKU")} in ${where}? ${kept} Shopify drops them on the next Check & Publish.`,
+        )
+      )
+        return;
+    }
+    clearMsgs();
+    const id = `${field}:${value}`;
+    const staged = rows
+      .filter((r) => r[field].trim() === value && !r.isNew && !r.markedDelete)
+      .map((r) => r.key);
+    if (staged.length > 0) setAttrStaged((m) => ({ ...m, [id]: [...(m[id] ?? []), ...staged] }));
+    setRows((rs) =>
+      rs.flatMap((r) => {
+        if (r[field].trim() !== value) return [r];
+        if (r.isNew) return [];
+        return [{ ...r, markedDelete: true }];
+      }),
+    );
+  };
+  const restoreAttr = (field: "color" | "size", value: string) => {
+    clearMsgs();
+    const id = `${field}:${value}`;
+    const staged = new Set(attrStaged[id] ?? []);
+    /* No record (every row was X'd one by one in Setup) or none of its rows is
+       still staged here → keep every SKU of it, as the ↺ title says. */
+    const exact = rows.some((r) => r.markedDelete && r[field].trim() === value && staged.has(r.key));
+    setRows((rs) =>
+      rs.map((r) =>
+        r.markedDelete && r[field].trim() === value && (!exact || staged.has(r.key))
+          ? { ...r, markedDelete: false }
+          : r,
+      ),
+    );
+    setAttrStaged((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const selectedRows = rows.filter((r) => selKeys.has(r.key));
+  const allSelected = rows.length > 0 && selectedRows.length === rows.length;
+  const printTargets = selectedRows.filter((r) => !r.isNew && !r.markedDelete && !r.origArchived && r.id);
+  const archiveTargets = selectedRows.filter((r) => r.isNew || (!r.markedDelete && !r.origArchived));
+  const restoreTargets = selectedRows.filter((r) => r.markedDelete);
+  const draggingKeys = dragKey ? movingKeysFor(dragKey) : null;
+  const toggleSel = (key: string) =>
+    setSelKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const toggleAllSel = () => setSelKeys(allSelected ? new Set() : new Set(rows.map((r) => r.key)));
+  /** Bulk archive = the row X on every selected row (staged until Save). */
+  const archiveSelected = () => {
+    clearMsgs();
+    const keys = new Set(archiveTargets.map((r) => r.key));
+    setRows((rs) =>
+      rs.flatMap((r) => {
+        if (!keys.has(r.key)) return [r];
+        if (r.isNew) return [];
+        return [{ ...r, markedDelete: true }];
+      }),
+    );
+  };
+  const restoreSelected = () => {
+    clearMsgs();
+    setRows((rs) => rs.map((r) => (selKeys.has(r.key) && r.markedDelete ? { ...r, markedDelete: false } : r)));
+  };
+  const printSelected = async () => {
+    const targets = printTargets;
+    if (targets.length === 0 || printingId !== null) return;
+    if (!window.confirm(`Print ${plural(targets.length, "label")}? Each label creates a new tag.`)) return;
+    setErr(null);
+    setOkMsg(null);
+    let printed = 0;
+    try {
+      for (const r of targets) {
+        if (!r.id) continue;
+        setBulkPrint({ done: printed + 1, total: targets.length });
+        setPrintingId(r.id);
+        const res = await printRfidLabel(r.id);
+        if (!res.ok) {
+          /* Each call allocates its tag before printing, so carrying on against
+             a printer that is down would leave a pile of unprinted tags. */
+          setErr(`Printed ${printed} of ${targets.length}. Stopped at ${r.sku}: ${res.message}`);
+          return;
+        }
+        printed += 1;
+      }
+      setOkMsg(`Printed ${plural(printed, "label")} to 192.168.1.3 (status: unknown).`);
+    } finally {
+      setPrintingId(null);
+      setBulkPrint(null);
+    }
   };
 
   const defPriceN = parseMoney(defPrice);
@@ -766,6 +983,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
       }
 
       await mutate();
+      void mutateOnHand();
       onMutated?.();
       setOkMsg(`Saved.${orderNote}`);
     } catch (e) {
@@ -773,7 +991,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     } finally {
       setBusy(null);
     }
-  }, [canManage, data, mForm, rows, dirty, orderDirty, matrixId, mutate, onMutated]);
+  }, [canManage, data, mForm, rows, dirty, orderDirty, matrixId, mutate, mutateOnHand, onMutated]);
 
   const archiveAll = useCallback(async () => {
     if (!canManage || !data) return;
@@ -1276,13 +1494,95 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
     }
   }, [data, matrixId, mutate, onMutated]);
 
+  /** Qty on hand beside a SKU → its EPC list (manual-qty history for a
+   *  manual-only matrix). 0 stays clickable: the list can show non-Live tags. */
+  const qtyButton = (v: Variant, className: string) => {
+    const q = onHandBySku.get(v.id);
+    const n = q ? q.on_hand : onHand ? 0 : null;
+    const what = manualOnly ? "Manual qty at this location — view history" : "Live EPCs at this location — view";
+    return (
+      <button
+        type="button"
+        disabled={!onHand && !onHandError}
+        onClick={() => setEpcSkuId(v.id)}
+        title={`${what} (${v.sku})`}
+        aria-label={`${v.sku}: ${n ?? "…"} ${manualOnly ? "on hand" : "Live"}, view`}
+        className={`shrink-0 font-mono tabular-nums disabled:cursor-wait ${
+          n ? "text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"
+        } ${className}`}
+      >
+        {n ?? (onHandError ? "—" : "…")}
+      </button>
+    );
+  };
+
+  const barBtn =
+    "rounded border px-2 py-0.5 font-mono text-[0.7rem] uppercase leading-tight tracking-wide disabled:cursor-not-allowed disabled:opacity-40 max-md:min-h-11 max-md:px-3";
+  const barBtnPlain = `${barBtn} border-[var(--wms-border)] bg-[var(--wms-surface)] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]`;
+  /** Setup bulk actions on the selected rows — in the Group Items title bar on
+   *  md+, pinned under the list below md. Move ↑/↓ stands in for drag on
+   *  touch screens. */
+  const bulkBar = (className: string) => (
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`}>
+      <span className="text-[var(--wms-fg)]">{selectedRows.length} selected</span>
+      <button
+        type="button"
+        disabled={printTargets.length === 0 || printingId !== null}
+        onClick={() => void printSelected()}
+        title="Print one RFID tag for each selected row to 192.168.1.3 (status: unknown). New, archived and to-be-archived rows are skipped."
+        className={barBtnPlain}
+      >
+        {bulkPrint ? `Printing ${bulkPrint.done}/${bulkPrint.total}…` : `🖨 Print ${printTargets.length}`}
+      </button>
+      {archiveTargets.length === 0 && restoreTargets.length > 0 ? (
+        <button
+          type="button"
+          onClick={restoreSelected}
+          title="Undo — keep the selected rows"
+          className={barBtnPlain}
+        >
+          ↺ Undo {restoreTargets.length}
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={archiveTargets.length === 0}
+          onClick={archiveSelected}
+          title="Archive the selected rows when you Save (unsaved new rows are removed)"
+          className={`${barBtn} border-red-500/55 bg-red-950/40 text-red-200 hover:bg-red-900/40`}
+        >
+          ✕ Archive {archiveTargets.length}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => moveSelection(-1)}
+        aria-label="Move the selected rows up"
+        className={`${barBtnPlain} md:hidden`}
+      >
+        Move ↑
+      </button>
+      <button
+        type="button"
+        onClick={() => moveSelection(1)}
+        aria-label="Move the selected rows down"
+        className={`${barBtnPlain} md:hidden`}
+      >
+        Move ↓
+      </button>
+      <button type="button" onClick={() => setSelKeys(new Set())} className={barBtnPlain}>
+        Clear
+      </button>
+    </div>
+  );
+
   return (
     <>
       <button
         type="button"
         aria-label="Close"
         className="fixed inset-0 z-[80] bg-black/75"
-        onClick={onClose}
+        onClick={closeMatrix}
       />
       <div className="fixed inset-0 z-[90] flex items-start justify-center overflow-y-auto p-2 sm:p-4 max-sm:p-0 max-md:overscroll-contain max-md:p-0">
         {/* Below md the panel is a bounded flex column (header · scrolling body ·
@@ -1475,6 +1775,26 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               >
                 {data?.matrix.shopify_product_id ? "🌐 View online" : "🔒 View online"}
               </button>
+              {shopifyAdminUrl ? (
+                <a
+                  href={shopifyAdminUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Open this product in the Shopify admin"
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
+                >
+                  🛍 View in Shopify
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  title="Link this product to Shopify to open it in the Shopify admin"
+                  className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:cursor-not-allowed disabled:opacity-50 max-md:shrink-0 max-md:whitespace-nowrap max-md:py-2 max-md:hidden"
+                >
+                  🔒 View in Shopify
+                </button>
+              )}
               <button
                 type="button"
                 disabled={!canManage || !data?.matrix.shopify_product_id || busy !== null}
@@ -1566,7 +1886,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
               <button
                 type="button"
                 aria-label="Close"
-                onClick={onClose}
+                onClick={closeMatrix}
                 className="rounded p-1 text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:shrink-0 max-md:items-center max-md:justify-center"
               >
                 <XIcon className="h-4 w-4" />
@@ -1632,6 +1952,25 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       {busy === "link" ? "Linking…" : "🔗 Link to Shopify"}
                     </button>
                   ) : null}
+                  {shopifyAdminUrl ? (
+                    <a
+                      href={shopifyAdminUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setMoreOpen(false)}
+                      className="flex min-h-12 items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 text-left text-[var(--wms-fg)] active:opacity-80"
+                    >
+                      🛍 View in Shopify
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="flex min-h-12 items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-4 text-left text-[var(--wms-fg)] disabled:opacity-50"
+                    >
+                      🔒 View in Shopify
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={!canManage || !data?.matrix.shopify_product_id || busy !== null}
@@ -1694,7 +2033,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
             <div className="flex flex-col sm:flex-row max-md:min-h-0 max-md:flex-1 max-md:overflow-y-auto max-md:overscroll-contain">
               <nav
                 ref={tabNavRef}
-                className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-32 sm:border-b-0 sm:border-r sm:py-3 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-[var(--wms-surface)]"
+                className="flex shrink-0 overflow-x-auto border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 py-1 sm:block sm:w-52 sm:border-b-0 sm:border-r sm:py-3 max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:bg-[var(--wms-surface)]"
               >
                 {(["setup", "matrix", "images", "seo", "collections", "studio"] as const).map((t) => (
                   <div key={t}>
@@ -1712,36 +2051,38 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       {t}
                     </button>
                     {/* Bare custom-SKU numbers listed under the Matrix menu item
-                        (desktop sidebar only — mobile uses the horizontal tab bar).
-                        Each one links to its item-details pop-up when onOpenSku is
-                        wired; otherwise it renders as plain text. */}
+                        (desktop sidebar only — mobile uses the horizontal tab bar
+                        and the "SKUs · Live" list in the Matrix tab). Each one
+                        links to its item-details pop-up when onOpenSku is wired;
+                        otherwise it renders as plain text. The number beside it
+                        is the qty on hand and opens that SKU's tags. */}
                     {t === "matrix" && data.variants.length > 0 ? (
                       <div className="hidden sm:block sm:border-l-2 sm:border-transparent">
-                        {data.variants.map((v) =>
-                          onOpenSku ? (
-                            <button
-                              key={v.id}
-                              type="button"
-                              title={`View item ${v.sku}`}
-                              onClick={() => onOpenSku({ id: v.id, sku: v.sku })}
-                              className={`block w-full truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.74rem] text-[var(--wms-accent)] underline-offset-2 hover:underline ${
-                                v.archived ? "opacity-50" : ""
-                              }`}
-                            >
-                              {v.sku}
-                            </button>
-                          ) : (
-                            <div
-                              key={v.id}
-                              title={v.sku}
-                              className={`truncate px-4 py-0.5 pl-7 text-left font-mono text-[0.74rem] text-[var(--wms-muted)] ${
-                                v.archived ? "opacity-50" : ""
-                              }`}
-                            >
-                              {v.sku}
-                            </div>
-                          ),
-                        )}
+                        {data.variants.map((v) => (
+                          <div key={v.id} className={`flex items-center ${v.archived ? "opacity-50" : ""}`}>
+                            {onOpenSku ? (
+                              <button
+                                type="button"
+                                title={`View item ${v.sku}`}
+                                onClick={() => onOpenSku({ id: v.id, sku: v.sku })}
+                                className="block min-w-0 flex-1 truncate py-0.5 pl-7 pr-1 text-left font-mono text-[0.74rem] text-[var(--wms-accent)] underline-offset-2 hover:underline"
+                              >
+                                {v.sku}
+                              </button>
+                            ) : (
+                              <div
+                                title={v.sku}
+                                className="min-w-0 flex-1 truncate py-0.5 pl-7 pr-1 text-left font-mono text-[0.74rem] text-[var(--wms-muted)]"
+                              >
+                                {v.sku}
+                              </div>
+                            )}
+                            {qtyButton(
+                              v,
+                              "mr-2 rounded px-2 py-0.5 text-[0.74rem] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-accent)]",
+                            )}
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                   </div>
@@ -1757,6 +2098,47 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   urls={data.matrix.image_urls ?? []}
                   title={data.matrix.description}
                 />
+
+                {/* Phones never see the rail's SKU list — same SKUs and qty here. */}
+                {data.variants.length > 0 ? (
+                  <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 sm:hidden">
+                    <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                      SKUs · {manualOnly ? "Manual qty" : "Live"}
+                    </div>
+                    <div className="divide-y divide-[var(--wms-border)]/60">
+                      {data.variants.map((v) => (
+                        <div
+                          key={v.id}
+                          className={`flex items-center gap-2 pl-3 ${v.archived ? "opacity-50" : ""}`}
+                        >
+                          {onOpenSku ? (
+                            <button
+                              type="button"
+                              title={`View item ${v.sku}`}
+                              onClick={() => onOpenSku({ id: v.id, sku: v.sku })}
+                              className="flex min-h-11 min-w-0 flex-1 items-center text-left font-mono text-[0.85rem] text-[var(--wms-accent)]"
+                            >
+                              <span className="truncate">{v.sku}</span>
+                            </button>
+                          ) : (
+                            <span className="flex min-h-11 min-w-0 flex-1 items-center font-mono text-[0.85rem] text-[var(--wms-fg)]">
+                              <span className="truncate">{v.sku}</span>
+                            </span>
+                          )}
+                          {v.archived ? (
+                            <span className="shrink-0 font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                              archived
+                            </span>
+                          ) : null}
+                          {qtyButton(
+                            v,
+                            "flex min-h-11 min-w-11 items-center justify-center px-3 text-[0.9rem] active:bg-[var(--wms-surface)]",
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
                   <div className="space-y-4">
@@ -1858,16 +2240,19 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
                   {/* Color list + add */}
                   <Section title="Color">
-                    {colors.length === 0 ? (
+                    {colorList.length === 0 ? (
                       <p className="px-3 py-2 font-mono text-[0.78rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
-                      colors.map((c) => (
-                        <div
+                      colorList.map(({ name: c, state }) => (
+                        <AttrRow
                           key={c}
-                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)] last:border-b-0"
-                        >
-                          {c}
-                        </div>
+                          name={c}
+                          state={state}
+                          canManage={canManage}
+                          what={`colour ${c}`}
+                          onArchive={() => archiveAttr("color", c)}
+                          onRestore={() => restoreAttr("color", c)}
+                        />
                       ))
                     )}
                     {canManage ? (
@@ -1882,16 +2267,19 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
 
                   {/* Size list + add */}
                   <Section title="Size">
-                    {sizes.length === 0 ? (
+                    {sizeList.length === 0 ? (
                       <p className="px-3 py-2 font-mono text-[0.78rem] text-[var(--wms-muted)]">(none)</p>
                     ) : (
-                      sizes.map((s) => (
-                        <div
+                      sizeList.map(({ name: s, state }) => (
+                        <AttrRow
                           key={s}
-                          className="border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)] last:border-b-0"
-                        >
-                          {s}
-                        </div>
+                          name={s}
+                          state={state}
+                          canManage={canManage}
+                          what={`size ${s}`}
+                          onArchive={() => archiveAttr("size", s)}
+                          onRestore={() => restoreAttr("size", s)}
+                        />
                       ))
                     )}
                     {canManage ? (
@@ -2168,7 +2556,12 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   defaultItemType={data.matrix.subcategory_1 || data.matrix.category || ""}
                   category={data.matrix.category ?? ""}
                   productName={data.matrix.description ?? ""}
-                  variants={data.variants.map((v) => ({
+                  /* Archived colours drop out (like Images) — unless every
+                     variant is archived, so an archived product keeps its colours. */
+                  variants={(data.variants.some((v) => !v.archived)
+                    ? data.variants.filter((v) => !v.archived)
+                    : data.variants
+                  ).map((v) => ({
                     id: v.id,
                     color: v.color,
                     shopify_variant_id: v.shopify_variant_id ?? null,
@@ -2179,13 +2572,42 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 /* Setup tab — Group Items (color/size added on the Matrix tab
                    show up here as new rows because the state is shared). */
                 <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
-                  <div className="border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                    Group Items
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                    <span>Group Items</span>
+                    {canManage && selectedRows.length > 0 ? bulkBar("-my-1 max-md:hidden") : null}
+                    {/* The grid header's select-all is not on phones (cards). */}
+                    {canManage && rows.length > 0 ? (
+                      <label className="-my-1.5 flex min-h-11 cursor-pointer items-center gap-2 sm:hidden">
+                        <input
+                          type="checkbox"
+                          aria-label="Select every row"
+                          checked={allSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = !allSelected && selectedRows.length > 0;
+                          }}
+                          onChange={toggleAllSel}
+                          className="h-5 w-5 accent-[var(--wms-accent)]"
+                        />
+                        All
+                      </label>
+                    ) : null}
                   </div>
                   <div className="overflow-x-auto max-sm:hidden">
-                    <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[92px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                        <span />
+                    <div className="min-w-[790px]">
+                      <div className="grid grid-cols-[120px_150px_70px_100px_100px_150px_160px] gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                        <span className="flex items-center">
+                          <input
+                            type="checkbox"
+                            aria-label="Select every row"
+                            checked={allSelected}
+                            ref={(el) => {
+                              if (el) el.indeterminate = !allSelected && selectedRows.length > 0;
+                            }}
+                            onChange={toggleAllSel}
+                            disabled={!canManage || rows.length === 0}
+                            className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] disabled:cursor-not-allowed max-md:h-5 max-md:w-5"
+                          />
+                        </span>
                         <span>Color</span>
                         <span>Size</span>
                         <span>Price</span>
@@ -2197,7 +2619,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                         <div
                           key={r.key}
                           onDragOver={(e) => {
-                            if (dragKey && dragKey !== r.key) e.preventDefault();
+                            if (dragKey && !draggingKeys?.has(r.key)) e.preventDefault();
                           }}
                           onDrop={(e) => {
                             if (!dragKey) return;
@@ -2205,13 +2627,25 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                             moveRow(dragKey, r.key);
                             setDragKey(null);
                           }}
-                          className={`grid grid-cols-[92px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
+                          className={`grid grid-cols-[120px_150px_70px_100px_100px_150px_160px] items-center gap-2 border-b border-[var(--wms-border)]/40 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
                             r.markedDelete ? "opacity-40" : ""
-                          } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""} ${
-                            dragKey === r.key ? "opacity-60 ring-1 ring-[var(--wms-accent)]/60" : ""
-                          }`}
+                          } ${
+                            selKeys.has(r.key)
+                              ? "bg-[var(--wms-accent)]/10"
+                              : r.isNew
+                                ? "bg-[var(--wms-accent)]/5"
+                                : ""
+                          } ${draggingKeys?.has(r.key) ? "opacity-60 ring-1 ring-[var(--wms-accent)]/60" : ""}`}
                         >
                           <div className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${r.sku || "row"}`}
+                              checked={selKeys.has(r.key)}
+                              onChange={() => toggleSel(r.key)}
+                              disabled={!canManage}
+                              className="h-3.5 w-3.5 shrink-0 cursor-pointer accent-[var(--wms-accent)] disabled:cursor-not-allowed max-md:h-5 max-md:w-5"
+                            />
                             <button
                               type="button"
                               draggable={canManage}
@@ -2223,7 +2657,11 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                                 e.dataTransfer.setData("text/plain", r.key);
                               }}
                               onDragEnd={() => setDragKey(null)}
-                              title="Drag to change the size order. Save pushes the new order to Shopify."
+                              title={
+                                selKeys.has(r.key) && selectedRows.length > 1
+                                  ? `Drag to move the ${selectedRows.length} selected rows together. Save pushes the new order to Shopify.`
+                                  : "Drag to change the size order. Save pushes the new order to Shopify."
+                              }
                               aria-label={`Reorder ${r.sku || "row"}`}
                               className="flex h-6 w-6 cursor-grab items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] active:cursor-grabbing disabled:opacity-40"
                             >
@@ -2280,6 +2718,21 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                           <Cell value={r.sku} onChange={(x) => patchRow(r.key, { sku: x })} editable={canManage} placeholder={r.isNew ? "SKU…" : undefined} />
                         </div>
                       ))}
+                      {/* Only while dragging: a row drop lands beside that row, so
+                          this is the one way to reach the very end. */}
+                      {dragKey ? (
+                        <div
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            moveRowToEnd(dragKey);
+                            setDragKey(null);
+                          }}
+                          className="m-2 rounded border border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10 py-2 text-center font-mono text-[0.68rem] text-[var(--wms-accent)]"
+                        >
+                          ⬇ drop here to move to the end
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   {/* Mobile (<sm) stacked variant cards — same rows/state as the
@@ -2290,12 +2743,31 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                         key={r.key}
                         className={`border-b border-[var(--wms-border)]/40 px-3 py-3 font-mono last:border-b-0 ${
                           r.markedDelete ? "opacity-40" : ""
-                        } ${r.isNew ? "bg-[var(--wms-accent)]/5" : ""}`}
+                        } ${
+                          selKeys.has(r.key)
+                            ? "bg-[var(--wms-accent)]/10"
+                            : r.isNew
+                              ? "bg-[var(--wms-accent)]/5"
+                              : ""
+                        }`}
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
-                          <span className="min-w-0 truncate text-[0.78rem] uppercase tracking-wide text-[var(--wms-muted)]">
-                            {(r.color.trim() || "—") + " · " + (r.size.trim() || "—")}
-                          </span>
+                          <div className="flex min-w-0 items-center gap-3">
+                            {/* The label is the 44px hit area around the box. */}
+                            <label className="-m-3 flex shrink-0 cursor-pointer items-center p-3">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${r.sku || "row"}`}
+                                checked={selKeys.has(r.key)}
+                                onChange={() => toggleSel(r.key)}
+                                disabled={!canManage}
+                                className="h-5 w-5 accent-[var(--wms-accent)]"
+                              />
+                            </label>
+                            <span className="min-w-0 truncate text-[0.78rem] uppercase tracking-wide text-[var(--wms-muted)]">
+                              {(r.color.trim() || "—") + " · " + (r.size.trim() || "—")}
+                            </span>
+                          </div>
                           <div className="flex shrink-0 items-center gap-2">
                             <button
                               type="button"
@@ -2370,6 +2842,14 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                       </div>
                     ))}
                   </div>
+                  {/* Touch-size bulk bar (<md): pinned to the bottom of the
+                      scrolling body, after the list, so ticking a box never
+                      shifts the rows under the finger. */}
+                  {canManage && selectedRows.length > 0 ? (
+                    <div className="sticky bottom-0 z-[1] border-t border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] md:hidden">
+                      {bulkBar("")}
+                    </div>
+                  ) : null}
                 </div>
                 )}
               </div>
@@ -2377,7 +2857,81 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
           )}
         </div>
       </div>
+
+      {/* Above the matrix window (layer "top"). Manual-only matrices have no
+          EPCs, so their qty opens the manual-qty history instead. */}
+      {epcVariant && (onHand || onHandError) ? (
+        manualOnly ? (
+          <ItemHistoryModal customSkuId={epcVariant.id} onClose={() => setEpcSkuId(null)} layer="top" />
+        ) : (
+          <RfidTagsModal
+            modalSku={{
+              custom_sku_id: epcVariant.id,
+              name: data?.matrix.description ?? "",
+              sku: epcVariant.sku,
+            }}
+            onClose={() => setEpcSkuId(null)}
+            /* Only the on-hand key — the matrix key would re-seed unsaved edits. */
+            onMutated={() => {
+              void mutateOnHand();
+              onMutated?.();
+            }}
+            layer="top"
+          />
+        )
+      ) : null}
     </>
+  );
+}
+
+/** One colour / size in the Matrix tab lists, with its archive X — or the undo
+ *  while every row of it is staged for archiving. */
+function AttrRow({
+  name,
+  state,
+  canManage,
+  what,
+  onArchive,
+  onRestore,
+}: {
+  name: string;
+  state: AttrState;
+  canManage: boolean;
+  what: string;
+  onArchive: () => void;
+  onRestore: () => void;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-2 border-b border-[var(--wms-border)]/60 px-3 py-1.5 font-mono text-[0.85rem] last:border-b-0 ${
+        state === "live" ? "text-[var(--wms-fg)]" : "text-[var(--wms-muted)]"
+      }`}
+    >
+      <span className={`min-w-0 break-words ${state === "pending" ? "line-through" : ""}`}>{name}</span>
+      {state === "archived" ? (
+        <span className="shrink-0 text-[0.7rem] uppercase tracking-wide">archived</span>
+      ) : !canManage ? null : state === "pending" ? (
+        <button
+          type="button"
+          onClick={onRestore}
+          title={`Undo — keep every SKU in ${what}`}
+          aria-label={`Undo archiving ${what}`}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--wms-border)] text-[var(--wms-muted)] hover:bg-[var(--wms-surface)] hover:text-[var(--wms-fg)] max-md:min-h-11 max-md:min-w-11"
+        >
+          <RotateCcw className="h-3 w-3" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onArchive}
+          title={`Archive every SKU in ${what} (applied on Save)`}
+          aria-label={`Archive ${what}`}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded border border-red-500/40 text-[var(--wms-muted)] hover:bg-red-950/40 hover:text-red-200 max-md:min-h-11 max-md:min-w-11"
+        >
+          <XIcon className="h-3 w-3" />
+        </button>
+      )}
+    </div>
   );
 }
 

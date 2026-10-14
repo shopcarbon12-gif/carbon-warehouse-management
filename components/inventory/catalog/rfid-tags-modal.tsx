@@ -70,6 +70,14 @@ function formatLastSeen(iso: string | null): string {
     .replace(", ", " ");
 }
 
+/* "top" lifts the window and its status drawer above the Matrix window
+   (z-[80]/[90]) while staying under the sync floater (z-[120]). */
+const LAYERS = {
+  default: { backdrop: "z-[60]", panel: "z-[70]", drawerBackdrop: "z-[80]", drawer: "z-[81]" },
+  top: { backdrop: "z-[100]", panel: "z-[101]", drawerBackdrop: "z-[110]", drawer: "z-[111]" },
+} as const;
+type Layer = (typeof LAYERS)[keyof typeof LAYERS];
+
 function statusPillClasses(status: string): string {
   switch (status) {
     case "in-stock":
@@ -94,6 +102,7 @@ export function RfidTagsModal({
   onClose,
   onMutated,
   showAllInitially = false,
+  layer = "default",
 }: {
   /** Only these three are read — so a Shopify order line can open the same window. */
   modalSku: Pick<CatalogGridRow, "custom_sku_id" | "name" | "sku">;
@@ -102,7 +111,10 @@ export function RfidTagsModal({
   onMutated?: () => void;
   /** Open with every status showing — from a Shopify order the tag clicked is usually UNKNOWN, not LIVE. */
   showAllInitially?: boolean;
+  /** "top" when opened from inside the Matrix window. */
+  layer?: keyof typeof LAYERS;
 }) {
+  const z = LAYERS[layer];
   const { data: itemData, isLoading: itemsLoading, mutate: mutateItems } = useSWR<CatalogItemRow[]>(
     `/api/inventory/catalog?customSkuId=${encodeURIComponent(modalSku.custom_sku_id)}`,
     fetcher,
@@ -222,10 +234,10 @@ export function RfidTagsModal({
       <button
         type="button"
         aria-label="Close"
-        className="fixed inset-0 z-[60] bg-black/70"
+        className={`fixed inset-0 ${z.backdrop} bg-black/70`}
         onClick={onClose}
       />
-      <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
+      <div className={`fixed inset-0 ${z.panel} flex items-center justify-center p-4 max-md:items-stretch max-md:p-0`}>
         <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none">
           {/* Header */}
           <div className="flex items-start justify-between gap-3 border-b border-[var(--wms-border)] px-5 py-4">
@@ -390,6 +402,7 @@ export function RfidTagsModal({
 
       {statusDrawerOpen ? (
         <ChangeStatusDrawer
+          z={z}
           epcs={[...selected]}
           busy={busy}
           setBusy={setBusy}
@@ -408,12 +421,14 @@ export function RfidTagsModal({
 }
 
 function ChangeStatusDrawer({
+  z,
   epcs,
   busy,
   setBusy,
   onClose,
   onChanged,
 }: {
+  z: Layer;
   epcs: string[];
   busy: boolean;
   setBusy: (v: boolean) => void;
@@ -481,10 +496,10 @@ function ChangeStatusDrawer({
       <button
         type="button"
         aria-label="Close drawer"
-        className="fixed inset-0 z-[80] bg-black/60"
+        className={`fixed inset-0 ${z.drawerBackdrop} bg-black/60`}
         onClick={onClose}
       />
-      <div className="fixed inset-y-0 right-0 z-[81] flex w-full max-w-md flex-col border-l border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl">
+      <div className={`fixed inset-y-0 right-0 ${z.drawer} flex w-full max-w-md flex-col border-l border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl`}>
         <div className="flex items-center justify-between border-b border-[var(--wms-border)] px-5 py-4">
           <div>
             <h3 className="text-base font-semibold text-[var(--wms-fg)]">Change status</h3>

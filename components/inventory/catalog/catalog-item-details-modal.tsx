@@ -34,6 +34,12 @@ type Props = {
    * the nested matrix window's Matrix tab). Resolved to a full row by the parent.
    */
   onOpenSku?: (variant: { id: string; sku: string }) => void;
+  /**
+   * Open this SKU's EPC list (RFID rows) / manual qty history (manual-only
+   * rows). The parent renders those windows after this one so they stack on top.
+   */
+  onOpenTags?: (customSkuId: string) => void;
+  onOpenHistory?: (customSkuId: string) => void;
 };
 
 type LeftTab = "details" | "inventory" | "sales" | "customers" | "history";
@@ -101,7 +107,15 @@ function formFromRow(row: CatalogGridRow): Form {
   };
 }
 
-export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, onOpenSku }: Props) {
+export function CatalogItemDetailsModal({
+  row,
+  canManage,
+  onClose,
+  onMutated,
+  onOpenSku,
+  onOpenTags,
+  onOpenHistory,
+}: Props) {
   const [tab, setTab] = useState<LeftTab>("details");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -127,7 +141,19 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
   // Derived pricing recomputes live from the edited price/cost fields.
   const cost = parseMoney(form.default_cost);
   const price = parseMoney(form.retail_price);
+  // Live in-stock EPCs at this location, or the manual qty for manual-only rows.
   const available = row.active_epc_count ?? 0;
+  const onHandWord = row.is_manual_only ? "Manual" : "Live";
+  const onHandTitle = row.is_manual_only
+    ? "Manual (non-RFID) qty at this location — view qty history"
+    : "Live EPCs at this location — view the tags";
+  const openOnHand = row.is_manual_only
+    ? onOpenHistory
+      ? () => onOpenHistory(row.custom_sku_id)
+      : undefined
+    : onOpenTags
+      ? () => onOpenTags(row.custom_sku_id)
+      : undefined;
   const onlinePrice = price;
   const totalValue = cost != null ? cost * available : null;
   const totalSaleValue = price != null ? price * available : null;
@@ -403,17 +429,33 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
             </nav>
 
             <div className="min-w-0 flex-1 p-3 sm:p-5">
-              <h2
-                className="mb-4 truncate text-base font-semibold text-[var(--wms-fg)] max-md:whitespace-normal max-md:break-words"
-                title={headerLabel}
-              >
-                {headerLabel}
-                {row.archived ? (
-                  <span className="ml-2 rounded border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 align-middle font-mono text-[0.55rem] uppercase tracking-wide text-amber-200 max-md:text-xs">
-                    archived
-                  </span>
-                ) : null}
-              </h2>
+              <div className="mb-4 flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
+                <h2
+                  className="min-w-0 truncate text-base font-semibold text-[var(--wms-fg)] max-md:whitespace-normal max-md:break-words"
+                  title={headerLabel}
+                >
+                  {headerLabel}
+                  {row.archived ? (
+                    <span className="ml-2 rounded border border-amber-500/40 bg-amber-950/40 px-2 py-0.5 align-middle font-mono text-[0.55rem] uppercase tracking-wide text-amber-200 max-md:text-xs">
+                      archived
+                    </span>
+                  ) : null}
+                </h2>
+                <button
+                  type="button"
+                  onClick={openOnHand}
+                  disabled={!openOnHand}
+                  title={onHandTitle}
+                  className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 font-mono text-[0.7rem] hover:opacity-90 disabled:cursor-default max-md:min-h-11 max-md:px-3 max-md:text-xs ${
+                    row.is_manual_only
+                      ? "border-sky-400/45 bg-sky-400/15 text-sky-400"
+                      : "border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] text-[var(--wms-accent)]"
+                  }`}
+                >
+                  On hand · {onHandWord}
+                  <span className="font-semibold tabular-nums">{available}</span>
+                </button>
+              </div>
 
               {tab === "details" ? (
                 <DetailsTab
@@ -426,6 +468,9 @@ export function CatalogItemDetailsModal({ row, canManage, onClose, onMutated, on
                   margin={margin}
                   markup={markup}
                   available={available}
+                  onHandWord={onHandWord}
+                  onHandTitle={onHandTitle}
+                  onOpenOnHand={openOnHand}
                   totalValue={totalValue}
                   totalSaleValue={totalSaleValue}
                 />
@@ -476,6 +521,9 @@ function DetailsTab({
   margin,
   markup,
   available,
+  onHandWord,
+  onHandTitle,
+  onOpenOnHand,
   totalValue,
   totalSaleValue,
 }: {
@@ -488,6 +536,9 @@ function DetailsTab({
   margin: number | null;
   markup: number | null;
   available: number;
+  onHandWord: string;
+  onHandTitle: string;
+  onOpenOnHand?: () => void;
   totalValue: number | null;
   totalSaleValue: number | null;
 }) {
@@ -618,7 +669,13 @@ function DetailsTab({
         </Section>
 
         <Section title="Stock">
-          <Row label="Available" value={String(available)} mono />
+          <Row
+            label={`On hand (${onHandWord})`}
+            value={String(available)}
+            mono
+            onClick={onOpenOnHand}
+            valueTitle={onHandTitle}
+          />
           <Row label="Reserved" value={String(reserved)} mono />
           <Row label="Avg Cost" value={fmtMoney(avgCost)} mono />
           <Row label="Total Value" value={fmtMoney(totalValue)} mono />
@@ -700,24 +757,40 @@ function Row({
   value,
   mono,
   dim,
+  onClick,
+  valueTitle,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   dim?: boolean;
+  /** Makes the value a button (e.g. on-hand qty → its EPC list). */
+  onClick?: () => void;
+  valueTitle?: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-1.5">
       <span className="font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:text-xs">
         {label}
       </span>
-      <span
-        className={`${mono ? "font-mono" : ""} text-xs ${
-          dim ? "text-[var(--wms-muted)]" : "text-[var(--wms-fg)]"
-        }`}
-      >
-        {value}
-      </span>
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          title={valueTitle}
+          className={`${mono ? "font-mono" : ""} text-xs text-[var(--wms-accent)] underline decoration-dotted underline-offset-2 hover:opacity-80 max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-end`}
+        >
+          {value}
+        </button>
+      ) : (
+        <span
+          className={`${mono ? "font-mono" : ""} text-xs ${
+            dim ? "text-[var(--wms-muted)]" : "text-[var(--wms-fg)]"
+          }`}
+        >
+          {value}
+        </span>
+      )}
     </div>
   );
 }

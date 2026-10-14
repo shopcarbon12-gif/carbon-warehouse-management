@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { imageFilesFromTransfer, isTextEntryTarget, transferHasFiles } from "@/lib/client/image-transfer";
 
 /**
  * Full Shopify media manager for a product (used on the Images tab).
@@ -76,15 +77,75 @@ async function downscaleToParts(
   return { b64, dataUrl };
 }
 
-function download(src: string, name: string) {
+/** Set on every drag that starts inside the Images tab (lowercase: browsers lowercase types). */
+const INTERNAL_DRAG_TYPE = "application/x-wms-media-internal";
+
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/heic": "heic",
+};
+
+function extFromUrl(src: string): string | null {
+  try {
+    const m = /\.([a-z0-9]{2,5})$/i.exec(new URL(src, window.location.href).pathname);
+    if (!m) return null;
+    const ext = m[1].toLowerCase();
+    return ext === "jpeg" ? "jpg" : ext;
+  } catch {
+    return null;
+  }
+}
+
+function saveBlob(blob: Blob, name: string) {
+  const u = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = src;
+  a.href = u;
   a.download = name;
-  a.target = "_blank";
-  a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   a.remove();
+  // Revoking right away cancels the save in some browsers (Firefox).
+  window.setTimeout(() => URL.revokeObjectURL(u), 60_000);
+}
+
+/**
+ * Save an image straight to the device instead of opening it in a new tab.
+ * Shopify CDN images are cross-origin, so `<a download>` on the URL itself is
+ * ignored; fetch it (cdn.shopify.com allows any origin) and save the blob.
+ * Staged uploads (data: URLs) are decoded locally — the CarbonWMS-PC app saves
+ * blob: and http(s) downloads, not data: ones. `base` has no extension: it
+ * comes from the real file type, since the CDN may serve JPEG or WebP.
+ */
+async function download(src: string, base: string) {
+  try {
+    if (src.startsWith("data:")) {
+      const comma = src.indexOf(",");
+      const meta = src.slice(5, comma);
+      const type = meta.split(";")[0].toLowerCase() || "image/jpeg";
+      const payload = src.slice(comma + 1);
+      let bytes: Uint8Array<ArrayBuffer>;
+      if (meta.includes(";base64")) {
+        const bin = atob(payload);
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      } else {
+        bytes = new TextEncoder().encode(decodeURIComponent(payload));
+      }
+      saveBlob(new Blob([bytes], { type }), `${base}.${EXT_BY_TYPE[type] ?? "jpg"}`);
+      return;
+    }
+    const r = await fetch(src, { mode: "cors", credentials: "omit" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    saveBlob(blob, `${base}.${EXT_BY_TYPE[blob.type.toLowerCase()] ?? extFromUrl(src) ?? "jpg"}`);
+  } catch {
+    window.open(src, "_blank", "noopener");
+  }
 }
 
 export function MediaManager({ matrixId, shopifyProductId, variants, canManage }: Props) {
@@ -96,6 +157,9 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   const [loaded, setLoaded] = useState(false);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
+  // Files dragged in from the desktop / another window (not a row reorder).
+  const [fileOver, setFileOver] = useState(false);
+  const fileOverTimer = useRef<number | null>(null);
 
   const toggleSel = (key: string) =>
     setSel((prev) => {
@@ -169,7 +233,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
     void load();
   }, [load]);
 
-  const addFiles = useCallback(async (files: FileList | null) => {
+  const addFiles = useCallback(async (files: File[] | FileList | null) => {
     if (!files?.length) return;
     setBusy("upload");
     setErr(null);
@@ -191,6 +255,83 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       setBusy(null);
     }
   }, []);
+
+  // Dropped / pasted photos are staged exactly like ＋ Upload, behind the same
+  // gate: staging during a load or publish would be overwritten when it ends.
+  const acceptFiles = useCallback(
+    (files: File[]) => {
+      if (!files.length || !canManage) return;
+      if (busy !== null) {
+        setErr("Wait for the current step to finish, then add the photos again.");
+        return;
+      }
+      void addFiles(files);
+    },
+    [busy, canManage, addFiles],
+  );
+
+  // Paste an image (⌘/Ctrl+V) anywhere while the Images tab is open → staged
+  // upload. Image payloads only, and never while typing (alt text pastes as usual).
+  useEffect(() => {
+    if (!canManage || !shopifyProductId) return;
+    const onPaste = (e: ClipboardEvent) => {
+      if (isTextEntryTarget(e.target) || isTextEntryTarget(document.activeElement)) return;
+      const imgs = imageFilesFromTransfer(e.clipboardData);
+      if (!imgs.length) return;
+      e.preventDefault();
+      acceptFiles(imgs);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [canManage, shopifyProductId, acceptFiles]);
+
+  // A file let go anywhere else in the window must not make the browser open
+  // the image in place of the WMS (losing the open matrix). The tab's own drop
+  // handler runs first and marks the event handled.
+  useEffect(() => {
+    if (!shopifyProductId) return;
+    const guard = (e: DragEvent) => {
+      if (e.defaultPrevented || !transferHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      if (e.type === "dragover" && e.dataTransfer) e.dataTransfer.dropEffect = "none";
+    };
+    window.addEventListener("dragover", guard);
+    window.addEventListener("drop", guard);
+    return () => {
+      window.removeEventListener("dragover", guard);
+      window.removeEventListener("drop", guard);
+    };
+  }, [shopifyProductId]);
+
+  useEffect(
+    () => () => {
+      if (fileOverTimer.current !== null) window.clearTimeout(fileOverTimer.current);
+    },
+    [],
+  );
+
+  /* A drag that started inside this tab (row handle or a thumbnail) is never
+     new photos, even if the browser attaches the image as a file: the root's
+     dragstart tags it. A type on the drag itself, not a flag here — a flag
+     sticks when the source row unmounts before its dragend. */
+  const isFileDrag = (e: React.DragEvent) =>
+    transferHasFiles(e.dataTransfer) && !Array.from(e.dataTransfer.types).includes(INTERNAL_DRAG_TYPE);
+  const onFileDragOver = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = canManage ? "copy" : "none";
+    setFileOver(true);
+    // dragover repeats while the pointer is inside; when it stops (left the
+    // tab, dropped elsewhere, Esc) the highlight clears on its own.
+    if (fileOverTimer.current !== null) window.clearTimeout(fileOverTimer.current);
+    fileOverTimer.current = window.setTimeout(() => setFileOver(false), 200);
+  };
+  const onFileDrop = (e: React.DragEvent) => {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    setFileOver(false);
+    acceptFiles(imageFilesFromTransfer(e.dataTransfer));
+  };
 
   const genAlt = useCallback(async (key: string) => {
     const item = items.find((m) => m.key === key);
@@ -355,14 +496,30 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
   }
 
   return (
-    <div className="space-y-3">
+    <div
+      className="space-y-3"
+      onDragStart={(e) => { e.dataTransfer.setData(INTERNAL_DRAG_TYPE, "1"); }}
+      onDragOver={onFileDragOver}
+      onDrop={onFileDrop}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[0.9rem] uppercase tracking-wide text-[var(--wms-fg)]">Images</span>
         <div className="flex-1" />
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { void addFiles(e.target.files); e.target.value = ""; }} />
-        <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
-          {busy === "upload" ? "…" : "＋ Upload"}
-        </button>
+        {/* Drop zone around Upload. The whole tab accepts the drop (rows too);
+            this is where it shows. Phones have no file drag: just the button. */}
+        <div
+          className={`flex items-center gap-2 rounded-md border border-dashed py-1 pl-3 pr-1 transition-colors max-md:border-0 max-md:p-0 ${fileOver && canManage ? "border-[var(--wms-accent)] bg-[var(--wms-accent)]/10" : "border-[var(--wms-border)]"}`}
+        >
+          {canManage ? (
+            <span className={`font-mono text-[0.72rem] max-md:hidden ${fileOver ? "text-[var(--wms-accent)]" : "text-[var(--wms-muted)]"}`}>
+              {fileOver ? "Drop to add these photos" : "Drag photos here, paste (Ctrl/⌘+V), or"}
+            </span>
+          ) : null}
+          <button type="button" disabled={!canManage || busy !== null} onClick={() => fileRef.current?.click()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50 max-md:min-h-11">
+            {busy === "upload" ? "…" : "＋ Upload"}
+          </button>
+        </div>
         <button type="button" disabled={!canManage || busy !== null || items.length === 0} onClick={() => void genAllAlts()} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-4 py-2 font-mono text-[0.82rem] uppercase tracking-wide text-[var(--wms-accent)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
           {busy === "alt-all" ? "…" : "✨ Alt all"}
         </button>
@@ -427,11 +584,11 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
               </div>
             </div>
             <div className="flex shrink-0 flex-col gap-1 max-sm:w-full max-sm:flex-row max-sm:flex-wrap">
-              <div draggable onDragStart={() => setDragKey(m.key)} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⠿</div>
+              <div draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("application/x-wms-media-row", m.key); setDragKey(m.key); }} onDragEnd={() => setDragKey(null)} title="Drag to reorder" className="cursor-move select-none rounded border border-[var(--wms-border)] px-2 py-1 text-center text-base text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⠿</div>
               <button type="button" onClick={() => move(m.key, -1)} disabled={idx === 0} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↑</button>
               <button type="button" onClick={() => move(m.key, 1)} disabled={idx === items.length - 1} className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">↓</button>
               <button type="button" onClick={() => makeHero(m.key)} disabled={idx === 0} title="Make hero" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-table-clean-fg)] disabled:opacity-30 max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">★</button>
-              <button type="button" onClick={() => download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}.png`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⬇</button>
+              <button type="button" onClick={() => void download(m.url, `${m.kind === "new" ? "upload" : "shopify"}-${idx + 1}`)} title="Download" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">⬇</button>
               <button type="button" onClick={() => remove(m.key)} title="Remove (deletes from Shopify on publish)" className="rounded border border-[var(--wms-border)] px-2 py-1 text-base text-[var(--wms-status-danger-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center">✕</button>
             </div>
           </div>
