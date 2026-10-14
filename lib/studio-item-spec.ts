@@ -330,13 +330,10 @@ export function specRiskReport(
     }
   }
 
-  if (textLines.length && !ctx.specConfirmed) {
-    warnings.push({
-      code: "text_unverified",
-      line: textLines[0].n,
-      message: `The spec quotes printed text (${lineList(textLines.map((l) => l.n))}). Read each quote against the real garment — a misread letter is printed in every panel.`,
-    });
-  }
+  /* No blanket "check every quote" reminder: it showed on every spec with a
+     TEXT line — even a correct "CARBON JEANS" — and read as an error (owner,
+     2026-10-14). Only evidence warns: a CARBON near-miss above, or the second
+     independent read below disagreeing with the quote. */
 
   for (const r of ctx.textReadings ?? []) {
     if (!r?.reading || !r.quoted || normText(r.reading) === normText(r.quoted)) continue;

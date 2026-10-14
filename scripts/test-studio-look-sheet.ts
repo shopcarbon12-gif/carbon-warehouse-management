@@ -318,9 +318,10 @@ test("spec risk: Jay Jeans 'CARRON JEANS' is a CARBON misread; CARBON itself is 
   const r = specRiskReport(JAY_SPEC, ctx("Jay Jeans", "JEANS"));
   const misread = r.warnings.filter((w) => w.code === "carbon_text_misread");
   assert.deepEqual(misread.map((w) => w.line), [4, 16]);
-  assert.ok(codes(r).includes("text_unverified"));
-  assert.ok(!codes(specRiskReport(JAY_SPEC.replace(/CARRON/g, "CARBON"), ctx("Jay Jeans", "JEANS"))).includes("carbon_text_misread"));
-  assert.ok(!codes(specRiskReport(JAY_SPEC, ctx("Jay Jeans", "JEANS", { specConfirmed: true }))).includes("text_unverified"));
+  // A correctly spelled CARBON quote raises nothing at all (no blanket "check the text" reminder).
+  const clean = specRiskReport(JAY_SPEC.replace(/CARRON/g, "CARBON"), ctx("Jay Jeans", "JEANS"));
+  assert.ok(!codes(clean).includes("carbon_text_misread"));
+  assert.ok(!codes(clean).includes("text_unverified"));
 });
 
 test("spec risk: a second read that disagrees is a warning until the line is fixed", () => {
