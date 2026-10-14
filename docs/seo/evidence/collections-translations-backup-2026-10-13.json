@@ -1,0 +1,1042 @@
+{
+ "flare-wide-leg-jeans-women": {
+  "id": "gid://shopify/Collection/433108615420",
+  "oldHandle": "jeans-women",
+  "content": [
+   {
+    "key": "title",
+    "value": "FLARE & WIDE LEG (women)",
+    "digest": "41c2465019fdcde3f4041d12b1910389c95859d6efce79576375d813cd82232a",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Fitted at the hip, opening into a flared or wide leg for a long, flowing shape. Wear them with heels to add length or with sneakers for an easy look. Filter by size or color, or browse all flare and wide-leg denim below.</p>",
+    "digest": "bda832af0fb489089eb9981ec5a27703d72fe9ca6e11d7c364607a5546f89a54",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "flare-wide-leg-jeans-women",
+    "digest": "aa7c624658ce29adb8ca3509ec9f139146651b6e8c1ca7feb4a95f69fbe94481",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Women’s Flare & Wide Leg Jeans | Carbon",
+    "digest": "87697bfcf715072175571f547994c452c86fa884f28f1f1988291e4cc0b96ad6",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Discover Carbon's womens flare & wide-leg denim - vintage-inspired fits with modern comfort and style. Sign up now to be first to shop new arrivals.",
+    "digest": "8d5536f7171bf19619482c4806696f1d91c86afe5618601887a51c25e7550863",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros Acampanados y Anchos de Mujer",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre los vaqueros acampanados y de pierna ancha de Carbon: cortes de inspiración vintage con comodidad y estilo modernos.",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros Flare y de Pierna Ancha para Mujer | Carbon",
+    "outdated": false
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Ajustado a la cadera, con apertura hacia una pierna acampanada o ancha para una silueta larga y fluida. Úsalos con tacones para alargar la figura o con zapatillas para un estilo desenfadado. Filtra por talla o color, o explora todos nuestros vaqueros acampanados y de pierna ancha a continuación.</p>",
+    "outdated": false
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Flare e Pantalona Femininos",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubra os jeans flare e pantalona da Carbon: cortes de inspiração vintage com conforto e estilo modernos.",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Calças Jeans Femininas Boca de Sino e Perna Larga | Carbon",
+    "outdated": false
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Ajustado no quadril, abrindo para uma perna flare ou ampla, criando um visual longo e fluido. Use com salto para alongar ou com tênis para um visual despojado. Filtre por tamanho ou cor, ou veja todos os jeans flare e wide leg abaixo.</p>",
+    "outdated": false
+   }
+  ]
+ },
+ "jeans-women": {
+  "id": "gid://shopify/Collection/433459921148",
+  "oldHandle": "clothing-jeans",
+  "content": [
+   {
+    "key": "title",
+    "value": "WOMEN JEANS",
+    "digest": "7fd166334d13c3b318aa4bbf0bd4b13539ef7b419ba2a17912666bc45744459f",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>All Carbon women's denim in one place: <a href=\"/collections/skinny-jeans-women\">skinny</a>, <a href=\"/collections/relaxed-women\">relaxed</a>, and <a href=\"/collections/flare-wide-leg-jeans-women\">flare and wide leg</a>. Choose your fit, then filter by size or color, or browse all women's jeans below.</p>",
+    "digest": "031c6d443c6890e39d9259b60e2323b26534aa8f4f907512ffddcea4fcf8e898",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "jeans-women",
+    "digest": "e9190245a294a44c71edaa836381ff9c8b4f4521cac237727d8cbe17f7037d46",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Women's Jeans – Skinny, Relaxed, Flare & Wide Leg | Carbon",
+    "digest": "0d0f4768808596009ebe259d00ecb12125f274463fd4f867e8342d184a71cf5d",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon women's jeans in skinny, relaxed, flare and wide-leg fits. Choose your fit, then filter by size or color.",
+    "digest": "7105109bd16749bdd901e6b55935ebcf666e6b642e7e425ce172897457948a36",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros de Mujer",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros de Mujer con Estilo | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre los vaqueros de mujer de Carbon: ajuste perfecto, cortes con estilo y denim versátil para cada look. Encuentra tu par.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Todo el denim para mujer de Carbon en un solo lugar: skinny, relajado, y de corte acampanado o de pierna ancha. Elige tu ajuste, luego filtra por talla o color, o explora todos los jeans para mujer a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Femininos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Jeans Femininos com Estilo | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubra os jeans femininos da Carbon: caimento perfeito, cortes estilosos e denim versátil para todo look. Ache o seu par.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Todos os jeans femininos da Carbon em um só lugar: skinny, relaxado, flare e perna larga. Escolha o seu caimento, depois filtre por tamanho ou cor, ou navegue por todos os jeans femininos abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "sweatshirts-hoodies-men": {
+  "id": "gid://shopify/Collection/433106944252",
+  "oldHandle": "matching-sets",
+  "content": [
+   {
+    "key": "title",
+    "value": "SWEATSHIRTS & HOODIES (Men)",
+    "digest": "e2f442089c8f4674cba68a2b4d2c3939ddf97ab43fde00809fa5cc7a75e65cf3",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Men's hoodies and sweatshirts, from lounging to the street, plus matching hoodie sets. Filter by size or color, or browse all men's sweatshirts and hoodies below.</p>",
+    "digest": "717345d2f25ddc5f9f8620a251682726bb70d41e756919115ec0890114b081a9",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "sweatshirts-hoodies-men",
+    "digest": "35a05aad749bbcd339a0f725e9d6309b24dc26be6a847a374980a8ba6f4a9494",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Hoodies & Sweatshirts – Graphic Prints | Carbon",
+    "digest": "c1b669c7cd6a6c8f9d613e83d1fd23d9125341154ae23f81b0773b1a37a421b5",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's hoodies and sweatshirts with bold graphic prints, plus matching hoodie sets. Filter by size or color.",
+    "digest": "6c72997bf2a4fdf5076936afc6a0c6e5476060a429528aa9af77a2f6bebcfaab",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Sudaderas con Capucha de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre las sudaderas y conjuntos a juego de hombre de Carbon: prendas cómodas y coordinadas para looks sin esfuerzo.",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Sudaderas y sudaderas con capucha para hombre | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Sudaderas y sudaderas con capucha para hombre diseñadas para brindar comodidad, desde estar en casa hasta salir a la calle. Filtra por talla o color, o explora todas las sudaderas y sudaderas con capucha para hombre a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Moletons e Capuzes Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Conheça os moletons e conjuntos masculinos da Carbon: peças confortáveis e combinando para looks sem esforço.",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Blusões e Moletons Masculinos | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Moletom e hoodies masculinos para conforto, do descanso ao dia a dia. Filtre por tamanho ou cor, ou veja todos os moletons e hoodies masculinos abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "matching-sets": {
+  "id": "gid://shopify/Collection/433108222204",
+  "oldHandle": "matching-sets-1",
+  "content": [
+   {
+    "key": "title",
+    "value": "MATCHING SETS (women)",
+    "digest": "d00834fd26580c4d250745b654d3bf04fe00a71316fae0569d66ceff8cf86db2",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Coordinated women's sets, top and bottom, for an instantly put-together look. Filter by size or color, or browse all matching sets below.</p>",
+    "digest": "4a1b381f05eadc361ee7317800bf4d88cfe15ce923d21c8056822123de3ff85e",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "matching-sets",
+    "digest": "72a550778dbfe64df381df40ec126fcba248c83ea4424a3816f555bdeaddf39e",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Women's Matching Sets – Coordinated Tops & Bottoms | Carbon",
+    "digest": "f851cfa0cab1fd546c031d3da3e9812ccd109087795b7a9c06024abd138c5f48",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon women's matching sets: a coordinated top and bottom for an instantly put-together look. Filter by size or color.",
+    "digest": "803781ef6ee5eae2e518eaebee10dc5ce1dc6494de05107ded7b3d99379cb497",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Conjuntos a Juego de Mujer",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Conjuntos a Juego - Compra Looks de 2 Piezas | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre los conjuntos a juego de Carbon: dos piezas, vestidos y co-ords cómodos para looks sin esfuerzo a buen precio.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Conjuntos coordinados para mujer, de blusa y pantalón, para un look impecable al instante. Filtra por talla o color, o explora todos los conjuntos a juego a continuación.</p>",
+    "outdated": false
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Conjuntos Femininos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Conjuntos Femininos - Looks de 2 Peças | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubra os conjuntos da Carbon: duas peças, vestidos e co-ords confortáveis para looks sem esforço com bom preço.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Conjuntos femininos coordenados, top e bottom, para um visual arrumado instantaneamente. Filtre por tamanho ou cor, ou veja todos os conjuntos combinando abaixo.</p>",
+    "outdated": false
+   }
+  ]
+ },
+ "ankle-zip-jeans-men": {
+  "id": "gid://shopify/Collection/510668210428",
+  "oldHandle": "super-skinny-jeans-men-copy",
+  "content": [
+   {
+    "key": "title",
+    "value": "SUPER SKINNY ANKLE ZIP JEANS (MEN)",
+    "digest": "0b3c2e7f64527c92c07eedb36da245157d922af3b6bc903704a9a078335cd6f3",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>The super skinny fit, cut shorter and finished with a zipper at the ankle. The cropped length shows off your sneakers. Filter by size or color, or browse all ankle-zip styles below.</p>",
+    "digest": "3beddcbdc0dcf80ee6d5c24b59404759df64d8b693e62a48b9e8f3bf35954e83",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "ankle-zip-jeans-men",
+    "digest": "f720e6308edb4bf0c40904dc178b5aa5f65db6e13637b2c6636c9cd837327f31",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Ankle Zip Jeans – Cropped Super Skinny | Carbon",
+    "digest": "123d1cb936417688650fa20e5ef9ea2536236fd0158df1cebbdba1720a68e6bb",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "The Carbon super skinny fit, cut shorter and finished with a zip at the ankle to show off your sneakers.",
+    "digest": "d64674fee5989b4c164272c5bb3e3df7323ad72e296bdfc6a01922276e35611b",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "SUPER SKINNY ANKLE ZIP JEANS (MEN)",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Compra vaqueros súper pitillo de hombre en Carbon: cortes ajustados, modernos y asequibles para elevar tu estilo urbano.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>El corte super skinny, más corto y terminado con cierre en el tobillo. El largo recortado resalta tus tenis, y el cierre facilita ponerlos y quitarlos. Filtra por talla o color, o explora todos los estilos con cierre en el tobillo a continuación.</p>",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Jeans Súper Pitillo de Hombre | Carbon",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "SUPER SKINNY ANKLE ZIP JEANS (MASCULINO)",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre jeans super skinny masculinos na Carbon: cortes ajustados, modernos e acessíveis para elevar seu estilo urbano.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Modelagem super skinny, mais curta e finalizada com zíper no tornozelo. O comprimento cropped destaca seus tênis e o zíper facilita vestir e tirar. Filtre por tamanho ou cor, ou veja todos os modelos ankle-zip abaixo.</p>",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Calça Jeans Masculina Super Skinny | Carbon",
+    "outdated": true
+   }
+  ]
+ },
+ "shorts-men": {
+  "id": "gid://shopify/Collection/433108353276",
+  "oldHandle": "shorts-1",
+  "content": [
+   {
+    "key": "title",
+    "value": "SHORTS (Men)",
+    "digest": "a52543470c591abd8c3304df452062817d56e7019776910b7de27ae78f920ccf",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Men's denim shorts, ripped or clean, and matching short sets for warm weather. See all <a href=\"/collections/summer-sets-men\">summer sets</a>. Filter by size or color, or browse all men's shorts below.</p>",
+    "digest": "f8397793ac358b0f68c776e35ad6b5b326d5084f80f86b7f6b21186538ec32b5",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "shorts-men",
+    "digest": "144c64a9c4f56eaa5881f13d3fd823176390bfa9e29c40b16c91c414303956f5",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Shorts – Denim Shorts & Short Sets | Carbon",
+    "digest": "123f8bbb559d84f8d3f646e0ec5f078798d5f02d4e6b17a931f9eb6e538773e0",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's shorts: ripped and clean denim shorts, plus matching short sets. Filter by size or color.",
+    "digest": "ffec31079e4069e1f4b78a0193ae80e71031e0f86fee9e452325b4b82fbfb4c7",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Shorts de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Shorts de Hombre para Looks Casuales | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre los shorts de hombre de Carbon: desde cortes casuales hasta ajustes deportivos, cómodos y versátiles para cada día.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Pantalones cortos para hombre en estilos de mezclilla e informales, hechos para el clima cálido. Filtra por talla o color, o explora todos los pantalones cortos para hombre a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Shorts Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Shorts Masculinos para Looks Casuais | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Conheça os shorts masculinos da Carbon: dos cortes casuais aos modelos esportivos, confortáveis e versáteis para todo dia.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Bermudas masculinas em jeans e estilos casuais, feitas para o clima quente. Filtre por tamanho ou cor, ou veja todas as bermudas masculinas abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "jeans-men": {
+  "id": "gid://shopify/Collection/437232009468",
+  "oldHandle": "jeans-men",
+  "content": [
+   {
+    "key": "title",
+    "value": "MEN JEANS",
+    "digest": "43cce7f773dfbf3dcb3f1c8ec333c6d738fea0428f2b35912978979d57a0d413",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>All Carbon men's denim in one place. Choose your fit — <a href=\"/collections/super-skinny-jeans-men\">super skinny</a>, <a href=\"/collections/skinny-jeans\">skinny</a>, <a href=\"/collections/slim-jeans-men\">slim</a>, <a href=\"/collections/ankle-zip-jeans-men\">ankle zip</a> or <a href=\"/collections/baggy-men\">baggy</a> — then filter by size or color, or browse all men's jeans below.</p>",
+    "digest": "866145b7f5def938fb714fd74fbc287a1069cbcf8ce99ab7fa76ac5d61b36dc1",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "jeans-men",
+    "digest": "5ffe8b0e5edce05535f07d522c40b20dc9c13824a33a3a5df072d4be809b5cb8",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Jeans – Super Skinny, Skinny, Slim & Baggy | Carbon",
+    "digest": "bb614ee4fa3e8981aa700bdb1cfb63120ad23d2b02df7c508318be47ee3a8ad2",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's jeans in every fit: super skinny, skinny, slim, ankle zip and baggy. Light to dark washes, clean or ripped.",
+    "digest": "925e49dcf6fe917483b4bf3a9b3cb45539a722e8fcefcfd0e9cb61151637dc5c",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros de Hombre para Cada Estilo | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre los vaqueros de hombre de Carbon: denim actual y asequible, del pitillo al ancho, cómodo para el día a día.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Todos los vaqueros para hombre de Carbon en un mismo lugar: super skinny, skinny, slim, con cremallera en el tobillo y baggy. Elige tu corte, filtra por talla o color, o explora todos los vaqueros para hombre a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Jeans Masculinos para Todo Estilo | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Conheça os jeans masculinos da Carbon: denim atual e acessível, do skinny ao baggy, confortável para o dia a dia.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Todos os jeans masculinos da Carbon em um só lugar: super skinny, skinny, slim, ankle zip e baggy. Escolha o seu caimento, depois filtre por tamanho ou cor, ou navegue por todos os jeans masculinos abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "super-skinny-jeans-men": {
+  "id": "gid://shopify/Collection/437269397756",
+  "oldHandle": "super-skinny-jeans-men",
+  "content": [
+   {
+    "key": "title",
+    "value": "SUPER SKINNY JEANS (MEN)",
+    "digest": "5979a2562fbf1fd779de96a7d2cc8d35dd6003f0f290bf038aa84c656c68cb15",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Our tightest fit: narrow from thigh to ankle for a sharp, tapered line, in a full-length leg. Closer than skinny, in light to dark washes, clean or ripped. Prefer it cropped? See <a href=\"/collections/ankle-zip-jeans-men\">ankle zip</a>. Filter by size or color, or browse all super skinny denim below.</p>",
+    "digest": "00026c400331c50eb300ba05edaa4b9c82d9fe2e002118c7dbbd1b9f2b54d501",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "super-skinny-jeans-men",
+    "digest": "c4ded788fad7f8ef2ab94adcb00a64d6963879fd5d874684ff2b2b74c5b3164a",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Super Skinny Jeans – Ripped & Clean | Carbon",
+    "digest": "e4eda1aaed84a601f3a25690e81204b93c82e9dd0525da30eea474dc39905da8",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon's tightest fit: men's super skinny jeans, narrow from thigh to ankle in a full-length leg. Light to dark washes, clean or ripped.",
+    "digest": "83052cd2faf539295680c7c070f77d91f67fdc7e2d984cebbab5b78db5471fce",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros Súper Pitillo de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Compra vaqueros súper pitillo de hombre en Carbon: cortes ajustados, modernos y asequibles para elevar tu estilo urbano.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Nuestro ajuste más ceñido: estrecho desde el muslo hasta el tobillo para una línea entallada y definida, con largo completo. Más ajustado que el modelo skinny, disponible en lavados de claro a oscuro, lisos o rasgados. Filtra por talla o color, o explora todos nuestros jeans super skinny a continuación.</p>",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Jeans Súper Pitillo de Hombre | Carbon",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Super Skinny Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre jeans super skinny masculinos na Carbon: cortes ajustados, modernos e acessíveis para elevar seu estilo urbano.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Nosso caimento mais justo: estreito da coxa ao tornozelo para uma linha afunilada e definida, com comprimento total. Mais ajustado que o skinny, em lavagens claras a escuras, lisos ou rasgados. Filtre por tamanho ou cor, ou navegue por todos os jeans super skinny abaixo.</p>",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Calça Jeans Masculina Super Skinny | Carbon",
+    "outdated": true
+   }
+  ]
+ },
+ "skinny-jeans": {
+  "id": "gid://shopify/Collection/433108648188",
+  "oldHandle": "skinny-jeans",
+  "content": [
+   {
+    "key": "title",
+    "value": "SKINNY JEANS (MEN)",
+    "digest": "efb062247b484a08c5149e99b511a0e50a1dbec380c07235a62faa314fbc8057",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Close-fitting but not tight: slim through the thigh and tapered to the ankle, with a little more room than super skinny. In light to dark washes, clean or ripped. Filter by size or color, or browse all skinny denim below.</p>",
+    "digest": "9e26d246286c7b6d8462f6e16b5e506860eac2639eb9441068ceb1669536d1e6",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "skinny-jeans",
+    "digest": "225c44de82502538d6284d918b984ade29a2e526edb6755bd2b2e14a21c6eb1a",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Skinny Jeans – Tapered to the Ankle | Carbon",
+    "digest": "5e8e7ae896767f0894bfc2d959cf726765f829d56ce5796cb53e880f3a43be32",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's skinny jeans: slim through the thigh and tapered to the ankle, with a little more room than super skinny. Clean or ripped.",
+    "digest": "e59cb5484427027badb8c4a7dddfada384e8f628fdfa4b526e4fc93ae8819293",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros Pitillo de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon ofrece vaqueros pitillo de hombre en denim actual y asequible, con cortes ajustados y cómodos para el día a día.",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros ajustados de hombre para un estilo elegante | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Ceñido pero no ajustado: entallado en el muslo y con corte estrecho hacia el tobillo, con un poco más de espacio que los modelos súper pitillo. En lavados de claro a oscuro, lisos o desgarrados. Filtra por talla o color, o explora todos los vaqueros pitillo a continuación.</p>",
+    "outdated": false
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Skinny Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_description",
+    "value": "A Carbon traz jeans skinny masculinos em denim atual e acessível, com cortes ajustados e confortáveis para o dia a dia.",
+    "outdated": true
+   },
+   {
+    "key": "meta_title",
+    "value": "Calças Jeans Masculinas Skinny para um Caimento Elegante | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Ajuste justo, mas não apertado: modelagem slim na coxa e afunilada até o tornozelo, com um pouco mais de espaço que o super skinny. Disponível em lavagens claras a escuras, lisa ou rasgada. Filtre por tamanho ou cor, ou veja todos os jeans skinny abaixo.</p>",
+    "outdated": false
+   }
+  ]
+ },
+ "slim-jeans-men": {
+  "id": "gid://shopify/Collection/437269496060",
+  "oldHandle": "slim-jeans-men",
+  "content": [
+   {
+    "key": "title",
+    "value": "SLIM JEANS (MEN)",
+    "digest": "ab86542d268b4a2df1ce709c6da9346bc95403b10f309aab65207fff08082fdd",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Slim through the leg with a gentle taper: tailored, not tight. An easy everyday fit that works dressed up or down. Filter by size or color, or browse all slim denim below.</p>",
+    "digest": "d090beeb5a2e97784dceb4f93aa8c6e6b8875383fb322edf4921f0ea5eaece5f",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "slim-jeans-men",
+    "digest": "861f694984ed0d82f01c1eaa389fdcb06ef328bf092bd921995ff12d70613061",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Slim Jeans | Carbon",
+    "digest": "d18a98076e4784d70eccd896ddc8e5fc27914acefbe85b05fd28827839aee323",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's slim jeans: slim through the leg with a gentle taper, an everyday fit that works dressed up or down.",
+    "digest": "c362720ad6b815da3584e07f55f42c1702cf3e37d48efed4308df3436bc93329",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros Slim de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros ajustados para hombre | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre jeans slim fit de hombre Carbon, mezclilla cónica que se encuentra entre ajustada y recta, cortada para brindar comodidad y un estilo moderno para el día a día.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Corte ajustado en la pierna con un estrechamiento sutil: entallado sin apretar. Un ajuste diario sencillo que combina tanto con estilos formales como informales. Filtra por talla o color, o explora todos nuestros jeans ajustados a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Slim Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Calça Jeans Masculina Slim Fit | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre jeans Carbon masculinos slim fit, jeans afunilados que ficam entre o justo e o reto, corte para conforto e estilo moderno para o dia a dia.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Justo na perna com leve afunilamento: ajustado sem apertar. Um caimento fácil para o dia a dia, que funciona tanto em looks casuais quanto arrumados. Filtre por tamanho ou cor, ou navegue por todos os jeans slim abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "baggy-men": {
+  "id": "gid://shopify/Collection/437269528828",
+  "oldHandle": "baggy-men",
+  "content": [
+   {
+    "key": "title",
+    "value": "BAGGY (MEN)",
+    "digest": "99b972d23d417be3014012023a05067c1164ac8244a84dc416b2ed903e00e605",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Our most relaxed fit: loose through the hip and thigh with a straight, roomy leg. Laid-back and made to stack over sneakers. Filter by size or color, or browse all baggy denim below.</p>",
+    "digest": "62cfcd21fa51132c336ad85f792f7d32f8819ce6c3998a12d90c95f57f37625b",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "baggy-men",
+    "digest": "8715f666d7e60f305e628272642f07a4b11af589f3b46f1b354e81fedfbf90c8",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Baggy Jeans – Loose, Straight Leg | Carbon",
+    "digest": "55a2969a8ebe30a60747284ff599044fea4eb5ec34b52a2d694190d1e5ef6e67",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's baggy jeans: loose through the hip and thigh with a straight, roomy leg made to stack over sneakers.",
+    "digest": "ec7c7580bd57b92358ea714b018de1f1f54196c82936dbb8a3fbeee6342f78ba",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Vaqueros Anchos de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Vaqueros Anchos de Hombre con Carácter | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compra los vaqueros anchos de hombre de Carbon: denim actual y asequible con cortes relajados y aire urbano.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Nuestro ajuste más relajado: holgado en la cadera y el muslo con una pierna recta y amplia. Cómodo, informal y diseñado para que se ajuste sobre las zapatillas. Filtra por talla o color, o explora todos los vaqueros baggy a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Jeans Baggy Masculinos",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Jeans Baggy Masculinos com Atitude | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre os jeans baggy masculinos da Carbon: denim atual e acessível com modelagem larga e pegada urbana.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Nosso caimento mais relaxado: solto no quadril e na coxa, com perna reta e ampla. Confortável, despojado e feito para usar sobre tênis. Filtre por tamanho ou cor, ou navegue por todos os jeans baggy abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "pants": {
+  "id": "gid://shopify/Collection/433107042556",
+  "oldHandle": "pants",
+  "content": [
+   {
+    "key": "title",
+    "value": "PANTS (Men)",
+    "digest": "6960e193c8302714ccf043fb628cb5549cfac48e3e008e7fb93b69d6c34576af",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Men's pants beyond denim: cargos, sweatpants and evening pants. Filter by size or color, or browse all men's pants below.</p>",
+    "digest": "57300a1fbb0f41a73a0700714ca24d2ed680b3240f90865e10759c22f1348fab",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "pants",
+    "digest": "2c50624bea38c570f59fb28e3fffd11330856e2cd512760acaff9eb82d3df8ca",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Pants – Cargo, Sweatpants & Evening Pants | Carbon",
+    "digest": "9624421c2a8fa53326500f4237f32dfd703962c01022c62b00c66e70eca0339f",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon men's pants beyond denim: cargo pants, sweatpants and evening pants. Filter by size or color.",
+    "digest": "718ab95a5899ec913860fb33abdd9c8c5163089ec50512f852f40cd62889a70b",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Pantalones de Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Pantalones de Hombre para Cada Ocasión | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compra pantalones de hombre en Carbon: vaqueros, joggers y pantalones de vestir asequibles y versátiles para cada ocasión.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Pantalones de hombre más allá de la mezclilla: cargo, chinos y estilos casuales para el día a día. Filtra por talla o color, o explora todos los pantalones de hombre a continuación.</p>",
+    "outdated": true
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Calças Masculinas",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Calças Masculinas para Toda Ocasião | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Compre calças masculinas na Carbon: jeans, joggers e calças sociais acessíveis e versáteis para toda ocasião.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Calças masculinas além do jeans: cargos, chinos e estilos casuais para o dia a dia. Filtre por tamanho ou cor, ou veja todas as calças masculinas abaixo.</p>",
+    "outdated": true
+   }
+  ]
+ },
+ "men": {
+  "id": "gid://shopify/Collection/432962175228",
+  "oldHandle": "men",
+  "content": [
+   {
+    "key": "title",
+    "value": "Men",
+    "digest": "d66f151aaeaf3888976bfbdbe081522a8c703d43d0bd826d749037f256ac75d4",
+    "locale": "en"
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Carbon menswear: denim, tees, shirts, jackets and more, made to mix and match. Filter by category, size or color, or browse the full men's range below.</p>",
+    "digest": "743c0e8075f11be7589bda394d1b3a7815273d53fe3d99ece59dca01b340e362",
+    "locale": "en"
+   },
+   {
+    "key": "handle",
+    "value": "men",
+    "digest": "08e3c4c91ca5c58e479ea699df7b1a7e3743831ac17b27e1e967c7d74f41df23",
+    "locale": "en"
+   },
+   {
+    "key": "meta_title",
+    "value": "Men's Clothing – Jeans, Tees, Shirts & Jackets | Carbon",
+    "digest": "396bb65ed34264c2c9fd513eb74a0809b6bb9670f2245f4a3e7ef52969e4a318",
+    "locale": "en"
+   },
+   {
+    "key": "meta_description",
+    "value": "Carbon menswear: jeans in every fit, graphic tees, shirts, jackets, hoodies and sets. Filter by category, size or color.",
+    "digest": "c0b4cfbb5b216461a1e0bad3a4cff434bfa31a405626ae7cb8aee6917438cd90",
+    "locale": "en"
+   }
+  ],
+  "es": [
+   {
+    "key": "title",
+    "value": "Hombre",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Ropa de Hombre a la Moda | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Descubre la colección de hombre de Carbon: ropa asequible y actual, vaqueros, chaquetas y básicos con aire urbano para cada día.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Moda masculina Carbon: denim, camisetas, camisas, chaquetas y más, hechos para combinar. Filtra por categoría, talla o color, o explora toda la colección para hombre a continuación.</p>",
+    "outdated": false
+   }
+  ],
+  "pt": [
+   {
+    "key": "title",
+    "value": "Masculino",
+    "outdated": false
+   },
+   {
+    "key": "meta_title",
+    "value": "Roupas Masculinas Modernas | Carbon",
+    "outdated": true
+   },
+   {
+    "key": "meta_description",
+    "value": "Conheça a coleção masculina da Carbon: roupas acessíveis e atuais, jeans, jaquetas e básicos com pegada urbana para todo dia.",
+    "outdated": true
+   },
+   {
+    "key": "body_html",
+    "value": "<p>Roupas masculinas Carbon: jeans, camisetas, camisas, jaquetas e mais, feitas para combinar entre si. Filtre por categoria, tamanho ou cor, ou navegue por toda a linha masculina abaixo.</p>",
+    "outdated": false
+   }
+  ]
+ }
+}

@@ -99,3 +99,10 @@ The rules are the same as for products: what the page holds, the fit as Carbon d
 ## After publishing
 - Spanish and Portuguese for these pages go out of date. Run Shopify's auto-translate on collections, then I check them with the same brand and glossary rules.
 - Each change is backed up first (old handle, title, SEO, intro), so any one of them can be undone.
+
+## Done — 2026-10-13
+- Part A live: the 6 handles renamed in order; 301s for `clothing-jeans`, `matching-sets-1`, `super-skinny-jeans-men-copy`, `shorts-1` (Shopify applies them under /es and /pt too). `jeans-women` and `matching-sets` were reused on purpose, so they have no redirect. 8 older redirects re-targeted (straight to the new handle; men's items no longer sent to women's pages).
+- Theme: Shopify rewrote collection pickers and `shopify://` links itself; plain-URL links fixed in page.jeans, page.women-dress-cuts, page.women-jeans-cuts and the footer snippet; size-guide fallback (`carbon-size-guide-router`, `product-information`) now also knows `ankle-zip-jeans-men`.
+- WMS: collection-mapping rule `COLLECTION: clothing-jeans` → `jeans-women`; seed handles updated; cached handles in `shopify_collection_menu_nodes` refreshed (mappings were already by collection id).
+- Part B live: SEO title + description (sent together) and intros on all 12; ES + PT written by hand with the glossary (80 fields), no outdated flags.
+- Backups: `evidence/collections-backup-2026-10-13.json` (handles, SEO, intros, menus, redirects), `evidence/collections-translations-backup-2026-10-13.json`.

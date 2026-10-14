@@ -1,0 +1,1826 @@
+{
+ "collections": {
+  "jeans-women": {
+   "id": "gid://shopify/Collection/433108615420",
+   "handle": "jeans-women",
+   "title": "FLARE & WIDE LEG (women)",
+   "descriptionHtml": "<p>Fitted at the hip, opening into a flared or wide leg for a long, flowing shape. Wear them with heels to add length or with sneakers for an easy look. Filter by size or color, or browse all flare and wide-leg denim below.</p>",
+   "seo": {
+    "title": "Women’s Flare & Wide Leg Jeans | Carbon",
+    "description": "Discover Carbon's womens flare & wide-leg denim - vintage-inspired fits with modern comfort and style. Sign up now to be first to shop new arrivals."
+   },
+   "updatedAt": "2026-09-29T03:40:53Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros Acampanados y Anchos de Mujer",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre los vaqueros acampanados y de pierna ancha de Carbon: cortes de inspiración vintage con comodidad y estilo modernos.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros Flare y de Pierna Ancha para Mujer | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Ajustado a la cadera, con apertura hacia una pierna acampanada o ancha para una silueta larga y fluida. Úsalos con tacones para alargar la figura o con zapatillas para un estilo desenfadado. Filtra por talla o color, o explora todos nuestros vaqueros acampanados y de pierna ancha a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Flare e Pantalona Femininos",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubra os jeans flare e pantalona da Carbon: cortes de inspiração vintage com conforto e estilo modernos.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calças Jeans Femininas Boca de Sino e Perna Larga | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Ajustado no quadril, abrindo para uma perna flare ou ampla, criando um visual longo e fluido. Use com salto para alongar ou com tênis para um visual despojado. Filtre por tamanho ou cor, ou veja todos os jeans flare e wide leg abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "clothing-jeans": {
+   "id": "gid://shopify/Collection/433459921148",
+   "handle": "clothing-jeans",
+   "title": "WOMEN JEANS",
+   "descriptionHtml": "<p>All Carbon women's denim in one place: skinny, relaxed, and flare and wide leg. Choose your fit, then filter by size or color, or browse all women's jeans below.</p>",
+   "seo": {
+    "title": "Trendy and Stylish Women’s Jeans | Carbon",
+    "description": "Discover women's jeans at Carbon - perfect fit, stylish cuts, and versatile denim for every look. Shop the collection and find your favorite pair today."
+   },
+   "updatedAt": "2026-09-29T03:46:40Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros de Mujer",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros de Mujer con Estilo | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre los vaqueros de mujer de Carbon: ajuste perfecto, cortes con estilo y denim versátil para cada look. Encuentra tu par.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Todo el denim para mujer de Carbon en un solo lugar: skinny, relajado, y de corte acampanado o de pierna ancha. Elige tu ajuste, luego filtra por talla o color, o explora todos los jeans para mujer a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Femininos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Jeans Femininos com Estilo | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubra os jeans femininos da Carbon: caimento perfeito, cortes estilosos e denim versátil para todo look. Ache o seu par.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Todos os jeans femininos da Carbon em um só lugar: skinny, relaxado, flare e perna larga. Escolha o seu caimento, depois filtre por tamanho ou cor, ou navegue por todos os jeans femininos abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "matching-sets": {
+   "id": "gid://shopify/Collection/433106944252",
+   "handle": "matching-sets",
+   "title": "SWEATSHIRTS & HOODIES (Men)",
+   "descriptionHtml": "<p>Men's sweatshirts and hoodies for comfort, from lounging to the street. Filter by size or color, or browse all men's sweatshirts and hoodies below.</p>",
+   "seo": {
+    "title": "Men’s Sweatshirts & Hoodies | Carbon",
+    "description": "Discover Carbon men's matching sweatshirts & hoodies - cozy, coordinated styles made for effortless everyday outfits. Shop stylish matching sets today."
+   },
+   "updatedAt": "2026-09-29T03:46:43Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Sudaderas con Capucha de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre las sudaderas y conjuntos a juego de hombre de Carbon: prendas cómodas y coordinadas para looks sin esfuerzo.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Sudaderas y sudaderas con capucha para hombre | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Sudaderas y sudaderas con capucha para hombre diseñadas para brindar comodidad, desde estar en casa hasta salir a la calle. Filtra por talla o color, o explora todas las sudaderas y sudaderas con capucha para hombre a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Moletons e Capuzes Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Conheça os moletons e conjuntos masculinos da Carbon: peças confortáveis e combinando para looks sem esforço.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Blusões e Moletons Masculinos | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Moletom e hoodies masculinos para conforto, do descanso ao dia a dia. Filtre por tamanho ou cor, ou veja todos os moletons e hoodies masculinos abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "matching-sets-1": {
+   "id": "gid://shopify/Collection/433108222204",
+   "handle": "matching-sets-1",
+   "title": "MATCHING SETS (women)",
+   "descriptionHtml": "<p>Coordinated women's sets, top and bottom, for an instantly put-together look. Filter by size or color, or browse all matching sets below.</p>",
+   "seo": {
+    "title": "Carbon Matching Sets - Shop 2 Piece Outfits",
+    "description": "Discover matching sets at Carbon featuring stylish two-piece outfits, dresses, and cozy co-ords designed for effortless everyday fashion at great prices."
+   },
+   "updatedAt": "2026-10-11T17:15:59Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Conjuntos a Juego de Mujer",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Conjuntos a Juego - Compra Looks de 2 Piezas | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre los conjuntos a juego de Carbon: dos piezas, vestidos y co-ords cómodos para looks sin esfuerzo a buen precio.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Conjuntos coordinados para mujer, de blusa y pantalón, para un look impecable al instante. Filtra por talla o color, o explora todos los conjuntos a juego a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Conjuntos Femininos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Conjuntos Femininos - Looks de 2 Peças | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubra os conjuntos da Carbon: duas peças, vestidos e co-ords confortáveis para looks sem esforço com bom preço.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Conjuntos femininos coordenados, top e bottom, para um visual arrumado instantaneamente. Filtre por tamanho ou cor, ou veja todos os conjuntos combinando abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "super-skinny-jeans-men-copy": {
+   "id": "gid://shopify/Collection/510668210428",
+   "handle": "super-skinny-jeans-men-copy",
+   "title": "SUPER SKINNY ANKLE ZIP JEANS (MEN)",
+   "descriptionHtml": "<p>The super skinny fit, cut shorter and finished with a zipper at the ankle. The cropped length shows off your sneakers, and the zip makes them easy to get on and off. Filter by size or color, or browse all ankle-zip styles below.</p>",
+   "seo": {
+    "title": "Men’s Super Skinny Jeans | Carbon",
+    "description": "Shop Carbon mens super skinny jeans with sleek, modern, and affordable fits crafted for comfort and style that elevate your everyday streetwear look."
+   },
+   "updatedAt": "2026-09-29T21:08:40Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "SUPER SKINNY ANKLE ZIP JEANS (MEN)",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compra vaqueros súper pitillo de hombre en Carbon: cortes ajustados, modernos y asequibles para elevar tu estilo urbano.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>El corte super skinny, más corto y terminado con cierre en el tobillo. El largo recortado resalta tus tenis, y el cierre facilita ponerlos y quitarlos. Filtra por talla o color, o explora todos los estilos con cierre en el tobillo a continuación.</p>",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Jeans Súper Pitillo de Hombre | Carbon",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "SUPER SKINNY ANKLE ZIP JEANS (MASCULINO)",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre jeans super skinny masculinos na Carbon: cortes ajustados, modernos e acessíveis para elevar seu estilo urbano.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Modelagem super skinny, mais curta e finalizada com zíper no tornozelo. O comprimento cropped destaca seus tênis e o zíper facilita vestir e tirar. Filtre por tamanho ou cor, ou veja todos os modelos ankle-zip abaixo.</p>",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calça Jeans Masculina Super Skinny | Carbon",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "shorts-1": {
+   "id": "gid://shopify/Collection/433108353276",
+   "handle": "shorts-1",
+   "title": "SHORTS (Men)",
+   "descriptionHtml": "<p>Men's shorts in denim and casual styles, made for warm weather. Filter by size or color, or browse all men's shorts below.</p>",
+   "seo": {
+    "title": "Stylish Men’s Shorts for Casual Looks | Carbon",
+    "description": "Discover Carbon men shorts with affordable trendy styles from casual cuts to athletic fits designed for modern everyday comfort and versatility."
+   },
+   "updatedAt": "2026-10-11T17:13:01Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Shorts de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Shorts de Hombre para Looks Casuales | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre los shorts de hombre de Carbon: desde cortes casuales hasta ajustes deportivos, cómodos y versátiles para cada día.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Pantalones cortos para hombre en estilos de mezclilla e informales, hechos para el clima cálido. Filtra por talla o color, o explora todos los pantalones cortos para hombre a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Shorts Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Shorts Masculinos para Looks Casuais | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Conheça os shorts masculinos da Carbon: dos cortes casuais aos modelos esportivos, confortáveis e versáteis para todo dia.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Bermudas masculinas em jeans e estilos casuais, feitas para o clima quente. Filtre por tamanho ou cor, ou veja todas as bermudas masculinas abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "jeans-men": {
+   "id": "gid://shopify/Collection/437232009468",
+   "handle": "jeans-men",
+   "title": "MEN JEANS",
+   "descriptionHtml": "<p>All Carbon men's denim in one place: super skinny, skinny, slim, ankle zip and baggy. Choose your fit, then filter by size or color, or browse all men's jeans below.</p>",
+   "seo": {
+    "title": "Men’s Trending Jeans for Every Style | Carbon",
+    "description": "Shop Carbon men's jeans collection featuring trendy, affordable denim styles from skinny to baggy fits built for comfort and modern everyday fashion."
+   },
+   "updatedAt": "2026-10-11T10:01:01Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros de Hombre para Cada Estilo | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre los vaqueros de hombre de Carbon: denim actual y asequible, del pitillo al ancho, cómodo para el día a día.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Todos los vaqueros para hombre de Carbon en un mismo lugar: super skinny, skinny, slim, con cremallera en el tobillo y baggy. Elige tu corte, filtra por talla o color, o explora todos los vaqueros para hombre a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Jeans Masculinos para Todo Estilo | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Conheça os jeans masculinos da Carbon: denim atual e acessível, do skinny ao baggy, confortável para o dia a dia.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Todos os jeans masculinos da Carbon em um só lugar: super skinny, skinny, slim, ankle zip e baggy. Escolha o seu caimento, depois filtre por tamanho ou cor, ou navegue por todos os jeans masculinos abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "super-skinny-jeans-men": {
+   "id": "gid://shopify/Collection/437269397756",
+   "handle": "super-skinny-jeans-men",
+   "title": "SUPER SKINNY JEANS (MEN)",
+   "descriptionHtml": "<p>Our tightest fit: narrow from thigh to ankle for a sharp, tapered line, in a full-length leg. Closer than skinny, in light to dark washes, clean or ripped. Filter by size or color, or browse all super skinny denim below.</p>",
+   "seo": {
+    "title": "Men’s Super Skinny Jeans | Carbon",
+    "description": "Shop Carbon mens super skinny jeans with sleek, modern, and affordable fits crafted for comfort and style that elevate your everyday streetwear look."
+   },
+   "updatedAt": "2026-10-11T10:01:01Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros Súper Pitillo de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compra vaqueros súper pitillo de hombre en Carbon: cortes ajustados, modernos y asequibles para elevar tu estilo urbano.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Nuestro ajuste más ceñido: estrecho desde el muslo hasta el tobillo para una línea entallada y definida, con largo completo. Más ajustado que el modelo skinny, disponible en lavados de claro a oscuro, lisos o rasgados. Filtra por talla o color, o explora todos nuestros jeans super skinny a continuación.</p>",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Jeans Súper Pitillo de Hombre | Carbon",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Super Skinny Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre jeans super skinny masculinos na Carbon: cortes ajustados, modernos e acessíveis para elevar seu estilo urbano.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Nosso caimento mais justo: estreito da coxa ao tornozelo para uma linha afunilada e definida, com comprimento total. Mais ajustado que o skinny, em lavagens claras a escuras, lisos ou rasgados. Filtre por tamanho ou cor, ou navegue por todos os jeans super skinny abaixo.</p>",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calça Jeans Masculina Super Skinny | Carbon",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "skinny-jeans": {
+   "id": "gid://shopify/Collection/433108648188",
+   "handle": "skinny-jeans",
+   "title": "SKINNY JEANS (MEN)",
+   "descriptionHtml": "<p>Close-fitting but not tight: slim through the thigh and tapered to the ankle, with a little more room than super skinny. In light to dark washes, clean or ripped. Filter by size or color, or browse all skinny denim below.</p>",
+   "seo": {
+    "title": "Men’s Skinny Jeans for a Sleek Fit | Carbon",
+    "description": "Carbon deliver mens skinny jeans in affordable, trendy denim with sleek, flattering fits designed for modern everyday style and all-day comfort."
+   },
+   "updatedAt": "2026-09-29T03:40:45Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros Pitillo de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Carbon ofrece vaqueros pitillo de hombre en denim actual y asequible, con cortes ajustados y cómodos para el día a día.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros ajustados de hombre para un estilo elegante | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Ceñido pero no ajustado: entallado en el muslo y con corte estrecho hacia el tobillo, con un poco más de espacio que los modelos súper pitillo. En lavados de claro a oscuro, lisos o desgarrados. Filtra por talla o color, o explora todos los vaqueros pitillo a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Skinny Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "A Carbon traz jeans skinny masculinos em denim atual e acessível, com cortes ajustados e confortáveis para o dia a dia.",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calças Jeans Masculinas Skinny para um Caimento Elegante | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Ajuste justo, mas não apertado: modelagem slim na coxa e afunilada até o tornozelo, com um pouco mais de espaço que o super skinny. Disponível em lavagens claras a escuras, lisa ou rasgada. Filtre por tamanho ou cor, ou veja todos os jeans skinny abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "slim-jeans-men": {
+   "id": "gid://shopify/Collection/437269496060",
+   "handle": "slim-jeans-men",
+   "title": "SLIM JEANS (MEN)",
+   "descriptionHtml": "<p>Slim through the leg with a gentle taper: tailored without feeling tight. An easy everyday fit that works dressed up or down. Filter by size or color, or browse all slim denim below.</p>",
+   "seo": {
+    "title": "Men’s Slim Fit Jeans | Carbon",
+    "description": "Shop Carbon men’s slim fit jeans, tapered denim that sits between skinny and straight, cut for comfort and modern everyday style."
+   },
+   "updatedAt": "2026-09-29T03:40:49Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros Slim de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros ajustados para hombre | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre jeans slim fit de hombre Carbon, mezclilla cónica que se encuentra entre ajustada y recta, cortada para brindar comodidad y un estilo moderno para el día a día.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Corte ajustado en la pierna con un estrechamiento sutil: entallado sin apretar. Un ajuste diario sencillo que combina tanto con estilos formales como informales. Filtra por talla o color, o explora todos nuestros jeans ajustados a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Slim Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calça Jeans Masculina Slim Fit | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre jeans Carbon masculinos slim fit, jeans afunilados que ficam entre o justo e o reto, corte para conforto e estilo moderno para o dia a dia.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Justo na perna com leve afunilamento: ajustado sem apertar. Um caimento fácil para o dia a dia, que funciona tanto em looks casuais quanto arrumados. Filtre por tamanho ou cor, ou navegue por todos os jeans slim abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "baggy-men": {
+   "id": "gid://shopify/Collection/437269528828",
+   "handle": "baggy-men",
+   "title": "BAGGY (MEN)",
+   "descriptionHtml": "<p>Our most relaxed fit: loose through the hip and thigh with a straight, roomy leg. Comfortable, laid-back and made to stack over sneakers. Filter by size or color, or browse all baggy denim below.</p>",
+   "seo": {
+    "title": "Men’s Baggy Jeans for Bold Style | Carbon",
+    "description": "Shop Carbon mens baggy jeans collection featuring trendy, affordable denim with relaxed fits crafted for comfort and modern streetwear fashion."
+   },
+   "updatedAt": "2026-09-30T00:25:18Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Vaqueros Anchos de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Vaqueros Anchos de Hombre con Carácter | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compra los vaqueros anchos de hombre de Carbon: denim actual y asequible con cortes relajados y aire urbano.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Nuestro ajuste más relajado: holgado en la cadera y el muslo con una pierna recta y amplia. Cómodo, informal y diseñado para que se ajuste sobre las zapatillas. Filtra por talla o color, o explora todos los vaqueros baggy a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Jeans Baggy Masculinos",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Jeans Baggy Masculinos com Atitude | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre os jeans baggy masculinos da Carbon: denim atual e acessível com modelagem larga e pegada urbana.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Nosso caimento mais relaxado: solto no quadril e na coxa, com perna reta e ampla. Confortável, despojado e feito para usar sobre tênis. Filtre por tamanho ou cor, ou navegue por todos os jeans baggy abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "pants": {
+   "id": "gid://shopify/Collection/433107042556",
+   "handle": "pants",
+   "title": "PANTS (Men)",
+   "descriptionHtml": "<p>Men's pants beyond denim: cargos, chinos and casual styles for every day. Filter by size or color, or browse all men's pants below.</p>",
+   "seo": {
+    "title": "Stylish Men's Pants for Every Occasion at Carbon",
+    "description": "Shop Carbon mens pants for affordable, on-trend denim, joggers, and trousers - modern versatile styles made to fit every occasion with ease."
+   },
+   "updatedAt": "2026-10-09T11:23:01Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Pantalones de Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Pantalones de Hombre para Cada Ocasión | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compra pantalones de hombre en Carbon: vaqueros, joggers y pantalones de vestir asequibles y versátiles para cada ocasión.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Pantalones de hombre más allá de la mezclilla: cargo, chinos y estilos casuales para el día a día. Filtra por talla o color, o explora todos los pantalones de hombre a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Calças Masculinas",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Calças Masculinas para Toda Ocasião | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Compre calças masculinas na Carbon: jeans, joggers e calças sociais acessíveis e versáteis para toda ocasião.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Calças masculinas além do jeans: cargos, chinos e estilos casuais para o dia a dia. Filtre por tamanho ou cor, ou veja todas as calças masculinas abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  },
+  "men": {
+   "id": "gid://shopify/Collection/432962175228",
+   "handle": "men",
+   "title": "Men",
+   "descriptionHtml": "<p>Carbon menswear: denim, tees, shirts, jackets and more, made to mix and match. Filter by category, size or color, or browse the full men's range below.</p>",
+   "seo": {
+    "title": "Shop Men’s Fashion Clothing at Carbon | Trendy Styles",
+    "description": "Shop Carbon mens fashion collection featuring trendy and affordable clothing, jeans, jackets, and essentials made for modern everyday street style."
+   },
+   "updatedAt": "2026-10-13T23:11:22Z",
+   "translations": {
+    "es": [
+     {
+      "key": "title",
+      "value": "Hombre",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Ropa de Hombre a la Moda | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Descubre la colección de hombre de Carbon: ropa asequible y actual, vaqueros, chaquetas y básicos con aire urbano para cada día.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Moda masculina Carbon: denim, camisetas, camisas, chaquetas y más, hechos para combinar. Filtra por categoría, talla o color, o explora toda la colección para hombre a continuación.</p>",
+      "outdated": false
+     }
+    ],
+    "pt": [
+     {
+      "key": "title",
+      "value": "Masculino",
+      "outdated": false
+     },
+     {
+      "key": "meta_title",
+      "value": "Roupas Masculinas Modernas | Carbon",
+      "outdated": false
+     },
+     {
+      "key": "meta_description",
+      "value": "Conheça a coleção masculina da Carbon: roupas acessíveis e atuais, jeans, jaquetas e básicos com pegada urbana para todo dia.",
+      "outdated": false
+     },
+     {
+      "key": "body_html",
+      "value": "<p>Roupas masculinas Carbon: jeans, camisetas, camisas, jaquetas e mais, feitas para combinar entre si. Filtre por categoria, tamanho ou cor, ou navegue por toda a linha masculina abaixo.</p>",
+      "outdated": false
+     }
+    ]
+   }
+  }
+ },
+ "redirects": [
+  {
+   "id": "gid://shopify/UrlRedirect/416019677436",
+   "path": "/pages/shirt-shop",
+   "target": "/collections/men-shirt-shop"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/416029933820",
+   "path": "/collections/accessories-shoes-1",
+   "target": "/collections/men-accessories-shoes"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/416030130428",
+   "path": "/collections/shirt-shop",
+   "target": "/collections/men-shirt-shop"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/477023895804",
+   "path": "/collections/slim-jeans-women",
+   "target": "/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/477249077500",
+   "path": "/products/gleann-black-slim-fit-denim-jeans-78",
+   "target": "/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/477479731452",
+   "path": "/products/black-distressed-blind-frame-denim-c1",
+   "target": "/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490952261884",
+   "path": "/collections/men-winter-sale/products/dennis-jacket",
+   "target": "/products/dennis-jacket"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490953539836",
+   "path": "/pt/collections/vendors/products/oversized-shorts-set-effortless-vibe-74",
+   "target": "/pt/collections/matching-sets"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490954359036",
+   "path": "/collections/men-jeans/products/bracelet-e",
+   "target": "/products/bracelet-e"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490959208700",
+   "path": "/pt/collections/men/products/adan-jeans",
+   "target": "/pt/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490960355580",
+   "path": "/collections/men/products/adam-lifestyle-shorts-set-summer-vibe-d6",
+   "target": "/collections/matching-sets"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490962616572",
+   "path": "/es/collections/women/products/cindy-black-denim-shorts-4c",
+   "target": "/es/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490970153212",
+   "path": "/es/collections/jeans-men/products/don-slim-fit-trendy-denim-jeans-cc",
+   "target": "/es/products/don-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/490975527164",
+   "path": "/collections/skinny-jeans/products/kaleb-jeans",
+   "target": "/products/kaleb-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604879847676",
+   "path": "/collections/jeans-men/products/mens-blue-washed-slim-fit-streetwear-jeans-81",
+   "target": "/collections/jeans-men"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604879880444",
+   "path": "/collections/men/products/black-button-down-shirt-streetwear-ootd-76",
+   "target": "/collections/shirts"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604879913212",
+   "path": "/collections/men/products/challenge-graphic-tee-streetwear-essential-c0",
+   "target": "/products/challenge-t-shirt"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604879945980",
+   "path": "/collections/men/products/denim-shorts-yz",
+   "target": "/collections/clothing-jeans"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604879978748",
+   "path": "/collections/pants/products/adrian-multi-pocket-cargo-pants-utility-38",
+   "target": "/products/adrian-cargo-pants"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604880011516",
+   "path": "/collections/pants/products/alo-pants-set",
+   "target": "/products/cole-pants-set"
+  },
+  {
+   "id": "gid://shopify/UrlRedirect/604880208124",
+   "path": "/collections/men-shirt/products/ryland-top-set",
+   "target": "/products/ryland-top-set"
+  }
+ ],
+ "menus": [
+  {
+   "id": "gid://shopify/Menu/211129663740",
+   "handle": "main-menu",
+   "title": "Main menu",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/604876931324",
+     "title": "MEN",
+     "type": "COLLECTION",
+     "url": "/collections/men",
+     "resourceId": "gid://shopify/Collection/432962175228",
+     "tags": [],
+     "items": [
+      {
+       "id": "gid://shopify/MenuItem/604876964092",
+       "title": "NEW & NOW",
+       "type": "COLLECTION",
+       "url": "/collections/men-new-now",
+       "resourceId": "gid://shopify/Collection/433443209468",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604876996860",
+         "title": "NEW ARRIVALS",
+         "type": "COLLECTION",
+         "url": "/collections/new-arrivals",
+         "resourceId": "gid://shopify/Collection/432960962812",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877029628",
+         "title": "LIMITED EDITION",
+         "type": "COLLECTION",
+         "url": "/collections/limited-edition-men",
+         "resourceId": "gid://shopify/Collection/463748694268",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877062396",
+         "title": "SUMMER SETS",
+         "type": "COLLECTION",
+         "url": "/collections/summer-sets-men",
+         "resourceId": "gid://shopify/Collection/437182333180",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877095164",
+         "title": "WINTER SETS",
+         "type": "COLLECTION",
+         "url": "/collections/winter-sets",
+         "resourceId": "gid://shopify/Collection/437171716348",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604877127932",
+       "title": "CLOTHING",
+       "type": "COLLECTION",
+       "url": "/collections/men-clothing",
+       "resourceId": "gid://shopify/Collection/433443373308",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604877160700",
+         "title": "SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/shirts",
+         "resourceId": "gid://shopify/Collection/433107435772",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877193468",
+         "title": "TOPS",
+         "type": "COLLECTION",
+         "url": "/collections/tops-men",
+         "resourceId": "gid://shopify/Collection/433401823484",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877226236",
+         "title": "JEANS",
+         "type": "PAGE",
+         "url": "/pages/men-jeans-cuts-1",
+         "resourceId": "gid://shopify/Page/128219218172",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877259004",
+         "title": "SWEATSHIRTS & HOODIES",
+         "type": "COLLECTION",
+         "url": "/collections/matching-sets",
+         "resourceId": "gid://shopify/Collection/433106944252",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877291772",
+         "title": "JACKETS & COATS",
+         "type": "COLLECTION",
+         "url": "/collections/jackets-coats",
+         "resourceId": "gid://shopify/Collection/433106845948",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877324540",
+         "title": "TRACKSUITS",
+         "type": "COLLECTION",
+         "url": "/collections/tracksuits-1",
+         "resourceId": "gid://shopify/Collection/433107009788",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877357308",
+         "title": "PANTS",
+         "type": "COLLECTION",
+         "url": "/collections/pants",
+         "resourceId": "gid://shopify/Collection/433107042556",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877390076",
+         "title": "OVERALLS",
+         "type": "COLLECTION",
+         "url": "/collections/overalls",
+         "resourceId": "gid://shopify/Collection/433107108092",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877422844",
+         "title": "POLOS",
+         "type": "COLLECTION",
+         "url": "/collections/polos",
+         "resourceId": "gid://shopify/Collection/433107140860",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877455612",
+         "title": "T-SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/t-shirts",
+         "resourceId": "gid://shopify/Collection/433107173628",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877488380",
+         "title": "SHORTS",
+         "type": "COLLECTION",
+         "url": "/collections/shorts-1",
+         "resourceId": "gid://shopify/Collection/433108353276",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877521148",
+         "title": "SWIMWEAR",
+         "type": "COLLECTION",
+         "url": "/collections/swimwear-1",
+         "resourceId": "gid://shopify/Collection/433108386044",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877553916",
+         "title": "SWEATPANTS",
+         "type": "COLLECTION",
+         "url": "/collections/sweatpants-men",
+         "resourceId": "gid://shopify/Collection/433371709692",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877586684",
+         "title": "SWEATERS",
+         "type": "COLLECTION",
+         "url": "/collections/sweaters-men",
+         "resourceId": "gid://shopify/Collection/433399955708",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877619452",
+         "title": "TANK TOPS",
+         "type": "COLLECTION",
+         "url": "/collections/tank-tops-men",
+         "resourceId": "gid://shopify/Collection/433420730620",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604877652220",
+       "title": "ACCESSORIES & SHOES",
+       "type": "COLLECTION",
+       "url": "/collections/men-accessories-shoes",
+       "resourceId": "gid://shopify/Collection/433460707580",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604877684988",
+         "title": "SHOES",
+         "type": "COLLECTION",
+         "url": "/collections/shoes",
+         "resourceId": "gid://shopify/Collection/433107632380",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877783292",
+         "title": "JEWELRY",
+         "type": "COLLECTION",
+         "url": "/collections/jewelry",
+         "resourceId": "gid://shopify/Collection/433107763452",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877816060",
+         "title": "SUNGLASSES",
+         "type": "COLLECTION",
+         "url": "/collections/sunglasses",
+         "resourceId": "gid://shopify/Collection/433107796220",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877881596",
+         "title": "ALL ACCESSORIES",
+         "type": "COLLECTION",
+         "url": "/collections/all-accessories",
+         "resourceId": "gid://shopify/Collection/433107927292",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604877914364",
+         "title": "HATS",
+         "type": "COLLECTION",
+         "url": "/collections/hats-men",
+         "resourceId": "gid://shopify/Collection/433368924412",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604877979900",
+       "title": "SHIRT SHOP",
+       "type": "COLLECTION",
+       "url": "/collections/men-shirt-shop",
+       "resourceId": "gid://shopify/Collection/433460838652",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604878012668",
+         "title": "GRAPHIC T-SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/short-sleeve-shirts",
+         "resourceId": "gid://shopify/Collection/433107992828",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/615980073212",
+         "title": "GRAPHIC T-SHIRTS (LONG-SLEEVE)",
+         "type": "COLLECTION",
+         "url": "/collections/graphic-t-shirts-winter",
+         "resourceId": "gid://shopify/Collection/460657590524",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604878045436",
+         "title": "DRESS SHIRT",
+         "type": "COLLECTION",
+         "url": "/collections/dress-shirt",
+         "resourceId": "gid://shopify/Collection/433108025596",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604878078204",
+         "title": "LINEN SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/linen-shirts",
+         "resourceId": "gid://shopify/Collection/433108058364",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604878110972",
+         "title": "DENIM SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/denim-shirts",
+         "resourceId": "gid://shopify/Collection/433108091132",
+         "tags": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "gid://shopify/MenuItem/604871491836",
+     "title": "WOMEN",
+     "type": "COLLECTION",
+     "url": "/collections/women",
+     "resourceId": "gid://shopify/Collection/432960241916",
+     "tags": [],
+     "items": [
+      {
+       "id": "gid://shopify/MenuItem/604871524604",
+       "title": "NEW & NOW",
+       "type": "COLLECTION",
+       "url": "/collections/women-new-now",
+       "resourceId": "gid://shopify/Collection/433459790076",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604871557372",
+         "title": "NEW ARRIVALS",
+         "type": "COLLECTION",
+         "url": "/collections/new-arrivals-women",
+         "resourceId": "gid://shopify/Collection/433419190524",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871590140",
+         "title": "LIMITED EDITION",
+         "type": "COLLECTION",
+         "url": "/collections/limited-edition",
+         "resourceId": "gid://shopify/Collection/433106616572",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871622908",
+         "title": "SUMMER SETS",
+         "type": "COLLECTION",
+         "url": "/collections/summer-sets",
+         "resourceId": "gid://shopify/Collection/433108156668",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871655676",
+         "title": "WINTER SETS",
+         "type": "COLLECTION",
+         "url": "/collections/winter-sets-women",
+         "resourceId": "gid://shopify/Collection/437182562556",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604871688444",
+       "title": "CLOTHING",
+       "type": "COLLECTION",
+       "url": "/collections/clothing-1",
+       "resourceId": "gid://shopify/Collection/433459855612",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604874342652",
+         "title": "MATCHING SETS",
+         "type": "COLLECTION",
+         "url": "/collections/matching-sets-1",
+         "resourceId": "gid://shopify/Collection/433108222204",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871753980",
+         "title": "DRESSES",
+         "type": "PAGE",
+         "url": "/pages/women-dress-cuts",
+         "resourceId": "gid://shopify/Page/128302022908",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871786748",
+         "title": "JEANS",
+         "type": "HTTP",
+         "url": "/pages/women-jeans-cuts",
+         "resourceId": null,
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871819516",
+         "title": "SHORTS",
+         "type": "COLLECTION",
+         "url": "/collections/shorts",
+         "resourceId": "gid://shopify/Collection/433107239164",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871852284",
+         "title": "SKIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/skirts",
+         "resourceId": "gid://shopify/Collection/433108320508",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871885052",
+         "title": "TOPS",
+         "type": "COLLECTION",
+         "url": "/collections/tops",
+         "resourceId": "gid://shopify/Collection/433106747644",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871917820",
+         "title": "TANK TOPS",
+         "type": "COLLECTION",
+         "url": "/collections/tank-tops",
+         "resourceId": "gid://shopify/Collection/433107206396",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871950588",
+         "title": "T-SHIRTS",
+         "type": "COLLECTION",
+         "url": "/collections/t-shirts-women",
+         "resourceId": "gid://shopify/Collection/433340645628",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604871983356",
+         "title": "JUMPSUITS & ROMPERS",
+         "type": "COLLECTION",
+         "url": "/collections/jumpsuits-rompers",
+         "resourceId": "gid://shopify/Collection/433106813180",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872016124",
+         "title": "JACKETS & COATS",
+         "type": "COLLECTION",
+         "url": "/collections/jackets-coats-2",
+         "resourceId": "gid://shopify/Collection/433107501308",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872048892",
+         "title": "BODYSUITS",
+         "type": "COLLECTION",
+         "url": "/collections/bodysuits",
+         "resourceId": "gid://shopify/Collection/433106878716",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872081660",
+         "title": "TRACKSUITS",
+         "type": "COLLECTION",
+         "url": "/collections/tracksuits",
+         "resourceId": "gid://shopify/Collection/433106911484",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872114428",
+         "title": "SWEATPANTS",
+         "type": "COLLECTION",
+         "url": "/collections/sweatpants",
+         "resourceId": "gid://shopify/Collection/433108254972",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872147196",
+         "title": "PANTS & LEGGINGS",
+         "type": "COLLECTION",
+         "url": "/collections/pants-women",
+         "resourceId": "gid://shopify/Collection/433340514556",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872179964",
+         "title": "SWEATSHIRTS & HOODIES",
+         "type": "COLLECTION",
+         "url": "/collections/sweatshirts-hoodies-women",
+         "resourceId": "gid://shopify/Collection/433341169916",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872212732",
+         "title": "SWIMWEAR",
+         "type": "COLLECTION",
+         "url": "/collections/swimsuit-women",
+         "resourceId": "gid://shopify/Collection/433350869244",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872245500",
+         "title": "SWEATERS",
+         "type": "COLLECTION",
+         "url": "/collections/sweaters-women",
+         "resourceId": "gid://shopify/Collection/460656247036",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604872278268",
+       "title": "ACCESSORIES & SHOES",
+       "type": "COLLECTION",
+       "url": "/collections/accessories-shoes-women",
+       "resourceId": "gid://shopify/Collection/433460314364",
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604872311036",
+         "title": "JEWELRY",
+         "type": "COLLECTION",
+         "url": "/collections/jewelry-women",
+         "resourceId": "gid://shopify/Collection/433365844220",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872376572",
+         "title": "BELTS",
+         "type": "COLLECTION",
+         "url": "/collections/women-belts",
+         "resourceId": "gid://shopify/Collection/433460347132",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872409340",
+         "title": "HATS",
+         "type": "COLLECTION",
+         "url": "/collections/hats",
+         "resourceId": "gid://shopify/Collection/433108451580",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872442108",
+         "title": "SHOES",
+         "type": "COLLECTION",
+         "url": "/collections/shoes-women",
+         "resourceId": "gid://shopify/Collection/433366073596",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872474876",
+         "title": "FRAGRANCE & BEAUTY",
+         "type": "COLLECTION",
+         "url": "/collections/fragrance-beauty-women",
+         "resourceId": "gid://shopify/Collection/433368957180",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872507644",
+         "title": "ALL ACCESSORIES",
+         "type": "COLLECTION",
+         "url": "/collections/all-accessories-women",
+         "resourceId": "gid://shopify/Collection/433341038844",
+         "tags": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "gid://shopify/MenuItem/604872540412",
+     "title": "JEANS",
+     "type": "HTTP",
+     "url": "/pages/jeans",
+     "resourceId": null,
+     "tags": [],
+     "items": [
+      {
+       "id": "gid://shopify/MenuItem/604872573180",
+       "title": "MEN",
+       "type": "HTTP",
+       "url": "/pages/men-jeans-cuts-1",
+       "resourceId": null,
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604872605948",
+         "title": "SKINNY JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/skinny-jeans",
+         "resourceId": "gid://shopify/Collection/433108648188",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872638716",
+         "title": "SUPER SKINNY JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/super-skinny-jeans-men",
+         "resourceId": "gid://shopify/Collection/437269397756",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/663312892156",
+         "title": "SUPER SKINNY ANKLE ZIP JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/super-skinny-jeans-men-copy",
+         "resourceId": "gid://shopify/Collection/510668210428",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872671484",
+         "title": "BAGGY",
+         "type": "COLLECTION",
+         "url": "/collections/baggy-men",
+         "resourceId": "gid://shopify/Collection/437269528828",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872704252",
+         "title": "SLIM JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/slim-jeans-men",
+         "resourceId": "gid://shopify/Collection/437269496060",
+         "tags": []
+        }
+       ]
+      },
+      {
+       "id": "gid://shopify/MenuItem/604872737020",
+       "title": "WOMEN",
+       "type": "HTTP",
+       "url": "/pages/women-jeans-cuts",
+       "resourceId": null,
+       "tags": [],
+       "items": [
+        {
+         "id": "gid://shopify/MenuItem/604872769788",
+         "title": "SKINNY JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/skinny-jeans-women",
+         "resourceId": "gid://shopify/Collection/436771553532",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872802556",
+         "title": "RELAXED JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/relaxed-women",
+         "resourceId": "gid://shopify/Collection/437269561596",
+         "tags": []
+        },
+        {
+         "id": "gid://shopify/MenuItem/604872835324",
+         "title": "FLARE & WIDE LEG JEANS",
+         "type": "COLLECTION",
+         "url": "/collections/jeans-women",
+         "resourceId": "gid://shopify/Collection/433108615420",
+         "tags": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "gid://shopify/MenuItem/604872868092",
+     "title": "REWARDS",
+     "type": "PAGE",
+     "url": "/pages/rewards",
+     "resourceId": "gid://shopify/Page/111603155196",
+     "tags": [],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/211129696508",
+   "handle": "footer",
+   "title": "Footer menu",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/493713883388",
+     "title": "Search",
+     "type": "SEARCH",
+     "url": "/search",
+     "resourceId": null,
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/628487782652",
+     "title": "Your Privacy Choices",
+     "type": "PAGE",
+     "url": "/pages/data-sharing-opt-out",
+     "resourceId": "gid://shopify/Page/136213987580",
+     "tags": [],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/213220589820",
+   "handle": "information",
+   "title": "INFORMATION",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/499096649980",
+     "title": "ABOUT US",
+     "type": "PAGE",
+     "url": "/pages/about-us",
+     "resourceId": "gid://shopify/Page/111602761980",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096682748",
+     "title": "GENERAL TERMS & CONDITIONS",
+     "type": "PAGE",
+     "url": "/pages/general-terms-conditions",
+     "resourceId": "gid://shopify/Page/111602991356",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096715516",
+     "title": "DISCLAIMER",
+     "type": "PAGE",
+     "url": "/pages/disclaimer",
+     "resourceId": "gid://shopify/Page/111603024124",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096879356",
+     "title": "PRIVACY POLICY",
+     "type": "PAGE",
+     "url": "/pages/privacy-policy",
+     "resourceId": "gid://shopify/Page/111603056892",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096912124",
+     "title": "SHIPPING & RETURNS",
+     "type": "PAGE",
+     "url": "/pages/shipping-returns",
+     "resourceId": "gid://shopify/Page/111603089660",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096944892",
+     "title": "PAYMENT METHODS",
+     "type": "PAGE",
+     "url": "/pages/payment-methods",
+     "resourceId": "gid://shopify/Page/111603122428",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/605729882364",
+     "title": "ACCESSIBILITY ",
+     "type": "HTTP",
+     "url": "/pages/accessibility",
+     "resourceId": null,
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499096977660",
+     "title": "CAREERS",
+     "type": "HTTP",
+     "url": "https://carbon1.myportfolio.com/hiring-now",
+     "resourceId": null,
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/605731160316",
+     "title": "CONTACT US",
+     "type": "PAGE",
+     "url": "/pages/contact-us",
+     "resourceId": "gid://shopify/Page/129945534716",
+     "tags": [],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/213220688124",
+   "handle": "categories",
+   "title": "CATEGORIES",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/499097141500",
+     "title": "MEN",
+     "type": "COLLECTION",
+     "url": "/collections/men",
+     "resourceId": "gid://shopify/Collection/432962175228",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499097174268",
+     "title": "WOMEN",
+     "type": "COLLECTION",
+     "url": "/collections/women",
+     "resourceId": "gid://shopify/Collection/432960241916",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/605729915132",
+     "title": "JEANS",
+     "type": "PAGE",
+     "url": "/pages/jeans",
+     "resourceId": "gid://shopify/Page/111816704252",
+     "tags": [],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/213220786428",
+   "handle": "my-account",
+   "title": "MY ACCOUNT",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/499097239804",
+     "title": "REGISTER",
+     "type": "HTTP",
+     "url": "/account/register",
+     "resourceId": null,
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499097272572",
+     "title": "MY ORDERS",
+     "type": "HTTP",
+     "url": "/orders",
+     "resourceId": null,
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499097305340",
+     "title": "MY WISHLIST",
+     "type": "PAGE",
+     "url": "/pages/swym-share-wishlist",
+     "resourceId": "gid://shopify/Page/111828697340",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/499097338108",
+     "title": "REWARDS",
+     "type": "PAGE",
+     "url": "/pages/rewards",
+     "resourceId": "gid://shopify/Page/111603155196",
+     "tags": [],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/220993913084",
+   "handle": "customer-account-main-menu",
+   "title": "Customer account main menu",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/664201199868",
+     "title": "Orders",
+     "type": "CUSTOMER_ACCOUNT_PAGE",
+     "url": "https://account.shopcarbon.com/orders",
+     "resourceId": "gid://shopify/CustomerAccountPage/46883176700",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/664201232636",
+     "title": "In-store purchases",
+     "type": "CUSTOMER_ACCOUNT_PAGE",
+     "url": "https://account.shopcarbon.com/pages/01a10bc5-850f-78dd-aa1e-3b8ee04c8111",
+     "resourceId": "gid://shopify/CustomerAccountPage/111782723836",
+     "tags": [
+      "app_extension"
+     ],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/664201265404",
+     "title": "Profile",
+     "type": "CUSTOMER_ACCOUNT_PAGE",
+     "url": "https://account.shopcarbon.com/profile",
+     "resourceId": "gid://shopify/CustomerAccountPage/46883209468",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/664201298172",
+     "title": "Rewards",
+     "type": "CUSTOMER_ACCOUNT_PAGE",
+     "url": "https://account.shopcarbon.com/pages/01a10b52-0216-71b7-9eed-6d9ea4827972",
+     "resourceId": "gid://shopify/CustomerAccountPage/111777710332",
+     "tags": [
+      "app_extension"
+     ],
+     "items": []
+    }
+   ]
+  },
+  {
+   "id": "gid://shopify/Menu/232976974076",
+   "handle": "premium-menu",
+   "title": "ONLINE EXCLUSIVE",
+   "items": [
+    {
+     "id": "gid://shopify/MenuItem/556562678012",
+     "title": "MEN EXCLUSIVE",
+     "type": "COLLECTION",
+     "url": "/collections/men",
+     "resourceId": "gid://shopify/Collection/432962175228",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/556562710780",
+     "title": "WOMEN EXCLUSIVE",
+     "type": "COLLECTION",
+     "url": "/collections/women",
+     "resourceId": "gid://shopify/Collection/432960241916",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/556562743548",
+     "title": "JEANS EXCLUSIVE",
+     "type": "COLLECTION",
+     "url": "/collections/jeans-men",
+     "resourceId": "gid://shopify/Collection/437232009468",
+     "tags": [],
+     "items": []
+    },
+    {
+     "id": "gid://shopify/MenuItem/560220700924",
+     "title": "REWARDS",
+     "type": "PAGE",
+     "url": "/pages/rewards",
+     "resourceId": "gid://shopify/Page/111603155196",
+     "tags": [],
+     "items": []
+    }
+   ]
+  }
+ ],
+ "scopes": [
+  "read_all_orders",
+  "read_content",
+  "read_customers",
+  "read_discounts",
+  "read_draft_orders",
+  "read_legal_policies",
+  "read_locales",
+  "read_locations",
+  "read_markets",
+  "read_metaobject_definitions",
+  "read_metaobjects",
+  "read_online_store_navigation",
+  "read_orders",
+  "read_pixels",
+  "read_products",
+  "read_publications",
+  "read_script_tags",
+  "read_shipping",
+  "read_themes",
+  "read_translations",
+  "write_content",
+  "write_customers",
+  "write_discounts",
+  "write_draft_orders",
+  "write_files",
+  "write_inventory",
+  "write_legal_policies",
+  "write_locales",
+  "write_markets",
+  "write_online_store_navigation",
+  "write_orders",
+  "write_pixels",
+  "write_products",
+  "write_publications",
+  "write_script_tags",
+  "write_shipping",
+  "write_themes",
+  "write_translations",
+  "read_returns",
+  "write_returns",
+  "read_files",
+  "read_inventory"
+ ]
+}

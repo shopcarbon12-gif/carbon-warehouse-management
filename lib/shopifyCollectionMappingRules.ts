@@ -118,7 +118,7 @@ const WORKBOOK_RULE_ROWS: WorkbookRuleRow[] = [
   { routeKey: "12", digit: "9", targetCells: ["MEN > ACCESSORIES & SHOES > ALL ACCESSORIES"] },
 
   // Route 21 (Women Summer)
-  { routeKey: "21", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: clothing-jeans"] },
+  { routeKey: "21", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: jeans-women"] },
   { routeKey: "21", digit: "1", targetCells: ["WOMEN > CLOTHING > DRESSES"] },
   { routeKey: "21", digit: "2", category: "JACKET", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
   { routeKey: "21", digit: "2", category: "VEST", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
@@ -144,7 +144,7 @@ const WORKBOOK_RULE_ROWS: WorkbookRuleRow[] = [
   { routeKey: "21", digit: "9", category: "SWIMSUIT", targetCells: ["WOMEN > CLOTHING > SWIMWEAR"] },
 
   // Route 22 (Women Winter)
-  { routeKey: "22", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: clothing-jeans"] },
+  { routeKey: "22", digit: "0", targetCells: ["WOMEN > CLOTHING > JEANS", "JEANS > WOMEN", "COLLECTION: jeans-women"] },
   { routeKey: "22", digit: "1", targetCells: ["WOMEN > CLOTHING > DRESSES"] },
   { routeKey: "22", digit: "2", category: "JACKET", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
   { routeKey: "22", digit: "2", category: "COAT", targetCells: ["WOMEN > CLOTHING > JACKETS & COATS"] },
