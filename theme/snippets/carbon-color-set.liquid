@@ -1,0 +1,43 @@
+{% comment %}
+  Which photos belong to a color.
+
+  Photos are uploaded one color at a time — every photo of the first color,
+  then every photo of the next — and each color's sizes are linked to the FIRST
+  photo of that color's run (the WMS Images tab "colour:" pick, or "variant
+  image" in Shopify admin). So a color's set runs from its linked photo up to,
+  not including, the next photo that is linked to any variant.
+
+  Outputs the media ids of that set for `variant`, comma-separated, in upload
+  order. Outputs nothing when the variant has no linked photo.
+
+  Sets need at least two different linked photos. With one (a single color, or
+  every color pointing at the same photo) the product has one set of photos,
+  not one per color, so the set is just the linked photo — exactly what the
+  theme did before: that photo first, the rest in upload order.
+
+  main-product.liquid renders this set first, so a page that opens on the
+  second color (first color sold out, or a link to that color) shows that
+  color's photos on top. carbon-color-gallery does the same live when the
+  shopper changes color.
+{%- endcomment -%}
+{%- liquid
+  assign cs_featured = variant.featured_media
+  if cs_featured != null
+    assign cs_starts = product.images | where: 'attached_to_variant?', true | map: 'src'
+    assign cs_in = false
+    if cs_starts.size < 2
+      echo cs_featured.id | append: ','
+    else
+      for cs_media in product.media
+        if cs_media.id == cs_featured.id
+          assign cs_in = true
+        elsif cs_in and cs_starts contains cs_media.src
+          break
+        endif
+        if cs_in
+          echo cs_media.id | append: ','
+        endif
+      endfor
+    endif
+  endif
+-%}

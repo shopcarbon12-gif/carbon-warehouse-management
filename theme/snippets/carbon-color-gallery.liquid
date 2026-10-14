@@ -1,0 +1,117 @@
+{% comment %}
+  Move the chosen color's whole photo set to the top when the shopper changes
+  color.
+
+  On its own the theme moves only the ONE photo linked to the new color to the
+  top-left and leaves everything else where it was, so the previous color's
+  photos stay on top. This puts the new color's whole set first, in upload
+  order, with every other photo after it in upload order — choosing the first
+  color again puts the gallery back the way it was uploaded. Which photos make
+  up a set is the rule in carbon-color-set.liquid; this is the same rule in the
+  browser.
+
+  It runs on the theme's product:variant-change event, which fires after the
+  theme has done its own one-photo move, so the end order is always the same
+  however the shopper got there. Changing size within a color changes nothing.
+  A color with no linked photo puts the upload order back. Every photo stays on
+  show, as when the page loads — the theme's own move would otherwise hide the
+  other colors' main photos.
+
+  Afterwards the slider is told its slides moved: the photo counter on mobile
+  counts in the new order, and the zoom viewer rebuilds itself from the page
+  order (the theme watches the slider for that), so swiping in zoom follows
+  what the shopper sees.
+
+  Grid / slider layout only. The thumbnails layout is driven by Flickity, which
+  does not survive its slides being moved, so it is left to the theme.
+
+  Rendered by main-product.liquid with the product and section.
+{% endcomment %}
+{%- liquid
+  assign cg_starts = product.images | where: 'attached_to_variant?', true | map: 'src'
+  capture cg_start_ids
+    for cg_media in product.media
+      if cg_starts contains cg_media.src
+        echo cg_media.id | append: ','
+      endif
+    endfor
+  endcapture
+-%}
+<script type="application/json" data-carbon-color-gallery="{{ section.id }}">
+  {"order":[{{ product.media | map: 'id' | join: ',' }}],"starts":[{{ cg_start_ids | strip | split: ',' | join: ',' }}]}
+</script>
+<script>
+(function () {
+  "use strict";
+  if (window.carbonColorGallery) return;
+  window.carbonColorGallery = true;
+
+  /* The set for the photo a variant is linked to: that photo, then every photo
+     after it up to the next one linked to any variant. With fewer than two
+     linked photos there are no per-color sets: just the linked photo. */
+  function colorSet(data, featuredId) {
+    var at = data.order.indexOf(featuredId);
+    if (at < 0) return [];
+    var set = [featuredId];
+    if (data.starts.length < 2) return set;
+    for (var i = at + 1; i < data.order.length; i++) {
+      if (data.starts.indexOf(data.order[i]) >= 0) break;
+      set.push(data.order[i]);
+    }
+    return set;
+  }
+
+  document.addEventListener("product:variant-change", function (event) {
+    var detail = event.detail || {};
+    if (!detail.variant || !detail.sectionId) return;
+
+    var tag = document.querySelector('script[data-carbon-color-gallery="' + detail.sectionId + '"]');
+    var gallery = document.getElementById("MediaGallery-" + detail.sectionId);
+    if (!tag || !gallery || gallery.querySelector(".product-thumbnail-container")) return;
+    var slider = gallery.querySelector(".product-images");
+    if (!slider) return;
+
+    var data;
+    try {
+      data = JSON.parse(tag.textContent);
+    } catch (e) {
+      return;
+    }
+
+    var featured = detail.variant.featured_media;
+    var set = featured ? colorSet(data, featured.id) : [];
+    var wanted = set.concat(data.order.filter(function (id) { return set.indexOf(id) < 0; }));
+
+    var slides = [];
+    wanted.forEach(function (id) {
+      var slide = document.getElementById("Slide-" + detail.sectionId + "-" + id);
+      if (slide && slide.parentElement === slider) slides.push(slide);
+    });
+    var current = Array.prototype.filter.call(slider.children, function (el) {
+      return el.id.indexOf("Slide-") === 0;
+    });
+
+    /* On a color change the theme also hides every other color's main photo
+       (it un-marks them), so the other color's set would show up without its
+       first photo. With the theme's "hide variant images" setting off, every
+       photo is on show when the page loads; keep it that way. */
+    if (slider.dataset.hideVariants !== "true") {
+      current.forEach(function (slide) { slide.classList.add("is-active"); });
+    }
+
+    var unchanged = slides.length === current.length && slides.every(function (slide, i) {
+      return slide === current[i];
+    });
+    if (!unchanged) slides.forEach(function (slide) { slider.appendChild(slide); });
+
+    /* The slider keeps the slide list it read when the page loaded; give it the
+       current order and visibility so the counter and the prev / next buttons
+       follow it. */
+    if (slider.sliderItems) {
+      slider.sliderItems = slider.querySelectorAll('[id^="Slide-"]');
+      if (typeof slider.onPaginationResize === "function") slider.onPaginationResize();
+    }
+    if (!unchanged) slider.scrollTo({ left: 0, behavior: "instant" });
+  });
+})();
+</script>
