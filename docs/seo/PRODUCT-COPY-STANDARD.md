@@ -48,6 +48,7 @@ Banned words and phrases: elevate, versatile, must-have, boasts, adorned, wardro
 - Fit promises or measurements: true to size, runs small, slim fit, relaxed fit, high-rise, inches, inseam, lengths in numbers. Visible cut and length words are fine: skinny, flare, baggy, wide-leg, cropped, mini, midi, maxi, knee length, above the knee, "sits high on the waist" (only when the photos clearly show it).
 - Care, origin ("made in", "handmade"), prices, sales, stock, shipping, "limited".
 - Labels, tags or patches of any kind — above all the "CARBON JEANS"/"CARBON" waistband or back label, and never put waistband branding into words. The Carbon logo is "the Carbon logo", never described by its shape (never "hexagon"); mention it only when it is the design (a printed/embroidered logo graphic, the slipper logo tab).
+- The fly type (zip fly, button fly, button-and-zip). It is hidden in almost every photo, and the old descriptions guessed it wrong (Vick Jeans is a button fly, not "button and zip"). State it only when exposed buttons or a zip are clearly visible, or the owner has confirmed it.
 - The model, the model's size, or the size worn.
 - Colours that are not in colorsOnSale.
 

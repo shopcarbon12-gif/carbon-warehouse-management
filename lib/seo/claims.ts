@@ -240,6 +240,7 @@ export function claimRulesFor(ctx: ClaimContext): string {
     "  - how it feels or performs: soft, stretchy, breathable, lightweight, warm, comfortable, durable, premium quality",
     "  - how it fits: true to size, slim fit, relaxed fit, high-rise (\"a relaxed look\" — describing the look — is fine)",
     "  - measurements, lengths or sizes, care instructions, where it was made",
+    "  - the fly type (zip fly, button fly, button and zip) unless exposed buttons or a zip are clearly visible in the photos — it is almost always hidden, and earlier copy got it wrong",
     '  - labels, patches or tags of any kind — never mention the waistband label, a back patch or a brand tag, and never quote the "CARBON JEANS" text printed on them',
     '  - the logo\'s shape: it is "the Carbon logo", and only mention it when it is printed or embroidered as the design',
     "Describe the design instead: colour, wash, print and its wording, graphics, distressing, neckline, sleeves, pockets, closures, hardware, hem, silhouette as it looks.",
