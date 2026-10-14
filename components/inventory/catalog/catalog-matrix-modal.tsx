@@ -2140,7 +2140,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                   </div>
                 ) : null}
 
-                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr_0.6fr_0.6fr]">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)]">
                   <div className="space-y-4">
                   {/* Shared Values */}
                   <Section title="Shared Values · applied to all items in this matrix">
@@ -3293,7 +3293,7 @@ function EditRow({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-32 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
+        className={`w-32 min-w-0 rounded border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1 text-left text-[0.85rem] text-[var(--wms-fg)] focus:border-[var(--wms-accent)]/60 focus:outline-none sm:w-44 ${
           mono ? "font-mono" : ""
         }`}
       />
