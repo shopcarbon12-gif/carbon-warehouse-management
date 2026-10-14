@@ -75,9 +75,13 @@ async function POST_handler(req: NextRequest) {
       itemType: context?.itemType ?? "",
       colorName: context?.colorName ?? "",
       instruction: context?.instruction ?? "",
+      modelGender: context?.modelGender ?? "",
+      accessoryKind: context?.accessoryKind ?? "",
       timeoutMs: QA_TIMEOUT_MS,
     });
-    /* The images are the expensive thing to hold; the verdict is bytes. */
+    /* The images are the expensive thing to hold; the verdict is bytes. Panel
+       1 of an anchored run whose other panels are held stays (see
+       releaseRunPanels) so their forced re-render is judged beside it. */
     releaseRunPanels(runId);
     if (verdict.findings.length) {
       console.warn(

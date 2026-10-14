@@ -36,10 +36,17 @@ type GenerateJob = {
   controller: AbortController;
 };
 
-/** A finished body is claimable for this long; also caps how long a running job is tracked. */
+/** A finished body is claimable for this long. */
 const JOB_TTL_MS = 15 * 60_000;
-/** Hard cap on parked jobs (~3 MB each worst case). Oldest are evicted first. */
-const MAX_JOBS = 12;
+/** A leak guard only: the route's own deadlines end every generation well before this. */
+const RUNNING_JOB_MAX_MS = 30 * 60_000;
+/**
+ * Cap on parked jobs (~3 MB each worst case). Oldest FINISHED bodies are
+ * evicted first and a running job never is: an anchored run keeps panels 2-4
+ * running while panel 1 renders, and evicting one would lose a render that is
+ * still being paid for. 24 = six four-panel runs overlapping.
+ */
+const MAX_JOBS = 24;
 
 /**
  * Pinned to globalThis so the same Map survives webpack/Next.js dev-mode
@@ -56,13 +63,13 @@ const cancelledEarly: Map<string, number> = CG.__generateJobsCancelled ?? (CG.__
 function prune(now: number): void {
   for (const [id, job] of jobs) {
     const age = now - (job.finishedAt ?? job.createdAt);
-    if (age > JOB_TTL_MS) jobs.delete(id);
+    if (age > (job.status === "running" ? RUNNING_JOB_MAX_MS : JOB_TTL_MS)) jobs.delete(id);
   }
-  while (jobs.size > MAX_JOBS) {
-    // Map preserves insertion order — the first entry is the oldest.
-    const oldest = jobs.keys().next();
-    if (oldest.done) break;
-    jobs.delete(oldest.value);
+  if (jobs.size <= MAX_JOBS) return;
+  // Map preserves insertion order — the first finished entry is the oldest.
+  for (const [id, job] of jobs) {
+    if (jobs.size <= MAX_JOBS) break;
+    if (job.status !== "running") jobs.delete(id);
   }
 }
 

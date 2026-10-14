@@ -59,6 +59,9 @@ export type RunQaContext = {
   colorName: string;
   /** The operator's instruction; it overrides the photos and spec, so the judge must too. */
   instruction: string;
+  /** Lets the judges label each frame as fact: "back view", or an accessory shot's role. */
+  modelGender?: string;
+  accessoryKind?: string;
 };
 
 type RunEntry = {
@@ -75,9 +78,10 @@ type VerdictEntry = {
 
 const RUN_TTL_MS = 15 * 60_000;
 const VERDICT_TTL_MS = 10 * 60_000;
-/* Four 1536x1024 PNGs is roughly 10 MB of base64 per run. Three runs is the
-   most this ever needs to hold — one in flight, two being collected. */
-const MAX_RUNS = 3;
+/* Four 1536x1024 PNGs is roughly 10 MB of base64 per run. An anchored run
+   (panel 1 first, then 2-4) is in flight about twice as long, so one more run
+   is held than the one-in-flight-two-being-collected this used to need. */
+const MAX_RUNS = 4;
 const MAX_VERDICTS = 16;
 const MAX_PANELS_PER_RUN = 8;
 
@@ -143,8 +147,21 @@ export function readRunPanels(runId: string): RunPanelImage[] {
   return [...entry.panels.values()].sort((a, b) => a.panel - b.panel);
 }
 
-/** The images are large; drop them as soon as the judges have looked. */
+/**
+ * The images are large; drop them as soon as the judges have looked.
+ *
+ * Except panel 1 of an anchored run whose other panels are still to come —
+ * being gated, or held by the gate until "render the other panels anyway":
+ * the QA of that run has to see panel 1 next to them. So while the run holds
+ * nothing but its source panel, the source stays.
+ */
 export function releaseRunPanels(runId: string): void {
+  const anchor = anchors.get(runId);
+  const entry = runs.get(runId);
+  const followersPending =
+    anchor?.result?.status === "ok" &&
+    ((anchor.gate !== null && !anchor.gateResult) || anchor.gateResult?.status === "flagged");
+  if (entry && followersPending && [...entry.panels.keys()].every((p) => p === anchor?.result?.panel)) return;
   runs.delete(runId);
 }
 
@@ -184,4 +201,145 @@ export function claimRunQa(
   const verdict = entry.verdict;
   verdicts.delete(id);
   return { status: "done", verdict };
+}
+
+/* ── Anchor: panel 1 sets the look ──────────────────────────────────────────
+ *
+ * The four panels of a run are four independent image calls, so whatever the
+ * prompt leaves open (how the shoes are drawn, how the tee drapes) is drawn
+ * four different ways. In an anchored run panel 1 renders first and panels
+ * 2-4 attach it as a same-shoot reference. All four are still POSTed at once
+ * (resume, Abort and the job ids are unchanged); the followers wait HERE, on
+ * the server, for the source to land.
+ *
+ * Depth is always 1: only a panel rendered from the real references becomes an
+ * anchor, never a follower. Same in-memory idiom as the panels above — a
+ * container restart loses a waiting run exactly as it loses a rendering one.
+ */
+
+export type RunAnchorResult =
+  | { status: "ok"; b64: string; panel: number; poseA: number | null; poseB: number | null }
+  | { status: "failed"; panel: number; reason: string };
+
+/** The accuracy judge on panel 1 alone, once per run, before 2-4 are paid for. */
+export type AnchorGateResult = {
+  status: "pass" | "flagged" | "unavailable";
+  findings: RunQaFinding[];
+  notes: string[];
+};
+
+type AnchorEntry = {
+  createdAt: number;
+  settledAt: number | null;
+  result: RunAnchorResult | null;
+  waiters: Set<(r: RunAnchorResult) => void>;
+  gate: Promise<AnchorGateResult> | null;
+  gateResult: AnchorGateResult | null;
+};
+
+const ANCHOR_TTL_MS = 15 * 60_000;
+/* One 1536x1024 PNG (~2.5 MB of base64) per entry. */
+const MAX_ANCHORS = 6;
+
+const GA = globalThis as unknown as { __runAnchors?: Map<string, AnchorEntry> };
+const anchors: Map<string, AnchorEntry> = GA.__runAnchors ?? (GA.__runAnchors = new Map());
+
+/** Never drops an entry somebody is waiting on. */
+function pruneAnchors(now: number): void {
+  for (const [id, e] of anchors) {
+    if (e.waiters.size) continue;
+    if (now - (e.settledAt ?? e.createdAt) > ANCHOR_TTL_MS) anchors.delete(id);
+  }
+  if (anchors.size <= MAX_ANCHORS) return;
+  for (const [id, e] of anchors) {
+    if (anchors.size <= MAX_ANCHORS) break;
+    if (!e.waiters.size) anchors.delete(id);
+  }
+}
+
+function anchorEntry(runId: string, now: number): AnchorEntry {
+  let entry = anchors.get(runId);
+  if (!entry) {
+    entry = { createdAt: now, settledAt: null, result: null, waiters: new Set(), gate: null, gateResult: null };
+    anchors.set(runId, entry);
+  }
+  return entry;
+}
+
+/**
+ * The source panel finished — rendered, refused, failed or aborted. Releases
+ * every follower waiting on it. A second source for the same run (panel 1
+ * regenerated under the same run id) replaces the first and its gate verdict.
+ */
+export function settleRunAnchor(runId: string, result: RunAnchorResult): void {
+  const now = Date.now();
+  pruneAnchors(now);
+  const entry = anchorEntry(runId, now);
+  entry.result = result;
+  entry.settledAt = now;
+  entry.gate = null;
+  entry.gateResult = null;
+  const waiting = [...entry.waiters];
+  entry.waiters.clear();
+  for (const wake of waiting) wake(result);
+}
+
+/** A follower waits for the source. Abortable (the Studio's Abort button) and bounded. */
+export function waitRunAnchor(
+  runId: string,
+  opts: { signal?: AbortSignal; timeoutMs: number },
+): Promise<RunAnchorResult | { status: "timeout" } | { status: "aborted" }> {
+  return new Promise((resolve) => {
+    if (opts.signal?.aborted) return resolve({ status: "aborted" });
+    const now = Date.now();
+    pruneAnchors(now);
+    const entry = anchorEntry(runId, now);
+    if (entry.result) return resolve(entry.result);
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = (r: RunAnchorResult | { status: "timeout" } | { status: "aborted" }) => {
+      if (finished) return;
+      finished = true;
+      if (timer) clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+      entry.waiters.delete(wake);
+      resolve(r);
+    };
+    const wake = (r: RunAnchorResult) => finish(r);
+    const onAbort = () => finish({ status: "aborted" });
+    entry.waiters.add(wake);
+    timer = setTimeout(() => finish({ status: "timeout" }), Math.max(0, opts.timeoutMs));
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * Gate the anchor once per run: the first follower to get a good anchor starts
+ * the judge, every other follower shares its answer. Never rejects — a judge
+ * that throws is `unavailable`, which holds nothing (QA flags, never blocks on
+ * its own failure).
+ */
+export function gateRunAnchor(runId: string, work: () => Promise<AnchorGateResult>): Promise<AnchorGateResult> {
+  const entry = anchors.get(runId);
+  const run = () =>
+    work().catch((): AnchorGateResult => ({ status: "unavailable", findings: [], notes: [] }));
+  if (!entry || entry.result?.status !== "ok") return run();
+  if (entry.gate) return entry.gate;
+  const gate = run().then((r) => {
+    if (entry.gate === gate) entry.gateResult = r;
+    return r;
+  });
+  entry.gate = gate;
+  return gate;
+}
+
+/** The gate verdict for this run, once there is one. */
+export function readRunAnchorGate(runId: string): AnchorGateResult | null {
+  return anchors.get(runId)?.gateResult ?? null;
+}
+
+/** The settled anchor for this run, without waiting — null while pending or after it aged out. */
+export function peekRunAnchor(runId: string): RunAnchorResult | null {
+  pruneAnchors(Date.now());
+  return anchors.get(runId)?.result ?? null;
 }

@@ -3,18 +3,16 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
-import { parseSpecBackState, specListsBackDesign, studioRefViewKey } from "@/lib/studio-item-spec";
+import { parseSpecBackState, specListsBackDesign, specRiskReport, studioRefViewKey, type SpecIssue } from "@/lib/studio-item-spec";
 import {
   accessoryPanelLabel,
   accessoryShotPair,
   accessoryTypeWord,
   buildAccessoryPanelPrompt,
-  buildAccessoryStylingLock,
   getAccessoryKind,
 } from "@/lib/accessoryShots";
 import {
-  buildStylingLock,
-  withBackWaistbandVisible,
+  needsBackWaistbandTuck,
   parseOutfitFromSpec,
   type OutfitSlot,
   buildMasterPanelPrompt,
@@ -23,6 +21,9 @@ import {
   pickExpressionDirective,
   splitPanelToThreeByFour,
 } from "@/lib/panelGeneration";
+import { instructionHasStyling, resolveLookSheet, type ResolvedStyling } from "@/lib/studioLookSheet";
+import { stableLsSystemIdFromString } from "@/lib/utils/ls-id";
+import { imageFilesFromTransfer } from "@/lib/client/image-transfer";
 
 /**
  * Carbon Studio (M2) — the OpenAI V2 generator, product-scoped.
@@ -138,6 +139,8 @@ type StudioState = {
   specRefsKey: string;
   specConfirmed: boolean;
   backIsPlain: boolean;
+  /** Read-only here: written by /api/generate after a successful panel 1. */
+  lookAnchors?: Record<string, LookAnchor>;
 };
 /** A media-manager row: an existing Shopify image or a new crop to add.
  * `color` = the variant colour this image is the MAIN pic for (all sizes). */
@@ -218,20 +221,36 @@ async function downscaleForUpload(
   return { blob, dataUrl: canvas.toDataURL("image/jpeg", quality), name: `${base}.jpg` };
 }
 
-/** Pull image files out of a drop or clipboard payload (drag-drop + paste). */
-function imageFilesFromTransfer(dt: DataTransfer | null): File[] {
-  if (!dt) return [];
-  const out: File[] = [];
-  if (dt.items && dt.items.length) {
-    for (const it of Array.from(dt.items)) {
-      if (it.kind === "file") {
-        const f = it.getAsFile();
-        if (f) out.push(f);
-      }
-    }
+/** Catalog images whose file names say an earlier generator made them. Used as
+ *  item references they hand the new shoot their mistakes (Creed Jeans: the
+ *  August renders' misspelled tee and missing back patch). */
+const AI_RENDER_NAME = /\/(?:studio-|download_|carbon-studio-|ChatGPTImage|ChatGPT_Image|preview_|panel)[^/]*$/i;
+function looksLikeAiRender(url: string): boolean {
+  return AI_RENDER_NAME.test(String(url || "").split("?")[0]);
+}
+
+/** Per-operator Studio preferences (this browser only). */
+function readPref(key: string, fallback: boolean): boolean {
+  try {
+    const v = localStorage.getItem(key);
+    return v === null ? fallback : v === "1";
+  } catch {
+    return fallback;
   }
-  if (!out.length && dt.files && dt.files.length) out.push(...Array.from(dt.files));
-  return out.filter((f) => f.type.startsWith("image/"));
+}
+function writePref(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    /* private mode — the toggle still works for this visit */
+  }
+}
+
+/** A stored "look" (an approved panel 1) — GET /api/studio/state lookAnchors. */
+type LookAnchor = { url: string; runTag?: string; at?: string; modelId?: string; colour?: string; gate?: string | null };
+/** Same key the server stores looks under: `${modelId}|${COLOUR UPPERCASE, spaces collapsed}`. */
+function lookAnchorKeyFor(modelId: string, colour: string): string {
+  return `${modelId}|${String(colour || "").replace(/\s+/g, " ").trim().slice(0, 80).toUpperCase()}`;
 }
 
 type Props = {
@@ -305,6 +324,8 @@ type PanelResponse = {
   backState?: "present" | "absent" | "unknown" | "photo";
   /** Cosmetic observations from QA (background, centring…) — never a failure. */
   qaNotes?: string[];
+  /** Panel 1 of an anchored run was saved as this product's look for the model + colour. */
+  lookAnchor?: { url?: string; key?: string; gate?: string | null };
   error?: unknown;
   status?: string;
 };
@@ -326,6 +347,9 @@ const JOB_POLL_INTERVAL_MS = 3_000;
 const JOB_POLL_TIMEOUT_MS = 5 * 60_000;
 /** Matches the server-side park window (lib/server/generate-jobs.ts). */
 const JOB_MAX_AGE_MS = 15 * 60_000;
+/** A panel that follows panel 1 waits for it, its check and then its own render
+ *  (the server gives a follower ~460 s in all). */
+const FOLLOWER_POLL_TIMEOUT_MS = 9 * 60_000;
 
 type PendingRun = {
   matrixId: string;
@@ -333,9 +357,18 @@ type PendingRun = {
   gender: string;
   /** Accessory runs number their frames as shots, not poses. */
   accessory?: boolean;
+  /** Panels 2–4 wait for panel 1 on the server — they take longer to land. */
+  anchored?: boolean;
   startedAt: number;
   jobs: { panel: number; jobId: string }[];
 };
+
+/** The error body of a held / refused panel (see app/api/generate/route.ts). */
+type PanelErrorBody = { type?: string; code?: string; message?: string; sourcePanel?: number; findings?: { text?: string }[] };
+function panelErrorOf(json: PanelResponse | null): PanelErrorBody | null {
+  const e = json?.error;
+  return e && typeof e === "object" ? (e as PanelErrorBody) : null;
+}
 
 function readPendingRun(matrixId: string): PendingRun | null {
   try {
@@ -581,6 +614,26 @@ export function CarbonStudioTab({
   const abortRef = useRef<{ controller: AbortController; jobIds: string[] } | null>(null);
   /** Style-with pieces already read, by photo set — so a re-run does not pay to read them again. */
   const stylePiecesRef = useRef(new Map<string, Partial<Record<OutfitSlot, string>>>());
+  /** Styling words of the item instruction turned into pieces, by (instruction, type, gender, colour). */
+  const lookResolveRef = useRef(new Map<string, ResolvedStyling | null>());
+  /** The same two reads, as state, so the look preview refreshes once a run has made them. */
+  const [readCache, setReadCache] = useState<{
+    style: Record<string, Partial<Record<OutfitSlot, string>>>;
+    styling: Record<string, ResolvedStyling | null>;
+  }>({ style: {}, styling: {} });
+  /* Panel 1 sets the look: panels 2–4 wait for it on the server and render
+     with it attached, so the outfit, shoes and garment read as one shoot. */
+  const [matchPanel1, setMatchPanel1] = useState(() => readPref("wms_studio_match_p1", true));
+  /* A re-render without panel 1 attaches this product's saved panel 1 for the
+     same model and colour, so new crops match the ones already kept. */
+  const [keepLook, setKeepLook] = useState(() => readPref("wms_studio_keep_look", true));
+  /* Photographed styling pieces are worn print-free unless asked: a full-body
+     frame cannot letter a tee's print and draws pseudo-letters instead. */
+  const [keepStylingPrints, setKeepStylingPrints] = useState(() => readPref("wms_studio_keep_prints", false));
+  const [lookAnchors, setLookAnchors] = useState<Record<string, LookAnchor>>({});
+  /** Panel 1 was held by its accuracy check: the other panels wait for the operator. */
+  const [heldRun, setHeldRun] = useState<{ runTag: string; sourcePanel: number; followers: number[]; findings: string[] } | null>(null);
+  const forceFollowersRef = useRef<(() => Promise<void>) | null>(null);
   const [aborting, setAborting] = useState(false);
   const abortGeneration = useCallback(() => {
     const live = abortRef.current;
@@ -610,6 +663,8 @@ export function CarbonStudioTab({
   /** Photo problems only the operator can fix (a close-ups-only side) — amber,
    *  not red: nothing failed. */
   const [photoWarn, setPhotoWarn] = useState<string | null>(null);
+  /** The analysis's second, independent read of each quoted text (spec risk check). */
+  const [specTextReadings, setSpecTextReadings] = useState<{ quoted: string; reading: string | null }[]>([]);
   /** Reference photo being turned upright on the server (thumbnail ⟳). */
   const [rotatingUrl, setRotatingUrl] = useState<string | null>(null);
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -835,6 +890,7 @@ export function CarbonStudioTab({
           setSpecRefsKey(s.specRefsKey || "");
           setSpecConfirmed(s.specConfirmed === true);
           setBackIsPlain(s.backIsPlain === true);
+          setLookAnchors(s.lookAnchors && typeof s.lookAnchors === "object" ? s.lookAnchors : {});
         }
         setStateLoaded(true);
       } catch {
@@ -896,6 +952,31 @@ export function CarbonStudioTab({
    *  rule, so the client gate and the render can never disagree. */
   const specBack = useMemo(() => parseSpecBackState(itemSpec), [itemSpec]);
   const specSaysBackDesign = useMemo(() => specBack === "design" || specListsBackDesign(itemSpec), [specBack, itemSpec]);
+  /** The spec lines most likely to be wrong, re-read on every edit. A wrong line
+   *  is a wrong garment in every paid panel, so `blocking` holds Generate until a
+   *  person confirms the spec. */
+  const specRisk = useMemo(
+    () =>
+      itemSpec.trim()
+        ? specRiskReport(itemSpec, {
+            productName,
+            itemType,
+            isAccessory: Boolean(accessoryKind),
+            refCount: productRefCount,
+            specConfirmed,
+            textReadings: specTextReadings,
+          })
+        : { blocking: [] as SpecIssue[], warnings: [] as SpecIssue[] },
+    [itemSpec, productName, itemType, accessoryKind, productRefCount, specConfirmed, specTextReadings],
+  );
+  const specBlocked = specRisk.blocking.length > 0 && !specConfirmed;
+  /** Item references whose file names say an earlier generator made them. */
+  const aiRefWarn = useMemo(() => {
+    const n = itemRefs.filter((r) => r.view !== "styling" && looksLikeAiRender(r.url)).length;
+    return n
+      ? `${n} item photo${n === 1 ? " looks" : "s look"} like an earlier AI render (catalog file name). A render used as a reference carries its mistakes — misspelled prints, missing back details — into the new shoot. Use real photos of the garment.`
+      : null;
+  }, [itemRefs]);
   /** Catalog images not yet added as references. */
   const catalogPhotosLeft = useMemo(
     () => (itemRefUrls || []).filter((u) => !itemRefs.some((r) => r.url === u)),
@@ -1091,6 +1172,34 @@ export function CarbonStudioTab({
   }, [visibleModels, modelId]);
 
   const model = models.find((m) => m.model_id === modelId) || null;
+  /** The look this run will use, as far as it is known before Generate (Style
+   *  with and instruction styling are read at Generate if not read yet). */
+  const lookPreview = useMemo(() => {
+    if (!model) return null;
+    const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(itemSpec)?.[1] ?? "";
+    const itemColour = (colorRun?.colorRefUrl ? colorRun.colorName : "") || garmentColour || color;
+    const styleKey = refViews.styling.join("|") + "::" + itemType;
+    const instr = instruction.trim();
+    const resolveKey = [instr, itemType, model.gender, itemColour].join("::");
+    const pendingReads = [
+      refViews.styling.length && !(styleKey in readCache.style) ? "the Style with photos" : "",
+      instr && instructionHasStyling(instr) && !(resolveKey in readCache.styling) ? "the styling in the item instruction" : "",
+    ].filter(Boolean);
+    const sheet = resolveLookSheet({
+      itemType,
+      gender: model.gender === "female" ? "female" : "male",
+      productName,
+      specOutfit: parseOutfitFromSpec(itemSpec),
+      styleWith: readCache.style[styleKey] ?? {},
+      instructionStyling: readCache.styling[resolveKey] ?? null,
+      itemColour,
+      accessoryKind,
+      seedKey: `${matrixId}|${model.model_id}|${color || itemColour}`,
+      keepStylingPrints,
+      backWaistbandLabel: !accessoryKind && needsBackWaistbandTuck(itemType, itemSpec),
+    });
+    return { text: sheet.text, pendingReads };
+  }, [model, itemSpec, colorRun, color, refViews.styling, itemType, instruction, productName, accessoryKind, matrixId, keepStylingPrints, readCache]);
 
   const uploadItems = useCallback(async (files: File[], view?: RefView) => {
     const list = files.filter((f) => f.type.startsWith("image/"));
@@ -1385,11 +1494,13 @@ export function CarbonStudioTab({
         const r = await fetch("/api/openai/item-spec", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ itemRefs: refUrls, itemRefViews: productViews(views), itemType }),
+          body: JSON.stringify({ itemRefs: refUrls, itemRefViews: productViews(views), itemType, productName }),
           signal,
         });
         const j = (await r.json().catch(() => ({}))) as {
           lockText?: string;
+          /** Second read of each quoted text — feeds the spec risk check below the spec. */
+          textReadings?: { quoted: string; reading: string | null }[];
           error?: string;
           imagesAnalyzed?: number;
           imagesDropped?: number;
@@ -1402,6 +1513,7 @@ export function CarbonStudioTab({
         };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
+        setSpecTextReadings(Array.isArray(j.textReadings) ? j.textReadings : []);
         setSpecRefsKey(refViewKey(views));
         // Raw analyzer output — no human has corrected it (yet).
         setSpecConfirmed(false);
@@ -1449,7 +1561,7 @@ export function CarbonStudioTab({
         setSpecBusy(false);
       }
     },
-    [itemType, rotateStoredRef, swapRefUrls],
+    [itemType, productName, rotateStoredRef, swapRefUrls],
   );
 
   const generate = useCallback(async () => {
@@ -1482,6 +1594,9 @@ export function CarbonStudioTab({
     }
     setErr(null);
     setMsg(null);
+    // A new run replaces any run still holding panels behind a flagged panel 1.
+    setHeldRun(null);
+    forceFollowersRef.current = null;
     /* Step 1 of a new product: analyze the photos and STOP, so the spec can be
        read and corrected before four panels are paid for. Once the spec exists
        for exactly these photos, Generate goes straight through. */
@@ -1508,6 +1623,15 @@ export function CarbonStudioTab({
         setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       }
       return;
+    }
+    /* The spec contradicts the product's own name ("Double Pleated" trouser,
+       spec says "no pleat"). Every panel would render the contradiction. */
+    if (specBlocked) {
+      abortRef.current = null;
+      setClock(null);
+      return setErr(
+        `The spec contradicts the product (red lines under the spec). Fix those lines, or tick "I checked the spec" if the spec is right — nothing was generated.`,
+      );
     }
     const specForRun = itemSpec.trim();
     setBusy("generate");
@@ -1560,6 +1684,8 @@ export function CarbonStudioTab({
           if (!r.ok || !j.outfit) throw new Error(j.error || "Could not read the Style with photos");
           styleWith = j.outfit;
           stylePiecesRef.current.set(key, styleWith);
+          const read = styleWith;
+          setReadCache((c) => ({ ...c, style: { ...c.style, [key]: read } }));
         } catch (e) {
           abortRef.current = null;
           setBusy(null);
@@ -1574,14 +1700,80 @@ export function CarbonStudioTab({
         }
       }
     }
-    const stylingLock = runAccessory
-      ? buildAccessoryStylingLock(runAccessory, model.gender, itemColour, parseOutfitFromSpec(specForRun), styleWith)
-      : buildStylingLock(itemType, model.gender, {
-          outfit: parseOutfitFromSpec(specForRun),
-          itemColour,
-          styleWith,
-        });
-    setProgress(`Generating ${chosen.length} panel(s) in parallel…`);
+    /* Styling words in the item instruction ("STYLE IT DRESSY") are turned into
+       concrete pieces ONCE — left as words, each panel invented its own dressy
+       outfit. A run that cannot read them stops before anything is paid for. */
+    const instr = instruction.trim();
+    let instructionStyling: ResolvedStyling | null = null;
+    if (instr && instructionHasStyling(instr)) {
+      const key = [instr, itemType, model.gender, itemColour].join("::");
+      if (lookResolveRef.current.has(key)) instructionStyling = lookResolveRef.current.get(key) ?? null;
+      else {
+        setProgress("Reading the styling in the item instruction…");
+        try {
+          const r = await fetch("/api/openai/look-resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: abort.signal,
+            body: JSON.stringify({ instruction: instr, itemType, gender: model.gender, itemColour, productName }),
+          });
+          const j = (await r.json().catch(() => ({}))) as { styling?: ResolvedStyling | null; error?: string };
+          if (!r.ok || !("styling" in j)) throw new Error(j.error || "Could not read the styling in the item instruction");
+          instructionStyling = j.styling ?? null;
+          lookResolveRef.current.set(key, instructionStyling);
+          const read = instructionStyling;
+          setReadCache((c) => ({ ...c, styling: { ...c.styling, [key]: read } }));
+        } catch (e) {
+          abortRef.current = null;
+          setBusy(null);
+          setNativeBusy(false);
+          setProgress("");
+          setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+          return setErr(
+            abort.signal.aborted
+              ? "Aborted."
+              : `${e instanceof Error ? e.message : "Could not read the styling in the item instruction"} — nothing was generated. Try again.`,
+          );
+        }
+      }
+    }
+    /* Everything the model wears that is not the product, decided here once
+       and sent byte-for-byte to every panel (the server puts it in the part of
+       the prompt that is never trimmed). The seed is per product + model +
+       colour, so a re-run dresses the model the same way. */
+    const lookColour = color || itemColour;
+    const look = resolveLookSheet({
+      itemType,
+      gender: model.gender === "female" ? "female" : "male",
+      productName,
+      specOutfit: parseOutfitFromSpec(specForRun),
+      styleWith,
+      instructionStyling,
+      itemColour,
+      accessoryKind: runAccessory,
+      seedKey: `${matrixId}|${model.model_id}|${lookColour}`,
+      keepStylingPrints,
+      backWaistbandLabel: !runAccessory && needsBackWaistbandTuck(itemType, specForRun),
+    });
+    /* One pose-variation seed for the whole run (a colourway keeps its stored
+       one); every panel used to take the second its request arrived. */
+    const runSeed = activeColorRun ? activeColorRun.variationSeed : stableLsSystemIdFromString(`${matrixId}|${runTag}`);
+    /* Panel 1 sets the look: it renders first, the others wait for it on the
+       server and render with it attached. Only garment runs that include panel 1
+       and at least one other panel. */
+    const anchored = matchPanel1 && !runAccessory && chosen.includes(1) && chosen.length > 1;
+    /* A re-render without panel 1 attaches the saved panel 1 for this model and
+       colour, so the new crops match the ones already kept. */
+    const savedLook =
+      !anchored && keepLook && !runAccessory && !chosen.includes(1) ? lookAnchors[lookAnchorKeyFor(model.model_id, lookColour)] : undefined;
+    const lookAnchorUrl = savedLook && savedLook.gate !== "flagged" && savedLook.url ? savedLook.url : undefined;
+    setProgress(
+      anchored
+        ? `Panel 1 sets the look — panel${chosen.length > 2 ? "s" : ""} ${chosen.filter((p) => p !== 1).join(", ")} follow (about 3 minutes)…`
+        : lookAnchorUrl
+          ? `Generating ${chosen.length} panel(s) to match the saved look…`
+          : `Generating ${chosen.length} panel(s) in parallel…`,
+    );
     // Touch devices only: keep the screen awake while the panels generate — a
     // locked phone suspends the page and aborts the in-flight fetches, which
     // surfaces as "failed" panels / missing poses. Desktop never requests one.
@@ -1599,24 +1791,26 @@ export function CarbonStudioTab({
     // renders keep going server-side and these ids are how we get them back.
     const jobIds = new Map<number, string>(chosen.map((p) => [p, newJobId(runTag, p)]));
     abortRef.current = { controller: abort, jobIds: [...jobIds.values()] };
+    const startedAt = Date.now();
     writePendingRun({
       matrixId,
       runTag,
       gender: model.gender,
       accessory: Boolean(runAccessory),
-      startedAt: Date.now(),
+      anchored,
+      startedAt,
       jobs: chosen.map((p) => ({ panel: p, jobId: jobIds.get(p)! })),
     });
 
-    const genOnePanel = async (panel: number): Promise<Crop[]> => {
-      const jobId = jobIds.get(panel)!;
+    /* One panel, start to finish. `force` re-sends a follower that was held
+       because panel 1's check flagged it ("Render the other panels anyway"). */
+    const genOnePanel = async (
+      panel: number,
+      opts: { jobId: string; signal: AbortSignal; force?: boolean },
+    ): Promise<{ crops: Crop[]; json: PanelResponse | null }> => {
+      const { jobId, signal } = opts;
       const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
       const panelLabel = runAccessory ? accessoryPanelLabel(panel) : getPanelButtonLabel(model.gender, panel);
-      /* Back-facing frames keep the top's hem off a back-waistband label. */
-      const panelLock =
-        !runAccessory && (isBackFacingPose(model.gender, poseA) || isBackFacingPose(model.gender, poseB))
-          ? withBackWaistbandVisible(stylingLock, itemType, specForRun)
-          : stylingLock;
       const prompt = runAccessory
         ? buildAccessoryPanelPrompt({
             kind: runAccessory,
@@ -1627,8 +1821,10 @@ export function CarbonStudioTab({
             itemColour,
             itemStyleInstructions: instruction,
             expressionDirective,
-            stylingLock,
+            stylingLock: "",
             hasStyleWith,
+            lookSheetInServer: true,
+            lookSeed: look.seed,
           })
         : buildMasterPanelPrompt({
         panelNumber: panel,
@@ -1642,13 +1838,19 @@ export function CarbonStudioTab({
         itemType,
         itemStyleInstructions: instruction,
         expressionDirective,
-        stylingLock: panelLock,
+        // The LOOK SHEET (below, in the request) replaces the per-panel styling lock.
+        stylingLock: "",
+        lookSheetInServer: true,
+        // Same seed as the request's: the pose blocks lose their "pick ONE" menus,
+        // settled in code to agree with the server's POSE VARIATION.
+        variationSeed: runSeed,
         hasStyleWith,
         // itemSpec travels as its own request field (server appends it inside the
         // protected lock block) — NOT inside the prompt, which is near the
         // model's length limit and gets trimmed from the middle.
       });
-      const deadline = Date.now() + JOB_POLL_TIMEOUT_MS;
+      const follower = anchored && panel !== 1;
+      const deadline = Date.now() + (follower ? FOLLOWER_POLL_TIMEOUT_MS : JOB_POLL_TIMEOUT_MS);
       let json: PanelResponse | null = null;
       try {
         const resp = await fetch("/api/generate", {
@@ -1667,7 +1869,7 @@ export function CarbonStudioTab({
             // with each other, so they can only run once the whole run is in.
             "x-generate-run": runTag,
           },
-          signal: abort.signal,
+          signal,
           body: JSON.stringify({
             prompt,
             size: "1536x1024",
@@ -1683,11 +1885,19 @@ export function CarbonStudioTab({
             /* Sent on its own as well as inside the prompt, so the server can
                give it the last word — see app/api/generate/route.ts. */
             instruction: instruction.trim() || undefined,
+            /* The run's outfit, identical in every panel; the seed for pose
+               variation, one per run (a colourway's stored seed keeps its poses
+               away from the colours already generated). */
+            lookSheet: look.text,
+            variationSeed: runSeed,
+            /* Which saved look this run's panel 1 becomes (model + colour). */
+            modelId: model.model_id,
+            itemColour: lookColour,
+            ...(anchored ? { anchor: { runId: runTag, role: panel === 1 ? "source" : "follower", ...(opts.force ? { force: true } : {}) } } : {}),
+            ...(lookAnchorUrl ? { lookAnchorUrl } : {}),
             /* A colourway on file turns this into a dye change: same analysis,
                same construction, new cloth colour, with that colour's own photo
-               attached. Its stored seed keeps the poses and expressions away
-               from the colours already generated, which is the whole reason the
-               seed is stored per colour rather than taken from the clock. */
+               attached. */
             ...(activeColorRun
               ? {
                   colorOverride: {
@@ -1695,7 +1905,6 @@ export function CarbonStudioTab({
                     refUrl: activeColorRun.colorRefUrl,
                     hardwareNote: activeColorRun.hardwareNote,
                   },
-                  variationSeed: activeColorRun.variationSeed,
                 }
               : {}),
           }),
@@ -1708,11 +1917,16 @@ export function CarbonStudioTab({
         json = null; // connection died — the render is still running server-side
       }
       // Aborted: the panel's job was cancelled server-side; it shows nothing.
-      if (abort.signal.aborted) return [];
-      if (!json) json = await claimPanelJob(jobId, deadline, abort.signal);
+      if (signal.aborted) return { crops: [], json: null };
+      if (!json) json = await claimPanelJob(jobId, deadline, signal);
       else releasePanelJob(jobId);
-      if (abort.signal.aborted) return [];
-      return panelResponseToCrops(json, panel, poseA, poseB, runTag, runAccessory ? "Shot" : "Pose");
+      if (signal.aborted) return { crops: [], json: null };
+      /* Panel 1 became this product's saved look for the model + colour. */
+      const saved = json?.lookAnchor;
+      if (saved?.url && saved.key) {
+        setLookAnchors((prev) => ({ ...prev, [saved.key!]: { url: saved.url!, gate: saved.gate ?? null, runTag } }));
+      }
+      return { crops: await panelResponseToCrops(json, panel, poseA, poseB, runTag, runAccessory ? "Shot" : "Pose"), json };
     };
 
     try {
@@ -1733,10 +1947,25 @@ export function CarbonStudioTab({
         const ordered = chosen.filter((p) => byPanel.has(p)).flatMap((p) => byPanel.get(p)!);
         setCrops([...kept, ...ordered]);
       };
+      /* Followers held because panel 1's check flagged it: nothing was paid for
+         them; they wait for the operator's word. */
+      const held: number[] = [];
+      let heldFindings: string[] = [];
       await Promise.all(
         chosen.map(async (panel) => {
           try {
-            byPanel.set(panel, await genOnePanel(panel));
+            const res = await genOnePanel(panel, { jobId: jobIds.get(panel)!, signal: abort.signal });
+            const perr = panelErrorOf(res.json);
+            if (perr?.type === "anchor_flagged") {
+              held.push(panel);
+              if (!heldFindings.length) {
+                heldFindings = (perr.findings ?? []).map((f) => String(f?.text ?? "").trim()).filter(Boolean);
+                if (!heldFindings.length && perr.message) heldFindings = [perr.message];
+              }
+              byPanel.set(panel, []);
+            } else {
+              byPanel.set(panel, res.crops);
+            }
           } catch (e) {
             if (abort.signal.aborted) {
               byPanel.set(panel, []);
@@ -1771,17 +2000,15 @@ export function CarbonStudioTab({
         setCrops((prev) => prev.map((c) => (c.qaPending ? { ...c, qaPending: false } : c)));
         return;
       }
-      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
 
       /* Every panel is in, so the judges can finally do the only comparison
          that matters: these frames against each other, and the garment against
          the photographs. The images stay on screen and selected while this
          runs — a flag arriving late unselects just the crop it names. */
-      const pending = all.filter((c) => c.qaPending && c.b64);
-      if (pending.length) {
-        setProgress(`Checking ${pending.length} crop(s) for consistency…`);
+      const checkRun = async (signal: AbortSignal) => {
+        setProgress("Checking the crops for consistency…");
         await collectRunQa(runTag, (v) => {
-          if (abort.signal.aborted) {
+          if (signal.aborted) {
             setMsg("Aborted — the consistency checks were cancelled. Review the crops yourself.");
             setCrops((prev) => prev.map((c) => (c.qaPending ? { ...c, qaPending: false } : c)));
             return;
@@ -1819,9 +2046,89 @@ export function CarbonStudioTab({
               };
             }),
           );
-        }, abort.signal);
+        }, signal);
         setProgress("");
+      };
+
+      if (held.length) {
+        /* Panel 1 is shown with what its check found, unselected; the run-level
+           judges wait until the operator decides (the server keeps panel 1). */
+        const findings = heldFindings.length ? heldFindings : ["The panel 1 check flagged this render."];
+        setCrops((prev) =>
+          prev.map((c) =>
+            c.panel === 1 && c.id.endsWith(`-${runTag}`)
+              ? { ...c, qaPending: false, qaWarnings: findings, selected: false }
+              : c,
+          ),
+        );
+        const savedKey = lookAnchorKeyFor(model.model_id, lookColour);
+        setLookAnchors((prev) => (prev[savedKey] ? { ...prev, [savedKey]: { ...prev[savedKey], gate: "flagged" } } : prev));
+        const followers = [...held].sort((a, b) => a - b);
+        setHeldRun({ runTag, sourcePanel: 1, followers, findings });
+        setMsg(
+          `Panel 1's check flagged it, so panel${followers.length > 1 ? "s" : ""} ${followers.join(", ")} ${followers.length > 1 ? "were" : "was"} held — nothing was paid for ${followers.length > 1 ? "them" : "it"}. Look at panel 1, then render the others anyway or regenerate panel 1.`,
+        );
+        /* "Render the other panels anyway": the same run, new job ids, force. */
+        forceFollowersRef.current = async () => {
+          setHeldRun(null);
+          forceFollowersRef.current = null;
+          const fAbort = new AbortController();
+          const fJobs = new Map<number, string>(followers.map((p) => [p, newJobId(runTag, p)]));
+          abortRef.current = { controller: fAbort, jobIds: [...fJobs.values()] };
+          setAborting(false);
+          setErr(null);
+          setBusy("generate");
+          setNativeBusy(true);
+          setClock({ startedAt: Date.now(), endedAt: null });
+          setProgress(`Rendering panel${followers.length > 1 ? "s" : ""} ${followers.join(", ")} to match panel 1…`);
+          writePendingRun({
+            matrixId,
+            runTag,
+            gender: model.gender,
+            accessory: false,
+            anchored: true,
+            startedAt: Date.now(),
+            jobs: followers.map((p) => ({ panel: p, jobId: fJobs.get(p)! })),
+          });
+          setLookAnchors((prev) => (prev[savedKey] ? { ...prev, [savedKey]: { ...prev[savedKey], gate: "forced" } } : prev));
+          // Panel 1 joins the run-level check with its followers.
+          setCrops((prev) => prev.map((c) => (c.panel === 1 && c.id.endsWith(`-${runTag}`) && c.b64 ? { ...c, qaPending: true } : c)));
+          try {
+            const results = await Promise.all(
+              followers.map(async (panel) => {
+                try {
+                  return (await genOnePanel(panel, { jobId: fJobs.get(panel)!, signal: fAbort.signal, force: true })).crops;
+                } catch (e) {
+                  return fAbort.signal.aborted
+                    ? []
+                    : [{ id: `p${panel}-fail-${runTag}`, b64: "", label: `Panel ${panel}: ${e instanceof Error ? e.message : "failed"}`, selected: false }];
+                }
+              }),
+            );
+            const fresh = results.flat();
+            setCrops((prev) => [...prev, ...fresh]);
+            if (fAbort.signal.aborted) {
+              setMsg("Aborted — generation cancelled.");
+              setCrops((prev) => prev.map((c) => (c.qaPending ? { ...c, qaPending: false } : c)));
+              return;
+            }
+            setMsg(`Generated ${fresh.filter((c) => c.b64).length} crop(s) matching panel 1. Select what to keep, then push.`);
+            await checkRun(fAbort.signal);
+          } finally {
+            abortRef.current = null;
+            setAborting(false);
+            writePendingRun(null);
+            setNativeBusy(false);
+            setBusy(null);
+            setProgress("");
+            setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+          }
+        };
+        return;
       }
+
+      setMsg(`Generated ${all.filter((c) => c.b64).length} crop(s). Select what to keep, then push${kept.length ? ` (kept ${kept.length})` : ""}.`);
+      if (all.some((c) => c.qaPending && c.b64)) await checkRun(abort.signal);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -1835,7 +2142,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, analyzeItem, colorRun, color, accessoryKind]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, specBlocked, analyzeItem, colorRun, color, accessoryKind, productName, keepStylingPrints, matchPanel1, keepLook, lookAnchors]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -1856,7 +2163,10 @@ export function CarbonStudioTab({
       setNativeBusy(true);
       setProgress(`Reconnecting to ${run.jobs.length} panel(s) still generating…`);
       try {
-        const deadline = Math.min(Date.now() + JOB_POLL_TIMEOUT_MS, run.startedAt + JOB_MAX_AGE_MS);
+        const deadline = Math.min(
+          Date.now() + (run.anchored ? FOLLOWER_POLL_TIMEOUT_MS : JOB_POLL_TIMEOUT_MS),
+          run.startedAt + JOB_MAX_AGE_MS,
+        );
         const settled = await Promise.allSettled(
           run.jobs.map(async ({ panel, jobId }) => {
             const [poseA, poseB] = run.accessory ? accessoryShotPair(panel) : getPanelPosePair(run.gender, panel);
@@ -2200,6 +2510,8 @@ export function CarbonStudioTab({
   // One colour → the hero is auto-assigned as its main pic; many colours → the
   // operator picks one image per colour (each pick locks that colour out of the rest).
   const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
+  /** The Colourway box sits beside Style with (md+), stacked on phones. */
+  const showColourway = canManage && colors.length > 0 && !!color;
 
   return (
     <div className="space-y-3">
@@ -2278,7 +2590,7 @@ export function CarbonStudioTab({
                   const imgs = imageFilesFromTransfer(e.dataTransfer);
                   if (imgs.length) void uploadItems(imgs, zone.view);
                 }}
-                className={`rounded-md border p-2 transition-colors ${zone.view === "styling" ? "md:col-span-3" : ""} ${
+                className={`rounded-md border p-2 transition-colors ${zone.view === "styling" ? (showColourway ? "md:col-span-2" : "md:col-span-3") : ""} ${
                   isOver
                     ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
                     : isActive
@@ -2529,6 +2841,116 @@ export function CarbonStudioTab({
               </div>
             );
           })}
+          {/* Another colourway: same product, same analysis, one photo of the new
+              colour. Only rendered when the catalogue actually has colours. */}
+          {showColourway ? (
+            <div
+              className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3"
+              /* Its own drop target: a colour photo dropped here must not make the
+                 browser open the file instead. */
+              onDragOver={(e) => {
+                if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
+              }}
+              onDrop={(e) => {
+                const files = imageFilesFromTransfer(e.dataTransfer);
+                if (!files.length) return;
+                e.preventDefault();
+                e.stopPropagation();
+                void uploadColorPhoto(files[0]);
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className={`${label} mb-0`}>
+                  Colourway · <span className="text-[var(--wms-fg)]">{color}</span>
+                </span>
+                {colorRun?.colorRefUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => void clearColorRun()}
+                    disabled={colorBusy}
+                    className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
+                  >
+                    remove colour photo
+                  </button>
+                ) : null}
+              </div>
+
+              {colorRun?.colorRefUrl ? (
+                <div className="mt-2 flex flex-wrap items-start gap-3">
+                  <img
+                    src={previewFor(colorRun.colorRefUrl)}
+                    alt={`${color} colour reference`}
+                    className="h-20 w-20 shrink-0 rounded border border-[var(--wms-border)] object-cover"
+                  />
+                  <div className="min-w-[14rem] flex-1">
+                    <span className={label}>Colour the render must hit</span>
+                    <input
+                      className={`${field} max-md:text-base`}
+                      value={colorRun.colorName}
+                      placeholder="e.g. deep navy blue"
+                      onChange={(e) =>
+                        setColorRuns((prev) => ({ ...prev, [color]: { ...prev[color], colorName: e.target.value } }))
+                      }
+                      onBlur={(e) => {
+                        void fetch("/api/studio/color-run", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            matrixId,
+                            color,
+                            colorRefUrl: colorRun.colorRefUrl,
+                            colorName: e.target.value,
+                            hardwareNote: colorRun.hardwareNote,
+                          }),
+                        }).catch(() => {});
+                      }}
+                    />
+                    <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
+                      Read off the photo. A phone photo carries its lighting, so correct this if the shade looks wrong —
+                      the words are what the render follows.
+                    </p>
+                    {colorRun.hardwareNote ? (
+                      <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+                        Colour check: {colorRun.hardwareNote}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-1 text-[0.78rem] text-[var(--wms-fg)]">
+                  Add one photo of this colour to render the same product in it. The item photos and the analysis above are
+                  reused unchanged — only the cloth colour changes, and the poses and expressions are rotated so the set
+                  does not look like the other colour with a filter on it.
+                </p>
+              )}
+
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
+                  {colorRun?.colorRefUrl ? "replace photo" : "upload colour photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      void uploadColorPhoto(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handoffTargetRef.current = "colour";
+                    void startPhoneCamera();
+                  }}
+                  className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2"
+                >
+                  phone camera
+                </button>
+                {colorBusy ? <span className="font-mono text-[0.72rem] text-[var(--wms-accent)]">reading colour…</span> : null}
+              </div>
+            </div>
+          ) : null}
         </div>
         {qr ? (
           <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
@@ -2625,6 +3047,33 @@ export function CarbonStudioTab({
             setSpecConfirmed(true);
           }}
         />
+        {/* The lines most likely to be wrong — checked before anything is paid for. */}
+        {specRisk.blocking.length || specRisk.warnings.length ? (
+          <div className="mt-2 space-y-1">
+            {specRisk.blocking.map((x, i) => (
+              <p key={`b${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-danger-fg)]">
+                ✕ {x.message}
+              </p>
+            ))}
+            {specRisk.warnings.map((x, i) => (
+              <p key={`w${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-warning-fg)]">
+                ⚠ {x.message}
+              </p>
+            ))}
+            {specRisk.blocking.length ? (
+              <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-fg)] max-md:min-h-11">
+                <input
+                  type="checkbox"
+                  className="max-md:h-5 max-md:w-5"
+                  checked={specConfirmed}
+                  disabled={!canManage}
+                  onChange={(e) => setSpecConfirmed(e.target.checked)}
+                />
+                I checked the spec against the real garment — it is right
+              </label>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {/* Options */}
@@ -2678,102 +3127,6 @@ export function CarbonStudioTab({
         </div>
       </div>
 
-      {/* Another colourway: same product, same analysis, one photo of the new
-          colour. Only rendered when the catalogue actually has colours. */}
-      {canManage && colors.length > 0 && color ? (
-        <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className={`${label} mb-0`}>
-              Colourway · <span className="text-[var(--wms-fg)]">{color}</span>
-            </span>
-            {colorRun?.colorRefUrl ? (
-              <button
-                type="button"
-                onClick={() => void clearColorRun()}
-                disabled={colorBusy}
-                className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
-              >
-                remove colour photo
-              </button>
-            ) : null}
-          </div>
-
-          {colorRun?.colorRefUrl ? (
-            <div className="mt-2 flex flex-wrap items-start gap-3">
-              <img
-                src={previewFor(colorRun.colorRefUrl)}
-                alt={`${color} colour reference`}
-                className="h-20 w-20 shrink-0 rounded border border-[var(--wms-border)] object-cover"
-              />
-              <div className="min-w-[14rem] flex-1">
-                <span className={label}>Colour the render must hit</span>
-                <input
-                  className={`${field} max-md:text-base`}
-                  value={colorRun.colorName}
-                  placeholder="e.g. deep navy blue"
-                  onChange={(e) =>
-                    setColorRuns((prev) => ({ ...prev, [color]: { ...prev[color], colorName: e.target.value } }))
-                  }
-                  onBlur={(e) => {
-                    void fetch("/api/studio/color-run", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        matrixId,
-                        color,
-                        colorRefUrl: colorRun.colorRefUrl,
-                        colorName: e.target.value,
-                        hardwareNote: colorRun.hardwareNote,
-                      }),
-                    }).catch(() => {});
-                  }}
-                />
-                <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
-                  Read off the photo. A phone photo carries its lighting, so correct this if the shade looks wrong —
-                  the words are what the render follows.
-                </p>
-                {colorRun.hardwareNote ? (
-                  <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
-                    Colour check: {colorRun.hardwareNote}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-1 text-[0.78rem] text-[var(--wms-fg)]">
-              Add one photo of this colour to render the same product in it. The item photos and the analysis above are
-              reused unchanged — only the cloth colour changes, and the poses and expressions are rotated so the set
-              does not look like the other colour with a filter on it.
-            </p>
-          )}
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
-              {colorRun?.colorRefUrl ? "replace photo" : "upload colour photo"}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  void uploadColorPhoto(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                handoffTargetRef.current = "colour";
-                void startPhoneCamera();
-              }}
-              className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2"
-            >
-              phone camera
-            </button>
-            {colorBusy ? <span className="font-mono text-[0.72rem] text-[var(--wms-accent)]">reading colour…</span> : null}
-          </div>
-        </div>
-      ) : null}
 
       <div>
         <span className={label}>Item instruction (optional)</span>
@@ -2784,6 +3137,63 @@ export function CarbonStudioTab({
           onChange={(e) => setInstruction(e.target.value)}
         />
       </div>
+
+      {/* How the four panels are tied together, and what the model wears. */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        {(
+          [
+            [
+              matchPanel1,
+              (v: boolean) => {
+                setMatchPanel1(v);
+                writePref("wms_studio_match_p1", v);
+              },
+              "Match panel 1 (consistent, slower)",
+              "Panel 1 renders first; the other panels wait for it and render with it attached, so the outfit, shoes and garment read as one shoot. About 3 minutes instead of 1½. If panel 1's check flags it, the others are held before anything is paid for.",
+            ],
+            [
+              keepLook,
+              (v: boolean) => {
+                setKeepLook(v);
+                writePref("wms_studio_keep_look", v);
+              },
+              "Keep look on re-renders",
+              "Re-rendering panels without panel 1 attaches this product's last panel 1 for the same model and colour, so the new crops match the ones you kept.",
+            ],
+            [
+              keepStylingPrints,
+              (v: boolean) => {
+                setKeepStylingPrints(v);
+                writePref("wms_studio_keep_prints", v);
+              },
+              "Keep prints on styling pieces",
+              "Off: a tee or tank worn WITH the product is drawn without its printed text (a full-body frame cannot letter it and draws pseudo-letters). On: its print is copied from the photo.",
+            ],
+          ] as const
+        ).map(([on, set, text, hint]) => (
+          <label
+            key={text}
+            title={hint}
+            className="flex cursor-pointer items-center gap-2 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:min-h-11"
+          >
+            <input type="checkbox" className="max-md:h-5 max-md:w-5" checked={on} disabled={busy !== null} onChange={(e) => set(e.target.checked)} />
+            {text}
+          </label>
+        ))}
+      </div>
+      {lookPreview ? (
+        <details className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 px-3 py-2">
+          <summary className="cursor-pointer font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] max-md:min-h-11 max-md:py-2">
+            Look for this shoot — the same in every panel
+          </summary>
+          <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[0.72rem] leading-snug text-[var(--wms-fg)]">{lookPreview.text}</pre>
+          {lookPreview.pendingReads.length ? (
+            <p className="mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+              Generate first reads {lookPreview.pendingReads.join(" and ")} — the pieces they name replace the matching lines above.
+            </p>
+          ) : null}
+        </details>
+      ) : null}
 
       {/* Panels */}
       <div>
@@ -2908,8 +3318,46 @@ export function CarbonStudioTab({
         {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
         {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
         {photoWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{photoWarn}</span> : null}
+        {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}
         {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
+
+      {/* Panel 1's check flagged it; the other panels are held, unpaid, until the operator decides. */}
+      {heldRun && busy === null ? (
+        <div className="rounded-md border border-amber-500/55 bg-amber-950/25 p-3">
+          <p className="font-mono text-[0.74rem] text-amber-200">
+            Panel 1 was flagged — panel{heldRun.followers.length > 1 ? "s" : ""} {heldRun.followers.join(", ")} {heldRun.followers.length > 1 ? "are" : "is"} on
+            hold and nothing was paid for {heldRun.followers.length > 1 ? "them" : "it"}:
+          </p>
+          <ul className="mt-1 list-disc pl-5 font-mono text-[0.72rem] text-[var(--wms-fg)]">
+            {heldRun.findings.map((f, i) => (
+              <li key={i}>{f}</li>
+            ))}
+          </ul>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!canManage}
+              onClick={() => void forceFollowersRef.current?.()}
+              className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+            >
+              Render the other panels anyway
+            </button>
+            <button
+              type="button"
+              disabled={!canManage}
+              onClick={() => {
+                setHeldRun(null);
+                forceFollowersRef.current = null;
+                void generate();
+              }}
+              className="rounded-md border border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+            >
+              ↻ Regenerate panel 1 (the others follow)
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!shopifyProductId ? (
         <p className="font-mono text-[0.68rem] text-[var(--wms-muted)]">

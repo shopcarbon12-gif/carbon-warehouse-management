@@ -340,3 +340,158 @@ export function getPoseLibraryForGender(gender: string) {
     ? FEMALE_POSE_LIBRARY
     : MALE_POSE_LIBRARY;
 }
+
+/*
+ * Choice-free pose text.
+ *
+ * The libraries were written for a human photographer: "Variation Options (pick
+ * ONE)", "Creative detail (choose ONE)", "Creative Options A–E", "mid-thigh to
+ * head OR waist-up". Pasted into an image prompt, every one of those is a coin
+ * the model flips on its own — and the server's POSE VARIATION line
+ * (lib/poseVariation.ts) has already made the pick, so a second pick could
+ * only contradict it. The resolver below hands over the library text with
+ * every choice made in code: the micro-variation is left to POSE VARIATION
+ * alone, Pose 8 is the one creative option the Selection Rule names for this
+ * kind of product, and the remaining A1/A2-style details come from the run seed.
+ */
+
+export type Pose8Option = "A" | "B" | "C" | "D" | "E";
+
+/** The creative option the Pose 8 Selection Rule makes the default for this
+ *  category (lib/panelGeneration.ts itemTypeCategory). Both libraries use the
+ *  same letters; dresses / sets / one-pieces share the tops default. */
+export function pose8OptionFor(_gender: string, category: string): Pose8Option {
+  const c = String(category || "");
+  if (c === "bottom" || c === "footwear") return "E";
+  if (c === "outerwear") return "C";
+  return "B";
+}
+
+function seededPick<T>(seed: number, salt: number, options: T[]): T {
+  const n = Math.abs(Math.floor(Number.isFinite(seed) ? seed : 0) + salt);
+  return options[n % options.length];
+}
+
+/* Library lines that carry a choice, rewritten (or dropped, null) once. Head
+   angle, gaze, foot angle and arm position are POSE VARIATION's to set, so the
+   lines that offered them are reduced to what stays fixed. */
+const RESOLVED_LINES: Record<string, string | null> = {
+  "- Variation rule: for each pose, choose ONE variation option below. Do not repeat the same option on back-to-back products.": null,
+  '- Variation rule: for each pose, choose ONE "Variation Option" listed. Do not repeat the same option on back-to-back products.': null,
+  "- Expression: premium + calm (neutral or soft controlled smile).": "- Expression: premium and calm.",
+  "- Head: small angle (5-10 deg) OR calm off-camera gaze (choose one direction per shoot).": null,
+  "- Arms slightly back or relaxed slightly away from torso to open chest/drape.": "- Arms relaxed, opening the chest and drape.",
+  "- Head forward or slightly angled (5-10 deg).": null,
+  "- Head turns 20-30 deg over ONE shoulder (choose one default side; switch occasionally).": "- Head turned over one shoulder.",
+  "- Arms relaxed at sides or one soft bend; held 1-2 inches away from torso.": "- Arms relaxed, held 1-2 inches away from the torso.",
+  "- Legs straight; feet parallel or slight toe-out (5-10 deg).": "- Legs straight.",
+  "- Head turned 30-45 deg over one shoulder so face is visible (choose one default side).": "- Head turned over one shoulder so the face is visible.",
+  "- Crop: mid-thigh to head (preferred) OR waist-up (choose one standard per category).": "- Crop: mid-thigh to head.",
+  "- Arms relaxed OR one hand resting lightly on upper thigh/hip area (must not cover waistband/pockets/logo).":
+    "- Hands never cover the waistband, the pockets, the logo.",
+  "- Hands/arms: out of frame preferred. If hands appear, do not block waistband/closure/pockets.": "- Hands and arms out of frame.",
+  "- Head: neutral or slight chin dip (2-5 deg); gaze to camera.": null,
+  "- Use when you need maximum waistband + closure clarity without standing.": null,
+  "- One forearm rests lightly on thigh; the other arm relaxed at side or lightly on other thigh.":
+    "- One forearm rests lightly on the thigh; the other arm relaxed at the side.",
+  "- One forearm lightly rests on thigh; the other arm relaxed at side or on thigh.":
+    "- One forearm rests lightly on the thigh; the other arm relaxed at the side.",
+  "- Head: slight angle (5-10 deg) or calm off-camera gaze (pick one direction and stay consistent).": null,
+  "- Head: slight angle (3-5 deg) or calm off-camera gaze (choose one direction and stay consistent).": null,
+  "- Capture at mid-step: front foot just landing or just lifting.": "- Captured at mid-step.",
+  "- Capture at mid-step: front foot landing or lifting; posture upright.": "- Captured at mid-step; posture upright.",
+  "- Head: calm gaze (camera or slightly off-camera), premium expression.": "- Premium expression.",
+  "- Head: calm gaze (camera or slightly off-camera), consistent direction.": null,
+  "- Head can be in frame or slightly cropped depending on your system, but keep it consistent.": "- Head in frame.",
+  "- Feet flat; hip-width; knees ~90 deg (knees together or slightly apart-natural).": "- Feet flat; hip-width; knees ~90 deg, slightly apart.",
+};
+
+/** The global rules with their "choose ONE variation" line gone (the pick is POSE VARIATION's). */
+export function resolveGlobalPoseRules(rules: string): string {
+  return resolveLines(String(rules || "").split("\n"), 0).join("\n");
+}
+
+function resolveLines(lines: string[], seed: number): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = lines[i];
+    const t = raw.trim();
+    if (/^Variation Options \(pick ONE\)/i.test(t)) {
+      // The option list under it: "- 3A: …", "- 7C: …".
+      while (i + 1 < lines.length && /^\s*-\s*\d+[A-Z]:/.test(lines[i + 1])) i += 1;
+      continue;
+    }
+    if (/^- Creative detail \(choose ONE/i.test(t)) {
+      const opts: string[] = [];
+      while (i + 1 < lines.length && /^\s+A\d\b/.test(lines[i + 1])) opts.push(lines[(i += 1)]);
+      if (opts.length) {
+        const chosen = seededPick(seed, 3, opts)
+          .trim()
+          .replace(/^A\d\s+"[^"]*":\s*/, "")
+          .replace(/,?\s*OR\s*$/, "")
+          .replace(/\.?$/, ".");
+        out.push(`- Hand detail: ${chosen}`);
+      }
+      continue;
+    }
+    if (/^- Feet: choose ONE/i.test(t)) {
+      const opts: string[] = [];
+      while (i + 1 < lines.length && /^\s+D\d:/.test(lines[i + 1])) opts.push(lines[(i += 1)]);
+      if (opts.length) {
+        const chosen = seededPick(seed, 5, opts)
+          .trim()
+          .replace(/^D\d:\s*/, "")
+          .replace(/,?\s*OR\s*$/, "")
+          .replace(/\.?$/, ".");
+        out.push(`- Feet: ${chosen}`);
+      }
+      continue;
+    }
+    if (/^- Best for:/i.test(t)) continue;
+    if (Object.prototype.hasOwnProperty.call(RESOLVED_LINES, t)) {
+      const r = RESOLVED_LINES[t];
+      if (r !== null) out.push(raw.replace(t, r));
+      continue;
+    }
+    out.push(raw);
+  }
+  return out;
+}
+
+/**
+ * Pose 8 is a menu of five creative poses plus a rule for choosing. Keep the
+ * core rules and the ONE option the rule picks for this category; the menu and
+ * the rule itself go.
+ */
+function resolvePose8Block(block: string, option: Pose8Option, seed: number): string {
+  const lines = block.split("\n");
+  const header = lines[0];
+  const core: string[] = [];
+  let i = 1;
+  for (; i < lines.length && !/^\s*Selection Rule\b/i.test(lines[i]) && !/^\s*[A-E]\)\s/.test(lines[i]); i += 1) {
+    if (lines[i].trim()) core.push(lines[i]);
+  }
+  const start = lines.findIndex((l) => new RegExp(`^\\s*${option}\\)\\s`).test(l));
+  if (start < 0) return block;
+  let end = start + 1;
+  while (end < lines.length && !/^\s*[A-E]\)\s/.test(lines[end])) end += 1;
+  const title = lines[start].trim().replace(/\s*\[[^\]]*\]\s*$/, "");
+  const body = resolveLines(lines.slice(start + 1, end), seed).filter((l) => l.trim());
+  return [header, ...core, `Creative pose for this product: ${title}`, ...body].join("\n");
+}
+
+/**
+ * One injected pose block, with every choice made. `category` is
+ * lib/panelGeneration.ts itemTypeCategory(itemType); `seed` is the run's
+ * variation seed (the same number the server's POSE VARIATION uses).
+ */
+export function resolvePoseBlock(
+  block: string,
+  opts: { gender: string; pose: number; category: string; seed: number },
+): string {
+  const text = String(block || "");
+  if (opts.pose === 8 && /Creative Options/i.test(text)) {
+    return resolvePose8Block(text, pose8OptionFor(opts.gender, opts.category), opts.seed);
+  }
+  return resolveLines(text.split("\n"), opts.seed).join("\n");
+}

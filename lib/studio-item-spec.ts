@@ -141,6 +141,266 @@ export function withCanonicalBackLine(lockText: string, state: "present" | "abse
   return src ? `${src}\n${canon}` : canon;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Spec risk: what to check before paying for four panels.                   */
+/* ------------------------------------------------------------------------ */
+
+export type SpecIssue = { code: string; line?: number; message: string };
+
+/** A second, independent read of one quoted text (/api/openai/item-spec `textReadings`). */
+export type TextReading = { quoted: string; reading: string | null };
+
+/*
+ * Every wrong current-Studio photo the 2026-10-14 audit traced back ended at a
+ * spec line the renders obeyed in all four panels: flap buttons the jacket does
+ * not have, "CARRON JEANS" for the CARBON patch, a styling tank's print locked
+ * as product text, "no pleat" on a Double Pleated trouser. Seven of 134 specs
+ * had ever been read by a person. These checks only READ the lock text (old
+ * stored specs work unchanged) and point at the line to check.
+ */
+
+/* Construction words in a product name, and how a spec line would deny them.
+   `feature` finds the feature in a spec line; `skipZone` lists the ZONE names
+   where saying "none" does not contradict the name — a pleated skirt or
+   trouser keeps a flat waistband (Leopard Print Pleated Skort: "WAISTBAND:
+   flat, no pleats", "FRONT OF LEG: pleated" — correct). */
+type NameRule = { name: RegExp; label: string; feature: RegExp; skipZone?: RegExp; flatDenies?: boolean };
+const NAME_RULES: NameRule[] = [
+  { name: /\bpleat(?:ed|s)?\b/i, label: "Pleated", feature: /pleat/i, skipZone: /waist|belt loop|hem|cuff|closure|fly|pocket/i, flatDenies: true },
+  { name: /\bruch(?:ed|ing)?\b/i, label: "Ruched", feature: /ruch|gather/i, skipZone: /waist|belt loop|closure|fly|pocket/i },
+  { name: /\bchains?\b/i, label: "Chain", feature: /\bchains?\b/i },
+  { name: /\bknot(?:ted|s)?\b/i, label: "Knot", feature: /\bknot/i },
+  { name: /\bzip(?:per|ped|s)?\b/i, label: "Zip", feature: /\bzip/i },
+  { name: /\b(?:one[- ]button|buttoned|buttons?|button[- ](?:down|up|front))\b/i, label: "Button", feature: /\bbuttons?\b/i },
+  { name: /\bhalter\b/i, label: "Halter", feature: /\bhalter/i },
+  { name: /\bcut[- ]?outs?\b/i, label: "Cut-out", feature: /cut[- ]?outs?|keyhole/i },
+  { name: /\bbelted\b/i, label: "Belted", feature: /\bbelt(?!\s*loops?)\b|\bbelted\b|\bsash\b|\bself[- ]belt/i, skipZone: /belt loop/i },
+  { name: /\b(?:ripped|distressed|destroyed)\b/i, label: "Ripped / Distressed", feature: /\brip(?:s|ped)?\b|\bdistress|\btears?\b|\bholes?\b|\bfray/i },
+  { name: /\bcargo\b/i, label: "Cargo", feature: /\bcargo\b/i },
+  { name: /\b(?:drawstring|drawcord)\b/i, label: "Drawstring", feature: /\bdraw(?:string|cord)/i },
+  { name: /\bwrap\b/i, label: "Wrap", feature: /\bwrap|crossover|overlap/i },
+  { name: /\btie(?:[- ]front|d)?\b(?![- ]?d(?:ye|ie))/i, label: "Tie", feature: /\bties?\b|\btied\b|\bbow\b|\bknot/i },
+  { name: /\b(?:ruffled?|frill(?:ed|y)?)\b/i, label: "Ruffle", feature: /ruffle|frill|flounce/i },
+  { name: /\blace\b(?![- ]up)/i, label: "Lace", feature: /\blace\b(?![- ]up)/i },
+  { name: /\bmesh\b/i, label: "Mesh", feature: /\bmesh\b/i },
+  { name: /\bsequin(?:ned|s)?\b/i, label: "Sequin", feature: /\bsequin/i },
+  { name: /\b(?:crossover|criss[- ]?cross)\b/i, label: "Crossover", feature: /cross|wrap|overlap/i },
+  { name: /\bdouble[- ]breasted\b/i, label: "Double-breasted", feature: /double[- ]breasted|two (?:rows|columns) of buttons/i },
+  { name: /\bdouble[- ]waist(?:band|ed)?\b/i, label: "Double waist", feature: /double[- ]waist|two waistbands|double band/i },
+];
+
+const NEGATED_BEFORE = /\b(?:no|not|non|without|never|zero|un)[\s-]*(?:\w+[\s-]+){0,3}$/i;
+
+/** Does this line mention the feature positively (at least once, not denied)? */
+function mentionsPositively(detail: string, feature: RegExp): boolean {
+  const re = new RegExp(feature.source, feature.flags.includes("g") ? feature.flags : `${feature.flags}g`);
+  for (const m of detail.matchAll(re)) {
+    const before = detail.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0).split(/[,;.:()—]/).pop() ?? "";
+    const word = detail.slice(Math.max(0, (m.index ?? 0) - 2), m.index ?? 0);
+    if (NEGATED_BEFORE.test(before) || /un$/i.test(word)) continue;
+    const after = detail.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 24);
+    if (/^\w*\s*[:—-]?\s*(?:none|absent|not (?:present|visible))\b/i.test(after)) continue;
+    return true;
+  }
+  return false;
+}
+
+function deniesFeature(zone: string, detail: string, rule: NameRule): boolean {
+  if (rule.skipZone && zone && rule.skipZone.test(zone)) return false;
+  const re = new RegExp(rule.feature.source, `${rule.feature.flags.replace("g", "")}g`);
+  for (const m of detail.matchAll(re)) {
+    const before = detail.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0).split(/[,;.:()—]/).pop() ?? "";
+    if (NEGATED_BEFORE.test(before)) return true;
+  }
+  /* "DISTRESSING: none — clean, undistressed fabric…" and "ZONE — BELT LOOPS: none". */
+  if (/^none\b/i.test(detail) && (rule.feature.test(zone) || (rule.label.startsWith("Ripped") && /distress/i.test(zone)))) return true;
+  /* "FRONT OF LEG: flat, no pressed crease" on a pleated trouser. */
+  return Boolean(rule.flatDenies && /\b(?:leg|front|back|body|skirt|panel|bodice)\b/i.test(zone) && /^flat\b/i.test(detail));
+}
+
+type SpecLine = { n: number; head: string; zone: string; detail: string; raw: string };
+
+function specLines(lockText: string): SpecLine[] {
+  return String(lockText || "")
+    .split("\n")
+    .map((raw, i) => {
+      const m = /^\s*(\d+)\.\s*(.*)$/.exec(raw);
+      const body = (m ? m[2] : raw).trim();
+      const n = m ? Number(m[1]) : i + 1;
+      const zoneM = /^ZONE\s*[—-]\s*([^:]+):\s*(.*)$/i.exec(body);
+      if (zoneM) return { n, head: "ZONE", zone: zoneM[1].trim(), detail: zoneM[2].trim(), raw: body };
+      const headM = /^([A-Z][A-Z/ —-]*?):\s*(.*)$/.exec(body);
+      return { n, head: headM ? headM[1].trim() : "", zone: headM ? headM[1].trim() : "", detail: headM ? headM[2].trim() : body, raw: body };
+    })
+    .filter((l) => l.raw);
+}
+
+/** Edit distance (insert / delete / substitute), for "CARRON" vs "CARBON". */
+function levenshtein(a: string, b: string): number {
+  const prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+/* Real words a short distance from CARBON that are not misreads of it. */
+const NEAR_CARBON_WORDS = new Set(["CARGO", "CARGOS", "CARSON", "BARON", "CANON", "CARTON", "CAPON", "CARBO"]);
+
+function quotedTexts(s: string): string[] {
+  return [...s.matchAll(/"([^"]{2,})"|“([^”]{2,})”|'([^']{2,})'/g)].map((m) => (m[1] ?? m[2] ?? m[3]).trim());
+}
+
+const normText = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+
+function lineList(ns: number[]): string {
+  const u = [...new Set(ns)];
+  return u.length === 1 ? `line ${u[0]}` : `lines ${u.slice(0, -1).join(", ")} and ${u[u.length - 1]}`;
+}
+
+/**
+ * The lines of a spec most likely to be wrong, before any render is paid for.
+ * `blocking` = the spec contradicts the product's own name; the Studio holds
+ * Generate until the operator confirms the spec. `warnings` = lines worth one
+ * look at the real garment. Reads only the text, so it works on stored specs.
+ */
+export function specRiskReport(
+  lockText: string,
+  ctx: {
+    productName: string;
+    itemType: string;
+    isAccessory: boolean;
+    refCount: number;
+    /** A person has edited / confirmed the spec (Studio `specConfirmed`). */
+    specConfirmed?: boolean;
+    /** The item-spec route's second, independent read of each quoted text. */
+    textReadings?: TextReading[];
+  },
+): { blocking: SpecIssue[]; warnings: SpecIssue[] } {
+  const blocking: SpecIssue[] = [];
+  const warnings: SpecIssue[] = [];
+  const all = specLines(lockText);
+  /* The Garment line is a name, not evidence; OUTFIT lines describe the clothes
+     worn WITH the product. */
+  const product = all.filter((l) => !/^garment$/i.test(l.head) && !/^OUTFIT\b/i.test(l.raw));
+  const name = `${ctx.productName || ""} ${ctx.itemType || ""}`;
+
+  for (const rule of NAME_RULES) {
+    if (!rule.name.test(name)) continue;
+    const confirmed = product.some((l) => mentionsPositively(l.raw.replace(/^ZONE\s*[—-]\s*/i, ""), rule.feature) && !deniesFeature(l.zone, l.detail, rule));
+    if (confirmed) continue;
+    const denying = product.filter((l) => deniesFeature(l.zone, l.detail, rule));
+    if (denying.length) {
+      const first = denying[0];
+      blocking.push({
+        code: "name_contradiction",
+        line: first.n,
+        message: `"${rule.label}" is in the product name, but ${lineList(denying.map((l) => l.n))} ${denying.length > 1 ? "say" : "says"} there is none ("${first.detail.slice(0, 80)}"). Check the garment: fix the line if it has the feature, or confirm the spec if the name is wrong.`,
+      });
+    } else if (!ctx.isAccessory) {
+      warnings.push({
+        code: "name_feature_unmentioned",
+        message: `"${rule.label}" is in the product name, but no line of the spec describes it. If the garment has it, add a line saying where and how — a feature the spec leaves out is left out of every panel.`,
+      });
+    }
+  }
+
+  const textLines = product.filter((l) => /^TEXT\b/i.test(l.raw));
+  for (const l of product) {
+    for (const q of quotedTexts(l.raw)) {
+      const t = normText(q);
+      if (!t || t === "CARBON" || t === "CARBON JEANS") continue;
+      const near =
+        (t.length >= 8 && levenshtein(t, "CARBON JEANS") <= 2) ||
+        t.split(" ").some((w) => w.length >= 4 && w !== "CARBON" && !NEAR_CARBON_WORDS.has(w) && levenshtein(w, "CARBON") <= 2);
+      if (near) {
+        warnings.push({
+          code: "carbon_text_misread",
+          line: l.n,
+          message: `Line ${l.n} quotes "${q}" — that is probably the CARBON mark misread. Check the label and correct the line; every panel prints exactly what it says.`,
+        });
+        break;
+      }
+    }
+  }
+
+  if (textLines.length && !ctx.specConfirmed) {
+    warnings.push({
+      code: "text_unverified",
+      line: textLines[0].n,
+      message: `The spec quotes printed text (${lineList(textLines.map((l) => l.n))}). Read each quote against the real garment — a misread letter is printed in every panel.`,
+    });
+  }
+
+  for (const r of ctx.textReadings ?? []) {
+    if (!r?.reading || !r.quoted || normText(r.reading) === normText(r.quoted)) continue;
+    const l = textLines.find((x) => x.raw.includes(`"${r.quoted}"`));
+    if (!l) continue; // the operator already changed that line
+    warnings.push({
+      code: "text_disagreement",
+      line: l.n,
+      message: `Line ${l.n} reads "${r.quoted}"; a second read of the photos gives "${r.reading}". Check the garment and correct line ${l.n}.`,
+    });
+  }
+
+  if (!ctx.isAccessory) {
+    const flapHardware = product.filter(
+      (l) =>
+        /\b(?:flaps?|chest pockets?|breast pockets?)\b/i.test(l.raw) &&
+        /\b(?:buttons?|snaps?|press studs?|poppers?|zips?|zippers?)\b/i.test(l.raw) &&
+        !/\b(?:no|without)\s+(?:\w+\s+){0,2}(?:buttons?|snaps?|zips?|zippers?)\b/i.test(l.raw),
+    );
+    if (flapHardware.length) {
+      warnings.push({
+        code: "hardware_conventional",
+        line: flapHardware[0].n,
+        message: `${lineList(flapHardware.map((l) => l.n)).replace(/^l/, "L")} put buttons or zips on the pocket flaps / chest pockets. The analysis adds these by habit — confirm they exist on the real garment, and delete them if the flaps are plain.`,
+      });
+    }
+  }
+
+  if (ctx.isAccessory && ctx.refCount <= 1) {
+    warnings.push({
+      code: "accessory_single_photo",
+      message:
+        "Only one photo of this accessory. Bead counts, spacers and the clasp are read off a single picture and the worn shots follow those words — add a close-up of the beads and a photo of the whole loop.",
+    });
+    const counted = product.filter(
+      (l) =>
+        /\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty[\w-]*|thirty[\w-]*|forty[\w-]*)\b/i.test(l.detail) &&
+        /\b(?:beads?|charms?|discs?|links?|stones?|spacers?|pearls?|groups?|clusters?|strands?)\b/i.test(l.detail),
+    );
+    if (counted.length) {
+      warnings.push({
+        code: "accessory_counts",
+        line: counted[0].n,
+        message: `${lineList(counted.map((l) => l.n)).replace(/^l/, "L")} count beads / charms from one photo — count them on the real piece before generating.`,
+      });
+    }
+  }
+
+  const styled = product.filter(
+    (l) =>
+      /^(?:TEXT|LOGO\/ICON|GRAPHIC\/PRINT)\b/i.test(l.raw) &&
+      /\btop[_ ]under\b|\boutfit\b|\bstyling\b|\bworn (?:under|with)\b/i.test(l.raw.replace(/"[^"]*"|“[^”]*”/g, "")),
+  );
+  for (const l of styled) {
+    warnings.push({
+      code: "styling_text_locked",
+      line: l.n,
+      message: `Line ${l.n} locks text or a print on a STYLING piece, not on the product. Delete it — the styling piece is described in its OUTFIT line, and its print is left off unless "Keep prints on styling pieces" is ticked.`,
+    });
+  }
+
+  return { blocking, warnings };
+}
+
 /* Fit words an operator writes in the item instruction ("RELAXED FIT",
    "oversized", "slim-fit"). A bare adjective only counts with a fit noun after
    it, except the ones that only ever describe a fit. */

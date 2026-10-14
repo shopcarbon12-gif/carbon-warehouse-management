@@ -21,6 +21,9 @@
 // no shared server state and no round-trip. `strength` controls how much
 // variation is applied.
 
+import { isLegsCropPose, isUpperBodyProductCategory, itemTypeCategory } from "@/lib/panelGeneration";
+import { pose8OptionFor, type Pose8Option } from "@/lib/panelPoseLibraries";
+
 export type VariationStrength = "subtle" | "natural" | "editorial";
 
 export const DEFAULT_VARIATION_STRENGTH: VariationStrength = "natural";
@@ -88,12 +91,6 @@ const MALE_BODY: Record<number, string[]> = {
     "look over the opposite shoulder for this shot",
     "soft chin dip (2-5°) with a relaxed over-shoulder glance",
   ],
-  8: [
-    "seated 3/4 angle, one forearm easing onto the thigh, calm off-camera gaze",
-    "controlled mid-step walk, weight just landing on the front foot",
-    "relaxed lean (weight shifted slightly back), ankles natural",
-    "seated upright, hands resting on thighs, composed gaze to camera",
-  ],
 };
 
 const FEMALE_BODY: Record<number, string[]> = {
@@ -133,12 +130,6 @@ const FEMALE_BODY: Record<number, string[]> = {
     "slight toe-out (5-10°) on the right foot",
     "stance a touch wider than hip-width (subtle)",
   ],
-  8: [
-    "seated 3/4 angle, one forearm easing onto the thigh, calm gaze",
-    "controlled walk-in mid-step, fabric showing natural drape",
-    "relaxed lean (weight shifted slightly back), ankles natural",
-    "seated upright, hands on thighs, composed gaze to camera",
-  ],
 };
 
 // Face micro-variation pools — applied WITHIN the identity lock. None of these
@@ -175,6 +166,40 @@ const WEIGHT = [
   "a micro weight shift, hips natural",
 ];
 
+/* Pose 8 is ONE creative option, the one the library's Selection Rule names for
+   the product's category (pose8OptionFor). Picking a different option here —
+   a walk for a pair of jeans the library seats on a cube — contradicted the
+   pose text, so the micro-variation stays inside that option. Head and gaze
+   come from the face pools below. */
+const POSE8_BODY: Record<Pose8Option, string[]> = {
+  A: [
+    "seated upright, hands resting flat on the thighs above the knees",
+    "seated upright, shoulders relaxed and level, hands flat on the thighs",
+  ],
+  B: [
+    "seated at a 3/4 angle, one forearm easing onto the thigh",
+    "seated at a 3/4 angle, spine tall, one foot 1-2 inches forward",
+  ],
+  C: [
+    "controlled mid-step, weight just landing on the front foot",
+    "controlled mid-step, the back heel just lifting",
+  ],
+  D: ["relaxed lean, weight shifted slightly back", "relaxed lean, shoulders easy, weight on the back foot"],
+  E: [
+    "seated on the cube edge, hands on the thighs near the knees",
+    "seated on the cube edge, knees ~90°, feet flat and hip-width",
+  ],
+};
+
+/* The legs-crop pose becomes a neckline-to-hem crop for tops / outerwear
+   (lib/panelGeneration.ts getUpperBodyCropPoseBlock): its feet are out of
+   frame, so it varies by that block's own options, not by foot angle. */
+const UPPER_BODY_CROP_BODY = [
+  "arms straight down, hands just out of frame (cleanest)",
+  "a slight 10° body turn to show the side seam",
+  "one hand resting lightly at the hem (no pulling, no covering print)",
+];
+
 /** Deterministic index that, for consecutive seeds, never repeats back-to-back. */
 function rotate(seed: number, offset: number, len: number): number {
   if (len <= 0) return 0;
@@ -183,8 +208,10 @@ function rotate(seed: number, offset: number, len: number): number {
   return m;
 }
 
-function bodyPool(gender: string, pose: number | null): string[] {
+function bodyPool(gender: string, pose: number | null, itemType: string): string[] {
   if (pose == null) return [];
+  if (pose === 8) return POSE8_BODY[pose8OptionFor(gender, itemTypeCategory(itemType))];
+  if (isLegsCropPose(gender, pose) && isUpperBodyProductCategory(itemType)) return UPPER_BODY_CROP_BODY;
   const table = String(gender || "").toLowerCase() === "female" ? FEMALE_BODY : MALE_BODY;
   return table[pose] || [];
 }
@@ -194,14 +221,15 @@ function describePoseVariation(
   pose: number | null,
   side: "LEFT" | "RIGHT",
   strength: VariationStrength,
-  seed: number
+  seed: number,
+  itemType: string
 ): string | null {
   if (pose == null) return null;
   const offset = side === "LEFT" ? 0 : 7; // de-sync the two halves of a panel
   const closeUp = isCloseUpPose(gender, pose);
   const lowerBody = isLowerBodyPose(gender, pose);
 
-  const body = bodyPool(gender, pose);
+  const body = bodyPool(gender, pose, itemType);
   const bodyPick = body.length ? body[rotate(seed, offset, body.length)] : null;
 
   // Close-up / lower-body frames have no face: only apply the body/detail micro-option.
@@ -250,8 +278,9 @@ export function buildPoseVariationDirective(args: {
   // directive language itself differs from the base prompt).
   const seed = Number.isFinite(args.seed as number) ? Math.floor(args.seed as number) : 0;
 
-  const left = describePoseVariation(args.modelGender, args.poseA, "LEFT", strength, seed);
-  const right = describePoseVariation(args.modelGender, args.poseB, "RIGHT", strength, seed);
+  const itemType = String(args.itemType || "");
+  const left = describePoseVariation(args.modelGender, args.poseA, "LEFT", strength, seed, itemType);
+  const right = describePoseVariation(args.modelGender, args.poseB, "RIGHT", strength, seed, itemType);
   if (!left && !right) return "";
 
   const editorial = strength === "editorial";

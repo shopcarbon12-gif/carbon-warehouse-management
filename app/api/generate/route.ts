@@ -16,7 +16,25 @@ import {
   recordStudioGeneration,
   type StudioGenerationLog,
 } from "@/lib/server/studio-generation-log";
-import { isValidRunId, stashRunPanel } from "@/lib/server/run-qa-store";
+import {
+  gateRunAnchor,
+  isValidRunId,
+  peekRunAnchor,
+  readRunAnchorGate,
+  settleRunAnchor,
+  stashRunPanel,
+  waitRunAnchor,
+  type AnchorGateResult,
+} from "@/lib/server/run-qa-store";
+import { runAnchorGate } from "@/lib/server/run-qa";
+import { isBackFacingPose } from "@/lib/server/studio-frames";
+import {
+  isValidLookModelId,
+  lookAnchorPrefix,
+  markLookAnchorGate,
+  normalizeLookColour,
+  storeLookAnchor,
+} from "@/lib/server/studio-look-anchors";
 import { ACCESSORY_KINDS, type AccessoryKind } from "@/lib/accessoryShots";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
@@ -30,6 +48,8 @@ import {
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
 import { isValidJobId, runGenerateJob, takeEarlyCancel } from "@/lib/server/generate-jobs";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const FALLBACK_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAFx0lEQVR42u3UwQkAIBDAMHX/nc8lBK4jUZBkn2tmdgDg53YHAH4MIAgQCBAECAQIAgQCBAECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIBggCBAEEAQYBAgCBAIEAQIBAgECAIEAQQBAgECAIEAgQBAgECAQIhD8eQ9JCmqo2AAAAAElFTkSuQmCC";
@@ -319,16 +339,6 @@ type PanelQaInput = {
   accessoryKind: string;
 };
 
-function isBackFacingPose(gender: string, pose: number | null) {
-  if (!Number.isFinite(Number(pose))) return false;
-  const p = Number(pose);
-  const g = String(gender || "").trim().toLowerCase();
-  if (g === "female") {
-    return p === 2;
-  }
-  return p === 4 || p === 7;
-}
-
 function inferItemTypeCategory(itemTypeValue: string) {
   const t = String(itemTypeValue || "").trim().toLowerCase();
   if (!t) return "item";
@@ -567,12 +577,26 @@ function buildServerLockPrompt(panelQa: PanelQaInput, modelCount: number) {
  * the front rips round onto the back of the legs (the spec says that zone is
  * plain). Naming the elements — and that nothing else is there — closes it.
  */
-function backElementsFromSpec(spec: string): { elements: string[]; plainZones: string[] } {
+const BACK_DISTRESS = /\b(?:rips?|ripped|tears?|torn|holes?|distress\w*|fray\w*|abrasions?|whisker\w*|faded|fading|destroyed)\b/i;
+
+function backElementsFromSpec(spec: string): { elements: string[]; plainZones: string[]; distress: string[] } {
   const elements: string[] = [];
   const plainZones: string[] = [];
+  /* Rips and distressing the spec itself places on the back — "DISTRESSING
+     (back, …)" lines and distressed BACK zones. The back lines below must keep
+     them, not wipe them with "no rips or distressing". */
+  const distress: string[] = [];
   for (const raw of String(spec || "").split("\n")) {
     const line = raw.replace(/^\s*\d+\.\s*/, "").trim();
     if (!line) continue;
+    const backZone = /^ZONE\s*—\s*(BACK[^:]*):\s*(.+)$/i.exec(line);
+    if (backZone && !/^plain\b/i.test(backZone[2].trim()) && BACK_DISTRESS.test(backZone[2])) {
+      distress.push(`${backZone[1].trim().toLowerCase()}: ${backZone[2].replace(/\.$/, "").trim()}`);
+    }
+    if (/^DISTRESSING\b/i.test(line) && /\bback\b/i.test(line) && !/^DISTRESSING\s*:\s*none\b/i.test(line)) {
+      distress.push(line.replace(/^DISTRESSING\s*/i, "").replace(/^[:(\s]+|[)\s.]+$/g, "").trim());
+      continue;
+    }
     if (/^ZONE\s*—\s*BACK[^:]*:\s*plain\b/i.test(line)) {
       plainZones.push(line.replace(/^ZONE\s*—\s*/i, "").replace(/:\s*plain[^.]*\.?/i, "").trim().toLowerCase());
       continue;
@@ -586,28 +610,36 @@ function backElementsFromSpec(spec: string): { elements: string[]; plainZones: s
       .trim();
     if (what) elements.push(what);
   }
-  return { elements: elements.slice(0, 4), plainZones };
+  return { elements: elements.slice(0, 4), plainZones, distress: distress.slice(0, 4) };
+}
+
+/** The back's own rips, named inside the back line (a carve-out lives in the line it carves out of). */
+function backDistressClause(distress: string[]): string {
+  return distress.length ? ` It keeps the rips and distressing the spec places on the back — ${distress.join(" | ")} — and nothing more.` : "";
 }
 
 function buildBackStateLine(backState: BackState, panelQa: PanelQaInput, spec = ""): string[] {
   const frames = backFacingFramesLabel(panelQa);
   if (!frames) return [];
+  const { elements, plainZones, distress } = backElementsFromSpec(spec);
+  const distressClause = backDistressClause(distress);
   if (backState === "present") {
-    const { elements, plainZones } = backElementsFromSpec(spec);
     if (elements.length) {
       return [
-        `- BACK (verified on the product): ${frames} shows exactly these on the back of the product, at their own size and position, and NOTHING ELSE: ${elements.join(" | ")}. Every other part of the product's back is plain in its own colour and fabric — no added print, graphic, artwork, text, rips or distressing${
-          plainZones.length ? ` (plain: ${plainZones.join(", ")})` : ""
-        }. A small patch or label stays small; it never becomes a large back print. Every other pose keeps its own facing and shows only the front.`,
+        `- BACK (verified on the product): ${frames} shows exactly these on the back of the product, at their own size and position, and NOTHING ELSE: ${elements.join(" | ")}${
+          distress.length ? ` | ${distress.join(" | ")}` : ""
+        }. Every other part of the product's back is plain in its own colour and fabric — no added print, graphic, artwork or text, and no ${
+          distress.length ? "other " : ""
+        }rips or distressing${plainZones.length ? ` (plain: ${plainZones.join(", ")})` : ""}. A small patch or label stays small; it never becomes a large back print. Every other pose keeps its own facing and shows only the front.`,
       ];
     }
     return [
-      `- BACK DESIGN (verified on the product): the back carries the design listed above. ${frames} shows it in full — same artwork, size, position, colours and print effect. A clean back, a shrunken version, or one moved up to the neck is WRONG. Every other pose keeps its own facing and shows only the front.`,
+      `- BACK DESIGN (verified on the product): the back carries the design listed above. ${frames} shows it in full — same artwork, size, position, colours and print effect. A clean back, a shrunken version, or one moved up to the neck is WRONG.${distressClause} Every other pose keeps its own facing and shows only the front.`,
     ];
   }
   if (backState === "absent") {
     return [
-      `- BACK IS PLAIN (verified): the back carries no print, text, graphic, logo or patch. ${frames} shows a plain back in the item's own colour, fabric and construction — add nothing.`,
+      `- BACK IS PLAIN (verified): the back carries no print, text, graphic, logo or patch. ${frames} shows a plain back in the item's own colour, fabric and construction — add nothing.${distressClause}`,
     ];
   }
   if (backState === "photo") {
@@ -645,6 +677,164 @@ function parseItemRefViews(views: unknown, fallbackRefs: unknown): ItemRefViewLi
     return { general: strList(fallbackRefs), front: [], back: [], styling: lists.styling };
   }
   return { general: strList(fallbackRefs), front: [], back: [], styling: [] };
+}
+
+/**
+ * OpenAI's edit endpoint documents "up to 16 images" for gpt-image-2. Nothing
+ * enforced it: 12 panels in 14 days went out with 17-18, and whatever OpenAI
+ * did with the tail (the Back photos, the Style-with pieces, the colour photo)
+ * the prompt's image numbers still pointed at it. Enforced here, before any
+ * download, with a priority: the anchor, the colourway photo, the Style-with
+ * pieces and 3 model refs are kept; General photos go first (from the end),
+ * then Front/Back beyond 3 each, then model refs beyond 3. What was left out
+ * is logged and returned.
+ */
+const MAX_INPUT_IMAGES = Math.max(4, Math.min(16, Number(process.env.OPENAI_IMAGE_MAX_INPUTS) || 16));
+const MIN_MODEL_REFS = 3;
+const MAX_MODEL_REFS = 6;
+const KEPT_PER_SIDE = 3;
+
+type DroppedRefs = Partial<Record<"model" | "general" | "front" | "back" | "styling", number[]>>;
+
+function capReferenceImages(args: {
+  modelCount: number;
+  lists: ItemRefViewLists;
+  /** The colourway photo is the last General entry when set. */
+  hasColorPhoto: boolean;
+  anchorSlots: number;
+}): { modelKeep: number; lists: ItemRefViewLists; dropped: DroppedRefs } {
+  const lists: ItemRefViewLists = {
+    general: [...args.lists.general],
+    front: [...args.lists.front],
+    back: [...args.lists.back],
+    styling: [...args.lists.styling],
+  };
+  let modelKeep = Math.min(MAX_MODEL_REFS, args.modelCount);
+  const dropped: DroppedRefs = {};
+  const drop = (view: keyof DroppedRefs, position: number) => (dropped[view] ??= []).unshift(position);
+  const total = () =>
+    modelKeep + lists.general.length + lists.front.length + lists.back.length + lists.styling.length + args.anchorSlots;
+  /* The colourway photo is a colour swatch, not a view of the garment: at
+     least one real product photo always stays besides it. */
+  const products = () =>
+    lists.general.length - (args.hasColorPhoto ? 1 : 0) + lists.front.length + lists.back.length;
+  /** The longer of Front/Back, if it is longer than `floor`. */
+  const longerSide = (floor: number): "front" | "back" | null => {
+    const side = lists.back.length >= lists.front.length ? "back" : "front";
+    return lists[side].length > floor ? side : null;
+  };
+
+  while (total() > MAX_INPUT_IMAGES && products() > 1) {
+    const plain = lists.general.length - (args.hasColorPhoto ? 1 : 0);
+    if (plain <= 0) break;
+    lists.general.splice(plain - 1, 1);
+    drop("general", plain);
+  }
+  for (let side = longerSide(KEPT_PER_SIDE); total() > MAX_INPUT_IMAGES && side; side = longerSide(KEPT_PER_SIDE)) {
+    drop(side, lists[side].length);
+    lists[side].pop();
+  }
+  while (total() > MAX_INPUT_IMAGES && modelKeep > MIN_MODEL_REFS) {
+    drop("model", modelKeep);
+    modelKeep -= 1;
+  }
+  for (let side = longerSide(0); total() > MAX_INPUT_IMAGES && side && products() > 1; side = longerSide(0)) {
+    drop(side, lists[side].length);
+    lists[side].pop();
+  }
+  while (total() > MAX_INPUT_IMAGES && lists.styling.length) {
+    drop("styling", lists.styling.length);
+    lists.styling.pop();
+  }
+  return { modelKeep, lists, dropped };
+}
+
+/* ── Anchor: panel 1 sets the look (lib/server/run-qa-store.ts) ─────────── */
+
+/** A follower waits this long for panel 1 at most. */
+const ANCHOR_WAIT_MAX_MS = 240_000;
+/** The Studio polls an anchored panel for ~8 min from its POST; stay inside that. */
+const FOLLOWER_WINDOW_MS = 460_000;
+/** A render takes ~80-95 s: never start one with less than this left. */
+const MIN_RENDER_WINDOW_MS = 95_000;
+/** The gate is one gpt-4o call (two attempts); past this it is "unavailable" and holds nothing. */
+const ANCHOR_GATE_MAX_MS = 80_000;
+const ANCHOR_GATE_ATTEMPT_MS = 38_000;
+/* The look sheet is a list of named pieces, not an essay; it sits in the
+   protected server block, so its size is taken from the trimmable part. */
+const LOOK_SHEET_MAX_BYTES = 3_000;
+
+/** Resolves null as soon as Abort is pressed; the shared work itself runs on. */
+function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T | null> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.resolve(null);
+  return new Promise<T | null>((resolve, reject) => {
+    const onAbort = () => resolve(null);
+    signal.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
+type AnchorRequest = { runId: string; role: "source" | "follower"; force: boolean };
+
+function parseAnchorRequest(v: unknown): AnchorRequest | null | "invalid" {
+  if (v === undefined || v === null || v === false) return null;
+  if (typeof v !== "object") return "invalid";
+  const o = v as Record<string, unknown>;
+  const role = o.role === "source" || o.role === "follower" ? o.role : null;
+  if (!role || !isValidRunId(o.runId)) return "invalid";
+  return { runId: o.runId, role, force: o.force === true };
+}
+
+/** Why panel 1 did not become an anchor, in the operator's words. */
+function describeSourceFailure(panel: number, outcome: string, code: string): string {
+  const p = `Panel ${panel || 1}`;
+  if (outcome === "aborted" || code === "aborted") return `${p} was cancelled`;
+  if (code === "back_unverified") return `${p} needs a Back photo (or the "back is plain" tick)`;
+  if (code === "anchor_unavailable" || code === "anchor_flagged") return `${p} did not render`;
+  if (outcome === "blocked") return `${p} was blocked by safety moderation`;
+  if (/^ref_download/.test(code)) return `${p} could not download its reference photos`;
+  if (code === "openai_auth" || code === "no_api_key") return `${p} could not reach OpenAI (API key)`;
+  return `${p} did not render${code ? ` (${code})` : ""}`;
+}
+
+/**
+ * The line that tells a follower what the attached panel 1 is. It sits after
+ * the COLOURWAY block and before the side geometry, the pose variation, the
+ * wearer-side mapping and the operator's final word, so the poses and the
+ * operator are still read later than the anchor and win.
+ */
+function buildSameShootLine(args: {
+  imageNumber: number;
+  modelCount: number;
+  stored: boolean;
+  hasSpec: boolean;
+  hasLookSheet: boolean;
+}): string {
+  const n = args.imageNumber;
+  const identity = args.modelCount === 1 ? "image 1" : `images 1–${args.modelCount}`;
+  return (
+    `SAME-SHOOT REFERENCE — attached image ${n} (the last image) is ${
+      args.stored
+        ? "an approved panel from an earlier shoot of this product, on this model, in this colour"
+        : "Panel 1 of THIS shoot, already rendered"
+    }. It is not a product photo and not an identity photo. ` +
+    `Match it exactly for everything that is NOT the product: the same top / bottom / outerwear / footwear / socks / accessories (same colour, cut, length, fit, tuck, cuff and roll), the same hair styling, the same light and white background.` +
+    (args.hasLookSheet ? " Where it and the LOOK SHEET disagree about what is worn, the LOOK SHEET wins." : "") +
+    ` For the product, match how it sits on this body in image ${n} (fit, length, drape) only where that agrees with the item photos${
+      args.hasSpec ? " and the VERIFIED ITEM SPEC" : ""
+    } — where they disagree, the item photos win. Identity comes from ${identity}. ` +
+    `Never copy image ${n}'s poses, framing, crop or layout — this panel's poses are the ACTIVE POSE blocks and POSE VARIATION.`
+  );
 }
 
 /** Which attached images are the FRONT and which are the BACK — so the
@@ -728,7 +918,7 @@ function buildItemViewMapLines(args: { modelCount: number; itemViews: ItemRefVie
  * whatever they cover. Everything that keeps the product faithful (spec, view
  * map, back lock, QA) describes the product only and never sees them.
  */
-function buildStylingRefLines(args: { modelCount: number; itemViews: ItemRefView[] }): string[] {
+function buildStylingRefLines(args: { modelCount: number; itemViews: ItemRefView[]; hasLookSheet?: boolean }): string[] {
   const styling = args.itemViews.filter((v) => v === "styling").length;
   if (!styling) return [];
   const productCount = args.itemViews.length - styling;
@@ -738,7 +928,9 @@ function buildStylingRefLines(args: { modelCount: number; itemViews: ItemRefView
     `STYLE-WITH PIECES (SERVER — chosen by the operator; authoritative): ${range} OTHER clothing / footwear / accessories the model wears WITH the product in this shoot. They are NOT the product.`,
     "- The model wears every piece shown there, in every frame where that part of the body is in view, reproduced faithfully: the same colour, cut, fit, length, fabric, print, text and hardware as the photo shows.",
     "- Several photos of one piece (its front and its back, say) are ONE piece: worn once, with its front content on its front and its back content on its back.",
-    "- They REPLACE the STYLING LOCK and any outfit read from the product photos for whatever they cover: a top here replaces that top, shoes here replace that footwear, and jewellery, a belt, a bag or a hat here is worn even where the lock says no accessories. The lock still supplies only what these pieces do not cover.",
+    args.hasLookSheet
+      ? "- They are pieces of the LOOK SHEET below, which names each of them: reproduce each one from its photo here."
+      : "- They REPLACE the STYLING LOCK and any outfit read from the product photos for whatever they cover: a top here replaces that top, shoes here replace that footwear, and jewellery, a belt, a bag or a hat here is worn even where the lock says no accessories. The lock still supplies only what these pieces do not cover.",
     "- The product is always worn and always the hero. A style-with piece never takes the product's place on the body, never covers its key details more than it naturally would, and never lends it a colour, print, text or detail — nor takes one from it. The item spec, the item view map and the garment-fidelity rules describe ONLY the product.",
     "- Any person, mannequin or hanger in a style-with photo is a display fixture: never copy a face, body, skin tone, hair or pose from it.",
   ];
@@ -833,6 +1025,11 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
   const startedAt = Date.now();
   // Set once the request is parsed, so the outer catch can log what was asked for.
   let logCtx: (() => Omit<StudioGenerationLog, "outcome">) | null = null;
+  /* Panel 1 of an anchored run: every exit settles it (see `finally`), so a
+     follower is never left waiting on a source that already gave up. */
+  let anchorSource: { runId: string; panel: number } | null = null;
+  let anchorSourceSettled = false;
+  let anchorSourceFailure = "";
   try {
     // WMS auth: authenticated admin session (replaces carbon-gen cookie auth).
     const session = await getSessionFromRequest(req);
@@ -857,6 +1054,11 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       specConfirmed,
       colorOverride,
       instruction: operatorInstructionRaw,
+      anchor: anchorRaw,
+      lookAnchorUrl: lookAnchorUrlRaw,
+      lookSheet: lookSheetRaw,
+      modelId: modelIdRaw,
+      itemColour: itemColourRaw,
     } = await req.json();
     /* The operator's own words about this garment and this shoot. */
     const operatorInstruction =
@@ -866,7 +1068,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     // Item refs sorted by view (Studio: General / Front / Back sections). The
     // image order sent to OpenAI is general → front → back so the prompt can
     // say which attached images are the front and which are the back.
-    const viewLists = parseItemRefViews(itemRefViews, itemRefs);
+    const parsedViewLists = parseItemRefViews(itemRefViews, itemRefs);
+    /* Style-with photos past the sixth were always cut by parseItemRefViews;
+       now the cut is logged with the rest of what was left out. */
+    const stylingSent = Array.isArray((itemRefViews as { styling?: unknown } | null)?.styling)
+      ? ((itemRefViews as { styling: unknown[] }).styling.filter((x) => typeof x === "string" && x.trim()).length)
+      : 0;
     /* "Generate another colour": the same garment in a colourway we hold ONE
        photo of. The matrix spec stays in charge of construction, text,
        placement and the zone map — those do not change with the dye, and one
@@ -874,12 +1081,8 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        replaced, and the photo rides along as a reference so the render matches
        a real sample rather than a colour word. */
     const colorRun = parseColorOverride(colorOverride);
-    /* Appended LAST among the general photos, so its position in the item list
-       is known without matching URLs back after normalisation. */
-    let colorAnchorIdx = -1;
     if (colorRun?.refUrl) {
-      viewLists.general = [...viewLists.general, colorRun.refUrl];
-      colorAnchorIdx = viewLists.general.length - 1;
+      parsedViewLists.general = [...parsedViewLists.general, colorRun.refUrl];
     }
     // Pre-generation item analysis (client → /api/openai/item-spec, possibly
     // edited by the operator). Appended INSIDE the server lock block and capped
@@ -909,7 +1112,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        keep the back clean — including runs whose references showed a back
        print. */
     const specBack = parseSpecBackState(itemSpecRaw);
-    const backPhotographed = viewLists.back.length > 0;
+    const backPhotographed = parsedViewLists.back.length > 0;
     const backState: BackState =
       specBack === "design" || specListsBackDesign(itemSpecRaw)
         ? "present"
@@ -934,12 +1137,48 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       !accessoryMode &&
       (isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA) ||
         isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB));
+    /* Panel 1 sets the look — garment runs only. An accessory's panel 1 is
+       product-only (no person, no outfit) and cannot anchor one; the Studio
+       sends no anchor there, and one sent anyway is ignored. */
+    const anchorParsed = accessoryMode ? null : parseAnchorRequest(anchorRaw);
+    const anchorReq = anchorParsed === "invalid" ? null : anchorParsed;
+    if (anchorReq?.role === "source") {
+      anchorSource = { runId: anchorReq.runId, panel: normalizedPanelQa.panelNumber ?? 1 };
+    }
+    /* A stored look ("Keep look") rides only on a panel outside a live
+       anchored run. A source renders from the real references alone, so an
+       anchor is never itself rendered from an anchor (depth 1), and a follower
+       already gets this run's own panel 1. */
+    const lookAnchorUrl =
+      !accessoryMode && !anchorReq && typeof lookAnchorUrlRaw === "string" ? lookAnchorUrlRaw.trim() : "";
+    const lookAnchorPath = lookAnchorUrl ? tryGetStoragePathFromUrl(lookAnchorUrl) : "";
+    const matrixIdValid = typeof matrixId === "string" && UUID_RE.test(matrixId) ? matrixId : "";
+    /* Same restriction style as /api/studio/ref-image: only this tenant's
+       look anchors for THIS product, never the bucket at large. */
+    const lookAnchorAllowed =
+      Boolean(lookAnchorPath && matrixIdValid && UUID_RE.test(String(session.tid || ""))) &&
+      lookAnchorPath.startsWith(lookAnchorPrefix(String(session.tid), matrixIdValid));
+    const anchorRole: "source" | "follower" | "stored" | null = anchorReq?.role ?? (lookAnchorUrl ? "stored" : null);
+    let anchorWaitMs: number | null = null;
+    let anchorGate: string | null = null;
+    /* The run's look, resolved once on the client (lib/studioLookSheet.ts) and
+       sent identical in every panel body. Injected verbatim into the protected
+       server block, so no panel can have it trimmed or reworded. */
+    const lookSheet = typeof lookSheetRaw === "string" ? lookSheetRaw.replace(/\r\n?/g, "\n").trim() : "";
+    const lookSheetBytes = lookSheet ? promptLen(lookSheet) : 0;
+    const runTag = req.headers.get("x-generate-run")?.trim() ?? "";
+    let imagesDropped: DroppedRefs = {};
     // Pose/expression variation: rotate by a per-generation seed so consecutive
-    // shots never collapse to the same default pose/face. Falls back to a
-    // time-derived seed when the client doesn't send one (older builders).
-    const resolvedVariationSeed = Number.isFinite(Number(variationSeed))
-      ? Math.floor(Number(variationSeed))
-      : Math.floor(Date.now() / 1000);
+    // shots never collapse to the same default pose/face. The Studio sends one
+    // seed per run (a colourway keeps its stored one); without it (older
+    // builders) the seed is time-derived per request.
+    const seedSent =
+      typeof variationSeed === "number"
+        ? variationSeed
+        : typeof variationSeed === "string" && variationSeed.trim()
+          ? Number(variationSeed)
+          : NaN;
+    const resolvedVariationSeed = Number.isFinite(seedSent) ? Math.floor(seedSent) : Math.floor(Date.now() / 1000);
 
     type ImageSize = "1024x1024" | "1536x1024" | "1024x1536";
     const allowedSizes = new Set<ImageSize>(["1024x1024", "1536x1024", "1024x1536"]);
@@ -977,9 +1216,19 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       specConfirmed: specConfirmed === true,
       specBytes: promptLen(itemSpecText),
       durationMs: Date.now() - startedAt,
+      anchorRole,
+      anchorWaitMs,
+      anchorGate,
+      variationSeed: resolvedVariationSeed,
+      lookSheetBytes: lookSheet ? lookSheetBytes : null,
+      imagesDropped: Object.keys(imagesDropped).length ? imagesDropped : null,
+      runTag: isValidRunId(runTag) ? runTag : null,
     });
     logCtx = logBase;
     const logged = <T,>(entry: Partial<StudioGenerationLog> & { outcome: StudioGenerationLog["outcome"] }, response: T): T => {
+      if (entry.outcome !== "ok") {
+        anchorSourceFailure = describeSourceFailure(anchorSource?.panel ?? 1, entry.outcome, String(entry.errorCode || ""));
+      }
       recordStudioGeneration({ ...logBase(), ...entry });
       return response;
     };
@@ -987,8 +1236,62 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     if (!prompt || typeof prompt !== "string") {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
     }
+    if (anchorParsed === "invalid") {
+      return NextResponse.json(
+        {
+          error: {
+            type: "invalid_anchor",
+            code: "invalid_anchor",
+            message: 'anchor must be { runId, role: "source" | "follower", force? } with a valid run id.',
+          },
+        },
+        { status: 400 },
+      );
+    }
+    if (lookAnchorUrl && !lookAnchorAllowed) {
+      return NextResponse.json(
+        {
+          error: {
+            type: "invalid_look_anchor",
+            code: "invalid_look_anchor",
+            message: "That stored look is not one of this product's saved looks. Turn off Keep look, or render panel 1 again.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+    if (lookSheetBytes > LOOK_SHEET_MAX_BYTES) {
+      return NextResponse.json(
+        {
+          error: {
+            type: "look_sheet_too_large",
+            code: "look_sheet_too_large",
+            message: `The look sheet is ${lookSheetBytes} bytes; the limit is ${LOOK_SHEET_MAX_BYTES}. Shorten the outfit lines and generate again.`,
+          },
+        },
+        { status: 400 },
+      );
+    }
 
     const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
+    const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
+    /* Inside the 16-image limit before anything is downloaded; the anchor's
+       slot is reserved here too, since it is attached after the downloads. */
+    const capped = capReferenceImages({
+      modelCount: modelRefNormalization.urls.length,
+      lists: parsedViewLists,
+      hasColorPhoto: Boolean(colorRun?.refUrl),
+      anchorSlots: anchorRole === "follower" || anchorRole === "stored" ? 1 : 0,
+    });
+    const viewLists = capped.lists;
+    /* Appended LAST among the general photos, so its position in the item list
+       is known without matching URLs back after normalisation. */
+    const colorAnchorIdx = colorRun?.refUrl ? viewLists.general.length - 1 : -1;
+    {
+      const dropped: DroppedRefs = { ...capped.dropped };
+      for (let n = MAX_STYLING_REFS + 1; n <= stylingSent; n += 1) (dropped.styling ??= []).push(n);
+      imagesDropped = dropped;
+    }
     // Style-with pieces go LAST, after every product photo (buildStylingRefLines counts on it).
     const itemRefValues = [...viewLists.general, ...viewLists.front, ...viewLists.back, ...viewLists.styling];
     const itemRefViewTags: ItemRefView[] = [
@@ -997,7 +1300,6 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       ...viewLists.back.map((): ItemRefView => "back"),
       ...viewLists.styling.map((): ItemRefView => "styling"),
     ];
-    const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
     const itemRefNormalization = normalizeReferenceUrls(itemRefValues, "Item");
     const normalizedModelRefs = modelRefNormalization.urls;
     const normalizedItemRefs = itemRefNormalization.urls;
@@ -1193,7 +1495,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ]
       : [];
 
-    const buildServerLockBlock = (modelCount: number, itemViewMapLines: string[], stylingRefLines: string[]) => [
+    const buildServerLockBlock = (
+      modelCount: number,
+      itemViewMapLines: string[],
+      stylingRefLines: string[],
+      sameShootLines: string[],
+    ) => [
       buildServerLockPrompt(normalizedPanelQa, modelCount),
       ...itemViewMapLines,
       ...stylingRefLines,
@@ -1209,6 +1516,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           ]
         : accessoryMode ? [] : buildBackStateLine(backState, normalizedPanelQa, itemSpecText)),
       buildBrandSafetyLock(normalizedPanelQa.itemType),
+      /* THE LOOK SHEET: what is worn, resolved once for the whole run and
+         byte-identical in every panel. It comes after the product (the spec)
+         and the coverage floor (brand safety) — styling never outranks
+         either — and before the colourway, the same-shoot reference, the
+         poses and the operator, which all still read later and win. */
+      ...(lookSheet ? [/^LOOK SHEET\b/i.test(lookSheet) ? lookSheet : `LOOK SHEET (SERVER — resolved once for this whole shoot; the same in every panel):\n${lookSheet}`] : []),
       ...(colorRun
         ? [
             `COLOURWAY — this run renders the SAME product in a different colour: ${
@@ -1227,6 +1540,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             "- Everything else is unchanged: same cut, same fit, same seams, same pockets, same hardware in the same places, same text and graphics at the same size and position. This is a dye change, not a redesign.",
           ]
         : []),
+      ...sameShootLines,
       ...sidePlacementLines,
       ...(poseVariationDirective ? [poseVariationDirective] : []),
       /* LAST, deliberately. The pose-variation directive just above carries its
@@ -1246,13 +1560,17 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
          now both. It sits in this server block, which is never trimmed. */
       ...(operatorInstruction
         ? [
-            `OPERATOR INSTRUCTION — FINAL WORD: "${operatorInstruction}". Written by the person holding this garment and publishing these photos. It outranks EVERY line above: the item spec, the styling lock, the outfit from the photos, the colourway, the side directions, the pose directions and the background. Where it disagrees with any of them, do what it says and drop the conflicting part. Where it says nothing, everything above still applies.`,
+            `OPERATOR INSTRUCTION — FINAL WORD: "${operatorInstruction}". Written by the person holding this garment and publishing these photos. It outranks EVERY line above: the item spec, ${
+              lookSheet ? "the look sheet" : "the styling lock, the outfit from the photos"
+            }, the colourway, ${
+              sameShootLines.length ? "the same-shoot reference, " : ""
+            }the side directions, the pose directions and the background. Where it disagrees with any of them, do what it says and drop the conflicting part. Where it says nothing, everything above still applies.`,
           ]
         : []),
     ].join("\n");
 
-    // Keep model identity anchors bounded; include all item refs provided by section 0.5.
-    const modelAnchors = normalizedModelRefs.slice(0, 6);
+    // Keep model identity anchors bounded (≤6, fewer when the 16-image cap needed the room).
+    const modelAnchors = normalizedModelRefs.slice(0, capped.modelKeep);
     const itemAnchors = normalizedItemRefs;
     // View tag per item anchor; if normalisation changed the count (it only
     // drops on error, which 400s above) fall back to "general" for all.
@@ -1329,10 +1647,213 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
+    /* A product photo — or a style-with piece — that failed to download used
+       to drop out of THIS panel only: the other panels of the run rendered with
+       it, this one without, and the view map was renumbered around the hole.
+       That is a different garment truth (or outfit) in one panel. Now the
+       panel fails before anything is paid for and says which photo. */
+    const failedItems = downloaded
+      .slice(modelAnchors.length)
+      .map((r, i) => ({ r, i }))
+      .filter((e): e is { r: PromiseRejectedResult; i: number } => e.r.status === "rejected");
+    if (failedItems.length) {
+      const VIEW_LABEL: Record<ItemRefView, string> = { general: "General", front: "Front", back: "Back", styling: "Style with" };
+      const failed = failedItems.map(({ i }) => {
+        const view = itemAnchorViews[i] ?? "general";
+        const position = itemAnchorViews.slice(0, i + 1).filter((v) => v === view).length;
+        return {
+          view,
+          position,
+          label: i === colorAnchorIdx ? "the colourway photo" : `${VIEW_LABEL[view]} photo ${position}`,
+        };
+      });
+      const names = failed.map((f) => f.label);
+      const one = names.length === 1;
+      const reasons = failedItems.map((e) => String((e.r.reason as Error)?.message || e.r.reason || "")).join(" | ");
+      return logged(
+        {
+          outcome: "failed",
+          errorCode: "ref_download_failed",
+          errorMessage: `${names.join(", ")}: ${reasons}`,
+          modelRefCount: modelFilesCount,
+          itemRefCount: itemFilesCount,
+        },
+        NextResponse.json(
+          {
+            error: {
+              type: "ref_download_failed",
+              code: "ref_download_failed",
+              message: `${names.join(", ")} could not be downloaded, so this panel was not rendered and nothing was charged for it. Re-upload ${
+                one ? "that photo (or remove it)" : "those photos (or remove them)"
+              } and generate again.`,
+              failed: failed.map(({ view, position }) => ({ view, position })),
+            },
+          },
+          { status: 400 },
+        ),
+      );
+    }
+    if (modelFilesCount < 3) {
+      return logged(
+        { outcome: "failed", errorCode: "ref_download_model", modelRefCount: modelFilesCount, itemRefCount: itemFilesCount },
+        NextResponse.json(
+          {
+            error:
+              "Locked model is under-specified after download. At least 3 model references must be successfully readable.",
+          },
+          { status: 400 }
+        )
+      );
+    }
+
+    /* The judges check the PRODUCT against its photos. Style-with pieces are
+       styling — showing them as product references would read as a mismatch. */
+    const qaItemIdx = itemRefViewsForQa.map((v, i) => (v === "styling" ? -1 : i)).filter((i) => i >= 0);
+    const qaItemRefs = qaItemIdx.map((i) => itemRefDataUrls[i]);
+    const qaItemViews = qaItemIdx.map((i) => itemRefViewsForQa[i] as Exclude<ItemRefView, "styling">);
+
+    /* ── Panel 1 sets the look ──────────────────────────────────────────────
+       A follower has its references; now it waits for panel 1 (on the server,
+       so resume, Abort and the job ids are exactly as before), gates it once
+       per run, and attaches it LAST, so no image number above changes. Every
+       way this can fail answers before any OpenAI call. */
+    const refCounts = { modelRefCount: modelFilesCount, itemRefCount: itemFilesCount };
+    const anchorUnavailable = (code: string, message: string) =>
+      logged(
+        { ...refCounts, outcome: "blocked", errorCode: "anchor_unavailable", errorMessage: `${code}: ${message}` },
+        NextResponse.json({ error: { type: "anchor_unavailable", code, message } }, { status: 409 }),
+      );
+    let anchorFile: Awaited<ReturnType<typeof toFile>> | null = null;
+    if (anchorRole === "follower" && anchorReq) {
+      const runId = anchorReq.runId;
+      /* "Render the others anyway" comes after panel 1 finished: if the server
+         no longer holds it (it is kept 15 minutes, and a restart loses it),
+         waiting for it would only run out the clock. */
+      if (anchorReq.force && !peekRunAnchor(runId)) {
+        return anchorUnavailable(
+          "anchor_expired",
+          "Panel 1 of this run is no longer held on the server, so this panel was not rendered and nothing was charged for it. Regenerate panel 1.",
+        );
+      }
+      const waitStarted = Date.now();
+      const waited = await waitRunAnchor(runId, {
+        signal,
+        timeoutMs: Math.min(ANCHOR_WAIT_MAX_MS, startedAt + FOLLOWER_WINDOW_MS - MIN_RENDER_WINDOW_MS - Date.now()),
+      });
+      anchorWaitMs = Date.now() - waitStarted;
+      if (waited.status === "aborted" || signal?.aborted) {
+        return logged({ ...refCounts, outcome: "aborted", errorCode: "aborted" }, abortedGenerateResponse());
+      }
+      if (waited.status === "timeout") {
+        return anchorUnavailable(
+          "anchor_timeout",
+          `Panel 1 did not finish in time, so this panel was not rendered and nothing was charged for it. Render this panel again.`,
+        );
+      }
+      if (waited.status === "failed") {
+        return anchorUnavailable(
+          "anchor_failed",
+          `${waited.reason}, so this panel was not rendered and nothing was charged for it. Fix panel 1 and generate again.`,
+        );
+      }
+      if (anchorReq.force) {
+        /* "Render the other panels anyway": the operator looked at panel 1. */
+        anchorGate = "forced";
+        void markLookAnchorGate(matrixIdValid, runId, "forced");
+      } else {
+        const gateWork = async (): Promise<AnchorGateResult> => {
+          const result = await withTimeout(
+            runAnchorGate({
+              openai,
+              panel: { panel: waited.panel, poseA: waited.poseA, poseB: waited.poseB, b64: waited.b64, logId: null },
+              itemRefs: qaItemRefs,
+              itemRefViews: qaItemViews,
+              modelRefs: modelRefDataUrls,
+              itemSpec: itemSpecText,
+              itemType: String(normalizedPanelQa.itemType || ""),
+              colorName: colorRun?.name ?? "",
+              instruction: operatorInstruction,
+              modelGender: normalizedPanelQa.modelGender,
+              timeoutMs: ANCHOR_GATE_ATTEMPT_MS,
+            }),
+            ANCHOR_GATE_MAX_MS,
+            "Panel 1 accuracy gate",
+          ).catch((): AnchorGateResult => ({ status: "unavailable", findings: [], notes: [] }));
+          void markLookAnchorGate(matrixIdValid, runId, result.status);
+          return result;
+        };
+        const gate = await untilAborted(gateRunAnchor(runId, gateWork), signal);
+        if (!gate) return logged({ ...refCounts, outcome: "aborted", errorCode: "aborted" }, abortedGenerateResponse());
+        anchorGate = gate.status;
+        if (gate.status === "flagged") {
+          return logged(
+            {
+              ...refCounts,
+              outcome: "blocked",
+              errorCode: "anchor_flagged",
+              errorMessage: gate.findings.map((f) => f.text).join(" | ").slice(0, 600),
+            },
+            NextResponse.json(
+              {
+                error: {
+                  type: "anchor_flagged",
+                  code: "anchor_flagged",
+                  message: `The check flagged panel ${waited.panel}, so this panel was held before anything was paid for. Look at panel ${waited.panel}'s flags, then render the other panels anyway or regenerate panel ${waited.panel}.`,
+                  sourcePanel: waited.panel,
+                  findings: gate.findings,
+                  notes: gate.notes,
+                },
+              },
+              { status: 409 },
+            ),
+          );
+        }
+      }
+      /* The wait and the gate came out of the Studio's polling window. */
+      if (startedAt + FOLLOWER_WINDOW_MS - Date.now() < MIN_RENDER_WINDOW_MS) {
+        return anchorUnavailable(
+          "anchor_timeout",
+          `Panel 1 and its check took too long to leave time for this panel, so it was not rendered and nothing was charged for it. Render this panel again.`,
+        );
+      }
+      anchorFile = await toFile(Buffer.from(waited.b64, "base64"), "same-shoot-panel-1.png", { type: "image/png" });
+    } else if (anchorRole === "stored") {
+      try {
+        const { body, contentType } = await withTimeout(
+          downloadStorageObject(lookAnchorPath),
+          getImageFetchTimeoutMs(),
+          "Stored look download",
+        );
+        const type = (contentType || "").split(";")[0].trim().toLowerCase();
+        if (!/^image\/(png|jpe?g|webp)$/.test(type)) throw new Error(`unsupported type ${type || "none"}`);
+        anchorFile = await toFile(Buffer.from(body), `same-shoot-look.${extFromContentType(type)}`, { type });
+      } catch (e) {
+        console.warn(`[generate] stored look not loaded (${lookAnchorPath}):`, (e as Error)?.message || e);
+        return anchorUnavailable(
+          "look_anchor_missing",
+          "The saved look for this model and colour could not be loaded, so this panel was not rendered and nothing was charged for it. Turn off Keep look, or render panel 1 again.",
+        );
+      }
+    }
+
+    const sameShootLines = anchorFile
+      ? [
+          buildSameShootLine({
+            // Attached LAST: every image number above is unchanged.
+            imageNumber: referenceFiles.length + 1,
+            modelCount: modelFilesCount,
+            stored: anchorRole === "stored",
+            hasSpec: Boolean(itemSpecText),
+            hasLookSheet: Boolean(lookSheet),
+          }),
+        ]
+      : [];
+    const editImages = anchorFile ? [...referenceFiles, anchorFile] : referenceFiles;
     const serverLockBlock = buildServerLockBlock(
       modelFilesCount,
       buildItemViewMapLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa }),
-      buildStylingRefLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa }),
+      buildStylingRefLines({ modelCount: modelFilesCount, itemViews: itemRefViewsForQa, hasLookSheet: Boolean(lookSheet) }),
+      sameShootLines,
     );
     const clamped = clampLockedPrompt(prompt, serverLockBlock);
     const lockedPrompt = clamped.prompt;
@@ -1353,21 +1874,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           `Panel ${normalizedPanelQa.panelNumber ?? "?"}, item type "${normalizedPanelQa.itemType ?? "?"}".`
       );
     }
-    if (modelFilesCount < 3) {
-      return logged(
-        { outcome: "failed", errorCode: "ref_download_model", modelRefCount: modelFilesCount, itemRefCount: itemFilesCount },
-        NextResponse.json(
-          {
-            error:
-              "Locked model is under-specified after download. At least 3 model references must be successfully readable.",
-          },
-          { status: 400 }
-        )
-      );
-    }
-
     let b64: string | null = null;
-    const logRefs = { modelRefCount: modelFilesCount, itemRefCount: itemFilesCount, promptBytes: promptLen(lockedPrompt), promptTrimmed: clamped.trimmed };
+    let imageUsage: Record<string, unknown> | null = null;
+    const logRefs = { ...refCounts, promptBytes: promptLen(lockedPrompt), promptTrimmed: clamped.trimmed };
     try {
       // Only the configured model — never silently substitute a different
       // (paid) model. No input_fidelity: on gpt-image edits it forces faithful
@@ -1393,8 +1902,13 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        */
       const attemptsAllowed = Math.max(1, Math.min(3, Number(process.env.OPENAI_IMAGE_ATTEMPTS) || 2));
       /* The browser stops polling at five minutes; stay inside that or a retry
-         produces an image nobody is still waiting for. */
-      const overallDeadline = Date.now() + Math.min(imageTimeoutMs + 60_000, 285_000);
+         produces an image nobody is still waiting for. Taken NOW, after any
+         wait for panel 1 — otherwise the wait would eat the render's budget —
+         and for a follower also inside the Studio's longer anchored window,
+         which the wait has already used part of. */
+      const renderBudgetEnd = Date.now() + Math.min(imageTimeoutMs + 60_000, 285_000);
+      const overallDeadline =
+        anchorRole === "follower" ? Math.min(renderBudgetEnd, startedAt + FOLLOWER_WINDOW_MS) : renderBudgetEnd;
       let imageErr: any = null;
       for (let attempt = 1; attempt <= attemptsAllowed; attempt += 1) {
         if (signal?.aborted) break;
@@ -1404,7 +1918,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             openai.images.edit(
               {
                 model: imageModel,
-                image: referenceFiles,
+                image: editImages,
                 prompt: enforcePromptLength(lockedPrompt),
                 size: finalSize,
                 quality: imageQuality as any,
@@ -1417,6 +1931,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
             "OpenAI image generation"
           );
           b64 = edited.data?.[0]?.b64_json ?? null;
+          /* What the render cost, in tokens — kept so cost stops being an estimate. */
+          const usage = (edited as any)?.usage;
+          imageUsage = usage && typeof usage === "object" ? (usage as Record<string, unknown>) : null;
           imageErr = null;
           break;
         } catch (e: any) {
@@ -1518,6 +2035,20 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
+    /* Panel 1 is in: release every follower waiting on it NOW, before the
+       stash, the log or the R2 upload below. */
+    const source = anchorSource;
+    if (source) {
+      settleRunAnchor(source.runId, {
+        status: "ok",
+        b64,
+        panel: source.panel,
+        poseA: normalizedPanelQa.poseA,
+        poseB: normalizedPanelQa.poseB,
+      });
+      anchorSourceSettled = true;
+    }
+
     /* Run-level QA. The judge used to run once per panel, and a panel seen on
        its own cannot answer the question the operator actually has: are these
        eight pictures the same outfit on the same person? Each panel is stashed
@@ -1525,15 +2056,10 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        and the Studio asks /api/generate/run-qa to audit the whole set once the
        last panel is in. lib/server/run-qa.ts records why the per-panel judge
        had to go. */
-    const runQaId = req.headers.get("x-generate-run")?.trim() ?? "";
+    const runQaId = runTag;
     const runQaActive = isValidRunId(runQaId);
     const logId = crypto.randomUUID();
     if (runQaActive) {
-      /* The judges check the PRODUCT against its photos. Style-with pieces are
-         styling — showing them as product references would read as a mismatch. */
-      const qaItemIdx = itemRefViewsForQa.map((v, i) => (v === "styling" ? -1 : i)).filter((i) => i >= 0);
-      const qaItemRefs = qaItemIdx.map((i) => itemRefDataUrls[i]);
-      const qaItemViews = qaItemIdx.map((i) => itemRefViewsForQa[i] as Exclude<ItemRefView, "styling">);
       const productAnchorIdx = itemAnchorViews.map((v, i) => (v === "styling" ? -1 : i)).filter((i) => i >= 0);
       stashRunPanel(
         runQaId,
@@ -1554,11 +2080,29 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           itemType: String(normalizedPanelQa.itemType || ""),
           colorName: colorRun?.name ?? "",
           instruction: operatorInstruction,
+          modelGender: normalizedPanelQa.modelGender,
+          accessoryKind: normalizedPanelQa.accessoryKind,
         },
       );
     }
+    /* Keep this panel 1 as the stored look for (model, colour), so a later
+       partial re-render can match it ("Keep look"). Best-effort, and after the
+       followers were already released above. */
+    const storedLook =
+      source && isValidLookModelId(modelIdRaw)
+        ? await storeLookAnchor({
+            tenantId: session.tid,
+            matrixId: matrixIdValid,
+            modelId: modelIdRaw,
+            colour: normalizeLookColour(itemColourRaw) || colorRun?.name || "",
+            runTag: source.runId,
+            b64,
+            currentGate: () => readRunAnchorGate(source.runId)?.status ?? null,
+          })
+        : null;
+    const droppedAny = Object.keys(imagesDropped).length > 0;
     return logged(
-      { ...logRefs, id: logId, outcome: "ok" },
+      { ...logRefs, id: logId, outcome: "ok", usage: imageUsage },
       NextResponse.json({
         imageBase64: b64,
         ...(runQaActive ? { runQaPending: true, runQaId } : {}),
@@ -1566,11 +2110,15 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         // Studio instead of only in a server log.
         ...(clamped.trimmed ? { promptTrimmed: true, promptOverflowBytes } : {}),
         backState,
+        ...(anchorRole ? { anchor: { role: anchorRole, gate: anchorGate, waitMs: anchorWaitMs } } : {}),
+        ...(storedLook ? { lookAnchor: { url: storedLook.url, key: storedLook.key, gate: storedLook.gate } } : {}),
+        ...(droppedAny ? { imagesDropped } : {}),
       }),
     );
   } catch (err: unknown) {
     console.error("Generate failed:", err);
     const reason = err instanceof Error ? err.message : "Generate failed";
+    anchorSourceFailure = describeSourceFailure(anchorSource?.panel ?? 1, "failed", "exception");
     if (logCtx) {
       recordStudioGeneration({
         ...logCtx(),
@@ -1589,6 +2137,17 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
     return fallbackGenerateResponse(reason);
+  } finally {
+    /* A source that ended any way but a render — refused, failed, aborted,
+       threw — still answers its followers, so none of them waits out the
+       whole window for a panel 1 that is never coming. */
+    if (anchorSource && !anchorSourceSettled) {
+      settleRunAnchor(anchorSource.runId, {
+        status: "failed",
+        panel: anchorSource.panel,
+        reason: anchorSourceFailure || `Panel ${anchorSource.panel} could not start`,
+      });
+    }
   }
 }
 

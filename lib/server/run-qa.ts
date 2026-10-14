@@ -32,7 +32,8 @@
  */
 import type OpenAI from "openai";
 import { withTimeout, extractOpenAiOutputText, parseJsonObjectFromText } from "@/lib/seo/aiText";
-import type { RunPanelImage, RunQaFinding, RunQaVerdict } from "@/lib/server/run-qa-store";
+import type { AnchorGateResult, RunPanelImage, RunQaFinding, RunQaVerdict } from "@/lib/server/run-qa-store";
+import { accessoryShotRole, isBackFacingPose } from "@/lib/server/studio-frames";
 
 export type ItemRefView = "general" | "front" | "back";
 
@@ -106,17 +107,37 @@ function buildLabelledItemRefContent(itemRefs: string[], views?: ItemRefView[]):
   return out;
 }
 
+/** What the judges are told each frame IS. Facts the pose plan fixes, never an
+ *  expectation about what ought to be visible. */
+type FrameFacts = { modelGender?: string; accessoryKind?: string };
+
+function frameLabel(pose: number | null, facts?: FrameFacts): string {
+  if (!pose) return "";
+  if (!facts) return ` (pose ${pose})`;
+  if (facts.accessoryKind) {
+    const role = accessoryShotRole(pose);
+    return role ? ` (shot ${pose}: ${role})` : ` (shot ${pose})`;
+  }
+  return isBackFacingPose(facts.modelGender ?? "", pose) ? ` (pose ${pose}, back view)` : ` (pose ${pose})`;
+}
+
+/** Garment runs only: does any frame show the model from behind? */
+function hasBackView(panels: RunPanelImage[], facts?: FrameFacts): boolean {
+  if (!facts || facts.accessoryKind) return false;
+  return panels.some((p) => isBackFacingPose(facts.modelGender ?? "", p.poseA) || isBackFacingPose(facts.modelGender ?? "", p.poseB));
+}
+
 /** One line per panel naming the frame tokens, then the image itself. */
-function buildPanelContent(panels: RunPanelImage[]): any[] {
+function buildPanelContent(panels: RunPanelImage[], facts?: FrameFacts): any[] {
   const out: any[] = [];
   for (const p of panels) {
     out.push({
       type: "input_text",
       text:
         `Panel ${p.panel}. Left half = frame P${p.panel}L` +
-        (p.poseA ? ` (pose ${p.poseA})` : "") +
+        frameLabel(p.poseA, facts) +
         `. Right half = frame P${p.panel}R` +
-        (p.poseB ? ` (pose ${p.poseB})` : "") +
+        frameLabel(p.poseB, facts) +
         ".",
     });
     out.push({ type: "input_image", image_url: `data:image/png;base64,${p.b64}` });
@@ -327,21 +348,32 @@ async function runConsistencyCheck(args: {
   model: string;
   panels: RunPanelImage[];
   itemType: string;
+  /** Labels the frames: back views, and in accessory mode each shot's role. */
+  facts?: FrameFacts;
   timeoutMs: number;
 }): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
   const roster = frameRoster(args.panels);
+  const accessory = Boolean(args.facts?.accessoryKind);
+  const backViews = hasBackView(args.panels, args.facts);
   const content: any[] = [
     {
       type: "input_text",
       text: [
-        `These frames are all from ONE shoot: the same model, wearing the same outfit, photographed the same day.`,
+        accessory
+          ? `These frames are all from ONE shoot of one accessory: the same product in every frame and, wherever a person is shown, the same model in the same outfit, photographed the same day.`
+          : `These frames are all from ONE shoot: the same model, wearing the same outfit, photographed the same day.`,
         `The product being sold is: ${args.itemType || "an apparel item"}. Everything else worn is styling.`,
         `The frames are: ${roster}.`,
         "",
         "Compare them with each other on these attributes:",
         "- FOOTWEAR: the same pair of shoes, same style, same colour, same sole, same laces, on every frame that shows feet.",
         "- TOP / other garment: the same shirt or top, same colour, same neckline, same sleeve length.",
-        "- SOCKS and ACCESSORIES: the same, or absent in all. A watch, belt, hat, bag or jewellery that appears in some frames and not others is an inconsistency.",
+        /* The pairing shot adds a watch or a second chain ON PURPOSE. Told
+           nothing, the judge flagged it 30 times in twelve days — so the
+           carve-out sits inside the line it carves out of. */
+        accessory
+          ? '- SOCKS and ACCESSORIES: the same, or absent in all. A watch, belt, hat, bag or jewellery that appears in some frames and not others is an inconsistency — except the ONE companion piece that the frame marked "pairing" places next to the product by design (a watch, a second chain, a second anklet, a ring stack, a necklace): that piece is never an inconsistency, in that frame or against any other.'
+          : "- SOCKS and ACCESSORIES: the same, or absent in all. A watch, belt, hat, bag or jewellery that appears in some frames and not others is an inconsistency.",
         "- PERSON: the same individual — same face, same hair colour and length, same build, same apparent age.",
         "- THE PRODUCT ITSELF: the same colour, same waistband, same pockets, same hardware, same stitching, same hems, same length and fit.",
         "",
@@ -354,7 +386,15 @@ async function runConsistencyCheck(args: {
         "- Lighting, shadow, colour temperature, background tint, centring.",
         "- Pose, stance, expression, hand position, which way the model faces.",
         "- A hanging part — a chain, drawcord, strap or tie — swinging, lying at a different angle, or catching the light differently. Same object, different moment, is the same object.",
-        "- A part of the garment being seen from the front in one frame and from the back in another.",
+        backViews
+          ? '- A part of the garment being seen from the front in one frame and from the back in another. A frame marked "back view" shows the model from BEHIND: there the product and the top show their BACKS, which are meant to differ from their fronts (a back print where the front carries other text, a plain back, a lower back neckline). A back view never disagrees with a front view about print, text, graphic or neckline; compare it on those only with other back views.'
+          : "- A part of the garment being seen from the front in one frame and from the back in another.",
+        ...(accessory
+          ? [
+              '- A frame marked "product only — no person" has no person and no outfit in it: it does not vote on footwear, top, socks, accessories worn or the person.',
+              '- The frame marked "flat lay" shows the product laid flat beside a garment. That garment is a prop: it does not vote on what is worn.',
+            ]
+          : []),
         "- WHICH SIDE OF THE BODY ANYTHING IS ON. Say nothing about left or right, ever. A chain, pocket, logo or vent that looks like it moved sides is NOT yours to report: a frame shot from behind reverses everything, and working that out from a picture is a separate check that does the arithmetic properly. Report colour, shape, style and presence. Never side.",
         "",
         "A FRAME THAT DOES NOT SHOW AN ATTRIBUTE SIMPLY DOES NOT VOTE ON IT.",
@@ -369,7 +409,7 @@ async function runConsistencyCheck(args: {
         "confidence is how sure you are that this is a real difference in the object and not a difference in viewing conditions. Below 0.75 it will be treated as a note, so use a high value only when you can point at both versions.",
       ].join("\n"),
     },
-    ...buildPanelContent(args.panels),
+    ...buildPanelContent(args.panels, args.facts),
   ];
 
   const { parsed, error } = await callJudge(
@@ -462,10 +502,12 @@ async function runAccuracyCheck(args: {
   colorName?: string;
   /** The operator's instruction: it outranks the photographs and the spec. */
   instruction?: string;
+  facts?: FrameFacts;
   timeoutMs: number;
 }): Promise<{ findings: RunQaFinding[]; notes: string[]; ok: boolean }> {
   const spec = String(args.itemSpec || "").trim();
   const roster = frameRoster(args.panels);
+  const accessory = Boolean(args.facts?.accessoryKind);
   const content: any[] = [
     {
       type: "input_text",
@@ -488,7 +530,9 @@ async function runAccuracyCheck(args: {
         "- CONSTRUCTION: seams, panels, pockets, waistband, closure, belt loops, hems, cuffs, collar.",
         "- HARDWARE the photographs show: buttons, zips, rivets, eyelets, chains, drawcords.",
         "",
-        "ADDED FEATURES COUNT AS MISMATCHES. A detail the render put there that the photographs do not have — a pressed centre crease down the leg, a pleat, a turn-up, an extra pocket, a side stripe, contrast stitching, a brand tab, an extra button or zip — is a mismatch exactly like a missing one. Compare the garment feature by feature, not just by colour and shape.",
+        accessory
+          ? 'ADDED FEATURES COUNT AS MISMATCHES. A detail the render put there that the photographs do not have — an extra bead, charm, link, stone or strand, a different clasp, an extra logo — is a mismatch exactly like a missing one. The one exception is the frame marked "pairing": it places ONE separate companion piece next to the product by design (a watch, a second chain, a second anklet, a ring stack), and that piece is never part of the product and never a mismatch. Compare the product feature by feature, not just by colour and shape.'
+          : "ADDED FEATURES COUNT AS MISMATCHES. A detail the render put there that the photographs do not have — a pressed centre crease down the leg, a pleat, a turn-up, an extra pocket, a side stripe, contrast stitching, a brand tab, an extra button or zip — is a mismatch exactly like a missing one. Compare the garment feature by feature, not just by colour and shape.",
         "",
         /* The item photographs are often worn by a shop model. That wearer is
            not this shoot's model: comparing against them failed all eight
@@ -548,7 +592,7 @@ async function runAccuracyCheck(args: {
     ...args.modelRefs.slice(0, 6).map((url) => ({ type: "input_image", image_url: url })),
     ...buildLabelledItemRefContent(args.itemRefs, args.itemRefViews),
     { type: "input_text", text: "Rendered frames to check:" },
-    ...buildPanelContent(args.panels),
+    ...buildPanelContent(args.panels, args.facts),
   ];
 
   const { parsed, error } = await callJudge(
@@ -600,6 +644,16 @@ async function runAccuracyCheck(args: {
       notes.push(`${text} (${Number.isFinite(confidence) ? "low" : "no"} confidence)`);
       continue;
     }
+    /* The spec says there is none of it and the judge says there is (or the
+       reverse). 9 of 51 accuracy findings in twelve days were this shape with
+       the SPEC wrong — a "Double Pleated" trouser whose spec says "no pleat" —
+       and each one unselected a correct crop. Which side is wrong is a
+       question for the person holding the garment, so it is asked as one. */
+    const denying = !isPerson && spec ? specLineDenying(spec, `${what} ${observed}`) : null;
+    if (denying) {
+      notes.push(specQuestion(denying, targets, expected, observed, what));
+      continue;
+    }
     if (!targets.length) {
       notes.push(text);
       continue;
@@ -612,6 +666,126 @@ async function runAccuracyCheck(args: {
   }
   return { findings: findings.slice(0, MAX_FINDINGS), notes, ok: true };
 }
+
+/* Construction a spec line can deny ("no pleat", "FRONT POCKETS: none"). */
+const SPEC_FEATURES: RegExp[] = [
+  /\bpleat/i,
+  /\bcrease/i,
+  /\bpocket/i,
+  /\bstripe/i,
+  /\b(?:top-?stitch|contrast stitch)/i,
+  /\bbutton/i,
+  /\bzip/i,
+  /\bdraw\s?(?:cord|string)/i,
+  /\bbelt[- ]?loops?\b/i,
+  /\b(?:rips?|ripped|tears?|distress\w*|fray\w*|holes?)\b/i,
+  /\bruch/i,
+  /\bdarts?\b/i,
+  /\bslits?\b/i,
+  /\bturn-?ups?\b/i,
+  /\bseams?\b/i,
+  /\b(?:fad(?:e|ed|ing)|whisker\w*)\b/i,
+  /\bpatch/i,
+  /\blogos?\b/i,
+  /\b(?:print\w*|graphic\w*)\b/i,
+  /\btabs?\b/i,
+  /\brivets?\b/i,
+  /\bstuds?\b/i,
+];
+
+const LOCATION_WORD = /\b(front|back|chest|side|hip|seat|knee|thigh|waist|waistband|hem|sleeve|cuff|collar|yoke|coin|shoulder|neck|ankle)s?\b/gi;
+
+function locationsIn(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of text.matchAll(LOCATION_WORD)) out.add(m[1].toLowerCase().replace(/band$/, ""));
+  return out;
+}
+
+/**
+ * The spec line that says a feature this finding is about is NOT there, or
+ * null. Lines that only say something was not clearly visible deny nothing.
+ * A line about one place ("no back pockets") does not answer a finding about
+ * another ("an added chest pocket").
+ */
+function specLineDenying(spec: string, findingText: string): string | null {
+  const findingPlaces = locationsIn(findingText);
+  for (const raw of spec.split("\n")) {
+    const line = raw.replace(/^\s*\d+\.\s*/, "").trim();
+    if (!line || /^NOT[\s-]+CLEARLY[\s-]+VISIBLE/i.test(line)) continue;
+    for (const feature of SPEC_FEATURES) {
+      if (!feature.test(findingText)) continue;
+      const negated = new RegExp(String.raw`\b(?:no|none of|without|zero)\s+(?:[\w'-]+\s+){0,3}?(?:${feature.source})`, "i").exec(line);
+      const zoneNone = new RegExp(
+        String.raw`^[^:]*(?:${feature.source})[^:]*:\s*(?:none|no\b|absent|not (?:present|visible)|plain|flat)`,
+        "i",
+      ).exec(line);
+      if (!negated && !zoneNone) continue;
+      const linePlaces = locationsIn(negated ? negated[0] : line.split(":")[0]);
+      if (linePlaces.size && findingPlaces.size && ![...linePlaces].some((p) => findingPlaces.has(p))) continue;
+      return line.length > 140 ? `${line.slice(0, 137)}…` : line;
+    }
+  }
+  return null;
+}
+
+function specQuestion(
+  line: string,
+  targets: { panel: number; frame: "left" | "right" | "both" }[],
+  expected: string,
+  observed: string,
+  what: string,
+): string {
+  const where = targets.length
+    ? targets.map((t) => `P${t.panel}${t.frame === "left" ? "L" : t.frame === "right" ? "R" : ""}`).join(", ")
+    : "this run";
+  const renderLacksIt = /\b(?:no|none|missing|absent|without|lacks?)\b/i.test(observed);
+  return (
+    renderLacksIt
+      ? `spec question: the spec says "${line}" and ${where} follows it, but the check read the photographs as showing ${expected || what}. If the garment really has it, correct that spec line and render again.`
+      : `spec question: the spec says "${line}", but ${where} shows ${observed || what}. If the garment really has it, correct that spec line; if it does not, that frame added it.`
+  ).slice(0, 320);
+}
+
+/**
+ * The anchor gate: the accuracy judge on panel 1 alone, before panels 2-4 are
+ * paid for. A flaw in panel 1 would otherwise be copied into every panel that
+ * attaches it. Findings hold the followers; notes (spec questions, low
+ * confidence) never do. The operator decides — "render the others anyway"
+ * skips this gate.
+ */
+export async function runAnchorGate(args: {
+  openai: OpenAI;
+  panel: RunPanelImage;
+  itemRefs: string[];
+  itemRefViews?: ItemRefView[];
+  modelRefs: string[];
+  itemSpec?: string;
+  itemType: string;
+  colorName?: string;
+  instruction?: string;
+  modelGender?: string;
+  timeoutMs: number;
+}): Promise<AnchorGateResult> {
+  const r = await runAccuracyCheck({
+    openai: args.openai,
+    model: qaModel(),
+    panels: [args.panel],
+    itemRefs: args.itemRefs,
+    itemRefViews: args.itemRefViews,
+    modelRefs: args.modelRefs,
+    itemSpec: args.itemSpec,
+    itemType: args.itemType,
+    colorName: args.colorName,
+    instruction: args.instruction,
+    facts: { modelGender: args.modelGender },
+    timeoutMs: args.timeoutMs,
+  });
+  const notes = r.notes.slice(0, MAX_NOTES);
+  if (!r.ok) return { status: "unavailable", findings: [], notes };
+  return { status: r.findings.length ? "flagged" : "pass", findings: r.findings, notes };
+}
+
+const qaModel = () => (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
 
 /**
  * Both passes, in parallel, merged into one verdict.
@@ -629,9 +803,13 @@ export async function runRunQa(args: {
   itemType: string;
   colorName?: string;
   instruction?: string;
+  /** For the frame labels ("back view", accessory shot roles). */
+  modelGender?: string;
+  accessoryKind?: string;
   timeoutMs: number;
 }): Promise<RunQaVerdict> {
-  const model = (process.env.OPENAI_IMAGE_QA_MODEL || "gpt-4o").trim() || "gpt-4o";
+  const model = qaModel();
+  const facts: FrameFacts = { modelGender: args.modelGender, accessoryKind: args.accessoryKind };
   const frameCount = args.panels.length * 2;
   const wantConsistency = frameCount >= 3;
 
@@ -646,6 +824,7 @@ export async function runRunQa(args: {
           model,
           panels: args.panels,
           itemType: args.itemType,
+          facts,
           timeoutMs: args.timeoutMs,
         }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false }))
       : Promise.resolve({ findings: [] as RunQaFinding[], notes: [] as string[], ok: true }),
@@ -660,6 +839,7 @@ export async function runRunQa(args: {
       itemType: args.itemType,
       colorName: args.colorName,
       instruction: args.instruction,
+      facts,
       timeoutMs: args.timeoutMs,
     }).catch(() => ({ findings: [] as RunQaFinding[], notes: [] as string[], ok: false })),
     sidedDetails.length && args.panels.length
@@ -673,7 +853,14 @@ export async function runRunQa(args: {
       : Promise.resolve({ findings: [] as RunQaFinding[], notes: [] as string[], ok: true }),
   ]);
 
-  const notes = [...consistency.notes, ...accuracy.notes, ...sides.notes].slice(0, MAX_NOTES);
+  /* Spec questions first: they are the notes that ask the operator to act. */
+  const isSpecQuestion = (n: string) => n.startsWith("spec question:");
+  const notes = [
+    ...accuracy.notes.filter(isSpecQuestion),
+    ...consistency.notes,
+    ...accuracy.notes.filter((n) => !isSpecQuestion(n)),
+    ...sides.notes,
+  ].slice(0, MAX_NOTES);
   if (!consistency.ok && !accuracy.ok) {
     return { findings: [], advisories: [], notes, unavailable: true };
   }

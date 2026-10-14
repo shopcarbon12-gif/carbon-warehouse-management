@@ -6,7 +6,7 @@
 // item-type, and 3:4-split behavior WITHOUT modifying the existing generator page.
 // Keep this file behavior-identical to the originals; the live studio page is the source of truth.
 
-import { getPoseLibraryForGender } from "@/lib/panelPoseLibraries";
+import { getPoseLibraryForGender, resolveGlobalPoseRules, resolvePoseBlock } from "@/lib/panelPoseLibraries";
 
 export const SPLIT_TARGET_WIDTH = 900;
 export const SPLIT_TARGET_HEIGHT = 1200;
@@ -72,15 +72,20 @@ export function getSensitivityTier(itemTypeValue: string, modelGender: string): 
   return "low";
 }
 
-export function getSwimwearStyleLockLines(gender: string, itemTypeValue: string) {
+export function getSwimwearStyleLockLines(gender: string, itemTypeValue: string, opts?: { lookSheet?: boolean }) {
   if (!isSwimwearItemType(itemTypeValue)) return [] as string[];
   const g = String(gender || "").trim().toLowerCase();
   const lines = [
-    "SWIMWEAR SAFETY + STYLING LOCK (NON-NEGOTIABLE):",
+    /* With a look sheet there is no styling lock left to name. */
+    opts?.lookSheet ? "SWIMWEAR SAFETY LOCK (NON-NEGOTIABLE):" : "SWIMWEAR SAFETY + STYLING LOCK (NON-NEGOTIABLE):",
     "- Keep the scene strictly ecommerce/catalog, neutral posture, and non-suggestive styling.",
     "- Keep the styling neutral, professional, and non-suggestive.",
     "- Use clean studio product-photography styling only.",
-    "- Foot styling for swimwear: use clean flip-flops/sandals/water-shoes, or naturally uncovered feet when needed.",
+    /* The look sheet has already decided the feet; offering a menu here would
+       let each panel pick again. */
+    opts?.lookSheet
+      ? "- Foot styling for swimwear: exactly the FOOTWEAR line of the LOOK SHEET."
+      : "- Foot styling for swimwear: use clean flip-flops/sandals/water-shoes, or naturally uncovered feet when needed.",
   ];
   if (g === "male") {
     lines.push(
@@ -234,6 +239,12 @@ function inferItemTypeCategory(itemTypeValue: string) {
     return "accessory";
   }
   return "item";
+}
+
+/** "top" | "bottom" | "outerwear" | "full-look" | "footwear" | "accessory" | "item" — the
+ *  category every pose and styling rule keys on. */
+export function itemTypeCategory(itemTypeValue: string) {
+  return inferItemTypeCategory(itemTypeValue);
 }
 
 export function getCloseUpCategoryRule(itemTypeValue: string) {
@@ -466,7 +477,7 @@ export function parseOutfitFromSpec(spec: string): Partial<Record<OutfitSlot, st
 }
 
 /** Light cloth wants a dark partner and the other way round. */
-function isLightColour(colour: string): boolean {
+export function isLightColour(colour: string): boolean {
   return /\b(white|off.?white|cream|ivory|ecru|beige|sand|stone|bone|light|pale|pastel|pink|yellow|mint|lavender|sky)\b/i.test(
     colour || "",
   );
@@ -559,6 +570,19 @@ export function buildStylingLock(
   return lines.join("\n");
 }
 
+/** Does a spec line put a label, patch, text or logo on the BACK waistband? */
+export function specHasBackWaistbandLabel(spec: string): boolean {
+  return String(spec || "")
+    .split("\n")
+    .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
+}
+
+/** A bottom with a back-waistband label: the top worn with it must keep the label in view
+ *  (the look sheet's `backWaistbandLabel`). */
+export function needsBackWaistbandTuck(itemTypeValue: string, spec: string): boolean {
+  return inferItemTypeCategory(itemTypeValue) === "bottom" && specHasBackWaistbandLabel(spec);
+}
+
 /**
  * A back-facing frame of a bottom whose BACK WAISTBAND carries a label, patch,
  * text or logo: the top must not hide it.
@@ -570,11 +594,7 @@ export function buildStylingLock(
  * (a separate note far from the lock loses — see the placement lessons).
  */
 export function withBackWaistbandVisible(lock: string, itemTypeValue: string, spec: string): string {
-  if (inferItemTypeCategory(itemTypeValue) !== "bottom") return lock;
-  const mark = String(spec || "")
-    .split("\n")
-    .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
-  if (!mark) return lock;
+  if (!needsBackWaistbandTuck(itemTypeValue, spec)) return lock;
   const clause =
     " In the frame facing away from the camera, the top's back hem sits just above the waistband — lightly tucked in at the back if it is long — so the label / patch on the back waistband of the product is fully visible and readable; the same top, only where its back hem sits changes.";
   return lock.replace(/^(- TOP:[^\n]*)$/m, (line) => line + clause);
@@ -664,6 +684,15 @@ export function buildMasterPanelPrompt(args: {
   stylingLock?: string;
   /** The operator attached STYLE-WITH photos (the server numbers them). */
   hasStyleWith?: boolean;
+  /** The run's LOOK SHEET (lib/studioLookSheet.ts) travels in the request body and the
+   *  server puts it in its protected block, byte-identical in every panel. This prompt
+   *  then carries no styling lock and no "outfit from the photos" of its own — it says
+   *  once that the outfit is exactly the LOOK SHEET. `stylingLock` is ignored. */
+  lookSheetInServer?: boolean;
+  /** The run's variation seed (the number sent as body.variationSeed). When given, the
+   *  injected pose blocks carry no "pick ONE" menus — every choice is made in code, and
+   *  the micro-variation is left to the server's POSE VARIATION line alone. */
+  variationSeed?: number;
 }) {
   /*
    * One rule, one voice. The previous builder said "the model is over 25" in
@@ -677,10 +706,21 @@ export function buildMasterPanelPrompt(args: {
    */
   const gender = String(args.modelGender || "").trim().toLowerCase() === "female" ? "female" : "male";
   const poseLibrary = getPoseLibraryForGender(args.modelGender);
+  const resolvePoses = Number.isFinite(args.variationSeed);
+  const lookSheet = args.lookSheetInServer === true;
+  const resolvedBlock = (pose: number, block: string) =>
+    resolvePoses
+      ? resolvePoseBlock(block, {
+          gender,
+          pose,
+          category: inferItemTypeCategory(args.itemType),
+          seed: Math.floor(Number(args.variationSeed)),
+        })
+      : block;
   // Shared styling rules only — never the other six poses. See extractGlobalRules.
-  const globalRules = extractGlobalRules(poseLibrary);
-  const poseABlock = getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseA, args.itemType);
-  const poseBBlock = getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseB, args.itemType);
+  const globalRules = resolvePoses ? resolveGlobalPoseRules(extractGlobalRules(poseLibrary)) : extractGlobalRules(poseLibrary);
+  const poseABlock = resolvedBlock(args.poseA, getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseA, args.itemType));
+  const poseBBlock = resolvedBlock(args.poseB, getEffectivePoseBlock(poseLibrary, args.modelGender, args.poseB, args.itemType));
   const upperBodyItem = isUpperBodyProductCategory(args.itemType);
   const legsCropOverrideActive =
     upperBodyItem &&
@@ -691,7 +731,7 @@ export function buildMasterPanelPrompt(args: {
     args.itemType
   );
   const swimwearActive = isSwimwearItemType(args.itemType);
-  const swimwearStyleLines = getSwimwearStyleLockLines(args.modelGender, args.itemType);
+  const swimwearStyleLines = getSwimwearStyleLockLines(args.modelGender, args.itemType, lookSheet ? { lookSheet } : undefined);
   const promptItemType = gender === "female" && swimwearActive ? "swimwear" : args.itemType.trim();
   const itemLabel = promptItemType || "apparel item";
   const styleInstructions = normalizePromptInstruction(args.itemStyleInstructions);
@@ -702,29 +742,55 @@ export function buildMasterPanelPrompt(args: {
     "a natural, relaxed premium expression with soft, warm eyes";
   const modelLabel = `${args.modelName || "the locked model"} (${args.modelGender || "model"})`;
 
+  /* With the look sheet in the server block every panel reads the same outfit,
+     word for word. The open-ended "wear the outfit in the photos" sentence is
+     exactly what let each panel pick its own pieces from 13 photos of different
+     shoots, so it goes — the photographed pieces are already named on the sheet. */
+  const outfitLines = lookSheet
+    ? [
+        `OUTFIT: everything the model wears that is not the product is the LOOK SHEET given with this prompt — the model wears exactly the pieces it lists, in every frame of every panel of this run. Nothing else is worn; nothing on it is left out. A piece an item photo shows that the LOOK SHEET does not list is not worn.`,
+      ]
+    : [
+        `OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit, the model wears that exact whole outfit — every piece, colour, layer and accessory — unchanged in every frame.${
+          args.hasStyleWith
+            ? " The STYLE-WITH photos (numbered in the STYLE-WITH PIECES line) are pieces the operator chose for this shoot: the model wears every one of them, exactly as photographed, and they replace any other piece for the same part of the body."
+            : ""
+        } Only what no photo shows comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.`,
+      ];
+  const footwearCategory = inferItemTypeCategory(args.itemType) === "footwear";
+  const footwearLine = lookSheet
+    ? footwearCategory
+      ? "FOOTWEAR: the product is the footwear — the exact pair from the item photos, on both feet, in every full-body frame; never a different pair."
+      : "FOOTWEAR: every full-body frame shows exactly the FOOTWEAR of the LOOK SHEET, on both feet — never socks-only, never a pair the LOOK SHEET does not name, never a different pair from the other panels."
+    : swimwearActive
+      ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
+      : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock (the photographed pair when it says so), on both feet. Never barefoot, never socks-only, never a different pair from the other panels.";
+
   return [
     `Professional ecommerce catalog photo shoot. Panel ${args.panelNumber} (${args.panelLabel}). Model: ${modelLabel}. Item type: ${itemLabel}.`,
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is Pose A, the RIGHT half (768x1024) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
-    `ITEM REFERENCES: take the garment's shape, colour, material, construction and every detail from the item photos. Any person, mannequin or hanger in an item photo${args.hasStyleWith ? " or a STYLE-WITH photo" : ""} is a display fixture — never copy a face, hair, skin tone, body, age, tattoos or pose from it; the person in every frame is the model from the MODEL references. The clothes, shoes and accessories those photos show are a different matter: see the next line.`,
-    `OUTFIT FROM THE PHOTOS: if an item photo shows the item worn in a complete outfit, the model wears that exact whole outfit — every piece, colour, layer and accessory — unchanged in every frame.${
-      args.hasStyleWith
-        ? " The STYLE-WITH photos (numbered in the STYLE-WITH PIECES line) are pieces the operator chose for this shoot: the model wears every one of them, exactly as photographed, and they replace any other piece for the same part of the body."
-        : ""
-    } Only what no photo shows comes from the STYLING LOCK below — never invent branded or designed pieces, prints, logos or accessories.`,
+    `ITEM REFERENCES: take the garment's shape, colour, material, construction and every detail from the item photos. Any person, mannequin or hanger in an item photo${args.hasStyleWith ? " or a STYLE-WITH photo" : ""} is a display fixture — never copy a face, hair, skin tone, body, age, tattoos or pose from it; the person in every frame is the model from the MODEL references.${
+      lookSheet ? "" : " The clothes, shoes and accessories those photos show are a different matter: see the next line."
+    }`,
+    ...outfitLines,
     buildAbsentFeatureGuard(args.itemType),
-    `STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. A piece named "from the STYLE-WITH photos" or "as worn in the item photos" is that photographed piece — reproduce it from the photo, never a generic version of it:`,
-    stylingLock,
+    ...(lookSheet
+      ? []
+      : [
+          `STYLING LOCK — everything that is NOT the product. Use these exact pieces, worded exactly as written, in this frame and in every other panel of this run; they are what keeps the set looking like one shoot. A piece named "from the STYLE-WITH photos" or "as worn in the item photos" is that photographed piece — reproduce it from the photo, never a generic version of it:`,
+          stylingLock,
+        ]),
     "WORN BY THE MODEL: every frame shows the garment ON the living model from the MODEL references — the model's own body inside the clothes, their legs in the trousers, their skin at the ankle and wrist. A cropped frame still contains their body. Never a flat lay, never a ghost mannequin, never an empty garment floating on the background, never a frame with no person in it.",
     `GARMENT FIDELITY: the ${itemLabel} is the exact product in the item photos — identical cut and fit (a slim fit stays slim, an oversized fit stays oversized; never lengthen, shorten, loosen or tighten it), identical colour, wash, material and texture, identical seams, stitching, pockets, hardware, closures, hems and cuffs, identical distressing in the same places, and every logo, text, print and graphic at the same size, position, colours and print effect. Never redesign, simplify, recolour, move, resize, mirror or add anything. It stays identical in both frames and across every panel of this run.`,
     ...(styleInstructions
       ? [
-          "OPERATOR INSTRUCTION — written by the person holding this garment and publishing these photos, and therefore the highest authority in this whole prompt. It outranks the item spec, the styling lock, the outfit from the photos, the colourway, the pose directions and the background. Where it disagrees with any of them, it wins and that part is dropped; where it is silent, they still apply. It is repeated as the last line of this prompt:",
+          lookSheet
+            ? "OPERATOR INSTRUCTION — written by the person holding this garment and publishing these photos, and therefore the highest authority in this whole prompt. It outranks the item spec, the LOOK SHEET, the colourway, the pose directions and the background. Where it disagrees with any of them, it wins and that part is dropped; where it is silent, they still apply. It is repeated as the last line of this prompt:"
+            : "OPERATOR INSTRUCTION — written by the person holding this garment and publishing these photos, and therefore the highest authority in this whole prompt. It outranks the item spec, the styling lock, the outfit from the photos, the colourway, the pose directions and the background. Where it disagrees with any of them, it wins and that part is dropped; where it is silent, they still apply. It is repeated as the last line of this prompt:",
           styleInstructions,
         ]
       : []),
-    swimwearActive
-      ? "FOOTWEAR: full-body frames use the sandals named in the styling lock, or naturally uncovered feet."
-      : "FOOTWEAR: every full-body frame shows the exact shoes named in the styling lock (the photographed pair when it says so), on both feet. Never barefoot, never socks-only, never a different pair from the other panels.",
+    footwearLine,
     `EXPRESSION for this generation: ${expressionDirective}. The face looks alive and human, with subtle natural variation between the two frames; expression changes only the mouth, eye warmth, brow and gaze — never face geometry, age, skin tone or hairline.`,
     "Photorealistic: real human anatomy and skin texture; no CGI, plastic or mannequin look.",
     ...(globalRules

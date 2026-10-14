@@ -398,12 +398,271 @@ function partnerColour(itemColour: string): string {
   return isLight(itemColour) ? "black" : "off-white";
 }
 
-/** The text of one shot, as it goes into the prompt. */
-export function accessoryShotText(kind: AccessoryKind, shot: number, gender: string, itemColour: string): string {
+function pickBySeed<T>(seed: number, salt: number, options: T[]): T {
+  return options[Math.abs(Math.floor(seed) + salt) % options.length];
+}
+
+/** The metal of a pairing piece: the product's own when its colour names one. */
+function pairingMetal(itemColour: string, seed: number): "gold" | "silver" {
+  if (/\b(silver|platinum|steel|chrome)\b/i.test(itemColour || "")) return "silver";
+  if (/\bgold\b/i.test(itemColour || "")) return "gold";
+  return pickBySeed(seed, 11, ["gold", "silver"] as const);
+}
+
+/*
+ * The on-model shots of the shot list, with every "X or Y" decided from the
+ * look seed (lib/studioLookSheet.ts). The four panels are four separate
+ * renders; a choice left in the words ("walking or standing", "one or two
+ * bands") is made again by each of them.
+ */
+const RESOLVED_ON_MODEL: Partial<
+  Record<
+    AccessoryKind,
+    {
+      worn?: () => string;
+      lifestyle?: (g: G, seed: number) => string;
+      pairing?: (g: G, seed: number, metal: "gold" | "silver") => string;
+    }
+  >
+> = {
+  socks: {
+    lifestyle: (_g, seed) =>
+      `LIFESTYLE — from the knee down, the model ${pickBySeed(seed, 29, ["seated on a low white cube, feet flat", "caught mid-step"])}, the socks and sneakers in view.`,
+  },
+  other: {
+    worn: () => "ON THE MODEL — a close crop of the product in use on the model, the way it is meant to be used, showing its true size.",
+  },
+  wrist: {
+    lifestyle: (_g, seed) =>
+      `LIFESTYLE — the model from chin to hip in the styling outfit, the wrist with the product naturally in view, ${pickBySeed(seed, 13, [
+        "the hand resting at the collar",
+        "the hand lightly at the opposite sleeve",
+        "the hand resting at the hem of the top",
+      ])}. Face cropped at the chin.`,
+    pairing: (g, _seed, metal) =>
+      g === "female"
+        ? `PAIRING — the wrist stacked with ONE thin plain ${metal} chain bracelet next to the product, which stays in front and in focus. Forearm and hand crop, no face.`
+        : "PAIRING — the wrist with ONE plain watch on a black leather strap next to the product, which stays in front and in focus. Forearm and hand crop, no face.",
+  },
+  ankle: {
+    lifestyle: (_g, seed) =>
+      `LIFESTYLE — from the knee down, the model ${pickBySeed(seed, 17, [
+        "standing with one foot slightly forward",
+        "caught mid-step, one foot slightly forward",
+      ])}, the anklet catching the light.`,
+    pairing: (_g, _seed, metal) =>
+      `PAIRING — the same ankle with ONE second thin plain ${metal} chain anklet layered next to the product, which stays in front and in focus. Lower-leg crop.`,
+  },
+  ring: {
+    lifestyle: (_g, seed) =>
+      `LIFESTYLE — the model's hand ${pickBySeed(seed, 19, [
+        "resting at the jaw",
+        "holding a plain white coffee cup",
+        "resting on the collarbone",
+      ])}, in the styling outfit, the ring in clear view. Face cropped at the chin.`,
+    pairing: (_g, seed, metal) =>
+      pickBySeed(seed, 23, [
+        `PAIRING — the same hand stacked with ONE plain thin ${metal} band on the neighbouring finger; the product stays the clear focus. Hand crop.`,
+        `PAIRING — the same hand stacked with TWO plain thin ${metal} bands, one on each neighbouring finger; the product stays the clear focus. Hand crop.`,
+      ]),
+  },
+  belt: {
+    pairing: () =>
+      "PAIRING — the belt worn with the same tucked-in top plus ONE plain watch on a black leather strap, from chest to mid-thigh; the belt stays the clear focus.",
+  },
+};
+
+/**
+ * What the model wears in the on-model shots of this kind, with every choice
+ * made. `seed` is the look seed; `itemColour` picks the partner colour.
+ * Returned in sheet order, keyed by slot so a photographed or chosen piece for
+ * the same slot can replace the default.
+ */
+export function accessoryLookSlots(
+  kind: AccessoryKind,
+  gender: string,
+  itemColour: string,
+  seed: number,
+): Array<{ slot: string; label: string; text: string }> {
+  const g: G = String(gender || "").toLowerCase() === "female" ? "female" : "male";
+  const p = partnerColour(itemColour);
+  const plain = "plain — no print, no text, no logo";
+  const sneakersLine = {
+    slot: "footwear",
+    label: "FOOTWEAR",
+    text: "chunky white leather low-top sneakers with a plain white rubber sole and white laces, no branding (seen only in frames that show the feet)",
+  };
+  const jeans = (fit: string) => `${fit} mid-blue washed denim jeans, full length`;
+  const only = (where: string) =>
+    `nothing else ${where} and no other jewellery — the one extra piece is the one the PAIRING shot names`;
+  switch (kind) {
+    case "wrist":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text:
+            g === "female"
+              ? `a fitted ${pickBySeed(seed, 1, ["short-sleeve", "sleeveless"])} crew-neck top in ${p}, ${plain}, so the wrist and forearm are completely bare`
+              : `a heavyweight short-sleeve crew-neck tee in ${p}, ${plain}, sleeves well clear of the wrist`,
+        },
+        { slot: "bottom", label: "BOTTOM", text: jeans(g === "female" ? "high-waisted wide-leg" : "relaxed straight-leg") },
+        { slot: "accessories", label: "ACCESSORIES", text: only("on the wrists and hands") },
+      ];
+    case "ankle":
+      return [
+        {
+          slot: "bottom",
+          label: "BOTTOM",
+          text: `cropped wide-leg ${pickBySeed(seed, 2, ["jeans", "trousers"])} in ${p} ending above the ankle, so the ankle is bare`,
+        },
+        {
+          slot: "footwear",
+          label: "FOOTWEAR",
+          text: pickBySeed(seed, 3, [
+            `minimal flat sandals with thin ${p} straps — nothing covering the ankle, the same pair in every shot`,
+            "none — bare feet in every shot, nothing covering the ankle",
+          ]),
+        },
+        { slot: "accessories", label: "ACCESSORIES", text: only("on the ankles and feet") },
+      ];
+    case "neck":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text:
+            g === "female"
+              ? `an open ${pickBySeed(seed, 4, ["scoop-neck", "square-neck"])} top in ${p}, ${plain} — the collarbone and the whole necklace uncovered`
+              : pickBySeed(seed, 4, [
+                  `a crew-neck tee in ${p}, ${plain}, the necklace worn over it and fully visible`,
+                  `an open-collar shirt in ${p}, top button undone, ${plain}, the necklace worn over it and fully visible`,
+                ]),
+        },
+        { slot: "hair", label: "HAIR", text: "away from the neck, never covering the chain" },
+        { slot: "accessories", label: "ACCESSORIES", text: only("at the neck") },
+      ];
+    case "ring":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text: `a ${pickBySeed(seed, 5, ["long-sleeve", "short-sleeve"])} crew-neck top in ${p}, ${plain}, sleeves clear of the hands`,
+        },
+        { slot: "hands", label: "HANDS", text: "clean, natural nails" },
+        { slot: "accessories", label: "ACCESSORIES", text: only("on the fingers") },
+      ];
+    case "ear":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text:
+            g === "female"
+              ? `an open ${pickBySeed(seed, 6, ["scoop-neck", "square-neck"])} top in ${p}, ${plain}`
+              : `an open-collar shirt in ${p}, top button undone, ${plain}`,
+        },
+        {
+          slot: "hair",
+          label: "HAIR",
+          text:
+            g === "female"
+              ? pickBySeed(seed, 7, ["tucked behind the ear, so the ear is fully visible", "tied back, so the ear is fully visible"])
+              : "short, clear of the ear",
+        },
+        { slot: "accessories", label: "ACCESSORIES", text: only("anywhere") },
+      ];
+    case "eyewear":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text: pickBySeed(seed, 8, [
+            `a boxy heavyweight short-sleeve crew-neck tee in ${p}, ${plain}`,
+            `an open overshirt in ${p} over a plain white crew-neck tee, ${plain}`,
+          ]),
+        },
+        { slot: "face", label: "FACE", text: "nothing else on the face, no hat" },
+        { slot: "accessories", label: "ACCESSORIES", text: only("anywhere") },
+      ];
+    case "hat":
+      return [
+        {
+          slot: "top",
+          label: "TOP",
+          text: pickBySeed(seed, 9, [
+            `a plain heavyweight pullover hoodie in ${p}, ${plain}`,
+            `a boxy heavyweight short-sleeve crew-neck tee in ${p}, ${plain}`,
+          ]),
+        },
+        { slot: "hair", label: "HAIR", text: "styled to sit naturally under the hat, never pushing it out of shape" },
+        { slot: "accessories", label: "ACCESSORIES", text: "none — the only extra piece is the sunglasses the PAIRING shot names" },
+      ];
+    case "belt":
+      return [
+        { slot: "top", label: "TOP", text: `a fitted crew-neck t-shirt in ${p}, short sleeves, ${plain}, fully tucked in so the whole waistline shows` },
+        {
+          slot: "bottom",
+          label: "BOTTOM",
+          text: pickBySeed(seed, 10, [
+            `${g === "female" ? "high-waisted " : ""}straight-leg mid-blue washed denim jeans with belt loops, full length`,
+            `${g === "female" ? "high-waisted " : ""}straight-leg charcoal tailored trousers with belt loops, full length`,
+          ]),
+        },
+        sneakersLine,
+        { slot: "accessories", label: "ACCESSORIES", text: "none — the only extra piece is the watch the PAIRING shot names" },
+      ];
+    case "bag":
+      return [
+        { slot: "top", label: "TOP", text: `a crew-neck t-shirt in ${p}, short sleeves, ${plain} — simple, so the bag leads` },
+        { slot: "bottom", label: "BOTTOM", text: jeans("straight-leg") },
+        sneakersLine,
+        { slot: "strap", label: "STRAP SIDE", text: "the strap side of the body stays clear of hair and jackets" },
+        { slot: "accessories", label: "ACCESSORIES", text: "none — the only extra piece is the belt the PAIRING shot names" },
+      ];
+    case "socks":
+      return [
+        {
+          slot: "bottom",
+          label: "BOTTOM",
+          text: pickBySeed(seed, 12, [
+            `cropped straight trousers in ${p} ending above the ankle, so the whole sock cuff shows`,
+            `knee-length shorts in ${p}, so the whole sock cuff shows`,
+          ]),
+        },
+        {
+          slot: "footwear",
+          label: "FOOTWEAR",
+          text: "clean white leather low-top sneakers with white soles and white laces; the PAIRING shot swaps them for plain white slides",
+        },
+      ];
+    case "bowtie":
+      return [
+        { slot: "top", label: "TOP", text: "a crisp white dress shirt, collar buttoned, under a charcoal tailored blazer" },
+        { slot: "accessories", label: "ACCESSORIES", text: "none — the only extra piece is the pocket square the PAIRING shot names" },
+      ];
+    default:
+      return [
+        { slot: "top", label: "TOP", text: `an oversized boxy heavyweight short-sleeve crew-neck t-shirt in ${p}, ${plain}` },
+        { slot: "bottom", label: "BOTTOM", text: jeans("relaxed straight-leg") },
+        sneakersLine,
+        { slot: "accessories", label: "ACCESSORIES", text: only("anywhere") },
+      ];
+  }
+}
+
+/** The text of one shot, as it goes into the prompt. With `seed` (the look seed) the
+ *  on-model shots carry no "X or Y" for the generator to settle on its own. */
+export function accessoryShotText(kind: AccessoryKind, shot: number, gender: string, itemColour: string, seed?: number): string {
   const k = KINDS[kind] ?? KINDS.other;
   const g: G = String(gender || "").toLowerCase() === "female" ? "female" : "male";
   const partner = partnerColour(itemColour);
   const productOnly = "No person, no hands, no mannequin, no props. Seamless pure white background, soft even light, a faint contact shadow.";
+  const resolved = Number.isFinite(seed) ? RESOLVED_ON_MODEL[kind] : undefined;
+  const s = Math.floor(Number(seed));
+  if (resolved?.worn && shot === 5) return `${resolved.worn()} Seamless pure white background.`;
+  if (resolved?.lifestyle && shot === 6) return `${resolved.lifestyle(g, s)} Seamless pure white background.`;
+  if (resolved?.pairing && shot === 7) return `${resolved.pairing(g, s, pairingMetal(itemColour, s))} Seamless pure white background.`;
   switch (shot) {
     case 1:
       return `HERO — the ${k.noun} alone, ${k.hero}, centred and large: it fills about two thirds of the frame. ${productOnly}`;
@@ -488,6 +747,12 @@ export function buildAccessoryPanelPrompt(args: {
   stylingLock: string;
   /** The operator attached STYLE-WITH photos (the server numbers them). */
   hasStyleWith?: boolean;
+  /** The run's LOOK SHEET travels in the request body and sits in the server block (see
+   *  lib/studioLookSheet.ts): this prompt then names no outfit of its own. `stylingLock`
+   *  is ignored. */
+  lookSheetInServer?: boolean;
+  /** The look sheet's seed (LookSheet.seed): settles the "X or Y" in the on-model shots. */
+  lookSeed?: number;
 }): string {
   const [a, b] = accessoryShotPair(args.panelNumber);
   const k = KINDS[args.kind] ?? KINDS.other;
@@ -495,19 +760,27 @@ export function buildAccessoryPanelPrompt(args: {
   const anyModel = isOnModelShot(a) || isOnModelShot(b);
   const anyFace = accessoryShowsFace(args.kind, a) || accessoryShowsFace(args.kind, b);
   const instruction = String(args.itemStyleInstructions || "").replace(/\s+/g, " ").trim();
+  const lookSheet = args.lookSheetInServer === true;
+  const outfitRef = lookSheet ? "the LOOK SHEET" : "the styling lock";
   return [
     `Professional ecommerce catalog photo shoot for an ACCESSORY: ${label}. Panel ${args.panelNumber} (Shot ${a} + Shot ${b}).`,
     "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is the first shot, the RIGHT half (768x1024) is the second shot, with a thin divider between them and nothing else: no third view, no collage, no grid, no text overlay.",
     `THE PRODUCT: the ${k.noun} in the item photos is what this shoot sells. Reproduce it exactly in every shot — every bead, link, charm, stone, logo, stitch and piece of hardware, the same count, colour, metal tone, finish and proportions. Keep its REAL size: never enlarge it into a costume piece or shrink it, and on the model it sits exactly as such a piece really sits.`,
-    `ITEM REFERENCES: the item photos are product references only. Any person, hand or mannequin in them${args.hasStyleWith ? " or in a STYLE-WITH photo" : ""} is a display fixture — never copy a face, skin, body or pose from it.${args.hasStyleWith ? " The pieces in the STYLE-WITH photos are worn by the model in every on-model shot, exactly as photographed (see the styling lock)." : " Never copy styling from an item photo."}`,
+    `ITEM REFERENCES: the item photos are product references only. Any person, hand or mannequin in them${args.hasStyleWith ? " or in a STYLE-WITH photo" : ""} is a display fixture — never copy a face, skin, body or pose from it.${args.hasStyleWith ? ` The pieces in the STYLE-WITH photos are worn by the model in every on-model shot, exactly as photographed (see ${outfitRef}).` : " Never copy styling from an item photo."}`,
     buildAbsentFeatureGuard(args.itemType),
     ...(anyModel
       ? [
           `THE MODEL: in the shots that show a person, it is ${args.modelName} (${args.modelGender}) from the MODEL references — same skin tone, hands and build${
             anyFace ? ", same face and hair" : ""
           }. Shots that are product-only have no person and no hands in them at all.`,
-          "STYLING LOCK — what the model wears in the on-model shots. Use these exact pieces in every on-model shot of this run:",
-          args.stylingLock,
+          ...(lookSheet
+            ? [
+                "OUTFIT: in every on-model shot of this run the model wears exactly the LOOK SHEET given with this prompt. Nothing else is worn; nothing on it is left out.",
+              ]
+            : [
+                "STYLING LOCK — what the model wears in the on-model shots. Use these exact pieces in every on-model shot of this run:",
+                args.stylingLock,
+              ]),
         ]
       : []),
     ...(anyFace && args.expressionDirective
@@ -520,7 +793,7 @@ export function buildAccessoryPanelPrompt(args: {
         ]
       : []),
     "Photorealistic product photography: real materials, real reflections on metal and stone, real skin texture where a person appears; no CGI look.",
-    `LEFT SHOT (Shot ${a}): ${accessoryShotText(args.kind, a, args.modelGender, args.itemColour)}`,
-    `RIGHT SHOT (Shot ${b}): ${accessoryShotText(args.kind, b, args.modelGender, args.itemColour)}`,
+    `LEFT SHOT (Shot ${a}): ${accessoryShotText(args.kind, a, args.modelGender, args.itemColour, lookSheet ? args.lookSeed : undefined)}`,
+    `RIGHT SHOT (Shot ${b}): ${accessoryShotText(args.kind, b, args.modelGender, args.itemColour, lookSheet ? args.lookSeed : undefined)}`,
   ].join("\n");
 }

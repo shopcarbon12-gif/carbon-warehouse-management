@@ -31,9 +31,17 @@ import {
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
-import { classifyBackView } from "@/lib/studio-item-spec";
+import { classifyBackView, specRiskReport, type TextReading } from "@/lib/studio-item-spec";
 import { detectUprightTurns } from "@/lib/server/studio-upright";
-import { buildLockText, buildSpecInstruction, isAccessoryItemType, text } from "@/lib/server/item-spec-build";
+import {
+  buildLockText,
+  buildSpecInstruction,
+  buildTextReadInstruction,
+  isAccessoryItemType,
+  parseTextReadings,
+  text,
+  textReadEntries,
+} from "@/lib/server/item-spec-build";
 
 /* Every photo the operator sorted is analysed. The old cap of 6 silently dropped
    the tail of the list — which, with the general → front → back order, was the
@@ -41,6 +49,39 @@ import { buildLockText, buildSpecInstruction, isAccessoryItemType, text } from "
    invented one. Twelve high-detail images is ~13k input tokens on gpt-4o. */
 const MAX_REFS = 12;
 const TIMEOUT_MS = 90_000;
+const TEXT_READ_TIMEOUT_MS = 45_000;
+
+type ImagePart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } };
+
+/** The second, independent read of every quoted product text. Never fails the analysis:
+ *  on any error there is simply no second opinion. */
+async function secondTextRead(client: OpenAI, model: string, spec: any, imageContent: ImagePart[]): Promise<TextReading[]> {
+  const entries = textReadEntries(spec);
+  if (!entries.length) return [];
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TEXT_READ_TIMEOUT_MS);
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model,
+        temperature: 0,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You transcribe text on garments exactly as printed. Output valid JSON only." },
+          { role: "user", content: [{ type: "text", text: buildTextReadInstruction(entries) }, ...imageContent] },
+        ],
+      },
+      { signal: ac.signal },
+    );
+    return parseTextReadings(text(completion.choices?.[0]?.message?.content), entries);
+  } catch (e) {
+    console.warn("[item-spec] second text read failed", e);
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function toDataUrl(rawUrl: string): Promise<string> {
   const url = text(rawUrl);
@@ -97,6 +138,8 @@ async function POST_handler(req: NextRequest) {
     const refs = entries.map((e) => e.url);
     const sortedViews = entries.some((e) => e.view !== "general");
     const itemType = text(body?.itemType) || "apparel item";
+    // Optional (older Studio builds do not send it): the name the product is sold under.
+    const productName = text(body?.productName).slice(0, 200);
     if (!refs.length) return NextResponse.json({ error: "itemRefs required" }, { status: 400 });
 
     const apiKey = text(getOpenAiApiKey());
@@ -125,13 +168,13 @@ async function POST_handler(req: NextRequest) {
       .filter((v): v is "general" | "front" | "back" => v !== null);
 
     const model = (process.env.ITEM_SPEC_MODEL || "gpt-4o").trim() || "gpt-4o";
-    const instruction = buildSpecInstruction(itemType, sortedViews);
+    const instruction = buildSpecInstruction(itemType, sortedViews, productName);
     const viewHeading: Record<"general" | "front" | "back", string> = {
       general: "GENERAL reference image(s) — any view (accessories, flats, details):",
       front: "FRONT reference image(s) — this is the FRONT of the garment; everything visible here is on the front:",
       back: "BACK reference image(s) — this is the BACK of the garment; everything visible here is on the back:",
     };
-    const imageContent: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string; detail: "high" } }> = [];
+    const imageContent: ImagePart[] = [];
     // Every image gets an "Image N" heading so photo_checks can point at it.
     const numbered: Array<{ view: "general" | "front" | "back"; pos: number; ref: string; data: string }> = [];
     for (const view of ["back", "front", "general"] as const) {
@@ -159,7 +202,8 @@ async function POST_handler(req: NextRequest) {
         {
           model,
           temperature: 0.1,
-          max_tokens: 1800,
+          // The surface, distressing-map and sequence answers add a few hundred tokens.
+          max_tokens: 2400,
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: "You document apparel with forensic precision for exact reproduction. Output valid JSON only." },
@@ -195,10 +239,15 @@ async function POST_handler(req: NextRequest) {
     if (!spec || typeof spec !== "object") {
       return NextResponse.json({ error: "Item analysis returned no usable result. Please retry." }, { status: 502 });
     }
-    const lockText = buildLockText(spec, { accessory: isAccessoryItemType(itemType) });
+    const accessory = isAccessoryItemType(itemType);
+    const lockText = buildLockText(spec, { accessory });
     if (!lockText) return NextResponse.json({ error: "Item analysis found nothing to lock. Add clearer item photos." }, { status: 422 });
     const { warnings: photoWarnings } = buildPhotoChecks(spec?.photo_checks, numbered);
-    const turns = await uprightTurns;
+    const [turns, textReadings] = await Promise.all([uprightTurns, secondTextRead(client, model, spec, imageContent)]);
+    /* What to check before paying for four panels. The Studio holds Generate on
+       `blocking` until the operator confirms the spec; it recomputes the report
+       itself after an edit, from the same lock text and `textReadings`. */
+    const risk = specRiskReport(lockText, { productName, itemType, isAccessory: accessory, refCount: images.length, textReadings });
     const photoRotations = numbered.flatMap((x, i) => {
       const degrees = turns.get(i + 1);
       return degrees ? [{ url: x.ref, view: x.view, degrees }] : [];
@@ -208,6 +257,8 @@ async function POST_handler(req: NextRequest) {
       photoRotations,
       spec,
       lockText,
+      risk,
+      textReadings,
       backView: classifyBackView(spec?.back_view, spec?.back_state).state,
       imagesAnalyzed: images.length,
       imagesDropped: droppedRefs,

@@ -7,9 +7,12 @@ import { withActivity } from "@/lib/server/activity-log";
  * and the photos that came back on reopen were the product's PUBLISHED
  * images, i.e. the previous AI renders, silently fed in as references.
  *
- *   GET  /api/studio/state?matrixId=<uuid>
+ *   GET  /api/studio/state?matrixId=<uuid>   → { state: {…, lookAnchors} | null }
  *   PUT  /api/studio/state   { matrixId, itemRefs, itemType, instruction,
  *                              itemSpec, specRefsKey, specConfirmed, backIsPlain }
+ *
+ * lookAnchors is written only by /api/generate (a successful panel 1 of an
+ * anchored run); PUT never touches it.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -17,6 +20,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
+import { sanitizeLookAnchors } from "@/lib/server/studio-look-anchors";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,9 +64,13 @@ export async function GET(req: NextRequest) {
   if ("error" in a) return a.error;
   const matrixId = String(new URL(req.url).searchParams.get("matrixId") || "").trim();
   if (!UUID_RE.test(matrixId)) return NextResponse.json({ error: "matrixId required" }, { status: 400 });
+  /* look_anchors is read through to_jsonb(row) so a database that has not run
+     migration 0114 yet still answers (with no stored looks) instead of 500ing
+     the whole Studio restore. */
   const r = await a.pool.query(
-    `SELECT item_refs, item_type, instruction, item_spec, spec_refs_key, spec_confirmed, back_is_plain, updated_at
-       FROM studio_matrix_state WHERE matrix_id = $1::uuid`,
+    `SELECT item_refs, item_type, instruction, item_spec, spec_refs_key, spec_confirmed, back_is_plain, updated_at,
+            to_jsonb(s) -> 'look_anchors' AS look_anchors
+       FROM studio_matrix_state s WHERE matrix_id = $1::uuid`,
     [matrixId]
   );
   const row = r.rows[0];
@@ -77,6 +85,8 @@ export async function GET(req: NextRequest) {
       specConfirmed: row.spec_confirmed === true,
       backIsPlain: row.back_is_plain === true,
       updatedAt: row.updated_at,
+      /* Panel 1 of earlier runs, per "<modelId>|<COLOUR>" (lib/server/studio-look-anchors.ts). */
+      lookAnchors: sanitizeLookAnchors(row.look_anchors),
     },
   });
 }
