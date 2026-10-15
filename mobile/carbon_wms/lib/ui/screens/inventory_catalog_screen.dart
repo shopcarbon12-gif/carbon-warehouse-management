@@ -11,6 +11,8 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/item_line_format.dart';
+import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
 
 /// Live read-only mirror of `/inventory/catalog` from the WMS web app.
 ///
@@ -1094,10 +1096,7 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                       ),
                                       SizedBox(height: 3.h),
                                       Text(
-                                        [
-                                          'serial: $serial',
-                                          if (status.isNotEmpty) status,
-                                        ].join(' · '),
+                                        'serial: $serial',
                                         style: GoogleFonts.manrope(
                                           fontSize: 13.sp,
                                           fontWeight: FontWeight.w700,
@@ -1105,6 +1104,11 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                           height: 1.2,
                                         ),
                                       ),
+                                      if (status.isNotEmpty) ...[
+                                        SizedBox(height: 4.h),
+                                        ItemStatusBinLine(
+                                            status: status, bin: null),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1207,7 +1211,7 @@ class _EpcBinPill extends StatelessWidget {
           ),
           SizedBox(height: 2.h),
           Text(
-            has ? binCode : '—',
+            has ? formatBinCode(binCode) : '—',
             textAlign: TextAlign.center,
             style: GoogleFonts.robotoMono(
               fontSize: 15.sp,

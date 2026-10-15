@@ -20,6 +20,8 @@ import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/widgets/item_line_format.dart';
+import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
 
 /// Find & Locate → Bulk Geiger (owner, 2026-10-15).
 ///
@@ -62,6 +64,7 @@ class _Target {
     this.size,
     this.status,
     this.bin,
+    this.resolved = false,
   });
 
   final String epc;
@@ -69,8 +72,15 @@ class _Target {
   final String? name;
   final String? color;
   final String? size;
+
+  /// WMS items.status; null after a lookup = the tag has no WMS record.
   final String? status;
+
+  /// The tag's assigned bin code, null when it has none.
   final String? bin;
+
+  /// The server answered for this EPC (catalog list or lookup).
+  final bool resolved;
 
   bool get hasInfo => (sku ?? '').isNotEmpty;
 
@@ -88,17 +98,20 @@ class _Target {
         size: _s(e['size']) ?? _s(skuRow['size']),
         status: _s(e['status']),
         bin: _s(e['bin_code']),
+        resolved: true,
       );
 
-  /// Row from `POST /api/handheld/epc-lookup` — keeps a bin we already had.
+  /// Row from `POST /api/handheld/epc-lookup` — the server's current status
+  /// and bin win (they change while a list is kept on the handheld).
   _Target withLookup(Map<String, dynamic> r) => _Target(
         epc: epc,
         sku: _s(r['sku']) ?? sku,
         name: _s(r['productName']) ?? name,
         color: _s(r['color']) ?? color,
         size: _s(r['size']) ?? size,
-        status: _s(r['status']) ?? status,
-        bin: bin,
+        status: _s(r['status']),
+        bin: _s(r['bin']),
+        resolved: true,
       );
 
   Map<String, dynamic> toJson() => {
@@ -109,6 +122,7 @@ class _Target {
         'size': size,
         'status': status,
         'bin': bin,
+        'resolved': resolved,
       };
 
   factory _Target.fromJson(Map<String, dynamic> j) => _Target(
@@ -119,6 +133,7 @@ class _Target {
         size: _s(j['size']),
         status: _s(j['status']),
         bin: _s(j['bin']),
+        resolved: j['resolved'] == true || _s(j['status']) != null,
       );
 }
 
@@ -252,6 +267,8 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
           .toList();
       if (!mounted || saved.isEmpty) return;
       setState(() => _put(saved));
+      // Status / bin may have changed since the list was saved — re-read.
+      unawaited(_enrich(saved.map((t) => t.epc).toList()));
     } catch (_) {/* start empty */}
   }
 
@@ -855,10 +872,6 @@ class _TargetTile extends StatelessWidget {
     final t = target;
     final found = hit != null;
     final variant = [t.color, t.size].where((x) => (x ?? '').isNotEmpty).join(' · ');
-    final facts = [
-      if ((t.status ?? '').isNotEmpty) t.status!.toUpperCase(),
-      if ((t.bin ?? '').isNotEmpty) 'BIN ${t.bin}',
-    ].join('  ·  ');
     return Material(
       color: found ? _kFoundBg : _kCard,
       child: InkWell(
@@ -892,8 +905,11 @@ class _TargetTile extends StatelessWidget {
                         style: GoogleFonts.robotoMono(fontSize: 12.sp, fontWeight: FontWeight.w700, color: AppColors.textMain),
                       ),
                     Text(t.epc, style: GoogleFonts.robotoMono(fontSize: 11.sp, fontWeight: FontWeight.w600, color: _kMuted)),
-                    if (facts.isNotEmpty)
-                      Text(facts, style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, fontWeight: FontWeight.w800, color: AppColors.textMain)),
+                    if (t.resolved || (t.bin ?? '').isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(top: 3.h),
+                        child: ItemStatusBinLine(status: t.status, bin: t.bin, showStatus: t.resolved),
+                      ),
                     if (found)
                       Text(
                         'FOUND ${_time(hit!.at)}${hit!.rssi != null ? '  ·  ${hit!.rssi} dBm' : ''}',
@@ -1105,8 +1121,8 @@ class _SkuEpcPickerState extends State<_SkuEpcPicker> {
                         title: Text(t.epc, style: GoogleFonts.robotoMono(fontSize: 12.sp, fontWeight: FontWeight.w700)),
                         subtitle: Text(
                           [
-                            (t.status ?? 'no status').toUpperCase(),
-                            if ((t.bin ?? '').isNotEmpty) 'BIN ${t.bin}',
+                            itemStatusLabel(t.status),
+                            if ((t.bin ?? '').isNotEmpty) 'BIN ${formatBinCode(t.bin!)}',
                             if (added) 'ON THE LIST',
                           ].join('  ·  '),
                           style: GoogleFonts.spaceGrotesk(fontSize: 11.sp, fontWeight: FontWeight.w800, color: _kMuted),

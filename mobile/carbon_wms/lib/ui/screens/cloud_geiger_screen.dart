@@ -19,6 +19,7 @@ import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Cloud + Geiger — landing pad for EPCs that were "Sent to handheld" from
@@ -357,29 +358,36 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   /// uses field name `epcHex` (NOT `epc`) and `productName` (NOT `name`)
   /// — pre-2026-05-29 we keyed off `r['epc']` which silently returned
   /// null for every row, so every container stayed "Resolving…" forever.
+  ///
+  /// Sent in chunks of 500 — the server's per-call cap. One call with more
+  /// (the web can queue up to 5,000) was rejected and left every row on
+  /// "Resolving…".
   Future<void> _enrich(List<String> epcs) async {
-    try {
-      final api = context.read<WmsApiClient>();
-      final rows = await api.lookupEpcs(epcs);
-      if (!mounted) return;
-      final byEpc = <String, Map<String, dynamic>>{};
-      for (final r in rows) {
-        // Server-side field is `epcHex`; legacy/alt `epc` checked as fallback.
-        final eRaw = (r['epcHex'] as String?) ?? (r['epc'] as String?);
-        final e = eRaw?.trim().toUpperCase();
-        if (e == null || e.isEmpty) continue;
-        byEpc[e] = r;
-      }
-      setState(() {
-        for (var i = 0; i < _items.length; i++) {
-          final it = _items[i];
-          final r = byEpc[it.epc];
-          if (r == null) continue;
-          _items[i] = it.withResolved(r);
+    final api = context.read<WmsApiClient>();
+    for (var start = 0; start < epcs.length; start += 500) {
+      final end = start + 500 > epcs.length ? epcs.length : start + 500;
+      try {
+        final rows = await api.lookupEpcs(epcs.sublist(start, end));
+        if (!mounted) return;
+        final byEpc = <String, Map<String, dynamic>>{};
+        for (final r in rows) {
+          // Server-side field is `epcHex`; legacy/alt `epc` checked as fallback.
+          final eRaw = (r['epcHex'] as String?) ?? (r['epc'] as String?);
+          final e = eRaw?.trim().toUpperCase();
+          if (e == null || e.isEmpty) continue;
+          byEpc[e] = r;
         }
-      });
-    } catch (_) {
-      /* enrichment best-effort; raw EPC still renders */
+        setState(() {
+          for (var i = 0; i < _items.length; i++) {
+            final it = _items[i];
+            final r = byEpc[it.epc];
+            if (r == null) continue;
+            _items[i] = it.withResolved(r);
+          }
+        });
+      } catch (_) {
+        /* enrichment best-effort; raw EPC still renders */
+      }
     }
   }
 
@@ -405,10 +413,13 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   /// Refresh: clear every bulk-find marker AND re-poll the server. The
   /// server-side queue itself isn't touched; only our in-memory "I just
   /// physically saw this tag" overlay resets. Operator gets a fresh
-  /// canvas to do another sweep.
+  /// canvas to do another sweep. Every row's status / bin is re-read too —
+  /// they can change while the list sits here.
   Future<void> _onRefresh() async {
     setState(() => _foundEpcs.clear());
     await _pollOnce();
+    if (!mounted || _items.isEmpty) return;
+    unawaited(_enrich(_items.map((e) => e.epc).toList()));
   }
 
   Future<void> _confirmDeleteAll() async {
@@ -471,6 +482,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       ScreenIds.locateTag,
       (_) => LocateTagScreen(
         targetEpc: item.epc,
+        targetBin: item.bin,
         targetSku: item.sku,
         targetName: item.itemName,
         targetColor: item.color,
@@ -829,6 +841,9 @@ class _GeigerItem {
     this.itemName,
     this.color,
     this.size,
+    this.resolved = false,
+    this.status,
+    this.bin,
   });
 
   factory _GeigerItem.bare(String epc) {
@@ -842,6 +857,16 @@ class _GeigerItem {
   final String? itemName;
   final String? color;
   final String? size;
+
+  /// The server lookup answered for this EPC — [status] null then means the
+  /// tag has no WMS record.
+  final bool resolved;
+
+  /// WMS items.status (`in-stock`, `tag_killed`, `retired`…).
+  final String? status;
+
+  /// The tag's assigned bin code, null when it has none.
+  final String? bin;
 
   _GeigerItem withResolved(Map<String, dynamic> row) {
     String? s(String k) {
@@ -858,6 +883,9 @@ class _GeigerItem {
       itemName: s('productName') ?? s('name') ?? s('item_name'),
       color: s('color'),
       size: s('size'),
+      resolved: true,
+      status: s('status'),
+      bin: s('bin'),
     );
   }
 }
@@ -991,6 +1019,10 @@ class _GeigerItemContainerState extends State<_GeigerItemContainer> {
                           height: 1.2,
                         ),
                       ),
+                      if (item.resolved) ...[
+                        const SizedBox(height: 6),
+                        ItemStatusBinLine(status: item.status, bin: item.bin),
+                      ],
                       if (_expanded) ...[
                         const SizedBox(height: 8),
                         Container(

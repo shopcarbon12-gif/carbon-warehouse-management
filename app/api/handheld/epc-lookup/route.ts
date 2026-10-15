@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * review screen with product info after a scan.
  *
  * Body: { epcs: [...], deviceId?: '...' }   (max 500 EPCs/call)
- * Reply: { rows: [{ epcHex, valid, reason, systemId, serial, sku, color, size, productName }] }
+ * Reply: { rows: [{ epcHex, valid, reason, systemId, serial, sku, color, size, productName, status, bin, ghost }] }
  */
 const bodySchema = z.object({
   epcs: z.array(z.string()).min(1).max(500),
@@ -151,19 +151,27 @@ async function POST_handler(req: Request) {
   // share an EPC over time (chip moves, gets re-encoded). Caller is
   // responsible for treating "in-stock at another location" however they
   // want; we just return the status string.
-  type ItemRow = { epc: string; status: string };
+  type ItemRow = { epc: string; status: string; bin_code: string | null };
   const itemStatus = new Map<string, string>();
+  // The bin this exact tag is assigned to (items.bin_id) — same bin the
+  // Catalog / Geiger EPC list shows. Absent when the tag has no bin.
+  const itemBin = new Map<string, string>();
   const epcsForLookup = decoded.map((d) => d.epcHex);
   if (epcsForLookup.length > 0) {
     const r = await pool.query<ItemRow>(
-      `SELECT i.epc, i.status
+      `SELECT i.epc, i.status, b.code AS bin_code
          FROM items i
          INNER JOIN locations l ON l.id = i.location_id
+         LEFT JOIN bins b ON b.id = i.bin_id
         WHERE l.tenant_id = $1::uuid
           AND i.epc = ANY($2::text[])`,
       [auth.tenantId, epcsForLookup],
     );
-    for (const row of r.rows) itemStatus.set(row.epc, row.status);
+    for (const row of r.rows) {
+      itemStatus.set(row.epc, row.status);
+      if (row.bin_code) itemBin.set(row.epc, row.bin_code);
+      else itemBin.delete(row.epc);
+    }
   }
 
   // Statuses ghosted on the Statuses page: the handheld ignores these tags
@@ -196,6 +204,8 @@ async function POST_handler(req: Request) {
       // this EPC under this tenant — handheld treats that as "fresh,
       // count as valid (upload promotes to in-stock)".
       status: itemStatus.get(d.epcHex) ?? (retired.has(d.epcHex) ? RETIRED_EPC_STATUS : null),
+      // bins.code of the tag's assigned bin (e.g. "6B02C"); null = none.
+      bin: itemBin.get(d.epcHex) ?? null,
       ghost: retired.has(d.epcHex) || ghostStatuses.has(itemStatus.get(d.epcHex) ?? ""),
     };
   });
