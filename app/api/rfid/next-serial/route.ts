@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { ISSUED_SERIAL_MAX } from "@/lib/server/rfid-serial-allocator";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,11 +22,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
+  // Serials above anything a Carbon encoder issues come from damaged chips'
+  // scrambled reads (2026-10-15) — one of them must not push every later tag
+  // of this SKU into the billions.
   const r = await pool.query<{ m: string }>(
     `SELECT coalesce(max(serial_number), 0)::text AS m
      FROM items
-     WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid`,
-    [customSkuId, session.lid],
+     WHERE custom_sku_id = $1::uuid AND location_id = $2::uuid
+       AND serial_number <= $3::bigint`,
+    [customSkuId, session.lid, ISSUED_SERIAL_MAX],
   );
   const next = Number(r.rows[0]?.m ?? 0) + 1;
   return NextResponse.json({ next_serial: next }, { headers: { "Cache-Control": "no-store" } });

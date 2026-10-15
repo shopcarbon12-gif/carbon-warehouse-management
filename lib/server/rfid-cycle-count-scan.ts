@@ -1,9 +1,10 @@
 import type { PoolClient } from "pg";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
-import { loadEpcConfig } from "@/lib/server/epc-ingress";
+import { loadEpcConfig, readOnEarlierDay } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
 import { loadRetiredEpcs } from "@/lib/server/retired-epcs";
+import { isIssuableSerial } from "@/lib/server/rfid-serial-allocator";
 import {
   loadStatusLabelBrainMap,
   shouldGhostDropLabel,
@@ -27,6 +28,10 @@ import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
  *  - live_already_here  no-op: already in-stock at this location
  *  - defective_decode_fail  first-time scan, decode failed → tag_killed
  *  - defective_no_match     first-time scan, no catalog hit → tag_killed
+ *  - unconfirmed       a serial no Carbon encoder issues (a damaged chip's
+ *                      scrambled read): first read → 'unknown'; a repeat read the
+ *                      same day leaves it 'unknown'; a read on a later day
+ *                      brings it LIVE as live_revived (owner rule 2026-10-15)
  *  - locked            any other status, or an existing tag that no longer
  *                      decodes; left untouched
  *  - ghost             status set to "Ignore" on the Statuses page, or an EPC a
@@ -41,6 +46,7 @@ export type CycleCountScanOutcome =
   | "live_already_here"
   | "defective_decode_fail"
   | "defective_no_match"
+  | "unconfirmed"
   | "locked"
   | "ghost";
 
@@ -48,7 +54,7 @@ export type CycleCountScanResult = {
   epc: string;
   outcome: CycleCountScanOutcome;
   previous_status: string | null;
-  new_status: "in-stock" | "tag_killed" | null;
+  new_status: "in-stock" | "tag_killed" | "unknown" | null;
   from_location_id: string | null;
 };
 
@@ -79,8 +85,9 @@ export async function ingestCycleCountEpcs(
     epc: string;
     status: string;
     location_id: string;
+    first_scanned_at: Date | null;
   }>(
-    `SELECT i.id::text, i.epc, i.status, i.location_id::text
+    `SELECT i.id::text, i.epc, i.status, i.location_id::text, i.first_scanned_at
        FROM items i
        INNER JOIN locations loc ON loc.id = i.location_id AND loc.tenant_id = $1::uuid
       WHERE i.epc = ANY($2::text[])`,
@@ -88,13 +95,14 @@ export async function ingestCycleCountEpcs(
   );
   const existingByEpc = new Map<
     string,
-    { id: string; status: string; location_id: string }
+    { id: string; status: string; location_id: string; first_scanned_at: Date | null }
   >();
   for (const row of existing.rows) {
     existingByEpc.set(row.epc.toUpperCase(), {
       id: row.id,
       status: row.status,
       location_id: row.location_id,
+      first_scanned_at: row.first_scanned_at,
     });
   }
 
@@ -144,9 +152,11 @@ export async function ingestCycleCountEpcs(
     // for encode/print/re-encode.
     let resolvedCustomSkuId: string | null = null;
     let resolvedSerial: bigint | null = null;
+    let viaPrimary = false;
     if (decoded && decoded.valid) {
       resolvedCustomSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
       resolvedSerial = decoded.serial;
+      viaPrimary = resolvedCustomSkuId !== null;
     }
     if (!resolvedCustomSkuId) {
       const legacySystemId = legacyEpcSystemId(epc);
@@ -206,7 +216,45 @@ export async function ingestCycleCountEpcs(
       continue;
     }
 
-    // 3. Catalog match (primary or legacy) — write/move to in-stock here.
+    // 3. A serial no Carbon encoder issues (primary formula only): UNKNOWN
+    //    until the tag is read again on a later day.
+    if (
+      viaPrimary && resolvedSerial !== null && !isIssuableSerial(resolvedSerial) &&
+      (!prior || (prior.status === "unknown" && !readOnEarlierDay(prior.first_scanned_at, args.receivedAt)))
+    ) {
+      const r = await upsertItem(client, {
+        epc,
+        status: "unknown",
+        customSkuId: resolvedCustomSkuId,
+        serial: resolvedSerial,
+        locationId: args.locationId,
+        receivedAt: args.receivedAt,
+      });
+      if (!prior) {
+        await writeAudit(client, {
+          tenantId: args.tenantId,
+          userId: args.userId,
+          sessionId: args.sessionId,
+          epc,
+          itemId: r.id,
+          previousStatus: null,
+          newStatus: "unknown",
+          previousLocationId: null,
+          newLocationId: args.locationId,
+          outcome: "unconfirmed",
+        });
+      }
+      results.push({
+        epc,
+        outcome: "unconfirmed",
+        previous_status: prior?.status ?? null,
+        new_status: "unknown",
+        from_location_id: prior?.location_id ?? null,
+      });
+      continue;
+    }
+
+    // 4. Catalog match (primary or legacy) — write/move to in-stock here.
     const outcome: CycleCountScanOutcome = !prior
       ? "live_added"
       : prior.status === "in-stock" && prior.location_id === args.locationId
@@ -271,7 +319,7 @@ async function upsertItem(
   client: PoolClient,
   args: {
     epc: string;
-    status: "in-stock" | "tag_killed";
+    status: "in-stock" | "tag_killed" | "unknown";
     customSkuId: string | null;
     serial: bigint | null;
     locationId: string;
@@ -318,7 +366,7 @@ async function writeAudit(
     epc: string;
     itemId: string;
     previousStatus: string | null;
-    newStatus: "in-stock" | "tag_killed";
+    newStatus: "in-stock" | "tag_killed" | "unknown";
     previousLocationId: string | null;
     newLocationId: string;
     outcome: CycleCountScanOutcome;

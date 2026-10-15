@@ -33,6 +33,19 @@ const SERIAL_MIN = 100_000;
 const SERIAL_MAX_EXCLUSIVE = 1_000_000; // upper bound (exclusive) → 999_999 max
 
 /**
+ * The largest serial any Carbon encoder has ever issued: random 6-digit
+ * serials since 2026-05-29, and the sequential allocator before that started
+ * at 100_001 (or lower) and never reached a million for one SKU. A read whose
+ * serial is above this was not written by us — in practice a damaged chip
+ * whose product part reads right and whose serial comes back scrambled.
+ */
+export const ISSUED_SERIAL_MAX = SERIAL_MAX_EXCLUSIVE - 1;
+
+export function isIssuableSerial(serial: bigint | number): boolean {
+  return BigInt(serial) <= BigInt(ISSUED_SERIAL_MAX);
+}
+
+/**
  * Pick a random 6-digit serial that isn't already used by another items
  * row for this [customSkuId]. Throws after 200 unsuccessful attempts
  * (effectively means the sku has more than ~900k tags — unreachable

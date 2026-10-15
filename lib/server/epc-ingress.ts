@@ -7,6 +7,7 @@ import {
 } from "@/lib/server/status-label-enforcement";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 import { loadRetiredEpcs, RETIRED_EPC_STATUS } from "@/lib/server/retired-epcs";
+import { isIssuableSerial } from "@/lib/server/rfid-serial-allocator";
 
 /**
  * Unified EPC ingress — every EPC entering the WMS (fixed reader, handheld,
@@ -73,8 +74,9 @@ export type EpcIngressInput = {
 export type EpcIngressResult = {
   /** items.id of the row that was inserted or updated. null on a no-op. */
   itemId: string | null;
-  /** Final status written to items.status. */
-  status: "in-stock" | "tag_killed";
+  /** Final status written to items.status. 'unknown' = an unconfirmed tag
+   *  number (serial no Carbon encoder issues) waiting for a read on another day. */
+  status: "in-stock" | "tag_killed" | "unknown";
   /** When status === 'tag_killed', why. Useful for audit. */
   reason?: "decode_failed" | "unknown_system_id";
   /** custom_skus.id we matched (or null when unmatched / tag-killed). */
@@ -112,7 +114,7 @@ export function isScanSource(source: EpcSource): boolean {
   return SCAN_SOURCES.has(source);
 }
 
-type PriorItem = { status: string; customSkuId: string | null };
+type PriorItem = { status: string; customSkuId: string | null; firstScannedAt: Date | null };
 
 /** Per-batch state: each EPC's current row + the ghost rule, loaded once. */
 export type EpcIngressContext = {
@@ -134,12 +136,22 @@ export async function loadEpcIngressContext(
   const upper = [...new Set(epcs.map((e) => e.trim().toUpperCase()))];
   const prior = new Map<string, PriorItem>();
   if (upper.length > 0) {
-    const r = await client.query<{ epc: string; status: string; custom_sku_id: string | null }>(
-      `SELECT epc, status, custom_sku_id::text FROM items WHERE epc = ANY($1::text[]) FOR UPDATE`,
+    const r = await client.query<{
+      epc: string;
+      status: string;
+      custom_sku_id: string | null;
+      first_scanned_at: Date | null;
+    }>(
+      `SELECT epc, status, custom_sku_id::text, first_scanned_at
+         FROM items WHERE epc = ANY($1::text[]) FOR UPDATE`,
       [upper],
     );
     for (const row of r.rows) {
-      prior.set(row.epc.toUpperCase(), { status: row.status, customSkuId: row.custom_sku_id });
+      prior.set(row.epc.toUpperCase(), {
+        status: row.status,
+        customSkuId: row.custom_sku_id,
+        firstScannedAt: row.first_scanned_at,
+      });
     }
   }
   const labels = await loadStatusLabelBrainMap(client);
@@ -319,6 +331,24 @@ export async function ingestEpc(
     });
   }
 
+  // Scan rule (owner, 2026-10-15): a serial no Carbon encoder issues is almost
+  // always a damaged chip — the product part reads right, the serial comes
+  // back scrambled, and every scrambled read used to become another LIVE
+  // garment that nobody can find. Such a number enters as UNKNOWN and only
+  // goes LIVE when it is read again on a later day; until then a repeat read
+  // just refreshes last-seen. An existing LIVE tag is not touched.
+  if (
+    isScanSource(input.source) &&
+    !isIssuableSerial(decoded.serial!) &&
+    (!prior || (prior.status === "unknown" && !readOnEarlierDay(prior.firstScannedAt, input.receivedAt)))
+  ) {
+    return await writeItem(client, input, prior, {
+      status: "unknown",
+      customSkuId,
+      serial: decoded.serial,
+    });
+  }
+
   return await writeItem(client, input, prior, {
     status: "in-stock",
     customSkuId,
@@ -326,8 +356,17 @@ export async function ingestEpc(
   });
 }
 
+/** Calendar day in the warehouse's time zone (YYYY-MM-DD). */
+const etDay = (d: Date) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
+
+/** True when [first] (a tag's first read) fell on an earlier day than [now]. */
+export function readOnEarlierDay(first: Date | null, now: Date): boolean {
+  return first !== null && etDay(first) < etDay(now);
+}
+
 type WriteItemArgs = {
-  status: "in-stock" | "tag_killed";
+  status: "in-stock" | "tag_killed" | "unknown";
   reason?: "decode_failed" | "unknown_system_id";
   customSkuId: string | null;
   serial: bigint | null;
@@ -496,9 +535,11 @@ export async function ingestEpcs(
     const r = await ingestEpc(client, i, ctx);
     // Later inputs in this batch see this write (same EPC twice in one batch).
     if (!r.kept && r.itemId) {
-      ctx.prior.set(i.epc.trim().toUpperCase(), {
+      const key = i.epc.trim().toUpperCase();
+      ctx.prior.set(key, {
         status: r.status,
         customSkuId: r.customSkuId,
+        firstScannedAt: ctx.prior.get(key)?.firstScannedAt ?? i.receivedAt,
       });
     }
     out.push(r);

@@ -492,6 +492,12 @@ export async function finalizeScanSession(
         rowsSkipped++;
         continue;
       }
+      // An unconfirmed tag number (serial no Carbon encoder issues) went in as
+      // UNKNOWN to wait for a read on another day — not live, not defective.
+      if (result.status === "unknown") {
+        rowsSkipped++;
+        continue;
+      }
       if (result.status === "in-stock") {
         rowsValid++;
       } else {
