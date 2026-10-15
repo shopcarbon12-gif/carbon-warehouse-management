@@ -16,6 +16,7 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
+import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
@@ -486,6 +487,20 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     _rfid?.scanContext = 'GEIGER_FIND';
   }
 
+  /// This list in Bulk Geiger (one beep per tag found, tap one → Geiger).
+  Future<void> _openBulk() async {
+    if (_scanning) await _stopScan();
+    if (!mounted) return;
+    await context.pushGuarded<void>(
+      ScreenIds.bulkGeiger,
+      (_) => BulkGeigerScreen(initialEpcs: _items.map((e) => e.epc).toList()),
+    );
+    // Same hand-back as _openGeiger: our own silent bulk-find + scan context.
+    if (!mounted) return;
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+    _rfid?.scanContext = 'GEIGER_FIND';
+  }
+
   /// Snapshot the current list (epc + found-or-not + best-effort sku /
   /// description) into a CSV and POST it via the `cloud-geiger-find`
   /// audit-only upload mode. The desktop /reports/uploads page picks
@@ -559,6 +574,13 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     final canExportCsv = perms.canDo(ScreenIds.cloudGeiger, 'export_csv');
     return CarbonScaffold(
       pageTitle: 'cloud + geiger',
+      actions: [
+        IconButton(
+          tooltip: 'Open in Bulk Geiger',
+          onPressed: _items.isEmpty ? null : () => unawaited(_openBulk()),
+          icon: const Icon(LucideIcons.radar),
+        ),
+      ],
       body: ColoredBox(
         color: Colors.white,
         child: Column(

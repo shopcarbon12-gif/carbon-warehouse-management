@@ -21,6 +21,7 @@ import 'package:carbon_wms/ui/screens/status_change_screen.dart';
 // Find & locate
 import 'package:carbon_wms/ui/screens/geiger_search_screen.dart';
 import 'package:carbon_wms/ui/screens/cloud_geiger_screen.dart';
+import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/store_replenishment_screen.dart';
 // Transfers
 import 'package:carbon_wms/ui/screens/transfer_out_screen.dart';
@@ -212,6 +213,13 @@ class CategoryHubScreen extends StatelessWidget {
             description: 'Locate tags sent from the web',
             icon: LucideIcons.cloud,
             builder: (_) => const CloudGeigerScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.bulkGeiger,
+            label: 'Bulk Geiger',
+            description: 'Find many tags at once',
+            icon: LucideIcons.radar,
+            builder: (_) => const BulkGeigerScreen(),
           ),
           CategoryHubTile(
             screenId: ScreenIds.storeReplenishment,

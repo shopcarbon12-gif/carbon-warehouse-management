@@ -184,6 +184,7 @@ const MOBILE_GROUPS: MobileGroupDef[] = [
         ],
       },
       { id: "store_replenishment", label: "Store Replenishment", editable: true },
+      { id: "bulk_geiger", label: "Bulk Geiger" },
       { id: "locate_tag", label: "Locate tag (Geiger)" },
     ],
   },

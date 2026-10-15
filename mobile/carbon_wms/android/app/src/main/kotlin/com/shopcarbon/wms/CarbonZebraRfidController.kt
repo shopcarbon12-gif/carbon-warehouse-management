@@ -154,7 +154,9 @@ class CarbonZebraRfidController(
   // inherit a stale belief about the radio's state.
   @Volatile private var currentTriggerModeRfid: Boolean? = null
   @Volatile private var currentPrefilterEpc: String? = null
-  @Volatile private var currentSessionZero: Boolean? = null
+  /// Gen2 session last written to antenna 1: 0 (Locate), 1 (default), 2 (quiet:
+  /// a tag that has been read stays silent while the sled keeps powering it).
+  @Volatile private var currentSession: Int? = null
 
   /// Transmit-power index last written to antenna 1, or -1 for "unknown".
   /// startInventory re-applied power on EVERY start, which is a
@@ -844,7 +846,7 @@ class CarbonZebraRfidController(
             "${e.javaClass.simpleName} msg=${e.message} " +
             "detail=${describeZebraError(e)} connected=${r.isConnected} " +
             "triggerRfid=$currentTriggerModeRfid prefilter=$currentPrefilterEpc " +
-            "sessionZero=$currentSessionZero powerIdx=$currentPowerIdx",
+            "session=S$currentSession powerIdx=$currentPowerIdx",
         )
         try { Thread.sleep(60) } catch (_: InterruptedException) { /* ignore */ }
       }
@@ -1687,7 +1689,7 @@ class CarbonZebraRfidController(
         sing.Action.setSLFlag(SL_FLAG.SL_ALL)
         r.Config.Antennas.setSingulationControl(1, sing)
         Log.d(TAG, "singulation: $session accepted")
-        currentSessionZero = session == SESSION.SESSION_S0
+        currentSession = if (session == SESSION.SESSION_S0) 0 else 1
         return
       } catch (e: Exception) {
         Log.w(TAG, "singulation: $session rejected (${e.message}); trying next")
@@ -1695,7 +1697,7 @@ class CarbonZebraRfidController(
     }
     // Unknown state — leave the cache null so the next explicit request always
     // writes rather than trusting a belief we never established.
-    currentSessionZero = null
+    currentSession = null
     Log.w(TAG, "singulation: all fallbacks rejected — using reader defaults")
   }
 
@@ -1792,6 +1794,26 @@ class CarbonZebraRfidController(
     useSessionZero: Boolean,
     result: MethodChannel.Result,
     force: Boolean = false,
+  ) = setInventorySession(if (useSessionZero) 0 else 1, result, force)
+
+  /**
+   * Gen2 session for antenna 1 — 0, 1 or 2.
+   *
+   * S2 is the "quiet" mode (owner, 2026-10-15): once a tag has been read it
+   * stays silent for as long as the sled keeps powering it, instead of
+   * answering again after S1's ~0.5–5 s, so the radio spends its time on tags
+   * it has not read yet. The flag lives in each tag's chip and fades a few
+   * seconds after the tag stops being powered — the screens also ignore every
+   * repeat read for the whole session, so a tag that does answer again is
+   * dropped at once.
+   *
+   * If the sled rejects S2 it falls back to S1 (today's behaviour) and answers
+   * false, so the caller knows quiet mode is not on.
+   */
+  fun setInventorySession(
+    session: Int,
+    result: MethodChannel.Result,
+    force: Boolean = false,
   ) {
     val seqAtCall = stopSeq.get()
     executor.execute {
@@ -1801,9 +1823,10 @@ class CarbonZebraRfidController(
           mainHandler.post { result.success(false) }
           return@execute
         }
-        if (!force && currentSessionZero == useSessionZero) {
+        val want = session.coerceIn(0, 2)
+        if (!force && currentSession == want) {
           // Already on the requested session — skip the get/set round-trips.
-          Log.d(TAG, "setSingulationSession: already S${if (useSessionZero) 0 else 1}, skipping")
+          Log.d(TAG, "setInventorySession: already S$want, skipping")
           mainHandler.post { result.success(true) }
           return@execute
         }
@@ -1812,26 +1835,39 @@ class CarbonZebraRfidController(
           try { r.Actions.Inventory.stop() } catch (_: Exception) {}
           inventoryActive = false
         }
-        val target = if (useSessionZero) SESSION.SESSION_S0 else SESSION.SESSION_S1
-        var ok = false
-        try {
-          val sing = r.Config.Antennas.getSingulationControl(1)
-          sing.setSession(target)
-          sing.Action.setInventoryState(INVENTORY_STATE.INVENTORY_STATE_A)
-          sing.Action.setSLFlag(SL_FLAG.SL_ALL)
-          r.Config.Antennas.setSingulationControl(1, sing)
-          Log.d(TAG, "setSingulationSession: $target accepted")
-          currentSessionZero = useSessionZero
-          ok = true
-        } catch (e: Exception) {
-          Log.w(TAG, "setSingulationSession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
+        fun apply(n: Int): Boolean {
+          val target = when (n) {
+            0 -> SESSION.SESSION_S0
+            2 -> SESSION.SESSION_S2
+            else -> SESSION.SESSION_S1
+          }
+          return try {
+            val sing = r.Config.Antennas.getSingulationControl(1)
+            sing.setSession(target)
+            sing.Action.setInventoryState(INVENTORY_STATE.INVENTORY_STATE_A)
+            sing.Action.setSLFlag(SL_FLAG.SL_ALL)
+            r.Config.Antennas.setSingulationControl(1, sing)
+            Log.d(TAG, "setInventorySession: $target accepted")
+            currentSession = n
+            true
+          } catch (e: Exception) {
+            Log.w(TAG, "setInventorySession: $target rejected (${e.javaClass.simpleName}: ${e.message})")
+            false
+          }
+        }
+        var ok = apply(want)
+        if (!ok && want == 2) {
+          // Quiet mode refused → today's S1, so the radio is never left in an
+          // unknown session. Still report false: quiet is not on.
+          if (!apply(1)) currentSession = null
+          ok = false
         }
         if (wasActive) {
           resumeInventoryWithRetry(r, seqAtCall)
         }
         mainHandler.post { result.success(ok) }
       } catch (e: Exception) {
-        Log.w(TAG, "setSingulationSession threw: ${e.message}")
+        Log.w(TAG, "setInventorySession threw: ${e.message}")
         mainHandler.post { result.success(false) }
       }
     }
@@ -2037,7 +2073,7 @@ class CarbonZebraRfidController(
     // new link genuinely needs.
     currentTriggerModeRfid = null
     currentPrefilterEpc = null
-    currentSessionZero = null
+    currentSession = null
     currentPowerIdx = -1
     currentBeeperVolume = null
 

@@ -351,6 +351,27 @@ class RfidVendorChannel {
     }
   }
 
+  /// Quiet mode for bulk scanning (owner, 2026-10-15): on the RFD8500 a tag
+  /// that has been read stays silent while the sled keeps powering it (Gen2
+  /// S2) instead of answering again after ~0.5–5 s (S1), so the radio spends
+  /// its time on tags it has not read yet. `false` → back to S1.
+  ///
+  /// Returns true only when the sled is now in the requested mode; a sled that
+  /// refuses S2 is put back on S1 and this answers false. No-op (false) on
+  /// readers without the Zebra SDK.
+  static Future<bool> setQuietInventory(bool quiet, {bool force = false}) async {
+    if (!_isAndroid) return false;
+    try {
+      final ok = await _method.invokeMethod<bool>(
+        'rfid.setInventorySession',
+        <String, dynamic>{'session': quiet ? 2 : 1, 'force': force},
+      );
+      return ok == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Install a Zebra PreFilter so the radio only responds to the given
   /// EPC. Matching tags go to inventory state A (responsive), everyone
   /// else goes to state B (silent) — radio dedicates all its time slots

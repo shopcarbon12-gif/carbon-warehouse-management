@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/permission_guard.dart';
+import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/inventory_catalog_screen.dart'
     show CatalogEpcListScreen, CatalogRowCard;
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
@@ -58,17 +62,31 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
   String? _error;
   final List<Map<String, dynamic>> _rows = [];
 
+  /// 2D-only mode: pulling/holding the trigger fires the imager, not UHF.
+  /// Both Chainway and Zebra paths covered defensively — calls are no-ops
+  /// on devices without the matching SDK so we don't need to know which
+  /// hardware we're on.
+  void _arm2d() {
+    unawaited(RfidVendorChannel.disableRfidFunctionMode());
+    unawaited(RfidVendorChannel.open2dBarcode());
+    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+  }
+
+  /// Many tags at once — Bulk Geiger, with this search carried over.
+  Future<void> _openBulk() async {
+    await context.pushGuarded<void>(
+      ScreenIds.bulkGeiger,
+      (_) => BulkGeigerScreen(initialQuery: _query.isEmpty ? null : _query),
+    );
+    // Bulk Geiger put the trigger on RFID; this screen's trigger is the imager.
+    if (mounted) _arm2d();
+  }
+
   @override
   void initState() {
     super.initState();
     _scrollCtrl.addListener(_onScroll);
-    // 2D-only mode: pulling/holding the trigger fires the imager, not UHF.
-    // Both Chainway and Zebra paths covered defensively — calls are no-ops
-    // on devices without the matching SDK so we don't need to know which
-    // hardware we're on.
-    unawaited(RfidVendorChannel.disableRfidFunctionMode());
-    unawaited(RfidVendorChannel.open2dBarcode());
-    unawaited(RfidVendorChannel.setZebraTriggerMode2D());
+    _arm2d();
     // Decoded 2D barcodes flow in here. We populate the search field +
     // run a search synchronously so the operator sees results immediately
     // after release. Only accept payloads that aren't 24-hex EPCs — those
@@ -242,6 +260,13 @@ class _GeigerSearchScreenState extends State<GeigerSearchScreen> {
   Widget build(BuildContext context) {
     return CarbonScaffold(
       pageTitle: 'GEIGER',
+      actions: [
+        TextButton.icon(
+          onPressed: () => unawaited(_openBulk()),
+          icon: const Icon(LucideIcons.radar, size: 18),
+          label: const Text('BULK'),
+        ),
+      ],
       body: Column(
         children: [
           Padding(

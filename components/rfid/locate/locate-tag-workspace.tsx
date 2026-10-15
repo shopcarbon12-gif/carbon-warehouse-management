@@ -17,6 +17,11 @@
  *      antenna's calibration points. That is the only trustworthy number on
  *      the page; the RSSI bands are a proximity hint, not a measurement.
  *
+ * Bulk (owner, 2026-10-15): the same page, but several target tags instead of
+ * one — each reader box lists which of them it hears, and each tag shows the
+ * reader that hears it best. "Single" on a tag opens it in the one-tag view
+ * (where Refine lives). No beep, nothing else changes.
+ *
  * Nothing here writes to inventory — locating a tag is read-only.
  */
 
@@ -142,8 +147,45 @@ function agoLabel(ms: number): string {
   return `${Math.round(ms / 60_000)}m ago`;
 }
 
+const EPC24 = /^[0-9A-F]{24}$/;
+
+function targetFromPick(m: TrackerSearchPickRow): Target {
+  return {
+    epc: m.epc.toUpperCase(),
+    sku: m.sku,
+    description: m.description,
+    color: m.color,
+    size: m.size,
+    status: m.status,
+    locationCode: m.location_code,
+    binCode: m.bin_code,
+    archived: m.archived,
+  };
+}
+
+function rawTarget(epc: string): Target {
+  return {
+    epc,
+    sku: null,
+    description: null,
+    color: null,
+    size: null,
+    status: null,
+    locationCode: null,
+    binCode: null,
+    archived: false,
+  };
+}
+
+/** Short label for a tag inside a reader box: SKU, else the EPC's tail. */
+function shortTag(t: Target | undefined, epc: string): string {
+  if (t?.sku) return [t.sku, t.size].filter(Boolean).join(" · ");
+  return `…${epc.slice(-8)}`;
+}
+
 export function LocateTagWorkspace() {
   // ── Target selection ─────────────────────────────────────────────────────
+  const [mode, setMode] = useState<"single" | "bulk">("single");
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<TrackerSearchPickRow[]>([]);
   const [searching, setSearching] = useState(false);
@@ -152,13 +194,23 @@ export function LocateTagWorkspace() {
   useEffect(() => {
     targetRef.current = target;
   }, [target]);
+  const [bulkTargets, setBulkTargets] = useState<Target[]>([]);
+  const bulkByEpc = useMemo(() => new Map(bulkTargets.map((t) => [t.epc, t])), [bulkTargets]);
+
+  /** EPCs the live stream credits — the one target, or every bulk target. */
+  const activeEpcsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    activeEpcsRef.current =
+      mode === "single" ? new Set(target ? [target.epc] : []) : new Set(bulkTargets.map((t) => t.epc));
+  }, [mode, target, bulkTargets]);
 
   const [err, setErr] = useState<string | null>(null);
 
-  // Debounced search. Skipped entirely once a target is locked in.
+  // Debounced search. Skipped once the single target is locked in; bulk keeps
+  // searching so more tags can be added.
   useEffect(() => {
     const q = query.trim();
-    if (target || q.length < 2) {
+    if ((mode === "single" && target) || q.length < 2) {
       setMatches([]);
       return;
     }
@@ -186,12 +238,69 @@ export function LocateTagWorkspace() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query, target]);
+  }, [query, target, mode]);
 
   const rawEpcCandidate = useMemo(() => {
     const t = query.replace(/\s/g, "").toUpperCase();
-    return /^[0-9A-F]{24}$/.test(t) ? t : null;
+    return EPC24.test(t) ? t : null;
   }, [query]);
+
+  /** Bulk: every 24-hex EPC typed or pasted into the box (any separators). */
+  const pastedEpcs = useMemo(() => {
+    const out = new Set<string>();
+    for (const tok of query.toUpperCase().split(/[^0-9A-F]+/)) if (EPC24.test(tok)) out.add(tok);
+    return Array.from(out);
+  }, [query]);
+
+  const addBulkTargets = useCallback((add: Target[]) => {
+    setBulkTargets((prev) => {
+      const have = new Set(prev.map((t) => t.epc));
+      const fresh: Target[] = [];
+      for (const t of add) {
+        if (have.has(t.epc)) continue;
+        have.add(t.epc);
+        fresh.push(t);
+      }
+      return fresh.length ? [...prev, ...fresh] : prev;
+    });
+  }, []);
+
+  /** Pasted EPCs carry no catalog fields — fill them in (product, colour, size, status). */
+  const enrichRaw = useCallback(async (epcs: string[]) => {
+    for (let i = 0; i < epcs.length; i += 500) {
+      const chunk = epcs.slice(i, i + 500);
+      try {
+        const res = await fetch("/api/handheld/epc-lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ epcs: chunk }),
+        });
+        if (!res.ok) continue;
+        const j = (await res.json()) as {
+          rows?: Array<{ epcHex: string; sku: string | null; productName: string | null; color: string | null; size: string | null; status: string | null }>;
+        };
+        const byEpc = new Map((j.rows ?? []).map((r) => [r.epcHex.toUpperCase(), r]));
+        setBulkTargets((prev) =>
+          prev.map((t) => {
+            const r = byEpc.get(t.epc);
+            if (!r || t.sku) return t;
+            return { ...t, sku: r.sku, description: r.productName, color: r.color, size: r.size, status: r.status };
+          }),
+        );
+      } catch {
+        /* the raw EPC still hunts */
+      }
+    }
+  }, []);
+
+  const addPasted = useCallback(() => {
+    const known = new Map(matches.map((m) => [m.epc.toUpperCase(), m]));
+    const add = pastedEpcs.map((e) => (known.has(e) ? targetFromPick(known.get(e)!) : rawTarget(e)));
+    addBulkTargets(add);
+    const raw = add.filter((t) => !t.sku).map((t) => t.epc);
+    if (raw.length) void enrichRaw(raw);
+    setQuery("");
+  }, [matches, pastedEpcs, addBulkTargets, enrichRaw]);
 
   // ── Reader selection + hunt lifecycle ────────────────────────────────────
   const { data: hwTree } = useSWR<HardwareConfigTree>("/api/hardware-config", fetcher, {
@@ -213,7 +322,8 @@ export function LocateTagWorkspace() {
   }, [hunting]);
 
   const scanSessionIdsRef = useRef<string[]>([]);
-  const [stats, setStats] = useState<Record<string, ReaderStat>>({});
+  /** readerId → target EPC → what that reader has heard of it. */
+  const [stats, setStats] = useState<Record<string, Record<string, ReaderStat>>>({});
 
   // Keep the chosen readers warm while the page is open so SCAN is instant.
   const selectedIdList = useMemo(() => Array.from(selectedReaders), [selectedReaders]);
@@ -250,7 +360,8 @@ export function LocateTagWorkspace() {
   }, [endScanSessions]);
 
   const startHunt = useCallback(async () => {
-    if (!targetRef.current) {
+    const epcs = Array.from(activeEpcsRef.current);
+    if (epcs.length === 0) {
       setErr("Pick a target EPC first.");
       return;
     }
@@ -271,7 +382,10 @@ export function LocateTagWorkspace() {
           body: JSON.stringify({
             readerId,
             kind: "geiger",
-            context: { page: "locate", epc: targetRef.current.epc },
+            context:
+              epcs.length === 1
+                ? { page: "locate", epc: epcs[0] }
+                : { page: "locate", mode: "bulk", count: epcs.length, epcs: epcs.slice(0, 50) },
           }),
         });
         const j = (await res.json().catch(() => ({}))) as {
@@ -303,8 +417,8 @@ export function LocateTagWorkspace() {
     const es = new EventSource("/api/edge/stream");
     es.onmessage = (ev) => {
       if (!huntingRef.current) return;
-      const t = targetRef.current;
-      if (!t) return;
+      const wanted = activeEpcsRef.current;
+      if (wanted.size === 0) return;
       if (!ev.data?.trim() || ev.data.startsWith(":")) return;
       let p: {
         deviceId?: string;
@@ -318,15 +432,19 @@ export function LocateTagWorkspace() {
       }
       const deviceId = p.deviceId;
       if (!deviceId || !selectedReadersRef.current.has(deviceId)) return;
-      const seen = (p.epcs ?? []).some((e) => e.replace(/\s/g, "").toUpperCase() === t.epc);
-      if (!seen) return;
-      const rssi = p.epcRssiMap?.[t.epc] ?? null;
+      const hits = new Set<string>();
+      for (const e of p.epcs ?? []) {
+        const k = e.replace(/\s/g, "").toUpperCase();
+        if (wanted.has(k)) hits.add(k);
+      }
+      if (hits.size === 0) return;
       const at = Date.now();
       setStats((prev) => {
-        const cur = prev[deviceId];
-        return {
-          ...prev,
-          [deviceId]: {
+        const forReader = { ...(prev[deviceId] ?? {}) };
+        for (const epc of hits) {
+          const rssi = p.epcRssiMap?.[epc] ?? null;
+          const cur = forReader[epc];
+          forReader[epc] = {
             reads: (cur?.reads ?? 0) + 1,
             lastRssi: rssi,
             bestRssi:
@@ -337,8 +455,9 @@ export function LocateTagWorkspace() {
                   : Math.max(cur.bestRssi, rssi),
             firstSeenMs: cur?.firstSeenMs ?? at,
             lastSeenMs: at,
-          },
-        };
+          };
+        }
+        return { ...prev, [deviceId]: forReader };
       });
     };
     return () => es.close();
@@ -506,10 +625,21 @@ export function LocateTagWorkspace() {
 
   // ── Derived rows ─────────────────────────────────────────────────────────
   const rows = useMemo(() => {
+    const singleEpc = target?.epc ?? null;
     return Array.from(selectedReaders)
       .map((id) => {
         const reader = readerById.get(id);
-        const s = stats[id];
+        const byEpc = stats[id] ?? {};
+        // Bulk: every target this reader has heard, live contact first, strongest first.
+        const heard = Object.entries(byEpc)
+          .filter(([epc]) => mode === "bulk" && bulkByEpc.has(epc))
+          .map(([epc, s]) => {
+            const age = nowMs - s.lastSeenMs;
+            const fresh = age <= CONTACT_TTL_MS;
+            return { epc, stat: s, age, fresh, liveRssi: fresh ? s.lastRssi : null };
+          })
+          .sort((a, b) => (b.liveRssi ?? (b.fresh ? -998 : -999)) - (a.liveRssi ?? (a.fresh ? -998 : -999)) || b.stat.lastSeenMs - a.stat.lastSeenMs);
+        const s = mode === "single" && singleEpc ? byEpc[singleEpc] : heard[0]?.stat;
         const age = s ? nowMs - s.lastSeenMs : null;
         const fresh = age !== null && age <= CONTACT_TTL_MS;
         return {
@@ -522,6 +652,7 @@ export function LocateTagWorkspace() {
           age,
           fresh,
           liveRssi: fresh ? s?.lastRssi ?? null : null,
+          heard,
         };
       })
       .sort((a, b) => {
@@ -530,16 +661,236 @@ export function LocateTagWorkspace() {
         const bv = b.liveRssi ?? (b.stat ? -998 : -999);
         return bv - av || a.name.localeCompare(b.name);
       });
-  }, [selectedReaders, readerById, stats, nowMs]);
+  }, [selectedReaders, readerById, stats, nowMs, mode, target, bulkByEpc]);
 
   const contactCount = rows.filter((r) => r.fresh).length;
   const bestRow = rows.find((r) => r.liveRssi !== null) ?? null;
 
+  /** Bulk: per target, the reader hearing it best right now (else the last one that did). */
+  const bestReaderByEpc = useMemo(() => {
+    const out = new Map<string, { readerName: string; liveRssi: number | null; age: number }>();
+    if (mode !== "bulk") return out;
+    for (const [readerId, byEpc] of Object.entries(stats)) {
+      if (!selectedReaders.has(readerId)) continue;
+      const name = readerById.get(readerId)?.name ?? readerId.slice(0, 8);
+      for (const [epc, s] of Object.entries(byEpc)) {
+        const age = nowMs - s.lastSeenMs;
+        const liveRssi = age <= CONTACT_TTL_MS ? s.lastRssi : null;
+        const cur = out.get(epc);
+        const score = liveRssi ?? (age <= CONTACT_TTL_MS ? -998 : -999 - age / 1000);
+        const curScore = cur ? cur.liveRssi ?? (cur.age <= CONTACT_TTL_MS ? -998 : -999 - cur.age / 1000) : -Infinity;
+        if (score > curScore) out.set(epc, { readerName: name, liveRssi, age });
+      }
+    }
+    return out;
+  }, [mode, stats, selectedReaders, readerById, nowMs]);
+
+  const heardTargets = mode === "bulk" ? bulkTargets.filter((t) => bestReaderByEpc.has(t.epc)).length : 0;
+  const hasTargets = mode === "single" ? Boolean(target) : bulkTargets.length > 0;
+
+  const switchMode = (next: "single" | "bulk") => {
+    if (next === mode) return;
+    stopHunt();
+    cancelRefine();
+    setStats({});
+    setQuery("");
+    setMode(next);
+  };
+
+  /** Bulk → the one-tag view for this tag (Refine lives there). Readers stay picked. */
+  const openSingle = (t: Target) => {
+    stopHunt();
+    cancelRefine();
+    setStats({});
+    setQuery("");
+    setTarget(t);
+    setMode("single");
+  };
+
   return (
     <div className="space-y-4">
+      {/* ── Mode ──────────────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Locate mode">
+        {(
+          [
+            ["single", "One tag"],
+            ["bulk", "Bulk — several tags"],
+          ] as const
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={mode === m}
+            onClick={() => switchMode(m)}
+            className={`rounded-md border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wide max-md:min-h-11 ${
+              mode === m
+                ? "border-[var(--wms-accent)] bg-[var(--wms-accent)] text-[var(--wms-accent-fg)]"
+                : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-teal-500/40"
+            }`}
+          >
+            {label}
+            {m === "bulk" && bulkTargets.length > 0 ? ` (${bulkTargets.length})` : ""}
+          </button>
+        ))}
+      </div>
+
       {/* ── Target ──────────────────────────────────────────────────────── */}
       <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
-        {target ? (
+        {mode === "bulk" ? (
+          <div className="space-y-2">
+            <label
+              htmlFor="locate-bulk-search"
+              className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Target tags · {bulkTargets.length} picked
+            </label>
+            <input
+              id="locate-bulk-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="EPC, SKU, description, colour, size, bin… or paste several EPCs"
+              spellCheck={false}
+              autoComplete="off"
+              enterKeyHint="search"
+              className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs text-[var(--wms-fg)] placeholder:text-[var(--wms-muted)] focus:border-[var(--wms-accent)] focus:outline-none max-md:text-base"
+            />
+            {searching ? <p className="font-mono text-[0.65rem] text-[var(--wms-muted)]">Searching…</p> : null}
+            {pastedEpcs.length > 0 && pastedEpcs.some((e) => !bulkByEpc.has(e)) ? (
+              <button
+                type="button"
+                onClick={addPasted}
+                className="w-full rounded-md border border-dashed border-[var(--wms-accent)]/50 px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/10 max-md:min-h-11"
+              >
+                Add {pastedEpcs.filter((e) => !bulkByEpc.has(e)).length} EPC
+                {pastedEpcs.filter((e) => !bulkByEpc.has(e)).length === 1 ? "" : "s"} from the box
+              </button>
+            ) : null}
+            {matches.length > 0 ? (
+              <div className="rounded-md border border-[var(--wms-border)]">
+                <div className="flex items-center justify-between gap-2 border-b border-[var(--wms-border)]/50 px-3 py-1.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <span>{matches.length} match{matches.length === 1 ? "" : "es"} — click to add</span>
+                  {matches.some((m) => !bulkByEpc.has(m.epc.toUpperCase())) ? (
+                    <button
+                      type="button"
+                      onClick={() => addBulkTargets(matches.map(targetFromPick))}
+                      className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-0.5 text-[var(--wms-fg)] hover:border-teal-500/40 max-md:min-h-11"
+                    >
+                      Add all
+                    </button>
+                  ) : null}
+                </div>
+                <ul className="max-h-[32dvh] divide-y divide-[var(--wms-border)]/50 overflow-y-auto max-md:overscroll-contain">
+                  {matches.map((m) => {
+                    const added = bulkByEpc.has(m.epc.toUpperCase());
+                    return (
+                      <li key={m.epc}>
+                        <button
+                          type="button"
+                          disabled={added}
+                          onClick={() => addBulkTargets([targetFromPick(m)])}
+                          className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-[var(--wms-surface-elevated)] disabled:cursor-default disabled:opacity-60 max-md:min-h-11"
+                        >
+                          <span className="font-mono text-xs font-semibold text-teal-400/90 max-md:break-all">
+                            {m.epc}
+                            {added ? <span className="ml-2 text-[0.6rem] text-[var(--wms-muted)]">added</span> : null}
+                          </span>
+                          <span className="font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                            {[m.sku, m.description, m.color, m.size].filter(Boolean).join(" · ")}
+                            {m.status ? ` · ${m.status}` : ""}
+                            {m.bin_code ? ` · bin ${m.bin_code}` : ""}
+                            {m.archived ? " · archived" : ""}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+            {bulkTargets.length > 0 ? (
+              <>
+                <ul className="max-h-[45dvh] divide-y divide-[var(--wms-border)]/50 overflow-y-auto rounded-md border border-[var(--wms-border)] max-md:overscroll-contain">
+                  {bulkTargets.map((t) => {
+                    const best = bestReaderByEpc.get(t.epc);
+                    const live = best ? best.age <= CONTACT_TTL_MS : false;
+                    return (
+                      <li
+                        key={t.epc}
+                        className={`flex flex-wrap items-start gap-2 px-3 py-2 ${live ? "bg-emerald-500/5" : ""}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-mono text-xs font-semibold text-teal-400/90 max-md:break-all">{t.epc}</div>
+                          <div className="font-mono text-[0.65rem] text-[var(--wms-fg)]">
+                            {t.sku ? (
+                              [t.sku, t.description, [t.color, t.size].filter(Boolean).join(" / ")].filter(Boolean).join(" · ")
+                            ) : (
+                              <span className="text-amber-300/80">Raw EPC — no catalog item</span>
+                            )}
+                          </div>
+                          <div className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                            {[t.status ? `status ${t.status}` : null, t.binCode ? `last bin ${t.binCode}` : null, t.locationCode]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
+                          <div
+                            className={`mt-0.5 font-mono text-[0.65rem] ${live ? "font-semibold text-emerald-300" : "text-[var(--wms-muted)]"}`}
+                          >
+                            {best
+                              ? live
+                                ? `Heard by ${best.readerName}${best.liveRssi !== null ? ` · ${best.liveRssi.toFixed(0)} dBm` : ""}`
+                                : `Last heard by ${best.readerName} · ${agoLabel(best.age)}`
+                              : hunting
+                                ? "Not heard yet"
+                                : "—"}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openSingle(t)}
+                            title="Open this tag in the one-tag view (signal per reader + Refine)"
+                            className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 font-mono text-[0.6rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)] hover:border-teal-500/40 max-md:min-h-11"
+                          >
+                            <Crosshair className="h-3 w-3" />
+                            Single
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBulkTargets((prev) => prev.filter((x) => x.epc !== t.epc))}
+                            aria-label={`Remove ${t.epc}`}
+                            className="inline-flex items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-1 text-[var(--wms-fg)] hover:border-red-400/50 max-md:min-h-11 max-md:px-2.5"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="flex items-center justify-between gap-2 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                  <span>
+                    <strong className={heardTargets > 0 ? "text-emerald-300" : "text-[var(--wms-fg)]"}>{heardTargets}</strong> of{" "}
+                    {bulkTargets.length} heard
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopHunt();
+                      setStats({});
+                      setBulkTargets([]);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] hover:border-red-400/50 max-md:min-h-11"
+                  >
+                    <X className="h-3 w-3" />
+                    Clear all
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : target ? (
           <div className="flex flex-wrap items-start gap-3">
             <Crosshair className="mt-0.5 h-4 w-4 shrink-0 text-[var(--wms-accent)]" />
             <div className="min-w-0 flex-1">
@@ -674,9 +1025,9 @@ export function LocateTagWorkspace() {
         <button
           type="button"
           onClick={() => (hunting ? stopHunt() : void startHunt())}
-          disabled={!target || (!hunting && selectedReaders.size === 0)}
+          disabled={!hasTargets || (!hunting && selectedReaders.size === 0)}
           title={
-            !target
+            !hasTargets
               ? "Pick a target EPC first."
               : selectedReaders.size === 0 && !hunting
                 ? "Pick at least one reader."
@@ -717,7 +1068,9 @@ export function LocateTagWorkspace() {
       {/* ── Per-reader Geiger readout ───────────────────────────────────── */}
       {rows.length === 0 ? (
         <div className="rounded-lg border border-[var(--wms-border)] px-3 py-10 text-center font-mono text-xs text-[var(--wms-muted)]">
-          Pick a target tag and the readers to hunt with, then press Scan.
+          {mode === "bulk"
+            ? "Add the target tags and pick the readers to hunt with, then press Scan."
+            : "Pick a target tag and the readers to hunt with, then press Scan."}
         </div>
       ) : (
         /* Boxes, not rows: all of a location's readers on one screen, so the
@@ -747,6 +1100,7 @@ export function LocateTagWorkspace() {
                       {!row.online ? <span className="ml-1 text-amber-500 dark:text-amber-300/80">· offline</span> : null}
                     </div>
                   </div>
+                  {mode === "single" ? (
                   <button
                     type="button"
                     onClick={() => (isRefining ? cancelRefine() : void startRefine(row.id))}
@@ -770,6 +1124,7 @@ export function LocateTagWorkspace() {
                     )}
                     {!isRefining ? "Refine" : refine?.phase === "done" || refine?.phase === "error" ? "Clear" : "Cancel"}
                   </button>
+                  ) : null}
                 </div>
 
                 {/* Signal bar — the live Geiger needle. */}
@@ -802,7 +1157,29 @@ export function LocateTagWorkspace() {
                   </span>
                 </div>
 
+                {mode === "bulk" && row.heard.length > 0 ? (
+                  <ul className="mt-1 space-y-0.5 border-t border-[var(--wms-border)]/50 pt-1">
+                    {row.heard.slice(0, 5).map((h) => (
+                      <li
+                        key={h.epc}
+                        className={`flex items-baseline justify-between gap-1 font-mono text-[0.6rem] ${h.fresh ? "text-emerald-300" : "text-[var(--wms-muted)]"}`}
+                      >
+                        <span className="truncate" title={h.epc}>
+                          {shortTag(bulkByEpc.get(h.epc), h.epc)}
+                        </span>
+                        <span className="shrink-0 tabular-nums">
+                          {h.liveRssi !== null ? `${h.liveRssi.toFixed(0)} dBm` : h.fresh ? "now" : agoLabel(h.age)}
+                        </span>
+                      </li>
+                    ))}
+                    {row.heard.length > 5 ? (
+                      <li className="font-mono text-[0.6rem] text-[var(--wms-muted)]">+{row.heard.length - 5} more</li>
+                    ) : null}
+                  </ul>
+                ) : null}
+
                 <div className="mt-0.5 truncate font-mono text-[0.6rem] text-[var(--wms-muted)]">
+                  {mode === "bulk" ? `${row.heard.length} tag${row.heard.length === 1 ? "" : "s"} heard · ` : ""}
                   {row.stat?.reads ?? 0} reads
                   {row.stat?.bestRssi !== null && row.stat?.bestRssi !== undefined ? ` · best ${row.stat.bestRssi.toFixed(0)}` : ""}
                   {row.age !== null ? ` · ${agoLabel(row.age)}` : ""}

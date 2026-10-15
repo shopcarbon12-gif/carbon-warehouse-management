@@ -162,8 +162,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   /// [_onCatalogChanged] the moment it is ready; nothing is ever dropped.
   final Map<String, ({DateTime at, int? rssi})> _addOnPendingEpcs =
       <String, ({DateTime at, int? rssi})>{};
-  /// One paced beep per new qualifying / defective EPC (the native per-read
-  /// beep stays suppressed in this mode).
+  /// Qualifying EPCs in read order. While scanning the list shows only these
+  /// EPCs (cheap rows); the full product lines appear on pause (owner,
+  /// 2026-10-15: product lines while scanning made it feel stuck).
+  final List<String> _addOnScanOrder = <String>[];
+  /// One paced beep per NEW EPC this session — Count: every new EPC whatever
+  /// its outcome; Add-On Catalog: each new qualifying / defective EPC. The
+  /// native per-read beep stays suppressed in both modes (owner, 2026-10-15:
+  /// it fired on every read, so one tag beeped over and over).
   final BeepPacer _beepPacer = BeepPacer();
   /// Marked on every raw read so the "reading" chip shows the radio is
   /// working while it passes known (silent) stock.
@@ -224,13 +230,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     super.initState();
     // Warm the shared scan sounds (pool-backed for low-latency per-tag read clicks).
     unawaited(ScanSounds.instance.init());
-    // Add-On Catalog suppresses the native per-tag beep: most reads are
-    // already-in-catalog tags we ignore, and beeping on them is wrong. We beep
-    // (ScanCue.read) ourselves only when an EPC is new (qualifies, or is a new
+    // Both modes suppress the native per-tag beep — it fired on EVERY read,
+    // so one tag beeped again and again. We beep (ScanCue.read) ourselves once
+    // per new EPC (Add-On Catalog: only when it qualifies or is a new
     // defective tag) — paced by [_beepPacer].
-    if (_isAddOnCatalog) {
-      unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    }
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initModule());
       unawaited(_loadUserEmail());
@@ -263,9 +267,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _catalog?.removeListener(_onCatalogChanged);
     _releaseAutoRefresh();
     _beepPacer.dispose();
-    if (_isAddOnCatalog) {
-      unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
-    }
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
+    // Quiet mode is for this screen's bulk passes only — back to the default.
+    unawaited(RfidVendorChannel.setQuietInventory(false));
     _readsSub?.cancel();
     _directTagSub?.cancel();
     _triggerSub?.cancel();
@@ -566,9 +570,10 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       lastSeen: now,
       rssi: rssi,
     );
-    // Read beep is now native-originated: CarbonChainwayRfidController.emitEpc /
-    // CarbonZebraRfidController.emitTag call ScanSoundPool.playTagBeep directly.
-    // Dart no longer fires per-tag beeps — saves a Dart→native round-trip.
+    // One beep per NEW EPC, whatever happens to it below (counted, defective,
+    // reclassified later). Repeat reads returned above, silently — for the
+    // whole session.
+    _beepPacer.request();
     //
     // Classify per-EPC to mirror the desktop cycle-counts variance buckets
     // (lib/server/rfid-cycle-count-sessions.ts:444 classifyVarianceLive):
@@ -678,6 +683,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _epcRows[epc] = row;
     final info = d.info;
     if (d.verdict == AddOnCatalogVerdict.qualify && info != null) {
+      _addOnScanOrder.add(epc);
       // systemId is always set when the SKU resolved; the fallbacks only
       // keep the group key non-null.
       final sysId = d.systemId ?? info.systemId ?? info.skuId;
@@ -1030,7 +1036,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         ),
       ),
     );
-    if (!_isAddOnCatalog || !mounted) return;
+    if (!mounted) return;
+    if (!_isAddOnCatalog) {
+      // Locate's dispose turns the per-read beep back on — Count beeps once
+      // per new EPC itself.
+      unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+      return;
+    }
     // The EPC list doesn't take the trigger, so a pull there starts this
     // screen underneath; _ensureScannerReady resets the UI to "not
     // scanning", so stop properly first (radio + auto-refresh).
@@ -1148,12 +1160,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // and the reader tolerates racing with the first reads.
     unawaited(RfidVendorChannel.clearChainwaySeenEpcs());
     unawaited(RfidVendorChannel.setAntennaPowerDbm(_effectivePowerDbm));
+    // Re-assert on every start: a Locate opened from the EPC list restores
+    // the per-read beep, the default radio session and the power override in
+    // its dispose, which can land after this screen was re-armed (fast double
+    // back). One beep per new EPC, quiet mode and the power hold every pass.
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+    // Quiet mode: a tag already read stays silent while the sled keeps
+    // powering it, so the radio spends its time on tags not read yet. The
+    // screen also ignores every repeat read for the whole session.
+    unawaited(RfidVendorChannel.setQuietInventory(true));
     if (_isAddOnCatalog) {
-      // Re-assert on every start: a Locate opened from the EPC list restores
-      // the per-read beep and clears the power override in its dispose, which
-      // can land after _openGroupEpcList re-armed this screen (fast double
-      // back). Silent-on-known-stock and max power must hold for every pass.
-      unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
       unawaited(_rfidManager?.setSessionPowerOverrideDbm(_effectivePowerDbm));
     }
     final lifecycleTickAtStart = _rfidManager?.lifecycleStopTick.value;
@@ -1204,18 +1220,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _stopUiFlushTimer();
     // Kill any in-flight read beeps so they don't trail past the stop event.
     ScanSounds.instance.stopAll();
-    if (_isAddOnCatalog) {
-      _beepPacer.cancel();
-      _releaseAutoRefresh();
-    }
+    _beepPacer.cancel();
+    if (_isAddOnCatalog) _releaseAutoRefresh();
     try { await _rfidManager?.stopLocateScanning(); } catch (_) {}
     if (!mounted) return;
     setState(() { _scanOn = false; });
     if (!silent) unawaited(_playStopTone());
+    // Reads that raced the radio stop can have queued beeps since the
+    // cancel above.
+    _beepPacer.cancel();
     if (_isAddOnCatalog) {
-      // Reads that raced the radio stop can have queued beeps since the
-      // cancel above.
-      _beepPacer.cancel();
       _syncDisplayedCounters();
       // Every pause refreshes the local copy. Decided tags stay decided;
       // a read still waiting for the copy is decided when it lands
@@ -1273,6 +1287,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // against the current copy on its next read.
       _ignoredEpcs.clear();
       _addOnPendingEpcs.clear();
+      _addOnScanOrder.clear();
     });
     _beepPacer.cancel();
     _readPulse.reset();
@@ -1725,7 +1740,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(20.w, 0.h, 20.w, 0.h),
-                    child: hasRealRows
+                    child: _isAddOnCatalog && _scanOn
+                        ? _AddOnScanEpcList(epcs: _addOnScanOrder)
+                        : hasRealRows
                         ? ListView.separated(
                             padding: EdgeInsets.only(bottom: 12.h),
                             itemCount: groups.length,
@@ -1754,6 +1771,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                     // on the next read); RESET clears it.
                                     if (_isAddOnCatalog) {
                                       _ignoredEpcs.addAll(g.epcs);
+                                      final gone = g.epcs.toSet();
+                                      _addOnScanOrder
+                                          .removeWhere(gone.contains);
                                     }
                                   });
                                   _syncDisplayedCounters();
@@ -3683,3 +3703,68 @@ String _csv(String v) {
 }
 
 String _two(int v) => v < 10 ? '0$v' : '$v';
+
+/// Add-On Catalog while the radio is on: one plain EPC line per new tag,
+/// newest first — no product lookup or card layout per tag. The product lines
+/// replace it the moment the scan pauses.
+class _AddOnScanEpcList extends StatelessWidget {
+  const _AddOnScanEpcList({required this.epcs});
+
+  final List<String> epcs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (epcs.isEmpty) {
+      return Center(
+        child: Text(
+          'Scanning — new tags appear here',
+          style: GoogleFonts.manrope(
+            fontSize: 14.sp,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF5A6464),
+          ),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(bottom: 6.h),
+          child: Text(
+            'PRODUCT DETAILS SHOW WHEN YOU PAUSE',
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+              color: const Color(0xFF6D7979),
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.only(bottom: 12.h),
+            itemCount: epcs.length,
+            itemExtent: 34.h,
+            itemBuilder: (_, i) => Container(
+              alignment: Alignment.centerLeft,
+              margin: EdgeInsets.only(bottom: 4.h),
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              color: const Color(0xFFECECEC),
+              child: Text(
+                epcs[epcs.length - 1 - i],
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.robotoMono(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMain,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

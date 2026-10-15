@@ -17,6 +17,7 @@ import 'package:carbon_wms/services/add_on_session_state.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_runtime_config.dart'
     show kAntennaPowerDbmMax;
+import 'package:carbon_wms/services/beep_pacer.dart';
 import 'package:carbon_wms/services/live_catalog_cache.dart';
 import 'package:carbon_wms/services/live_catalog_models.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
@@ -105,6 +106,18 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   // shows the radio is alive while it passes stock that is already counted.
   final RfidReadPulse _readPulse = RfidReadPulse();
 
+  /// [_session] repaints paced like Count's 150 ms flush — it used to repaint
+  /// the whole screen once per new tag (owner, 2026-10-15: felt stuck).
+  late final _PacedListenable _paced;
+
+  /// One beep per NEW EPC this session (counted or defective), never closer
+  /// than the pacer's gap, so a burst can't pile up behind the tags.
+  final BeepPacer _beepPacer = BeepPacer();
+
+  /// Tags decided "stay silent" for the rest of the session (ignored
+  /// statuses) — a repeat read returns at once, without another lookup.
+  final Set<String> _silenced = <String>{};
+
   // Local-first scan buffer. Each tag is counted instantly in `_session`
   // (ChangeNotifier → smooth per-tag UI) and queued here; a periodic flush
   // POSTs them to the server in batches. This removes the per-tag network
@@ -140,6 +153,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       sourceSlip: widget.sourceSlip,
       sourceEpcs: widget.sourceEpcs,
     );
+    _paced = _PacedListenable(_session);
     // App to background / phone screen off: RfidManager has already stopped
     // the radio; we only drop our own scanning state (_onLifecycleStop).
     _rfid.lifecycleStopTick.addListener(_onLifecycleStop);
@@ -367,6 +381,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       } catch (_) {/* ignore — best-effort stop */}
       if (!mounted) return;
       _session.setScanning(false);
+      _beepPacer.cancel();
       ScanSounds.instance.play(ScanCue.stop);
       _releaseAutoRefresh();
       // Every pause pulls what changed in the catalog meanwhile.
@@ -388,6 +403,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       // re-apply may have moved it since we armed.
       unawaited(_rfid.setSessionPowerOverrideDbm(kAntennaPowerDbmMax));
       unawaited(RfidVendorChannel.setAntennaPowerDbm(kAntennaPowerDbmMax));
+      // Quiet mode: a tag already read stays silent while the sled keeps
+      // powering it, so the radio spends its time on tags not read yet. Re-
+      // asserted every start (a Locate in between puts the sled back on S0/S1).
+      unawaited(RfidVendorChannel.setQuietInventory(true));
       try {
         await _rfid.startLocateScanning().timeout(_radioCallCap, onTimeout: () {});
       } catch (_) {/* radio may be unconnected — tag stream stays cold */}
@@ -405,6 +424,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       } catch (_) {/* best-effort */}
       if (!mounted) return;
       _session.setScanning(false);
+      _beepPacer.cancel();
       _releaseAutoRefresh();
       unawaited(_catalog.refresh());
     }).catchError((Object _) {});
@@ -499,20 +519,25 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   }
 
   void _decideEpc(String clean) {
+    if (_silenced.contains(clean)) return;
     // Ghost (Statuses page "Ignore": sold, return, damaged, in-transit,
-    // pending transaction, …): scanners ignore the tag — no beep, no count.
-    // Checked before shouldSubmit so the EPC isn't reserved for the session.
+    // pending transaction, …): scanners ignore the tag — no beep, no count —
+    // and it stays silent for the rest of the session.
     final known = _catalog.isReady ? _catalog.statusForEpc(clean) : null;
-    if (known != null && _catalog.isGhostStatus(known)) return;
+    if (known != null && _catalog.isGhostStatus(known)) {
+      _silenced.add(clean);
+      return;
+    }
 
     // _session.shouldSubmit returns false for any EPC already in the chosen
     // source list (silent skip per Q16) AND for any EPC already reserved this
     // session — so anything past here is a NEW-to-device, not-in-source tag.
     if (!_session.shouldSubmit(clean)) return;
 
-    // Carbon EPC formula gate. Defective tags go in their own bucket — not
-    // shown in the main list, no beep. We still flush them with
-    // validationFailed=true so finalize surfaces them as the Defective sheet.
+    // Carbon EPC formula gate. Defective tags go in their own bucket (the
+    // DEFECTIVE counter, once per EPC) — not shown in the main list. One beep
+    // like any new EPC. We still flush them with validationFailed=true so
+    // finalize surfaces them as the Defective sheet.
     final cfg = _settings.epcConfig;
     final decoded = decodeEpc(clean, cfg);
     if (!decoded.valid) {
@@ -522,8 +547,9 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         reason: reason,
         scannedAtUtc: DateTime.now().toUtc(),
       ));
+      _beepPacer.request();
       _queueFlush({'epc': clean, 'validationFailed': true, 'failureReason': reason});
-      return; // no display, no beep
+      return; // counter only, no line
     }
 
     // Valid + new-to-this-device → count immediately, beep, buffer. Item info
@@ -542,7 +568,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       bin: info?.binDisplay,
       retailPrice: num.tryParse(info?.retailPrice ?? ''),
     ));
-    ScanSounds.instance.play(ScanCue.read);
+    _beepPacer.request();
     unawaited(_maybeVibrate());
     _queueFlush({'epc': clean, 'inSource': false});
   }
@@ -665,8 +691,11 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     // linked yet. A start still queued natively is superseded by this stop.
     unawaited(_rfid.stopLocateScanning().catchError((Object _) {}));
     unawaited(RfidVendorChannel.stopZebraInventory());
-    // Re-enable the auto per-tag beep for other screens.
+    // Re-enable the auto per-tag beep for other screens, and the default
+    // radio session (quiet mode is this screen's only).
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
+    unawaited(RfidVendorChannel.setQuietInventory(false));
+    _beepPacer.dispose();
     // Restore what we changed on the shared manager so screens we pop back
     // to see the value they had when they pushed us. Cached reference — no
     // context.read here. These setters notify the manager's listeners, which
@@ -686,6 +715,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     // is already running drains it (and its removeRange would throw).
     _flushForced = true;
     unawaited(_flush(force: true));
+    _paced.dispose();
     _session.dispose();
     super.dispose();
   }
@@ -700,7 +730,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
           children: [
             _Header(slip: widget.sourceSlip, sourceCount: widget.sourceEpcs.length),
             ListenableBuilder(
-              listenable: _session,
+              listenable: _paced,
               builder: (_, __) => RfidReadingIndicator(
                 scanning: _session.scanning,
                 pulse: _readPulse,
@@ -708,7 +738,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
               ),
             ),
             ListenableBuilder(
-              listenable: _session,
+              listenable: _paced,
               builder: (_, __) => _CounterRow(
                 newCount: _session.newCount,
                 defectiveCount: _session.failedCount,
@@ -716,12 +746,15 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
             ),
             Expanded(
               child: ListenableBuilder(
-                listenable: _session,
-                builder: (_, __) => _NewList(entries: _session.newEntries),
+                listenable: _paced,
+                builder: (_, __) => _NewList(
+                  entries: _session.newEntries,
+                  scanning: _session.scanning,
+                ),
               ),
             ),
             ListenableBuilder(
-              listenable: _session,
+              listenable: _paced,
               builder: (_, __) => _ActionBar(
                 scanning: _session.scanning,
                 onToggle: _toggleScanning,
@@ -838,17 +871,62 @@ class _CounterTile extends StatelessWidget {
 }
 
 class _NewList extends StatelessWidget {
-  const _NewList({required this.entries});
+  const _NewList({required this.entries, required this.scanning});
   final List<NewEpcEntry> entries;
+  final bool scanning;
 
   @override
   Widget build(BuildContext context) {
     if (entries.isEmpty) {
       return Center(
         child: Text(
-          'Pull trigger to start scanning',
+          scanning ? 'Scanning — new tags appear here' : 'Pull trigger to start scanning',
           style: GoogleFonts.manrope(color: AppColors.textMuted),
         ),
+      );
+    }
+    // While the radio is on: one plain EPC line per new tag (no product card
+    // per tag — owner, 2026-10-15). The full lines show the moment it pauses.
+    if (scanning) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(12.w, 4.h, 12.w, 4.h),
+            child: Text(
+              'PRODUCT DETAILS SHOW WHEN YOU PAUSE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+              itemCount: entries.length,
+              itemExtent: 34.h,
+              itemBuilder: (_, i) => Container(
+                alignment: Alignment.centerLeft,
+                margin: EdgeInsets.only(bottom: 4.h),
+                padding: EdgeInsets.symmetric(horizontal: 10.w),
+                color: const Color(0xFFECECEC),
+                child: Text(
+                  entries[entries.length - 1 - i].epc,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMain,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
     }
     // One container per EPC. No grouping by SKU, no qty counter — each tag is
@@ -913,5 +991,46 @@ class _ActionBar extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Forwards [source]'s notifications at most once per 150 ms (Count's flush
+/// pace): the first one at once, the rest coalesced into one trailing notify.
+class _PacedListenable extends ChangeNotifier {
+  _PacedListenable(this.source) {
+    source.addListener(_onSource);
+  }
+
+  static const Duration every = Duration(milliseconds: 150);
+
+  final Listenable source;
+  final Stopwatch _clock = Stopwatch()..start();
+  Duration? _last;
+  Timer? _timer;
+  bool _disposed = false;
+
+  void _onSource() {
+    if (_disposed || _timer != null) return;
+    final now = _clock.elapsed;
+    final last = _last;
+    if (last == null || now - last >= every) {
+      _last = now;
+      notifyListeners();
+      return;
+    }
+    _timer = Timer(every - (now - last), () {
+      _timer = null;
+      if (_disposed) return;
+      _last = _clock.elapsed;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _timer?.cancel();
+    source.removeListener(_onSource);
+    super.dispose();
   }
 }
