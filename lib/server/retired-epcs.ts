@@ -13,14 +13,27 @@ import type { Pool, PoolClient } from "pg";
  * physically still around.
  *
  * Owner rule (2026-10-14): an EPC that was re-encoded away never comes back
- * through a scan — no beep, no count, never LIVE again. An encode_events row
- * with status 'ok' is a verified write. An EPC that a LATER confirmed encode
- * wrote again (old → X → … → X) is a live chip ID again, so it is not retired.
+ * through a scan — no beep, no count, never LIVE again. An EPC that a LATER
+ * confirmed encode wrote again (old → X → … → X) is a live chip ID again, so
+ * it is not retired.
+ *
+ * Only a TRUSTED write retires an EPC. Since 2026-06-05 'ok' is set by
+ * encode-finalize after the chip write was verified. Before that, the claim
+ * logged 'ok' before the write was even attempted, and about a quarter of
+ * those writes failed — the old chip is still on the garment (fixed in
+ * encode-claim / encode-finalize on 2026-06-05). No encode_events row was logged between
+ * 2026-06-05 08:37 UTC and 2026-06-06, so rows created from 2026-06-06 on are
+ * trusted; an earlier one only when its new EPC really exists (a row in any
+ * status but 'unknown', the placeholder the old claim created).
  */
 
 /** Status the handheld's live catalog and epc-lookup carry for a retired EPC
  *  that has no items row. Never written to items.status. */
 export const RETIRED_EPC_STATUS = "retired";
+
+const TRUSTED_WRITE = `e.status = 'ok'
+        AND (e.created_at >= '2026-06-06'::timestamptz
+             OR EXISTS (SELECT 1 FROM items v WHERE v.epc = e.new_epc AND v.status <> 'unknown'))`;
 
 const NOT_WRITTEN_AGAIN = `NOT EXISTS (
          SELECT 1 FROM encode_events n
@@ -38,7 +51,7 @@ export async function loadRetiredEpcs(
   const r = await db.query<{ epc: string }>(
     `SELECT DISTINCT e.old_epc AS epc
        FROM encode_events e
-      WHERE e.status = 'ok'
+      WHERE ${TRUSTED_WRITE}
         AND e.old_epc = ANY($1::text[])
         AND ${NOT_WRITTEN_AGAIN}`,
     [upper],
@@ -59,7 +72,7 @@ export async function listRetiredEpcsWithoutItem(
     `SELECT DISTINCT e.old_epc AS epc
        FROM encode_events e
        LEFT JOIN locations l ON l.id::text = e.warehouse_id
-      WHERE e.status = 'ok'
+      WHERE ${TRUSTED_WRITE}
         AND (l.tenant_id = $1::uuid OR l.id IS NULL)
         AND ${NOT_WRITTEN_AGAIN}
         AND NOT EXISTS (SELECT 1 FROM items i WHERE i.epc = e.old_epc)`,
