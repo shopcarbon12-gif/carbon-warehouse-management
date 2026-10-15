@@ -23,8 +23,9 @@ import type { Pool, PoolClient } from "pg";
  * those writes failed — the old chip is still on the garment (fixed in
  * encode-claim / encode-finalize on 2026-06-05). No encode_events row was logged between
  * 2026-06-05 08:37 UTC and 2026-06-06, so rows created from 2026-06-06 on are
- * trusted; an earlier one only when its new EPC really exists (a row in any
- * status but 'unknown', the placeholder the old claim created).
+ * trusted; an earlier one only when its new chip was actually read — the
+ * claim created the new EPC's row without last_seen / first_scanned, so a row
+ * alone (even one later set to TAG KILLED by the June cleanup) proves nothing.
  */
 
 /** Status the handheld's live catalog and epc-lookup carry for a retired EPC
@@ -33,7 +34,9 @@ export const RETIRED_EPC_STATUS = "retired";
 
 const TRUSTED_WRITE = `e.status = 'ok'
         AND (e.created_at >= '2026-06-06'::timestamptz
-             OR EXISTS (SELECT 1 FROM items v WHERE v.epc = e.new_epc AND v.status <> 'unknown'))`;
+             OR EXISTS (SELECT 1 FROM items v
+                         WHERE v.epc = e.new_epc
+                           AND (v.last_seen_at IS NOT NULL OR v.first_scanned_at IS NOT NULL)))`;
 
 const NOT_WRITTEN_AGAIN = `NOT EXISTS (
          SELECT 1 FROM encode_events n
