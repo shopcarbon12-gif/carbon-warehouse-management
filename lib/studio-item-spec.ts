@@ -387,6 +387,89 @@ export function specRiskReport(
   return { blocking, warnings };
 }
 
+/* ── Second-look corrections (owner, 2026-10-14: a vest with PLAIN chest flaps
+   got "flap pockets with button closure" and an oversized drop-shoulder vest
+   got "regular fit"; every panel drew what the spec said). The item-spec route
+   asks one targeted question about the photos and these rewrite the lines. ── */
+
+const FLAP_WORDS = /\b(?:flaps?|chest pockets?|breast pockets?)\b/i;
+const FLAP_FASTENER = /\b(?:buttons?|buttoned|snaps?|press studs?|poppers?|zips?|zippers?)\b/i;
+const FLAP_FASTENER_DENIED = /\b(?:no|without)\s+(?:\w+\s+){0,2}(?:buttons?|snaps?|zips?|zippers?)\b/i;
+
+/** Spec lines that put a button / snap / zip on the chest-pocket flaps. */
+export function flapFastenerLines(lockText: string): number[] {
+  return String(lockText || "")
+    .split("\n")
+    .map((raw) => {
+      const m = /^\s*(\d+)\.\s*(.*)$/.exec(raw);
+      return m ? { n: Number(m[1]), text: m[2] } : null;
+    })
+    .filter((l): l is { n: number; text: string } => !!l && !/^OUTFIT\b/i.test(l.text))
+    .filter((l) => FLAP_WORDS.test(l.text) && FLAP_FASTENER.test(l.text) && !FLAP_FASTENER_DENIED.test(l.text))
+    .map((l) => l.n);
+}
+
+/** Those lines rewritten for plain flaps (the photos show no fastener on them). */
+export function withPlainFlaps(lockText: string): string {
+  const lines = new Set(flapFastenerLines(lockText));
+  if (!lines.size) return lockText;
+  return lockText
+    .split("\n")
+    .map((raw) => {
+      const m = /^(\s*(\d+)\.\s*)(.*)$/.exec(raw);
+      if (!m || !lines.has(Number(m[2]))) return raw;
+      const body = m[3]
+        .replace(/[,;]?\s*(?:with\s+)?(?:an?\s+)?(?:\w+\s+)?(?:buttons?|buttoned|snaps?|press studs?|poppers?|zips?|zippers?)(?:\s+(?:closures?|fastenings?|flaps?))?/gi, "")
+        .replace(/\s+([.,;])/g, "$1")
+        .replace(/[.\s]+$/, "");
+      return `${m[1]}${body} — plain flaps, no button, snap or zip on them.`;
+    })
+    .join("\n");
+}
+
+const FIT_CLASS: Record<string, "big" | "mid" | "small"> = {
+  oversized: "big", boxy: "big", baggy: "big", loose: "big", relaxed: "big",
+  regular: "mid", classic: "mid", straight: "mid",
+  slim: "small", skinny: "small", fitted: "small", tight: "small",
+};
+
+/**
+ * The FIT/SILHOUETTE line with a second look's fit, when it puts the garment in
+ * a different size class (oversized vs regular vs slim), and the extended /
+ * dropped shoulder when the line does not say so. `changed` is false when the
+ * spec already agrees.
+ */
+export function withCheckedFit(lockText: string, fit: string, dropShoulder: boolean): { text: string; changed: boolean; was: string } {
+  const want = String(fit || "").toLowerCase().trim();
+  let changed = false;
+  let was = "";
+  const text = String(lockText || "").replace(/^(\s*\d+\.\s*FIT\/SILHOUETTE:\s*)(.*)$/m, (line, head: string, rest: string) => {
+    was = rest.trim();
+    if (/set by the item instruction/i.test(rest)) return line; // the person holding it decided
+    const words = rest.toLowerCase().match(/\b(?:oversized|boxy|baggy|loose|relaxed|regular|classic|straight|slim|skinny|fitted|tight)\b/g) ?? [];
+    const have = words.map((x) => FIT_CLASS[x]).find(Boolean);
+    const need = FIT_CLASS[want];
+    let out = rest;
+    /* Only the clear misreads: oversized read as regular / slim, or the reverse.
+       Slim vs regular is too fine to overrule the first read. */
+    if (need && have !== need && (need === "big" || have === "big")) {
+      const kept = rest.replace(SPEC_FIT_WORDS, "").replace(/^[\s,;—-]+/, "").trim();
+      const fitWords = want === "oversized" || want === "boxy" ? "oversized, boxy fit" : `${want} fit`;
+      out = `${fitWords}${kept ? `, ${kept}` : "."}`;
+      changed = true;
+    }
+    if (dropShoulder && !/\b(?:drop(?:ped)?|extended)[\s-]+shoulders?\b/i.test(out)) {
+      const parts = out.split(/,\s*/);
+      const at = Math.max(0, parts.findIndex((p) => /\bfit\b/i.test(p)));
+      parts[at] = parts[at].replace(/[.\s]+$/, "") + " with extended, dropped shoulders" + (at === parts.length - 1 ? "." : "");
+      out = parts.join(", ");
+      changed = true;
+    }
+    return `${head}${out}`;
+  });
+  return { text, changed, was };
+}
+
 /* Fit words an operator writes in the item instruction ("RELAXED FIT",
    "oversized", "slim-fit"). A bare adjective only counts with a fit noun after
    it, except the ones that only ever describe a fit. */

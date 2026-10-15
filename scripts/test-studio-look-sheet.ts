@@ -32,7 +32,7 @@ import {
 import { ACCESSORY_KINDS, accessoryPanelLabel, accessoryShotText, buildAccessoryPanelPrompt, buildAccessoryStylingLock } from "@/lib/accessoryShots";
 import { buildPoseVariationDirective } from "@/lib/poseVariation";
 import { pose8OptionFor } from "@/lib/panelPoseLibraries";
-import { specRiskReport } from "@/lib/studio-item-spec";
+import { flapFastenerLines, specRiskReport, withCheckedFit, withPlainFlaps } from "@/lib/studio-item-spec";
 import { buildLockText } from "@/lib/server/item-spec-build";
 
 const CHOICE = /\bor\b/i;
@@ -343,6 +343,27 @@ test("spec risk: buttoned chest flaps raise no warning (a guess, not evidence)",
   ].join("\n");
   const r = specRiskReport(vest, ctx("Denim Vest", "VEST"));
   assert.equal(r.warnings.length, 0, JSON.stringify(r.warnings));
+});
+
+test("second look: plain chest flaps and an oversized drop-shoulder fit rewrite the spec lines", () => {
+  const vest = [
+    "2. FIT/SILHOUETTE: regular fit, sleeveless, hip-length.",
+    "6. ZONE — CHEST: two flap pockets with button closure.",
+    "10. HARDWARE: button ×6, metallic silver, front, centre, round.",
+    "12. POCKET: flap pocket ×2, front, chest, angled flap with button closure.",
+    "20. OUTFIT — TOP UNDER: mint green ribbed crop top with button detail at the chest.",
+  ].join("\n");
+  assert.deepEqual(flapFastenerLines(vest), [6, 12]);
+  const plain = withPlainFlaps(vest);
+  assert.match(plain, /^6\. ZONE — CHEST: two flap pockets — plain flaps, no button, snap or zip on them\.$/m);
+  assert.match(plain, /^12\. POCKET: flap pocket ×2, front, chest, angled flap — plain flaps/m);
+  assert.match(plain, /^10\. HARDWARE: button ×6/m, "the front closure's buttons stay");
+  assert.match(plain, /^20\. OUTFIT — TOP UNDER: mint green ribbed crop top with button detail/m, "outfit lines are not the product");
+  const fit = withCheckedFit(plain, "oversized", true);
+  assert.ok(fit.changed);
+  assert.match(fit.text, /^2\. FIT\/SILHOUETTE: oversized, boxy fit with extended, dropped shoulders, sleeveless, hip-length\.$/m);
+  assert.equal(withCheckedFit("2. FIT/SILHOUETTE: slim fit, ankle length.", "regular", false).changed, false, "slim vs regular is not overruled");
+  assert.equal(withCheckedFit("2. FIT/SILHOUETTE: oversized, boxy.", "boxy", false).changed, false);
 });
 
 test("spec risk: Wayne's styling tank text is flagged; the analyzer no longer locks it", () => {

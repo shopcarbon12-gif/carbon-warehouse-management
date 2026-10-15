@@ -31,7 +31,14 @@ import {
   normalizeRemoteImageUrl,
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
-import { classifyBackView, specRiskReport, type TextReading } from "@/lib/studio-item-spec";
+import {
+  classifyBackView,
+  flapFastenerLines,
+  specRiskReport,
+  withCheckedFit,
+  withPlainFlaps,
+  type TextReading,
+} from "@/lib/studio-item-spec";
 import { detectUprightTurns } from "@/lib/server/studio-upright";
 import {
   buildLockText,
@@ -78,6 +85,63 @@ async function secondTextRead(client: OpenAI, model: string, spec: any, imageCon
   } catch (e) {
     console.warn("[item-spec] second text read failed", e);
     return [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+type ConstructionCheck = { flapFastener: string; fit: string; dropShoulder: string; confidence: string } | null;
+
+/**
+ * A second, targeted look at what the analysis gets wrong by habit and every
+ * panel then copies (owner, 2026-10-14: a vest with PLAIN chest flaps got
+ * "flap pockets with button closure", an oversized drop-shoulder vest got
+ * "regular fit"). One small question about the product only; never fails the
+ * analysis — on any error there is simply no correction.
+ */
+async function secondConstructionRead(client: OpenAI, model: string, itemType: string, imageContent: ImagePart[]): Promise<ConstructionCheck> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TEXT_READ_TIMEOUT_MS);
+  try {
+    const completion = await client.chat.completions.create(
+      {
+        model,
+        temperature: 0,
+        max_tokens: 200,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: "You inspect garment construction in product photos. Output valid JSON only." },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: [
+                  `Look only at THE PRODUCT in these photos — the ${itemType} — not the other clothes worn with it. Answer JSON only:`,
+                  '{"flap_fastener": "yes" | "no" | "unclear" | "no_flaps", "fit": "oversized" | "boxy" | "relaxed" | "regular" | "slim" | "skinny", "drop_shoulder": "yes" | "no" | "n/a", "confidence": "high" | "low"}',
+                  '- flap_fastener: look ONLY at the flaps of the chest / breast pockets. "yes" only if you can SEE a button, snap or zip ON a flap itself. The buttons of the front closure do not count. Plain flaps → "no". No chest-pocket flaps → "no_flaps".',
+                  "- fit: how the product sits on the person compared with their body: oversized / boxy (clearly wider than the body), relaxed, regular, slim, skinny.",
+                  '- drop_shoulder: "yes" if the product\'s shoulder seam sits clearly past the person\'s natural shoulder (extended / dropped shoulder); "n/a" for trousers, shorts and skirts.',
+                  '- confidence: "high" only if the photos show these clearly.',
+                ].join("\n"),
+              },
+              ...imageContent,
+            ],
+          },
+        ],
+      },
+      { signal: ac.signal },
+    );
+    const j = JSON.parse(text(completion.choices?.[0]?.message?.content) || "{}") as Record<string, unknown>;
+    return {
+      flapFastener: String(j.flap_fastener ?? "").toLowerCase(),
+      fit: String(j.fit ?? "").toLowerCase(),
+      dropShoulder: String(j.drop_shoulder ?? "").toLowerCase(),
+      confidence: String(j.confidence ?? "").toLowerCase(),
+    };
+  } catch (e) {
+    console.warn("[item-spec] construction check failed", e);
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -240,10 +304,30 @@ async function POST_handler(req: NextRequest) {
       return NextResponse.json({ error: "Item analysis returned no usable result. Please retry." }, { status: 502 });
     }
     const accessory = isAccessoryItemType(itemType);
-    const lockText = buildLockText(spec, { accessory });
+    let lockText = buildLockText(spec, { accessory });
     if (!lockText) return NextResponse.json({ error: "Item analysis found nothing to lock. Add clearer item photos." }, { status: 422 });
     const { warnings: photoWarnings } = buildPhotoChecks(spec?.photo_checks, numbered);
-    const [turns, textReadings] = await Promise.all([uprightTurns, secondTextRead(client, model, spec, imageContent)]);
+    const [turns, textReadings, construction] = await Promise.all([
+      uprightTurns,
+      secondTextRead(client, model, spec, imageContent),
+      accessory ? Promise.resolve(null) : secondConstructionRead(client, model, itemType, imageContent),
+    ]);
+    /* Correct the lines the second look contradicts, and say so. */
+    const specCorrections: string[] = [];
+    const flapLines = flapFastenerLines(lockText);
+    if (flapLines.length && construction?.flapFastener === "no") {
+      lockText = withPlainFlaps(lockText);
+      specCorrections.push(
+        `Line${flapLines.length > 1 ? "s" : ""} ${flapLines.join(" and ")} put buttons on the chest-pocket flaps; a second look at the photos shows plain flaps, so ${flapLines.length > 1 ? "they now say" : "it now says"} plain flaps.`,
+      );
+    }
+    if (construction?.confidence === "high" && construction.fit) {
+      const r = withCheckedFit(lockText, construction.fit, construction.dropShoulder === "yes");
+      if (r.changed) {
+        lockText = r.text;
+        specCorrections.push(`The fit was read as "${r.was.replace(/\.$/, "")}"; a second look at the photos corrected the FIT line.`);
+      }
+    }
     /* What to check before paying for four panels. The Studio holds Generate on
        `blocking` until the operator confirms the spec; it recomputes the report
        itself after an edit, from the same lock text and `textReadings`. */
@@ -259,6 +343,7 @@ async function POST_handler(req: NextRequest) {
       lockText,
       risk,
       textReadings,
+      specCorrections,
       backView: classifyBackView(spec?.back_view, spec?.back_state).state,
       imagesAnalyzed: images.length,
       imagesDropped: droppedRefs,

@@ -1637,6 +1637,8 @@ export function CarbonStudioTab({
           photoWarnings?: string[];
           /** Photos lying sideways / upside down, with the clockwise turn. */
           photoRotations?: Array<{ url: string; degrees: 90 | 180 | 270 }>;
+          /** Lines a second look at the photos corrected (flap buttons, fit). */
+          specCorrections?: string[];
         };
         if (!r.ok || !j.lockText) throw new Error(j.error ?? "Item analysis failed");
         setItemSpec(j.lockText);
@@ -1675,7 +1677,12 @@ export function CarbonStudioTab({
           }
         }
         const dropped = Number(j.imagesDropped) || 0;
-        if (dropped) setMsg(`Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).`);
+        const corrected = (j.specCorrections ?? []).filter(Boolean);
+        if (dropped || corrected.length) {
+          setMsg(
+            [dropped ? `Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).` : "", ...corrected].filter(Boolean).join(" "),
+          );
+        }
         return { lockText: j.lockText, dropped };
       } catch (e) {
         if (signal?.aborted) {
