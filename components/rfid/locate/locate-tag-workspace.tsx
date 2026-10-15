@@ -20,14 +20,16 @@
  * Bulk (owner, 2026-10-15): the same page, but several target tags instead of
  * one — each reader box lists which of them it hears, and each tag shows the
  * reader that hears it best. "Single" on a tag opens it in the one-tag view
- * (where Refine lives). No beep, nothing else changes.
+ * (where Refine lives). No beep, nothing else changes. Import CSV / XLSX
+ * (the Bulk Geiger page's parser) adds a file's EPCs; Send to handheld puts
+ * the list on every handheld here (Cloud + Geiger → Bulk Geiger).
  *
  * Nothing here writes to inventory — locating a tag is read-only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Radio, Loader2, Search, X, Crosshair, Ruler } from "lucide-react";
+import { Radio, Loader2, Search, X, Crosshair, Ruler, Upload, Smartphone } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
 import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
@@ -205,6 +207,9 @@ export function LocateTagWorkspace() {
   }, [mode, target, bulkTargets]);
 
   const [err, setErr] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<"import" | "send" | null>(null);
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   // Debounced search. Skipped once the single target is locked in; bulk keeps
   // searching so more tags can be added.
@@ -292,6 +297,90 @@ export function LocateTagWorkspace() {
       }
     }
   }, []);
+
+  /** Bulk: a CSV / XLSX EPC list (first column, same parser as the Bulk Geiger page). */
+  const importFile = useCallback(
+    async (file: File) => {
+      setBulkBusy("import");
+      setErr(null);
+      setNotice(null);
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/rfid/bulk-geiger/parse", { method: "POST", body: fd });
+        const j = (await res.json().catch(() => ({}))) as { epcs?: string[]; truncated?: boolean; error?: string };
+        if (!res.ok) throw new Error(j.error ?? "Could not read the file.");
+        const all = (j.epcs ?? []).map((e) => e.replace(/\s/g, "").toUpperCase());
+        const valid = Array.from(new Set(all.filter((e) => EPC24.test(e))));
+        const skipped = all.length - valid.length;
+        if (valid.length === 0) {
+          setErr(`No EPCs found in ${file.name} — the first column must hold 24-character EPC numbers.`);
+          return;
+        }
+        const fresh = valid.filter((e) => !bulkByEpc.has(e));
+        addBulkTargets(fresh.map(rawTarget));
+        if (fresh.length) void enrichRaw(fresh);
+        setNotice(
+          `Imported ${fresh.length} EPC${fresh.length === 1 ? "" : "s"} from ${file.name}` +
+            (valid.length - fresh.length ? ` · ${valid.length - fresh.length} already on the list` : "") +
+            (skipped ? ` · ${skipped} line${skipped === 1 ? "" : "s"} skipped (not an EPC)` : "") +
+            (j.truncated ? " · file cut at 5,000 rows" : "") +
+            ".",
+        );
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Import failed.");
+      } finally {
+        setBulkBusy(null);
+      }
+    },
+    [bulkByEpc, addBulkTargets, enrichRaw],
+  );
+
+  /** Bulk: put the list on every handheld at this location (their Cloud + Geiger screen). */
+  const sendToHandheld = useCallback(async () => {
+    const epcs = bulkTargets.map((t) => t.epc);
+    if (epcs.length === 0) return;
+    const ok = window.confirm(
+      `Send ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to every handheld at your active location?\n\n` +
+        "They appear on each handheld's Cloud + Geiger screen — its radar button opens them in Bulk Geiger.",
+    );
+    if (!ok) return;
+    setBulkBusy("send");
+    setErr(null);
+    setNotice(null);
+    try {
+      let handhelds = 0;
+      let where = "this location";
+      for (let i = 0; i < epcs.length; i += 5000) {
+        const res = await fetch("/api/handhelds/epc-queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ epcs: epcs.slice(i, i + 5000) }),
+        });
+        const j = (await res.json().catch(() => ({}))) as {
+          handhelds?: number;
+          location?: { code?: string; name?: string };
+          warning?: string;
+          error?: string;
+        };
+        if (!res.ok) throw new Error(j.error ?? "Send failed.");
+        if (j.warning) {
+          setNotice(j.warning);
+          return;
+        }
+        handhelds = j.handhelds ?? handhelds;
+        if (j.location?.code) where = `${j.location.code}${j.location.name ? ` — ${j.location.name}` : ""}`;
+      }
+      setNotice(
+        `Sent ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to ${handhelds} handheld${handhelds === 1 ? "" : "s"} at ${where} — ` +
+          "open Cloud + Geiger, then the radar button for Bulk Geiger.",
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Send failed.");
+    } finally {
+      setBulkBusy(null);
+    }
+  }, [bulkTargets]);
 
   const addPasted = useCallback(() => {
     const known = new Map(matches.map((m) => [m.epc.toUpperCase(), m]));
@@ -739,13 +828,53 @@ export function LocateTagWorkspace() {
       <div className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
         {mode === "bulk" ? (
           <div className="space-y-2">
-            <label
-              htmlFor="locate-bulk-search"
-              className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
-            >
-              <Search className="h-3.5 w-3.5" />
-              Target tags · {bulkTargets.length} picked
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label
+                htmlFor="locate-bulk-search"
+                className="flex items-center gap-2 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-muted)]"
+              >
+                <Search className="h-3.5 w-3.5" />
+                Target tags · {bulkTargets.length} picked
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void importFile(f);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={bulkBusy !== null}
+                  onClick={() => fileRef.current?.click()}
+                  title="Add the EPCs in a CSV or XLSX file (first column)"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50 max-md:min-h-11"
+                >
+                  {bulkBusy === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Import CSV / XLSX
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkBusy !== null || bulkTargets.length === 0}
+                  onClick={() => void sendToHandheld()}
+                  title="Put this list on every handheld at your active location (Cloud + Geiger → Bulk Geiger)"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:border-teal-500/40 disabled:opacity-50 max-md:min-h-11"
+                >
+                  {bulkBusy === "send" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
+                  Send to handheld ({bulkTargets.length})
+                </button>
+              </div>
+            </div>
+            {notice ? (
+              <p className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 font-mono text-xs text-emerald-300">
+                {notice}
+              </p>
+            ) : null}
             <input
               id="locate-bulk-search"
               value={query}
