@@ -6,6 +6,7 @@ import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
 import { decodeEpc, type EpcConfig } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId } from "@/lib/server/legacy-epc-catalog";
 import { loadGhostWmsStatuses } from "@/lib/server/status-label-enforcement";
+import { loadRetiredEpcs, RETIRED_EPC_STATUS } from "@/lib/server/retired-epcs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -168,6 +169,9 @@ async function POST_handler(req: Request) {
   // Statuses ghosted on the Statuses page: the handheld ignores these tags
   // (no count). Older apps ignore the field.
   const ghostStatuses = new Set(await loadGhostWmsStatuses(pool));
+  // An EPC a confirmed re-encode replaced has no row, which reads as "fresh,
+  // count it" — report it as retired + ghost instead (2026-10-14).
+  const retired = await loadRetiredEpcs(pool, epcsForLookup);
 
   const rows = decoded.map((d) => {
     const primaryCat = d.systemId ? catalog.get(d.systemId) : undefined;
@@ -191,8 +195,8 @@ async function POST_handler(req: Request) {
       // items.status for the chip. null when no items row exists for
       // this EPC under this tenant — handheld treats that as "fresh,
       // count as valid (upload promotes to in-stock)".
-      status: itemStatus.get(d.epcHex) ?? null,
-      ghost: ghostStatuses.has(itemStatus.get(d.epcHex) ?? ""),
+      status: itemStatus.get(d.epcHex) ?? (retired.has(d.epcHex) ? RETIRED_EPC_STATUS : null),
+      ghost: retired.has(d.epcHex) || ghostStatuses.has(itemStatus.get(d.epcHex) ?? ""),
     };
   });
 

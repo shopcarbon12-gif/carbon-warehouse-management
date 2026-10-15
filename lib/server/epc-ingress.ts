@@ -6,6 +6,7 @@ import {
   shouldGhostDropLabel,
 } from "@/lib/server/status-label-enforcement";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
+import { loadRetiredEpcs, RETIRED_EPC_STATUS } from "@/lib/server/retired-epcs";
 
 /**
  * Unified EPC ingress — every EPC entering the WMS (fixed reader, handheld,
@@ -85,6 +86,8 @@ export type EpcIngressResult = {
    * may not change. Nothing was written; `status` above is meaningless — read
    * `kept.status` (the tag's current status). `ghost` = its status label is set
    * to "Ignore" on the Statuses page (scanners ignore the read entirely).
+   * A retired EPC (re-encoded away, 2026-10-14) is kept + ghost too; its
+   * `kept.status` is 'retired' when it has no row.
    */
   kept?: { status: string; ghost: boolean };
 };
@@ -115,12 +118,14 @@ type PriorItem = { status: string; customSkuId: string | null };
 export type EpcIngressContext = {
   prior: Map<string, PriorItem>;
   isGhost: (status: string) => boolean;
+  /** EPCs a confirmed re-encode replaced (lib/server/retired-epcs). */
+  retired: Set<string>;
 };
 
 /**
- * Lock + load the current rows for [epcs] and the Statuses-page ghost flags.
- * FOR UPDATE so a concurrent ingest of the same EPC can't slip a status change
- * between this read and the write.
+ * Lock + load the current rows for [epcs], the Statuses-page ghost flags and
+ * which of them are retired. FOR UPDATE so a concurrent ingest of the same EPC
+ * can't slip a status change between this read and the write.
  */
 export async function loadEpcIngressContext(
   client: PoolClient,
@@ -140,7 +145,8 @@ export async function loadEpcIngressContext(
   const labels = await loadStatusLabelBrainMap(client);
   const isGhost = (status: string) =>
     shouldGhostDropLabel(labels.get(labelNameForWmsStatus(status).trim().toLowerCase()));
-  return { prior, isGhost };
+  const retired = await loadRetiredEpcs(client, upper);
+  return { prior, isGhost, retired };
 }
 
 // Per-tenant config cache. The brain is small (one row per tenant) and rarely
@@ -243,6 +249,19 @@ export async function ingestEpc(
 ): Promise<EpcIngressResult> {
   const c = ctx ?? (await loadEpcIngressContext(client, [input.epc]));
   const prior = c.prior.get(input.epc.trim().toUpperCase()) ?? null;
+
+  // Scan rule (owner, 2026-10-14): an EPC a confirmed re-encode replaced is
+  // ignored outright, whatever its row says or whether it has one — a late
+  // upload of a read taken before the encode must not bring it back LIVE.
+  if (isScanSource(input.source) && c.retired.has(input.epc.trim().toUpperCase())) {
+    return {
+      itemId: null,
+      status: "tag_killed",
+      customSkuId: prior?.customSkuId ?? null,
+      serialNumber: null,
+      kept: { status: prior?.status ?? RETIRED_EPC_STATUS, ghost: true },
+    };
+  }
 
   // Scan rule: an existing tag whose status is not LIVE or UNKNOWN is left
   // exactly as it is — ghosted statuses are ignored outright, and nothing a

@@ -3,6 +3,7 @@ import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
 import { loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
+import { loadRetiredEpcs } from "@/lib/server/retired-epcs";
 import {
   loadStatusLabelBrainMap,
   shouldGhostDropLabel,
@@ -28,7 +29,9 @@ import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
  *  - defective_no_match     first-time scan, no catalog hit → tag_killed
  *  - locked            any other status, or an existing tag that no longer
  *                      decodes; left untouched
- *  - ghost             status set to "Ignore" on the Statuses page; dropped
+ *  - ghost             status set to "Ignore" on the Statuses page, or an EPC a
+ *                      confirmed re-encode replaced (lib/server/retired-epcs);
+ *                      dropped
  */
 
 export type CycleCountScanOutcome =
@@ -95,10 +98,25 @@ export async function ingestCycleCountEpcs(
     });
   }
 
+  const retired = await loadRetiredEpcs(client, norm);
+
   const results: CycleCountScanResult[] = [];
 
   for (const epc of norm) {
     const prior = existingByEpc.get(epc) ?? null;
+
+    // 0. Re-encoded away (owner, 2026-10-14): the chip carries another EPC now.
+    //    Dropped like a ghost — never counted, never brought back LIVE.
+    if (retired.has(epc)) {
+      results.push({
+        epc,
+        outcome: "ghost",
+        previous_status: prior?.status ?? null,
+        new_status: null,
+        from_location_id: prior?.location_id ?? null,
+      });
+      continue;
+    }
 
     // 1. Scan rule (owner, 2026-10-13): a cycle-count read may only bring an
     //    UNKNOWN tag, or a brand-new tag that decodes to a catalog SKU, to LIVE.

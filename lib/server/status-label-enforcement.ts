@@ -3,6 +3,7 @@ import {
   WMS_STATUS_TO_LABEL_NAME,
   labelNameForWmsStatus,
 } from "@/lib/server/wms-status-to-label-name";
+import { loadRetiredEpcs } from "@/lib/server/retired-epcs";
 
 export type StatusLabelBrainRow = {
   name: string;
@@ -93,7 +94,8 @@ export async function findAuditBlockedEpc(
 export type EpcVisibilityRow = { epc: string; visible: boolean };
 
 /**
- * Per-EPC visibility for handheld ghost filter. Unknown EPC → visible (commissioning).
+ * Per-EPC visibility for handheld ghost filter. Unknown EPC → visible
+ * (commissioning) — unless a confirmed re-encode retired it (2026-10-14).
  */
 export async function resolveEpcVisibilityForTenant(
   db: Pool | PoolClient,
@@ -116,7 +118,9 @@ export async function resolveEpcVisibilityForTenant(
   for (const row of r.rows) {
     byEpc.set(row.epc.trim().toUpperCase(), row.status);
   }
+  const retired = await loadRetiredEpcs(db, norm);
   return norm.map((epc) => {
+    if (retired.has(epc)) return { epc, visible: false };
     const st = byEpc.get(epc);
     if (st == null) return { epc, visible: true };
     const flags = flagsForWmsStatus(map, st);

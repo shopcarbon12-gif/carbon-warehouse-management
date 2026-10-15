@@ -4,6 +4,11 @@ import { gzip } from "node:zlib";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { resolveEdgeDeviceCached } from "@/lib/server/edge-device-cache";
 import { loadGhostWmsStatuses } from "@/lib/server/status-label-enforcement";
+import {
+  listRetiredEpcsWithoutItem,
+  loadRetiredEpcs,
+  RETIRED_EPC_STATUS,
+} from "@/lib/server/retired-epcs";
 
 /**
  * Live catalog for the handheld (Add-On Catalog / Add-On Count).
@@ -24,6 +29,12 @@ import { loadGhostWmsStatuses } from "@/lib/server/status-label-enforcement";
  * locations are tenant-scoped through locations.tenant_id (all locations, every
  * status); custom_skus and matrices are global. locationId only feeds the
  * phone's BIN line — it filters nothing here.
+ *
+ * Retired EPCs (re-encoded away, lib/server/retired-epcs) have no items row, so
+ * the phone would read them as brand-new and beep. They ride along as items
+ * with status 'retired' (no SKU / bin / location) and 'retired' is listed in
+ * ghostStatuses — phones already ignore ghost statuses, no app update needed.
+ * In a delta, the tombstone a re-encode's DELETE leaves becomes that upsert.
  */
 
 export const LIVE_CATALOG_VERSION = 1;
@@ -93,8 +104,22 @@ type ItemRow = {
   status: string;
   sku_id: string | null;
   bin_id: string | null;
-  loc_id: string;
+  /** null only for a retired EPC (no items row). */
+  loc_id: string | null;
 };
+
+const retiredItemRow = (epc: string): ItemRow => ({
+  epc,
+  status: RETIRED_EPC_STATUS,
+  sku_id: null,
+  bin_id: null,
+  loc_id: null,
+});
+
+/** Scanners ignore these: the Statuses page's ghosted statuses + 'retired'. */
+async function ghostStatusesForPhone(client: PoolClient): Promise<string[]> {
+  return [...(await loadGhostWmsStatuses(client)), RETIRED_EPC_STATUS];
+}
 type SkuRow = {
   id: string;
   system_id: string | null;
@@ -370,6 +395,7 @@ export async function buildLiveCatalogSnapshot(
       [args.tenantId],
     );
     const epcCfg = await queryEpcCfg(client, args.tenantId);
+    const retired = await listRetiredEpcsWithoutItem(client, args.tenantId);
 
     const p = emptyPayload("snapshot", {
       cursor: formatLiveCatalogCursor(snap.snapText, snap.serverTime.getTime() / 1000),
@@ -382,10 +408,10 @@ export async function buildLiveCatalogSnapshot(
       bins: bins.rows,
       matrices: matrices.rows,
       skus: skus.rows,
-      items: items.rows,
+      items: [...items.rows, ...retired.map(retiredItemRow)],
       epcCfg,
     });
-    p.ghostStatuses = await loadGhostWmsStatuses(client);
+    p.ghostStatuses = await ghostStatusesForPhone(client);
     return p;
   });
   console.info("[live-catalog] snapshot", {
@@ -503,15 +529,6 @@ export async function buildLiveCatalogDelta(
     const locations = await queryLocations(client, args.tenantId);
     const epcCfg = await queryEpcCfg(client, args.tenantId);
 
-    const p = emptyPayload("delta", base);
-    fillPayload(p, {
-      locations,
-      bins: bins.rows,
-      matrices: matrices.rows,
-      skus: skus.rows,
-      items: items.rows,
-      epcCfg,
-    });
     // The same key can be tombstoned more than once inside a window.
     const deadItems = new Set<string>();
     const deadSkus = new Set<string>();
@@ -519,8 +536,22 @@ export async function buildLiveCatalogDelta(
       if (t.kind === "item") deadItems.add(t.key.toUpperCase());
       else deadSkus.add(t.key);
     }
+    // A deleted EPC that a re-encode retired stays on the phone as 'retired'
+    // (ghost) instead of disappearing, so a later read of it stays silent.
+    const retired = await loadRetiredEpcs(client, [...deadItems]);
+    for (const epc of retired) deadItems.delete(epc);
+
+    const p = emptyPayload("delta", base);
+    fillPayload(p, {
+      locations,
+      bins: bins.rows,
+      matrices: matrices.rows,
+      skus: skus.rows,
+      items: [...items.rows, ...[...retired].map(retiredItemRow)],
+      epcCfg,
+    });
     p.tombstones = { items: [...deadItems], skus: [...deadSkus] };
-    p.ghostStatuses = await loadGhostWmsStatuses(client);
+    p.ghostStatuses = await ghostStatusesForPhone(client);
     return p;
   });
 
