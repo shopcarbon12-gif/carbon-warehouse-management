@@ -24,12 +24,17 @@
  * (the Bulk Geiger page's parser) adds a file's EPCs; Send to handheld puts
  * the list on every handheld here (Cloud + Geiger → Bulk Geiger).
  *
+ * Bulk keeps each tag's STRONGEST sighting locked (reader, zone, antenna and
+ * its configured power, best signal, time) — it only moves to a stronger read,
+ * never drops when the tag goes quiet — and Export PDF prints a "where to
+ * look" sheet grouped by reader before walking the floor.
+ *
  * Nothing here writes to inventory — locating a tag is read-only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Radio, Loader2, Search, X, Crosshair, Ruler, Upload, Smartphone } from "lucide-react";
+import { Radio, Loader2, Search, X, Crosshair, Ruler, Upload, Smartphone, FileDown, MapPin } from "lucide-react";
 
 import { ReaderPicker } from "@/components/shared/reader-picker";
 import { ReaderForceStopButton } from "@/components/shared/reader-force-stop-button";
@@ -109,6 +114,34 @@ type SweepMessage =
       totalSteps: number;
       stepEndsAtMs: number;
     };
+
+/** Strongest sighting of one bulk tag this session ("locked"). */
+type Lock = { readerId: string; antennaId: string | null; rssi: number; at: number };
+
+type AntennaInfo = { readerId: string; name: string; powerDbm: number | null };
+
+function antennaIndex(tree: HardwareConfigTree | undefined): Map<string, AntennaInfo> {
+  const out = new Map<string, AntennaInfo>();
+  if (!tree?.locations) return out;
+  for (const loc of tree.locations) {
+    const readers = [...(loc.zones ?? []).flatMap((z) => z.readers ?? []), ...(loc.unzonedReaders ?? [])];
+    for (const r of readers) {
+      for (const a of r.antennas ?? []) {
+        const p = Number((a.config as Record<string, unknown> | null)?.transmit_power_dbm);
+        out.set(a.id, { readerId: r.id, name: a.name, powerDbm: Number.isFinite(p) ? p : null });
+      }
+    }
+  }
+  return out;
+}
+
+function escapeHtml(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 type FlatReader = {
   id: string;
@@ -431,6 +464,9 @@ export function LocateTagWorkspace() {
   const scanSessionIdsRef = useRef<string[]>([]);
   /** readerId → target EPC → what that reader has heard of it. */
   const [stats, setStats] = useState<Record<string, Record<string, ReaderStat>>>({});
+  /** Bulk: EPC → strongest sighting so far. Survives stop / a new scan; only a stronger read replaces it. */
+  const [locks, setLocks] = useState<Record<string, Lock>>({});
+  const antennaById = useMemo(() => antennaIndex(hwTree), [hwTree]);
 
   // Keep the chosen readers warm while the page is open so SCAN is instant.
   const selectedIdList = useMemo(() => Array.from(selectedReaders), [selectedReaders]);
@@ -531,6 +567,7 @@ export function LocateTagWorkspace() {
         deviceId?: string;
         epcs?: string[];
         epcRssiMap?: Record<string, number>;
+        epcAntennaMap?: Record<string, string>;
       };
       try {
         p = JSON.parse(ev.data) as typeof p;
@@ -565,6 +602,20 @@ export function LocateTagWorkspace() {
           };
         }
         return { ...prev, [deviceId]: forReader };
+      });
+      // Lock each tag's strongest sighting (reader + antenna). Reads without a
+      // signal can't rank, so they never move a lock.
+      setLocks((prev) => {
+        let next: Record<string, Lock> | null = null;
+        for (const epc of hits) {
+          const rssi = p.epcRssiMap?.[epc];
+          if (rssi === undefined || rssi === null) continue;
+          const cur = (next ?? prev)[epc];
+          if (cur && cur.rssi >= rssi) continue;
+          next = next ?? { ...prev };
+          next[epc] = { readerId: deviceId, antennaId: p.epcAntennaMap?.[epc] ?? null, rssi, at };
+        }
+        return next ?? prev;
       });
     };
     return () => es.close();
@@ -792,6 +843,96 @@ export function LocateTagWorkspace() {
     return out;
   }, [mode, stats, selectedReaders, readerById, nowMs]);
 
+  /** A lock in words: where the tag was heard strongest. */
+  const lockInfo = useCallback(
+    (l: Lock) => {
+      const reader = readerById.get(l.readerId);
+      const ant = l.antennaId ? antennaById.get(l.antennaId) : undefined;
+      return {
+        readerName: reader?.name ?? l.readerId.slice(0, 8),
+        zone: reader?.zoneName ?? "—",
+        location: reader?.locationCode ?? "",
+        antenna: ant?.name ?? null,
+        powerDbm: ant?.powerDbm ?? null,
+        rssi: l.rssi,
+        feet: rssiToFeet(l.rssi),
+        time: new Date(l.at).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", second: "2-digit" }),
+      };
+    },
+    [readerById, antennaById],
+  );
+  const lockedPerReader = useMemo(() => {
+    const out = new Map<string, number>();
+    if (mode !== "bulk") return out;
+    for (const t of bulkTargets) {
+      const l = locks[t.epc];
+      if (l) out.set(l.readerId, (out.get(l.readerId) ?? 0) + 1);
+    }
+    return out;
+  }, [mode, bulkTargets, locks]);
+  const lockedCount = mode === "bulk" ? bulkTargets.filter((t) => locks[t.epc]).length : 0;
+
+  /** "Where to look" sheet — a print-ready page; the print dialog's Save as PDF makes the file. */
+  const exportPdf = () => {
+    const ft = (f: number) => (f < 10 ? f.toFixed(1) : String(Math.round(f)));
+    const groups = new Map<string, { title: string; sub: string; rows: string[] }>();
+    const notHeard: string[] = [];
+    const sorted = [...bulkTargets].sort((a, b) => (locks[b.epc]?.rssi ?? -999) - (locks[a.epc]?.rssi ?? -999));
+    for (const t of sorted) {
+      const product = [t.sku, t.description, [t.color, t.size].filter(Boolean).join(" / ")].filter(Boolean).join(" · ") || "Raw EPC — no catalog item";
+      const facts = [t.status, t.binCode ? `last bin ${t.binCode}` : null].filter(Boolean).join(" · ");
+      const l = locks[t.epc];
+      if (!l) {
+        notHeard.push(`<tr><td class="epc">${escapeHtml(t.epc)}</td><td>${escapeHtml(product)}</td><td>${escapeHtml(facts)}</td></tr>`);
+        continue;
+      }
+      const i = lockInfo(l);
+      const key = l.readerId;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          title: i.readerName,
+          sub: [i.zone, i.location, i.antenna ? `${i.antenna}${i.powerDbm !== null ? ` @ ${i.powerDbm} dBm` : ""}` : null].filter(Boolean).join(" · "),
+          rows: [],
+        });
+      }
+      groups.get(key)!.rows.push(
+        `<tr><td class="epc">${escapeHtml(t.epc)}</td><td>${escapeHtml(product)}</td><td>${escapeHtml(facts)}</td>` +
+          `<td class="num">${i.rssi.toFixed(0)} dBm</td><td class="num">≈ ${ft(i.feet)} ft</td><td class="num">${escapeHtml(i.time)}</td></tr>`,
+      );
+    }
+    const ordered = [...groups.values()].sort((a, b) => a.sub.localeCompare(b.sub) || a.title.localeCompare(b.title));
+    const now = new Date().toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Where to look — ${escapeHtml(now)}</title><style>
+      body{font:12px/1.4 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111;margin:24px}
+      h1{font-size:18px;margin:0 0 2px} .meta{color:#555;margin:0 0 14px}
+      h2{font-size:14px;margin:18px 0 2px} .sub{color:#555;margin:0 0 6px}
+      table{width:100%;border-collapse:collapse;margin-bottom:6px} th,td{border-bottom:1px solid #ddd;padding:4px 6px;text-align:left;vertical-align:top}
+      th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#555} .epc{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+      .num{white-space:nowrap;text-align:right} .note{color:#555;font-size:11px;margin-top:16px}
+      section{break-inside:avoid-page} @page{size:letter;margin:14mm}
+    </style></head><body>
+      <h1>Where to look — strongest reader per tag</h1>
+      <p class="meta">${escapeHtml(now)} · ${bulkTargets.length} tags · ${lockedCount} located · ${bulkTargets.length - lockedCount} not heard</p>
+      ${ordered
+        .map(
+          (g) => `<section><h2>${escapeHtml(g.title)} — ${g.rows.length} tag${g.rows.length === 1 ? "" : "s"}</h2><p class="sub">${escapeHtml(g.sub)}</p>
+          <table><thead><tr><th>EPC</th><th>Product</th><th>Status</th><th class="num">Best signal</th><th class="num">Rough distance</th><th class="num">At</th></tr></thead><tbody>${g.rows.join("")}</tbody></table></section>`,
+        )
+        .join("")}
+      ${notHeard.length ? `<section><h2>Not heard by any reader — ${notHeard.length}</h2><table><thead><tr><th>EPC</th><th>Product</th><th>Status</th></tr></thead><tbody>${notHeard.join("")}</tbody></table></section>` : ""}
+      <p class="note">Strongest = the reader that heard the tag loudest during the scan. The distance is a rough hint from the signal (denim, metal and tag angle move it by feet) — start at that reader, then use the handheld's Geiger.</p>
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    if (!w) {
+      setErr("The browser blocked the new tab — allow pop-ups for wms.shopcarbon.com and try again.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  };
+
   const heardTargets = mode === "bulk" ? bulkTargets.filter((t) => bestReaderByEpc.has(t.epc)).length : 0;
   const hasTargets = mode === "single" ? Boolean(target) : bulkTargets.length > 0;
 
@@ -889,6 +1030,16 @@ export function LocateTagWorkspace() {
                 >
                   {bulkBusy === "send" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
                   Send to handheld ({checkedTargets.length})
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkTargets.length === 0}
+                  onClick={exportPdf}
+                  title="Print / Save as PDF: each tag's strongest reader, grouped by reader — before walking the floor"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:border-teal-500/40 disabled:opacity-50 max-md:min-h-11"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  Export PDF
                 </button>
               </div>
             </div>
@@ -1005,16 +1156,28 @@ export function LocateTagWorkspace() {
                               .filter(Boolean)
                               .join(" · ")}
                           </div>
-                          {best || hunting ? (
-                            <div
-                              className={`mt-0.5 font-mono text-[0.65rem] ${live ? "font-semibold text-emerald-300" : "text-[var(--wms-muted)]"}`}
-                            >
-                              {best
-                                ? live
-                                  ? `Heard by ${best.readerName}${best.liveRssi !== null ? ` · ${best.liveRssi.toFixed(0)} dBm` : ""}`
-                                  : `Last heard by ${best.readerName} · ${agoLabel(best.age)}`
-                                : "Not heard yet"}
+                          {live && best ? (
+                            <div className="mt-0.5 font-mono text-[0.65rem] font-semibold text-emerald-300">
+                              Heard now by {best.readerName}
+                              {best.liveRssi !== null ? ` · ${best.liveRssi.toFixed(0)} dBm` : ""}
                             </div>
+                          ) : null}
+                          {locks[t.epc] ? (
+                            (() => {
+                              const i = lockInfo(locks[t.epc]);
+                              return (
+                                <div className="mt-0.5 flex items-start gap-1 font-mono text-[0.65rem] font-semibold text-[var(--wms-fg)]">
+                                  <MapPin className="mt-px h-3 w-3 shrink-0 text-[var(--wms-accent)]" />
+                                  <span>
+                                    Strongest: {i.readerName} · {i.zone}
+                                    {i.antenna ? ` · ${i.antenna}${i.powerDbm !== null ? ` @ ${i.powerDbm} dBm` : ""}` : ""} ·{" "}
+                                    {i.rssi.toFixed(0)} dBm ≈ {i.feet < 10 ? i.feet.toFixed(1) : Math.round(i.feet)} ft · {i.time}
+                                  </span>
+                                </div>
+                              );
+                            })()
+                          ) : hunting && !best ? (
+                            <div className="mt-0.5 font-mono text-[0.65rem] text-[var(--wms-muted)]">Not heard yet</div>
                           ) : null}
                         </div>
                         <div className="flex shrink-0 gap-1.5">
@@ -1035,6 +1198,11 @@ export function LocateTagWorkspace() {
                                 const next = new Set(prev);
                                 next.delete(t.epc);
                                 return next;
+                              });
+                              setLocks((prev) => {
+                                const { [t.epc]: _gone, ...rest } = prev;
+                                void _gone;
+                                return rest;
                               });
                             }}
                             aria-label={`Remove ${t.epc}`}
@@ -1059,6 +1227,7 @@ export function LocateTagWorkspace() {
                       setStats({});
                       setBulkTargets([]);
                       setCheckedEpcs(new Set());
+                      setLocks({});
                     }}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] hover:border-red-400/50 max-md:min-h-11"
                   >
@@ -1336,6 +1505,12 @@ export function LocateTagWorkspace() {
                   </span>
                 </div>
 
+                {mode === "bulk" && (lockedPerReader.get(row.id) ?? 0) > 0 ? (
+                  <div className="mt-1 flex items-center gap-1 font-mono text-[0.6rem] font-semibold text-[var(--wms-accent)]">
+                    <MapPin className="h-3 w-3" />
+                    Strongest for {lockedPerReader.get(row.id)} tag{lockedPerReader.get(row.id) === 1 ? "" : "s"}
+                  </div>
+                ) : null}
                 {mode === "bulk" && row.heard.length > 0 ? (
                   <ul className="mt-1 space-y-0.5 border-t border-[var(--wms-border)]/50 pt-1">
                     {row.heard.slice(0, 5).map((h) => (
@@ -1344,6 +1519,7 @@ export function LocateTagWorkspace() {
                         className={`flex items-baseline justify-between gap-1 font-mono text-[0.6rem] ${h.fresh ? "text-emerald-300" : "text-[var(--wms-muted)]"}`}
                       >
                         <span className="truncate" title={h.epc}>
+                          {locks[h.epc]?.readerId === row.id ? "★ " : ""}
                           {shortTag(bulkByEpc.get(h.epc), h.epc)}
                         </span>
                         <span className="shrink-0 tabular-nums">

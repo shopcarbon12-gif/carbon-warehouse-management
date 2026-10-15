@@ -82,6 +82,10 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
 
   static const int _searchDbm = 30;
 
+  /// NARROW goes down to here (owner, 2026-10-15) — or the reader's own
+  /// lowest step if that is higher.
+  static const int _narrowFloorDbm = 5;
+
   RfidManager? _rfid;
   // Captured while mounted: dispose posts the session log and must never
   // `context.read` (the element is already detached there — which is why no
@@ -496,9 +500,11 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
           _log('narrow_ok', {'dbm': trial.toDbm});
           setState(() => _notice = 'Range narrowed to ${trial.toDbm} dBm — still heard.');
         } else {
-          _log('narrow_rejected', {'dbm': trial.toDbm});
-          setState(() => _notice = 'Not heard at ${trial.toDbm} dBm — search widened back to ${trial.fromDbm} dBm.');
-          unawaited(_applyPower(trial.fromDbm, engine, reason: 'narrow_revert'));
+          // The step STAYS (owner, 2026-10-15: narrow all the way to 5 dBm) —
+          // at a low range the tag is only heard up close, so move the reader
+          // closer, or WIDEN.
+          _log('narrow_not_heard', {'dbm': trial.toDbm});
+          setState(() => _notice = 'Not heard at ${trial.toDbm} dBm yet — move closer to the rack, or WIDEN.');
         }
       }
     }
@@ -621,9 +627,9 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
   Future<void> _narrow() async {
     final engine = _engine;
     if (engine == null || !_scanning || _trial != null) return;
-    final next = nextPowerDown(_caps.powerLevelsDbm, _powerDbm);
+    final next = nextPowerDown(_caps.powerLevelsDbm.where((l) => l >= _narrowFloorDbm).toList(), _powerDbm);
     if (next == null) {
-      setState(() => _notice = 'Already at the lowest range this reader supports.');
+      setState(() => _notice = 'Already at the lowest range ($_powerDbm dBm).');
       return;
     }
     final from = _powerDbm;
@@ -921,8 +927,8 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
               ),
               SizedBox(height: 4.h),
               Text(
-                'Stand still at the rack and narrow step by step. A step is kept only if the tag is still heard repeatedly. '
-                'Then compare neighbouring sections at the same range.',
+                'Stand still at the rack and narrow step by step, down to 5 dBm. At a low range the tag is only heard up close — '
+                'move the reader along the rack, and WIDEN if you lose it. Compare neighbouring sections at the same range.',
                 style: GoogleFonts.manrope(fontSize: 12.sp, color: AppColors.textMuted, fontWeight: FontWeight.w600),
               ),
             ],

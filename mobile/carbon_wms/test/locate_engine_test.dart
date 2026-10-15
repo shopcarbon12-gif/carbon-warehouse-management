@@ -129,6 +129,16 @@ void main() {
       expect(nextPowerUp(levels, 20), 25);
       expect(nextPowerDown(const [], 30), isNull);
     });
+
+    test('narrowing reaches 5 dBm on a 0–30 dBm reader, and stops there', () {
+      // Locate 2.0 passes only the reader's levels >= 5 dBm (its NARROW floor).
+      final levels = [for (var d = 0; d <= 30; d++) d].where((l) => l >= 5).toList();
+      final steps = <int>[];
+      for (int? p = 30; p != null; p = nextPowerDown(levels, p)) {
+        steps.add(p);
+      }
+      expect(steps, [30, 25, 20, 15, 10, 5]);
+    });
   });
 
   group('SweepEstimator', () {
