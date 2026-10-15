@@ -150,7 +150,7 @@ class _TransferInPendingScreenState extends State<TransferInPendingScreen> {
               style: OutlinedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: _accent,
-                side: BorderSide(color: _accent, width: 1.5),
+                side: const BorderSide(color: _accent, width: 1.5),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(2.r)),
                 textStyle: GoogleFonts.spaceGrotesk(

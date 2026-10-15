@@ -726,9 +726,10 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       // Cache-first lookup. If the cache is empty (first run, eviction, or
       // a previous fetch failed) fall back to a live fetch — that path is
       // also what the create-bin flow refreshes into the cache.
+      // Read once, before any await — the context is not safe to use after one.
+      final api = context.read<WmsApiClient>();
       List<Map<String, dynamic>> bins = _binsCache;
       if (bins.isEmpty) {
-        final api = context.read<WmsApiClient>();
         final live = await api.fetchBins();
         bins = live.cast<Map<String, dynamic>>();
         _binsCache = bins;
@@ -744,7 +745,6 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       // refresh wouldn't be in `_binsCache`. Re-fetch once before declaring
       // the bin unknown so we don't push the operator into "create bin?".
       if (match == null && _binsCache.isNotEmpty) {
-        final api = context.read<WmsApiClient>();
         final live = await api.fetchBins();
         bins = live.cast<Map<String, dynamic>>();
         _binsCache = bins;

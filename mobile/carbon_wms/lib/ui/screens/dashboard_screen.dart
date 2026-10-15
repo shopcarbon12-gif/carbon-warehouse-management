@@ -1163,24 +1163,33 @@ class _PulseCard extends StatelessWidget {
             ),
           ),
           SizedBox(width: 10.w),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(label.toUpperCase(),
-                  style: GoogleFonts.spaceGrotesk(
-                      fontSize: 11.sp,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.0,
-                      color: mutedColor)),
-              Text(value,
-                  style: GoogleFonts.manrope(
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w700,
-                      color: noSource
-                          ? mainColor.withValues(alpha: 0.6)
-                          : mainColor)),
-            ],
+          // Flexible + ellipsis: three cards share the row, so a large
+          // system font size (or a long value) must shorten the text, not
+          // push it past the card edge.
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                        fontSize: 11.sp,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
+                        color: mutedColor)),
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w700,
+                        color: noSource
+                            ? mainColor.withValues(alpha: 0.6)
+                            : mainColor)),
+              ],
+            ),
           ),
         ],
       ),
