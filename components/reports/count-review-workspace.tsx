@@ -419,7 +419,7 @@ export function CountReviewWorkspace() {
           >
             <TagTable rows={review.killedNoProduct} />
           </Section>
-          <Section title="Sold / damaged / other status, found on the shelf" count={review.otherStatus.length} csv={csv("otherStatus")} note="Ignored by the push — a scan never changes these.">
+          <Section title="Sold / damaged / other status, found on the shelf" count={review.otherStatus.length} csv={csv("otherStatus")} note="Ignored by the push — a scan never changes these. “retired” = the old number of a tag that was re-encoded (the item lives on under its new number), so it never comes back.">
             <TagTable rows={review.otherStatus} />
           </Section>
           <Section title="Not in WMS — no product" count={review.defective.length} csv={csv("defective")} note="Filed as defective by the push, like any count upload.">

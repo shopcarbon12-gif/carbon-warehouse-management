@@ -4,6 +4,7 @@ import { ingestEpcs, loadEpcConfig } from "@/lib/server/epc-ingress";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId } from "@/lib/server/legacy-epc-catalog";
 import { applyManualItemOverride } from "@/lib/server/manual-item-qty";
+import { loadRetiredEpcs, RETIRED_EPC_STATUS } from "@/lib/server/retired-epcs";
 
 /**
  * Count review & push (owner, 2026-10-15).
@@ -210,12 +211,19 @@ const toRow = (t: DbTag, file: string | null): TagRow => ({
 const byProduct = (a: TagRow, b: TagRow) =>
   String(a.upc ?? "~").localeCompare(String(b.upc ?? "~")) || String(a.sku ?? "").localeCompare(String(b.sku ?? "")) || a.epc.localeCompare(b.epc);
 
-/** Does a tag with no items row decode to a catalog SKU (primary or legacy formula)? */
-async function decodesToProduct(q: Exec, tenantId: string, epcs: string[]): Promise<Set<string>> {
-  const ok = new Set<string>();
-  if (!epcs.length) return ok;
-  const client = q as PoolClient;
-  const config = await loadEpcConfig(client, tenantId);
+type SkuInfo = { sku: string; color: string | null; size: string | null; product: string | null; upc: string | null };
+
+/**
+ * The catalog SKU each tag with no items row decodes to (primary formula
+ * first, then the legacy one) — so a new tag shows its product on the review,
+ * not "no product". A tag missing from the map decodes to no SKU (defective).
+ */
+async function decodeToSkus(q: Exec, tenantId: string, epcs: string[]): Promise<Map<string, SkuInfo>> {
+  const out = new Map<string, SkuInfo>();
+  if (!epcs.length) return out;
+  const config = await loadEpcConfig(q as PoolClient, tenantId);
+  const idsByEpc = new Map<string, string[]>();
+  const allIds = new Set<string>();
   for (const epc of epcs) {
     const ids: string[] = [];
     if (config) {
@@ -225,10 +233,25 @@ async function decodesToProduct(q: Exec, tenantId: string, epcs: string[]): Prom
     const legacy = legacyEpcSystemId(epc);
     if (legacy !== null) ids.push(legacy.toString());
     if (!ids.length) continue;
-    const r = await q.query(`SELECT 1 FROM custom_skus WHERE ls_system_id = ANY($1::bigint[]) LIMIT 1`, [ids]);
-    if (r.rowCount) ok.add(epc);
+    idsByEpc.set(epc, ids);
+    for (const id of ids) allIds.add(id);
   }
-  return ok;
+  if (!allIds.size) return out;
+  const r = await q.query<SkuInfo & { sid: string }>(
+    `SELECT DISTINCT ON (cs.ls_system_id) cs.ls_system_id::text AS sid, cs.sku, cs.color_code AS color, cs.size,
+            m.description AS product, m.upc
+       FROM custom_skus cs
+       LEFT JOIN matrices m ON m.id = cs.matrix_id
+      WHERE cs.ls_system_id = ANY($1::bigint[])
+      ORDER BY cs.ls_system_id, cs.sku`,
+    [[...allIds]],
+  );
+  const bySid = new Map(r.rows.map((x) => [x.sid, x]));
+  for (const [epc, ids] of idsByEpc) {
+    const hit = ids.map((id) => bySid.get(id)).find(Boolean);
+    if (hit) out.set(epc, { sku: hit.sku, color: hit.color, size: hit.size, product: hit.product, upc: hit.upc });
+  }
+  return out;
 }
 
 /** The combined result of [reportIds] against the live WMS at [locationId]. Read-only. */
@@ -256,6 +279,10 @@ export async function reviewCount(
     ? (await q.query<DbTag>(`${tagSelect} WHERE l.tenant_id = $1::uuid AND i.epc = ANY($2::text[])`, [args.tenantId, all])).rows
     : [];
   const known = new Map(tags.map((t) => [t.epc.toUpperCase(), t]));
+  // The old EPC of a tag that was re-encoded never comes back through a scan
+  // (owner, 2026-10-14) — the push's ingest drops it, so the review must not
+  // call it "will go live". Listed with the other ignored statuses instead.
+  const retired = await loadRetiredEpcs(q, all);
 
   let alreadyLive = 0;
   const willGoLive: TagRow[] = [];
@@ -265,6 +292,10 @@ export async function reviewCount(
   const otherStatus: TagRow[] = [];
   for (const t of tags) {
     const file = scanned.get(t.epc.toUpperCase()) ?? null;
+    if (t.status !== "in-stock" && retired.has(t.epc.toUpperCase())) {
+      otherStatus.push({ ...toRow(t, file), status: RETIRED_EPC_STATUS });
+      continue;
+    }
     if (t.status === "in-stock") {
       if (t.location_id === args.locationId) alreadyLive++;
       else liveElsewhere.push(toRow(t, file));
@@ -273,10 +304,27 @@ export async function reviewCount(
     else otherStatus.push(toRow(t, file));
   }
   const unseen = all.filter((e) => !known.has(e));
-  const decodable = await decodesToProduct(q, args.tenantId, unseen);
-  const blank = (epc: string): TagRow => ({ epc, status: "none", product: null, upc: null, sku: null, color: null, size: null, bin: null, lastSeenAt: null, location: null, file: scanned.get(epc) ?? null });
-  const newTags = unseen.filter((e) => decodable.has(e)).map(blank);
-  const defective = unseen.filter((e) => !decodable.has(e)).map(blank);
+  const skus = await decodeToSkus(q, args.tenantId, unseen);
+  const noRow = (epc: string, status: string): TagRow => {
+    const s = skus.get(epc);
+    return {
+      epc,
+      status,
+      product: s?.product ?? null,
+      upc: s?.upc ?? null,
+      sku: s?.sku ?? null,
+      color: s?.color ?? null,
+      size: s?.size ?? null,
+      bin: null,
+      lastSeenAt: null,
+      location: null,
+      file: scanned.get(epc) ?? null,
+    };
+  };
+  for (const e of unseen) if (retired.has(e)) otherStatus.push(noRow(e, RETIRED_EPC_STATUS));
+  const fresh = unseen.filter((e) => !retired.has(e));
+  const newTags = fresh.filter((e) => skus.has(e)).map((e) => noRow(e, "none")).sort(byProduct);
+  const defective = fresh.filter((e) => !skus.has(e)).map((e) => noRow(e, "none"));
 
   const missingCount = await q.query<{ n: string }>(
     `SELECT count(*)::text AS n FROM items i WHERE i.location_id = $1::uuid AND i.status = 'in-stock' AND NOT (i.epc = ANY($2::text[]))`,
