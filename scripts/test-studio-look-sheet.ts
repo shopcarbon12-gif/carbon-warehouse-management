@@ -335,19 +335,14 @@ test("spec risk: a second read that disagrees is a warning until the line is fix
   assert.ok(!codes(fixed).includes("text_disagreement"));
 });
 
-test("spec risk: Aubri's flap buttons are a conventional-hardware warning", () => {
-  const aubri = [
-    "1. Garment: jacket — light blue denim.",
+test("spec risk: buttoned chest flaps raise no warning (a guess, not evidence)", () => {
+  const vest = [
+    "1. Garment: vest — light blue.",
     "6. ZONE — CHEST: two flap pockets with button closure.",
-    "13. ZONE — POCKET FLAPS: rectangular, button closure.",
-    "17. POCKET: flap pocket ×2, front, chest, rectangular with button closure.",
-    "7. ZONE — SLEEVE AND CUFF: long sleeves, buttoned cuffs.",
+    "12. POCKET: flap pocket ×2, front, chest, angled flap with button closure.",
   ].join("\n");
-  const r = specRiskReport(aubri, ctx("Aubri Denim Jacket", "JACKET"));
-  const w = r.warnings.filter((x) => x.code === "hardware_conventional");
-  assert.equal(w.length, 1);
-  assert.equal(w[0].line, 6);
-  assert.match(w[0].message, /6, 13 and 17/);
+  const r = specRiskReport(vest, ctx("Denim Vest", "VEST"));
+  assert.equal(r.warnings.length, 0, JSON.stringify(r.warnings));
 });
 
 test("spec risk: Wayne's styling tank text is flagged; the analyzer no longer locks it", () => {

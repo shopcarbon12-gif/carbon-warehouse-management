@@ -346,21 +346,10 @@ export function specRiskReport(
     });
   }
 
-  if (!ctx.isAccessory) {
-    const flapHardware = product.filter(
-      (l) =>
-        /\b(?:flaps?|chest pockets?|breast pockets?)\b/i.test(l.raw) &&
-        /\b(?:buttons?|snaps?|press studs?|poppers?|zips?|zippers?)\b/i.test(l.raw) &&
-        !/\b(?:no|without)\s+(?:\w+\s+){0,2}(?:buttons?|snaps?|zips?|zippers?)\b/i.test(l.raw),
-    );
-    if (flapHardware.length) {
-      warnings.push({
-        code: "hardware_conventional",
-        line: flapHardware[0].n,
-        message: `${lineList(flapHardware.map((l) => l.n)).replace(/^l/, "L")} put buttons or zips on the pocket flaps / chest pockets. The analysis adds these by habit — confirm they exist on the real garment, and delete them if the flaps are plain.`,
-      });
-    }
-  }
+  /* No "the analysis adds flap buttons by habit" reminder: it fired on every
+     spec with buttoned chest flaps — a trucker jacket or vest that really has
+     them included — and read as an error (owner, 2026-10-14). Like the text
+     reminder above, a warning needs evidence, not a habit of the analyzer. */
 
   if (ctx.isAccessory && ctx.refCount <= 1) {
     warnings.push({
