@@ -48,13 +48,6 @@ import {
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
 import { isLowerBodyProductCategory } from "@/lib/panelGeneration";
-import {
-  compositeLabelIntoKey,
-  labelProportions,
-  pickLabelKey,
-  readLabelPhoto,
-  type LabelKey,
-} from "@/lib/server/studio-label-composite";
 import { isValidJobId, runGenerateJob, takeEarlyCancel } from "@/lib/server/generate-jobs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -592,20 +585,10 @@ function specHasBackWaistbandLabelLine(spec: string): boolean {
     .some((l) => /\bback\b/i.test(l) && /waistband|waist band|belt line/i.test(l) && /label|patch|text|logo|print|tag|embroider/i.test(l));
 }
 
-/** The operator's label photo as a reference — used only when no key colour is
- *  safe for this shoot (the mask below is the normal path). */
+/** The operator's label photo, sent with the Pose 7 panel as a command (owner,
+ *  2026-10-14: "add this label to OpenAI as a command" — no paste, no crop tool). */
 function buildJeansLabelLine(imageNumber: number, side: string): string {
-  return `- BACK-WAISTBAND LABEL — attached image ${imageNumber} is a photograph of THIS product's real label, the patch on the back of the waistband. It is not a product photo for anything else and contains no person. In ${side} Pose 7, the zoomed-in back crop, it is EXACTLY the one in image ${imageNumber}: the same shape and proportions, colour and material, border stitching, logo and every letter, at the position and size the item photos show it on the waistband — never a different, simplified or re-lettered patch.`;
-}
-
-/**
- * The label is not drawn at all: the renderer leaves a flat key-colour shape
- * where it sits, and lib/server/studio-label-composite.ts paints the operator's
- * photo into it. Asked to copy the photo, the renderer re-lettered it
- * ("CARRON JEANS") and drew a different patch in each pose.
- */
-function buildLabelMaskLine(side: string, key: LabelKey, proportions: string): string {
-  return `- LABEL MASK — ${side} Pose 7 (HARD LOCK; it overrides every other line about how the back-waistband label looks): the label on the back of the waistband is NOT drawn. In ${side} Pose 7, exactly where the label sits on the back of the waistband — at the position and size the item photos show it — paint ONE flat, solid, pure ${key.name} (${key.hex}) rectangle, ${proportions}, level with the waistband, its top edge on the waistband's top edge: no letters, no logo, no border, no stitching, no texture, no highlight, nothing on it and nothing in front of it. It is a placeholder: the real label photograph is placed into it after rendering, so its shape is the label's shape. The back hem of the top rests on the waistband's top edge, just above it — never higher (see POSE 7 HARD LOCK). Pure ${key.name} appears nowhere else in the image — not in the other pose, the garment, the outfit or the background.`;
+  return `- BACK-WAISTBAND LABEL (COMMAND — overrides every other line about how the back-waistband label looks): attached image ${imageNumber} is a photograph of THIS product's real label, the patch sewn on the back of the waistband. It is not a product photo for anything else and contains no person. In ${side} Pose 7, the zoomed-in back crop, put THIS label on the back of the waistband, at the position and size the item photos show it: copy it exactly as photographed — the same shape and proportions, colours and material, border and stitching, the same logo and every letter in the same font and spacing, level with the waistband. Do not redesign, simplify, re-letter, recolour or invent any part of it; if a letter is too small to read, keep the photo's letters as they are rather than writing new ones.`;
 }
 
 /** Owner's hard lock: the zoomed-in back never shows skin. The item photos are
@@ -627,7 +610,7 @@ function buildBackCoverLine(side: string, pose: number, itemType: string): strin
 /** The close-up picks "branding" first, and a bottom's only branding is often
  *  the back-waistband label — which would then be drawn, not pasted. */
 function buildCloseUpFrontLine(side: string, pose: number, itemType: string, labelPose: number | null): string {
-  return `- CLOSE-UP (${side} Pose ${pose}): a FRONT detail of the ${itemType || "product"} — the waistband button, the fly, the rivets, a front pocket, the wash or the stitching — never the back-waistband label or patch${
+  return `- CLOSE-UP (${side} Pose ${pose}): a FRONT detail of the ${itemType || "product"} that the item photos show — its closure or hardware, a front pocket, the wash or the stitching — never the back-waistband label or patch${
     labelPose ? `, which only Pose ${labelPose} shows` : ", which no frame of this shoot shows"
   }.`;
 }
@@ -1218,9 +1201,6 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        JEANS / DENIM SHORTS), for the panel holding Pose 7, and only when the
        spec itself puts a label on the back waistband. */
     let jeansLabelUrl = "";
-    /* Only a label cropped to the patch alone can be pasted: an uncropped photo
-       is a picture of a whole waistband. */
-    let jeansLabelCropped = false;
     if (
       pose7Side &&
       typeof jeansLabelIdRaw === "string" &&
@@ -1228,13 +1208,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       specHasBackWaistbandLabelLine(itemSpecText)
     ) {
       const r = await authPool
-        .query<{ image_url: string; cropped: boolean }>(
-          `SELECT image_url, source_url IS NOT NULL AS cropped FROM studio_jeans_labels WHERE id = $1::uuid AND tenant_id = $2::uuid AND archived_at IS NULL`,
+        .query<{ image_url: string }>(
+          `SELECT image_url FROM studio_jeans_labels WHERE id = $1::uuid AND tenant_id = $2::uuid AND archived_at IS NULL`,
           [jeansLabelIdRaw, session.tid],
         )
-        .catch(() => ({ rows: [] as { image_url: string; cropped: boolean }[] }));
+        .catch(() => ({ rows: [] as { image_url: string }[] }));
       jeansLabelUrl = r.rows[0]?.image_url ?? "";
-      jeansLabelCropped = Boolean(r.rows[0]?.cropped);
     }
     const backLockActive =
       !accessoryMode &&
@@ -1376,12 +1355,8 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
-    /* A key colour nothing in this shoot wears; without one the label photo is
-       attached as a reference instead (the old, redrawn path). */
-    const labelKey = jeansLabelUrl && jeansLabelCropped
-      ? pickLabelKey([itemSpecText, String(itemColourRaw ?? ""), colorRun?.name ?? "", lookSheet, operatorInstruction].join("\n"))
-      : null;
-    const labelAttach = Boolean(jeansLabelUrl) && !labelKey;
+    /* The label photo rides with the Pose 7 panel as one more image. */
+    const labelAttach = Boolean(jeansLabelUrl);
 
     const modelRefValues = Array.isArray(modelRefs) ? modelRefs : [];
     const modelRefNormalization = normalizeReferenceUrls(modelRefValues, "Model");
@@ -1607,11 +1582,10 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
 
     /* What the back waistband shows in this panel, said inside the spec and back
        lines that would otherwise ask for the label in every back frame. */
-    const labelMasked = Boolean(jeansLabelUrl && labelKey && pose7Side);
     const waistbandCarves = [
       ...(pose4Side ? [`in ${pose4Side} Pose ${coverPose} the top hangs over the waistband, so the label or patch on the back of the waistband is hidden under it there`] : []),
-      ...(labelMasked && labelKey
-        ? [`in ${pose7Side} Pose 7 the back-waistband label is the flat ${labelKey.name} placeholder of the LABEL MASK line, never drawn or lettered`]
+      ...(labelAttach && pose7Side
+        ? [`in ${pose7Side} Pose 7 the back-waistband label is copied exactly from the attached label photo (BACK-WAISTBAND LABEL line)`]
         : []),
     ];
     const waistbandBackCarve = waistbandCarves.length ? ` The back waistband: ${waistbandCarves.join("; ")}.` : "";
@@ -1967,19 +1941,14 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       }
     }
 
-    /* The jeans label photo. Normally it is never shown to the renderer — it is
-       painted into the Pose 7 placeholder after rendering. Only without a safe
-       key colour does it ride as a reference, after the references and before
-       the same-shoot anchor, so every image number above it is unchanged. A
-       label that will not download stops the panel: rendering on would leave an
-       empty placeholder or an invented patch. */
+    /* The jeans label photo rides after the references and before the
+       same-shoot anchor, so every image number above it is unchanged. A label
+       that will not download stops the panel: rendering on would draw an
+       invented patch. */
     let labelFile: Awaited<ReturnType<typeof toFile>> | null = null;
-    let labelPhoto: Awaited<ReturnType<typeof readLabelPhoto>> | null = null;
     if (jeansLabelUrl) {
       try {
-        const dl = await downloadReferenceAsFile(jeansLabelUrl, referenceFiles.length);
-        labelPhoto = await readLabelPhoto(Buffer.from(dl.dataUrl.replace(/^data:[^,]*,/, ""), "base64"));
-        if (labelAttach) labelFile = dl.file;
+        labelFile = (await downloadReferenceAsFile(jeansLabelUrl, referenceFiles.length)).file;
       } catch (e) {
         return logged(
           { ...refCounts, outcome: "failed", errorCode: "ref_download_failed", errorMessage: `jeans label: ${(e as Error)?.message || e}` },
@@ -1998,12 +1967,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         );
       }
     }
-    const labelLines =
-      labelMasked && labelKey && labelPhoto && pose7Side
-        ? [buildLabelMaskLine(pose7Side, labelKey, labelProportions(labelPhoto.width, labelPhoto.height))]
-        : labelFile && pose7Side
-          ? [buildJeansLabelLine(referenceFiles.length + 1, pose7Side)]
-          : [];
+    const labelLines = labelFile && pose7Side ? [buildJeansLabelLine(referenceFiles.length + 1, pose7Side)] : [];
     const sameShootLines = anchorFile
       ? [
           buildSameShootLine({
@@ -2204,33 +2168,6 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       );
     }
 
-    /* The real label into the Pose 7 placeholder — before anything sees the
-       image (followers, the run-QA stash, the stored look, the response). */
-    /* placed: the label is in. Otherwise `drawn` says whether the renderer left
-       a placeholder the paste could not use (or the paste failed), so the
-       Studio can say which, and the crop is not published as it is. */
-    let jeansLabel: { pose: 7; placed: boolean; drawn: boolean; keyLeft: number } | null = null;
-    if (labelMasked && labelKey && labelPhoto && pose7Side) {
-      try {
-        const r = await compositeLabelIntoKey({
-          imageB64: b64,
-          label: labelPhoto,
-          key: labelKey,
-          region: pose7Side === "LEFT" ? { x0: 0, x1: 0.5 } : { x0: 0.5, x1: 1 },
-        });
-        b64 = r.b64;
-        jeansLabel = { pose: 7, placed: r.placed > 0, drawn: r.keySeen > 0, keyLeft: r.keyPixelsLeft };
-        console.info(
-          `[generate] panel ${normalizedPanelQa.panelNumber ?? "?"}: jeans label ${
-            r.placed ? `placed (${Math.round(r.clothShare * 100)}% of the placeholder became cloth, ${r.strayShapes} stray shape(s) painted out)` : `NOT placed — ${r.keySeen ? `${r.keySeen} ${labelKey.name} px but no usable placeholder` : `no ${labelKey.name} placeholder in the render`}`
-          }; ${r.keyPixelsLeft} key px left.`,
-        );
-      } catch (e) {
-        jeansLabel = { pose: 7, placed: false, drawn: true, keyLeft: -1 };
-        console.warn(`[generate] jeans label composite failed: ${(e as Error)?.message || e}`);
-      }
-    }
-
     /* Panel 1 is in: release every follower waiting on it NOW, before the
        stash, the log or the R2 upload below. */
     const source = anchorSource;
@@ -2309,7 +2246,6 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ...(anchorRole ? { anchor: { role: anchorRole, gate: anchorGate, waitMs: anchorWaitMs } } : {}),
         ...(storedLook ? { lookAnchor: { url: storedLook.url, key: storedLook.key, gate: storedLook.gate } } : {}),
         ...(droppedAny ? { imagesDropped } : {}),
-        ...(jeansLabel ? { jeansLabel } : {}),
       }),
     );
   } catch (err: unknown) {

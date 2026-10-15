@@ -11,8 +11,7 @@ export const dynamic = "force-dynamic";
  * labels / patches, uploaded once (bytes via /api/models/upload, like model
  * references) and picked per product when the item type is JEANS / DENIM SHORTS.
  *
- *   GET  /api/studio/labels            → { labels: [{ id, name, url, sourceUrl, createdAt }] }
- *     (sourceUrl: the original photo once the label has been cropped; null = not cropped yet)
+ *   GET  /api/studio/labels            → { labels: [{ id, name, url, createdAt }] }
  *   POST /api/studio/labels { url, name } → { label }
  */
 
@@ -21,13 +20,13 @@ export async function GET(req: NextRequest) {
   if ("error" in a) return a.error;
   const r = await a.pool
     .query(
-      `SELECT id::text, name, image_url, source_url, created_at FROM studio_jeans_labels
+      `SELECT id::text, name, image_url, created_at FROM studio_jeans_labels
         WHERE tenant_id = $1::uuid AND archived_at IS NULL ORDER BY created_at DESC LIMIT 200`,
       [a.session.tid],
     )
-    .catch(() => ({ rows: [] as { id: string; name: string; image_url: string; source_url: string | null; created_at: string }[] }));
+    .catch(() => ({ rows: [] as { id: string; name: string; image_url: string; created_at: string }[] }));
   return NextResponse.json({
-    labels: r.rows.map((x) => ({ id: x.id, name: x.name, url: x.image_url, sourceUrl: x.source_url ?? null, createdAt: x.created_at })),
+    labels: r.rows.map((x) => ({ id: x.id, name: x.name, url: x.image_url, createdAt: x.created_at })),
   });
 }
 
@@ -46,7 +45,7 @@ async function POST_handler(req: NextRequest) {
     [a.session.tid, name, url, /^[0-9a-f-]{36}$/i.test(String(a.session.sub || "")) ? a.session.sub : null],
   );
   const x = r.rows[0];
-  return NextResponse.json({ label: { id: x.id, name: x.name, url: x.image_url, sourceUrl: null, createdAt: x.created_at } });
+  return NextResponse.json({ label: { id: x.id, name: x.name, url: x.image_url, createdAt: x.created_at } });
 }
 
 export const POST = withActivity("studio/labels", POST_handler);

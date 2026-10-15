@@ -84,10 +84,6 @@ export function ItemRefCropDialog({
   error,
   onCancel,
   onApply,
-  title = "Crop / rotate reference photo",
-  hint,
-  initialRect,
-  headShortcuts = true,
 }: {
   /** Data URL or same-origin URL the browser can actually decode. */
   src: string;
@@ -97,18 +93,12 @@ export function ItemRefCropDialog({
   error?: string | null;
   onCancel: () => void;
   onApply: (blob: Blob) => void;
-  title?: string;
-  /** Replaces the head-crop explanation (e.g. the jeans-label crop). */
-  hint?: string;
-  initialRect?: Rect;
-  /** The "cut top" shortcuts — only meaningful for photos of a person. */
-  headShortcuts?: boolean;
 }) {
   const imgRef = useRef<HTMLImageElement | null>(null);
   /* Opens with the common crop already selected — head out of frame. An empty
      selection disables Apply, and a disabled button is indistinguishable from a
      broken one. */
-  const [rect, setRect] = useState<Rect | null>(initialRect ?? { x: 0, y: 1 / 3, w: 1, h: 2 / 3 });
+  const [rect, setRect] = useState<Rect | null>({ x: 0, y: 1 / 3, w: 1, h: 2 / 3 });
   const [drawing, setDrawing] = useState(false);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -308,7 +298,7 @@ export function ItemRefCropDialog({
       <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:p-0 max-md:items-stretch">
         <div className="flex max-h-[min(92vh,900px)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-2xl max-md:h-full max-md:max-h-none max-md:max-w-none max-md:rounded-none max-md:border-0">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--wms-border)] px-4 py-3">
-            <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">{title}</h3>
+            <h3 className="font-mono text-sm font-semibold text-[var(--wms-fg)]">Crop / rotate reference photo</h3>
             <button
               type="button"
               onClick={() => !busy && onCancel()}
@@ -321,17 +311,11 @@ export function ItemRefCropDialog({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 max-md:overscroll-contain">
             <p className="mb-2 font-mono text-[0.68rem] leading-snug text-[var(--wms-muted)]">
-              {hint ?? (
-                <>
-                  Cut the head out of frame so the face stops competing with your model&apos;s own
-                  reference photos. Use a shortcut below, or drag a box on the photo.
-                </>
-              )}
+              Cut the head out of frame so the face stops competing with your model&apos;s own
+              reference photos. Use a shortcut below, or drag a box on the photo.
             </p>
 
             <div className="mb-3 flex flex-wrap gap-2">
-              {headShortcuts ? (
-              <>
               <button type="button" onClick={() => cutTop(0.25)} disabled={busy} className="wms-btn-ghost rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3">
                 Cut top 25%
               </button>
@@ -341,8 +325,6 @@ export function ItemRefCropDialog({
               <button type="button" onClick={() => cutTop(0.5)} disabled={busy} className="wms-btn-ghost rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11 max-md:px-3">
                 Cut top half
               </button>
-              </>
-              ) : null}
               <button type="button" onClick={() => setRect(null)} disabled={busy || !rect} className="rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.66rem] text-[var(--wms-muted)] disabled:opacity-40 max-md:min-h-11 max-md:px-3">
                 Reset
               </button>

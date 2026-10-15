@@ -146,8 +146,7 @@ type StudioState = {
   jeansLabelId?: string | null;
 };
 /** A photo of a real back-waistband label in the Studio's jeans-label library. */
-/** sourceUrl: the original photo once the label was cropped to the patch; null = not cropped yet. */
-type JeansLabel = { id: string; name: string; url: string; sourceUrl?: string | null };
+type JeansLabel = { id: string; name: string; url: string };
 /** The jeans-label box shows only for these item types (owner, 2026-10-14). */
 const JEANS_LABEL_TYPES = /\bjeans\b|\bdenim\s+shorts?\b/i;
 /** A media-manager row: an existing Shopify image or a new crop to add.
@@ -334,9 +333,6 @@ type PanelResponse = {
   qaNotes?: string[];
   /** Panel 1 of an anchored run was saved as this product's look for the model + colour. */
   lookAnchor?: { url?: string; key?: string; gate?: string | null };
-  /** The operator's label photo pasted into the Pose 7 placeholder (or not);
-   *  drawn = the AI left a placeholder (or the paste failed) but it was not used. */
-  jeansLabel?: { pose: number; placed: boolean; drawn?: boolean };
   error?: unknown;
   status?: string;
 };
@@ -487,26 +483,14 @@ async function panelResponseToCrops(
       : null;
   const extraNotes = [trimNote].filter(Boolean) as string[];
   const notes = extraNotes.length ? [...(qaNotes ?? []), ...extraNotes] : qaNotes;
-  /* The jeans label, on the frame it belongs to and first, so the tile shows it. */
-  const label = json.jeansLabel;
-  const labelNote = label
-    ? label.placed
-      ? "Label: your label photo was pasted onto the back waistband."
-      : label.drawn
-        ? "Label NOT pasted: the AI's placeholder could not be used — regenerate this panel."
-        : "Label NOT pasted: the AI left no placeholder, so this label is its own drawing — regenerate this panel."
-    : null;
-  const notesFor = (pose: number) => (labelNote && label && pose === label.pose ? [labelNote, ...(notes ?? [])] : notes);
-  /* A Pose 7 whose label is not the real one is never published by default. */
-  const keep = (pose: number) => !(label && !label.placed && pose === label.pose);
   /* The image is here; the judges only run once the whole run has landed,
      because what they check is how the frames compare with each other. Crops
      show now with a "checking" badge and the flags arrive after the last
      panel. */
   const qaPending = json.runQaPending === true;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · ${unit} ${poseA}`, selected: keep(poseA), qaNotes: notesFor(poseA), side: "left", panel, qaPending },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · ${unit} ${poseB}`, selected: keep(poseB), qaNotes: notesFor(poseB), side: "right", panel, qaPending },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · ${unit} ${poseA}`, selected: true, qaNotes: notes, side: "left", panel, qaPending },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · ${unit} ${poseB}`, selected: true, qaNotes: notes, side: "right", panel, qaPending },
   ];
 }
 
@@ -665,10 +649,6 @@ export function CarbonStudioTab({
   const [jeansLabels, setJeansLabels] = useState<JeansLabel[]>([]);
   const [jeansLabelId, setJeansLabelId] = useState<string | null>(null);
   const [labelBusy, setLabelBusy] = useState(false);
-  /* The label being cropped to the patch alone — the picture pasted into Pose 7. */
-  const [labelCrop, setLabelCrop] = useState<JeansLabel | null>(null);
-  const [labelCropBusy, setLabelCropBusy] = useState(false);
-  const [labelCropErr, setLabelCropErr] = useState<string | null>(null);
   const [aborting, setAborting] = useState(false);
   const abortGeneration = useCallback(() => {
     const live = abortRef.current;
@@ -1016,10 +996,7 @@ export function CarbonStudioTab({
     } finally {
       if (added.length) {
         setJeansLabels((prev) => [...added, ...prev]);
-        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} to the library — crop each one to the patch alone.`);
-        // Straight into the crop: an uncropped photo is a whole waistband, not a label.
-        setLabelCropErr(null);
-        setLabelCrop(added[0]);
+        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} to the library.`);
       }
       setLabelBusy(false);
     }
@@ -1045,7 +1022,7 @@ export function CarbonStudioTab({
     } finally {
       if (added.length) {
         setJeansLabels((prev) => [...added, ...prev.filter((p) => !added.some((a) => a.id === p.id))]);
-        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} from the phone to the library — crop each one (✂) to the patch alone.`);
+        setMsg(`Added ${added.length} label photo${added.length === 1 ? "" : "s"} from the phone to the library.`);
       }
       setLabelBusy(false);
     }
@@ -1053,43 +1030,6 @@ export function CarbonStudioTab({
   useEffect(() => {
     adoptLabelPhotosRef.current = adoptLabelPhotos;
   }, [adoptLabelPhotos]);
-  /** Save a label cropped to the patch: the original photo is kept as its source. */
-  const applyLabelCrop = useCallback(
-    async (blob: Blob) => {
-      const target = labelCrop;
-      if (!target) {
-        setLabelCropErr("Lost track of which label was being cropped — close this and try again.");
-        return;
-      }
-      setLabelCropBusy(true);
-      setLabelCropErr(null);
-      try {
-        const ext = blob.type === "image/png" ? "png" : "jpg";
-        const name = `label-crop.${ext}`;
-        const fd = new FormData();
-        fd.append("file", new File([blob], name, { type: blob.type || "image/png" }), name);
-        const up = await fetch("/api/models/upload", { method: "POST", body: fd });
-        const uj = (await up.json().catch(() => ({}))) as { url?: string; error?: string };
-        if (!up.ok || !uj.url) throw new Error(uj.error ?? `Upload failed (HTTP ${up.status})`);
-        const r = await fetch(`/api/studio/labels/${encodeURIComponent(target.id)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: uj.url }),
-        });
-        const j = (await r.json().catch(() => ({}))) as { label?: JeansLabel; error?: string };
-        if (!r.ok || !j.label) throw new Error(j.error ?? `Could not save the crop (HTTP ${r.status})`);
-        const saved = j.label;
-        setJeansLabels((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
-        setLabelCrop(null);
-        setMsg(`Label cropped — this exact picture is pasted onto the back waistband in Pose 7.`);
-      } catch (e) {
-        setLabelCropErr(e instanceof Error ? e.message : "Crop failed — please try again.");
-      } finally {
-        setLabelCropBusy(false);
-      }
-    },
-    [labelCrop],
-  );
   const removeLabel = useCallback(
     async (label: JeansLabel) => {
       if (!window.confirm(`Remove "${label.name || "this label"}" from the label library? Products that use it will have no label picked.`)) return;
@@ -3220,10 +3160,10 @@ export function CarbonStudioTab({
             </label>
           </div>
           <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
-            Pick the patch sewn on the back of this product&apos;s waistband. In Pose 7 (the zoomed-in back) the shirt rests on
-            the top edge of the waistband — no skin — and your label photo is pasted there exactly, level and in its own
-            proportions; the AI never draws it. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label
-            shows there. Upload every label once and crop it to the patch alone (✂) — they are kept for all products.
+            Pick the patch sewn on the back of this product&apos;s waistband. Its photo is sent to the AI with Pose 7 (the
+            zoomed-in back) with the command to put exactly this label on the back waistband; the shirt rests on the top edge
+            of the waistband — no skin. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label shows
+            there. Upload every label once — they are kept for all products.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
@@ -3248,12 +3188,6 @@ export function CarbonStudioTab({
           {!jeansLabelId && specHasBackWaistbandLabel(itemSpec) ? (
             <p className="mt-2 rounded border border-[var(--wms-status-warning-fg)]/50 bg-[var(--wms-status-warning-fg)]/10 px-2 py-1.5 text-[0.75rem] font-semibold text-[var(--wms-status-warning-fg)]">
               No label picked for this product — Pose 7 will draw a label of its own. Pick this product&apos;s label below.
-            </p>
-          ) : null}
-          {chosenLabel && !chosenLabel.sourceUrl ? (
-            <p className="mt-2 rounded border border-[var(--wms-status-warning-fg)]/50 bg-[var(--wms-status-warning-fg)]/10 px-2 py-1.5 text-[0.75rem] font-semibold text-[var(--wms-status-warning-fg)]">
-              This label photo is not cropped yet — press ✂ on it and box the patch alone. Until then Pose 7 draws the label from
-              the photo instead of pasting it.
             </p>
           ) : null}
           {jeansLabelId && !specHasBackWaistbandLabel(itemSpec) ? (
@@ -3284,22 +3218,6 @@ export function CarbonStudioTab({
                     }`}
                   >
                     <img src={previewFor(l.url)} alt={l.name || "jeans label"} className="h-full w-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    disabled={labelBusy || labelCropBusy}
-                    onClick={() => {
-                      setLabelCropErr(null);
-                      setLabelCrop(l);
-                    }}
-                    title={l.sourceUrl ? "Crop again (from the original photo)" : "Crop this label to the patch alone"}
-                    className={`absolute inset-x-0 bottom-5 rounded-b border-t py-0.5 font-mono text-[0.6rem] max-md:py-1.5 ${
-                      l.sourceUrl
-                        ? "border-[var(--wms-border)] bg-[var(--wms-surface)]/90 text-[var(--wms-fg)] hover:text-[var(--wms-accent)]"
-                        : "border-[var(--wms-status-warning-fg)]/60 bg-[var(--wms-status-warning-fg)]/20 font-semibold text-[var(--wms-status-warning-fg)]"
-                    }`}
-                  >
-                    {l.sourceUrl ? "✂ crop" : "✂ crop me"}
                   </button>
                   <button
                     type="button"
@@ -3600,12 +3518,9 @@ export function CarbonStudioTab({
         );
       })() : null}
 
-      {canManage && isJeansType && !accessoryKind && model && model.gender !== "female" && specHasBackWaistbandLabel(itemSpec) &&
-      (!chosenLabel || !chosenLabel.sourceUrl) ? (
+      {canManage && isJeansType && !accessoryKind && model && model.gender !== "female" && specHasBackWaistbandLabel(itemSpec) && !chosenLabel ? (
         <p className="font-mono text-[0.72rem] font-semibold text-[var(--wms-status-warning-fg)]">
-          {chosenLabel
-            ? "⚠ The picked jeans label is not cropped — crop it (✂ in the Jeans label box) or Pose 7 draws the label itself."
-            : "⚠ No jeans label picked for this product — pick it in the Jeans label box or Pose 7 draws a label of its own."}
+          ⚠ No jeans label picked for this product — pick it in the Jeans label box or Pose 7 draws a label of its own.
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
@@ -4002,24 +3917,6 @@ export function CarbonStudioTab({
             <div className="h-20 w-16 rounded border-2 border-[var(--wms-accent)] bg-[var(--wms-surface)] opacity-90 shadow-lg" />
           )}
         </div>
-      ) : null}
-
-      {labelCrop ? (
-        <ItemRefCropDialog
-          src={previewFor(labelCrop.sourceUrl || labelCrop.url)}
-          busy={labelCropBusy}
-          error={labelCropErr}
-          title="Crop the jeans label"
-          hint="Drag a box tight around the label patch only — its own edges, no denim, belt loop or background around it. This exact picture is pasted onto the back waistband in Pose 7, so whatever is inside the box shows up there."
-          initialRect={{ x: 0.2, y: 0.2, w: 0.6, h: 0.6 }}
-          headShortcuts={false}
-          onCancel={() => {
-            if (labelCropBusy) return;
-            setLabelCrop(null);
-            setLabelCropErr(null);
-          }}
-          onApply={(blob) => void applyLabelCrop(blob)}
-        />
       ) : null}
 
       {cropping ? (
