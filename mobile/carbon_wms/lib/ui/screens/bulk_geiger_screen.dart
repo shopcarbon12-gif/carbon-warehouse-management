@@ -16,6 +16,7 @@ import 'package:carbon_wms/services/beep_pacer.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/covering_route.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
@@ -166,11 +167,25 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
   StreamSubscription<RfidTagRead>? _vendorSub;
   StreamSubscription<RfidTagRead>? _geigerSub;
   StreamSubscription<String>? _triggerSub;
+  ModalRoute<dynamic>? _route;
   bool _scanning = false;
-  bool _busy = false;
+
+  /// Bumped by every start / stop: a slow start a stop overtook never flips
+  /// the screen back to scanning. (A `_busy` flag used to DROP a pull while
+  /// a start was still talking to the sled — the stop that never happened.)
+  int _scanGen = 0;
+
+  /// Radio hand-back in flight after Geiger closed; a start waits for it.
+  Future<void> _radioReady = Future<void>.value();
   int _maxDbm = 30;
   final BeepPacer _beeper = BeepPacer();
   Timer? _repaintTimer;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
+  }
 
   @override
   void initState() {
@@ -221,7 +236,11 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
 
   void _onLifecycleStop() {
     // App to background / screen off: RfidManager already stopped the radio.
-    if (mounted && _scanning) setState(() => _scanning = false);
+    if (mounted && _scanning) {
+      _scanGen++;
+      _beeper.cancel();
+      setState(() => _scanning = false);
+    }
   }
 
   @override
@@ -464,19 +483,16 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
 
   // ── Scan ────────────────────────────────────────────────────────────────
 
+  /// A pull is never dropped: stop wins over a start still in flight.
   Future<void> _toggle() async {
-    if (_busy) return;
-    _busy = true;
-    try {
-      if (_scanning) {
-        await _stop();
-      } else {
-        await _start();
-      }
-    } finally {
-      _busy = false;
+    if (_scanning) {
+      await _stop();
+    } else {
+      await _start();
     }
   }
+
+  bool _isLive(int gen) => mounted && _scanning && gen == _scanGen;
 
   Future<void> _start() async {
     if (_scanning || _targets.isEmpty) return;
@@ -485,29 +501,76 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
       _toast('Every EPC on the list is found. CLEAR FOUND to look again.');
       return;
     }
+    final gen = ++_scanGen;
     setState(() => _scanning = true);
     ScanSounds.instance.play(ScanCue.start);
+    // Back from Geiger a moment ago: let its dispose hand the radio back
+    // first, or it stops this scan again.
+    await _radioReady;
+    if (!_isLive(gen)) return;
     // Re-asserted every start: a Locate opened from this list restores the
     // per-read beep, the 2D imager, the default session, its one-tag filter
-    // and the power in its dispose — which can land after we are back.
+    // and the power in its dispose.
+    await _applyRadioSetup();
+    if (!_isLive(gen)) return;
+    final problem = await _startRadio();
+    if (!_isLive(gen) || problem == null) return;
+    // Said so instead of showing SCANNING over a radio that is off.
+    _beeper.cancel();
+    setState(() => _scanning = false);
+    ScanSounds.instance.play(ScanCue.stop);
+    _toast(problem);
+  }
+
+  Future<void> _applyRadioSetup() async {
     unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     _rfid?.scanContext = 'GEIGER_FIND';
-    unawaited(_armRfidTrigger());
-    unawaited(RfidVendorChannel.setEpcInventoryFilter(null));
-    unawaited(RfidVendorChannel.setQuietInventory(true));
-    unawaited(_rfid?.setSessionPowerOverrideDbm(_maxDbm));
-    unawaited(RfidVendorChannel.setAntennaPowerDbm(_maxDbm));
-    try {
-      await RfidVendorChannel.startZebraInventory();
-    } catch (_) {}
-    if (!mounted || !_scanning) return;
-    try {
-      await RfidVendorChannel.startChainwayInventory();
-    } catch (_) {}
+    await _armRfidTrigger();
+    await RfidVendorChannel.setEpcInventoryFilter(null);
+    await RfidVendorChannel.setQuietInventory(true);
+    await _rfid?.setSessionPowerOverrideDbm(_maxDbm);
+    await RfidVendorChannel.setAntennaPowerDbm(_maxDbm);
+  }
+
+  /// Starts inventory on the reader this phone has; a message when it didn't.
+  Future<String?> _startRadio() async {
+    const notStarted = 'The sled did not start. Pull the trigger again.';
+    final status = await RfidVendorChannel.readerStatus();
+    if (status != null && !status.connected) {
+      return 'No RFID sled connected. Connect the RFD8500, then pull the trigger.';
+    }
+    switch (status?.stack) {
+      case 'zebra':
+        try {
+          await RfidVendorChannel.startZebraInventory();
+          return null;
+        } catch (_) {
+          return notStarted;
+        }
+      case 'chainway':
+        try {
+          await RfidVendorChannel.startChainwayInventory();
+          return null;
+        } catch (_) {
+          return notStarted;
+        }
+      default:
+        var started = false;
+        try {
+          await RfidVendorChannel.startZebraInventory();
+          started = true;
+        } catch (_) {}
+        try {
+          await RfidVendorChannel.startChainwayInventory();
+          started = true;
+        } catch (_) {}
+        return started ? null : notStarted;
+    }
   }
 
   Future<void> _stop({bool silent = false}) async {
     if (!_scanning) return;
+    _scanGen++;
     setState(() => _scanning = false);
     _beeper.cancel();
     if (!silent) ScanSounds.instance.play(ScanCue.stop);
@@ -557,9 +620,14 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
         targetSize: t.size,
       ),
     );
+    // Locate's dispose (beep on, power override off, filter off, session
+    // back, radio stopped) runs ~300 ms after this await returns.
     if (!mounted) return;
-    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    _rfid?.scanContext = 'GEIGER_FIND';
+    _radioReady = () async {
+      await coveringRouteGone(_route);
+      if (mounted) await _applyRadioSetup();
+    }();
+    await _radioReady;
   }
 
   // ── UI ──────────────────────────────────────────────────────────────────

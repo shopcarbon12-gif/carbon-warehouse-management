@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'package:carbon_wms/hardware/channel_fanout.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 
 /// Outcome of attempting a native vendor RFID connection (Android only).
@@ -400,7 +401,16 @@ class RfidVendorChannel {
   /// at Locate read rates (hundreds/sec for one tag behind a pre-filter) a
   /// message per tag backed the platform channel up badly. Older emitters that
   /// still send one map at a time keep working unchanged.
-  static Stream<RfidTagRead> tagReadStream() {
+  ///
+  /// Every caller shares ONE platform subscription ([ChannelFanout]): the
+  /// newest screen gets the reads and, when it closes, the screen below gets
+  /// them back. [background] is for RfidManager's scanner subscriptions only.
+  static Stream<RfidTagRead> tagReadStream({bool background = false}) =>
+      _tagFanout.stream(background: background);
+
+  static final ChannelFanout<RfidTagRead> _tagFanout = ChannelFanout<RfidTagRead>(_openTagReads);
+
+  static Stream<RfidTagRead> _openTagReads() {
     return _events.receiveBroadcastStream().expand<RfidTagRead>((dynamic e) {
       if (e is Map) {
         final r = _parseTagRead(e);
@@ -486,20 +496,33 @@ class RfidVendorChannel {
     } catch (_) {}
   }
 
-  static Stream<String> hardwareBarcodeStream() {
+  /// Decoded 2D barcodes. Shared like [tagReadStream]: the newest screen gets
+  /// each scan, the one below gets them back when it closes. [background] is
+  /// for RfidManager's fallback subscription only.
+  static Stream<String> hardwareBarcodeStream({bool background = false}) {
     if (!_isAndroid) return const Stream<String>.empty();
-    return _hardwareBarcodeEvents.receiveBroadcastStream().map((dynamic e) {
-      final s = e?.toString() ?? '';
-      return s.trim();
-    }).where((s) => s.isNotEmpty);
+    return _barcodeFanout.stream(background: background);
   }
 
+  static final ChannelFanout<String> _barcodeFanout = ChannelFanout<String>(
+    () => _hardwareBarcodeEvents.receiveBroadcastStream().map((dynamic e) {
+      final s = e?.toString() ?? '';
+      return s.trim();
+    }).where((s) => s.isNotEmpty),
+  );
+
+  /// Raw sled trigger. ONE platform stream for the whole app — each screen
+  /// opening its own let a closing screen cancel the channel for everyone
+  /// (the dead trigger after leaving Locate). Screens use hardwareTriggerFor,
+  /// which decides who reacts; every listener of this stream hears every pull.
   static Stream<String> hardwareTriggerStream() {
     if (!_isAndroid) return const Stream<String>.empty();
-    return _hardwareTriggerEvents.receiveBroadcastStream().map((dynamic e) {
+    return _triggerShared ??= _hardwareTriggerEvents.receiveBroadcastStream().map((dynamic e) {
       return (e?.toString() ?? '').trim().toLowerCase();
     }).where((s) => s == 'down' || s == 'up');
   }
+
+  static Stream<String>? _triggerShared;
 
   /// Live radio state, straight from the native controllers.
   ///

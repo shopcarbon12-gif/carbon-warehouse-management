@@ -47,6 +47,16 @@ import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 /// still responds. That is no worse than the behaviour before any of this, and
 /// far better than the crossfire it replaces.
 ///
+/// ## Why the upstream is shared (2026-10-15)
+///
+/// Each subscriber used to open its OWN platform stream. Flutter's
+/// EventChannel has one handler per channel, so cancelling any of them (the
+/// screen on top closing) cancelled the channel for everyone and Android
+/// dropped its trigger sink: back on the screen below, every pull went
+/// nowhere (Cloud + Geiger → Geiger → back). [RfidVendorChannel
+/// .hardwareTriggerStream] is now one shared stream; this stack still decides
+/// which screen reacts.
+///
 /// Use this instead of [RfidVendorChannel.hardwareTriggerStream] in any screen.
 Stream<String> hardwareTriggerFor(State<StatefulWidget> state) {
   final entry = _TriggerSubscriber(state);

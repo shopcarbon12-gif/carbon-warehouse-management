@@ -275,7 +275,7 @@ class RfidManager extends ChangeNotifier {
     );
     // Always merge OEM scan broadcasts: some devices report UHF only via rscja intents while
     // native SDK is linked to a dead path, or sled + built-in overlap.
-    _fallbackBarcodeSub = RfidVendorChannel.hardwareBarcodeStream().listen(
+    _fallbackBarcodeSub = RfidVendorChannel.hardwareBarcodeStream(background: true).listen(
       _handleFallbackBarcodeRead,
       onError: (_) {},
     );

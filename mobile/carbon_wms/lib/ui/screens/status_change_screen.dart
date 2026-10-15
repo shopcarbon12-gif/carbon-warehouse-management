@@ -34,11 +34,14 @@ import 'package:carbon_wms/hardware/hardware_trigger.dart';
 class StatusChangeScreen extends StatefulWidget {
   const StatusChangeScreen({super.key, this.cloudGeigerResolveEpc});
 
-  /// When opened from Cloud + Geiger → Take an Action, this is the EPC
-  /// that was sent to the handheld. After a successful commit that
-  /// included this EPC we POST `/api/handheld/epc-queue` to mark the
-  /// drop as resolved so the row disappears across every device on
-  /// the next poll. Null on the dashboard Status tile entry path.
+  /// When opened from Cloud + Geiger → one tag's Geiger → Take an Action,
+  /// this is that tag's EPC, and the screen works on THAT TAG ONLY (owner,
+  /// 2026-10-15): it is listed on entry, the trigger still scans as normal
+  /// but every other tag the sled hears is ignored, and the status picked
+  /// is applied to this one EPC — no batch of whatever happened to be near.
+  /// After the commit we POST `/api/handheld/epc-queue` to mark the drop
+  /// resolved so the row disappears across every device on the next poll.
+  /// Null on the dashboard Status tile entry path (normal batch mode).
   final String? cloudGeigerResolveEpc;
 
   @override
@@ -101,6 +104,13 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   RfidManager? _rfid;
   RfidManager? _lifecycleRfid;
 
+  /// The one EPC this screen changes when opened from Cloud + Geiger.
+  String get _onlyEpc => widget.cloudGeigerResolveEpc?.trim().toUpperCase() ?? '';
+  bool get _singleTag => _onlyEpc.isNotEmpty;
+
+  /// The sled has heard [_onlyEpc] since entry (shown, nothing else).
+  bool _onlyEpcHeard = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -137,17 +147,8 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       // Route reads through the geiger sink so the Count session-EPC
       // accumulator doesn't capture status-change scans.
       rfid.scanContext = 'GEIGER_FIND';
-      _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
-      // Also listen to the raw vendor stream so reads land even if the
-      // manager's geiger path is out of sync (see field comment).
-      _directSub = RfidVendorChannel.tagReadStream().listen(_onUhfRead, onError: (_) {});
-
-      await _hydrateSliderRange();
-      await rfid.setSessionPowerOverrideDbm(_powerDbm);
-      try {
-        await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
-      } catch (_) {}
-
+      // Trigger first — not behind the power calls below, which can be slow
+      // on a busy sled (the first pulls went unheard).
       _triggerSub = hardwareTriggerFor(this).listen((event) {
         if (!mounted) return;
         if (event == 'down') {
@@ -158,8 +159,22 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           }
         }
       }, onError: (_) {});
-
+      _uhfSub = rfid.geigerTagReads.listen(_onUhfRead, onError: (_) {});
+      // Also listen to the raw vendor stream so reads land even if the
+      // manager's geiger path is out of sync (see field comment).
+      _directSub = RfidVendorChannel.tagReadStream().listen(_onUhfRead, onError: (_) {});
       unawaited(_loadStatusLabels());
+      // Cloud + Geiger single tag: list it right away — no scan needed.
+      if (_singleTag) {
+        _inFlightEpcs.add(_onlyEpc);
+        unawaited(_resolveAndAppend(_onlyEpc));
+      }
+
+      await _hydrateSliderRange();
+      await rfid.setSessionPowerOverrideDbm(_powerDbm);
+      try {
+        await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
+      } catch (_) {}
     });
   }
 
@@ -327,6 +342,14 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
     if (!mounted) return;
     final epc = read.epcHex24.toUpperCase();
     if (epc.isEmpty) return;
+    if (_singleTag) {
+      // Scan as normal, but only the tag from Cloud + Geiger counts: every
+      // other read is ignored, so nothing else can be changed by accident.
+      if (epc == _onlyEpc && !_onlyEpcHeard) {
+        setState(() => _onlyEpcHeard = true);
+      }
+      return;
+    }
     if (_seenEpcs.contains(epc) || _inFlightEpcs.contains(epc)) return;
     _inFlightEpcs.add(epc);
     unawaited(_resolveAndAppend(epc));
@@ -375,8 +398,10 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           productName: enriched ? _str(row?['productName']) : null,
           color: enriched ? _str(row?['color']) : null,
           size: enriched ? _str(row?['size']) : null,
-          status: enriched ? _str(row?['status']) : null,
-        ),
+          // The single Cloud + Geiger tag shows its WMS status even when it
+          // has no product (killed / foreign tags are exactly what gets sent).
+          status: (enriched || epc == _onlyEpc) ? _str(row?['status']) : null,
+        )..expanded = epc == _onlyEpc,
       );
     });
     // No `ScanCue.success` here — the native per-tag beep fires from
@@ -392,6 +417,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
   }
 
   void _removeRow(_ScannedEpc card) {
+    if (_singleTag) return; // the one tag this screen is for
     setState(() {
       _scanned.removeWhere((c) => c.epc == card.epc);
       _seenEpcs.remove(card.epc);
@@ -422,7 +448,10 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
       await _stopScan();
     }
     if (!mounted) return;
-    final epcs = _scanned.map((e) => e.epc).toList(growable: false);
+    // Single tag: exactly that EPC, whatever else the sled heard.
+    final epcs = _singleTag
+        ? <String>[_onlyEpc]
+        : _scanned.map((e) => e.epc).toList(growable: false);
     // Resolve-source EPC for the Cloud + Geiger auto-dismiss path.
     // Empty string sentinel keeps the closure null-clean; we only
     // dismiss when both (a) the operator entered from Cloud + Geiger
@@ -440,10 +469,16 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           isSuperAdmin: _isSuperAdmin,
           onCommitted: (updated) {
             if (!mounted || updated <= 0) return;
-            setState(() {
-              _scanned.clear();
-              _seenEpcs.clear();
-            });
+            if (_singleTag) {
+              // Keep the tag on screen with its NEW status, re-read from the
+              // server, so the operator sees the change landed.
+              unawaited(_refreshOnlyEpcStatus());
+            } else {
+              setState(() {
+                _scanned.clear();
+                _seenEpcs.clear();
+              });
+            }
             if (committedSource) {
               unawaited(_dismissCloudGeiger(resolveEpc));
             }
@@ -451,6 +486,21 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _refreshOnlyEpcStatus() async {
+    try {
+      final rows = await context.read<WmsApiClient>().lookupEpcs([_onlyEpc]);
+      if (!mounted) return;
+      for (final r in rows) {
+        if ((r['epcHex'] as String?)?.toUpperCase() != _onlyEpc) continue;
+        setState(() {
+          for (final c in _scanned) {
+            if (c.epc == _onlyEpc) c.status = _str(r['status']);
+          }
+        });
+      }
+    } catch (_) {/* the commit itself already succeeded */}
   }
 
   Future<void> _dismissCloudGeiger(String epc) async {
@@ -475,7 +525,8 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           children: [
             _StepHeader(
               count: _scanned.length,
-              onClear: _scanned.isNotEmpty
+              singleTagHeard: _singleTag ? _onlyEpcHeard : null,
+              onClear: _scanned.isNotEmpty && !_singleTag
                   ? () => setState(() {
                         _scanned.clear();
                         _seenEpcs.clear();
@@ -484,7 +535,9 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
             ),
             Expanded(
               child: _scanned.isEmpty
-                  ? const _ScanEmptyHint()
+                  ? (_singleTag
+                      ? const Center(child: CircularProgressIndicator())
+                      : const _ScanEmptyHint())
                   : ListView.separated(
                       padding:
                           EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 12.h),
@@ -494,8 +547,10 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
                         final card = _scanned[i];
                         return _EpcContainer(
                           card: card,
+                          // The single Cloud + Geiger tag starts open: the
+                          // operator should see exactly which EPC changes.
                           onTap: () => _toggleExpand(card),
-                          onRemove: () => _removeRow(card),
+                          onRemove: _singleTag ? null : () => _removeRow(card),
                         );
                       },
                     ),
@@ -504,6 +559,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
               padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 8.h),
               child: _ContinueButton(
                 enabled: _scanned.isNotEmpty && _statusOptions.isNotEmpty,
+                label: _singleTag ? 'PICK THE NEW STATUS' : 'CONTINUE',
                 onTap: _continue,
               ),
             ),
@@ -555,24 +611,32 @@ String? _wmsValueForLabelName(String labelName) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _StepHeader extends StatelessWidget {
-  const _StepHeader({required this.count, this.onClear});
+  const _StepHeader({required this.count, this.onClear, this.singleTagHeard});
 
   final int count;
   final VoidCallback? onClear;
 
+  /// Non-null = Cloud + Geiger single-tag mode (true once the sled heard it).
+  final bool? singleTagHeard;
+
   @override
   Widget build(BuildContext context) {
+    final single = singleTagHeard;
     return Container(
       height: 36.h,
       padding: EdgeInsets.symmetric(horizontal: 20.w),
-      color: const Color(0xFFF0F5F4),
+      color: single == true ? const Color(0xFFD6F5E6) : const Color(0xFFF0F5F4),
       child: Row(
         children: [
           Expanded(
             child: Text(
-              count == 0
-                  ? 'PULL TRIGGER TO SCAN'
-                  : '$count SCANNED · TAP A CARD TO REVEAL EPC',
+              single != null
+                  ? (single
+                      ? 'THIS TAG ONLY · HEARD BY THE SLED'
+                      : 'THIS TAG ONLY · OTHER TAGS ARE IGNORED')
+                  : count == 0
+                      ? 'PULL TRIGGER TO SCAN'
+                      : '$count SCANNED · TAP A CARD TO REVEAL EPC',
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 11.sp,
                 fontWeight: FontWeight.w800,
@@ -665,7 +729,9 @@ class _EpcContainer extends StatelessWidget {
 
   final _ScannedEpc card;
   final VoidCallback onTap;
-  final VoidCallback onRemove;
+
+  /// Null hides the trash slot (the single Cloud + Geiger tag).
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -688,17 +754,20 @@ class _EpcContainer extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Left trash slot — fixed 56dp wide so glove-touch lands.
-            GestureDetector(
-              onTap: onRemove,
-              behavior: HitTestBehavior.opaque,
-              child: Container(
-                width: 56,
-                color: _kTrashRed,
-                alignment: Alignment.center,
-                child: Icon(LucideIcons.trash2,
-                    color: Colors.white, size: 22.sp),
-              ),
-            ),
+            if (onRemove != null)
+              GestureDetector(
+                onTap: onRemove,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: 56,
+                  color: _kTrashRed,
+                  alignment: Alignment.center,
+                  child: Icon(LucideIcons.trash2,
+                      color: Colors.white, size: 22.sp),
+                ),
+              )
+            else
+              Container(width: 6, color: AppColors.primary),
             Expanded(
               child: GestureDetector(
                 onTap: onTap,
@@ -825,9 +894,10 @@ class _StatusBadge extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ContinueButton extends StatelessWidget {
-  const _ContinueButton({required this.enabled, required this.onTap});
+  const _ContinueButton({required this.enabled, required this.onTap, this.label = 'CONTINUE'});
   final bool enabled;
   final VoidCallback onTap;
+  final String label;
   @override
   Widget build(BuildContext context) {
     final bg = enabled ? AppColors.primary : const Color(0xFFBCC9C9);
@@ -842,7 +912,7 @@ class _ContinueButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'CONTINUE',
+              label,
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 14.sp,
                 fontWeight: FontWeight.w900,

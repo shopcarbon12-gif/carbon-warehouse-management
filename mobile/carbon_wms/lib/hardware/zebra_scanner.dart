@@ -72,7 +72,9 @@ class ZebraScanner implements RfidScanner {
     if (r != RfidNativeConnectResult.linked) return;
     _nativeLinked = true;
     await _nativeSub?.cancel();
-    _nativeSub = RfidVendorChannel.tagReadStream().listen(_reads.add, onError: (_) {});
+    // Background: screens running the radio hold their own (foreground) stream;
+    // see ChannelFanout for why the manager never takes reads back from them.
+    _nativeSub = RfidVendorChannel.tagReadStream(background: true).listen(_reads.add, onError: (_) {});
   }
 
   @override

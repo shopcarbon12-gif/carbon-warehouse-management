@@ -10,11 +10,13 @@ import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
+import 'package:carbon_wms/services/beep_pacer.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/guards/covering_route.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
@@ -62,6 +64,11 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   final List<_GeigerItem> _items = <_GeigerItem>[];
   final Set<String> _seenEpcs = <String>{};
 
+  /// Last 16 hex of each queued EPC → that EPC. A read that isn't an exact
+  /// match is looked up here (a CSV of 16-hex tails vs the radio's 24-hex
+  /// EPC) — one map lookup instead of scanning the whole list per read.
+  final Map<String, String> _byTail = <String, String>{};
+
   /// In-memory bulk-find overlay. Independent of the persistent server
   /// queue — Refresh resets it; killing the screen clears it; never
   /// writes back to the items table.
@@ -75,11 +82,26 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
 
   // Bulk-find radio state.
   RfidManager? _rfid;
-  StreamSubscription<RfidTagRead>? _uhfSub;
+  ModalRoute<dynamic>? _route;
   StreamSubscription<RfidTagRead>? _vendorSub;
   StreamSubscription<String>? _triggerSub;
   bool _scanning = false;
   bool _uploading = false;
+
+  /// Bumped by every start / stop, so a slow start that a stop overtook
+  /// never flips the screen back to scanning.
+  int _scanGen = 0;
+
+  /// Radio setup in flight (entry, or handing back after Geiger / Bulk
+  /// Geiger closed). A start waits for it.
+  Future<void> _radioReady = Future<void>.value();
+
+  /// Shown when a start did not reach the sled.
+  String? _radioProblem;
+
+  /// One beep per newly found EPC, spaced so a burst is still countable.
+  final BeepPacer _beeper = BeepPacer();
+  Timer? _repaintTimer;
 
   // Power slider — bounds populated from native getPowerRangeDbm so the
   // operator can't drag below the radio's floor (RFD8500 ~5..30, C72E
@@ -93,6 +115,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _route = ModalRoute.of(context);
     if (_lifecycleRfid == null) {
       _lifecycleRfid = context.read<RfidManager>();
       _lifecycleRfid!.lifecycleStopTick.addListener(_onLifecycleStop);
@@ -104,7 +127,11 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   /// queue poller is a server refresh, not a scan timer — it keeps running.)
   void _onLifecycleStop() {
     if (!mounted) return;
-    if (_scanning) setState(() => _scanning = false);
+    if (_scanning) {
+      _scanGen++;
+      _beeper.cancel();
+      setState(() => _scanning = false);
+    }
   }
 
   @override
@@ -127,63 +154,83 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _rfid = context.read<RfidManager>();
-      // 2026-05-29 — ROOT FIX for "trigger pull doesn't pick up tags on
-      // the main screen, but per-row Geiger finds them". RfidManager
-      // gates its geigerTagReads stream on _scanContext == 'GEIGER_FIND'
-      // (rfid_manager.dart:379). Cloud+Geiger was setting the context
-      // to a project-specific 'CLOUD_GEIGER_BULK_FIND' which the
-      // manager didn't recognise → no reads ever flowed into our
-      // stream → 0/N forever. Use the same 'GEIGER_FIND' context the
-      // locate-tag screen uses; it's the canonical Carbon WMS label
-      // for "raw single-tag-style reads, no edge ingest / ghost
-      // filter".
+      // 'GEIGER_FIND' — the canonical context for raw single-tag-style
+      // reads (no edge ingest / ghost filter), same as Locate.
       _rfid!.scanContext = 'GEIGER_FIND';
-      _uhfSub = _rfid!.geigerTagReads.listen(_onUhfRead, onError: (_) {});
-      // Belt-and-suspenders: also subscribe to the vendor channel's
-      // raw stream. The locate-tag screen does this for the same
-      // reason — if the manager's gate ever falls out of sync with
-      // the active driver, the vendor channel still surfaces every
-      // chip the radio reports.
+      // Trigger FIRST: it used to be wired only after the power-range and
+      // power calls finished, so a slow sled left the first pulls unheard.
+      _triggerSub = hardwareTriggerFor(this).listen(_onTrigger, onError: (_) {});
+      // The tag stream. (It used to also listen to RfidManager's
+      // geigerTagReads "in case" — the real reason reads went missing was
+      // the shared platform channel, fixed in ChannelFanout.)
       _vendorSub = RfidVendorChannel.tagReadStream().listen(
         _onUhfRead,
         onError: (_) {},
       );
-
-      await _hydrateSliderRange();
-      // Default the slider to the radio's MAX achievable dBm so the
-      // first bulk-find sweep has the widest possible range without
-      // the operator having to drag the slider first. They can always
-      // dial down for closer work; defaulting low frustrated operators
-      // hunting tags across an aisle.
-      _powerDbm = _maxDbm;
-      await _rfid!.setSessionPowerOverrideDbm(_powerDbm);
-      try {
-        await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
-      } catch (_) {}
-
-      _triggerSub = hardwareTriggerFor(this).listen((event) {
-        if (!mounted) return;
-        if (event != 'down') return;
-        // No EPCs to find → ignore the trigger entirely. We never want
-        // bulk-find to fire when the list is empty: the operator gets
-        // a confusing "started but found nothing" radio chirp and the
-        // header would flip into BULK FIND state with no rows to mark.
-        // Only block on _start; an already-running scan still stops on
-        // a second pull so the operator can cancel cleanly.
-        if (!_scanning && _items.isEmpty) return;
-        if (_scanning) {
-          unawaited(_stopScan());
-        } else {
-          unawaited(_startScan());
-        }
-      }, onError: (_) {});
-
+      _radioReady = _initRadio();
       unawaited(_pollOnce());
     });
     _poller = Timer.periodic(_pollInterval, (_) => unawaited(_pollOnce()));
+  }
+
+  /// Entry: slider bounds, then the radio at the reader's MAX achievable dBm
+  /// so the first sweep has the widest range without touching the slider.
+  Future<void> _initRadio() async {
+    await _hydrateSliderRange();
+    if (!mounted) return;
+    setState(() => _powerDbm = _maxDbm);
+    await _applyRadioSetup();
+  }
+
+  /// Everything this screen needs from the radio. Applied on entry, after
+  /// Geiger / Bulk Geiger opened from here have fully closed (their dispose
+  /// restores THEIR defaults: power override off, per-tag beep on, one-tag
+  /// filter, 2D imager), and before every start. Each step is a no-op on the
+  /// sled when nothing changed.
+  Future<void> _applyRadioSetup() async {
+    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
+    _rfid?.scanContext = 'GEIGER_FIND';
+    try {
+      await RfidVendorChannel.scannerDisableTriggerRelay();
+      await RfidVendorChannel.close2dBarcode();
+      await RfidVendorChannel.enableRfidFunctionMode();
+      await RfidVendorChannel.setZebraTriggerModeRfid();
+    } catch (_) {/* best-effort — no-op when the sled is not connected */}
+    await RfidVendorChannel.setEpcInventoryFilter(null);
+    await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
+    try {
+      await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
+    } catch (_) {}
+  }
+
+  /// Back from a screen opened here: wait until it is really gone (its
+  /// dispose ran), then take the radio back.
+  Future<void> _reclaimRadio() async {
+    await coveringRouteGone(_route);
+    if (!mounted) return;
+    await _applyRadioSetup();
+  }
+
+  void _onTrigger(String event) {
+    if (!mounted || event != 'down') return;
+    // A running scan always stops on a pull.
+    if (_scanning) {
+      unawaited(_stopScan());
+      return;
+    }
+    // No EPCs to find → ignore the pull: no "started but found nothing".
+    if (_items.isEmpty) return;
+    if (_foundEpcs.length >= _items.length) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(
+        content: Text('Every EPC on the list is found. Tap Refresh to look again.'),
+        duration: Duration(milliseconds: 1600),
+      ));
+      return;
+    }
+    unawaited(_startScan());
   }
 
   @override
@@ -192,7 +239,8 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     _poller?.cancel();
     _poller = null;
     _powerApplyTimer?.cancel();
-    unawaited(_uhfSub?.cancel());
+    _repaintTimer?.cancel();
+    _beeper.dispose();
     unawaited(_vendorSub?.cancel());
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopChainwayInventory());
@@ -217,34 +265,91 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     });
   }
 
+  /// The screen flips to BULK FIND at once; the radio follows. A stop (second
+  /// pull, background, leaving) at any point wins — [_scanGen] makes every
+  /// late step of an overtaken start a no-op.
   Future<void> _startScan() async {
-    if (_scanning) return;
-    setState(() => _scanning = true);
+    if (_scanning || _items.isEmpty) return;
+    if (_rfid?.isBackgrounded ?? false) return;
+    final gen = ++_scanGen;
+    setState(() {
+      _scanning = true;
+      _radioProblem = null;
+    });
     try {
       ScanSounds.instance.play(ScanCue.start);
     } catch (_) {}
-    try {
-      await RfidVendorChannel.startZebraInventory();
-    } catch (_) {}
-    // A background/screen-off stop can land during the await above.
-    if (!mounted || !_scanning) return;
-    try {
-      await RfidVendorChannel.startChainwayInventory();
-    } catch (_) {}
-  }
-
-  Future<void> _stopScan() async {
-    if (!_scanning) return;
-    setState(() => _scanning = false);
+    // Back from Geiger / Bulk Geiger a moment ago: let it finish handing the
+    // radio back first, or its dispose would stop this scan again.
+    await _radioReady;
+    if (!_isLive(gen)) return;
+    await _applyRadioSetup();
+    if (!_isLive(gen)) return;
+    final problem = await _startRadio();
+    if (!_isLive(gen) || problem == null) return;
+    // Said so instead of showing BULK FIND over a radio that is off.
+    _beeper.cancel();
+    setState(() {
+      _scanning = false;
+      _radioProblem = problem;
+    });
     try {
       ScanSounds.instance.play(ScanCue.stop);
     } catch (_) {}
-    try {
-      await RfidVendorChannel.stopZebraInventory();
-    } catch (_) {}
-    try {
-      await RfidVendorChannel.stopChainwayInventory();
-    } catch (_) {}
+  }
+
+  bool _isLive(int gen) => mounted && _scanning && gen == _scanGen;
+
+  /// Starts inventory on the reader this phone actually has. Returns what to
+  /// tell the operator when it did not start; null when it did.
+  Future<String?> _startRadio() async {
+    const notStarted = 'The sled did not start. Pull the trigger again.';
+    final status = await RfidVendorChannel.readerStatus();
+    if (status != null && !status.connected) {
+      return 'No RFID sled connected. Connect the RFD8500, then pull the trigger.';
+    }
+    switch (status?.stack) {
+      case 'zebra':
+        try {
+          await RfidVendorChannel.startZebraInventory();
+          return null;
+        } catch (_) {
+          return notStarted;
+        }
+      case 'chainway':
+        try {
+          await RfidVendorChannel.startChainwayInventory();
+          return null;
+        } catch (_) {
+          return notStarted;
+        }
+      default:
+        // Reader state unknown: try both, as before.
+        var started = false;
+        try {
+          await RfidVendorChannel.startZebraInventory();
+          started = true;
+        } catch (_) {}
+        try {
+          await RfidVendorChannel.startChainwayInventory();
+          started = true;
+        } catch (_) {}
+        return started ? null : notStarted;
+    }
+  }
+
+  Future<void> _stopScan({bool silent = false}) async {
+    if (!_scanning) return;
+    _scanGen++;
+    _beeper.cancel();
+    setState(() => _scanning = false);
+    if (!silent) {
+      try {
+        ScanSounds.instance.play(ScanCue.stop);
+      } catch (_) {}
+    }
+    await RfidVendorChannel.stopZebraInventory();
+    await RfidVendorChannel.stopChainwayInventory();
   }
 
   Future<void> _setPower(int dbm) async {
@@ -278,37 +383,38 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     if (!mounted || !_scanning) return;
     final epc = read.epcHex24.toUpperCase();
     if (epc.isEmpty) return;
-    // Exact-match against the queue first. If no exact match AND the
-    // queued EPCs are shorter / differently-prefixed (a CSV with 16-hex
-    // tail-only EPCs vs the radio's 24-hex full EPC is the most common
-    // case), fall back to a suffix compare on the last 16 hex chars
-    // (item + serial bits — what's actually unique). 0/N counts in the
-    // field were the symptom that pushed this in.
-    String matched = epc;
-    var hit = _seenEpcs.contains(epc);
-    if (!hit && epc.length >= 16) {
-      final tail = epc.substring(epc.length - 16);
-      for (final q in _seenEpcs) {
-        if (q == epc) continue;
-        if (q.endsWith(tail) ||
-            (q.length >= 16 && tail.endsWith(q.substring(q.length - 16)))) {
-          matched = q;
-          hit = true;
-          break;
-        }
-      }
-    }
-    if (!hit) return;
-    if (_foundEpcs.add(matched)) {
-      // First time we've heard this EPC during the bulk-find pass —
-      // tick the success cue so the operator hears progress. Native
-      // per-tag beep is suppressed for this screen so this is the ONLY
-      // sound the operator gets, and only on a fresh queue hit.
+    // Exact match first, then the last 16 hex (item + serial — what is
+    // actually unique) for queues holding tail-only EPCs. Both are single
+    // lookups: this runs for EVERY tag the sled hears in the aisle, and the
+    // old per-read loop over the whole list grew with the list.
+    final matched = _seenEpcs.contains(epc)
+        ? epc
+        : (epc.length >= 16 ? _byTail[epc.substring(epc.length - 16)] : null);
+    if (matched == null || !_foundEpcs.add(matched)) return;
+    // First time this EPC is heard this pass: one beep (the native per-tag
+    // beep is off here, so this is the only sound, and only on a new hit).
+    _beeper.request();
+    if (_foundEpcs.length >= _items.length) {
+      // Everything on the list is found — nothing left to look for.
       try {
-        ScanSounds.instance.play(ScanCue.read);
+        ScanSounds.instance.play(ScanCue.success);
       } catch (_) {}
-      setState(() {});
+      unawaited(_stopScan(silent: true));
     }
+    // A burst of finds repaints once, not once per tag.
+    _repaintTimer ??= Timer(const Duration(milliseconds: 150), () {
+      _repaintTimer = null;
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _reindexTails() {
+    _byTail
+      ..clear()
+      ..addEntries([
+        for (final q in _seenEpcs)
+          if (q.length >= 16) MapEntry(q.substring(q.length - 16), q),
+      ]);
   }
 
   Future<void> _pollOnce() async {
@@ -339,6 +445,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       _items.removeWhere((it) => !serverSet.contains(it.epc));
       _seenEpcs.retainAll(serverSet);
       _foundEpcs.retainAll(serverSet);
+      _reindexTails();
       if (fresh.isNotEmpty) {
         unawaited(_enrich(fresh));
       }
@@ -396,6 +503,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       _items.removeWhere((e) => e.epc == item.epc);
       _seenEpcs.remove(item.epc);
       _foundEpcs.remove(item.epc);
+      _reindexTails();
     });
     unawaited(_dismissOnServer(item.epc));
   }
@@ -451,10 +559,13 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     );
     if (ok != true || !mounted) return;
     final epcs = _items.map((e) => e.epc).toList(growable: false);
+    if (_scanning) await _stopScan();
+    if (!mounted) return;
     setState(() {
       _items.clear();
       _seenEpcs.clear();
       _foundEpcs.clear();
+      _byTail.clear();
     });
     // Best-effort server dismiss for every EPC. Failure on any single
     // call doesn't undo the local clear — the next poll will re-fetch
@@ -473,6 +584,11 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   }
 
   Future<void> _openGeiger(_GeigerItem item) async {
+    // Geiger takes the radio. A bulk find left "running" here used to come
+    // back showing BULK FIND over a radio Geiger had already stopped, so the
+    // next pull only "stopped" it and the one after that started it.
+    if (_scanning) await _stopScan();
+    if (!mounted) return;
     // Thread the enrichment payload through so LocateTagScreen renders
     // its built-in item-info card directly under the EPC strip. The
     // operator confirmed they don't want to mentally cross-reference
@@ -490,13 +606,12 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
         cloudGeigerMode: true,
       ),
     );
-    // Locate Tag's dispose un-suppresses the native per-tag beep and owns
-    // its own scan context. Re-assert ours on return so the next bulk-find
-    // sweep stays silent (we only beep on new queue hits) and reads still
-    // flow through the geiger sink.
+    // Locate's dispose (per-tag beep on, power override off, one-tag filter
+    // off, radio stopped) runs ~300 ms AFTER this await returns. Take the
+    // radio back only once it has run, and hold any trigger pull until then.
     if (!mounted) return;
-    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    _rfid?.scanContext = 'GEIGER_FIND';
+    _radioReady = _reclaimRadio();
+    await _radioReady;
   }
 
   /// This list in Bulk Geiger (one beep per tag found, tap one → Geiger).
@@ -507,10 +622,10 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       ScreenIds.bulkGeiger,
       (_) => BulkGeigerScreen(initialEpcs: _items.map((e) => e.epc).toList()),
     );
-    // Same hand-back as _openGeiger: our own silent bulk-find + scan context.
+    // Same hand-back as _openGeiger.
     if (!mounted) return;
-    unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
-    _rfid?.scanContext = 'GEIGER_FIND';
+    _radioReady = _reclaimRadio();
+    await _radioReady;
   }
 
   /// Snapshot the current list (epc + found-or-not + best-effort sku /
@@ -603,6 +718,20 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
               found: foundCount,
               total: totalCount,
             ),
+            if (_radioProblem != null)
+              Container(
+                width: double.infinity,
+                color: const Color(0xFFFFF7E6),
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                child: Text(
+                  _radioProblem!,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 12.sp,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFFB45309),
+                  ),
+                ),
+              ),
             if (_error != null)
               Container(
                 width: double.infinity,
