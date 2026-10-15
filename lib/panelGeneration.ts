@@ -330,7 +330,7 @@ export function getBottomsCropPoseBlock(gender: string, poseNumber: number) {
       `POSE ${poseNumber} - Back Bottoms Crop (BOTTOMS VARIANT — replaces the library's Torso Back crop because the locked item is a bottom)`,
       "Base",
       "- Crop: from the lower back, just above the waistband, to just below the knees. Back-facing, body square to the camera, no twist. The head and shoulders are OUT of frame.",
-      "- The back of the product fills the frame: waistband, back yoke, back pockets, seat fit and the back of the thighs, with the back-waistband label or patch exactly as the item photos show it.",
+      "- The back of the product fills the frame: waistband, back yoke, back pockets, seat fit and the back of the thighs, and the back-waistband label or patch where the item has one.",
       "- Arms relaxed at the sides; hands never cover the back pockets, the waistband or the label.",
       "- Even weight on both feet; fabric relaxed, no pulling.",
     ].join("\n");
@@ -360,7 +360,7 @@ export function getEffectivePoseBlock(library: string, gender: string, poseNumbe
 
 function bottomsCropLockLine(side: "LEFT" | "RIGHT", poseNumber: number, back: boolean) {
   return back
-    ? `- ${side} Pose ${poseNumber} is a BACK BOTTOMS crop of the locked item (from the lower back, just above the waistband, to just below the knees), back-facing. HARD CROP LOCK: the head and shoulders are OUT of frame; the back of the product fills the frame — waistband, yoke, back pockets, seat, the label as photographed. A torso-and-head crop or a full standing body is WRONG.`
+    ? `- ${side} Pose ${poseNumber} is a BACK BOTTOMS crop of the locked item (from the top's back hem resting on the waistband to just below the knees), back-facing. HARD CROP LOCK: the head and shoulders are OUT of frame; the back of the product fills the frame — waistband, yoke, back pockets, seat. A torso-and-head crop or a full standing body is WRONG.`
     : `- ${side} Pose ${poseNumber} is a FRONT BOTTOMS crop of the locked item (from just above the waistband to just below the knees), front three-quarter. HARD CROP LOCK: the head, face and chest are OUT of frame; the product fills the frame — waistband, fly, front pockets, thighs. A torso-and-head crop or a full standing body is WRONG.`;
 }
 

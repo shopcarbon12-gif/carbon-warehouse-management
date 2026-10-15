@@ -334,8 +334,9 @@ type PanelResponse = {
   qaNotes?: string[];
   /** Panel 1 of an anchored run was saved as this product's look for the model + colour. */
   lookAnchor?: { url?: string; key?: string; gate?: string | null };
-  /** The operator's label photo pasted into the Pose 7 placeholder (or not). */
-  jeansLabel?: { pose: number; placed: boolean };
+  /** The operator's label photo pasted into the Pose 7 placeholder (or not);
+   *  drawn = the AI left a placeholder (or the paste failed) but it was not used. */
+  jeansLabel?: { pose: number; placed: boolean; drawn?: boolean };
   error?: unknown;
   status?: string;
 };
@@ -491,17 +492,21 @@ async function panelResponseToCrops(
   const labelNote = label
     ? label.placed
       ? "Label: your label photo was pasted onto the back waistband."
-      : "Label NOT pasted: the AI left no placeholder, so this label is its own drawing — regenerate this panel."
+      : label.drawn
+        ? "Label NOT pasted: the AI's placeholder could not be used — regenerate this panel."
+        : "Label NOT pasted: the AI left no placeholder, so this label is its own drawing — regenerate this panel."
     : null;
   const notesFor = (pose: number) => (labelNote && label && pose === label.pose ? [labelNote, ...(notes ?? [])] : notes);
+  /* A Pose 7 whose label is not the real one is never published by default. */
+  const keep = (pose: number) => !(label && !label.placed && pose === label.pose);
   /* The image is here; the judges only run once the whole run has landed,
      because what they check is how the frames compare with each other. Crops
      show now with a "checking" badge and the flags arrive after the last
      panel. */
   const qaPending = json.runQaPending === true;
   return [
-    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · ${unit} ${poseA}`, selected: true, qaNotes: notesFor(poseA), side: "left", panel, qaPending },
-    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · ${unit} ${poseB}`, selected: true, qaNotes: notesFor(poseB), side: "right", panel, qaPending },
+    { id: `p${panel}-l-${runTag}`, b64: left, label: `P${panel} · ${unit} ${poseA}`, selected: keep(poseA), qaNotes: notesFor(poseA), side: "left", panel, qaPending },
+    { id: `p${panel}-r-${runTag}`, b64: right, label: `P${panel} · ${unit} ${poseB}`, selected: keep(poseB), qaNotes: notesFor(poseB), side: "right", panel, qaPending },
   ];
 }
 
@@ -3215,10 +3220,10 @@ export function CarbonStudioTab({
             </label>
           </div>
           <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
-            Pick the patch sewn on the back of this product&apos;s waistband. Pose 7 (the zoomed-in back) folds the shirt up
-            just enough to show it, and your cropped label photo is pasted there exactly — the AI never draws it. Pose 4 (the
-            full-body back) always keeps the shirt over the jeans, so no label shows there. Upload every label once and crop it
-            to the patch alone (✂) — they are kept for all products.
+            Pick the patch sewn on the back of this product&apos;s waistband. In Pose 7 (the zoomed-in back) the shirt rests on
+            the top edge of the waistband — no skin — and your label photo is pasted there exactly, level and in its own
+            proportions; the AI never draws it. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label
+            shows there. Upload every label once and crop it to the patch alone (✂) — they are kept for all products.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button

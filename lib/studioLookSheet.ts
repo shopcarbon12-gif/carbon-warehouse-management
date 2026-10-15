@@ -349,7 +349,8 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
        every frame; only the label pose (male Pose 7) lifts the back hem, just
        enough to show a back-waistband label — Pose 4 keeps the top over it.
        Never bare skin between top and waistband; a close-up may raise the hem
-       a little. The carve-outs sit inside this one line, so every panel reads
+       a little — to the waistband's top edge, never past it ("just clear of
+       it" read as a gap and showed the lower back, Julian Jeans 2026-10-14). The carve-outs sit inside this one line, so every panel reads
        the same words. The item instruction's own word on tucking still wins. */
     const labelPose = !female && input.backWaistbandLabel ? 7 : null;
     const over =
@@ -360,9 +361,9 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
       instrTuck ??
       `${over}${
         labelPose
-          ? ` — except in Pose ${labelPose}, the zoomed-in back crop, where only the back hem is folded up just enough to show the label on the back of the waistband (the full-body back view keeps the top over it)`
+          ? ` — except in Pose ${labelPose}, the zoomed-in back crop, where only the back hem is lifted to the top edge of the waistband and rests on it, so the label below that edge shows in full (the full-body back view keeps the top over it)`
           : ""
-      }; it always covers the stomach and the lower back — no skin shows between the top and the waistband in any frame; only a close-up of the waistband may raise the hem a little, just clear of it`;
+      }; it always covers the stomach and the lower back — no skin shows between the top and the waistband in any frame, even where the item photos show a bare back; a close-up of the waistband may raise the hem a little, only up to the waistband's top edge, where it rests — never above it`;
     put("top", "TOP", renderPiece("top", top, input, { tuck }));
   }
   if (resolved.top_under) put("top_under", "TOP UNDERNEATH", renderPiece("top_under", resolved.top_under, input));

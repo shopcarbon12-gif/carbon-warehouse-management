@@ -132,9 +132,12 @@ test("owner styling rules: photographed accessories worn, top always over the pa
   assert.match(sheet.slots.accessories, /^exactly the accessories the item photos show the model wearing/);
   assert.match(sheet.slots.top, /worn untucked over the waistband in every frame/);
   assert.ok(!/tucked in loosely/.test(sheet.text), sheet.slots.top);
-  assert.match(sheet.slots.top, /except in Pose 7, the zoomed-in back crop, where only the back hem is folded up/);
+  assert.match(sheet.slots.top, /except in Pose 7, the zoomed-in back crop, where only the back hem is lifted to the top edge of the waistband and rests on it/);
   assert.match(sheet.slots.top, /no skin shows between the top and the waistband/);
-  assert.equal((sheet.text.match(/label on the back of the waistband/g) ?? []).length, 1);
+  // "just clear of it" read as a gap and showed the lower back (Julian Jeans).
+  assert.ok(!/clear of it/.test(sheet.text), sheet.slots.top);
+  assert.match(sheet.slots.top, /only up to the waistband's top edge, where it rests — never above it/);
+  assert.equal((sheet.text.match(/the label below that edge shows in full/g) ?? []).length, 1);
   const her = resolveLookSheet(base({ gender: "female" }));
   assert.ok(!/Pose 7/.test(her.text), "a female sheet never names a male pose");
   assert.match(sheet.slots.footwear, /white sneakers/);
