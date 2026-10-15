@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSession } from "@/lib/get-session";
 import { CountSessionsWorkspace } from "@/components/reports/count-sessions-workspace";
 
@@ -16,6 +17,12 @@ export default async function CountSessionsReportsPage() {
         <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
           Audit archive of handheld count sessions (intent-driven uploads, retained 1 year).
         </p>
+        <Link
+          href="/reports/count-sessions/review"
+          className="mt-3 inline-flex rounded-md border border-[var(--wms-accent)] bg-[var(--wms-accent)] px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-[var(--wms-accent-fg)] hover:brightness-110 max-md:min-h-11"
+        >
+          Combine &amp; review a count → push
+        </Link>
       </div>
       <CountSessionsWorkspace />
     </div>

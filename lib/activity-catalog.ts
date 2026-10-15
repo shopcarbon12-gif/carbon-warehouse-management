@@ -142,6 +142,8 @@ const ROUTES: Record<string, Entry> = {
   "handheld/add-on-sessions/[id]/epcs": { module: "Counts", label: "Add-on count scans" },
   "handheld/add-on-sessions/[id]/join-request": { module: "Counts", label: "Asked to join add-on count" },
   "handheld/add-on-sessions/[id]/reopen": { module: "Counts", label: "Reopened add-on count" },
+  "reports/count-review": { module: "Counts", label: "Reviewed a combined count" },
+  "reports/count-review/push": { module: "Counts", label: "Pushed a count to stock" },
   "compare/runs": { module: "Counts", label: "Ran compare" },
 
   "operations/transfers/commit": { module: "Transfers", label: "Sent transfer" },
