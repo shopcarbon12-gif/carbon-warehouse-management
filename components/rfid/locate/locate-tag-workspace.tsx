@@ -197,6 +197,8 @@ export function LocateTagWorkspace() {
     targetRef.current = target;
   }, [target]);
   const [bulkTargets, setBulkTargets] = useState<Target[]>([]);
+  /** Bulk: EPCs ticked for Send to handheld. */
+  const [checkedEpcs, setCheckedEpcs] = useState<Set<string>>(() => new Set());
   const bulkByEpc = useMemo(() => new Map(bulkTargets.map((t) => [t.epc, t])), [bulkTargets]);
 
   /** EPCs the live stream credits — the one target, or every bulk target. */
@@ -217,6 +219,9 @@ export function LocateTagWorkspace() {
     const q = query.trim();
     if ((mode === "single" && target) || q.length < 2) {
       setMatches([]);
+      // A search cancelled mid-flight (box cleared, target picked) never
+      // reaches its finally — without this "Searching…" stayed on screen.
+      setSearching(false);
       return;
     }
     let cancelled = false;
@@ -336,9 +341,22 @@ export function LocateTagWorkspace() {
     [bulkByEpc, addBulkTargets, enrichRaw],
   );
 
-  /** Bulk: put the list on every handheld at this location (their Cloud + Geiger screen). */
+  /** Bulk: put the ticked EPCs on every handheld at this location (their Cloud + Geiger screen). */
+  const checkedTargets = useMemo(() => bulkTargets.filter((t) => checkedEpcs.has(t.epc)), [bulkTargets, checkedEpcs]);
+  const allChecked = bulkTargets.length > 0 && checkedTargets.length === bulkTargets.length;
+  const toggleChecked = (epc: string) =>
+    setCheckedEpcs((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(epc)) next.add(epc);
+      return next;
+    });
+  const checkAllRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (checkAllRef.current) checkAllRef.current.indeterminate = checkedTargets.length > 0 && !allChecked;
+  }, [checkedTargets.length, allChecked]);
+
   const sendToHandheld = useCallback(async () => {
-    const epcs = bulkTargets.map((t) => t.epc);
+    const epcs = checkedTargets.map((t) => t.epc);
     if (epcs.length === 0) return;
     const ok = window.confirm(
       `Send ${epcs.length} EPC${epcs.length === 1 ? "" : "s"} to every handheld at your active location?\n\n` +
@@ -380,7 +398,7 @@ export function LocateTagWorkspace() {
     } finally {
       setBulkBusy(null);
     }
-  }, [bulkTargets]);
+  }, [checkedTargets]);
 
   const addPasted = useCallback(() => {
     const known = new Map(matches.map((m) => [m.epc.toUpperCase(), m]));
@@ -860,13 +878,17 @@ export function LocateTagWorkspace() {
                 </button>
                 <button
                   type="button"
-                  disabled={bulkBusy !== null || bulkTargets.length === 0}
+                  disabled={bulkBusy !== null || checkedTargets.length === 0}
                   onClick={() => void sendToHandheld()}
-                  title="Put this list on every handheld at your active location (Cloud + Geiger → Bulk Geiger)"
+                  title={
+                    checkedTargets.length === 0
+                      ? "Tick the EPCs to send (or Check all)"
+                      : "Put the ticked EPCs on every handheld at your active location (Cloud + Geiger → Bulk Geiger)"
+                  }
                   className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:border-teal-500/40 disabled:opacity-50 max-md:min-h-11"
                 >
                   {bulkBusy === "send" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Smartphone className="h-3.5 w-3.5" />}
-                  Send to handheld ({bulkTargets.length})
+                  Send to handheld ({checkedTargets.length})
                 </button>
               </div>
             </div>
@@ -940,6 +962,19 @@ export function LocateTagWorkspace() {
             ) : null}
             {bulkTargets.length > 0 ? (
               <>
+                <label className="flex w-fit cursor-pointer items-center gap-2 font-mono text-xs text-[var(--wms-fg)] max-md:min-h-11">
+                  <input
+                    ref={checkAllRef}
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={() => setCheckedEpcs(allChecked ? new Set() : new Set(bulkTargets.map((t) => t.epc)))}
+                    className="h-4 w-4 accent-[var(--wms-accent)]"
+                  />
+                  Check all
+                  <span className="text-[var(--wms-muted)]">
+                    · {checkedTargets.length} of {bulkTargets.length} checked
+                  </span>
+                </label>
                 <ul className="max-h-[45dvh] divide-y divide-[var(--wms-border)]/50 overflow-y-auto rounded-md border border-[var(--wms-border)] max-md:overscroll-contain">
                   {bulkTargets.map((t) => {
                     const best = bestReaderByEpc.get(t.epc);
@@ -949,6 +984,13 @@ export function LocateTagWorkspace() {
                         key={t.epc}
                         className={`flex flex-wrap items-start gap-2 px-3 py-2 ${live ? "bg-emerald-500/5" : ""}`}
                       >
+                        <input
+                          type="checkbox"
+                          checked={checkedEpcs.has(t.epc)}
+                          onChange={() => toggleChecked(t.epc)}
+                          aria-label={`Check ${t.epc}`}
+                          className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="font-mono text-xs font-semibold text-teal-400/90 max-md:break-all">{t.epc}</div>
                           <div className="font-mono text-[0.65rem] text-[var(--wms-fg)]">
@@ -963,17 +1005,17 @@ export function LocateTagWorkspace() {
                               .filter(Boolean)
                               .join(" · ")}
                           </div>
-                          <div
-                            className={`mt-0.5 font-mono text-[0.65rem] ${live ? "font-semibold text-emerald-300" : "text-[var(--wms-muted)]"}`}
-                          >
-                            {best
-                              ? live
-                                ? `Heard by ${best.readerName}${best.liveRssi !== null ? ` · ${best.liveRssi.toFixed(0)} dBm` : ""}`
-                                : `Last heard by ${best.readerName} · ${agoLabel(best.age)}`
-                              : hunting
-                                ? "Not heard yet"
-                                : "—"}
-                          </div>
+                          {best || hunting ? (
+                            <div
+                              className={`mt-0.5 font-mono text-[0.65rem] ${live ? "font-semibold text-emerald-300" : "text-[var(--wms-muted)]"}`}
+                            >
+                              {best
+                                ? live
+                                  ? `Heard by ${best.readerName}${best.liveRssi !== null ? ` · ${best.liveRssi.toFixed(0)} dBm` : ""}`
+                                  : `Last heard by ${best.readerName} · ${agoLabel(best.age)}`
+                                : "Not heard yet"}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="flex shrink-0 gap-1.5">
                           <button
@@ -987,7 +1029,14 @@ export function LocateTagWorkspace() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setBulkTargets((prev) => prev.filter((x) => x.epc !== t.epc))}
+                            onClick={() => {
+                              setBulkTargets((prev) => prev.filter((x) => x.epc !== t.epc));
+                              setCheckedEpcs((prev) => {
+                                const next = new Set(prev);
+                                next.delete(t.epc);
+                                return next;
+                              });
+                            }}
                             aria-label={`Remove ${t.epc}`}
                             className="inline-flex items-center rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5 py-1 text-[var(--wms-fg)] hover:border-red-400/50 max-md:min-h-11 max-md:px-2.5"
                           >
@@ -1009,6 +1058,7 @@ export function LocateTagWorkspace() {
                       stopHunt();
                       setStats({});
                       setBulkTargets([]);
+                      setCheckedEpcs(new Set());
                     }}
                     className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1 text-[var(--wms-fg)] hover:border-red-400/50 max-md:min-h-11"
                   >
