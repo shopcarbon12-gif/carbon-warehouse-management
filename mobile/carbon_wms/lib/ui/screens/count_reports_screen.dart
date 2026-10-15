@@ -10,6 +10,7 @@ import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/format_user_name.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/screens/count_review_screen.dart';
 
 /// Reports → Count Reports.
 ///
@@ -133,6 +134,30 @@ class _CountReportsScreenState extends State<CountReportsScreen> {
       pageTitle: 'COUNT REPORTS',
       body: Column(
         children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 0),
+            child: SizedBox(
+              width: double.infinity,
+              height: 48.h,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  shape: const RoundedRectangleBorder(),
+                ),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const CountReviewScreen()),
+                ),
+                child: Text(
+                  'COMBINE & REVIEW A COUNT → PUSH',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+            ),
+          ),
           Padding(
             padding: EdgeInsets.fromLTRB(20.w, 12.h, 20.w, 8.h),
             child: Align(

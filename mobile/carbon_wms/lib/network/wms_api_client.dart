@@ -698,6 +698,64 @@ class WmsApiClient {
     };
   }
 
+  /// Counts → Combine & review: recent Count / Add-On files (newest first,
+  /// with pushed state) + whether this user is a super-admin.
+  /// `GET /api/reports/count-review` → `{ files: [...], isSuperAdmin }`.
+  Future<Map<String, dynamic>> fetchCountReviewFiles() async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final res = await _http.get(Uri.parse('$base/api/reports/count-review'), headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// The combined result of [reportIds] against the live WMS (read-only).
+  /// `POST /api/reports/count-review` → `{ review: {...}, isSuperAdmin }`.
+  Future<Map<String, dynamic>> postCountReview(List<String> reportIds) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final res = await _http.post(
+      Uri.parse('$base/api/reports/count-review'),
+      headers: {'Content-Type': 'application/json', ...await sessionAuthHeaders()},
+      body: jsonEncode({'reportIds': reportIds}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// Push the combined count once: `mode` is `add` or `override`.
+  /// Override needs [confirmZeroCount] = the number of not-scanned tags shown
+  /// on the review. [reviveEpcs] is super-admin only. Returns `{ result }`.
+  Future<Map<String, dynamic>> postCountPush({
+    required List<String> reportIds,
+    required String mode,
+    int? confirmZeroCount,
+    List<String> reviveEpcs = const [],
+    bool zeroManual = false,
+  }) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final res = await _http.post(
+      Uri.parse('$base/api/reports/count-review/push'),
+      headers: {'Content-Type': 'application/json', ...await sessionAuthHeaders()},
+      body: jsonEncode({
+        'reportIds': reportIds,
+        'mode': mode,
+        'confirmZeroCount': confirmZeroCount,
+        'reviveEpcs': reviveEpcs,
+        'zeroManual': zeroManual,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
   Future<Map<String, String>> sessionAuthHeaders() async {
     final t = await getSessionToken();
     final h = <String, String>{};
