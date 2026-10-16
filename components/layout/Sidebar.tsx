@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  BadgeAlert,
   Activity,
   AlertTriangle,
   ArrowRightLeft,
@@ -152,6 +153,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/reports/inventory-compare", label: "POS compare", icon: Banknote },
       { href: "/reports/count-sessions", label: "Count sessions", icon: ClipboardList },
+      { href: "/reports/unknown-tags", label: "New Unknown tags", icon: BadgeAlert },
       { href: "/reports/transfers/out", label: "Transfer out (report)", icon: ArrowRightLeft },
       { href: "/reports/transfers/in", label: "Transfer in (report)", icon: FolderInput },
       { href: "/reports/uploads", label: "Device upload logs", icon: Upload },

@@ -18,6 +18,7 @@ import {
   CircleSlash,
 } from "lucide-react";
 import { ReaderPicker } from "@/components/shared/reader-picker";
+import { CountReportActions } from "@/components/reports/count-report-actions";
 import { useReaderWake } from "@/components/shared/use-reader-wake";
 import { useCountUp } from "@/components/dashboard/use-count-up";
 import { CycleCountCommitModal } from "./cycle-count-commit-modal";
@@ -1115,12 +1116,16 @@ function ActiveSessionView({
               started {new Date(detail.started_at).toLocaleString()}
             </p>
           </div>
-          <a
-            href={`/api/rfid/cycle-counts/sessions/${sessionId}/export`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
-          >
-            <Download className="h-3.5 w-3.5" /> Export XLSX
-          </a>
+          <div className="flex flex-col items-end gap-1.5">
+            <a
+              href={`/api/rfid/cycle-counts/sessions/${sessionId}/export`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.65rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-surface)]"
+            >
+              <Download className="h-3.5 w-3.5" /> Export XLSX
+            </a>
+            {/* Count report: summary + NEW Unknown tags + defective. */}
+            <CountReportActions kind="cycle_count" id={sessionId} />
+          </div>
         </div>
       </div>
 

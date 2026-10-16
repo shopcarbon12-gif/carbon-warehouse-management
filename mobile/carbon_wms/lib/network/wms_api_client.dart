@@ -665,6 +665,73 @@ class WmsApiClient {
     return <String, dynamic>{};
   }
 
+  /* ---------- Count reports (owner, 2026-10-16) ---------- */
+
+  /// End-of-count report for a phone count upload (inventory_reports.id):
+  /// summary, every NEW Unknown tag with all its information, defective tags.
+  /// Server: /api/reports/count-report?kind=phone.
+  Future<Map<String, dynamic>> fetchCountReport(String reportId) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/reports/count-report').replace(
+      queryParameters: {'kind': 'phone', 'id': reportId, 'deviceId': deviceId},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// The same report as a file — [format] `xlsx` or `pdf`.
+  Future<({Uint8List bytes, String filename})> downloadCountReport(
+    String reportId,
+    String format,
+  ) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final uri = Uri.parse('$base/api/reports/count-report').replace(
+      queryParameters: {'kind': 'phone', 'id': reportId, 'format': format, 'deviceId': deviceId},
+    );
+    final res = await _http.get(uri, headers: await sessionAuthHeaders());
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final cd = res.headers['content-disposition'] ?? '';
+    final m = RegExp(r'filename="([^"]+)"').firstMatch(cd);
+    return (bytes: res.bodyBytes, filename: m?.group(1) ?? 'count-report.$format');
+  }
+
+  /// Adds EPCs to THIS handheld's Cloud + Geiger queue (count report's
+  /// CLOUD + GEIGER button). Returns how many were queued.
+  Future<int> addToMyEpcQueue({
+    required String deviceId,
+    required List<String> epcs,
+  }) async {
+    final cleaned = epcs
+        .map((e) => e.trim().toUpperCase())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+    if (cleaned.isEmpty) return 0;
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/handheld/epc-queue');
+    final res = await _http.post(
+      uri,
+      headers: <String, String>{
+        ...await handheldAuthHeaders(),
+        'Content-Type': 'application/json',
+        'x-wms-device-id': deviceId,
+      },
+      body: jsonEncode({'deviceId': deviceId, 'epcs': cleaned, 'action': 'add'}),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? (decoded['enqueued'] as num?)?.toInt() ?? 0 : 0;
+  }
+
   /// Paginated list of count-session reports for the active tenant.
   /// Powers the in-app Reports → Count Reports list. Server returns
   /// `{rows: [{id, activity, uploaded_at, uploaded_by_email, device_id,

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Download } from "lucide-react";
 import type { CountSessionReportRow } from "@/lib/queries/inventory-reports";
+import { CountReportActions } from "@/components/reports/count-report-actions";
 import {
   cellTruncate,
   DataTableContainer,
@@ -200,7 +201,7 @@ function CountSessionsTable({
   hasData: boolean;
 }) {
   const tableRef = useRef<HTMLTableElement>(null);
-  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 8);
+  const { colWidths, startDrag, autoFit } = useColResize(tableRef, 9);
   const cols: { label: string; align?: "right"; mobileCls?: string }[] = [
     { label: "Uploaded at" },
     { label: "Activity" },
@@ -209,6 +210,7 @@ function CountSessionsTable({
     { label: "Rows", align: "right" },
     { label: "Filename", mobileCls: "max-md:hidden" },
     { label: "Expires", mobileCls: "max-md:hidden" },
+    { label: "Report" },
     {
       label: "CSV",
       align: "right",
@@ -220,7 +222,7 @@ function CountSessionsTable({
     <DataTableContainer maxHeight="min(70vh, 640px)">
       <table
         ref={tableRef}
-        className="w-full min-w-[900px] max-md:min-w-[480px] border-collapse text-left text-sm"
+        className="w-full min-w-[1150px] max-md:min-w-[720px] border-collapse text-left text-sm"
         style={{ tableLayout: pickTableLayout(colWidths) }}
       >
         <thead className="sticky top-0 z-10 bg-[var(--wms-surface-elevated)] font-mono text-[0.6rem] max-md:text-xs uppercase text-[var(--wms-muted)]">
@@ -243,13 +245,13 @@ function CountSessionsTable({
         <tbody className="divide-y divide-[var(--wms-border)]/80">
           {isLoading && !hasData ? (
             <tr>
-              <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+              <td colSpan={9} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                 Loading…
               </td>
             </tr>
           ) : !rows.length ? (
             <tr>
-              <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+              <td colSpan={9} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                 No reports match these filters.
               </td>
             </tr>
@@ -272,6 +274,9 @@ function CountSessionsTable({
                 <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 font-mono text-xs`} title={row.filename}>{row.filename}</td>
                 <td className={`${cellTruncate} max-md:hidden px-3 py-2.5 font-mono text-xs tabular-nums text-[var(--wms-muted)]`}>
                   {new Date(row.expires_at).toLocaleDateString()}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  <CountReportActions kind="phone" id={row.id} />
                 </td>
                 <td className="overflow-hidden px-3 py-2.5 text-right max-md:sticky max-md:right-0 max-md:z-[5] max-md:bg-[var(--wms-surface)] max-md:shadow-[inset_2px_0_0_var(--wms-border)]">
                   <a

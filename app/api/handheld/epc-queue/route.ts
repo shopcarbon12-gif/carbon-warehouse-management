@@ -2,7 +2,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db";
 import { resolveTenantOrError } from "@/lib/auth/resolve-tenant";
-import { dismissEpcsForDevice, listPendingEpcsForDevice } from "@/lib/queries/device-epc-queue";
+import { dismissEpcsForDevice, enqueueEpcsForDevice, listPendingEpcsForDevice } from "@/lib/queries/device-epc-queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +79,10 @@ export async function GET(req: Request) {
  *
  * Body: { epcs: [...] }
  * Reply: { ok: true, dismissed: number }
+ *
+ * `action: "add"` instead ADDS the EPCs to this handheld's own queue — the
+ * count report's CLOUD + GEIGER button (owner, 2026-10-16: check the new
+ * Unknown tags). Reply: { ok: true, enqueued: number }
  */
 async function POST_handler(req: Request) {
   const pool = getPool();
@@ -134,6 +138,15 @@ async function POST_handler(req: Request) {
   }
 
   try {
+    if (body.action === "add") {
+      const r = await enqueueEpcsForDevice(pool, {
+        tenantId: auth.tenantId,
+        deviceId: row.id,
+        epcs: epcs.slice(0, 5000),
+        enqueuedBy: auth.userId,
+      });
+      return NextResponse.json({ ok: true, ...r });
+    }
     const r = await dismissEpcsForDevice(pool, row.id, epcs);
     return NextResponse.json({ ok: true, ...r });
   } catch (e) {

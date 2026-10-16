@@ -10,6 +10,7 @@ import 'package:carbon_wms/services/report_csv_export.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/util/format_user_name.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
+import 'package:carbon_wms/ui/screens/count_report_screen.dart';
 import 'package:carbon_wms/ui/screens/count_review_screen.dart';
 
 /// Reports → Count Reports.
@@ -76,10 +77,9 @@ class _CountReportsScreenState extends State<CountReportsScreen> {
         limit: _pageSize,
       );
       if (!mounted) return;
-      final rows = (res['rows'] as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
+      final rows =
+          (res['rows'] as List?)?.whereType<Map<String, dynamic>>().toList() ??
+              [];
       setState(() {
         _rows.addAll(rows);
         _total = (res['total'] as num?)?.toInt() ?? rows.length;
@@ -109,10 +109,9 @@ class _CountReportsScreenState extends State<CountReportsScreen> {
         limit: _pageSize,
       );
       if (!mounted) return;
-      final rows = (res['rows'] as List?)
-              ?.whereType<Map<String, dynamic>>()
-              .toList() ??
-          [];
+      final rows =
+          (res['rows'] as List?)?.whereType<Map<String, dynamic>>().toList() ??
+              [];
       setState(() {
         _page = next;
         _rows.addAll(rows);
@@ -145,7 +144,8 @@ class _CountReportsScreenState extends State<CountReportsScreen> {
                   shape: const RoundedRectangleBorder(),
                 ),
                 onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const CountReviewScreen()),
+                  MaterialPageRoute<void>(
+                      builder: (_) => const CountReviewScreen()),
                 ),
                 child: Text(
                   'COMBINE & REVIEW A COUNT → PUSH',
@@ -359,75 +359,87 @@ class _CountReportCard extends StatelessWidget {
       height: 1.2,
     );
 
+    final id = '${row['id'] ?? ''}';
     return Material(
       color: const Color(0xFFECECEC),
       borderRadius: BorderRadius.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          activity.isEmpty ? 'COUNT' : activity,
-                          style: activityStyle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+      // Tap → the count's report: summary, NEW Unknown tags, defective,
+      // EXCEL / PDF, CLOUD + GEIGER (owner, 2026-10-16).
+      child: InkWell(
+        onTap: id.isEmpty
+            ? null
+            : () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                      builder: (_) => CountReportScreen(reportId: id)),
+                ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            activity.isEmpty ? 'COUNT' : activity,
+                            style: activityStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      if (overrideCatalog) ...[
-                        SizedBox(width: 8.w),
-                        Text('OVERRIDE', style: overrideStyle),
+                        if (overrideCatalog) ...[
+                          SizedBox(width: 8.w),
+                          Text('OVERRIDE', style: overrideStyle),
+                        ],
                       ],
-                    ],
-                  ),
-                  SizedBox(height: 3.h),
-                  Text(
-                    whoLine,
-                    style: whoStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  SizedBox(height: 2.h),
-                  Text(
-                    dateText,
-                    style: dateStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (filename.isNotEmpty) ...[
-                    SizedBox(height: 2.h),
+                    ),
+                    SizedBox(height: 3.h),
                     Text(
-                      filename,
-                      style: filenameStyle,
+                      whoLine,
+                      style: whoStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    SizedBox(height: 2.h),
+                    Text(
+                      dateText,
+                      style: dateStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (filename.isNotEmpty) ...[
+                      SizedBox(height: 2.h),
+                      Text(
+                        filename,
+                        style: filenameStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            SizedBox(width: 4.w),
-            Padding(
-              padding: const EdgeInsets.only(left: 6, right: 4),
-              child: Text('x$rowCount', style: qtyStyle),
-            ),
-            SizedBox(width: 4.w),
-            ReportRowDownloadButton(
-              header: csvHeader,
-              rows: [csvCells(row)],
-              filename: csvFilename(row),
-            ),
-          ],
+              SizedBox(width: 4.w),
+              Padding(
+                padding: const EdgeInsets.only(left: 6, right: 4),
+                child: Text('x$rowCount', style: qtyStyle),
+              ),
+              SizedBox(width: 4.w),
+              ReportRowDownloadButton(
+                header: csvHeader,
+                rows: [csvCells(row)],
+                filename: csvFilename(row),
+              ),
+            ],
+          ),
         ),
       ),
     );

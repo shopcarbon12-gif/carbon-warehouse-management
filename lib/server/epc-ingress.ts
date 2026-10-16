@@ -7,7 +7,6 @@ import {
 } from "@/lib/server/status-label-enforcement";
 import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
 import { loadRetiredEpcs, RETIRED_EPC_STATUS } from "@/lib/server/retired-epcs";
-import { isIssuableSerial } from "@/lib/server/rfid-serial-allocator";
 
 /**
  * Unified EPC ingress — every EPC entering the WMS (fixed reader, handheld,
@@ -75,8 +74,7 @@ export type EpcIngressResult = {
   /** items.id of the row that was inserted or updated. null on a no-op. */
   itemId: string | null;
   /** Final status written to items.status. 'unknown' = an unconfirmed tag
-   *  number (never seen before, see holdUnconfirmed) waiting for a read on
-   *  another day. */
+   *  number — a fresh tag (scanDecision), not verified by a person yet. */
   status: "in-stock" | "tag_killed" | "unknown";
   /** When status === 'tag_killed', why. Useful for audit. */
   reason?: "decode_failed" | "unknown_system_id";
@@ -84,6 +82,8 @@ export type EpcIngressResult = {
   customSkuId: string | null;
   /** Decoded serial that we wrote to items.serial_number. */
   serialNumber: string | null; // bigint stringified for safe JSON
+  /** True when this read found a fresh tag (never recorded) → UNKNOWN, "new, not verified". */
+  fresh?: boolean;
   /**
    * Scan rule (owner, 2026-10-13): the tag already exists with a status a scan
    * may not change. Nothing was written; `status` above is meaningless — read
@@ -115,7 +115,13 @@ export function isScanSource(source: EpcSource): boolean {
   return SCAN_SOURCES.has(source);
 }
 
-type PriorItem = { status: string; customSkuId: string | null; firstScannedAt: Date | null };
+type PriorItem = {
+  status: string;
+  customSkuId: string | null;
+  firstScannedAt: Date | null;
+  /** Found fresh by a scan and not verified by a person yet (0121). */
+  freshUnverified: boolean;
+};
 
 /** Per-batch state: each EPC's current row + the ghost rule, loaded once. */
 export type EpcIngressContext = {
@@ -123,6 +129,8 @@ export type EpcIngressContext = {
   isGhost: (status: string) => boolean;
   /** EPCs a confirmed re-encode replaced (lib/server/retired-epcs). */
   retired: Set<string>;
+  /** EPCs with no items row that the WMS still has a record of (loadRecordedEpcs). */
+  recorded: Set<string>;
 };
 
 /**
@@ -142,8 +150,10 @@ export async function loadEpcIngressContext(
       status: string;
       custom_sku_id: string | null;
       first_scanned_at: Date | null;
+      fresh_unverified: boolean;
     }>(
-      `SELECT epc, status, custom_sku_id::text, first_scanned_at
+      `SELECT epc, status, custom_sku_id::text, first_scanned_at,
+              (fresh_found_at IS NOT NULL AND verified_at IS NULL) AS fresh_unverified
          FROM items WHERE epc = ANY($1::text[]) FOR UPDATE`,
       [upper],
     );
@@ -152,6 +162,7 @@ export async function loadEpcIngressContext(
         status: row.status,
         customSkuId: row.custom_sku_id,
         firstScannedAt: row.first_scanned_at,
+        freshUnverified: row.fresh_unverified === true,
       });
     }
   }
@@ -159,7 +170,31 @@ export async function loadEpcIngressContext(
   const isGhost = (status: string) =>
     shouldGhostDropLabel(labels.get(labelNameForWmsStatus(status).trim().toLowerCase()));
   const retired = await loadRetiredEpcs(client, upper);
-  return { prior, isGhost, retired };
+  const recorded = await loadRecordedEpcs(client, upper.filter((e) => !prior.has(e)));
+  return { prior, isGhost, retired, recorded };
+}
+
+/**
+ * EPCs among [epcs] the WMS has a record of besides an items row — printed,
+ * encoded or re-encoded (either number), transferred, scanned out, or any tag
+ * history. With an items row (any status) a number is recorded anyway.
+ */
+export async function loadRecordedEpcs(client: PoolClient, epcs: string[]): Promise<Set<string>> {
+  if (epcs.length === 0) return new Set();
+  const r = await client.query<{ epc: string }>(
+    `SELECT DISTINCT upper(epc) AS epc FROM (
+       SELECT new_epc AS epc FROM encode_events WHERE new_epc = ANY($1::text[])
+       UNION ALL SELECT old_epc FROM encode_events WHERE old_epc = ANY($1::text[])
+       UNION ALL SELECT new_epc FROM encode_jobs WHERE new_epc = ANY($1::text[])
+       UNION ALL SELECT old_epc FROM encode_jobs WHERE old_epc = ANY($1::text[])
+       UNION ALL SELECT epc FROM print_events WHERE epc = ANY($1::text[])
+       UNION ALL SELECT epc FROM transfer_items WHERE epc = ANY($1::text[])
+       UNION ALL SELECT epc FROM scan_out_events WHERE epc = ANY($1::text[])
+       UNION ALL SELECT entity_reference FROM inventory_audit_logs WHERE entity_reference = ANY($1::text[])
+     ) x WHERE epc IS NOT NULL`,
+    [epcs],
+  );
+  return new Set(r.rows.map((x) => x.epc));
 }
 
 // Per-tenant config cache. The brain is small (one row per tenant) and rarely
@@ -235,17 +270,19 @@ async function tryLegacyCatalogEntrance(
   input: EpcIngressInput,
   primarySerial: bigint | null,
   prior: PriorItem | null,
+  recorded: boolean,
 ): Promise<EpcIngressResult | null> {
   const legacySystemId = legacyEpcSystemId(input.epc);
   if (legacySystemId === null) return null;
   const legacyCustomSkuId = await lookupCatalogBySystemId(client, legacySystemId);
   if (!legacyCustomSkuId) return null;
-  // Same never-seen rule as the primary formula (holdUnconfirmed).
-  const hold = isScanSource(input.source) && holdUnconfirmed(prior, primarySerial, input.receivedAt);
+  // Same known / fresh rule as the primary formula (scanDecision).
+  const d = isScanSource(input.source) ? scanDecision(prior, recorded) : "live";
   return await writeItem(client, input, prior, {
-    status: hold ? "unknown" : "in-stock",
+    status: d === "live" ? "in-stock" : "unknown",
     customSkuId: legacyCustomSkuId,
     serial: primarySerial ?? legacyEpcSerial(input.epc),
+    fresh: d === "fresh",
   });
 }
 
@@ -264,6 +301,7 @@ export async function ingestEpc(
 ): Promise<EpcIngressResult> {
   const c = ctx ?? (await loadEpcIngressContext(client, [input.epc]));
   const prior = c.prior.get(input.epc.trim().toUpperCase()) ?? null;
+  const recorded = c.recorded.has(input.epc.trim().toUpperCase());
 
   // Scan rule (owner, 2026-10-14): an EPC a confirmed re-encode replaced is
   // ignored outright, whatever its row says or whether it has one — a late
@@ -297,7 +335,7 @@ export async function ingestEpc(
     // Tenant has no EPC config row — should not happen post-migration 032.
     // Try the legacy fallback before giving up; else tag_killed so the EPC is
     // at least visible in Defective EPCs.
-    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior);
+    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior, recorded);
     if (legacy) return legacy;
     return await writeItem(client, input, prior, {
       status: "tag_killed",
@@ -311,7 +349,7 @@ export async function ingestEpc(
   if (!decoded.valid) {
     // Primary formula rejected it (wrong prefix / bad bits). Legacy fallback:
     // if int(epc[5:15],16) maps to a catalog SKU, bring it in LIVE.
-    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior);
+    const legacy = await tryLegacyCatalogEntrance(client, input, null, prior, recorded);
     if (legacy) return legacy;
     return await writeItem(client, input, prior, {
       status: "tag_killed",
@@ -324,7 +362,7 @@ export async function ingestEpc(
   const customSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
   if (!customSkuId) {
     // Primary system_id isn't in the catalog. Legacy fallback before tag_killed.
-    const legacy = await tryLegacyCatalogEntrance(client, input, decoded.serial, prior);
+    const legacy = await tryLegacyCatalogEntrance(client, input, decoded.serial, prior, recorded);
     if (legacy) return legacy;
     return await writeItem(client, input, prior, {
       status: "tag_killed",
@@ -334,13 +372,15 @@ export async function ingestEpc(
     });
   }
 
-  // Scan rule: a number never seen before enters as UNKNOWN until it is read
-  // again on a later day (holdUnconfirmed). An existing LIVE tag is not touched.
-  if (isScanSource(input.source) && holdUnconfirmed(prior, decoded.serial ?? null, input.receivedAt)) {
+  // Scan rule (scanDecision): a fresh number goes UNKNOWN, "new, not
+  // verified"; it stays UNKNOWN until a person changes it.
+  const d = isScanSource(input.source) ? scanDecision(prior, recorded) : "live";
+  if (d !== "live") {
     return await writeItem(client, input, prior, {
       status: "unknown",
       customSkuId,
       serial: decoded.serial,
+      fresh: d === "fresh",
     });
   }
 
@@ -351,38 +391,31 @@ export async function ingestEpc(
   });
 }
 
-/** Calendar day in the warehouse's time zone (YYYY-MM-DD). */
-const etDay = (d: Date) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(d);
-
-/** True when [first] (a tag's first read) fell on an earlier day than [now]. */
-export function readOnEarlierDay(first: Date | null, now: Date): boolean {
-  return first !== null && etDay(first) < etDay(now);
-}
-
 /**
- * Scan rule (owner, 2026-10-16: "fix the phantom so wms will never produce new
- * ones"): a number the WMS has never seen enters as UNKNOWN and only goes LIVE
- * when it is read again on a later day; a repeat read the same day leaves it
- * UNKNOWN. One read used to make a LIVE garment on the spot — on 2026-10-13
- * eight numbers read once and never again (a label not on any garment in
- * stock, or a wrong read) became LIVE stock nobody could find; Rhea Jacket
- * WHITE S showed 5 with 4 on the shelf. The 2026-10-15 rule for serials no
- * Carbon encoder issues (damaged chips) is the special case it grew from.
- *
- * True = write UNKNOWN. A tag already known revives on a read as before: first
- * read on an earlier day, or never read at all (encode claims) — except a
- * never-read number whose [primarySerial] no Carbon encoder issues.
+ * Scan rule (owner, 2026-10-16): what a scan does with a number that passes
+ * ingress (decodes and matches the catalog).
+ *  - "live"  — the number was recorded in the WMS before (an items row in
+ *              LIVE or UNKNOWN, or a print / encode / re-encode / transfer /
+ *              scan-out / history record): LIVE automatically. Other statuses
+ *              never reach here (only UNKNOWN revives on a scan).
+ *  - "fresh" — never recorded anywhere, the reader just found it: UNKNOWN now,
+ *              marked "new, not verified" (items.fresh_found_at). The count's
+ *              report lists it; the owner checks it with Cloud + Geiger and
+ *              changes it to LIVE when found.
+ *  - "hold"  — a fresh tag nobody has verified yet, read again: stays UNKNOWN
+ *              (owner decision 1a) until a person changes its status.
+ * Replaces the 2026-10-15 / 10-16 "LIVE when read again on a later day" rules
+ * (Rhea Jacket WHITE S: one read of a never-recorded number made a 5th LIVE
+ * jacket, 4 on the shelf). A number that fails ingress is TAG KILLED
+ * (Defective) as before.
  */
-export function holdUnconfirmed(
-  prior: { status: string; firstScannedAt: Date | null } | null,
-  primarySerial: bigint | null,
-  receivedAt: Date,
-): boolean {
-  if (!prior) return true;
-  if (prior.status !== "unknown") return false;
-  if (prior.firstScannedAt === null) return primarySerial !== null && !isIssuableSerial(primarySerial);
-  return !readOnEarlierDay(prior.firstScannedAt, receivedAt);
+export function scanDecision(
+  prior: { status: string; freshUnverified: boolean } | null,
+  recorded: boolean,
+): "live" | "fresh" | "hold" {
+  if (!prior) return recorded ? "live" : "fresh";
+  if (prior.status === "unknown" && prior.freshUnverified) return "hold";
+  return "live";
 }
 
 type WriteItemArgs = {
@@ -390,6 +423,8 @@ type WriteItemArgs = {
   reason?: "decode_failed" | "unknown_system_id";
   customSkuId: string | null;
   serial: bigint | null;
+  /** A fresh number (scanDecision "fresh"): stamp fresh_found_at on insert. */
+  fresh?: boolean;
 };
 
 /**
@@ -441,12 +476,14 @@ async function writeItem(
        epc, serial_number, custom_sku_id, location_id,
        status, last_seen_at, first_scanned_at,
        source, source_device_label,
-       source_device_id, source_antenna_id
+       source_device_id, source_antenna_id,
+       fresh_found_at
      ) VALUES (
        $1, $2::bigint, $3::uuid, $4::uuid,
        $5, $6::timestamptz, $6::timestamptz,
        $7, $8,
-       $9::uuid, $10::uuid
+       $9::uuid, $10::uuid,
+       CASE WHEN $12::boolean THEN $6::timestamptz END
      )
      ON CONFLICT (epc) DO UPDATE SET
        serial_number       = CASE WHEN $11::boolean THEN items.serial_number ELSE EXCLUDED.serial_number END,
@@ -476,7 +513,8 @@ async function writeItem(
        source              = COALESCE(items.source, EXCLUDED.source),
        source_device_label = COALESCE(items.source_device_label, EXCLUDED.source_device_label),
        source_device_id    = COALESCE(items.source_device_id, EXCLUDED.source_device_id),
-       source_antenna_id   = COALESCE(items.source_antenna_id, EXCLUDED.source_antenna_id)
+       source_antenna_id   = COALESCE(items.source_antenna_id, EXCLUDED.source_antenna_id),
+       fresh_found_at      = COALESCE(items.fresh_found_at, EXCLUDED.fresh_found_at)
      RETURNING id::text`,
     [
       epcUpper,
@@ -490,6 +528,7 @@ async function writeItem(
       input.sourceDeviceId ?? null,
       input.sourceAntennaId ?? null,
       keepIdentity,
+      args.fresh === true && !prior,
     ],
   );
 
@@ -530,6 +569,7 @@ async function writeItem(
     reason: keepIdentity ? undefined : args.reason,
     customSkuId: keepIdentity ? (prior?.customSkuId ?? null) : args.customSkuId,
     serialNumber: args.serial !== null ? args.serial.toString() : null,
+    ...(args.fresh === true && !prior ? { fresh: true } : {}),
   };
 }
 
@@ -556,10 +596,12 @@ export async function ingestEpcs(
     // Later inputs in this batch see this write (same EPC twice in one batch).
     if (!r.kept && r.itemId) {
       const key = i.epc.trim().toUpperCase();
+      const was = ctx.prior.get(key);
       ctx.prior.set(key, {
         status: r.status,
         customSkuId: r.customSkuId,
-        firstScannedAt: ctx.prior.get(key)?.firstScannedAt ?? i.receivedAt,
+        firstScannedAt: was?.firstScannedAt ?? i.receivedAt,
+        freshUnverified: r.status === "unknown" && (r.fresh === true || (was?.freshUnverified ?? false)),
       });
     }
     out.push(r);

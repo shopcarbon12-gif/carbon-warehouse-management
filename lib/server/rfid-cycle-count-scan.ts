@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
-import { holdUnconfirmed, loadEpcConfig } from "@/lib/server/epc-ingress";
+import { loadEpcConfig, loadRecordedEpcs, scanDecision } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
 import { loadRetiredEpcs } from "@/lib/server/retired-epcs";
 import {
@@ -20,20 +20,18 @@ import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
  * pending_visibility statuses are protected and never auto-transition.
  *
  * Per-EPC outcome (also written to audit_log on every state change):
- *  - live_added         not used for scans since 2026-10-16 (a first-time scan
- *                       is 'unconfirmed'); kept for the outcome type
+ *  - live_added         first-time row for a number the WMS recorded before
+ *                       (print / encode / transfer / history) → in-stock
  *  - live_moved         existed in-stock at another location → moved here
  *  - live_revived       existed as 'unknown' → in-stock here (the ONLY status a
  *                       scan may revive — owner rule 2026-10-13)
  *  - live_already_here  no-op: already in-stock at this location
  *  - defective_decode_fail  first-time scan, decode failed → tag_killed
  *  - defective_no_match     first-time scan, no catalog hit → tag_killed
- *  - unconfirmed       a number never seen before (decoded + catalog matched):
- *                      first read → 'unknown'; a repeat read the same day leaves
- *                      it 'unknown'; a read on a later day brings it LIVE as
- *                      live_revived (owner rule 2026-10-16 — one read used to
- *                      make a LIVE "phantom" garment; 2026-10-15 did this for
- *                      damaged-chip serials only)
+ *  - unconfirmed       a fresh number — never recorded in the WMS (decoded +
+ *                      catalog matched): → 'unknown', "new, not verified"
+ *                      (items.fresh_found_at); read again before a person
+ *                      verified it → stays 'unknown' (owner rule 2026-10-16)
  *  - locked            any other status, or an existing tag that no longer
  *                      decodes; left untouched
  *  - ghost             status set to "Ignore" on the Statuses page, or an EPC a
@@ -88,8 +86,10 @@ export async function ingestCycleCountEpcs(
     status: string;
     location_id: string;
     first_scanned_at: Date | null;
+    fresh_unverified: boolean;
   }>(
-    `SELECT i.id::text, i.epc, i.status, i.location_id::text, i.first_scanned_at
+    `SELECT i.id::text, i.epc, i.status, i.location_id::text, i.first_scanned_at,
+            (i.fresh_found_at IS NOT NULL AND i.verified_at IS NULL) AS fresh_unverified
        FROM items i
        INNER JOIN locations loc ON loc.id = i.location_id AND loc.tenant_id = $1::uuid
       WHERE i.epc = ANY($2::text[])`,
@@ -97,7 +97,7 @@ export async function ingestCycleCountEpcs(
   );
   const existingByEpc = new Map<
     string,
-    { id: string; status: string; location_id: string; first_scanned_at: Date | null }
+    { id: string; status: string; location_id: string; first_scanned_at: Date | null; fresh_unverified: boolean }
   >();
   for (const row of existing.rows) {
     existingByEpc.set(row.epc.toUpperCase(), {
@@ -105,10 +105,12 @@ export async function ingestCycleCountEpcs(
       status: row.status,
       location_id: row.location_id,
       first_scanned_at: row.first_scanned_at,
+      fresh_unverified: row.fresh_unverified === true,
     });
   }
 
   const retired = await loadRetiredEpcs(client, norm);
+  const recorded = await loadRecordedEpcs(client, norm.filter((e) => !existingByEpc.has(e)));
 
   const results: CycleCountScanResult[] = [];
 
@@ -154,11 +156,9 @@ export async function ingestCycleCountEpcs(
     // for encode/print/re-encode.
     let resolvedCustomSkuId: string | null = null;
     let resolvedSerial: bigint | null = null;
-    let viaPrimary = false;
     if (decoded && decoded.valid) {
       resolvedCustomSkuId = await lookupCatalogBySystemId(client, decoded.systemId!);
       resolvedSerial = decoded.serial;
-      viaPrimary = resolvedCustomSkuId !== null;
     }
     if (!resolvedCustomSkuId) {
       const legacySystemId = legacyEpcSystemId(epc);
@@ -218,15 +218,14 @@ export async function ingestCycleCountEpcs(
       continue;
     }
 
-    // 3. A number never seen before: UNKNOWN until the tag is read again on a
-    //    later day (holdUnconfirmed — owner, 2026-10-16).
-    if (
-      holdUnconfirmed(
-        prior ? { status: prior.status, firstScannedAt: prior.first_scanned_at } : null,
-        viaPrimary ? resolvedSerial : null,
-        args.receivedAt,
-      )
-    ) {
+    // 3. A fresh number (never recorded in the WMS): UNKNOWN, "new, not
+    //    verified"; read again before a person verified it: stays UNKNOWN
+    //    (scanDecision — owner, 2026-10-16).
+    const decision = scanDecision(
+      prior ? { status: prior.status, freshUnverified: prior.fresh_unverified } : null,
+      recorded.has(epc),
+    );
+    if (decision !== "live") {
       const r = await upsertItem(client, {
         epc,
         status: "unknown",
@@ -234,6 +233,7 @@ export async function ingestCycleCountEpcs(
         serial: resolvedSerial,
         locationId: args.locationId,
         receivedAt: args.receivedAt,
+        fresh: decision === "fresh",
       });
       if (!prior) {
         await writeAudit(client, {
@@ -329,6 +329,8 @@ async function upsertItem(
     serial: bigint | null;
     locationId: string;
     receivedAt: Date;
+    /** Fresh number (scanDecision "fresh"): stamp fresh_found_at on insert. */
+    fresh?: boolean;
   },
 ): Promise<{ id: string }> {
   const serialText = args.serial !== null ? args.serial.toString() : "0";
@@ -336,11 +338,12 @@ async function upsertItem(
     `INSERT INTO items (
        epc, serial_number, custom_sku_id, location_id,
        status, last_seen_at, first_scanned_at,
-       source, source_device_label
+       source, source_device_label, fresh_found_at
      ) VALUES (
        $1, $2::bigint, $3::uuid, $4::uuid,
        $5, $6::timestamptz, $6::timestamptz,
-       'cycle_count', 'cycle-count-live'
+       'cycle_count', 'cycle-count-live',
+       CASE WHEN $7::boolean THEN $6::timestamptz END
      )
      ON CONFLICT (epc) DO UPDATE SET
        serial_number    = EXCLUDED.serial_number,
@@ -348,7 +351,8 @@ async function upsertItem(
        status           = EXCLUDED.status,
        location_id      = EXCLUDED.location_id,
        last_seen_at     = EXCLUDED.last_seen_at,
-       first_scanned_at = COALESCE(items.first_scanned_at, EXCLUDED.first_scanned_at)
+       first_scanned_at = COALESCE(items.first_scanned_at, EXCLUDED.first_scanned_at),
+       fresh_found_at   = COALESCE(items.fresh_found_at, EXCLUDED.fresh_found_at)
      RETURNING id::text`,
     [
       args.epc,
@@ -357,6 +361,7 @@ async function upsertItem(
       args.locationId,
       args.status,
       args.receivedAt.toISOString(),
+      args.fresh === true,
     ],
   );
   return { id: r.rows[0]!.id };

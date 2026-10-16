@@ -26,6 +26,7 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
+import 'package:carbon_wms/ui/screens/count_report_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/ui/widgets/item_line_format.dart';
@@ -1531,7 +1532,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   ///
   /// One server call instead of the prior archive-then-upload pair: the
   /// finalize endpoint runs the whole sequence inside a single transaction.
-  Future<void> _uploadCountReport({required bool overrideCatalog}) async {
+  /// Returns the report id — the Continue screen opens the count report.
+  Future<String?> _uploadCountReport({required bool overrideCatalog}) async {
     final api = context.read<WmsApiClient>();
     final rows = _buildCycleCountReportRows();
     if (rows.isEmpty) {
@@ -1557,12 +1559,15 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     final failed = result['rowsFailed'] ?? 0;
     final wiped = result['wipedCount'] ?? 0;
     // Add-On Catalog only (0 / absent everywhere else, and from older servers).
-    final skipped = result['rowsSkipped'] ?? 0;
+    // rowsUnknown (NEW Unknown tags) is counted inside rowsSkipped.
+    final unknown = (result['rowsUnknown'] as num?)?.toInt() ?? 0;
+    final skipped = ((result['rowsSkipped'] as num?)?.toInt() ?? 0) - unknown;
     if (mounted) {
       final extras = <String>[];
+      if (unknown != 0) extras.add('$unknown NEW Unknown');
       if (failed != 0) extras.add('$failed defective');
       if (wiped != 0) extras.add('$wiped wiped');
-      if (_isAddOnCatalog && skipped != 0) {
+      if (_isAddOnCatalog && skipped > 0) {
         extras.add('$skipped already in catalog');
       }
       final suffix = extras.isEmpty ? '' : ' (${extras.join(', ')})';
@@ -1570,6 +1575,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         SnackBar(content: Text('Uploaded · $valid live$suffix')),
       );
     }
+    final id = result['reportId'];
+    return id == null ? null : '$id';
   }
 
   /// W3: archive-only path (SAVE button). Phase 4c flips this through the
@@ -2657,7 +2664,8 @@ class _CountInventoryContinueScreen extends StatefulWidget {
   final Map<String, dynamic> Function() buildBackendPreviewPayload;
   // UPLOAD: 2-step pipeline — archive then apply to inventory. Both must
   // succeed; archive failure aborts before inventory mutation.
-  final Future<void> Function({required bool overrideCatalog}) onUploadReport;
+  /// Returns the report id (null from older servers).
+  final Future<String?> Function({required bool overrideCatalog}) onUploadReport;
   // SAVE TO FILE: best-effort backend archive after the local save succeeds.
   // Local save is the primary deliverable; archive failure is non-fatal.
   final Future<void> Function() onArchiveReport;
@@ -2684,7 +2692,7 @@ class _CountInventoryContinueScreenState
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
-      await widget.onUploadReport(
+      final reportId = await widget.onUploadReport(
         overrideCatalog: _overrideEntireCloudQuantities,
       );
       if (!mounted) return;
@@ -2692,7 +2700,15 @@ class _CountInventoryContinueScreenState
         content: Text('Inventory uploaded — Qty (EPC) updated'),
         duration: Duration(seconds: 3),
       ));
-      navigator.pop();
+      // End of the count → its report (summary, NEW Unknown tags, defective,
+      // EXCEL / PDF, CLOUD + GEIGER — owner, 2026-10-16).
+      if (reportId != null && reportId.isNotEmpty) {
+        unawaited(navigator.pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => CountReportScreen(reportId: reportId)),
+        ));
+      } else {
+        navigator.pop();
+      }
     } on WmsApiException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(

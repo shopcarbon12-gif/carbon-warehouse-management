@@ -25,6 +25,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/permission_guard.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_settings_screen.dart';
 import 'package:carbon_wms/ui/screens/add_on_count_review_screen.dart';
+import 'package:carbon_wms/ui/screens/count_report_screen.dart';
 import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/ui/widgets/rfid_reading_indicator.dart';
@@ -681,7 +682,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         }
       }
       if (!mounted) return;
-      await context.pushGuarded<void>(
+      final reportId = await context.pushGuarded<String>(
         ScreenIds.addOnCountReview,
         (_) => AddOnCountReviewScreen(
           sessionId: widget.sessionId,
@@ -693,6 +694,14 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
         ),
       );
       if (!mounted) return;
+      // Uploaded → the count report (summary, NEW Unknown tags, defective,
+      // EXCEL / PDF, CLOUD + GEIGER). Still "covered" while it is open.
+      if (reportId != null && reportId.isNotEmpty) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(builder: (_) => CountReportScreen(reportId: reportId)),
+        );
+        if (!mounted) return;
+      }
       // Back from review — resume the periodic flush in case the operator keeps
       // scanning into the same session.
       _flushTimer ??= Timer.periodic(

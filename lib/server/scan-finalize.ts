@@ -109,6 +109,10 @@ export type ScanFinalizeResult = {
   /** Add-On Catalog UPLOAD: scanned EPCs not ingested because the catalog
    *  already holds them (status other than 'unknown'). 0 everywhere else. */
   rowsSkipped: number;
+  /** NEW Unknown tags this upload found or read again: fresh numbers never
+   *  recorded in the WMS (scanDecision) — they wait for a person (Cloud +
+   *  Geiger → LIVE). Listed on the count report. Included in rowsSkipped. */
+  rowsUnknown: number;
 };
 
 const AUDIT_HEADER =
@@ -410,6 +414,7 @@ export async function finalizeScanSession(
         wipedCount: 0,
         defectiveRowCount: savedDefectiveCount,
         rowsSkipped: 0,
+        rowsUnknown: 0,
       };
     }
 
@@ -481,6 +486,7 @@ export async function finalizeScanSession(
     const ingressResults = await ingestEpcs(client, ingressInputs);
 
     let rowsValid = 0;
+    let rowsUnknown = 0;
     const failures: DefectiveEpcRow[] = [];
     for (let i = 0; i < ingressResults.length; i++) {
       const result = ingressResults[i]!;
@@ -490,12 +496,15 @@ export async function finalizeScanSession(
       // live, and not a defective either.
       if (result.kept) {
         rowsSkipped++;
+        // A new tag still waiting for a person, read again: stays UNKNOWN.
+        if (result.kept.status === "unknown") rowsUnknown++;
         continue;
       }
-      // An unconfirmed tag number (serial no Carbon encoder issues) went in as
-      // UNKNOWN to wait for a read on another day — not live, not defective.
+      // A fresh number (never recorded in the WMS) went in as UNKNOWN, "new,
+      // not verified" — not live, not defective; on the count report.
       if (result.status === "unknown") {
         rowsSkipped++;
+        rowsUnknown++;
         continue;
       }
       if (result.status === "in-stock") {
@@ -642,6 +651,7 @@ export async function finalizeScanSession(
       wipedCount,
       defectiveRowCount: combinedFailures.length,
       rowsSkipped,
+      rowsUnknown,
     };
   } catch (e) {
     try {

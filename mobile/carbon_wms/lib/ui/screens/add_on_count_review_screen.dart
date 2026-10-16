@@ -73,7 +73,10 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
       );
       if (!mounted) return;
       _showResult(intent, result);
-      Navigator.of(context).pop();
+      // UPLOAD ends the count: hand the report id back so the Add-On screen
+      // opens the count report (owner, 2026-10-16).
+      final id = result['reportId'];
+      Navigator.of(context).pop(intent == 'upload' && id != null ? '$id' : null);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -87,9 +90,10 @@ class _AddOnCountReviewScreenState extends State<AddOnCountReviewScreen> {
   void _showResult(String intent, Map<String, dynamic> result) {
     final valid = result['rowsValid'] ?? 0;
     final failed = result['rowsFailed'] ?? 0;
+    final unknown = (result['rowsUnknown'] as num?)?.toInt() ?? 0;
     final msg = intent == 'save'
         ? 'Saved ${result['rowsArchived'] ?? 0} rows to reports'
-        : 'Uploaded · $valid live · $failed defective';
+        : 'Uploaded · $valid live · $unknown NEW Unknown · $failed defective';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
