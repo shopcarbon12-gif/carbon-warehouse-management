@@ -4,6 +4,8 @@ import { z } from "zod";
 import { getPool } from "@/lib/db";
 import { assignItemsToBinBySkuScan } from "@/lib/queries/putaway-assign";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,18 +49,34 @@ async function POST_handler(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  // The bin list, contents, clean and remove on the same screen all use the
+  // session's location; the assign used the phone's registered location, so
+  // after a location switch it looked up the bin somewhere else.
+  const session = await getSessionFromRequest(req);
+  if (session && !(await canChangeBins(pool, session, "assign"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const locationId = session?.lid || auth.device.locationId;
+  const tenantId = session?.tid || auth.device.tenantId;
+
   try {
-    const { updated } = await assignItemsToBinBySkuScan(
+    const { updated, changes, binId } = await assignItemsToBinBySkuScan(
       pool,
-      auth.device.locationId,
+      tenantId,
+      locationId,
       parsed.data.binCode,
       parsed.data.skuScanned,
       parsed.data.scope,
       parsed.data.mode ?? "homeless_only",
       parsed.data.matrixId ?? null,
+      binActorFrom(req, session, parsed.data.deviceId),
     );
-    return NextResponse.json({ ok: true, updated });
+    return NextResponse.json({ ok: true, updated, binId, changes });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.startsWith("BAD_REQUEST:")) {
+      return NextResponse.json({ error: msg.slice(12) }, { status: 400 });
+    }
     console.error("[putaway-assign]", e);
     return NextResponse.json({ error: "Putaway failed" }, { status: 500 });
   }

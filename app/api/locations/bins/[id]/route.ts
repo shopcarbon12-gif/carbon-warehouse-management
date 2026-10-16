@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { deleteBin } from "@/lib/server/overview-locations";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -23,6 +24,13 @@ async function DELETE_handler(_req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
+  // Was open to any signed-in user while Clean needed admin — deleting a bin
+  // empties it, so it now needs the Delete bin permission (desktop role or the
+  // handheld role's Bin Assign → Delete bin action).
+  if (!(await canChangeBins(pool, session, "delete"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // Active-location guard.
   const guard = await assertRowLocation(pool, "bins", id, session.tid, session.lid);
   if (guard === "not_found")
@@ -33,9 +41,14 @@ async function DELETE_handler(_req: Request, ctx: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await deleteBin(client, session.tid, id);
+    const result = await deleteBin(
+      client,
+      session.tid,
+      id,
+      binActorFrom(_req, session, new URL(_req.url).searchParams.get("deviceId")),
+    );
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, orphaned: result.orphaned });
+    return NextResponse.json({ ok: true, orphaned: result.orphaned, binId: id, changes: result.changes });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

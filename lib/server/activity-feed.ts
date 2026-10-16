@@ -102,9 +102,12 @@ const REASON_SOURCE: Record<string, [string, string | null]> = {
   catalog_rfid_modal: ["Web", "Catalog → RFID tags"],
   pos_update_status_modal: ["Carbon POS", "Status popup"],
   pos_sale: ["Carbon POS", "Sale"],
-  clean_bin: ["Handheld", "Clean bin"],
-  bin_move: ["Handheld", "Bin move"],
-  bin_add: ["Handheld", "Bin add"],
+  // Bin rows without a device_id come from the web (Shelf Map, catalog, Bin
+  // Locations) — handheld bin changes carry the handheld in device_id since
+  // the shared bin engine (2026-10-16), and before it wrote no row at all.
+  clean_bin: ["Web", "Bins & locations"],
+  bin_move: ["Web", "Bins & locations"],
+  bin_add: ["Web", "Bins & locations"],
 };
 
 const REASON_WORD: Record<string, string> = {
@@ -184,7 +187,8 @@ export async function listActivity(pool: Pool, tenantId: string, f: ActivityFilt
     const v = p(f.source);
     aw.push(`al.metadata->>'source' = ${v}`);
     if (f.source === "handheld") iw.push(`l.device_id IS NOT NULL`);
-    else if (f.source === "web") iw.push(`l.reason = 'catalog_rfid_modal'`);
+    else if (f.source === "web")
+      iw.push(`l.device_id IS NULL AND l.reason IN ('catalog_rfid_modal', 'clean_bin', 'bin_move', 'bin_add')`);
     else iw.push("false");
   }
   if (f.failedOnly) {

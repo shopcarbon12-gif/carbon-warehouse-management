@@ -8,6 +8,7 @@ import {
   upsertBinSchema,
   upsertBin,
 } from "@/lib/server/overview-locations";
+import { canChangeBins } from "@/lib/server/bin-engine";
 
 export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -102,6 +103,13 @@ async function POST_handler(req: Request) {
   const pool = getPool();
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  }
+
+  // Creating needs the Create bin permission (desktop role or the handheld
+  // role's Bin Assign → Create bin); renaming / capacity / active-inactive are
+  // desktop-role edits. Both used to be open to any signed-in user.
+  if (!(await canChangeBins(pool, session, parsed.data.binId ? "edit" : "create"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const client = await pool.connect();

@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import { requireSessionScopes } from "@/lib/server/api-require-scopes";
-import { SCOPES } from "@/lib/auth/roles";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
 import { assignSkuGroupToBin } from "@/lib/server/shelf-map";
 
 const Body = z.object({
@@ -55,10 +54,10 @@ async function POST_handler(req: Request) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
 
-  // Same gate as the existing Clean flow — moving items between bins is an
-  // admin/manager action; warehouse-floor users can't reorganize bins.
-  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
-  if (denied) return denied;
+  // One permission rule for desktop and handheld (lib/server/bin-engine.ts).
+  if (!(await canChangeBins(pool, session, "assign"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const client = await pool.connect();
   try {
@@ -68,9 +67,10 @@ async function POST_handler(req: Request) {
       session.tid,
       session.lid,
       parsed.data,
+      binActorFrom(req, session),
     );
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, moved: result.moved });
+    return NextResponse.json({ ok: true, moved: result.moved, changes: result.changes });
   } catch (e) {
     try { await client.query("ROLLBACK"); } catch { /* ignore */ }
     const msg = e instanceof Error ? e.message : "Move failed";

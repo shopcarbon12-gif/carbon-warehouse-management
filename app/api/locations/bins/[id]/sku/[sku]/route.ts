@@ -2,6 +2,8 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
+import { cleanBinContents } from "@/lib/queries/clean-bin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +27,10 @@ type Ctx = { params: Promise<{ id: string; sku: string }> };
  * (migration 0092), so the prefix alone can match a second product's variants
  * and evict them from the bin too. Optional, for older handhelds.
  *
- * Effect: in-stock items of that SKU whose PRIMARY bin is this bin become
- * homeless (bin_id = NULL); items that merely list this bin in
- * additional_bin_ids just drop it from that array. Active-location scoped.
+ * Effect (shared bin engine, same as Clean): every tag of that product that
+ * lists this bin loses it; a tag whose primary bin this was gets its first
+ * live extra bin promoted. Returns before → after per EPC for an exact Undo.
+ * Active-location scoped.
  */
 async function DELETE_handler(req: Request, ctx: Ctx) {
   const session = await getSessionFromRequest(req);
@@ -63,38 +66,20 @@ async function DELETE_handler(req: Request, ctx: Ctx) {
   const binId = bin.rows[0]?.id;
   if (!binId) return NextResponse.json({ error: "Bin not found" }, { status: 404 });
 
+  if (!(await canChangeBins(pool, session, "assign"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // 1. Items whose PRIMARY home is this bin → homeless.
-    const primary = await client.query(
-      `UPDATE items
-         SET bin_id = NULL
-       WHERE location_id = $1::uuid
-         AND status IN ('in-stock', 'pending_visibility')
-         AND bin_id = $2::uuid
-         AND custom_sku_id IN (
-           SELECT id FROM custom_skus
-            WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`,
-      [session.lid, binId, `${skuPrefix}%`, matrixId],
-    );
-    // 2. Items that merely list this bin as an additional (multi-bin) home.
-    const secondary = await client.query(
-      `UPDATE items
-         SET additional_bin_ids = array_remove(additional_bin_ids, $2::uuid)
-       WHERE location_id = $1::uuid
-         AND status IN ('in-stock', 'pending_visibility')
-         AND $2::uuid = ANY(additional_bin_ids)
-         AND custom_sku_id IN (
-           SELECT id FROM custom_skus
-            WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`,
-      [session.lid, binId, `${skuPrefix}%`, matrixId],
-    );
-    await client.query("COMMIT");
-    return NextResponse.json({
-      ok: true,
-      removed: (primary.rowCount ?? 0) + (secondary.rowCount ?? 0),
+    const result = await cleanBinContents(client, session.tid, binId, {
+      skuPrefix,
+      matrixId,
+      actor: binActorFrom(req, session, new URL(req.url).searchParams.get("deviceId")),
     });
+    await client.query("COMMIT");
+    return NextResponse.json({ ok: true, removed: result.cleared, binId, changes: result.changes });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

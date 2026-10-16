@@ -291,7 +291,13 @@ export function CatalogWorkspace({
     brands: string[];
     categories: string[];
     vendors: string[];
-  }>(url, fetcher, { revalidateOnFocus: false });
+  }>(url, fetcher, {
+    // Bins, statuses and counts change on the handhelds — keep the grid live
+    // (30 s + on returning to the tab) instead of only on page load.
+    revalidateOnFocus: true,
+    refreshInterval: 30_000,
+    keepPreviousData: true,
+  });
 
   const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   const total = data?.total ?? 0;

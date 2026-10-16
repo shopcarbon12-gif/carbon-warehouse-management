@@ -22,6 +22,8 @@ export type BinContentLineRow = {
   color_code: string | null;
   size: string | null;
   qty: number;
+  /** EPCs of this line in the bin (in-stock + pending visibility). */
+  epcs: string[];
 };
 
 /** One in-stock EPC in a bin, with catalog context for the EPC-list modal. */
@@ -88,37 +90,50 @@ export async function listBinsWithCounts(
     status: string;
     bin_items: string | null;
   }>(
-    `SELECT
+    // A bin holds a tag when it is the tag's primary bin OR one of its extra
+    // (multi-bin) bins — the same rule as bin contents, the EPC list and the
+    // Shelf Map. Counting primary only showed a product added as an extra bin
+    // as "0 / —" here, with its EPC list and Clean unreachable.
+    `WITH homes AS (
+       SELECT i.bin_id AS bin_id, i.id, i.custom_sku_id
+         FROM items i
+        WHERE i.location_id = $1::uuid
+          AND i.bin_id IS NOT NULL
+          AND i.status IN ('in-stock', 'pending_visibility')
+       UNION
+       SELECT x AS bin_id, i.id, i.custom_sku_id
+         FROM items i
+         CROSS JOIN LATERAL unnest(i.additional_bin_ids) AS x
+        WHERE i.location_id = $1::uuid
+          AND i.status IN ('in-stock', 'pending_visibility')
+     ),
+     counts AS (
+       SELECT h.bin_id, COUNT(DISTINCT h.id) AS n FROM homes h GROUP BY h.bin_id
+     ),
+     labels AS (
+       SELECT x.bin_id, string_agg(x.label, E'\\n' ORDER BY x.label) AS items
+         FROM (
+           SELECT DISTINCT h.bin_id,
+                  CASE WHEN cs.sku LIKE 'C%' THEN left(cs.sku, 11) ELSE left(cs.sku, 9) END
+                  || ' · ' || regexp_replace(m.description, '\\s+\\S+$', '') AS label
+             FROM homes h
+             JOIN custom_skus cs ON cs.id = h.custom_sku_id
+             JOIN matrices m ON m.id = cs.matrix_id
+         ) x
+        GROUP BY x.bin_id
+     )
+     SELECT
        b.id::text AS id,
        b.code,
        b.capacity::text AS capacity,
        b.status,
-       COUNT(i.id) FILTER (WHERE i.status IN ('in-stock', 'pending_visibility'))::text AS in_stock_count,
-       (
-         SELECT string_agg(label, E'\n' ORDER BY label)
-         FROM (
-           SELECT DISTINCT
-             CASE
-               WHEN cs.sku LIKE 'C%' THEN left(cs.sku, 11)
-               ELSE left(cs.sku, 9)
-             END
-             || ' · ' || regexp_replace(m.description, '\\s+\\S+$', '')
-             AS label
-           FROM items ii
-           INNER JOIN custom_skus cs ON cs.id = ii.custom_sku_id
-           INNER JOIN matrices m ON m.id = cs.matrix_id
-           WHERE ii.bin_id = b.id
-             AND ii.location_id = $1::uuid
-             AND ii.status IN ('in-stock', 'pending_visibility')
-         ) sub
-       ) AS bin_items
+       COALESCE(c.n, 0)::text AS in_stock_count,
+       l.items AS bin_items
      FROM bins b
-     LEFT JOIN items i
-       ON i.bin_id = b.id
-       AND i.location_id = $1::uuid
+     LEFT JOIN counts c ON c.bin_id = b.id
+     LEFT JOIN labels l ON l.bin_id = b.id
      WHERE b.location_id = $1::uuid
        AND b.archived_at IS NULL
-     GROUP BY b.id, b.code, b.capacity, b.status
      ORDER BY b.code ASC`,
     [locationId],
   );
@@ -146,6 +161,7 @@ export async function listBinContentsGrouped(
     color_code: string | null;
     size: string | null;
     qty: string;
+    epcs: string[] | null;
   }>(
     // 1.2.47: bin contents include both primary-bin items (bin_id = $1)
     // AND multi-bin secondaries ($1 = ANY(additional_bin_ids)). The
@@ -161,7 +177,10 @@ export async function listBinContentsGrouped(
        cs.sku,
        cs.color_code,
        cs.size,
-       COUNT(i.id)::text AS qty
+       COUNT(i.id)::text AS qty,
+       -- The handheld's Bin Assign opens a line's EPC list from this; without
+       -- it every tap said "No EPCs found".
+       array_agg(i.epc ORDER BY i.epc) AS epcs
      FROM items i
      INNER JOIN bins bin ON bin.id = $1::uuid AND bin.location_id = $2::uuid AND bin.archived_at IS NULL
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
@@ -181,6 +200,7 @@ export async function listBinContentsGrouped(
     color_code: row.color_code,
     size: row.size,
     qty: Number(row.qty),
+    epcs: row.epcs ?? [],
   }));
 }
 

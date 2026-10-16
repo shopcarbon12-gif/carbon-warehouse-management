@@ -146,11 +146,10 @@ function buildWhere(
     const binExistsClause = hasLoc
       ? `OR EXISTS (
           SELECT 1 FROM items ix
-          INNER JOIN bins bx ON bx.id = ix.bin_id
+          INNER JOIN bins bx ON bx.id = ix.bin_id OR bx.id = ANY(ix.additional_bin_ids)
           WHERE ix.custom_sku_id = cs.id
             AND ix.location_id = $${i + 1}::uuid
             AND ix.status = 'in-stock'
-            AND ix.bin_id IS NOT NULL
             AND bx.archived_at IS NULL
             AND bx.code ILIKE $${i}
         )`
@@ -349,14 +348,17 @@ export async function listCatalogGrid(
        ) AS manual_qty,
        -- This variant's OWN in-stock bin(s). Zero-qty variants get null here and
        -- inherit their colour's bin in a second pass (see below).
+       -- Primary AND extra (multi-bin) bins: a product added to a second bin
+       -- is listed in that bin's contents and Shelf Map cell, so it shows
+       -- (and is searchable) here too.
        (
          SELECT string_agg(DISTINCT b.code, ', ' ORDER BY b.code)
          FROM items i
-         INNER JOIN bins b ON b.id = i.bin_id
+         CROSS JOIN LATERAL unnest(array_prepend(i.bin_id, i.additional_bin_ids)) AS h(bin_id)
+         INNER JOIN bins b ON b.id = h.bin_id
          WHERE i.custom_sku_id = cs.id
            AND i.location_id = $${locIdx}::uuid
            AND i.status = 'in-stock'
-           AND i.bin_id IS NOT NULL
            AND b.archived_at IS NULL
        ) AS bin_location,
        -- Explicit home bin from the "move to bin" dialog — used only when a
@@ -377,7 +379,7 @@ export async function listCatalogGrid(
        (
          SELECT b.code
          FROM items i
-         INNER JOIN bins b ON b.id = i.pinned_bin_id
+         INNER JOIN bins b ON b.id = i.pinned_bin_id AND b.archived_at IS NULL
          WHERE i.custom_sku_id = cs.id
            AND i.location_id = $${locIdx}::uuid
            AND i.status = 'in-stock'
@@ -405,26 +407,33 @@ export async function listCatalogGrid(
   // colour's OTHER sizes are in-stock, so a whole colour reads as one shelf.
   // Derived live from items (works for every scan-based assignment, no backfill)
   // in a single query scoped to the current page's colour prefixes.
+  // Keyed by product + colour prefix: two products can share a UPC (migration
+  // 0092), and a prefix-only key showed a zero-stock Kyle Cargo GREY size in
+  // Cole Pants GREY's bin.
   const skuPrefix = (sku: string) => (sku.startsWith("C") ? sku.slice(0, 11) : sku.slice(0, 9));
+  const colourKey = (matrixId: string, sku: string) => `${matrixId}|${skuPrefix(sku)}`;
   const colourBinByPrefix = new Map<string, string>();
   if (data.rows.length > 0) {
     const prefixes = Array.from(new Set(data.rows.map((r) => skuPrefix(r.sku))));
+    const matrixIds = Array.from(new Set(data.rows.map((r) => r.matrix_id)));
     try {
-      const cb = await pool.query<{ prefix: string; bins: string }>(
-        `SELECT (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) AS prefix,
+      const cb = await pool.query<{ matrix_id: string; prefix: string; bins: string }>(
+        `SELECT cs.matrix_id::text AS matrix_id,
+                (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) AS prefix,
                 string_agg(DISTINCT b.code, ', ' ORDER BY b.code) AS bins
            FROM items i
            INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
-           INNER JOIN bins b ON b.id = i.bin_id
+           CROSS JOIN LATERAL unnest(array_prepend(i.bin_id, i.additional_bin_ids)) AS h(bin_id)
+           INNER JOIN bins b ON b.id = h.bin_id
           WHERE i.location_id = $1::uuid
             AND i.status = 'in-stock'
-            AND i.bin_id IS NOT NULL
             AND b.archived_at IS NULL
+            AND cs.matrix_id = ANY($3::uuid[])
             AND (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) = ANY($2::text[])
-          GROUP BY 1`,
-        [locationId, prefixes],
+          GROUP BY 1, 2`,
+        [locationId, prefixes, matrixIds],
       );
-      for (const r of cb.rows) colourBinByPrefix.set(r.prefix, r.bins);
+      for (const r of cb.rows) colourBinByPrefix.set(`${r.matrix_id}|${r.prefix}`, r.bins);
     } catch (e) {
       console.warn(
         "[inventory_catalog] colour-bin inheritance skipped:",
@@ -439,7 +448,7 @@ export async function listCatalogGrid(
       // Final bin: this variant's own in-stock bin → else the colour's bin
       // (in-stock siblings) → else an explicit home-bin assignment.
       const finalBin =
-        row.bin_location ?? colourBinByPrefix.get(skuPrefix(row.sku)) ?? row.assigned_bin_code ?? null;
+        row.bin_location ?? colourBinByPrefix.get(colourKey(row.matrix_id, row.sku)) ?? row.assigned_bin_code ?? null;
       const lsOnHand = (() => {
         if (row.ls_on_hand_total == null || row.ls_on_hand_total === "") return null;
         const n = Number(row.ls_on_hand_total);

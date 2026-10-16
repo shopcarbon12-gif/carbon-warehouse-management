@@ -39,10 +39,11 @@ type ShelfMapBin = {
   id: string;
   code: string;
   status: string;
+  capacity?: number | null;
   lines: ShelfMapLine[];
 };
 type ShelfMapNav = { aisle: string; section: string; bin_count: number };
-type UnmappedBin = { id: string; code: string; status: string; in_stock_count: number };
+type UnmappedBin = { id: string; code: string; status: string; capacity?: number | null; in_stock_count: number };
 type NavPayload = {
   location: { id: string; code: string; name: string } | null;
   navigation: ShelfMapNav[];
@@ -70,7 +71,9 @@ export function ShelfMap({
     error: navError,
     mutate: mutateNav,
   } = useSWR<NavPayload>("/api/overview/locations/sections", fetcher, {
-    revalidateOnFocus: false,
+    // Live with the handhelds: re-read every 30 s and on returning to the tab.
+    revalidateOnFocus: true,
+    refreshInterval: 30_000,
   });
 
   // Operator-explicit selection. Null = "let the effective value default to
@@ -109,7 +112,7 @@ export function ShelfMap({
   const { data: sectionData, error: sectionError, mutate: mutateSection } = useSWR<SectionPayload>(
     sectionKey,
     fetcher,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: true, refreshInterval: 15_000 },
   );
 
   // Build a code → bin map so we can place each cell into its (shelf, position) slot.
@@ -144,11 +147,15 @@ export function ShelfMap({
       sectionData?.bins.find((b) => b.id === binParam) ??
       nav?.unmapped.find((b) => b.id === binParam);
     if (!hit) return null;
+    // Real capacity and stock: the editor saves what it shows (an empty
+    // capacity here wiped the bin's capacity on Save), and Delete warns
+    // about the tags it will unassign.
     return {
       id: hit.id,
       code: hit.code,
-      capacity: null,
-      in_stock_count: 0,
+      capacity: hit.capacity ?? null,
+      in_stock_count:
+        "lines" in hit ? hit.lines.reduce((n, l) => n + (l.qty ?? 0), 0) : (hit.in_stock_count ?? 0),
       status: hit.status,
       bin_items: null,
     };
@@ -613,15 +620,21 @@ function MoveDialog({
         body: JSON.stringify({
           skuPrefix: line.sku_prefix,
           matrixId: line.matrix_id,
-          sourceBinId: mode === "add" ? "any" : fromBin.id,
+          // Move = the whole colour ends up here and nowhere else (same as
+          // the catalog and the handheld); the cell's bin is not a filter.
+          sourceBinId: "any",
           targetBinId: target.id,
           mode,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string; moved?: number };
       if (!res.ok) throw new Error(j.error ?? "Failed");
-      if (mode === "add" && Number(j.moved ?? 0) === 0) {
-        setErr(`${line.name} · ${line.color ?? "—"} is already in ${target.code}.`);
+      if (Number(j.moved ?? 0) === 0) {
+        setErr(
+          mode === "add"
+            ? `${line.name} · ${line.color ?? "—"} is already in ${target.code}.`
+            : `Nothing moved — ${line.name} · ${line.color ?? "—"} is already only in ${target.code}.`,
+        );
         return;
       }
       onDone();

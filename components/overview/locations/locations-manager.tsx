@@ -127,7 +127,10 @@ export function LocationsManager({
     "/api/overview/locations",
     fetcher,
     {
-      revalidateOnFocus: false,
+      // Live: handhelds assign / clean / delete bins all day — refresh every
+      // 20 s and on coming back to the tab instead of only on page load.
+      revalidateOnFocus: true,
+      refreshInterval: 20_000,
       revalidateOnMount: true,
       fallbackData:
         initialLocations !== undefined ? { locations: initialLocations } : undefined,
@@ -172,7 +175,7 @@ export function LocationsManager({
   const { data: epcData, isLoading: epcLoading } = useSWR<BinEpcRow[]>(
     epcModalBin ? `/api/locations/bins/${epcModalBin.id}/epcs` : null,
     fetcher,
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: true, refreshInterval: 20_000 },
   );
 
   useEffect(() => {

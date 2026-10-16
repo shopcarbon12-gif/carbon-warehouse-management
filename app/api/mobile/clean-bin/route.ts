@@ -3,14 +3,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import { requireSessionScopes } from "@/lib/server/api-require-scopes";
-import { SCOPES } from "@/lib/auth/roles";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
 import { cleanBinContents } from "@/lib/queries/clean-bin";
 
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
   binCode: z.string().min(1).max(128).trim(),
+  deviceId: z.string().max(256).nullish(),
 });
 
 /**
@@ -21,8 +21,11 @@ async function POST_handler(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
-  const denied = await requireSessionScopes(pool, session, [SCOPES.MANAGER]);
-  if (denied) return denied;
+  // Same rule as the desktop: the handheld role's Clean bin action (a
+  // warehouse_ops user with Clean allowed on the phone used to get a 403 here).
+  if (!(await canChangeBins(pool, session, "clean"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   let raw: unknown;
   try {
@@ -61,10 +64,17 @@ async function POST_handler(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await cleanBinContents(
-        client, session.tid, binId, undefined, session.sub);
+    const result = await cleanBinContents(client, session.tid, binId, {
+      actor: binActorFrom(req, session, parsed.data.deviceId),
+    });
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, cleared: result.cleared, binCode: code });
+    return NextResponse.json({
+      ok: true,
+      cleared: result.cleared,
+      binCode: code,
+      binId,
+      changes: result.changes,
+    });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

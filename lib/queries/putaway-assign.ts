@@ -1,4 +1,11 @@
 import type { Pool } from "pg";
+import {
+  assignToBin,
+  publicChanges,
+  type BinActor,
+  type BinChange,
+  type SkuGroup,
+} from "@/lib/server/bin-engine";
 
 export type PutawayScope = "all_colors" | "single_color_all_sizes";
 
@@ -29,52 +36,52 @@ export type PutawayScope = "all_colors" | "single_color_all_sizes";
  *     of wherever it lives (incl. additional_bin_ids on other rows) and
  *     repoint bin_id to this bin, also clearing additional_bin_ids so a
  *     subsequent "in this bin" preview returns the right count.
+ *
+ * Runs on the shared bin engine (lib/server/bin-engine.ts): same rule as the
+ * desktop Shelf Map / catalog Move & Add, writes bin_move / bin_add history
+ * with the user and handheld, keeps the colour's home bin, refuses inactive
+ * bins, and returns before → after per EPC for an exact Undo.
  */
 export async function assignItemsToBinBySkuScan(
   pool: Pool,
+  tenantId: string,
   locationId: string,
   binCode: string,
   skuScanned: string,
   scope: PutawayScope,
   mode: "homeless_only" | "all" = "homeless_only",
-  matrixId?: string | null,
-): Promise<{ updated: number }> {
+  matrixId: string | null | undefined,
+  actor: BinActor,
+): Promise<{ updated: number; changes: BinChange[]; binId: string | null }> {
   const trimmed = skuScanned.trim();
-  if (!trimmed) return { updated: 0 };
+  if (!trimmed) return { updated: 0, changes: [], binId: null };
 
   const bin = await pool.query<{ id: string }>(
     // Normalize both stored code and input parameter — strip every
     // non-alphanumeric char and uppercase. Mobile clients format 5-char
     // codes with dashes for display (e.g. `_formatBinCode` turns
     // "1A01L" into "1-A-01-L") and ship the dashed form to API endpoints.
-    // The bins table stores the undashed canonical form ("1A01L") from
-    // the orlando-bin-grid seed. Pre-1.2.46 the equality test failed
-    // silently, server returned `updated: 0`, and the mobile rendered
-    // "0 items assigned, every matching EPC is already placed" with no
-    // hint that the lookup itself missed. regexp_replace runs over a
-    // few-hundred-row bin table per request — cheap enough vs the
-    // cumulative operator-frustration cost.
     `SELECT id::text FROM bins
        WHERE location_id = $1::uuid
          AND archived_at IS NULL
          AND regexp_replace(upper(code), '[^A-Z0-9]', '', 'g')
              = regexp_replace(upper($2), '[^A-Z0-9]', '', 'g')
+       ORDER BY code
        LIMIT 1`,
     [locationId, binCode.trim()],
   );
   const binId = bin.rows[0]?.id;
-  if (!binId) return { updated: 0 };
+  if (!binId) return { updated: 0, changes: [], binId: null };
 
-  // Build the SKU filter once — single_color_all_sizes uses LIKE prefix
-  // match, all_colors resolves to a matrix UUID via custom_skus.
+  // single_color_all_sizes: LIKE prefix (the app strips the size);
+  // all_colors: every SKU of the matrix.
   const matrix = (matrixId ?? "").trim() || null;
-  let skuFilter: string;
-  let skuParam: string | null;
+  let group: SkuGroup;
   if (scope === "single_color_all_sizes") {
-    skuFilter = `custom_sku_id IN (
-      SELECT id FROM custom_skus
-       WHERE sku LIKE $3 AND ($4::uuid IS NULL OR matrix_id = $4::uuid))`;
-    skuParam = `${trimmed}%`;
+    group = {
+      sql: (n) => `SELECT id FROM custom_skus WHERE sku LIKE $${n} AND ($${n + 1}::uuid IS NULL OR matrix_id = $${n + 1}::uuid)`,
+      params: [`${trimmed}%`, matrix],
+    };
   } else {
     let resolved = matrix;
     if (!resolved) {
@@ -87,84 +94,34 @@ export async function assignItemsToBinBySkuScan(
       );
       resolved = skuRow.rows[0]?.matrix_id ?? null;
     }
-    if (!resolved) return { updated: 0 };
-    skuFilter = `custom_sku_id IN (SELECT id FROM custom_skus WHERE matrix_id = $3::uuid)`;
-    skuParam = resolved;
+    if (!resolved) return { updated: 0, changes: [], binId };
+    group = { sql: (n) => `SELECT id FROM custom_skus WHERE matrix_id = $${n}::uuid`, params: [resolved] };
   }
 
-  // $4 only exists in the prefix filter — Postgres rejects a bind that
-  // supplies a parameter the statement never references.
-  const params: unknown[] = [binId, locationId, skuParam];
-  if (scope === "single_color_all_sizes") params.push(matrix);
-
-  if (mode === "all") {
-    // MOVE — pull every matching item out of wherever it lives (primary
-    // OR multi-bin secondary) and into this bin. Reset additional_bin_ids
-    // so the next preview sees them only here.
-    const r = await pool.query(
-      `UPDATE items
-         SET bin_id = $1::uuid,
-             additional_bin_ids = '{}'::uuid[]
-       WHERE location_id = $2::uuid
-         AND status IN ('in-stock', 'pending_visibility')
-         AND ${skuFilter}`,
-      params,
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { changes } = await assignToBin(
+      client,
+      tenantId,
+      locationId,
+      binId,
+      mode === "all" ? "move" : "add",
+      group,
+      actor,
     );
-    return { updated: r.rowCount ?? 0 };
+    await client.query("COMMIT");
+    return { updated: changes.length, changes: publicChanges(changes), binId };
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw e;
+  } finally {
+    client.release();
   }
-
-  // ADD — multi-bin path. Three buckets, each gets a separate UPDATE:
-  //
-  //   1. Homeless items (bin_id NULL or pointing to archived/orphan bin)
-  //      → set bin_id = target. Don't touch additional_bin_ids.
-  //   2. Items currently in OTHER live bins → keep their bin_id (truth
-  //      bin for qty), append target to additional_bin_ids if not
-  //      already there. The bin contents view unions both, so the SKU
-  //      will appear under both bins from the operator's perspective.
-  //   3. Items already in target (primary or additional) → no-op,
-  //      excluded by both UPDATEs' WHERE clauses.
-  //
-  // Returning the affected EPCs from each step lets us tally one final
-  // `updated` count without double-counting.
-  const homelessRes = await pool.query<{ id: string }>(
-    `UPDATE items
-       SET bin_id = $1::uuid
-     WHERE location_id = $2::uuid
-       AND status IN ('in-stock', 'pending_visibility')
-       AND ${skuFilter}
-       AND (
-         bin_id IS NULL
-         OR NOT EXISTS (
-           SELECT 1 FROM bins b
-           WHERE b.id = items.bin_id
-             AND b.archived_at IS NULL
-         )
-       )
-     RETURNING id::text`,
-    params,
-  );
-
-  const multiBinRes = await pool.query<{ id: string }>(
-    `UPDATE items
-       SET additional_bin_ids = additional_bin_ids || ARRAY[$1::uuid]
-     WHERE location_id = $2::uuid
-       AND status IN ('in-stock', 'pending_visibility')
-       AND ${skuFilter}
-       AND bin_id IS NOT NULL
-       AND bin_id <> $1::uuid
-       AND NOT ($1::uuid = ANY(additional_bin_ids))
-       AND EXISTS (
-         SELECT 1 FROM bins b
-         WHERE b.id = items.bin_id
-           AND b.archived_at IS NULL
-       )
-     RETURNING id::text`,
-    params,
-  );
-
-  return {
-    updated: (homelessRes.rowCount ?? 0) + (multiBinRes.rowCount ?? 0),
-  };
 }
 
 export type PutawayPreview = {

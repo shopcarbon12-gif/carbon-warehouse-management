@@ -118,7 +118,8 @@ export function RfidTagsModal({
   const { data: itemData, isLoading: itemsLoading, mutate: mutateItems } = useSWR<CatalogItemRow[]>(
     `/api/inventory/catalog?customSkuId=${encodeURIComponent(modalSku.custom_sku_id)}`,
     fetcher,
-    { revalidateOnFocus: false },
+    // Bins and statuses change on the handhelds too — keep the open popup live.
+    { revalidateOnFocus: true, refreshInterval: 20_000 },
   );
 
   const [showAllStatuses, setShowAllStatuses] = useState(showAllInitially);
@@ -371,6 +372,9 @@ export function RfidTagsModal({
                           <span>
                             <span className="text-[var(--wms-muted)]">Bin:</span>{" "}
                             <span className="text-[var(--wms-fg)]">{it.bin_code || "—"}</span>
+                            {it.extra_bin_codes?.length ? (
+                              <span className="text-[var(--wms-muted)]"> (+ {it.extra_bin_codes.join(", ")})</span>
+                            ) : null}
                           </span>
                           <span>·</span>
                           <span>

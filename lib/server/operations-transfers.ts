@@ -500,6 +500,10 @@ export async function commitTransfer(
       `UPDATE items
        SET location_id = $1::uuid,
            bin_id = NULL,
+           -- the extra (multi-bin) bins are at the old location too; left
+           -- behind they put the tag back in those bins if it ever returned
+           additional_bin_ids = '{}'::uuid[],
+           pinned_bin_id = NULL,
            status = 'in-transit',
            transfer_id = $2::uuid
        WHERE epc = ANY($3::text[])`,
@@ -513,6 +517,10 @@ export async function commitTransfer(
       `UPDATE items
        SET location_id = $1::uuid,
            bin_id = NULL,
+           -- the extra (multi-bin) bins are at the old location too; left
+           -- behind they put the tag back in those bins if it ever returned
+           additional_bin_ids = '{}'::uuid[],
+           pinned_bin_id = NULL,
            transfer_id = $2::uuid
        WHERE epc = ANY($3::text[])`,
       [destinationLocationId, transferId, nonLiveEpcs],
@@ -1280,33 +1288,22 @@ export async function commitReceive(
   ];
   let rfidReceived = 0;
   if (liveEpcs.length > 0) {
-    // Pick "most used bin" per EPC's custom_sku at the destination.
+    // The product's bin at the destination — the same rule as a new tag
+    // (item_sibling_home, migration 0119): its colour's LIVE tags there must
+    // all share one home (primary + extra bins). Used to be the busiest
+    // primary bin of the size, ignoring extra bins.
     const upd = await client.query(
       `WITH preferred AS (
-         SELECT
-           it.epc,
-           (
-             SELECT bx.bin_id::text
-             FROM (
-               SELECT i.bin_id, COUNT(*) AS c
-               FROM items i
-               WHERE i.custom_sku_id = it.custom_sku_id
-                 AND i.location_id = $1::uuid
-                 AND i.status = 'in-stock'
-                 AND i.bin_id IS NOT NULL
-               GROUP BY i.bin_id
-               ORDER BY c DESC, i.bin_id::text ASC
-               LIMIT 1
-             ) bx
-           ) AS bin_id
-         FROM items it
-         WHERE it.epc = ANY($2::text[])
+         SELECT it.id, item_sibling_home(it.custom_sku_id, $1::uuid, it.id) AS home
+           FROM items it
+          WHERE it.epc = ANY($2::text[])
        )
        UPDATE items i
        SET status = 'in-stock',
-           bin_id = preferred.bin_id::uuid
+           bin_id = preferred.home[1],
+           additional_bin_ids = COALESCE(preferred.home[2:], '{}'::uuid[])
        FROM preferred
-       WHERE i.epc = preferred.epc`,
+       WHERE i.id = preferred.id`,
       [t.destination_location_id, liveEpcs],
     );
     rfidReceived = upd.rowCount ?? 0;

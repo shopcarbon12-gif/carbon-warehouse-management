@@ -1,5 +1,12 @@
 import type { Pool, PoolClient } from "pg";
 import { sectionRegex } from "@/lib/queries/bin-code";
+import {
+  assignToBin,
+  publicChanges,
+  type BinActor,
+  type BinChange,
+  type SkuGroup,
+} from "@/lib/server/bin-engine";
 
 export type ShelfMapLine = {
   /** Identifies the PRODUCT. Two matrices can share a UPC (migration 0092),
@@ -15,6 +22,7 @@ export type ShelfMapBin = {
   id: string;
   code: string;
   status: string;
+  capacity: number | null;
   lines: ShelfMapLine[];
 };
 
@@ -49,12 +57,14 @@ export async function listShelfMapSection(
     id: string;
     code: string;
     status: string;
+    capacity: number | null;
     lines: ShelfMapLine[] | null;
   }>(
     `SELECT
        b.id::text AS id,
        b.code,
        b.status,
+       b.capacity,
        (
          SELECT COALESCE(
            jsonb_agg(jsonb_build_object(
@@ -93,6 +103,7 @@ export async function listShelfMapSection(
     id: row.id,
     code: row.code,
     status: row.status,
+    capacity: row.capacity ?? null,
     lines: Array.isArray(row.lines) ? row.lines : [],
   }));
 }
@@ -134,26 +145,28 @@ export async function listShelfMapNavigation(
 export async function listUnmappedBins(
   pool: Pool,
   locationId: string,
-): Promise<{ id: string; code: string; status: string; in_stock_count: number }[]> {
+): Promise<{ id: string; code: string; status: string; capacity: number | null; in_stock_count: number }[]> {
   const r = await pool.query<{
     id: string;
     code: string;
     status: string;
+    capacity: number | null;
     in_stock_count: number;
   }>(
     `SELECT
        b.id::text AS id,
        b.code,
        b.status,
-       COUNT(i.id) FILTER (WHERE i.status IN ('in-stock','pending_visibility'))::int AS in_stock_count
+       b.capacity,
+       -- primary OR extra bin, like every other bin view
+       (SELECT COUNT(*) FROM items i
+         WHERE i.location_id = $1::uuid
+           AND i.status IN ('in-stock','pending_visibility')
+           AND (i.bin_id = b.id OR b.id = ANY(i.additional_bin_ids)))::int AS in_stock_count
      FROM bins b
-     LEFT JOIN items i
-       ON i.bin_id = b.id
-       AND i.location_id = $1::uuid
      WHERE b.location_id = $1::uuid
        AND b.archived_at IS NULL
        AND b.code !~ '^\\d+[A-Z][0-9]{2}[LCR]$'
-     GROUP BY b.id, b.code, b.status
      ORDER BY b.code ASC`,
     [locationId],
   );
@@ -161,31 +174,23 @@ export async function listUnmappedBins(
 }
 
 /**
- * Put every in-stock EPC of one product's (UPC + colour) group into
- * `targetBinId`. Operates at one `locationId` only, writes one
- * `inventory_audit_logs` row per affected EPC, and must be wrapped in a
- * transaction by the caller.
+ * Put one product's (UPC + colour) group into `targetBinId` — Shelf Map
+ * Move / Add / Add item and the catalog's Move-to-bin. Runs on the shared bin
+ * engine (lib/server/bin-engine.ts), the same rule as the handheld Bin Assign.
+ * Must be wrapped in a transaction by the caller.
  *
- * `matrixId` narrows the group to ONE product. Leave it null only for legacy
- * callers: since migration 0092 two products can share a UPC and therefore a
- * SKU prefix, and a prefix-only sweep silently drags the twin along — that is
- * how "Cole Pants GREY" and "Kyle Cargo GREY" kept moving (and being cleared)
- * as one 38-EPC lump.
+ * `matrixId` narrows the group to ONE product (two products can share a UPC
+ * and therefore a SKU prefix — Cole Pants GREY / Kyle Cargo GREY).
  *
  * `mode`:
- *   - `"move"` (default) — the group ends up in this bin ONLY: `bin_id` is
- *     repointed and `additional_bin_ids` cleared. Audit reason `bin_move`.
- *   - `"add"` — multi-bin. Homeless EPCs get this bin as their primary home;
- *     EPCs that already live in another live bin keep it (that bin still owns
- *     the qty) and gain this one in `additional_bin_ids`, so the group lists
- *     under both. EPCs already here are a no-op. Audit reason `bin_add`.
- *     There is no cap on how many bins an EPC can carry.
- *
- * Source semantics (`"move"` only — `"add"` always considers every EPC of the
- * group, since its whole point is to widen the set of bins):
- *   - sourceBinId = UUID → move only from that bin
- *   - sourceBinId = null → move only from homeless (bin_id IS NULL)
- *   - sourceBinId = "any" → move from anywhere (any bin + homeless)
+ *   - `"move"` (default) — every tag of the group ends up in this bin only,
+ *     wherever it was. `sourceBinId` no longer narrows a move: Shelf Map sent
+ *     the cell's bin and the server moved only tags whose PRIMARY bin it was,
+ *     so a product listed there as an extra bin moved 0 tags while the dialog
+ *     closed as if it worked. `sourceBinId: null` still means "only tags with
+ *     no bin".
+ *   - `"add"` — tags without a live bin get this one as primary; tags in
+ *     another bin keep it and list this one as an extra bin.
  */
 export async function assignSkuGroupToBin(
   client: PoolClient,
@@ -198,186 +203,25 @@ export async function assignSkuGroupToBin(
     targetBinId: string;
     mode?: "move" | "add";
   },
-): Promise<{ moved: number }> {
+  actor: BinActor,
+): Promise<{ moved: number; changes: BinChange[] }> {
   const mode = params.mode ?? "move";
-  // Verify target bin belongs to this tenant + location and is active.
-  const target = await client.query<{ code: string; status: string }>(
-    `SELECT b.code, b.status
-       FROM bins b
-       INNER JOIN locations l ON l.id = b.location_id
-      WHERE b.id = $1::uuid
-        AND l.id = $2::uuid
-        AND l.tenant_id = $3::uuid
-        AND b.archived_at IS NULL
-      LIMIT 1`,
-    [params.targetBinId, locationId, tenantId],
-  );
-  if (!target.rows[0]) throw new Error("BAD_REQUEST:Target bin not found");
-  if (target.rows[0].status === "inactive") {
-    throw new Error("BAD_REQUEST:Target bin is inactive");
-  }
-  const targetCode = target.rows[0].code;
-
-  // $1 location, $2 sku prefix, $3 target bin, $4 matrix id (nullable).
-  const args: unknown[] = [
+  const group: SkuGroup = {
+    sql: (n) => `SELECT cs.id FROM custom_skus cs
+       WHERE (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) = $${n}
+         AND ($${n + 1}::uuid IS NULL OR cs.matrix_id = $${n + 1}::uuid)`,
+    params: [params.skuPrefix, params.matrixId ?? null],
+  };
+  const { changes } = await assignToBin(
+    client,
+    tenantId,
     locationId,
-    params.skuPrefix,
     params.targetBinId,
-    params.matrixId ?? null,
-  ];
-
-  /* The group filter. `matrix_id` is what actually names the product; the
-     prefix alone is ambiguous whenever two matrices share a UPC. */
-  const groupClause = `
-         AND (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) = $2
-         AND ($4::uuid IS NULL OR cs.matrix_id = $4::uuid)`;
-
-  // Same shape filter for source: must belong to this tenant + location.
-  let sourceClause: string;
-  let sourceCode: string | null = null;
-
-  if (mode === "add") {
-    // ADD considers the whole group wherever it currently sits.
-    sourceClause = "TRUE";
-  } else if (params.sourceBinId === null) {
-    sourceClause = "i.bin_id IS NULL";
-  } else if (params.sourceBinId === "any") {
-    sourceClause = "TRUE";
-  } else {
-    const src = await client.query<{ code: string }>(
-      `SELECT b.code
-         FROM bins b
-         INNER JOIN locations l ON l.id = b.location_id
-        WHERE b.id = $1::uuid
-          AND l.id = $2::uuid
-          AND l.tenant_id = $3::uuid
-          AND b.archived_at IS NULL
-        LIMIT 1`,
-      [params.sourceBinId, locationId, tenantId],
-    );
-    if (!src.rows[0]) throw new Error("BAD_REQUEST:Source bin not found");
-    sourceCode = src.rows[0].code;
-    sourceClause = `i.bin_id = $${args.length + 1}::uuid`;
-    args.push(params.sourceBinId);
-  }
-
-  type Touched = { epc: string; old_bin: string | null };
-  let touched: Touched[];
-
-  if (mode === "add") {
-    /* Multi-bin. Two buckets, mirroring the handheld's ADD
-       (`assignItemsToBinBySkuScan`, mode `homeless_only`):
-         1. no live home (bin_id NULL, or pointing at an archived bin)
-            → this bin becomes the primary home;
-         2. living in some other live bin → that bin keeps the qty, this one
-            is appended to `additional_bin_ids`.
-       EPCs already here (primary or additional) match neither and stay put. */
-    const homeless = await client.query<Touched>(
-      `WITH affected AS (
-         SELECT i.id, i.epc
-         FROM items i
-         INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
-         WHERE i.location_id = $1::uuid
-           AND i.status IN ('in-stock', 'pending_visibility')
-           ${groupClause}
-           AND (
-             i.bin_id IS NULL
-             OR NOT EXISTS (
-               SELECT 1 FROM bins b WHERE b.id = i.bin_id AND b.archived_at IS NULL
-             )
-           )
-       )
-       UPDATE items SET bin_id = $3::uuid
-       WHERE id IN (SELECT id FROM affected)
-       RETURNING epc, NULL::text AS old_bin`,
-      args,
-    );
-
-    const secondary = await client.query<Touched>(
-      `WITH affected AS (
-         SELECT i.id, i.epc, i.bin_id AS old_bin_id
-         FROM items i
-         INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
-         WHERE i.location_id = $1::uuid
-           AND i.status IN ('in-stock', 'pending_visibility')
-           ${groupClause}
-           AND i.bin_id IS NOT NULL
-           AND i.bin_id <> $3::uuid
-           AND NOT ($3::uuid = ANY(i.additional_bin_ids))
-           AND EXISTS (
-             SELECT 1 FROM bins b WHERE b.id = i.bin_id AND b.archived_at IS NULL
-           )
-       ),
-       updated AS (
-         UPDATE items
-            SET additional_bin_ids = additional_bin_ids || ARRAY[$3::uuid]
-          WHERE id IN (SELECT id FROM affected)
-          RETURNING id
-       )
-       SELECT a.epc,
-         (SELECT b.code FROM bins b WHERE b.id = a.old_bin_id) AS old_bin
-       FROM affected a`,
-      args,
-    );
-    touched = [...homeless.rows, ...secondary.rows];
-  } else {
-    // MOVE — the group ends up here and nowhere else, so the multi-bin list
-    // is cleared too (same semantics as the handheld's MOVE choice).
-    const moved = await client.query<Touched>(
-      `WITH affected AS (
-         SELECT i.id, i.epc, i.bin_id AS old_bin_id
-         FROM items i
-         INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
-         WHERE i.location_id = $1::uuid
-           AND i.status IN ('in-stock', 'pending_visibility')
-           ${groupClause}
-           AND ${sourceClause}
-       ),
-       updated AS (
-         UPDATE items
-            SET bin_id = $3::uuid,
-                additional_bin_ids = '{}'::uuid[]
-          WHERE id IN (SELECT id FROM affected)
-          RETURNING id
-       )
-       SELECT a.epc,
-         (SELECT b.code FROM bins b WHERE b.id = a.old_bin_id) AS old_bin
-       FROM affected a`,
-      args,
-    );
-    touched = moved.rows;
-  }
-
-  const reason = mode === "add" ? "bin_add" : "bin_move";
-  for (const row of touched) {
-    const oldVal = row.old_bin ?? "(homeless)";
-    await client.query(
-      `INSERT INTO inventory_audit_logs (
-         tenant_id, log_type, entity_type, entity_reference, old_value, new_value, reason, user_id
-       )
-       VALUES (
-         $1::uuid, 'ADJUSTMENT', 'EPC', $2, $3, $4, $5, NULL
-       )`,
-      [tenantId, row.epc, oldVal, targetCode, reason],
-    );
-  }
-
-  // Variant-level home-bin assignment: mark EVERY size of this colour as
-  // assigned to the target bin — INCLUDING zero-qty sizes with no EPCs — so the
-  // catalog shows the whole colour as assigned. This is display metadata only;
-  // it never creates inventory and bin SCANNING still reads live items only.
-  // Scoped to the matrix when we have one, so the twin product that shares
-  // this UPC doesn't inherit a bin nobody assigned it to.
-  await client.query(
-    `UPDATE custom_skus cs
-        SET assigned_bin_id = $2::uuid
-      WHERE (CASE WHEN cs.sku LIKE 'C%' THEN LEFT(cs.sku, 11) ELSE LEFT(cs.sku, 9) END) = $1
-        AND ($3::uuid IS NULL OR cs.matrix_id = $3::uuid)`,
-    [params.skuPrefix, params.targetBinId, params.matrixId ?? null],
+    mode === "add" ? "add" : params.sourceBinId === null ? "homeless" : "move",
+    group,
+    actor,
   );
-
-  void sourceCode; // captured above for potential future use
-  return { moved: touched.length };
+  return { moved: changes.length, changes: publicChanges(changes) };
 }
 
 /* Per-line ✕ Remove uses the existing `POST /api/locations/bins/:id/clean`

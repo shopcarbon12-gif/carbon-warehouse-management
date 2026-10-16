@@ -39,6 +39,8 @@ export type CatalogItemRow = {
    *  modal renders a small colored chip next to the EPC when this is
    *  non-null. See migration 0082 + the cycle-count scan handler. */
   pinned_bin_code: string | null;
+  /** Extra (multi-bin) bins the tag is also listed in, live bins only. */
+  extra_bin_codes: string[];
 };
 
 /** Matrix (UPC) rows with custom SKU / EPC totals for the active location. */
@@ -144,12 +146,19 @@ export async function listCatalogItemsForCustomSku(
     color: string | null;
     sku: string;
     pinned_bin_code: string | null;
+    extra_bin_codes: string[] | null;
   }>(
     `SELECT
        i.serial_number::text AS serial_number,
        i.epc,
        i.status,
        COALESCE(b.code, '') AS bin_code,
+       -- Extra (multi-bin) bins: the tag is also listed in these bins'
+       -- contents and Shelf Map cells, so the popup shows them too.
+       ARRAY(SELECT xb.code FROM unnest(i.additional_bin_ids) AS x(id)
+               JOIN bins xb ON xb.id = x.id AND xb.archived_at IS NULL
+              WHERE x.id IS DISTINCT FROM i.bin_id
+              ORDER BY xb.code) AS extra_bin_codes,
        i.last_seen_at,
        m.description AS name,
        cs.size,
@@ -159,8 +168,8 @@ export async function listCatalogItemsForCustomSku(
      FROM items i
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
-     LEFT JOIN bins b ON b.id = i.bin_id
-     LEFT JOIN bins pb ON pb.id = i.pinned_bin_id
+     LEFT JOIN bins b ON b.id = i.bin_id AND b.archived_at IS NULL
+     LEFT JOIN bins pb ON pb.id = i.pinned_bin_id AND pb.archived_at IS NULL
      WHERE i.custom_sku_id = $1::uuid AND i.location_id = $2::uuid
      ORDER BY i.serial_number ASC`,
     [customSkuId, locationId],
@@ -176,5 +185,6 @@ export async function listCatalogItemsForCustomSku(
     color: row.color,
     sku: row.sku,
     pinned_bin_code: row.pinned_bin_code ?? null,
+    extra_bin_codes: row.extra_bin_codes ?? [],
   }));
 }

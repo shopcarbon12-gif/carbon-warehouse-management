@@ -2,8 +2,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
-import { requireSessionScopes } from "@/lib/server/api-require-scopes";
-import { SCOPES } from "@/lib/auth/roles";
+import { binActorFrom, canChangeBins } from "@/lib/server/bin-engine";
 import { assertRowLocation } from "@/lib/server/assert-row-location";
 import { cleanBinContents } from "@/lib/queries/clean-bin";
 
@@ -44,8 +43,9 @@ async function POST_handler(req: Request, ctx: Ctx) {
   const pool = getPool();
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
 
-  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
-  if (denied) return denied;
+  if (!(await canChangeBins(pool, session, "clean"))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   // Active-location guard.
   const guard = await assertRowLocation(pool, "bins", id, session.tid, session.lid);
@@ -57,10 +57,13 @@ async function POST_handler(req: Request, ctx: Ctx) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const result = await cleanBinContents(
-        client, session.tid, id, skuPrefix, session.sub, matrixId);
+    const result = await cleanBinContents(client, session.tid, id, {
+      skuPrefix,
+      matrixId,
+      actor: binActorFrom(req, session),
+    });
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, cleared: result.cleared });
+    return NextResponse.json({ ok: true, cleared: result.cleared, changes: result.changes });
   } catch (e) {
     try {
       await client.query("ROLLBACK");

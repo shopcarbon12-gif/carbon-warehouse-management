@@ -140,36 +140,21 @@ export async function rfidCommissionPrepare(
 
   if (binId) {
     const binOk = await client.query<{ ok: string }>(
-      `SELECT 1::text AS ok FROM bins WHERE id = $1::uuid AND location_id = $2::uuid`,
+      `SELECT 1::text AS ok FROM bins
+        WHERE id = $1::uuid AND location_id = $2::uuid AND archived_at IS NULL AND status <> 'inactive'`,
       [binId, session.lid],
     );
     if (!binOk.rows[0]) {
-      throw new Error("BAD_REQUEST:Bin not in this location");
+      throw new Error("BAD_REQUEST:Bin not in this location, deleted or inactive");
     }
   }
 
-  // Bin resolution. A bin is never *required*. When the caller adds to
-  // inventory but picks no bin (binId null), the new EPCs inherit the bin
-  // where existing in-stock items of the SAME UPC (matrix) already live —
-  // most-populated bin wins. If this UPC has never been binned, the rows
-  // stay unassigned (bin_id NULL). "Lives wherever its UPC lives, else null."
-  let resolvedBinId: string | null = binId ?? null;
-  if (!resolvedBinId && addToInventory) {
-    const inherit = await client.query<{ bin_id: string }>(
-      `SELECT i.bin_id
-         FROM items i
-         JOIN custom_skus cs2 ON cs2.id = i.custom_sku_id
-        WHERE cs2.matrix_id = $1::uuid
-          AND i.location_id = $2::uuid
-          AND i.status = 'in-stock'
-          AND i.bin_id IS NOT NULL
-        GROUP BY i.bin_id
-        ORDER BY count(*) DESC
-        LIMIT 1`,
-      [row.matrix_id, session.lid],
-    );
-    resolvedBinId = inherit.rows[0]?.bin_id ?? null;
-  }
+  // Bin resolution. A bin is never *required*. With no bin picked, the row is
+  // inserted without one and the database gives it the product's bin
+  // (item_sibling_home, migrations 0118/0119 — the same rule as every other
+  // path: the colour's LIVE tags must all share one home). This used to take
+  // the busiest bin of the whole product, every colour.
+  const resolvedBinId: string | null = binId ?? null;
 
   // Random 6-digit unique serials per Carbon-Jeans policy (2026-05-29).
   // The batch allocator pre-checks against existing items.serial_number

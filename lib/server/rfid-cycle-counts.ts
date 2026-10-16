@@ -119,7 +119,7 @@ export async function listExpectedCycleCountItems(
      LEFT JOIN bins b ON b.id = i.bin_id
      WHERE i.location_id = $2::uuid
        AND i.status = 'in-stock'
-       AND ($3::uuid IS NULL OR i.bin_id = $3::uuid)
+       AND ($3::uuid IS NULL OR i.bin_id = $3::uuid OR $3::uuid = ANY(i.additional_bin_ids))
      ORDER BY cs.sku ASC, i.epc ASC`,
     [tenantId, locationId, binId],
   );
@@ -287,7 +287,7 @@ export async function listSimMisplaceEpcs(
      WHERE i.status = 'in-stock'
        AND NOT (
          i.location_id = $2::uuid
-         AND ($3::uuid IS NULL OR i.bin_id = $3::uuid)
+         AND ($3::uuid IS NULL OR i.bin_id = $3::uuid OR $3::uuid = ANY(i.additional_bin_ids))
        )
      ORDER BY random()
      LIMIT $4`,

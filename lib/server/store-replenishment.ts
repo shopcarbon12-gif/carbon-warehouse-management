@@ -179,7 +179,8 @@ export async function getReplenishmentLines(
        FROM facts f
        LEFT JOIN custom_skus cs ON cs.id = f.sku_id
        LEFT JOIN matrices m ON m.id = cs.matrix_id
-       LEFT JOIN bins ab ON ab.id = cs.assigned_bin_id
+       -- Home bin fallback: only a live bin of this location.
+       LEFT JOIN bins ab ON ab.id = cs.assigned_bin_id AND ab.location_id = $1::uuid AND ab.archived_at IS NULL
       -- Pick order: lines with stock first, then by bin (walk the aisles in
       -- order; no bin last), then by product name.
       ORDER BY (f.sku_id IS NOT NULL AND f.in_stock > 0) DESC, bin NULLS LAST, name NULLS LAST, f.line_id`,

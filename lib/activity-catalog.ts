@@ -170,11 +170,12 @@ const ROUTES: Record<string, Entry> = {
   "handheld/print-event": { module: "Tags & labels", label: "Printed label (handheld)" },
   "v1/rfid/encode-events": { module: "Tags & labels", label: "Encode event" },
 
-  "locations/bins": { module: "Bins & locations", label: "Created bin" },
+  "locations/bins": { module: "Bins & locations", label: "Created or edited bin" },
   "locations/bins/[id]": { module: "Bins & locations", label: { PATCH: "Edited bin", DELETE: "Deleted bin", POST: "Edited bin" } },
   "locations/bins/[id]/clean": { module: "Bins & locations", label: "Cleaned bin" },
   "locations/bins/[id]/sku/[sku]": { module: "Bins & locations", label: { DELETE: "Removed SKU from bin", POST: "Added SKU to bin", PATCH: "Changed SKU in bin" } },
   "locations/bins/move": { module: "Bins & locations", label: "Moved bin contents" },
+  "locations/bins/revert": { module: "Bins & locations", label: "Undid bin change" },
   "mobile/clean-bin": { module: "Bins & locations", label: "Cleaned bin (handheld)" },
   "settings/ensure-orlando-bins": { module: "Bins & locations", label: "Created standard bins" },
   "zones": { module: "Bins & locations", label: "Created zone" },

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getPool } from "@/lib/db";
 import { previewPutawayAssign } from "@/lib/queries/putaway-assign";
 import { authorizeHandheldDeviceRequest } from "@/lib/server/handheld-request-auth";
+import { getSessionFromRequest } from "@/lib/get-session-from-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,10 +44,13 @@ async function POST_handler(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  // Same location as the assign it previews (the session's, like the rest of
+  // the Bin Assign screen), not the phone's registered one.
+  const session = await getSessionFromRequest(req);
   try {
     const preview = await previewPutawayAssign(
       pool,
-      auth.device.locationId,
+      session?.lid || auth.device.locationId,
       parsed.data.binCode,
       parsed.data.skuScanned,
       parsed.data.scope,
