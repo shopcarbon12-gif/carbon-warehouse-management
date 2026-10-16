@@ -1,0 +1,3186 @@
+{
+ "takenAt": "2026-10-16T14:53:07.278Z",
+ "restore": "UPDATE items SET bin_id = old_bin_id, additional_bin_ids = old_extra WHERE id = id",
+ "rows": [
+  {
+   "id": "d169e205-1aaa-41c7-8962-fe77062e98c6",
+   "epc": "F0A0B30E4F9CF3F00002368C",
+   "product": "2 Pieces Gyda BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4d155d4c-f5a1-4b5d-b0be-25c1ec774056",
+   "new_extra": []
+  },
+  {
+   "id": "4f49d03c-ea06-402e-ae9a-0b29eec8a4dc",
+   "epc": "F0A0B30E4F9CF5A00006EE0E",
+   "product": "2 Pieces Gyda WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0713363a-91fd-4658-bd3b-f9074c7d65d2",
+   "new_extra": []
+  },
+  {
+   "id": "a68e47f2-4db1-420e-8ee5-bf5a9d07cd82",
+   "epc": "F0A0B30E4F9CF4C00009B00F",
+   "product": "2 Pieces Gyda WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0713363a-91fd-4658-bd3b-f9074c7d65d2",
+   "new_extra": []
+  },
+  {
+   "id": "518016e0-aa58-4832-a52d-edd54680036e",
+   "epc": "F0A0B30E4F9CF3E0000ADAFE",
+   "product": "2 Pieces Gyda WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0713363a-91fd-4658-bd3b-f9074c7d65d2",
+   "new_extra": []
+  },
+  {
+   "id": "5618a180-062f-4438-98cc-d626ba604cf6",
+   "epc": "F0A0B30E4F9BA160000E5F1E",
+   "product": "Ace Jeans WHITE 29",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c2e320a4-2d4c-47c9-a27d-462c402efa31",
+   "new_extra": []
+  },
+  {
+   "id": "cc6c6fc2-154a-4842-860a-cdd243ef7dcb",
+   "epc": "F0A0B30E4F9B8CF0000AB51C",
+   "product": "Adalyn Sequin Dress BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "028f35e0-263c-412b-9dcd-e86711b8165a",
+   "new_extra": []
+  },
+  {
+   "id": "0a7cdc1e-5549-4bfc-9721-ef22940efbef",
+   "epc": "F0A0B30E4F9CB6900004A033",
+   "product": "Adriana Top WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "60b7d3fb-e4a0-4034-9e89-54e55a471ef4",
+   "epc": "F0A0B30E4F9CB5500004E0EB",
+   "product": "Adriana Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "8a994abd-5bd5-4c19-a778-fc7ef76f5b99",
+   "epc": "F0A0B30E4F9CB55000059A98",
+   "product": "Adriana Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "a6f07747-4aba-4e22-84ce-abb5c2ca0bde",
+   "epc": "F0A0B30E4F9CB5500008F94E",
+   "product": "Adriana Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "cab522d1-3170-4c71-84ae-efd7cecbc7aa",
+   "epc": "F0A0B30E4F9BBCF00003B795",
+   "product": "Aleena Knot T-Shirt WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b3ba665b-a070-4037-97d6-bc1e57eb5d81",
+   "new_extra": []
+  },
+  {
+   "id": "e1e14b6f-ffc7-4eeb-8aa0-2fce9c7c0d09",
+   "epc": "F0A0B30E4F9BBCE0000D1FF5",
+   "product": "Aleena Knot T-Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b3ba665b-a070-4037-97d6-bc1e57eb5d81",
+   "new_extra": []
+  },
+  {
+   "id": "cc239dda-9696-4019-8c3c-31da353d86fb",
+   "epc": "F0A0B30E4F9C056000069103",
+   "product": "Alex Denim Shorts BLACK 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9b56b49a-6481-477a-9aee-fce18fa0d69a",
+   "new_extra": []
+  },
+  {
+   "id": "f20d7467-421a-46d8-9af3-61fbd2b1dd38",
+   "epc": "F0A0B30E4F9B91E000060F66",
+   "product": "Alexia Top LIGHT BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4bb26640-5dcf-4d3c-817b-1b9472d21727",
+   "new_extra": []
+  },
+  {
+   "id": "15ce02bd-8d73-4bca-af22-aeb48ecf259d",
+   "epc": "F0A0B30E4F9B91E00006145C",
+   "product": "Alexia Top LIGHT BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4bb26640-5dcf-4d3c-817b-1b9472d21727",
+   "new_extra": []
+  },
+  {
+   "id": "dec8c2f0-aebc-43f0-99ea-1eb30e90385b",
+   "epc": "F0A0B30E4F9B91C00002FB72",
+   "product": "Alexia Top PINK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4bb26640-5dcf-4d3c-817b-1b9472d21727",
+   "new_extra": []
+  },
+  {
+   "id": "b7a3a9e6-79b1-4ca8-9ed5-00f9b281084c",
+   "epc": "F0A0B30E4F9BC5D000064453",
+   "product": "Anaya Jeans BLUE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8445f989-6238-4fd6-98e0-600ebe19f358",
+   "new_extra": []
+  },
+  {
+   "id": "41bfe652-b665-4747-8e8f-a78fbaeab0f3",
+   "epc": "F0A0B30E4F9C7E200008426F",
+   "product": "Apology Hoodie BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5834a009-a32c-40af-a70c-1acb562c3e83",
+   "new_extra": [
+    "54fd4810-deb6-4df2-9c7e-9cdc9418e895",
+    "f1da31b6-438f-4f93-a4c7-58713af1b7f0"
+   ]
+  },
+  {
+   "id": "30475f32-14f4-41a4-b27c-75a3970a14bf",
+   "epc": "F0A0B30E4F9BB0D0000600B6",
+   "product": "Aubri Denim Jacket BLUE WASHED XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "690bbfa8-615b-4bb4-9400-c52487034f2b",
+   "new_extra": []
+  },
+  {
+   "id": "ed2ff30f-c1f9-46f1-9070-84c70ec1a4a0",
+   "epc": "F0A0B30E4F9B8B700001B0FD",
+   "product": "Ava Mini Dress BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "028f35e0-263c-412b-9dcd-e86711b8165a",
+   "new_extra": []
+  },
+  {
+   "id": "7657eb58-2740-4351-b69e-7b3045a06bdb",
+   "epc": "F0A0B30E4F9CBE30000D1475",
+   "product": "Ayla Dress BLACK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3fce4aed-a8ff-4975-9bc0-168f39838e10",
+   "new_extra": []
+  },
+  {
+   "id": "4193858e-dd34-4311-9caf-1c7ba07011b2",
+   "epc": "F0A0B30E4F9CBC50000704AE",
+   "product": "Ayla Dress BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3fce4aed-a8ff-4975-9bc0-168f39838e10",
+   "new_extra": []
+  },
+  {
+   "id": "0c2e9c31-effe-4056-a219-9c1eb736ecf7",
+   "epc": "F0A0B30E4F9C2E8000084817",
+   "product": "Bailey Crop Tank LILAC M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "645cc88a-9160-4424-8a42-b5051df04039",
+   "new_extra": []
+  },
+  {
+   "id": "a6919c65-6e81-4337-a705-f5d7ad85cc42",
+   "epc": "F0A0B30E4F9BB4A0000A1903",
+   "product": "Blaire Shoulder Dress BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "dbb3b41d-9df0-4631-8031-61537a920023",
+   "new_extra": []
+  },
+  {
+   "id": "56a485a6-c45d-42ec-a0f2-142e896c9a97",
+   "epc": "F0A0B30E4F9D09600004D80A",
+   "product": "Bradley Jacket DARK BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "70d3b38e-9c96-4ae2-b422-1cd4dc77d454",
+   "new_extra": [
+    "1a2851fe-61a7-4ef8-8def-2d1829186ba5",
+    "cb79cfbc-a250-4739-904f-51878d2943a1"
+   ]
+  },
+  {
+   "id": "91b91205-45fe-4b78-8da1-d035ee3411ed",
+   "epc": "F0A0B30E4F9D08B00003AB6A",
+   "product": "Bradley Jacket DARK BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "70d3b38e-9c96-4ae2-b422-1cd4dc77d454",
+   "new_extra": [
+    "1a2851fe-61a7-4ef8-8def-2d1829186ba5",
+    "cb79cfbc-a250-4739-904f-51878d2943a1"
+   ]
+  },
+  {
+   "id": "50beb901-f746-4490-8e27-6cdee7e153ee",
+   "epc": "F0A0B30E4F9C6D8000018E6B",
+   "product": "Bralette Top CLAY 10",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b9e064ee-052b-4ad6-b21f-ab8ebb4b6cc8",
+   "new_extra": []
+  },
+  {
+   "id": "c3012cc3-9754-433d-ad08-ba376c521f75",
+   "epc": "F0A0B30E4F9C67D0000B2A82",
+   "product": "Bralette Top PINK 06",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b9e064ee-052b-4ad6-b21f-ab8ebb4b6cc8",
+   "new_extra": []
+  },
+  {
+   "id": "376caefa-9c74-42fb-a934-c82d994e4dde",
+   "epc": "F0A0B30E4F9CC4000007AB83",
+   "product": "Callie Pants Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "dfae492b-f8da-4be6-95c6-c020ecf5d0bd",
+   "new_extra": []
+  },
+  {
+   "id": "7d634495-818b-4a69-85d4-1aade7338253",
+   "epc": "F0A0B30E4F9CC3400008E778",
+   "product": "Callie Pants Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "dfae492b-f8da-4be6-95c6-c020ecf5d0bd",
+   "new_extra": []
+  },
+  {
+   "id": "aceb91b2-8bca-4e8e-a2ba-82f4d174af9c",
+   "epc": "F0A0B30E4F9CC4C0000DEFFD",
+   "product": "Callie Pants Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "dfae492b-f8da-4be6-95c6-c020ecf5d0bd",
+   "new_extra": []
+  },
+  {
+   "id": "dec0f165-5022-412b-863c-36d51621f88f",
+   "epc": "F0A0B30E4F9CC3F000018896",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "438d4051-e3ef-422c-937e-9fdf7d487d8f",
+   "epc": "F0A0B30E4F9CC3F000018898",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "386d9a1a-cc68-4c14-a6a1-43a4933bc1be",
+   "epc": "F0A0B30E4F9CC3F00001889B",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "646b8ff1-ca58-4afb-a4eb-3f614374cabc",
+   "epc": "F0A0B30E4F9CC3F00001889C",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "e8b32d37-d963-4897-9cff-fa7c129accff",
+   "epc": "F0A0B30E4F9CC3F00001889D",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "fe656269-73f5-4620-a13c-72dfd2327fd5",
+   "epc": "F0A0B30E4F9CC3F000088D2E",
+   "product": "Callie Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "c08fcb51-8ca9-4a8d-8936-e8016c0c504f",
+   "epc": "F0A0B30E4F9CC330000187C6",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "650933a3-4aa2-44d6-87a6-b62446b4986a",
+   "epc": "F0A0B30E4F9CC330000187C7",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "768743c4-4973-4f7f-8470-85c95980974b",
+   "epc": "F0A0B30E4F9CC330000187C8",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "1089bddc-48b5-40eb-b592-a864e5ef2b3a",
+   "epc": "F0A0B30E4F9CC330000187CC",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "30531f1d-52b3-4b74-af89-6e26ca111f54",
+   "epc": "F0A0B30E4F9CC330000187CD",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "9b08f03b-ade1-4803-a2bc-678c3a67c258",
+   "epc": "F0A0B30E4F9CC330000187D0",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "67005ea5-219c-49ba-b953-ecb99a6f9234",
+   "epc": "F0A0B30E4F9CC330000187D1",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "b3d1b4a7-3796-4f4a-8f1a-a96096da9a08",
+   "epc": "F0A0B30E4F9CC330000A45D8",
+   "product": "Callie Top Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "fa78d514-fc23-4e6f-aa74-c00501caeba7",
+   "epc": "F0A0B30E4F9CC270000186F6",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "d7a3015a-cd1e-4945-81e9-f02c2b7b21da",
+   "epc": "F0A0B30E4F9CC270000186F8",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "65161ccf-d926-4c38-ade7-12a4d1030805",
+   "epc": "F0A0B30E4F9CC270000186F9",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "e340ae9e-c6f9-44d1-ad3a-9d88e08b1186",
+   "epc": "F0A0B30E4F9CC270000186FB",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "e26337ff-e0f3-4a74-be62-a86071147a48",
+   "epc": "F0A0B30E4F9CC270000186FF",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "913b8330-5f5b-410f-b773-cc3adfc1b419",
+   "epc": "F0A0B30E4F9CC27000018701",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "936bda73-2e5f-4c12-bd06-e7b1270321ff",
+   "epc": "F0A0B30E4F9CC27000018704",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "07b356c5-a506-4de3-99a3-a6346bf41cac",
+   "epc": "F0A0B30E4F9CC27000018705",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "e62bf717-e512-4751-b1f1-493fa840c525",
+   "epc": "F0A0B30E4F9CC2700002ED4A",
+   "product": "Callie Top Set CREAM S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "314e0fca-2b76-4af9-ab8a-bc509a0a6389",
+   "epc": "F0A0B30E4F9CC4B000018932",
+   "product": "Callie Top Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "2e966e63-6068-4e57-9cd0-913459916395",
+   "epc": "F0A0B30E4F9CC4B000018935",
+   "product": "Callie Top Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "5b22b709-5eb2-4481-b790-097200e04fb9",
+   "epc": "F0A0B30E4F9CC4B000018939",
+   "product": "Callie Top Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [
+    "2fe7b13b-f416-4d93-bbf5-405c0f28c469"
+   ],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "0458834e-0bf8-4f5b-b4f5-f9589a2acac2",
+   "epc": "F0A0B30E4F9CC4B00003D804",
+   "product": "Callie Top Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "46adcd91-2c81-466f-8139-785b33a6f145",
+   "epc": "F0A0B30E4F9CC4B000044A47",
+   "product": "Callie Top Set CREAM XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2fe7b13b-f416-4d93-bbf5-405c0f28c469",
+   "new_extra": []
+  },
+  {
+   "id": "670a4722-e33e-4f78-a5ae-72adb18904b7",
+   "epc": "F0A0B30E4F9BC900000143CF",
+   "product": "Camille Double Pleated Trouser BEIGE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f20f7e5a-ad0b-45bd-815c-ff8a6f29af9b",
+   "new_extra": []
+  },
+  {
+   "id": "1ac12b19-79ac-493b-9719-8c49d317c9cc",
+   "epc": "F0A0B30E4F9BC90000053C51",
+   "product": "Camille Double Pleated Trouser BEIGE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f20f7e5a-ad0b-45bd-815c-ff8a6f29af9b",
+   "new_extra": []
+  },
+  {
+   "id": "82b1765f-9b9e-4507-bce5-7e55cfcc8c71",
+   "epc": "F0A0B30E4F9BC91000068117",
+   "product": "Camille Double Pleated Trouser BEIGE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f20f7e5a-ad0b-45bd-815c-ff8a6f29af9b",
+   "new_extra": []
+  },
+  {
+   "id": "05c3519b-3e6c-4600-9adb-064e888b1e15",
+   "epc": "F0A0B30E4F9BC8900006A072",
+   "product": "Camille Double Pleated Trouser BLACK 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1d6e470c-813d-4a52-ab79-ea40fe678371",
+   "new_extra": []
+  },
+  {
+   "id": "a74d1678-da62-44d3-929c-e4d9ff4790b3",
+   "epc": "F0A0B30E4F9CA720000702F9",
+   "product": "Carbon Classic T BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "520fbdc3-6ce4-4000-9a62-b93b3c01df48",
+   "new_extra": [
+    "76495bc9-3316-4cb6-a983-0ffab8be02af"
+   ]
+  },
+  {
+   "id": "972f7499-f96c-4bd4-b6ec-d5705d751654",
+   "epc": "F0A0B30E4F9CB0A0000D09C0",
+   "product": "Carbon Classic T BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "520fbdc3-6ce4-4000-9a62-b93b3c01df48",
+   "new_extra": [
+    "76495bc9-3316-4cb6-a983-0ffab8be02af"
+   ]
+  },
+  {
+   "id": "a3fd81ca-aafb-4593-919c-0dbeb8a72a94",
+   "epc": "F0A0B30E4F9C1D000006D2A4",
+   "product": "Carbon Sneakers BLACK 41",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2f0ff914-d712-4785-be17-d6671c746879",
+   "new_extra": [
+    "9333cee4-eb3b-4413-a60f-9f8bb0ff314d"
+   ]
+  },
+  {
+   "id": "bafd6f8d-b62f-404f-aeb3-bc1dfdec0fcd",
+   "epc": "F0A0B30E4F9C233000013038",
+   "product": "Carbon Sneakers WHITE 45",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2f0ff914-d712-4785-be17-d6671c746879",
+   "new_extra": []
+  },
+  {
+   "id": "95963442-295b-4b07-b9ea-6abdce069afb",
+   "epc": "F0A0B30E4F9C8E60000685FA",
+   "product": "Carlos Jeans WHITE 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "47cb5f27-d3e8-4e36-ac7b-f1701e287669",
+   "new_extra": []
+  },
+  {
+   "id": "a4997dcc-4945-49e9-b003-cb3477273e18",
+   "epc": "F0A0B30E4F9C8E60000B3963",
+   "product": "Carlos Jeans WHITE 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "47cb5f27-d3e8-4e36-ac7b-f1701e287669",
+   "new_extra": []
+  },
+  {
+   "id": "cbd379bd-be15-41d8-b2cd-54cca16b4e3f",
+   "epc": "F0A0B30E4F9C9A40000402BE",
+   "product": "Celtics Jacket BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6afc5b76-e924-43bc-bbb4-09e1b696f702",
+   "new_extra": []
+  },
+  {
+   "id": "48965006-57bf-4f6b-86eb-c8f2ec5e391c",
+   "epc": "F0A0B30E4F9D04000003E695",
+   "product": "Charles Hoodie YELLOW NEON M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d3605075-dc8e-4c0d-9966-f34bc146b02c",
+   "new_extra": [
+    "42e26b12-1a53-4217-81f3-f70de2a64148",
+    "8a9cbf56-835e-48cb-8d5f-3fe22f081793",
+    "b031f0dd-8964-4de3-8ead-84068f4b5cbb",
+    "efe74f88-6f6f-4aef-a790-2a3cf004a660"
+   ]
+  },
+  {
+   "id": "5ea0913c-7664-4615-bd96-8b2dfcf159e0",
+   "epc": "F0A0B30E4F9BEED0000D1C9A",
+   "product": "Choices T-Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "32571e1d-0630-4eef-96b4-a89a51934780",
+   "new_extra": []
+  },
+  {
+   "id": "ef4555b5-79ad-47d2-af63-cd690c63b28a",
+   "epc": "F0A0B30E4F9BEEE00005D696",
+   "product": "Choices T-Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "32571e1d-0630-4eef-96b4-a89a51934780",
+   "new_extra": []
+  },
+  {
+   "id": "08e7d06e-24b0-4fba-ab46-eb8dc527b202",
+   "epc": "F0A0B30E4F9C5830000D1492",
+   "product": "Chris Maxi Skirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "54646bd4-a0c7-49a7-9fed-98f67f938685",
+   "new_extra": []
+  },
+  {
+   "id": "682aeaa4-ce97-4e2d-9361-de8be7640877",
+   "epc": "F0A0B30E4F9BC1E00001B394",
+   "product": "Christy Legging Set BLUE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0d0f91ff-0fb4-4379-bbd1-da638733e334",
+   "new_extra": []
+  },
+  {
+   "id": "0dbad5c0-ff49-4cd9-a5e1-d7caa7083cab",
+   "epc": "F0A0B30E4F9BB690000DF6F0",
+   "product": "Ciena Mini Dress WHITE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8eeee3e2-8e96-4896-a53c-ef067faaafab",
+   "new_extra": []
+  },
+  {
+   "id": "4d64fc01-3272-4bb6-bf48-db300bc6aea9",
+   "epc": "F0A0B30E4F9BB690000E6C75",
+   "product": "Ciena Mini Dress WHITE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8eeee3e2-8e96-4896-a53c-ef067faaafab",
+   "new_extra": []
+  },
+  {
+   "id": "f4f22e79-0683-4dd3-9a04-a311a74614bd",
+   "epc": "F0A0B30E4F9BB6A000061A75",
+   "product": "Ciena Mini Dress WHITE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8eeee3e2-8e96-4896-a53c-ef067faaafab",
+   "new_extra": []
+  },
+  {
+   "id": "211fc69f-1385-4e93-b1f3-63e043f33e0a",
+   "epc": "F0A0B30E4F9BB6A0000E473E",
+   "product": "Ciena Mini Dress WHITE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8eeee3e2-8e96-4896-a53c-ef067faaafab",
+   "new_extra": []
+  },
+  {
+   "id": "21369131-618c-4683-aa2a-95a48a0f1484",
+   "epc": "F0A0B30E4F9BB6C0000518E9",
+   "product": "Ciena Mini Dress WHITE 42",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8eeee3e2-8e96-4896-a53c-ef067faaafab",
+   "new_extra": []
+  },
+  {
+   "id": "96195165-93ac-4bae-861c-b1a5119c4cad",
+   "epc": "F0A0B30E4F9C164000013BCC",
+   "product": "Classic Heels BLACK 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fc19950a-646b-4eea-a6c7-824e3b4d3c66",
+   "new_extra": []
+  },
+  {
+   "id": "7f686bd1-367a-48fb-a585-aee97a91c6d1",
+   "epc": "F0A0B30E4F9BE370000521DD",
+   "product": "Classic Industry T-Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3643e8d5-a53c-4d16-b411-27b61140feb4",
+   "new_extra": []
+  },
+  {
+   "id": "3dae6f49-65ae-4806-8c19-ba3eed8b238a",
+   "epc": "F0A0B30E4F9C9EC000023623",
+   "product": "Colin Evening Pants BLUE 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c088ca1c-4742-4a49-9963-6537acef5543",
+   "new_extra": [
+    "88339784-5a66-4199-ac72-794d5c300565"
+   ]
+  },
+  {
+   "id": "5141fc3b-8215-48f6-a907-23f32de90f74",
+   "epc": "F0A0B30E4F9C9E200002F2D8",
+   "product": "Colin Evening Pants GREY 29",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1cc557c5-27b5-446a-a8c4-da0505ee05df",
+   "new_extra": [
+    "e135ffc1-505c-4f53-af61-bf7f346ddda8"
+   ]
+  },
+  {
+   "id": "af3679ef-5e7f-4321-a793-8a818f3e3507",
+   "epc": "F0A0B30E4F9C90400009AD6D",
+   "product": "Colin Evening Pants GREY 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1cc557c5-27b5-446a-a8c4-da0505ee05df",
+   "new_extra": [
+    "e135ffc1-505c-4f53-af61-bf7f346ddda8"
+   ]
+  },
+  {
+   "id": "3c648d9d-a4f4-4288-a024-57dc67a546ff",
+   "epc": "F0A0B30E4F9CC0400007FCAD",
+   "product": "Collar Pants Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "80b6a510-2215-4143-872b-c2889c9882de",
+   "new_extra": []
+  },
+  {
+   "id": "4174d4e7-93ec-44ba-ba51-a0fd5fcf4189",
+   "epc": "F0A0B30E4F9CC040000B6EE2",
+   "product": "Collar Pants Set CREAM M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "80b6a510-2215-4143-872b-c2889c9882de",
+   "new_extra": []
+  },
+  {
+   "id": "4428a624-15a9-46f5-83d0-ebf7aeefd19e",
+   "epc": "F0A0B30E4F9CBED0000409CD",
+   "product": "Collar Top Set BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "06a667e8-bccf-4bee-9214-6e02cc7ed0ba",
+   "new_extra": []
+  },
+  {
+   "id": "e9295640-f4ed-4a3c-8b49-76660841763e",
+   "epc": "F0A0B30E4F9CC17000040921",
+   "product": "Collar Top Set CREAM L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "80b6a510-2215-4143-872b-c2889c9882de",
+   "new_extra": []
+  },
+  {
+   "id": "6a897bcb-f376-4cc9-bceb-444eaf6d883a",
+   "epc": "F0A0B30E4F9CA560000732FF",
+   "product": "Complete Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "7863196e-225a-4b7d-999a-bf649517a94d",
+   "new_extra": [
+    "5095e9bc-b321-4a02-9275-562f39cfe523"
+   ]
+  },
+  {
+   "id": "db661e7d-ee3c-40af-a099-2893827daaec",
+   "epc": "F0A0B30E4F9CA6300002A787",
+   "product": "Constantinopolis Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fa6c15fa-94b9-4f7e-986e-d1c0954749fa",
+   "new_extra": []
+  },
+  {
+   "id": "11e5c79b-fb7a-4497-97fa-c06256ac6f99",
+   "epc": "F0A0B30E4F9C6200000DA2A8",
+   "product": "Cut Out Crop Top BROWN M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "679ff95d-b0e3-4c81-80b2-90c013657955",
+   "new_extra": []
+  },
+  {
+   "id": "8e26527f-19a3-4adc-91e1-d0c1b3f75890",
+   "epc": "F0A0B30E4F9C60A0000DD437",
+   "product": "Cut Out Crop Top BROWN S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "679ff95d-b0e3-4c81-80b2-90c013657955",
+   "new_extra": []
+  },
+  {
+   "id": "a66bd4c2-e340-46c4-a67a-516e94fc1d02",
+   "epc": "F0A0B30E4F9CEE700008AA3C",
+   "product": "Diana Jeans BLUE 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "7e92c1b0-f5df-4491-bb1d-b3f70bb011e9",
+   "new_extra": [
+    "17c360d3-470d-49d2-9fed-3838eacebc0b"
+   ]
+  },
+  {
+   "id": "8909fc53-d2da-472b-9d1a-6d29bfcd90a0",
+   "epc": "F0A0B30E4F9BDC80000BAFE6",
+   "product": "Different T-Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1dfdc4c3-0625-4444-a6fb-4028c5601956",
+   "new_extra": []
+  },
+  {
+   "id": "32512e89-d8af-4f10-9ee9-f931c37ab933",
+   "epc": "F0A0B30E4F9D11300004E5AB",
+   "product": "Dream Shorts Set PRINT M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "813bd7fa-f15c-4ebb-a37b-c2825a092f60",
+   "new_extra": []
+  },
+  {
+   "id": "054db6bd-62dc-4711-b593-a5c1760b4a8e",
+   "epc": "F0A0B30E4F9B929000076BAD",
+   "product": "Dulce Tye-Die Bodysuit TIE-DIE BLUE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "10369450-8949-485c-9e03-56086669c800",
+   "new_extra": []
+  },
+  {
+   "id": "30eedd30-0b5a-4c0f-98b1-6f09b6012848",
+   "epc": "F0A0B30E4F9CBD2000065DE6",
+   "product": "Eden Dress 2 Pieces SILVER M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "387de9de-85cf-4592-a77a-dced43366275",
+   "new_extra": []
+  },
+  {
+   "id": "fb6ad15b-f09f-4bea-b55f-b0c4c005fa87",
+   "epc": "F0A0B30E4F9C302000092696",
+   "product": "Eden One-Button Jacket WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5db4e405-acd4-4b7b-9216-46de42158e19",
+   "new_extra": []
+  },
+  {
+   "id": "7170cafd-1bf0-4d9c-ba6b-177aec05bfc1",
+   "epc": "F0A0B30E4F9CAA10000A2825",
+   "product": "Element Shirt BLACK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0b464dd9-83b9-43c3-8136-a186ef2f227b",
+   "new_extra": [
+    "c4bb2839-91dd-4ec9-bdb9-b42d54d0866e"
+   ]
+  },
+  {
+   "id": "c9553f85-a887-48d8-a98f-b3e98a2ca8fe",
+   "epc": "F0A0B30E4F9BC85019474002",
+   "product": "Ella Legging BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a3bdeee-1ead-47a4-bf63-c568558a4d27",
+   "new_extra": []
+  },
+  {
+   "id": "112bfc65-726a-4674-8f53-bc7f2b9e795d",
+   "epc": "F0A0B30E4F9C8F80000EFB1D",
+   "product": "Elliott Jeans WHITE 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e8384b61-a32f-4223-9303-4279320607a1",
+   "new_extra": []
+  },
+  {
+   "id": "6e8612f8-9ae1-4610-8047-c77d958b4231",
+   "epc": "F0A0B30E4F9C9080000E30CE",
+   "product": "Elliott Jeans WHITE 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e8384b61-a32f-4223-9303-4279320607a1",
+   "new_extra": []
+  },
+  {
+   "id": "de916523-368f-45f0-a0a5-d326baea5f18",
+   "epc": "F0A0B30E4F9BB8200006ABD2",
+   "product": "Ellis Bomber Jacket BLACK 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5cfa1713-9853-455d-a348-37e59b4cfc9a",
+   "new_extra": []
+  },
+  {
+   "id": "a0f887d4-1add-4ce5-9116-c22d48881ad7",
+   "epc": "F0A0B30E4F9BB830000CFFED",
+   "product": "Ellis Bomber Jacket BLACK 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5cfa1713-9853-455d-a348-37e59b4cfc9a",
+   "new_extra": []
+  },
+  {
+   "id": "64ba8b65-b9b8-4c49-8bcd-64c2bda6c9f7",
+   "epc": "F0A0B30E4F9BB8400004C32E",
+   "product": "Ellis Bomber Jacket BLACK 42",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5cfa1713-9853-455d-a348-37e59b4cfc9a",
+   "new_extra": []
+  },
+  {
+   "id": "daad4ef0-ecb2-4ab4-bf66-d0829cbb348e",
+   "epc": "F0A0B30E4F9BB84000062796",
+   "product": "Ellis Bomber Jacket BLACK 42",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5cfa1713-9853-455d-a348-37e59b4cfc9a",
+   "new_extra": []
+  },
+  {
+   "id": "f77f15ba-ebf4-4278-b1a3-bee9abfc5e6e",
+   "epc": "F0A0B30E4F9C30800003C4F2",
+   "product": "Ellis Bomber Jacket CREAM 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a8f713b-7a88-4054-bc8e-407e36fddc46",
+   "new_extra": []
+  },
+  {
+   "id": "9fce2682-54c6-4b39-9eda-71de441c90ce",
+   "epc": "F0A0B30E4F9C309000019BDC",
+   "product": "Ellis Bomber Jacket CREAM 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a8f713b-7a88-4054-bc8e-407e36fddc46",
+   "new_extra": []
+  },
+  {
+   "id": "168418f5-87d0-4b22-88e1-10e637d60179",
+   "epc": "F0A0B30E4F9C30900001E3C9",
+   "product": "Ellis Bomber Jacket CREAM 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a8f713b-7a88-4054-bc8e-407e36fddc46",
+   "new_extra": []
+  },
+  {
+   "id": "6e32f426-8b67-4277-a976-5a0b9a1d51dc",
+   "epc": "F0A0B30E4F9C30B0000C86F0",
+   "product": "Ellis Bomber Jacket CREAM 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a8f713b-7a88-4054-bc8e-407e36fddc46",
+   "new_extra": []
+  },
+  {
+   "id": "205673e4-72db-4240-8d83-b1a1c6dc275a",
+   "epc": "F0A0B30E4F9BBBA00007A823",
+   "product": "Emmie Strapless Bustier BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "fb47dac5-da4f-4a1d-b5b1-ff20d90292d6",
+   "epc": "F0A0B30E4F9BBBA0000C14A0",
+   "product": "Emmie Strapless Bustier BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "bcf088a0-56c0-4626-ba87-4e39fcc208c4",
+   "epc": "F0A0B30E4F9BBB90000A7233",
+   "product": "Emmie Strapless Bustier BLACK XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "e31e62e7-ffe7-40ca-a208-e802f95c663f",
+   "epc": "F0A0B30E4F9BBBF000020EE8",
+   "product": "Emmie Strapless Bustier WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "34da67cf-db03-43f6-a4ca-a94ca5506841",
+   "epc": "F0A0B30E4F9BBBF00003352E",
+   "product": "Emmie Strapless Bustier WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "e09cca01-aeda-4096-9ad5-b28bd0e81afe",
+   "epc": "F0A0B30E4F9BBBF000098EF1",
+   "product": "Emmie Strapless Bustier WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c62038f1-ecb1-4f4b-abdb-c17b8afb0fe2",
+   "new_extra": []
+  },
+  {
+   "id": "24ee57c0-1df0-4e8b-94e7-814c8df69a64",
+   "epc": "F0A0B30E4F9C81F00009AD9A",
+   "product": "Eric Pants Set WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "024b5897-79ef-4b2c-8c46-365c925478d1",
+   "new_extra": []
+  },
+  {
+   "id": "912fa4b6-f8a6-4670-a183-40f53aeea0ff",
+   "epc": "F0A0B30E4F9CC560000BBBCF",
+   "product": "Eve Top PURPLE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "78949f8b-5b64-4a56-b95e-85fee269c5d6",
+   "new_extra": []
+  },
+  {
+   "id": "abf3089f-876a-430b-8e91-e2d7e944dce5",
+   "epc": "F0A0B30E4F9CAF10000E5211",
+   "product": "Ever Tried Shirt BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d581dee5-6bdd-4c94-b09c-a4210b1b692a",
+   "new_extra": [
+    "01ac0e15-7edd-4840-a8d0-07bd5bf1ddca"
+   ]
+  },
+  {
+   "id": "e1e87d97-ada2-423a-9f4b-eb57ee97940e",
+   "epc": "F0A0B30E4F9CAA40000C7D21",
+   "product": "Ever Tried Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "197034ee-df42-42c6-aa8e-ad93cf845e07",
+   "new_extra": [
+    "0e35b783-2fd7-4c8b-811d-e166e0880202"
+   ]
+  },
+  {
+   "id": "8e4f1145-73bf-4169-a20a-152112bcb1f7",
+   "epc": "F0A0B30E4F9CAB2000070335",
+   "product": "Excuse Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "62470f1f-a34e-4d08-8c7d-9b59ee82f247",
+   "new_extra": [
+    "61ec0ee4-5404-4d0a-b7b0-852e8b40488f"
+   ]
+  },
+  {
+   "id": "895ec9f5-ccfc-4a2b-ae67-80d3dd3e4007",
+   "epc": "F0A0B30E4F9CAD8000052FE2",
+   "product": "Excuse Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "62470f1f-a34e-4d08-8c7d-9b59ee82f247",
+   "new_extra": [
+    "61ec0ee4-5404-4d0a-b7b0-852e8b40488f"
+   ]
+  },
+  {
+   "id": "d496a21b-8091-45a9-b670-9d5bd5688fc7",
+   "epc": "F0A0B30E4F9CF520000B8378",
+   "product": "Fern Dress LEOPARD L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2cd9076d-0f1a-4346-a2f3-5e951bcd2351",
+   "new_extra": []
+  },
+  {
+   "id": "00ad9b0b-c27c-4d63-8031-d9c6e2f947e1",
+   "epc": "F0A0B30E4F9CF44000045541",
+   "product": "Fern Dress LEOPARD M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2cd9076d-0f1a-4346-a2f3-5e951bcd2351",
+   "new_extra": []
+  },
+  {
+   "id": "cf4c896d-1147-4d5c-82d1-870fe237710f",
+   "epc": "F0A0B30E4F9CF3600007E8DD",
+   "product": "Fern Dress LEOPARD S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2cd9076d-0f1a-4346-a2f3-5e951bcd2351",
+   "new_extra": []
+  },
+  {
+   "id": "4180f779-070d-42b9-8fba-46a760834359",
+   "epc": "F0A0B30E4F9B9DC000086D54",
+   "product": "Finn Jeans BLUE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fc094547-4749-44c6-9b37-e2400cdef435",
+   "new_extra": [
+    "ef707203-1eef-4fec-813c-0684433b9b34"
+   ]
+  },
+  {
+   "id": "56f1dbc3-0ed4-4c14-aed3-6c00b1242ed7",
+   "epc": "F0A0B30E4F9B9B80000DC541",
+   "product": "Finnley Jeans BLUE 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a71871f9-6ec2-47c0-b763-d9548ab3556f",
+   "new_extra": []
+  },
+  {
+   "id": "ae35327d-80c6-482a-b1ee-798324de5f70",
+   "epc": "F0A0B30E4F9CFFC0000D03D1",
+   "product": "Gary Cargo Pants KHAKI L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "08f15668-2f9f-495c-86f8-723cd680a40d",
+   "new_extra": []
+  },
+  {
+   "id": "c44933ac-3568-4cf7-b679-9f2e9a5d874a",
+   "epc": "F0A0B30E4F9CFD90000186AF",
+   "product": "Gary Cargo Pants STONE XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e7df8d10-8329-4c7c-af37-e78a18985b58",
+   "new_extra": []
+  },
+  {
+   "id": "befabf64-1fa3-4c33-b1da-94b27025af7d",
+   "epc": "F0A0B30E4F9CC1D0000AABF1",
+   "product": "Gem Romper CREAM L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d899ea24-16a1-4ee8-8039-ead5855f8bd4",
+   "new_extra": []
+  },
+  {
+   "id": "6f02a3e8-acde-4dc9-a446-183a5bcedaff",
+   "epc": "F0A0B30E4F9C185000085660",
+   "product": "Glow Shoes PINK NEON 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e484a1ca-5570-48d4-bf5c-7496d39e739e",
+   "new_extra": []
+  },
+  {
+   "id": "2681dd00-dc34-466a-9fdb-8990e4361fbd",
+   "epc": "F0A0B30E4F9CB9000003807D",
+   "product": "Goldie Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "45fd81d0-2274-47a4-a935-612cfba8f76e",
+   "new_extra": []
+  },
+  {
+   "id": "20f96bdf-2202-4f73-9a20-517cb8f92ec7",
+   "epc": "F0A0B30E4F9D67C0000C571E",
+   "product": "Gothic T-Shirt Set BEIGE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "167e9da8-b7b7-4455-8386-8fc4ba09a751",
+   "new_extra": []
+  },
+  {
+   "id": "7fe40988-08c6-4337-bd18-d739211c8a45",
+   "epc": "F0A0B30E4F9D66000008DC8F",
+   "product": "Gothic T-Shirt Set BEIGE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "167e9da8-b7b7-4455-8386-8fc4ba09a751",
+   "new_extra": []
+  },
+  {
+   "id": "df4d53f5-5b24-4504-b7a0-b96fd26dc02c",
+   "epc": "F0A0B30E4F9D660000092B1A",
+   "product": "Gothic T-Shirt Set BEIGE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "167e9da8-b7b7-4455-8386-8fc4ba09a751",
+   "new_extra": []
+  },
+  {
+   "id": "42b15aed-e7be-4910-9db0-5d9a48f0f02b",
+   "epc": "F0A0B30E4F9C9A20000A86C3",
+   "product": "Harrison Pants BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ee6f6442-3bb7-46e8-b9ff-b96a8f7f8de5",
+   "new_extra": []
+  },
+  {
+   "id": "323b244a-590d-4cc9-b65c-2d64eacb255f",
+   "epc": "F0A0B30E4F9CAE0000026FDB",
+   "product": "Heartbit Shirt BLACK XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "aa3aeb24-cd97-4221-a758-2cfca0d2607a",
+   "new_extra": [
+    "10cbe557-1e47-471c-b0ae-1f8eb8f1f8e1",
+    "dc8baea3-78fc-43eb-a8b6-55dc08b36775"
+   ]
+  },
+  {
+   "id": "7b434c3c-052c-41b8-875d-b192d3f331e9",
+   "epc": "F0A0B30E4F9CB0600003FC2D",
+   "product": "Heartbit Shirt BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "aa3aeb24-cd97-4221-a758-2cfca0d2607a",
+   "new_extra": [
+    "10cbe557-1e47-471c-b0ae-1f8eb8f1f8e1",
+    "dc8baea3-78fc-43eb-a8b6-55dc08b36775"
+   ]
+  },
+  {
+   "id": "57b9ff4d-8066-4d3b-b48b-c69a3b1d08ad",
+   "epc": "F0A0B30E4F9CB2C0000CD185",
+   "product": "Heartbit Shirt BLACK XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "aa3aeb24-cd97-4221-a758-2cfca0d2607a",
+   "new_extra": [
+    "10cbe557-1e47-471c-b0ae-1f8eb8f1f8e1",
+    "dc8baea3-78fc-43eb-a8b6-55dc08b36775"
+   ]
+  },
+  {
+   "id": "7f0e7957-7ae6-46b9-a7d3-9f5d5d36119a",
+   "epc": "F0A0B30E4F9CAB8000019584",
+   "product": "Heartbit Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ceb963cb-39fa-418f-b713-a4e6802dee47",
+   "new_extra": [
+    "b488f266-b42e-4500-81da-76b3b6730ef5"
+   ]
+  },
+  {
+   "id": "dd8c834d-7cdb-415d-8f54-61dd50b3f772",
+   "epc": "F0A0B30E4F9CAB8000019585",
+   "product": "Heartbit Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ceb963cb-39fa-418f-b713-a4e6802dee47",
+   "new_extra": [
+    "b488f266-b42e-4500-81da-76b3b6730ef5"
+   ]
+  },
+  {
+   "id": "ec2c05aa-e8b0-4477-b87b-c090624b422e",
+   "epc": "F0A0B30E4F9CA920000674BA",
+   "product": "Heartbit Shirt WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ceb963cb-39fa-418f-b713-a4e6802dee47",
+   "new_extra": [
+    "b488f266-b42e-4500-81da-76b3b6730ef5"
+   ]
+  },
+  {
+   "id": "3c07393c-d9f3-4a00-9525-c0b58dfaae88",
+   "epc": "F0A0B30E4F9D593000022B65",
+   "product": "Highest Self T-Shirt BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1930f6d7-b6b0-476c-957f-860c958e63df",
+   "new_extra": []
+  },
+  {
+   "id": "498f2c47-ea52-4f26-b8de-7ea53872dfaa",
+   "epc": "F0A0B30E4F9CBFC00003827A",
+   "product": "Hoodie Dress WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "690bbfa8-615b-4bb4-9400-c52487034f2b",
+   "new_extra": []
+  },
+  {
+   "id": "265f6e2c-5536-473b-a12e-aff95e366a65",
+   "epc": "F0A0B30E4F9CBE80000B59E1",
+   "product": "Hoodie Dress WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "690bbfa8-615b-4bb4-9400-c52487034f2b",
+   "new_extra": []
+  },
+  {
+   "id": "2762253c-1f11-4293-af1a-93fddf6b4a42",
+   "epc": "F0A0B30E4F9CBE80000F157A",
+   "product": "Hoodie Dress WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "690bbfa8-615b-4bb4-9400-c52487034f2b",
+   "new_extra": []
+  },
+  {
+   "id": "ff9d4be9-65a1-4c38-88dc-6cef5e7a85a2",
+   "epc": "F0A0B30E4F9C88F000047F6B",
+   "product": "Ian Hoodie Set WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "bc941e81-1729-4cc8-8aab-723c8f936e3a",
+   "new_extra": [
+    "b988d94d-da53-4bbb-b888-9d6007aa57a3"
+   ]
+  },
+  {
+   "id": "cad302bb-18ba-436b-8f93-2509897c8f50",
+   "epc": "F0A0B30E4F9C15400001451A",
+   "product": "Ice Shoes BLUSH 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d201c1f0-c6c1-4792-8dc3-2fe5c0985773",
+   "new_extra": [
+    "25164ab6-795e-4ad1-a586-68381da3f060"
+   ]
+  },
+  {
+   "id": "a8331368-6675-4166-9c7e-cd40b73482a1",
+   "epc": "F0A0B30E4F9C1580000020B7",
+   "product": "Ice Shoes BLUSH 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d201c1f0-c6c1-4792-8dc3-2fe5c0985773",
+   "new_extra": [
+    "25164ab6-795e-4ad1-a586-68381da3f060"
+   ]
+  },
+  {
+   "id": "75c32bd7-82d9-4c4f-a670-3698328018c7",
+   "epc": "F0A0B30E4F9C1580000BB92D",
+   "product": "Ice Shoes BLUSH 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d201c1f0-c6c1-4792-8dc3-2fe5c0985773",
+   "new_extra": [
+    "25164ab6-795e-4ad1-a586-68381da3f060"
+   ]
+  },
+  {
+   "id": "328be3e1-2176-43c5-88f7-e0b6b5a3d06b",
+   "epc": "F0A0B30E4F9CAE8000095B46",
+   "product": "Interested Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "bc3479a9-759b-4e2a-a4d0-d5e610176381",
+   "new_extra": [
+    "d925df73-7c0e-41ab-82ed-719cd40fb85c"
+   ]
+  },
+  {
+   "id": "ed2a709c-9330-45d4-901f-9b9d19067f27",
+   "epc": "F0A0B30E4F9C569000084E68",
+   "product": "Isabel Dress WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5cbc202a-e958-42f5-a253-a82bf8c580b7",
+   "new_extra": []
+  },
+  {
+   "id": "1521da33-0597-43df-8b31-fbbdd612d14a",
+   "epc": "F0A0B30E4F9CB950000AA18D",
+   "product": "Ivory Top BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a13d3875-f412-4d9d-998a-5ce90d6fa788",
+   "new_extra": []
+  },
+  {
+   "id": "2df90965-44af-41a3-a1f9-b6bd3dec4289",
+   "epc": "F0A0B30E4F9BA090000DD52E",
+   "product": "Jase Jeans DARK BLUE 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "768d5614-cce1-4037-95ce-d7bae9115600",
+   "new_extra": [
+    "839ca413-4cba-4728-a7b5-c59fc70c360b"
+   ]
+  },
+  {
+   "id": "5ba6c574-fc94-44f0-82a8-9e7d3886c1e0",
+   "epc": "F0A0B30E4F9D5150000E3F7E",
+   "product": "Jermone Jeans BLUE 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "7aefbe99-47d1-4b39-9e51-97bb24293aa3",
+   "new_extra": []
+  },
+  {
+   "id": "0dd43821-c31d-4740-8f3e-f1b93c5e748a",
+   "epc": "F0A0B30E4F9D56C00001884B",
+   "product": "Jermone Jeans BLUE 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "7aefbe99-47d1-4b39-9e51-97bb24293aa3",
+   "new_extra": []
+  },
+  {
+   "id": "15fe301a-4908-468b-bcf1-8ac1d783e4f5",
+   "epc": "F0A0B30E4F9C9B20000DA015",
+   "product": "Jesse Pants BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "60853317-f65e-4434-9f0f-27b611e9b02b",
+   "new_extra": []
+  },
+  {
+   "id": "660c4705-51f2-4d75-ad2b-30e76fa42521",
+   "epc": "F0A0B30E4F9CFE000002AFD4",
+   "product": "Jesus Cargo Pants GREY XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1a8988cb-5d55-44a4-8589-ee5e920b7903",
+   "new_extra": []
+  },
+  {
+   "id": "dd532480-40c6-416b-98b6-a82a62cfabf1",
+   "epc": "F0A0B30E4F9D00500002CD00",
+   "product": "Jesus Cargo Pants KHAKI L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "cdad3f45-f77f-47de-8e40-634a86ae2ce7",
+   "new_extra": [
+    "1a8988cb-5d55-44a4-8589-ee5e920b7903"
+   ]
+  },
+  {
+   "id": "df79eb90-9f18-462a-a884-2bcf793520be",
+   "epc": "F0A0B30E4F9D00500007F75B",
+   "product": "Jesus Cargo Pants KHAKI L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "cdad3f45-f77f-47de-8e40-634a86ae2ce7",
+   "new_extra": [
+    "1a8988cb-5d55-44a4-8589-ee5e920b7903"
+   ]
+  },
+  {
+   "id": "3e7548e9-c535-43ad-a4aa-3d8f5436afc2",
+   "epc": "F0A0B30E4F9CFFA000075009",
+   "product": "Jesus Cargo Pants STONE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "52c9e1e6-4e1a-485f-8dce-9243857e0ad2",
+   "new_extra": [
+    "1a8988cb-5d55-44a4-8589-ee5e920b7903"
+   ]
+  },
+  {
+   "id": "275909c3-4fa7-4596-b428-64a67c0c0c48",
+   "epc": "F0A0B30E4F9CFEE00006E5FC",
+   "product": "Jesus Cargo Pants STONE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "52c9e1e6-4e1a-485f-8dce-9243857e0ad2",
+   "new_extra": [
+    "1a8988cb-5d55-44a4-8589-ee5e920b7903"
+   ]
+  },
+  {
+   "id": "de744065-389e-461e-9058-6ab943b8b660",
+   "epc": "F0A0B30E4F9C1BC0000C7ED1",
+   "product": "Johnny Sneakers GREY 41",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "663783fa-2da9-4d05-b630-ecdd6a73b728",
+   "new_extra": []
+  },
+  {
+   "id": "052c28a1-3f63-412a-a35a-3631b557c854",
+   "epc": "F0A0B30E4F9CB61000045535",
+   "product": "Jolene Top Set BURGUNDY S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "bcf80935-8574-46df-bccf-f151d7fc140c",
+   "new_extra": []
+  },
+  {
+   "id": "95f885d0-c503-48f9-91a3-a4dd3528f0f8",
+   "epc": "F0A0B30E4F9C8C10000A5159",
+   "product": "Kaiden Denim Shirt BLACK WASHED XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0801ab81-1dca-4d8d-aa6c-46d156daffa5",
+   "new_extra": []
+  },
+  {
+   "id": "0c3e5229-6ff9-4a2e-a291-0db80aed4481",
+   "epc": "F0A0B30E4F9C8F00000AC226",
+   "product": "Kaleb Jeans BLACK 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e36cef8a-efe4-4204-b255-a80a38cc7ade",
+   "new_extra": []
+  },
+  {
+   "id": "1936f022-7977-40b1-80e8-26d27d3ffaa4",
+   "epc": "F0A0B30E4F9CA4E0000CBEBB",
+   "product": "Keep On Moving Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b5bf0da2-2ffa-4ff6-9a31-82e24db94369",
+   "new_extra": [
+    "5a7520d2-5ad5-4c6e-895a-d3dda5b9f92c",
+    "6b55b191-27e3-44b6-b813-4ebc36c17d72"
+   ]
+  },
+  {
+   "id": "74274518-c29e-4ec0-9883-dec576efa656",
+   "epc": "F0A0B30E4F9CAC00000E83E0",
+   "product": "Keep On Moving Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b5bf0da2-2ffa-4ff6-9a31-82e24db94369",
+   "new_extra": [
+    "5a7520d2-5ad5-4c6e-895a-d3dda5b9f92c",
+    "6b55b191-27e3-44b6-b813-4ebc36c17d72"
+   ]
+  },
+  {
+   "id": "f580145f-194e-4045-a1b8-72135a6e0aaf",
+   "epc": "F0A0B30E4F9CB0C00003794B",
+   "product": "Keep On Moving Shirt WHITE XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b5bf0da2-2ffa-4ff6-9a31-82e24db94369",
+   "new_extra": [
+    "5a7520d2-5ad5-4c6e-895a-d3dda5b9f92c",
+    "6b55b191-27e3-44b6-b813-4ebc36c17d72"
+   ]
+  },
+  {
+   "id": "0c046fa1-6a2d-4c4c-adb7-922e541631e0",
+   "epc": "F0A0B30E4F9CAF700002AD7C",
+   "product": "Keep On Rising Shirt BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4c2a84a3-1224-44a1-99dd-5af135031104",
+   "new_extra": [
+    "344ad93f-2925-443c-aa35-976089fc044b"
+   ]
+  },
+  {
+   "id": "824baaf2-094e-441f-b2c0-b32b166cbc77",
+   "epc": "F0A0B30E4F9CAD00000C8262",
+   "product": "Keep On Rising Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9c1c3477-b732-45e5-b86c-ce02749e10ee",
+   "new_extra": [
+    "2d075834-11ac-42a9-b543-bcf42190d376"
+   ]
+  },
+  {
+   "id": "bd0a6f9a-9a94-4333-8932-205e8cb2ecf9",
+   "epc": "F0A0B30E4F9B976000086226",
+   "product": "Kylo Jeans BLACK WASHED 29",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ce8d618-eb78-4ecc-81ca-d560bb41acec",
+   "new_extra": []
+  },
+  {
+   "id": "8306f4f9-7e26-40f4-9358-25791c924fa1",
+   "epc": "F0A0B30E4F9B9770000ED0FD",
+   "product": "Kylo Jeans BLACK WASHED 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ce8d618-eb78-4ecc-81ca-d560bb41acec",
+   "new_extra": []
+  },
+  {
+   "id": "dd659423-9255-42db-9214-ec5ef8067ad5",
+   "epc": "F0A0B30E4F9B9790000238AC",
+   "product": "Kylo Jeans BLACK WASHED 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ce8d618-eb78-4ecc-81ca-d560bb41acec",
+   "new_extra": []
+  },
+  {
+   "id": "a6e70057-f888-468f-86b9-4179c4a390e1",
+   "epc": "F0A0B30E4F9B97900009BBFA",
+   "product": "Kylo Jeans BLACK WASHED 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ce8d618-eb78-4ecc-81ca-d560bb41acec",
+   "new_extra": []
+  },
+  {
+   "id": "9ebdb494-0eb1-40ab-ade3-0e31fa12e45c",
+   "epc": "F0A0B30E4F9BB550000A3A41",
+   "product": "Laney Bodysuit NUDE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3fed2403-9e4a-483b-83b2-53c3916fac35",
+   "new_extra": []
+  },
+  {
+   "id": "3a42b1b8-92d8-4e24-9afa-54e883981ae5",
+   "epc": "F0A0B30E4F9CA310000491E1",
+   "product": "Leroy Sweatshirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "cfb1f0c3-1a0c-4f8c-96c9-a9c8e4f28e58",
+   "new_extra": []
+  },
+  {
+   "id": "bad9e262-76a7-4e0d-8b47-2d375872dd80",
+   "epc": "F0A0B30E4F9CA310000A2B3A",
+   "product": "Leroy Sweatshirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "cfb1f0c3-1a0c-4f8c-96c9-a9c8e4f28e58",
+   "new_extra": []
+  },
+  {
+   "id": "2bd78793-eaba-45fa-bd9a-c53f06f49482",
+   "epc": "F0A0B30E4F9CE9A0000EEA06",
+   "product": "Les Benjamin Tee WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "37da9674-e38d-415b-b50f-67820185cacb",
+   "new_extra": []
+  },
+  {
+   "id": "cf8161b9-1e47-48f7-b539-844379d41632",
+   "epc": "F0A0B30E4F9CE91000072312",
+   "product": "Les Benjamin Tee WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "37da9674-e38d-415b-b50f-67820185cacb",
+   "new_extra": []
+  },
+  {
+   "id": "8da14631-8743-4fef-b3dc-283d652e71ab",
+   "epc": "F0A0B30E4F9CB9A000077740",
+   "product": "Lexie Top NUDE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da9bb6d0-a11a-4965-b86d-743925ea0b66",
+   "new_extra": []
+  },
+  {
+   "id": "5ad2e000-4cad-4b6a-a946-cb0a2500bfb8",
+   "epc": "F0A0B30E4F9CB930000B2C1D",
+   "product": "Lexie Top NUDE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da9bb6d0-a11a-4965-b86d-743925ea0b66",
+   "new_extra": []
+  },
+  {
+   "id": "9707fe47-bec6-4e37-ac77-dd9d6004eced",
+   "epc": "F0A0B30E4F9CB930000C8B94",
+   "product": "Lexie Top NUDE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da9bb6d0-a11a-4965-b86d-743925ea0b66",
+   "new_extra": []
+  },
+  {
+   "id": "1657d673-0454-4066-8ea0-88f027364f22",
+   "epc": "F0A0B30E4F9CB930000E2080",
+   "product": "Lexie Top NUDE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da9bb6d0-a11a-4965-b86d-743925ea0b66",
+   "new_extra": []
+  },
+  {
+   "id": "95d78996-7c31-40bc-9834-7cc87d17254c",
+   "epc": "F0A0B30E4F9CB980000C79CE",
+   "product": "Lexie Top RED M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da9bb6d0-a11a-4965-b86d-743925ea0b66",
+   "new_extra": []
+  },
+  {
+   "id": "8b0f4393-4b7c-4a56-8832-d6b308a3819e",
+   "epc": "F0A0B30E4F9BBE9000090C5C",
+   "product": "Leyla Crop Top CREAM M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "77fcc7aa-c2bb-437e-9b1f-486867f6d7c3",
+   "new_extra": []
+  },
+  {
+   "id": "cb7de239-d2e9-481e-b91d-18f163da0cd0",
+   "epc": "F0A0B30E4F9C9C8000088E76",
+   "product": "Liam Full Zipper Sweater Jacket BLACK XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6ddf37a0-f78e-40b5-9d49-fb8f3cfe5557",
+   "new_extra": [
+    "dcf652d2-1a24-49d1-a0bd-5410163441d3"
+   ]
+  },
+  {
+   "id": "958dbdb0-9d30-4788-97d4-815bccd9c0c4",
+   "epc": "F0A0B30E4F9BC160000C7762",
+   "product": "Liany Romper ARMY 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a748fe35-21eb-48c0-ae28-e97222c20073",
+   "new_extra": []
+  },
+  {
+   "id": "670aa220-69ac-474f-8c3d-b54e8809712f",
+   "epc": "F0A0B30E4F9CBD50000D9948",
+   "product": "London Dress BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "515bdfae-11d7-4e87-872c-dc536ccfc093",
+   "new_extra": []
+  },
+  {
+   "id": "dba7d2d2-0ef9-4887-ab38-d68667bf5b71",
+   "epc": "F0A0B30E4F9CEE40000CE933",
+   "product": "Londyn Jeans BLUE 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ab47e2f8-2634-41a3-a3d4-dd45b9d25b33",
+   "new_extra": [
+    "c09673fe-ad32-4964-b5ca-22d7a77b0cc5"
+   ]
+  },
+  {
+   "id": "13476dd4-bef2-40ac-a757-dd96d6def70d",
+   "epc": "F0A0B30E4F9C8680000B2FBD",
+   "product": "Lucas Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "23dcc337-dfd8-4d4e-8317-67dd6e80bec1",
+   "new_extra": []
+  },
+  {
+   "id": "9f08fb39-3ebc-472a-bb9d-fcfb5647fab6",
+   "epc": "F0A0B30E4F9C628000076E58",
+   "product": "Luna Tank Top WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fbca8675-d492-4ff0-b0cb-06114fa81d8d",
+   "new_extra": []
+  },
+  {
+   "id": "e6fd135a-df18-4381-98bd-b5c27cf98f3b",
+   "epc": "F0A0B30E4F9C5FC0000493BA",
+   "product": "Luna Tank Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fbca8675-d492-4ff0-b0cb-06114fa81d8d",
+   "new_extra": []
+  },
+  {
+   "id": "ac43ac3c-31f8-4b19-8267-cba92931be7a",
+   "epc": "F0A0B30E4F9C5FC0000A1923",
+   "product": "Luna Tank Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fbca8675-d492-4ff0-b0cb-06114fa81d8d",
+   "new_extra": []
+  },
+  {
+   "id": "454caf97-99a9-41da-bd42-471a4c2dc50f",
+   "epc": "F0A0B30E4F9CE8C0000D61AB",
+   "product": "Magnifique Tee WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "78aba9cf-bd6c-4ee0-944a-33b679a001cb",
+   "new_extra": []
+  },
+  {
+   "id": "851e705f-f582-4c95-8fa6-ddb6e39cb721",
+   "epc": "F0A0B30E4F9CF530000B7190",
+   "product": "Maia Dress BLACK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "740c5a78-c198-45bf-acf1-d649ab0f5fae",
+   "new_extra": []
+  },
+  {
+   "id": "91272614-5b1a-4f28-913d-e980d5ed46bb",
+   "epc": "F0A0B30E4F9BC310000F036D",
+   "product": "Maisie Pant WHITE 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fae06c49-cea5-4253-bde5-9b81a8818f6b",
+   "new_extra": []
+  },
+  {
+   "id": "2d211759-4279-4df4-84a8-97a7b87c9f52",
+   "epc": "F0A0B30E4F9BC330000B70F1",
+   "product": "Maisie Pant WHITE 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fae06c49-cea5-4253-bde5-9b81a8818f6b",
+   "new_extra": []
+  },
+  {
+   "id": "72b3f2a6-9195-47f7-a6ba-f9cf4d00fb36",
+   "epc": "F0A0B30E4F9BBB80000AFC5C",
+   "product": "Mara Crop Tank ORANGE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9a3bdeee-1ead-47a4-bf63-c568558a4d27",
+   "new_extra": []
+  },
+  {
+   "id": "3af8d921-bb6a-4ceb-be02-da501ee06e03",
+   "epc": "F0A0B30E4F9BB910000E0BB3",
+   "product": "Mara Short Legging ORANGE XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c3bada55-4936-4a7e-8a66-bfd2f9de6dde",
+   "new_extra": []
+  },
+  {
+   "id": "2d10e84e-945a-4ae9-965c-aad52f44a0ce",
+   "epc": "F0A0B30E4F9D53300002700F",
+   "product": "Mario Jeans BLACK 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "89bbb890-023c-4c6a-bc8f-cb603f31ce40",
+   "new_extra": []
+  },
+  {
+   "id": "fbea32a8-a831-4326-a210-ae8ffd0f218e",
+   "epc": "F0A0B30E4F9B920000074828",
+   "product": "Marleigh Top BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "012d81c6-f47c-4542-8951-f6096149e511",
+   "new_extra": []
+  },
+  {
+   "id": "546f6bd0-f846-4eef-8b86-2aee69002c72",
+   "epc": "F0A0B30E4F9C56D0000187CD",
+   "product": "Martha Dress COLORFUL S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "502a3ffa-48b4-42d4-bf89-f5f43bd284d0",
+   "new_extra": []
+  },
+  {
+   "id": "46a6df37-d9f4-48d8-8ed5-ca4cdc90d4a3",
+   "epc": "F0A0B30E4F9C60F0000385D3",
+   "product": "Maya Padded Crop Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "08a5db5c-5f7e-4e4e-ba77-9a61cf9c652d",
+   "new_extra": []
+  },
+  {
+   "id": "2cac1fa3-a9e1-42aa-87f6-094fe81a8c34",
+   "epc": "F0A0B30E4F9BDE000005AB1D",
+   "product": "Memories T-Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f5f408b8-7774-4e81-a8ef-a84f54f46e6e",
+   "new_extra": []
+  },
+  {
+   "id": "9a8e7772-23db-4827-9771-b9fde828f965",
+   "epc": "F0A0B30E4F9BDE00000ED4FE",
+   "product": "Memories T-Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f5f408b8-7774-4e81-a8ef-a84f54f46e6e",
+   "new_extra": []
+  },
+  {
+   "id": "8206976f-7bcf-49c0-b674-82ee57aa0605",
+   "epc": "F0A0B30E4F9BDDF000038525",
+   "product": "Memories T-Shirt WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f5f408b8-7774-4e81-a8ef-a84f54f46e6e",
+   "new_extra": []
+  },
+  {
+   "id": "b63b30b2-6c9b-497c-b6d9-ac86ef0f8f1f",
+   "epc": "F0A0B30E4F9BAF70000C9A35",
+   "product": "Men Swim Bottom I BLACK XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1a11d867-1668-4e5b-a9fb-726a790293d4",
+   "new_extra": []
+  },
+  {
+   "id": "33e471d7-b20f-4e0b-bd0d-db9911fafdf6",
+   "epc": "F0A0B30E4F9B99F0000B7EC7",
+   "product": "Mens Jeans AX LIGHT GREY 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6c708349-8961-4e9c-844c-652653fcc875",
+   "new_extra": []
+  },
+  {
+   "id": "b1f849b5-846c-44f3-ab55-2507dc097f5e",
+   "epc": "F0A0B30E4F9B9A70000E6899",
+   "product": "Mens Jeans AY BLUE WASHED 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "51559861-d432-4183-86e6-0aa9bbc8da0c",
+   "new_extra": [
+    "220945f0-7c1f-45b5-8884-bc9493595dd1"
+   ]
+  },
+  {
+   "id": "b4ebadfa-a8b6-424f-9ad2-c8d963d9f8e2",
+   "epc": "F0A0B30E4F9B9AC0000DCFAD",
+   "product": "Mens Jeans AY BLUE WASHED 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "51559861-d432-4183-86e6-0aa9bbc8da0c",
+   "new_extra": [
+    "220945f0-7c1f-45b5-8884-bc9493595dd1"
+   ]
+  },
+  {
+   "id": "342d77d5-6bf7-46cc-9d56-008b5054d847",
+   "epc": "F0A0B30E4F9BA410000D5F84",
+   "product": "Mens Jeans BR BLUE WASHED 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1fc9b1b4-eed7-4e88-b454-0a78f82e9573",
+   "new_extra": [
+    "4e21e73d-875a-41c7-a7f7-e975337a39af"
+   ]
+  },
+  {
+   "id": "68ae495d-8e3e-4729-99e4-e52cd412f258",
+   "epc": "F0A0B30E4F9C0AE00005F72C",
+   "product": "Michael Denim Shorts BLUE WASHED 29",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e2d41f43-a782-4b26-af38-c80763b1f681",
+   "new_extra": []
+  },
+  {
+   "id": "5189faaf-ec0f-41a9-8bd1-faf16afba655",
+   "epc": "F0A0B30E4F9C0B00000C957A",
+   "product": "Michael Denim Shorts BLUE WASHED 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e2d41f43-a782-4b26-af38-c80763b1f681",
+   "new_extra": []
+  },
+  {
+   "id": "79e312a2-e097-4b99-8c02-b9d602d9b24e",
+   "epc": "F0A0B30E4F9C7AA0000D3DAD",
+   "product": "Michelle Heels BLACK 40",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6424db07-42b8-4d7d-a744-27e021df8165",
+   "new_extra": []
+  },
+  {
+   "id": "37fe469f-a466-4118-9fd2-45761e402eee",
+   "epc": "F0A0B30E4F9CC36000098EDE",
+   "product": "Morgan Pants Set PINK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "09dc81fb-d3a2-4e85-b761-5446471f2b15",
+   "new_extra": []
+  },
+  {
+   "id": "3b1344ef-0b74-4ee7-a3af-afb43ac6e09f",
+   "epc": "F0A0B30E4F9BB150000EC1C2",
+   "product": "Mylah Denim Vest BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e86af3e3-eedd-4d4a-8c94-aa8ebb644f85",
+   "new_extra": [
+    "a42b2b23-6f80-4ba3-b616-4ff437ba654e"
+   ]
+  },
+  {
+   "id": "6042342c-517d-49b6-b4a6-8ffe23156fb6",
+   "epc": "F0A0B30E4F9BAE40000328B9",
+   "product": "Nash Swimsuit YELLOW XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e8af57ee-3cdb-41eb-82ad-a2fd75678bd4",
+   "new_extra": []
+  },
+  {
+   "id": "bfb6acf2-9a76-444d-9f27-b040974348b0",
+   "epc": "F0A0B30E4F9C58F000079B2B",
+   "product": "Natalie Bottom Set WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4eed39a1-f0cf-4dd0-b296-21707faca584",
+   "new_extra": []
+  },
+  {
+   "id": "cf5289e0-c77a-4de0-94d3-19e86b81dbac",
+   "epc": "F0A0B30E4F9C6A7000018C66",
+   "product": "Nice Top Set BEIGE 08",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1fe46bff-3d90-4010-9a81-c4eb09983723",
+   "new_extra": []
+  },
+  {
+   "id": "1d0bcdd0-a675-4e1d-a0fb-78efef54e3f7",
+   "epc": "F0A0B30E4F9C6DB000018E93",
+   "product": "Nice Top Set BEIGE 10",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1fe46bff-3d90-4010-9a81-c4eb09983723",
+   "new_extra": []
+  },
+  {
+   "id": "90b3478b-d26b-4476-990e-d5f961d94be9",
+   "epc": "F0A0B30E4F9CF380000C0F3F",
+   "product": "Nikita Dress BEIGE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b5e84de8-44ae-41ca-b4ac-d88dd8f7fbc0",
+   "new_extra": []
+  },
+  {
+   "id": "c1522ca0-e1f1-488e-b430-61647177ab65",
+   "epc": "F0A0B30E4F9CEE50000C8C6D",
+   "product": "Noelle Jeans BLUE WASHED 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3f67015b-9868-4d39-81a9-c2046e79d3c3",
+   "new_extra": [
+    "95661fd7-03c8-4ce0-8626-15714b479a94"
+   ]
+  },
+  {
+   "id": "3de0e08c-04a6-440a-8f61-4ce3c0cbb69a",
+   "epc": "F0A0B30E4F9CD7F00005E976",
+   "product": "OZ Jeans WHITE 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "7f2510ef-4271-4b1e-bb60-dc3422367f7c",
+   "new_extra": []
+  },
+  {
+   "id": "019c6e3e-bdd6-46f4-900c-00564d956279",
+   "epc": "F0A0B30E4F9B9E700005473B",
+   "product": "Odin Jeans LIGHT GREY 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2f60723c-9439-45e1-ae78-0115718e7e45",
+   "new_extra": []
+  },
+  {
+   "id": "b7d8a097-773a-4ae1-bec0-22f2529ac910",
+   "epc": "F0A0B30E4F9B9EA00005B317",
+   "product": "Odin Jeans LIGHT GREY 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2f60723c-9439-45e1-ae78-0115718e7e45",
+   "new_extra": []
+  },
+  {
+   "id": "1ab4f723-c34d-4adb-9b0f-8ee2a8c65b15",
+   "epc": "F0A0B30E4F9C65C000067A66",
+   "product": "One Shoulder Sweatshirt CLAY 04",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "932c050c-0eaa-441b-b033-59947baaba05",
+   "new_extra": []
+  },
+  {
+   "id": "1f907bee-9420-4458-be0b-ff4497e3738d",
+   "epc": "F0A0B30E4F9C0190000E6352",
+   "product": "Otto Denim Shorts BLUE 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f70c8020-451a-4427-ba80-001d59d22b3b",
+   "new_extra": []
+  },
+  {
+   "id": "a2655e10-ab40-4f54-9810-97da612cdd90",
+   "epc": "F0A0B30E4F9D4E0000095E59",
+   "product": "Oversized Basic T-Shirt BEIGE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "725a9c24-94c0-42c6-8707-8c0094f9a3fe",
+   "new_extra": []
+  },
+  {
+   "id": "64626b99-20e4-4994-bcb6-0e4d35ff8a0e",
+   "epc": "F0A0B30E4F9C53F00005678E",
+   "product": "Pablo Pants BLACK 31",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "87fdcef4-652b-48af-b904-0c01c62f6bc4",
+   "new_extra": [
+    "90ef0349-f0a3-482c-8a50-00d9dae4911d"
+   ]
+  },
+  {
+   "id": "039f7dd6-dc99-4642-b7cf-03e4fa0f3200",
+   "epc": "F0A0B30E4F9C5400000D6564",
+   "product": "Pablo Pants BLACK 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "87fdcef4-652b-48af-b904-0c01c62f6bc4",
+   "new_extra": [
+    "90ef0349-f0a3-482c-8a50-00d9dae4911d"
+   ]
+  },
+  {
+   "id": "0dd23fe8-6613-4f3f-8783-ceda179df113",
+   "epc": "F0A0B30E4F9D456000019380",
+   "product": "Pablo Pants GREY 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da2ca1b1-9131-4652-bacb-8d54183088c7",
+   "new_extra": []
+  },
+  {
+   "id": "34602b50-9d7d-4b5b-82d2-8a0c0a670b12",
+   "epc": "F0A0B30E4F9D45600003247F",
+   "product": "Pablo Pants GREY 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da2ca1b1-9131-4652-bacb-8d54183088c7",
+   "new_extra": []
+  },
+  {
+   "id": "34da2237-3207-4a03-ba0f-bf5f7cb3bed7",
+   "epc": "F0A0B30E4F9D456000078235",
+   "product": "Pablo Pants GREY 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da2ca1b1-9131-4652-bacb-8d54183088c7",
+   "new_extra": []
+  },
+  {
+   "id": "61c0637f-3d6c-43d3-a901-16d867de8417",
+   "epc": "F0A0B30E4F9D4580000A1B02",
+   "product": "Pablo Pants GREY 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "da2ca1b1-9131-4652-bacb-8d54183088c7",
+   "new_extra": []
+  },
+  {
+   "id": "ee258d28-923f-4c82-8f1f-cf6edabb2f66",
+   "epc": "F0A0B30E4F9C64600001A4AF",
+   "product": "Padded Dress GALLNUT 04",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "eb422a43-835e-414b-b7c0-682b5bac1a4f",
+   "new_extra": []
+  },
+  {
+   "id": "6e25f761-e6cb-4804-9033-fbee1ee74e8e",
+   "epc": "F0A0B30E4F9C6B50000EF3B4",
+   "product": "Padded Dress GRAVITY GREY 10",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2133b5d4-8bfe-4113-8e0e-ce1c91699a92",
+   "new_extra": []
+  },
+  {
+   "id": "f02c4d52-c41a-47bd-8804-495a86a55e8a",
+   "epc": "F0A0B30E4F9BEF90000F2507",
+   "product": "Painted King T-Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "822cae08-4d78-4e95-ae8e-7e4b1e4e9158",
+   "new_extra": []
+  },
+  {
+   "id": "39746350-f10a-456b-9533-5c96bde5e8a4",
+   "epc": "F0A0B30E4F9D4910000E4E64",
+   "product": "Papillon T-Shirt BEIGE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "22bf84a1-4274-4916-96ec-9c015e42ae69",
+   "new_extra": []
+  },
+  {
+   "id": "1977724b-df5f-44b7-bf25-192039e5f925",
+   "epc": "F0A0B30E4F9D3F00000DAA80",
+   "product": "Peace T-Shirt WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "822cae08-4d78-4e95-ae8e-7e4b1e4e9158",
+   "new_extra": []
+  },
+  {
+   "id": "3798980f-7754-46a9-a718-2802e3839dc9",
+   "epc": "F0A0B30E4F9D5C00000D8444",
+   "product": "Prospect T-Shirt BLACK XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1226c181-fe81-4be6-87eb-5cc13b342192",
+   "new_extra": []
+  },
+  {
+   "id": "16ca1d91-c197-46fd-8ccf-6f512e117ecc",
+   "epc": "F0A0B30E4F9C18E0000A30FF",
+   "product": "Queen Sneakers WHITE 39",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3d04f05a-9cd6-4d18-854c-a642481710ac",
+   "new_extra": []
+  },
+  {
+   "id": "026eb921-ed8a-409a-8ce5-cad60b229290",
+   "epc": "F0A0B30E4F9C1920000333A9",
+   "product": "Queen Sneakers WHITE/BLACK 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "1afb5a1e-d284-419f-b35b-81ae73c3f6a8",
+   "new_extra": []
+  },
+  {
+   "id": "3dc9373b-140d-4b42-b0e2-78385c952ffc",
+   "epc": "F0A0B30E4F9CC3800002E012",
+   "product": "Remi Bodysuit Set SALMON M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3bb789d9-3cb1-4df1-a48f-8034300f02a9",
+   "new_extra": []
+  },
+  {
+   "id": "54355410-c8c5-4965-ac36-574cd441f1a1",
+   "epc": "F0A0B30E4F9BB8000003F48A",
+   "product": "Rhea Jacket WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "041e941b-f913-4052-8a89-5dc492210e00",
+   "new_extra": []
+  },
+  {
+   "id": "3a8df325-7fb4-499d-a57c-6b6ab342f3ac",
+   "epc": "F0A0B30E4F9BB800000C5F58",
+   "product": "Rhea Jacket WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "041e941b-f913-4052-8a89-5dc492210e00",
+   "new_extra": []
+  },
+  {
+   "id": "cd502181-e7bb-4caf-87ea-17f8e03c2856",
+   "epc": "F0A0B30E4F9BB7F0000E1C03",
+   "product": "Rhea Jacket WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "041e941b-f913-4052-8a89-5dc492210e00",
+   "new_extra": []
+  },
+  {
+   "id": "5dcd0022-fc6d-44ae-bdde-ac43bd3c11b9",
+   "epc": "F0A0B30E4F9BB7D00005848F",
+   "product": "Rhea Jacket WHITE XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "041e941b-f913-4052-8a89-5dc492210e00",
+   "new_extra": []
+  },
+  {
+   "id": "847e04d8-56b8-47e2-be79-5e2593a01857",
+   "epc": "F0A0B30E4F9C5870000597CF",
+   "product": "Rose Romper COLORFUL M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f9088e60-1e85-403d-a01e-86c9e76667db",
+   "new_extra": []
+  },
+  {
+   "id": "28fb3d8e-ddf4-4360-b300-ffe455c1d186",
+   "epc": "F0A0B30E4F9C82000007E6D3",
+   "product": "Rostory Hoodie Set LIGHT GREY M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "701ef1c5-df14-42ea-94ef-f05f85088d5c",
+   "new_extra": [
+    "4816d44a-dfec-4d4f-962b-a2e3e70b96a1"
+   ]
+  },
+  {
+   "id": "49f55006-26c9-4ef6-8c41-e6e6cfe8fb67",
+   "epc": "F0A0B30E4F9BC9D0000CF80C",
+   "product": "Ryan Polo Shirt GREY XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a77bf22e-b539-431b-9808-4170699bf612",
+   "new_extra": []
+  },
+  {
+   "id": "745a2943-e53a-4284-b7c6-a2bfe51381f3",
+   "epc": "F0A0B30E4F9BCA70000842E7",
+   "product": "Ryan Polo Shirt LIGHT BLUE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "72081ba5-49f9-4311-86c7-d02f8c12c93f",
+   "new_extra": []
+  },
+  {
+   "id": "59a93bb9-07a6-4bc9-9821-d5d7a99a45ae",
+   "epc": "F0A0B30E4F9BCB00000975BB",
+   "product": "Ryan Polo Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d35142b9-ea1a-494d-9cb9-9d59c634faf4",
+   "new_extra": []
+  },
+  {
+   "id": "d01f1f36-ca30-4403-9155-f53cc0303576",
+   "epc": "F0A0B30E4F9BCB10000646BF",
+   "product": "Ryan Polo Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "d35142b9-ea1a-494d-9cb9-9d59c634faf4",
+   "new_extra": []
+  },
+  {
+   "id": "56cee085-ad10-4e61-b9ad-9493e8e899c9",
+   "epc": "F0A0B30E4F9B8BE000071E2D",
+   "product": "Sapphire Tropics Dress BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3cc9e67c-7701-455c-8f93-79614dfd1a97",
+   "new_extra": []
+  },
+  {
+   "id": "afdb49f2-0494-4d1d-bc8b-46545b9644a3",
+   "epc": "F0A0B30E4F9C82C00007B7A1",
+   "product": "Sean Knit Sweater BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "ba286b7e-6331-457e-ac5d-25abc671307b",
+   "epc": "F0A0B30E4F9C82C0000A2413",
+   "product": "Sean Knit Sweater BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "34f0cdf8-45f9-4695-9f5a-286225de26ea",
+   "epc": "F0A0B30E4F9C82C0000DAAD3",
+   "product": "Sean Knit Sweater BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "2192b993-ecc3-408b-8d38-e17d7c52271e",
+   "epc": "F0A0B30E4F9C82C0000E36E3",
+   "product": "Sean Knit Sweater BLUE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "8afb63d8-65ea-43a4-abe3-b8477aba175d",
+   "epc": "F0A0B30E4F9C7FB000034F8A",
+   "product": "Sean Knit Sweater BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "0d318c31-ffe7-4ef4-aa0c-2c18cd08c78c",
+   "epc": "F0A0B30E4F9C7FB0000505CE",
+   "product": "Sean Knit Sweater BLUE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "1f383204-dd3d-40b1-8e27-f45bf70d3ee7",
+   "epc": "F0A0B30E4F9C85D00004AB4C",
+   "product": "Sean Knit Sweater BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "67bc1e94-ca6e-4dd3-9779-9aadc0d80d90",
+   "epc": "F0A0B30E4F9C85D00005DB5C",
+   "product": "Sean Knit Sweater BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "80b35ffa-5f08-4d58-ae01-6a975e1b7276",
+   "epc": "F0A0B30E4F9C85D000063006",
+   "product": "Sean Knit Sweater BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "0369a504-6bb0-4b47-b4d0-99a8e66ed48d",
+   "epc": "F0A0B30E4F9C85D00008BE36",
+   "product": "Sean Knit Sweater BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "e027d78c-e027-429b-b29e-87160f791514",
+   "epc": "F0A0B30E4F9C85D0000CD624",
+   "product": "Sean Knit Sweater BLUE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "e38eb2df-0e02-4f3a-8102-80ecbe8ea776",
+   "new_extra": []
+  },
+  {
+   "id": "5fbe727f-393b-4168-9cc6-11f730810abb",
+   "epc": "F0A0B30E4F9C23200000053A",
+   "product": "Shoes AK BLACK 45",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f6925efc-b4c1-45ae-8a05-11c192602e66",
+   "new_extra": []
+  },
+  {
+   "id": "caaa6261-f1c7-402a-a276-b74455f7275b",
+   "epc": "F0A0B30E4F9CA820000EE170",
+   "product": "Show Must Go On Shirt BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "b417928d-8350-414d-92bd-adaa2291e610",
+   "new_extra": [
+    "527f5e0f-3c4f-428f-8716-6ef2a8b0d5b4",
+    "db5a510b-b174-46e2-9a02-f959c88d56f0"
+   ]
+  },
+  {
+   "id": "340c4e68-69a0-470f-8a6c-eaf5df77bac9",
+   "epc": "F0A0B30E4F9CA5B0000C4FE0",
+   "product": "Show Must Go On Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "db98ebfc-1d89-4e9f-9cc5-d56734ad99a0",
+   "new_extra": [
+    "527f5e0f-3c4f-428f-8716-6ef2a8b0d5b4",
+    "6f02d51b-9e91-4be0-9ea0-75b64ef625fe"
+   ]
+  },
+  {
+   "id": "a0c3ceb0-9728-42ab-8425-5b5a0fa73c97",
+   "epc": "F0A0B30E4F9CACD0000CCF36",
+   "product": "Show Must Go On Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "db98ebfc-1d89-4e9f-9cc5-d56734ad99a0",
+   "new_extra": [
+    "527f5e0f-3c4f-428f-8716-6ef2a8b0d5b4",
+    "6f02d51b-9e91-4be0-9ea0-75b64ef625fe"
+   ]
+  },
+  {
+   "id": "0a5b3453-875b-44fc-942c-f71ca4366289",
+   "epc": "F0A0B30E4F9C6B2000057CAD",
+   "product": "Sirena Dress BEIGE 08",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a13803e0-6944-4d60-9219-51b996c0ecc3",
+   "new_extra": []
+  },
+  {
+   "id": "4507621b-8d01-4ecf-9e1d-d95fe5c14c30",
+   "epc": "F0A0B30E4F9C15F000001D9C",
+   "product": "Skin Heels BLACK 37",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fc19950a-646b-4eea-a6c7-824e3b4d3c66",
+   "new_extra": []
+  },
+  {
+   "id": "b451ff0c-eb86-45e1-b1c5-9b757dcb8646",
+   "epc": "F0A0B30E4F9C87300008F5F8",
+   "product": "Smiley Hoodie WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ca0bc60e-8182-4f51-a726-12210e87c7cc",
+   "new_extra": []
+  },
+  {
+   "id": "646ed74e-4f72-4c49-88b1-41917abc0e9c",
+   "epc": "F0A0B30E4F9CE3D000072934",
+   "product": "Social Club T-Shirt WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "822cae08-4d78-4e95-ae8e-7e4b1e4e9158",
+   "new_extra": []
+  },
+  {
+   "id": "97e94033-348e-4d18-8c8b-0761f9ce5913",
+   "epc": "F0A0B30E4F9BD8600004DED6",
+   "product": "Social T-Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0469ae30-a993-43ca-adce-0fa256ddebb2",
+   "new_extra": []
+  },
+  {
+   "id": "3c666ef9-be48-48a3-857f-255077243e45",
+   "epc": "F0A0B30E4F9BD87000013DBE",
+   "product": "Social T-Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "0469ae30-a993-43ca-adce-0fa256ddebb2",
+   "new_extra": []
+  },
+  {
+   "id": "1afce783-9b9a-4880-b7cc-1dccc06b29c3",
+   "epc": "F0A0B30E4F9BA3700008C5AC",
+   "product": "Soren Jeans BLACK WASHED 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "47cb5f27-d3e8-4e36-ac7b-f1701e287669",
+   "new_extra": []
+  },
+  {
+   "id": "c1046e4d-eede-4261-aca0-6fb0f65ac255",
+   "epc": "F0A0B30E4F9C0DD0000CA953",
+   "product": "Stevie Crop Top WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "aa2b64fd-4ad0-4e60-ae05-4728bc208e62",
+   "epc": "F0A0B30E4F9C0DB00004C7C6",
+   "product": "Stevie Crop Top WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "303b5e04-79fc-4ddc-a71d-00d4e9fcda2b",
+   "new_extra": []
+  },
+  {
+   "id": "f29129f0-d830-40d4-a059-820cd5d7bde1",
+   "epc": "F0A0B30E4F9BA31000090690",
+   "product": "Stone Jeans DARK GREY 32",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "3cbbe3a1-49e2-4895-853d-0eedacd00e50",
+   "new_extra": []
+  },
+  {
+   "id": "54dd486e-8eb6-4256-9d2c-537b2d75af08",
+   "epc": "F0A0B30E4F9CA640000CEECE",
+   "product": "Street Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c514850d-c245-44cc-ad59-3ba306f618c7",
+   "new_extra": [
+    "9de9bdb8-d755-47f6-b670-3f3bff334fdf",
+    "c1417251-3b22-4ede-b6c3-665f7b400d45"
+   ]
+  },
+  {
+   "id": "148e54c2-4772-4987-b3c4-1c3a18e094a2",
+   "epc": "F0A0B30E4F9CB220000879D7",
+   "product": "Street Shirt WHITE XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c514850d-c245-44cc-ad59-3ba306f618c7",
+   "new_extra": [
+    "9de9bdb8-d755-47f6-b670-3f3bff334fdf",
+    "c1417251-3b22-4ede-b6c3-665f7b400d45"
+   ]
+  },
+  {
+   "id": "e2b2f9d3-9646-46c9-9739-c63fc87fab5c",
+   "epc": "F0A0B30E4F9C7B900009C1D0",
+   "product": "Stringer Pride Tank Top WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4852a4b8-7f20-4954-af08-3fb077229648",
+   "new_extra": []
+  },
+  {
+   "id": "f5a5bbf3-063b-4225-b302-d2f767d3102f",
+   "epc": "F0A0B30E4F9C7B8000095212",
+   "product": "Stringer Pride Tank Top WHITE M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4852a4b8-7f20-4954-af08-3fb077229648",
+   "new_extra": []
+  },
+  {
+   "id": "254701ad-ccab-48b6-8a75-d5024441c4e3",
+   "epc": "F0A0B30E4F9C7B6000021AD3",
+   "product": "Stringer Pride Tank Top WHITE XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4852a4b8-7f20-4954-af08-3fb077229648",
+   "new_extra": []
+  },
+  {
+   "id": "c01f0e4e-a3b1-4a37-938c-bbbc25d846f8",
+   "epc": "F0A0B30E4F9C7B6000036C6C",
+   "product": "Stringer Pride Tank Top WHITE XS",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "4852a4b8-7f20-4954-af08-3fb077229648",
+   "new_extra": []
+  },
+  {
+   "id": "66d465aa-4b10-4585-90a5-04e455a4b546",
+   "epc": "F0A0B30E4F9BCCA0000A44D1",
+   "product": "Successful Tank WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "90365b61-9b02-4c02-863d-0b10ee90f9c2",
+   "new_extra": []
+  },
+  {
+   "id": "1bda0823-9e19-4ebb-bb4a-45c53cb8c3df",
+   "epc": "F0A0B30E4F9CA6900001BA2F",
+   "product": "Superior Shirt BLACK S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ba8066b1-291c-4f58-b50e-e3eb34dbaaaa",
+   "new_extra": [
+    "380a0a0c-53d3-4ba4-be3f-fdb6dffbb041",
+    "fec42c68-84c5-4f20-be5d-c48318cefdda"
+   ]
+  },
+  {
+   "id": "c61d611d-534e-4c95-b23e-f5586f76947c",
+   "epc": "F0A0B30E4F9CB0100004F4AC",
+   "product": "Superior Shirt BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ba8066b1-291c-4f58-b50e-e3eb34dbaaaa",
+   "new_extra": [
+    "380a0a0c-53d3-4ba4-be3f-fdb6dffbb041",
+    "fec42c68-84c5-4f20-be5d-c48318cefdda"
+   ]
+  },
+  {
+   "id": "7fae46ec-6469-4cf1-8518-2b3dcccef895",
+   "epc": "F0A0B30E4F9CB2700003CDDA",
+   "product": "Superior Shirt BLACK XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ba8066b1-291c-4f58-b50e-e3eb34dbaaaa",
+   "new_extra": [
+    "380a0a0c-53d3-4ba4-be3f-fdb6dffbb041",
+    "fec42c68-84c5-4f20-be5d-c48318cefdda"
+   ]
+  },
+  {
+   "id": "7434371c-7436-4aca-bf4f-b91a0670d37b",
+   "epc": "F0A0B30E4F9CAB400008FDF6",
+   "product": "Superior Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ecbe8637-f8b9-4ba2-be3f-81f53b109deb",
+   "new_extra": [
+    "11f46dba-1d90-4989-8d5e-96f6684a320a"
+   ]
+  },
+  {
+   "id": "cc60ccb3-c85f-4c9f-9fc3-c3f2d25a0959",
+   "epc": "F0A0B30E4F9CC2E0000E458B",
+   "product": "Sydney Dress BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "c126f167-d915-4874-a146-b76c950ef991",
+   "new_extra": []
+  },
+  {
+   "id": "9cd62c23-0be8-4faf-bee1-67b513a30c33",
+   "epc": "F0A0B30E4F9CB720000DAD2C",
+   "product": "Talk Top BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f586b430-f6a6-4d46-963e-6ce9ec387451",
+   "new_extra": []
+  },
+  {
+   "id": "2e1b48b8-04c4-495a-9073-d308d04ea5b6",
+   "epc": "F0A0B30E4F9C7EB000060244",
+   "product": "Thank You Hoodie Set WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fc424ca9-efb4-4097-ae60-952a8a51c513",
+   "new_extra": [
+    "06d17442-0304-4147-8d3d-cf27ddbe3be2",
+    "6c5fbd89-ac5c-4de9-a177-ba9847670cd9",
+    "8b093e60-a06b-4063-bdb7-c426671c53bb",
+    "e17f1d00-af55-425c-86a5-429b49ad983f",
+    "e22d7c82-adb4-4d4f-b694-773c3e1e1ce3"
+   ]
+  },
+  {
+   "id": "58f7dd66-7f2d-42be-b61f-f1fccaa591c9",
+   "epc": "F0A0B30E4F9CB630000E18A6",
+   "product": "The Who Top TEAL S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "396fc32a-8598-40e1-aace-138cada4d457",
+   "new_extra": []
+  },
+  {
+   "id": "97d54dd3-c740-4f4e-a9e2-bb6064740383",
+   "epc": "F0A0B30E4F9CB08000055107",
+   "product": "Time Never Shirt BEIGE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "458798da-4cb4-47d1-9909-a475e4a0a9f4",
+   "new_extra": [
+    "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+    "ee78bbbe-7d13-4061-9eb8-ae4eae638bf6"
+   ]
+  },
+  {
+   "id": "1f28323f-c785-46a4-8160-8525100d9eaa",
+   "epc": "F0A0B30E4F9CA9700004ED31",
+   "product": "Time Never Shirt BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ee78bbbe-7d13-4061-9eb8-ae4eae638bf6",
+   "new_extra": [
+    "93ab507a-ac06-4442-8e22-656e201f52c4",
+    "f6985226-0f7a-47b7-ada4-0fe1010c4cb8"
+   ]
+  },
+  {
+   "id": "560dcc03-4394-4ebb-9df5-27f67fcee144",
+   "epc": "F0A0B30E4F9CB090000B0657",
+   "product": "Time Never Shirt BLACK XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ee78bbbe-7d13-4061-9eb8-ae4eae638bf6",
+   "new_extra": [
+    "93ab507a-ac06-4442-8e22-656e201f52c4",
+    "f6985226-0f7a-47b7-ada4-0fe1010c4cb8"
+   ]
+  },
+  {
+   "id": "92a588ac-ccb0-4062-891e-352743a5dd63",
+   "epc": "F0A0B30E4F9CABB0000346C5",
+   "product": "Time Never Shirt WHITE L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "ccbb1ddf-217d-4c5f-a2fc-e6f78d493ca3",
+   "epc": "F0A0B30E4F9CA6F0000E2CDB",
+   "product": "Time Never Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "d364f86c-e2d2-459f-a962-c98a0771c7d1",
+   "epc": "F0A0B30E4F9CB07000092F84",
+   "product": "Time Never Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "8b10ae84-e001-496c-8dd7-b92f86d8f305",
+   "epc": "F0A0B30E4F9CB2D00007A84F",
+   "product": "Time Never Shirt WHITE XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "4e3f97f3-7584-4ee5-bb78-efca6995e563",
+   "epc": "F0A0B30E4F9CB2D00008C66B",
+   "product": "Time Never Shirt WHITE XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "740d7850-543a-4d31-b1c1-ce13630451f1",
+   "epc": "F0A0B30E4F9CB2D0000AC6F7",
+   "product": "Time Never Shirt WHITE XXXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "6b9c4a2b-faa6-4c34-a9b0-0274984c4cf7",
+   "new_extra": [
+    "07d38916-de45-457e-a67a-6bde5a40b2e0",
+    "93ab507a-ac06-4442-8e22-656e201f52c4"
+   ]
+  },
+  {
+   "id": "bd342ebc-df54-4783-8277-6b4274e354f8",
+   "epc": "F0A0B30E4F9C8D30000A1AB7",
+   "product": "Tobias Pants BLACK XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "dd40fd21-b927-417d-a5b6-81b5c1d03d8f",
+   "new_extra": []
+  },
+  {
+   "id": "5714b804-a25c-40c4-8dc6-96c276af40a7",
+   "epc": "F0A0B30E4F9BE1D0000B6FC7",
+   "product": "Trace T-Shirt WHITE XL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "32571e1d-0630-4eef-96b4-a89a51934780",
+   "new_extra": []
+  },
+  {
+   "id": "83451e98-ec20-4510-9393-063d7e1f37e0",
+   "epc": "F0A0B30E4F9BE1E00006E5BE",
+   "product": "Trace T-Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "32571e1d-0630-4eef-96b4-a89a51934780",
+   "new_extra": []
+  },
+  {
+   "id": "2222e03a-93e6-41aa-a50c-f0854aefa987",
+   "epc": "F0A0B30E4F9BE1E000080B44",
+   "product": "Trace T-Shirt WHITE XXL",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "32571e1d-0630-4eef-96b4-a89a51934780",
+   "new_extra": []
+  },
+  {
+   "id": "9d419093-1675-403c-af5b-060635b997cd",
+   "epc": "F0A0B30E4F9C90A000018DFD",
+   "product": "Tristan Jeans BLUE WASHED 33",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "456b66c3-88c4-4af9-a620-8c01adc98094",
+   "new_extra": [
+    "b4bae55f-0a34-4ad3-8218-23cfccde8b22"
+   ]
+  },
+  {
+   "id": "87ecacbc-461e-4661-ba69-99cb28f04cbf",
+   "epc": "F0A0B30E4F9CAAD0000E116F",
+   "product": "Untimely Shirt BLACK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8f36ccd8-bf0e-4b81-be9e-203010dda578",
+   "new_extra": [
+    "81f84368-dc33-434c-8667-b26ebd2dcd83"
+   ]
+  },
+  {
+   "id": "16784280-0b3d-48b1-882b-86e9027629ef",
+   "epc": "F0A0B30E4F9CA600000854A0",
+   "product": "Untimely Shirt WHITE S",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "48a99fac-55da-4d4c-8825-b06c9e7649bf",
+   "new_extra": [
+    "013f3961-7706-44e4-ba52-4f839fe133d0"
+   ]
+  },
+  {
+   "id": "ab707707-0bf9-4b13-a37d-7473128f957f",
+   "epc": "F0A0B30E4F9CBE0000079FCD",
+   "product": "Valeria Dress BLACK L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "729f1516-739b-4dfe-9aea-988684554e79",
+   "new_extra": []
+  },
+  {
+   "id": "8185e8a0-c6b5-4c4d-9fa3-a2802a023eec",
+   "epc": "F0A0B30E4F9C277000018F20",
+   "product": "Vera Blazer BLUE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ba0be3f-fc38-4e65-a316-02af0208971b",
+   "new_extra": []
+  },
+  {
+   "id": "4503fb02-3e8b-4afc-9b1f-c94376a605e5",
+   "epc": "F0A0B30E4F9C277000080A8B",
+   "product": "Vera Blazer BLUE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ba0be3f-fc38-4e65-a316-02af0208971b",
+   "new_extra": []
+  },
+  {
+   "id": "8d3aa4cc-d8bb-4fcb-a79e-a9b0077becae",
+   "epc": "F0A0B30E4F9C2760000DF46C",
+   "product": "Vera Blazer BLUE 42",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ba0be3f-fc38-4e65-a316-02af0208971b",
+   "new_extra": []
+  },
+  {
+   "id": "52a3e298-7715-42f4-8816-59fa44cc01b4",
+   "epc": "F0A0B30E4F9BB960000BDBC8",
+   "product": "Vera Shorts BLUE 38",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ba0be3f-fc38-4e65-a316-02af0208971b",
+   "new_extra": []
+  },
+  {
+   "id": "f172e265-5a94-4f8f-baab-56c74a9777a3",
+   "epc": "F0A0B30E4F9BB98000080563",
+   "product": "Vera Shorts BLUE 42",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "2ba0be3f-fc38-4e65-a316-02af0208971b",
+   "new_extra": []
+  },
+  {
+   "id": "6bddeb1c-7623-4c6b-a106-220ac4514970",
+   "epc": "F0A0B30E4F9C6A1000092330",
+   "product": "Verona Tee UNBLEACHED 08",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "9467c1b4-886e-4ec1-8681-579451c5a936",
+   "new_extra": []
+  },
+  {
+   "id": "be85e9b4-c9c1-4481-8c22-476436007566",
+   "epc": "F0A0B30E4F9B96300009FA68",
+   "product": "Vick Jeans BLUE WASHED 34",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "8c16f3ea-ec26-4f2a-a130-c9ad154c988d",
+   "new_extra": [
+    "334b4d58-e8e2-409e-87fe-f62f075e2387",
+    "b853d97c-0bf8-444c-8aaa-4a22f1a1a91d"
+   ]
+  },
+  {
+   "id": "5565c9c9-7cef-4965-a5eb-b9d204b92ecc",
+   "epc": "F0A0B30E4F9BC350000D06D1",
+   "product": "W Long Pants B PEACH 36",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "f4a375aa-5d94-4821-92c3-f698cdbb5976",
+   "new_extra": []
+  },
+  {
+   "id": "f2fea6e2-932a-47dc-bacb-b2a3504c3b49",
+   "epc": "F0A0B30E4F9BA1F0000ACB7F",
+   "product": "Wilder Jeans BLUE WASHED 30",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "91b8503e-f3c7-49f5-a731-74ef2c9a7bdc",
+   "new_extra": [
+    "3e8d3128-5f0f-418e-aafd-f8392b5fc3cb"
+   ]
+  },
+  {
+   "id": "1a75542f-2ff7-444b-ba0c-6ce06e6e64ee",
+   "epc": "F0A0B30E4F9BB1C00001AE2D",
+   "product": "Womens Short Jeans B BLUE WASHED L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "fc3fb363-fa61-4f5c-b86b-f85e8cbdd5a4",
+   "new_extra": [
+    "af75d308-94ae-4763-951f-e0c62952eb6d"
+   ]
+  },
+  {
+   "id": "48e07c6d-feae-4eff-b380-b8eaaba670dd",
+   "epc": "F0A0B30E4F9BB2B000040467",
+   "product": "Womens Short Jeans F BLUE WASHED M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "5f7508f1-168c-4f46-9767-ee2d5d7447e8",
+   "new_extra": []
+  },
+  {
+   "id": "2cbbfd02-2476-4c59-bc16-dae726d7b44f",
+   "epc": "F0A0B30E4F9C227000035650",
+   "product": "Zipper Sneakers BLACK 45",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "ac8b762c-16a5-42cc-80c9-ac2703e6f789",
+   "new_extra": []
+  },
+  {
+   "id": "097d6d72-5d56-42f4-8e4b-e076967b517c",
+   "epc": "F0A0B30E4F9C27C00003A844",
+   "product": "Zuri Knit Cami Top BLACK M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a755e50f-1170-45de-991d-7473c580dd5d",
+   "new_extra": []
+  },
+  {
+   "id": "95a1faba-2862-4b95-bf0b-a874dda343ed",
+   "epc": "F0A0B30E4F9C27E0000855F5",
+   "product": "Zuri Knit Cami Top TEAL L",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a755e50f-1170-45de-991d-7473c580dd5d",
+   "new_extra": []
+  },
+  {
+   "id": "c95f6f66-094e-44a5-969c-4e83394da165",
+   "epc": "F0A0B30E4F9C27B00001F015",
+   "product": "Zuri Knit Cami Top TEAL M",
+   "old_bin_id": null,
+   "old_extra": [],
+   "new_bin_id": "a755e50f-1170-45de-991d-7473c580dd5d",
+   "new_extra": []
+  }
+ ]
+}
