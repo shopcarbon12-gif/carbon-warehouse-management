@@ -1,0 +1,390 @@
+{
+ "takenAt": "2026-10-16T14:30:36.244Z",
+ "rows": [
+  {
+   "item": {
+    "id": "8270da7d-6c90-43f9-b886-b9e3e0e43ce0",
+    "epc": "F0A0B30E4F9C8440000191A0",
+    "bin_id": null,
+    "source": "cycle_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-10-13T05:16:28.910053-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T05:16:49.367-04:00",
+    "custom_sku_id": "96396738-97aa-4002-9b93-2221b0d5a201",
+    "pinned_bin_id": null,
+    "serial_number": 102816,
+    "first_scanned_at": "2026-10-13T05:16:29.154-04:00",
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "cycle-count-live",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Apology Hoodie",
+   "size": "L",
+   "homes": [
+    {
+     "bin": "5834a009-a32c-40af-a70c-1acb562c3e83",
+     "extra": [
+      "54fd4810-deb6-4df2-9c7e-9cdc9418e895",
+      "f1da31b6-438f-4f93-a4c7-58713af1b7f0"
+     ]
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "8f7345dc-481d-4a43-a565-c58e88911ead",
+    "epc": "F0A0B30E4F9CB3100001A196",
+    "bin_id": null,
+    "source": "add_on_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-10-13T10:31:37.990004-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T13:39:04.989-04:00",
+    "custom_sku_id": "149d5609-7cf2-4781-ae8c-cf19b88bc44b",
+    "pinned_bin_id": null,
+    "serial_number": 106902,
+    "first_scanned_at": "2026-10-13T10:31:37.987-04:00",
+    "source_device_id": "2c3e6c0a-aa74-49f3-a8fe-3108c15b70ca",
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "0becfb9eba1e4f18",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Carbon Classic T",
+   "size": "XXXL",
+   "homes": [
+    {
+     "bin": "76495bc9-3316-4cb6-a983-0ffab8be02af",
+     "extra": [
+      "e7b8d944-95c5-4ce4-b201-1e9f4e92db6e"
+     ]
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "1b9dda31-109c-4c02-a9a5-899ece2f3e57",
+    "epc": "F0A0B30E4F9BDAB0000C7BA2",
+    "bin_id": null,
+    "source": "handheld",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-08-17T17:45:07.81181-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T13:39:04.989-04:00",
+    "custom_sku_id": "2751bbdd-7ffc-472c-a63b-b93633259d55",
+    "pinned_bin_id": null,
+    "serial_number": 818082,
+    "first_scanned_at": "2026-09-02T16:09:20.242-04:00",
+    "source_device_id": "2c3e6c0a-aa74-49f3-a8fe-3108c15b70ca",
+    "last_seen_zone_id": "8810a1f5-4195-4cee-b763-6ccca62d1130",
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": "3c02fbd9-e2a4-4516-a36d-bb5a6c5250d7",
+    "source_device_label": "0becfb9eba1e4f18",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Choose Carbon T-Shirt",
+   "size": "XXL",
+   "homes": [
+    {
+     "bin": "3643e8d5-a53c-4d16-b411-27b61140feb4",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "36add2b8-c070-414c-860b-22af2bb02203",
+    "epc": "F0A0B30E4F9CDCD00002FA24",
+    "bin_id": null,
+    "source": "cycle_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-09-05T01:26:41.580599-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-09-05T01:26:41.871-04:00",
+    "custom_sku_id": "ee44390c-7d0a-4347-9b20-2cf36095bd38",
+    "pinned_bin_id": null,
+    "serial_number": 195108,
+    "first_scanned_at": "2026-09-05T01:26:41.871-04:00",
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "cycle-count-live",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Cory Jeans",
+   "size": "38",
+   "homes": [
+    {
+     "bin": "e136c097-7a15-44bf-9e1a-03962dadd310",
+     "extra": [
+      "8271e490-1134-4125-a4a1-3a9f262a149f"
+     ]
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "19294426-6088-4cc0-9e4e-e8d4266561f7",
+    "epc": "F0A0B30E4F9C7AF000023564",
+    "bin_id": null,
+    "source": "handheld",
+    "status": "unknown",
+    "live_txid": 132994849,
+    "created_at": "2026-09-28T17:01:40.826093-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": null,
+    "custom_sku_id": "54903897-f87e-40b6-a06f-9d006cee7f14",
+    "pinned_bin_id": null,
+    "serial_number": 144740,
+    "first_scanned_at": null,
+    "source_device_id": null,
+    "last_seen_zone_id": "8810a1f5-4195-4cee-b763-6ccca62d1130",
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": "3c02fbd9-e2a4-4516-a36d-bb5a6c5250d7",
+    "source_device_label": null,
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Dani Heels",
+   "size": "40",
+   "homes": [
+    {
+     "bin": "d4032646-2d72-48b8-8dcd-0d3ab4d3da50",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "27dbc12b-1e26-4a73-9bad-8a929a90d3af",
+    "epc": "F0A0B30E4F9B9D7000002212",
+    "bin_id": null,
+    "source": "add_on_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-10-13T10:31:37.990004-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T13:39:04.989-04:00",
+    "custom_sku_id": "aa37569d-5970-49d1-b8e3-748aaec0b703",
+    "pinned_bin_id": null,
+    "serial_number": 8722,
+    "first_scanned_at": "2026-10-13T10:31:37.987-04:00",
+    "source_device_id": "2c3e6c0a-aa74-49f3-a8fe-3108c15b70ca",
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "0becfb9eba1e4f18",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Finn Jeans",
+   "size": "30",
+   "homes": [
+    {
+     "bin": "fc094547-4749-44c6-9b37-e2400cdef435",
+     "extra": [
+      "ef707203-1eef-4fec-813c-0684433b9b34"
+     ]
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "65c6de64-187b-4fbe-be8a-5a77552bc9ce",
+    "epc": "F0A0B30E4F9BBF40000126AD",
+    "bin_id": null,
+    "source": "cycle_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-10-13T05:33:30.351327-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T05:33:30.701-04:00",
+    "custom_sku_id": "578244a0-aeb0-49c8-bb94-490e86926c84",
+    "pinned_bin_id": null,
+    "serial_number": 75437,
+    "first_scanned_at": "2026-10-13T05:33:30.701-04:00",
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "cycle-count-live",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Marlee Crop Top",
+   "size": "38",
+   "homes": [
+    {
+     "bin": "b0884b3a-0682-42e5-a78a-2ae8173d6f03",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "34206ca0-fd9d-4560-837b-7011bf32833e",
+    "epc": "F0A0B30E4F9CF5400002B77B",
+    "bin_id": null,
+    "source": "handheld",
+    "status": "unknown",
+    "live_txid": 132994849,
+    "created_at": "2026-09-04T17:01:37.834223-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": null,
+    "custom_sku_id": "f86b2e3a-df1f-40ef-acdf-4838ab358794",
+    "pinned_bin_id": null,
+    "serial_number": 178043,
+    "first_scanned_at": null,
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": "3c02fbd9-e2a4-4516-a36d-bb5a6c5250d7",
+    "source_device_label": null,
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Nikita Dress",
+   "size": "L",
+   "homes": [
+    {
+     "bin": "b5e84de8-44ae-41ca-b4ac-d88dd8f7fbc0",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "6b6c1ea1-96f7-4330-90de-3b92fcea5984",
+    "epc": "F0A0B30E4F9CF460000B7642",
+    "bin_id": null,
+    "source": "handheld",
+    "status": "unknown",
+    "live_txid": 132994849,
+    "created_at": "2026-09-04T17:03:58.784088-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": null,
+    "custom_sku_id": "e6e152af-a92b-4f57-829e-e1726f37e2c2",
+    "pinned_bin_id": null,
+    "serial_number": 751170,
+    "first_scanned_at": null,
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": "3c02fbd9-e2a4-4516-a36d-bb5a6c5250d7",
+    "source_device_label": null,
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Nikita Dress",
+   "size": "M",
+   "homes": [
+    {
+     "bin": "b5e84de8-44ae-41ca-b4ac-d88dd8f7fbc0",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "d89d7547-7026-48dd-b560-174d557bca7d",
+    "epc": "F0A0B30E4F9BB7E000012502",
+    "bin_id": null,
+    "source": "cycle_count",
+    "status": "in-stock",
+    "live_txid": 0,
+    "created_at": "2026-10-13T05:16:08.908414-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T05:16:09.179-04:00",
+    "custom_sku_id": "6a2198e3-96ce-4f5f-bd07-4f9ac1384a08",
+    "pinned_bin_id": null,
+    "serial_number": 75010,
+    "first_scanned_at": "2026-10-13T05:16:09.179-04:00",
+    "source_device_id": null,
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "cycle-count-live",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Rhea Jacket",
+   "size": "S",
+   "homes": [
+    {
+     "bin": "041e941b-f913-4052-8a89-5dc492210e00",
+     "extra": []
+    }
+   ]
+  },
+  {
+   "item": {
+    "id": "ea633020-8aff-4bab-9d2f-0707511e71ef",
+    "epc": "F0A0B30E4F9D0810000186FB",
+    "bin_id": null,
+    "source": "add_on_count",
+    "status": "in-stock",
+    "live_txid": 118427272,
+    "created_at": "2026-10-13T13:35:18.791625-04:00",
+    "location_id": "75a2569b-4c91-4211-9ce4-997254e5f868",
+    "transfer_id": null,
+    "last_seen_at": "2026-10-13T13:39:04.989-04:00",
+    "custom_sku_id": "7ed015e3-766e-4623-a035-5ee8d6bf184a",
+    "pinned_bin_id": null,
+    "serial_number": 100091,
+    "first_scanned_at": "2026-10-13T13:35:18.778-04:00",
+    "source_device_id": "a24202e5-20fd-43a5-bc75-a2277fffa640",
+    "last_seen_zone_id": null,
+    "source_antenna_id": null,
+    "additional_bin_ids": [],
+    "created_by_user_id": null,
+    "source_device_label": "0e59c1a08cbbcfa9",
+    "defective_acknowledged_at": null
+   },
+   "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+   "product": "Russell Jacket",
+   "size": "S",
+   "homes": [
+    {
+     "bin": "8614561e-b771-411c-8ab1-67b7e3895f42",
+     "extra": [
+      "f2fc6394-3d66-452d-92d6-53867cb5523b"
+     ]
+    }
+   ]
+  }
+ ]
+}
