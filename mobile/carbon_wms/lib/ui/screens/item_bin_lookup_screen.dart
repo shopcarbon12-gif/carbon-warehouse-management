@@ -180,22 +180,38 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
       for (final list in lists) {
         for (final e in list) {
           final status = (e['status']?.toString() ?? '').toLowerCase();
-          // Only in-stock (a.k.a. "live") units occupy a bin.
-          if (status.isNotEmpty && status != 'in-stock') continue;
+          // The units a bin lists: live + pending visibility (same rule as
+          // Bin Assign / Clean Bin contents and the desktop).
+          if (status.isNotEmpty &&
+              status != 'in-stock' &&
+              status != 'pending_visibility') {
+            continue;
+          }
           total++;
           final rawBin = e['bin_code']?.toString().trim() ?? '';
-          final bin = (rawBin.isEmpty || rawBin == '—') ? '' : rawBin;
+          final primary = (rawBin.isEmpty || rawBin == '—') ? '' : rawBin;
+          // A unit is listed in its primary bin AND every extra (multi-bin)
+          // bin — this screen promised every bin but showed the primary only.
+          final extras = e['extra_bin_codes'];
+          final bins = <String>{
+            primary,
+            if (extras is List)
+              ...extras.map((x) => x.toString().trim()).where((x) => x.isNotEmpty),
+          };
+          if (primary.isEmpty && bins.length > 1) bins.remove('');
           final color = e['color']?.toString().trim() ?? '';
           final size = e['size']?.toString().trim() ?? '';
           final vSku = e['sku']?.toString().trim() ?? '';
           final key = '$color|$size|$vSku';
-          final slot = byBin.putIfAbsent(bin, () => <String, _VariantQty>{});
-          final v = slot[key];
-          if (v == null) {
-            slot[key] =
-                _VariantQty(color: color, size: size, sku: vSku, qty: 1);
-          } else {
-            v.qty++;
+          for (final bin in bins) {
+            final slot = byBin.putIfAbsent(bin, () => <String, _VariantQty>{});
+            final v = slot[key];
+            if (v == null) {
+              slot[key] =
+                  _VariantQty(color: color, size: size, sku: vSku, qty: 1);
+            } else {
+              v.qty++;
+            }
           }
         }
       }

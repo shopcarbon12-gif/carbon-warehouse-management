@@ -105,6 +105,27 @@ class AddOnSessionState extends ChangeNotifier {
     return changed;
   }
 
+  /// Re-apply the BIN of rows that already have item info, when the phone's
+  /// catalog copy changed (a bin moved on the desktop or another handheld).
+  /// [binOf] returns the current bin text for a row, or null to leave it.
+  /// Rows used to keep the bin they were first shown with. One notify.
+  int refreshBins(String? Function(NewEpcEntry e) binOf) {
+    if (_disposed) return 0;
+    var changed = 0;
+    for (var i = 0; i < _newEntries.length; i++) {
+      final e = _newEntries[i];
+      if (e.customSku == null) continue;
+      final next = binOf(e);
+      if (next == null) continue;
+      final normalized = next.isEmpty ? null : next;
+      if (normalized == e.bin) continue;
+      _newEntries[i] = normalized == null ? e.copyWith(clearBin: true) : e.copyWith(bin: normalized);
+      changed++;
+    }
+    if (changed > 0) notifyListeners();
+    return changed;
+  }
+
   /// Caller learned the EPC was already counted by another device — don't
   /// surface to the operator but keep the dedup mark so we don't re-submit.
   void recordRemoteDuplicate(String epc) {
@@ -236,6 +257,7 @@ class NewEpcEntry {
     String? color,
     String? size,
     String? bin,
+    bool clearBin = false,
     num? retailPrice,
   }) =>
       NewEpcEntry(
@@ -246,7 +268,7 @@ class NewEpcEntry {
         itemName: itemName ?? this.itemName,
         color: color ?? this.color,
         size: size ?? this.size,
-        bin: bin ?? this.bin,
+        bin: clearBin ? null : (bin ?? this.bin),
         retailPrice: retailPrice ?? this.retailPrice,
       );
 

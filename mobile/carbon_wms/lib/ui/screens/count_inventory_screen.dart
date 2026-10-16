@@ -117,6 +117,12 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   static const int _statusFetchBatchMax = 300;
   final Map<String, Map<String, dynamic>> _assetCache =
       <String, Map<String, dynamic>>{};
+
+  /// Products whose saved catalog row (incl. BIN) was re-read this session.
+  /// The saved copy is shown at once, then refreshed once per session — it
+  /// used to be trusted forever, so Count, the uploaded report and Locate
+  /// showed whatever bin a product had the first time this phone saw it.
+  final Set<String> _assetRefreshedThisSession = <String>{};
   List<Map<String, String>> _locations = [];
   String _currentLocationName = 'Loading...';
   String _currentLocationId = '';
@@ -615,7 +621,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       final cached = _assetCache[sysIdStr];
       if (cached != null) {
         _applyCatalogToGroup(group, cached);
+        if (_assetRefreshedThisSession.add(sysIdStr)) {
+          unawaited(_resolveCatalog(sysIdStr, group, refreshOnly: true));
+        }
       } else {
+        _assetRefreshedThisSession.add(sysIdStr);
         unawaited(_resolveCatalog(sysIdStr, group));
       }
     }
@@ -737,12 +747,36 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   /// waiting for the copy are decided here.
   void _onCatalogChanged() {
     if (!mounted) return;
-    if (!_drainAddOnPending(beep: _scanOn)) return;
+    final decided = _drainAddOnPending(beep: _scanOn);
+    // Rows already on screen follow bin changes made on the desktop or another
+    // handheld (decided tags stay decided, but their BIN text used to change
+    // only when another tag of the product was read).
+    final rebinned = _refreshAddOnBins();
+    if (!decided && !rebinned) return;
     // While scanning the 150 ms UI flush repaints; otherwise repaint now.
     if (!_scanOn) {
       setState(() {});
       _syncDisplayedCounters();
     }
+  }
+
+  /// Re-reads each Add-On Catalog row's bin from the catalog copy (via any
+  /// one of its EPCs). Returns true when a row changed.
+  bool _refreshAddOnBins() {
+    final catalog = _catalog;
+    if (!_isAddOnCatalog || catalog == null || !catalog.isReady) return false;
+    var changed = false;
+    for (final g in _groupedRows.values) {
+      if (g.epcs.isEmpty) continue;
+      final info = catalog.itemInfoForEpc(g.epcs.first, locationId: _binLocationId);
+      if (info == null) continue;
+      final bin = info.binDisplay;
+      if (bin != g.binLocation) {
+        g.binLocation = bin;
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   void _holdAutoRefresh() {
@@ -907,7 +941,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         final cached = _assetCache[sysId];
         if (cached != null) {
           _applyCatalogToGroup(group, cached);
+          if (_assetRefreshedThisSession.add(sysId)) {
+            unawaited(_resolveCatalog(sysId, group, refreshOnly: true));
+          }
         } else {
+          _assetRefreshedThisSession.add(sysId);
           unawaited(_resolveCatalog(sysId, group));
         }
       }
@@ -921,12 +959,16 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _syncDisplayedCounters();
   }
 
-  Future<void> _resolveCatalog(String sysIdStr, _GroupedRow group) async {
+  Future<void> _resolveCatalog(String sysIdStr, _GroupedRow group,
+      {bool refreshOnly = false}) async {
     if (!mounted) return;
     final api = context.read<WmsApiClient>();
     try {
       final row = await api.catalogLookupBySystemId(sysIdStr);
       if (!mounted) return;
+      // A background refresh of a saved row only updates it; it never moves
+      // already-shown tags to Defective.
+      if (row == null && refreshOnly) return;
       if (row == null) {
         // Confirmed catalog miss. Route this system_id's EPCs out of the
         // container list into the defective bucket — mirrors the desktop

@@ -13,7 +13,6 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/login_credentials_store.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
-import 'package:carbon_wms/services/mobile_settings_repository.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
@@ -220,8 +219,6 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final perms = context.read<MobilePermissions>();
-    final canSetAntennaPower =
-        perms.canDo(ScreenIds.handheldSettings, 'set_antenna_power');
     final canSetScannerSource =
         perms.canDo(ScreenIds.handheldSettings, 'set_scanner_source');
     final canToggleBiometric =
@@ -329,60 +326,9 @@ class _HandheldSettingsScreenState extends State<HandheldSettingsScreen> {
 
           SizedBox(height: 24.h),
 
-          // ── RFID ANTENNA POWER ───────────────────────────────────────────
-          _Label('RFID', mutedColor),
-          SizedBox(height: 8.h),
-          _Card(
-            color: cardColor,
-            child: Consumer2<MobileSettingsRepository, RfidManager>(
-              builder: (ctx, settings, rfid, _) {
-                final power = settings.config.transferOutAntennaPower;
-                final hwLinked = rfid.isHardwareLinked;
-                return Padding(
-                  padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 12.h),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Antenna Power',
-                            style: GoogleFonts.manrope(fontSize: 14.sp, fontWeight: FontWeight.w700,
-                              color: hwLinked ? mainColor : mutedColor)),
-                          Text(
-                            hwLinked ? '$power dBm' : 'N/A',
-                            style: GoogleFonts.spaceGrotesk(fontSize: 20.sp, fontWeight: FontWeight.w800,
-                              color: hwLinked ? AppColors.primary : mutedColor),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 4.h),
-                      if (hwLinked && canSetAntennaPower) ...[
-                        Slider(
-                          value: power.toDouble(),
-                          min: 0, max: 30, divisions: 30,
-                          activeColor: AppColors.primary,
-                          label: '$power dBm',
-                          onChanged: (v) => settings.setGlobalAntennaPower(v.round()),
-                        ),
-                        Text('Applies to transfer-in and transfer-out scans.',
-                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h)),
-                      ] else if (hwLinked) ...[
-                        Text('Antenna power is managed by an administrator.',
-                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h,
-                            fontStyle: FontStyle.italic)),
-                      ] else
-                        Text('No RFID hardware detected on this device.',
-                          style: TextStyle(color: mutedColor, fontSize: 12.sp, height: 1.4.h,
-                            fontStyle: FontStyle.italic)),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-
-          SizedBox(height: 24.h),
+          // RFID antenna power is set on each scanning screen (its own slider
+          // or setting) — the global slider here was removed (owner,
+          // 2026-10-16: "each screen has its own settings or its own slider").
 
           // ── BARCODE / DEVICE SCANNER ────────────────────────────────────
           _Label('Barcode / Scanner', mutedColor),

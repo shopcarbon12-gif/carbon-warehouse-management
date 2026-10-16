@@ -215,9 +215,13 @@ class _AssignOutcome {
     this.inThisBin = 0,
     this.inOtherCount = 0,
     this.firstOtherBin,
+    this.changes = const [],
   });
   final int updated;
   final _AssignOutcomeKind outcome;
+
+  /// Server's before → after per EPC — what an exact Undo replays.
+  final List<dynamic> changes;
   /// When [outcome] is `zeroUpdated`, these explain WHY no rows changed
   /// — surfaced in the snackbar so the operator can tell whether the
   /// items are already in this bin (correct no-op), still in other bins
@@ -234,7 +238,13 @@ class _AssignSnapshot {
     required this.skuAssigned,
     required this.itemName,
     this.matrixId,
+    this.changes = const [],
   });
+
+  /// Before → after per EPC from the server. Undo puts exactly these tags
+  /// back where they were (it used to remove the whole colour from the bin,
+  /// including stock that was there before, and left MOVEd tags with no bin).
+  final List<dynamic> changes;
 
   final String binCode;
   final String binId;
@@ -308,7 +318,15 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   String? _userEmail;
 
   List<_StoredItem> _storedContents = [];
-  List<_StoredItem> _undoSnapshot = [];
+
+  /// Server's before → after of the last Clean — replayed exactly by Undo
+  /// (Undo used to re-ADD the product: unassigned stock got binned too and
+  /// stock in other bins gained this bin as a second bin).
+  List<dynamic> _undoChanges = const [];
+
+  /// Re-reads the open bin's contents while the screen is idle, so a change
+  /// made on the desktop or another handheld shows up without re-scanning.
+  Timer? _contentsPoll;
   // Cached bin list, refreshed in _load() and after createBin. The previous
   // implementation hit `api.fetchBins()` on every scan, which is ~300–600 ms
   // on Samsung + RFD8500 and was the dominant source of the perceived lag
@@ -489,6 +507,38 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _loadUserEmail();
       _resetForNextEntry();
     });
+    // Live with the desktop and other handhelds: re-read the open bin's
+    // contents every 15 s while nothing is in progress, and the bin list every
+    // minute so deleted / renamed / new bins are known before the next scan.
+    _contentsPoll = Timer.periodic(const Duration(seconds: 15), (t) {
+      if (!mounted || _busy || !_binActive || _currentBinId.isEmpty) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      unawaited(_refreshContents().catchError((_) {}));
+      if (t.tick % 4 == 0) unawaited(_refreshBinsCache());
+    });
+  }
+
+  /// A scan opens the bin from the cached list at once; this re-reads the
+  /// list right after and backs out if the bin was deleted or renamed on the
+  /// desktop / another handheld meanwhile (every assign to it would miss).
+  Future<void> _verifyBinStillLive(String binId, String code) async {
+    try {
+      final api = context.read<WmsApiClient>();
+      final bins = (await api.fetchBins()).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      _binsCache = bins;
+      final still = bins.any((b) =>
+          b['id']?.toString() == binId &&
+          _normalizeBinForCompare(b['code']?.toString() ?? '') ==
+              _normalizeBinForCompare(code));
+      if (still || _currentBinId != binId) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            'Bin $code was deleted or renamed on another device. Scan the bin again.'),
+        duration: const Duration(seconds: 5),
+      ));
+      _resetForNextEntry();
+    } catch (_) {/* offline — the next scan re-checks */}
   }
 
   void _onManualModeReset() {
@@ -521,6 +571,8 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     BinAssignSession.resetVersion.removeListener(_onManualModeReset);
     _flashTimer?.cancel();
     _flashTimer = null;
+    _contentsPoll?.cancel();
+    _contentsPoll = null;
     _hardwareBarcodeSub?.cancel();
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     // RFD8500: restore the trigger to RFID mode so the next screen
@@ -729,10 +781,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       // Read once, before any await — the context is not safe to use after one.
       final api = context.read<WmsApiClient>();
       List<Map<String, dynamic>> bins = _binsCache;
+      var cachedHit = true;
       if (bins.isEmpty) {
         final live = await api.fetchBins();
         bins = live.cast<Map<String, dynamic>>();
         _binsCache = bins;
+        cachedHit = false;
       }
       Map<String, dynamic>? match;
       for (final b in bins) {
@@ -748,6 +802,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         final live = await api.fetchBins();
         bins = live.cast<Map<String, dynamic>>();
         _binsCache = bins;
+        cachedHit = false;
         for (final b in bins) {
           if (_normalizeBinForCompare(b['code']?.toString() ?? '') == want) {
             match = b;
@@ -758,7 +813,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       if (!mounted) return;
       if (match != null) {
         // Known bin — confirm (or swap, if a different bin was already active).
-        await _confirmBin(match['id']?.toString() ?? '', code);
+        final matchId = match['id']?.toString() ?? '';
+        await _confirmBin(matchId, code);
+        if (cachedHit) unawaited(_verifyBinStillLive(matchId, code));
       } else if (wasBinActive) {
         // Unknown bin code while another bin is active. Per spec answer
         // #11 we do NOT offer "create bin" here — that path requires the
@@ -935,11 +992,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     required String scope,
     String? matrixId,
     bool allowMoveOrAddPrompt = true,
+    String? forcedMode,
   }) async {
     final api = context.read<WmsApiClient>();
     final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
 
-    String mode = 'homeless_only';
+    String mode = forcedMode ?? 'homeless_only';
     // Preview state captured for the snackbar — when the assign returns
     // updated=0 we want the operator to see WHY (already in this bin /
     // still in other bins / picked ADD instead of MOVE). Pre-1.2.45 the
@@ -949,7 +1007,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     int previewInOtherCount = 0;
     String? previewFirstOtherBin;
 
-    if (allowMoveOrAddPrompt) {
+    if (allowMoveOrAddPrompt && forcedMode == null) {
       try {
         final preview = await api.previewPutawayAssign(
           deviceId: deviceId,
@@ -1026,6 +1084,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       matrixId: matrixId,
     );
     final updated = (res['updated'] as num?)?.toInt() ?? 0;
+    final changes = res['changes'];
     return _AssignOutcome(
       updated: updated,
       outcome: updated > 0
@@ -1034,6 +1093,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       inThisBin: previewInThisBin,
       inOtherCount: previewInOtherCount,
       firstOtherBin: previewFirstOtherBin,
+      changes: changes is List ? changes : const [],
     );
   }
 
@@ -1154,11 +1214,12 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final snapshot = List<_StoredItem>.from(_storedContents);
-      await context.read<WmsApiClient>().postCleanBinByCode(_currentBin);
+      final res =
+          await context.read<WmsApiClient>().postCleanBinByCode(_currentBin);
       if (!mounted) return;
+      final changes = res['changes'];
       setState(() {
-        _undoSnapshot = snapshot;
+        _undoChanges = changes is List ? changes : const [];
         _lastAssignSnapshot = null;
         _storedContents = [];
         _busy = false;
@@ -1214,13 +1275,18 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final snapshot = List<_StoredItem>.from(_storedContents);
       final deletedBin = _currentBin;
       final deletedBinId = _currentBinId;
-      await context.read<WmsApiClient>().deleteBin(_currentBinId);
+      final res = await context.read<WmsApiClient>().deleteBin(_currentBinId);
+      final rawChanges = res['changes'];
+      final deleteChanges = rawChanges is List ? rawChanges : const <dynamic>[];
+      // Drop the deleted bin from the cache now — a re-scan of its code must
+      // offer "create bin", not open an archived bin every assign misses.
+      _binsCache = _binsCache
+          .where((b) => b['id']?.toString() != deletedBinId)
+          .toList();
       if (!mounted) return;
       setState(() {
-        _undoSnapshot = snapshot;
         _lastAssignSnapshot = null;
         _busy = false;
       });
@@ -1234,7 +1300,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
             action: SnackBarAction(
               label: 'UNDO',
               onPressed: () => unawaited(
-                  _onUndoDeleteBin(deletedBin, deletedBinId, snapshot)),
+                  _onUndoDeleteBin(deletedBin, deletedBinId, deleteChanges)),
             ),
           ),
         );
@@ -1248,29 +1314,27 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   Future<void> _onUndoDeleteBin(
-      String binCode, String binId, List<_StoredItem> snapshot) async {
+      String binCode, String binId, List<dynamic> changes) async {
     setState(() => _busy = true);
     try {
       final api = context.read<WmsApiClient>();
-      // Re-create the bin
-      await api.createBin(binCode);
-      // Keep the cache fresh so the recreated bin is reachable through the
-      // fast lookup path immediately.
-      unawaited(_refreshBinsCache());
-      // Re-assign all items
-      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      for (final item in snapshot) {
-        await api.postPutawayAssign(
-          deviceId: deviceId,
-          binCode: binCode,
-          skuScanned: item.sku,
-          scope: 'single_color_all_sizes',
-          matrixId: item.matrixId,
-        );
-      }
+      // Exact undo: the server brings the deleted bin back (same bin) and puts
+      // every tag back where it was. It used to create a new bin and re-ADD
+      // each product, which also binned unassigned stock.
+      final res = await api.revertBinChanges(changes, restoreBinId: binId);
+      // The cache must hold the restored bin before re-confirming it.
+      await _refreshBinsCache();
       if (!mounted) return;
-      // Re-confirm the bin
       await _handleBinScan(binCode);
+      if (!mounted) return;
+      final skipped = (res['skipped'] as num?)?.toInt() ?? 0;
+      if (skipped > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Bin $binCode restored. $skipped tag${skipped == 1 ? '' : 's'} changed since and stayed where they are.'),
+          duration: const Duration(seconds: 4),
+        ));
+      }
       setState(() => _busy = false);
     } catch (e) {
       if (mounted) {
@@ -1282,25 +1346,24 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   }
 
   Future<void> _onUndoClean() async {
-    if (_undoSnapshot.isEmpty || _currentBin.isEmpty) return;
+    if (_undoChanges.isEmpty || _currentBin.isEmpty) return;
     setState(() => _busy = true);
     try {
       final api = context.read<WmsApiClient>();
-      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      for (final item in _undoSnapshot) {
-        await api.postPutawayAssign(
-          deviceId: deviceId,
-          binCode: _currentBin,
-          skuScanned: item.sku,
-          scope: 'single_color_all_sizes',
-          matrixId: item.matrixId,
-        );
-      }
+      final res = await api.revertBinChanges(_undoChanges);
       await _refreshContents();
       if (mounted) {
         setState(() {
-          _undoSnapshot = [];
+          _undoChanges = const [];
         });
+        final skipped = (res['skipped'] as num?)?.toInt() ?? 0;
+        if (skipped > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                '$skipped tag${skipped == 1 ? '' : 's'} changed since the clean and stayed where they are.'),
+            duration: const Duration(seconds: 4),
+          ));
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1321,7 +1384,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       _showUndoAssignFirst(assignSnap);
       return;
     }
-    if (_undoSnapshot.isNotEmpty) {
+    if (_undoChanges.isNotEmpty) {
       unawaited(_onUndoClean());
       return;
     }
@@ -1399,10 +1462,23 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
   Future<void> _executeUndoAssign(_AssignSnapshot snap) async {
     setState(() => _busy = true);
     try {
-      await context
-          .read<WmsApiClient>()
-          .removeSkuFromBin(snap.binCode, snap.skuAssigned,
-              matrixId: snap.matrixId);
+      final api = context.read<WmsApiClient>();
+      String message;
+      if (snap.changes.isNotEmpty) {
+        // Exact undo: every tag the assign touched goes back to the bins it
+        // had (a MOVEd tag returns to its old bin; stock already in this bin
+        // before the assign stays).
+        final res = await api.revertBinChanges(snap.changes);
+        final back = (res['reverted'] as num?)?.toInt() ?? 0;
+        final skipped = (res['skipped'] as num?)?.toInt() ?? 0;
+        message = 'Reversed: $back tag${back == 1 ? '' : 's'} back where they were'
+            '${skipped > 0 ? ' ($skipped changed since — left alone)' : ''}.';
+      } else {
+        await api.removeSkuFromBin(snap.binCode, snap.skuAssigned,
+            matrixId: snap.matrixId);
+        message = 'Reversed: ${snap.skuAssigned} removed from ${snap.binCode}.';
+      }
+      await _refreshContents();
       if (!mounted) return;
       setState(() {
         _lastAssignSnapshot = null;
@@ -1410,8 +1486,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-              'Reversed: ${snap.skuAssigned} removed from ${snap.binCode}.'),
+          content: Text(message),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -1462,10 +1537,34 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      await context
+      final res = await context
           .read<WmsApiClient>()
           .removeSkuFromBin(_currentBin, item.sku, matrixId: item.matrixId);
+      final raw = res['changes'];
+      final removed = raw is List ? raw : const <dynamic>[];
       await _refreshContents();
+      if (mounted && removed.isNotEmpty) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(
+            duration: const Duration(seconds: 4),
+            content: Text('${item.sku} removed from $_currentBin.'),
+            action: SnackBarAction(
+              label: 'UNDO',
+              onPressed: () => unawaited(() async {
+                try {
+                  await context.read<WmsApiClient>().revertBinChanges(removed);
+                  await _refreshContents();
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Undo failed: $e')));
+                  }
+                }
+              }()),
+            ),
+          ));
+      }
       if (mounted) _checkAutoEmptyRule(_storedContents);
     } catch (e) {
       if (mounted) {
@@ -1904,8 +2003,9 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
           skuAssigned: skuScanned,
           itemName: itemName,
           matrixId: matrixId,
+          changes: outcome.changes,
         );
-        _undoSnapshot = [];
+        _undoChanges = const [];
       });
       return true;
     } catch (e) {
@@ -1932,19 +2032,64 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
     final binCode = _currentBin;
     final binId = _currentBinId;
     try {
+      // Ask MOVE or ADD once for the whole batch when any picked colour has
+      // stock in another bin. The picker used to skip the question and always
+      // ADD, silently giving every unit of those colours in other bins this
+      // bin as a second bin.
+      final api = context.read<WmsApiClient>();
+      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+      final otherBins = <String, int>{};
+      int homeless = 0;
+      for (final sku in colourSkus) {
+        try {
+          final preview = await api.previewPutawayAssign(
+            deviceId: deviceId,
+            binCode: binCode,
+            skuScanned: sku,
+            scope: 'single_color_all_sizes',
+            matrixId: matrixId,
+          );
+          homeless += (preview['homeless'] as num?)?.toInt() ?? 0;
+          final raw = preview['inOtherBins'];
+          if (raw is List) {
+            for (final m in raw.whereType<Map>()) {
+              final code = m['binCode']?.toString() ?? '';
+              final qty = (m['qty'] as num?)?.toInt() ?? 0;
+              if (code.isNotEmpty && qty > 0) {
+                otherBins[code] = (otherBins[code] ?? 0) + qty;
+              }
+            }
+          }
+        } catch (_) {/* preview is advisory — the question is just skipped */}
+      }
+      if (!mounted) return false;
+      String mode = 'homeless_only';
+      if (otherBins.isNotEmpty) {
+        final choice = await _askMoveOrAddDialog(
+          inOtherBins: otherBins.entries
+              .map((e) => <String, dynamic>{'binCode': e.key, 'qty': e.value})
+              .toList(),
+          homeless: homeless,
+        );
+        if (!mounted || choice == null || choice == _MoveOrAddChoice.cancel) {
+          return false;
+        }
+        mode = choice == _MoveOrAddChoice.move ? 'all' : 'homeless_only';
+      }
+
       int totalUpdated = 0;
+      final allChanges = <dynamic>[];
       for (final sku in colourSkus) {
         // `sku` is the matrix+colour CODE prefix (e.g. 122224804) the picker
-        // resolved from the real custom SKU — NOT the colour name. Suppress the
-        // per-colour Move/Add prompt so the batch isn't 5 dialogs deep; runs
-        // homeless_only.
+        // resolved from the real custom SKU — NOT the colour name.
         final outcome = await _doAssign(
           skuScanned: sku,
           scope: 'single_color_all_sizes',
           matrixId: matrixId,
-          allowMoveOrAddPrompt: false,
+          forcedMode: mode,
         );
         totalUpdated += outcome.updated;
+        allChanges.addAll(outcome.changes);
       }
       await _refreshContents();
       if (!mounted) return false;
@@ -1957,17 +2102,19 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
         return false;
       }
       setState(() {
-        // Snapshot the final colour as the undoable assignment — operators
-        // generally remember the last action they took; also matches the
-        // single-undo behaviour the user signed off on (spec answer #9).
-        final lastSku = colourSkus.last;
+        // Undo reverses the whole batch exactly (every colour), not just the
+        // last colour.
         _lastAssignSnapshot = _AssignSnapshot(
           binCode: binCode,
           binId: binId,
-          skuAssigned: lastSku,
+          skuAssigned: colourSkus.length == 1
+              ? colourSkus.first
+              : '${colourSkus.length} colours',
           itemName: itemName,
+          matrixId: matrixId,
+          changes: allChanges,
         );
-        _undoSnapshot = [];
+        _undoChanges = const [];
       });
       return true;
     } catch (e) {

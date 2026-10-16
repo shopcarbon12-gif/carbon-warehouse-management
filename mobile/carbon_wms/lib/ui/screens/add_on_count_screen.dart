@@ -485,6 +485,11 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       final info = _catalogInfo(e.epc, e.systemId);
       return info == null ? null : _withInfo(e, info);
     });
+    // Lines already shown keep up with bin changes too ("" = no bin now).
+    _session.refreshBins((e) {
+      final info = _catalogInfo(e.epc, e.systemId);
+      return info == null ? null : (info.binDisplay ?? '');
+    });
   }
 
   // Local-first: decide new/duplicate/failed on-device and update the counter

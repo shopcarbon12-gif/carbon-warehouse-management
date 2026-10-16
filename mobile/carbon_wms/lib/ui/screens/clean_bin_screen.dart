@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
-import 'package:carbon_wms/services/handheld_device_identity.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
@@ -77,7 +76,15 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
   List<_CleanItem> _contents = [];
 
   bool _busy = false;
-  List<_CleanItem> _undoSkus = const [];
+
+  /// Server's before → after of the last clean, replayed exactly by Undo.
+  /// (Undo used to re-ADD each product: unassigned stock got binned too and
+  /// stock in other bins gained this bin as a second bin.)
+  List<dynamic> _undoChanges = const [];
+
+  /// Re-reads the open bin every 15 s so changes from the desktop or another
+  /// handheld show without re-scanning.
+  Timer? _contentsPoll;
   String? _status;
   bool _cleared = false;
 
@@ -101,10 +108,16 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
       } catch (_) {}
       if (mounted) _binFocus.requestFocus();
     });
+    _contentsPoll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted || _busy || !_binActive) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      unawaited(_loadContents());
+    });
   }
 
   @override
   void dispose() {
+    _contentsPoll?.cancel();
     unawaited(_barcodeSub?.cancel());
     _binCtrl.dispose();
     _binFocus.dispose();
@@ -139,18 +152,15 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
     });
     try {
       final api = context.read<WmsApiClient>();
+      // Always the live list: a bin deleted or renamed on the desktop must not
+      // open from a stale copy (cleaning it would miss), and a new bin must be
+      // found. Cleaning is rare enough that the round-trip doesn't matter.
       List<Map<String, dynamic>> bins = _binsCache;
-      if (bins.isEmpty) {
+      try {
         bins = (await api.fetchBins()).cast<Map<String, dynamic>>();
         _binsCache = bins;
-      }
-      Map<String, dynamic>? match = _matchBin(bins, want);
-      // Cache-miss → one live refresh before declaring unknown.
-      if (match == null) {
-        bins = (await api.fetchBins()).cast<Map<String, dynamic>>();
-        _binsCache = bins;
-        match = _matchBin(bins, want);
-      }
+      } catch (_) {/* offline — fall back to the last list */}
+      final Map<String, dynamic>? match = _matchBin(bins, want);
       if (!mounted) return;
       if (match == null) {
         setState(() {
@@ -166,7 +176,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
         _currentBinId = binId;
         _locationLine = loc;
         _binActive = true;
-        _undoSkus = const [];
+        _undoChanges = const [];
       });
       await _loadContents();
     } catch (e) {
@@ -237,12 +247,12 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final snapshot = List<_CleanItem>.from(_contents);
       final j = await context.read<WmsApiClient>().postCleanBinByCode(_currentBin);
       final cleared = j['cleared'];
+      final changes = j['changes'];
       if (!mounted) return;
       setState(() {
-        _undoSkus = snapshot;
+        _undoChanges = changes is List ? changes : const [];
         _contents = [];
         _cleared = true;
         _status = 'Cleared $cleared item(s) from $_currentBin.';
@@ -259,26 +269,19 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
   }
 
   Future<void> _undo() async {
-    if (_undoSkus.isEmpty || _currentBin.isEmpty || _busy) return;
+    if (_undoChanges.isEmpty || _currentBin.isEmpty || _busy) return;
     setState(() => _busy = true);
     try {
-      final api = context.read<WmsApiClient>();
-      final deviceId = await HandheldDeviceIdentity.primaryDeviceIdForServer();
-      for (final item in _undoSkus) {
-        await api.postPutawayAssign(
-          deviceId: deviceId,
-          binCode: _currentBin,
-          skuScanned: item.sku,
-          scope: 'single_color_all_sizes',
-          matrixId: item.matrixId,
-        );
-      }
+      final res =
+          await context.read<WmsApiClient>().revertBinChanges(_undoChanges);
       await _loadContents();
       if (!mounted) return;
+      final skipped = (res['skipped'] as num?)?.toInt() ?? 0;
       setState(() {
-        _undoSkus = const [];
+        _undoChanges = const [];
         _cleared = false;
-        _status = 'Undo — items restored to $_currentBin.';
+        _status = 'Undo — items restored to $_currentBin.'
+            '${skipped > 0 ? ' $skipped changed since the clean and stayed where they are.' : ''}';
       });
     } catch (e) {
       if (mounted) setState(() => _status = 'Undo failed: $e');
@@ -300,7 +303,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
       _locationLine = '';
       _binActive = false;
       _contents = [];
-      _undoSkus = const [];
+      _undoChanges = const [];
       _cleared = false;
       _status = null;
     });
@@ -498,7 +501,7 @@ class _CleanBinScreenState extends State<CleanBinScreen> {
 
   Widget _cleanBar(bool armed) {
     final bg = armed ? _kRed : _kSlate;
-    final canUndo = _undoSkus.isNotEmpty;
+    final canUndo = _undoChanges.isNotEmpty;
     return Container(
       margin: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 0),
       color: bg,

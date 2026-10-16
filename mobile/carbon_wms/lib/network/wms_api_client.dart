@@ -762,7 +762,21 @@ class WmsApiClient {
     if (t != null && t.isNotEmpty) {
       h['Authorization'] = 'Bearer $t';
     }
+    // Names this handheld on every call, so the server's history (bin moves,
+    // cleans, status changes) and the activity log show WHICH handheld did it.
+    final device = await _deviceIdForHeaders();
+    if (device.isNotEmpty) h['x-wms-device-id'] = device;
     return h;
+  }
+
+  static String? _cachedDeviceId;
+  static Future<String> _deviceIdForHeaders() async {
+    final cached = _cachedDeviceId;
+    if (cached != null) return cached;
+    final id = await HandheldDeviceIdentity.primaryDeviceIdForServer();
+    final v = id == 'HANDHELD_OFFLINE' ? '' : id;
+    _cachedDeviceId = v;
+    return v;
   }
 
   /// Active locations for the signed-in user (`GET /api/locations`) — returns
@@ -1667,7 +1681,10 @@ class WmsApiClient {
   /// `DELETE /api/locations/bins/:binCode/sku/:sku` — removes a SKU assignment
   /// from a bin. `matrixId` keeps it to one product: a SKU prefix can belong to
   /// two products that share a UPC, and without it both get evicted.
-  Future<void> removeSkuFromBin(String binCode, String sku,
+  ///
+  /// Returns the server's `{ removed, binId, changes }`; `changes` (before →
+  /// after per EPC) is what [revertBinChanges] replays for an exact Undo.
+  Future<Map<String, dynamic>> removeSkuFromBin(String binCode, String sku,
       {String? matrixId}) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final encodedBin = Uri.encodeComponent(binCode.trim());
@@ -1680,6 +1697,35 @@ class WmsApiClient {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// `POST /api/locations/bins/revert` — exact Undo of a bin change. `changes`
+  /// is the list an assign / clean / remove / delete response returned; every
+  /// tag goes back to its `before` bins unless it changed since (counted in
+  /// `skipped`). `restoreBinId` brings a deleted bin back first.
+  Future<Map<String, dynamic>> revertBinChanges(List<dynamic> changes,
+      {String? restoreBinId}) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base/api/locations/bins/revert');
+    final res = await _http.post(
+      uri,
+      headers: {
+        ...await sessionAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'changes': changes,
+        if (restoreBinId != null && restoreBinId.isNotEmpty)
+          'restoreBinId': restoreBinId,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>?> fetchItemDetailByEpc(String epc) async {
@@ -2171,13 +2217,17 @@ class WmsApiClient {
   }
 
   /// `DELETE /api/locations/bins/:id` — archives/deletes a bin completely.
-  Future<void> deleteBin(String binId) async {
+  /// Returns `{ orphaned, binId, changes }` — `changes` + `binId` are what an
+  /// Undo sends to [revertBinChanges].
+  Future<Map<String, dynamic>> deleteBin(String binId) async {
     final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$base/api/locations/bins/$binId');
     final res = await _http.delete(uri, headers: await sessionAuthHeaders());
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw WmsApiException(res.statusCode, res.body);
     }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
   }
 
   // ── Re-encode module (Search and Encode) ────────────────────────────────
