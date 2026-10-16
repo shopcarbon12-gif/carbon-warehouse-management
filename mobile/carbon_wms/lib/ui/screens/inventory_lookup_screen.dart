@@ -457,6 +457,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
         // EPC for this SKU (`bin_location`). Show it so barcode mode surfaces
         // the same CURRENT BIN block RFID mode does.
         var bin = map['bin_location']?.toString().trim() ?? '';
+        var zone = '';
         if (isEpc) {
           try {
             final detail = await api.fetchItemDetailByEpc(cleaned);
@@ -464,8 +465,16 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             if (item is Map<String, dynamic>) {
               final bc = item['bin_code']?.toString().trim();
               // A single-chip scan pinpoints ONE bin — let it override the
-              // SKU-wide summary.
-              if (bc != null && bc.isNotEmpty) bin = bc;
+              // SKU-wide summary. Extra (multi-bin) bins are listed too.
+              if (bc != null && bc.isNotEmpty) {
+                final extra = item['extra_bin_codes'];
+                final extras = extra is List
+                    ? extra.map((e) => e.toString()).where((e) => e.isNotEmpty).toList()
+                    : const <String>[];
+                bin = extras.isEmpty ? bc : '$bc (+ ${extras.join(', ')})';
+              }
+              // Assigned zone (Zone Management), e.g. "Store".
+              zone = item['zone_name']?.toString().trim() ?? '';
             }
           } catch (_) {/* optional enrichment */}
         }
@@ -491,6 +500,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             // shows; empty when the SKU has no synced picture.
             imageUrl: map['shopify_image_url']?.toString().trim() ?? '',
             bin: bin,
+            zone: zone,
             matrixId: map['matrix_id']?.toString().trim() ?? '',
             epcHint: prof != null ? _epcProfileHint(prof) : null,
           );
@@ -1100,6 +1110,27 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                     color: _muted),
               ),
             ),
+          if (r.zone.isNotEmpty) ...[
+            SizedBox(height: 10.h),
+            Text(
+              'ZONE',
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: _muted,
+              ),
+            ),
+            SizedBox(height: 2.h),
+            Text(
+              r.zone,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.robotoMono(
+                  fontSize: 24.sp,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF7C3AED)),
+            ),
+          ],
           SizedBox(height: 14.h),
           SizedBox(
             height: 56.h,
@@ -1505,6 +1536,7 @@ class _LookupRow {
     required this.sku,
     required this.name,
     required this.bin,
+    this.zone = '',
     this.upc = '',
     this.vendor = '',
     this.color = '',
@@ -1521,6 +1553,9 @@ class _LookupRow {
   final String sku;
   final String name;
   final String bin;
+
+  /// Assigned zone of the scanned chip (Zone Management); '' = none.
+  final String zone;
   final String upc;
   final String vendor;
   final String color;

@@ -47,18 +47,23 @@ class ItemStatusBinLine extends StatelessWidget {
     super.key,
     required this.status,
     required this.bin,
+    this.zone,
     this.showStatus = true,
   });
 
   final String? status;
   final String? bin;
+
+  /// Assigned zone (Zone Management), e.g. "Store"; null = none.
+  final String? zone;
   final bool showStatus;
 
   @override
   Widget build(BuildContext context) {
     final binCode = (bin ?? '').trim();
     final hasBin = binCode.isNotEmpty && binCode != '—';
-    if (!showStatus && !hasBin) return const SizedBox.shrink();
+    final zoneName = (zone ?? '').trim();
+    if (!showStatus && !hasBin && zoneName.isEmpty) return const SizedBox.shrink();
     return Wrap(
       spacing: 8.w,
       runSpacing: 4.h,
@@ -86,6 +91,16 @@ class ItemStatusBinLine extends StatelessWidget {
               fontSize: 13.sp,
               fontWeight: FontWeight.w800,
               color: AppColors.primary,
+              height: 1.2,
+            ),
+          ),
+        if (zoneName.isNotEmpty)
+          Text(
+            'ZONE ${zoneName.toUpperCase()}',
+            style: GoogleFonts.robotoMono(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF7C3AED),
               height: 1.2,
             ),
           ),

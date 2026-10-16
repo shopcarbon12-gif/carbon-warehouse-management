@@ -65,6 +65,7 @@ class _Target {
     this.size,
     this.status,
     this.bin,
+    this.zone,
     this.resolved = false,
   });
 
@@ -79,6 +80,9 @@ class _Target {
 
   /// The tag's assigned bin code, null when it has none.
   final String? bin;
+
+  /// Assigned zone (Zone Management), null when none.
+  final String? zone;
 
   /// The server answered for this EPC (catalog list or lookup).
   final bool resolved;
@@ -99,6 +103,7 @@ class _Target {
         size: _s(e['size']) ?? _s(skuRow['size']),
         status: _s(e['status']),
         bin: _s(e['bin_code']),
+        zone: _s(e['zone_name']),
         resolved: true,
       );
 
@@ -112,6 +117,7 @@ class _Target {
         size: _s(r['size']) ?? size,
         status: _s(r['status']),
         bin: _s(r['bin']),
+        zone: _s(r['zone']),
         resolved: true,
       );
 
@@ -123,6 +129,7 @@ class _Target {
         'size': size,
         'status': status,
         'bin': bin,
+        'zone': zone,
         'resolved': resolved,
       };
 
@@ -134,6 +141,7 @@ class _Target {
         size: _s(j['size']),
         status: _s(j['status']),
         bin: _s(j['bin']),
+        zone: _s(j['zone']),
         resolved: j['resolved'] == true || _s(j['status']) != null,
       );
 }
@@ -976,7 +984,7 @@ class _TargetTile extends StatelessWidget {
                     if (t.resolved || (t.bin ?? '').isNotEmpty)
                       Padding(
                         padding: EdgeInsets.only(top: 3.h),
-                        child: ItemStatusBinLine(status: t.status, bin: t.bin, showStatus: t.resolved),
+                        child: ItemStatusBinLine(status: t.status, bin: t.bin, zone: t.zone, showStatus: t.resolved),
                       ),
                     if (found)
                       Text(

@@ -12,6 +12,7 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/screens/fast_putaway_screen.dart';
 import 'package:carbon_wms/ui/screens/clean_bin_screen.dart';
 import 'package:carbon_wms/ui/screens/item_bin_lookup_screen.dart';
+import 'package:carbon_wms/ui/screens/zone_management_screen.dart';
 // Encode & print
 import 'package:carbon_wms/ui/screens/encode_screen.dart';
 import 'package:carbon_wms/ui/screens/encode_and_print_screen.dart';
@@ -138,6 +139,13 @@ class CategoryHubScreen extends StatelessWidget {
             description: "Empty a bin's assignments",
             icon: Icons.cleaning_services_outlined,
             builder: (_) => const CleanBinScreen(),
+          ),
+          CategoryHubTile(
+            screenId: ScreenIds.zoneManagement,
+            label: 'Zone Management',
+            description: 'Scan tags into a zone, e.g. Store — bins stay',
+            icon: Icons.place_outlined,
+            builder: (_) => const ZoneManagementScreen(),
           ),
         ],
       );

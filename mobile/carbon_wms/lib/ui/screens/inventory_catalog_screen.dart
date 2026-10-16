@@ -1107,7 +1107,9 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                                       if (status.isNotEmpty) ...[
                                         SizedBox(height: 4.h),
                                         ItemStatusBinLine(
-                                            status: status, bin: null),
+                                            status: status,
+                                            bin: null,
+                                            zone: e['zone_name']?.toString()),
                                       ],
                                     ],
                                   ),

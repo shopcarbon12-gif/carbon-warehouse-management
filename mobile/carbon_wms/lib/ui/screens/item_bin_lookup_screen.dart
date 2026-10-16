@@ -176,6 +176,8 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
 
       // bin code → variant-key → running variant tally. '' bin = unbinned.
       final byBin = <String, Map<String, _VariantQty>>{};
+      // Assigned zone (Zone Management) → units in it.
+      final byZone = <String, int>{};
       var total = 0;
       for (final list in lists) {
         for (final e in list) {
@@ -199,6 +201,8 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
               ...extras.map((x) => x.toString().trim()).where((x) => x.isNotEmpty),
           };
           if (primary.isEmpty && bins.length > 1) bins.remove('');
+          final zone = e['zone_name']?.toString().trim() ?? '';
+          if (zone.isNotEmpty) byZone[zone] = (byZone[zone] ?? 0) + 1;
           final color = e['color']?.toString().trim() ?? '';
           final size = e['size']?.toString().trim() ?? '';
           final vSku = e['sku']?.toString().trim() ?? '';
@@ -258,6 +262,9 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
           bins: binGroups,
           unbinned: unbinned,
           total: total,
+          zones: (byZone.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+              .map((e) => '${e.key} ${e.value}')
+              .toList(),
         );
         _busy = false;
       });
@@ -510,6 +517,17 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
               else
                 for (final b in r.bins) _binGroup(b),
               if (r.unbinned != null) _binGroup(r.unbinned!, unbinned: true),
+              if (r.zones.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(14.w, 10.h, 14.w, 16.h),
+                  child: Text(
+                    'IN ZONES: ${r.zones.join(' · ')}',
+                    style: GoogleFonts.robotoMono(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF7C3AED)),
+                  ),
+                ),
             ],
           ),
         ),
@@ -723,6 +741,7 @@ class _BinResult {
     required this.bins,
     required this.unbinned,
     required this.total,
+    this.zones = const [],
   });
   final String code;
   final String sku;
@@ -731,6 +750,9 @@ class _BinResult {
   final List<_BinGroup> bins;
   final _BinGroup? unbinned;
   final int total;
+
+  /// "Store 2" per assigned zone (Zone Management) holding units.
+  final List<String> zones;
 }
 
 class _BinGroup {

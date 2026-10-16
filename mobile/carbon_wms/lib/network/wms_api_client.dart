@@ -1701,6 +1701,71 @@ class WmsApiClient {
     return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
   }
 
+  // ── Zone Management (assigned zones — per tag, never touches bins) ──────
+
+  Future<Map<String, dynamic>> _zoneCall(String method, String path,
+      [Object? body]) async {
+    final base = (await resolveBaseUrl()).replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$base$path');
+    final headers = {
+      ...await sessionAuthHeaders(),
+      'Content-Type': 'application/json',
+    };
+    final http.Response res;
+    switch (method) {
+      case 'GET':
+        res = await _http.get(uri, headers: headers);
+      default:
+        res = await _http.post(uri,
+            headers: headers, body: body == null ? null : jsonEncode(body));
+    }
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw WmsApiException(res.statusCode, res.body);
+    }
+    final decoded = jsonDecode(res.body);
+    return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+  }
+
+  /// `{ zones: [{id, name, count}], canManage }` at the session location.
+  Future<Map<String, dynamic>> fetchAssignedZones() =>
+      _zoneCall('GET', '/api/assigned-zones');
+
+  /// `{ zone: {id, name} }`.
+  Future<Map<String, dynamic>> createAssignedZone(String name) =>
+      _zoneCall('POST', '/api/assigned-zones', {'name': name});
+
+  /// Per tag: `{ epc, ok, reason, reasonText, details }` — ok = LIVE here and
+  /// can be assigned; otherwise why not, with everything known about the tag.
+  Future<List<Map<String, dynamic>>> checkZoneEpcs(List<String> epcs) async {
+    final j = await _zoneCall('POST', '/api/assigned-zones/check', {'epcs': epcs});
+    final rows = j['rows'];
+    return rows is List
+        ? rows.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+        : <Map<String, dynamic>>[];
+  }
+
+  /// `{ assigned, moved, alreadyInZone, skipped: [...], zone }`.
+  Future<Map<String, dynamic>> assignEpcsToZone(
+          String zoneId, List<String> epcs) =>
+      _zoneCall('POST', '/api/assigned-zones/$zoneId/assign', {'epcs': epcs});
+
+  /// `{ removed, notInZone }`. `zoneId` limits it to tags in that zone.
+  Future<Map<String, dynamic>> removeEpcsFromZone(List<String> epcs,
+          {String? zoneId}) =>
+      _zoneCall('POST', '/api/assigned-zones/remove', {
+        'epcs': epcs,
+        if (zoneId != null) 'zoneId': zoneId,
+      });
+
+  /// The LIVE tags in a zone (details + assignedBy).
+  Future<List<Map<String, dynamic>>> fetchZoneEpcs(String zoneId) async {
+    final j = await _zoneCall('GET', '/api/assigned-zones/$zoneId/epcs');
+    final rows = j['rows'];
+    return rows is List
+        ? rows.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+        : <Map<String, dynamic>>[];
+  }
+
   /// `POST /api/locations/bins/revert` — exact Undo of a bin change. `changes`
   /// is the list an assign / clean / remove / delete response returned; every
   /// tag goes back to its `before` bins unless it changed since (counted in

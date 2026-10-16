@@ -982,6 +982,7 @@ class _GeigerItem {
     this.resolved = false,
     this.status,
     this.bin,
+    this.zone,
   });
 
   factory _GeigerItem.bare(String epc) {
@@ -1006,6 +1007,9 @@ class _GeigerItem {
   /// The tag's assigned bin code, null when it has none.
   final String? bin;
 
+  /// Assigned zone (Zone Management), null when none.
+  final String? zone;
+
   _GeigerItem withResolved(Map<String, dynamic> row) {
     String? s(String k) {
       final v = row[k];
@@ -1024,6 +1028,7 @@ class _GeigerItem {
       resolved: true,
       status: s('status'),
       bin: s('bin'),
+      zone: s('zone'),
     );
   }
 }
@@ -1159,7 +1164,7 @@ class _GeigerItemContainerState extends State<_GeigerItemContainer> {
                       ),
                       if (item.resolved) ...[
                         const SizedBox(height: 6),
-                        ItemStatusBinLine(status: item.status, bin: item.bin),
+                        ItemStatusBinLine(status: item.status, bin: item.bin, zone: item.zone),
                       ],
                       if (_expanded) ...[
                         const SizedBox(height: 8),

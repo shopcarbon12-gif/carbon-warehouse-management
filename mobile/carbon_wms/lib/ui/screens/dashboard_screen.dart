@@ -811,7 +811,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     if (perms.canView(ScreenIds.fastPutaway) ||
                         perms.canView(ScreenIds.cleanBin) ||
-                        perms.canView(ScreenIds.itemBinLookup))
+                        perms.canView(ScreenIds.itemBinLookup) ||
+                        perms.canView(ScreenIds.zoneManagement))
                       _HeroTile(
                         icon: Icons.qr_code_scanner,
                         label: 'Bin Management',
