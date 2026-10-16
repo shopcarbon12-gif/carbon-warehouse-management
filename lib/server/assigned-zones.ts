@@ -387,10 +387,20 @@ export async function checkEpcsForZone(
   });
 }
 
+/** One line of a zone report — every tag of the scan and what happened to it. */
+export type ZoneReportLine = {
+  epc: string;
+  result: "assigned" | "moved" | "already in zone" | "removed" | "not in this zone" | "skipped";
+  reason: string | null;
+  details: ZoneTagDetails;
+  zoneAfter: string | null;
+};
+
 /**
  * Assigns the LIVE tags of this location among `epcs` to the zone (moving
- * them from another zone if they had one). Returns the counts and the
- * skipped rows with reasons + details. Must run inside a transaction.
+ * them from another zone if they had one). `epcs` is the whole scan: tags
+ * that can't be assigned come back as skipped lines with the reason and all
+ * their details, so the zone report keeps them. Must run inside a transaction.
  */
 export async function assignEpcsToZone(
   pool: Pool,
@@ -400,57 +410,81 @@ export async function assignEpcsToZone(
   zoneId: string,
   epcs: string[],
   actor: BinActor,
-): Promise<{ assigned: number; moved: number; alreadyInZone: number; skipped: ZoneCheckRow[]; zone: string }> {
+): Promise<{
+  assigned: number;
+  moved: number;
+  alreadyInZone: number;
+  skipped: ZoneCheckRow[];
+  zone: string;
+  lines: ZoneReportLine[];
+}> {
   const z = await zoneAt(client, tenantId, locationId, zoneId);
   if (!z) throw new Error("BAD_REQUEST:Zone not found");
   const checked = await checkEpcsForZone(pool, tenantId, locationId, epcs);
   const ok = checked.filter((c) => c.ok);
   const skipped = checked.filter((c) => !c.ok);
-  const already = ok.filter((c) => c.details.zoneId === zoneId).map((c) => c.epc);
   const todo = ok.filter((c) => c.details.zoneId !== zoneId);
-  if (todo.length === 0) return { assigned: 0, moved: 0, alreadyInZone: already.length, skipped, zone: z.name };
-  const up = await client.query<{ epc: string; old_zone: string | null }>(
-    `WITH prev AS (
-       SELECT i.id, i.epc, oz.name AS old_zone
-         FROM items i
-         LEFT JOIN assigned_zones oz ON oz.id = i.assigned_zone_id
-        WHERE i.epc = ANY($1::text[]) AND i.location_id = $2::uuid AND i.status = 'in-stock'
-          AND i.assigned_zone_id IS DISTINCT FROM $3::uuid
-        FOR UPDATE OF i
-     )
-     UPDATE items i
-        SET assigned_zone_id = $3::uuid, zone_assigned_at = now(), zone_assigned_by = $4::uuid
-       FROM prev
-      WHERE i.id = prev.id
-      RETURNING i.epc, prev.old_zone`,
-    [todo.map((c) => c.epc), locationId, zoneId, actor.userId],
-  );
+  const up = todo.length
+    ? await client.query<{ epc: string; old_zone: string | null }>(
+        `WITH prev AS (
+           SELECT i.id, i.epc, oz.name AS old_zone
+             FROM items i
+             LEFT JOIN assigned_zones oz ON oz.id = i.assigned_zone_id
+            WHERE i.epc = ANY($1::text[]) AND i.location_id = $2::uuid AND i.status = 'in-stock'
+              AND i.assigned_zone_id IS DISTINCT FROM $3::uuid
+            FOR UPDATE OF i
+         )
+         UPDATE items i
+            SET assigned_zone_id = $3::uuid, zone_assigned_at = now(), zone_assigned_by = $4::uuid
+           FROM prev
+          WHERE i.id = prev.id
+          RETURNING i.epc, prev.old_zone`,
+        [todo.map((c) => c.epc), locationId, zoneId, actor.userId],
+      )
+    : { rows: [] as { epc: string; old_zone: string | null }[] };
   await auditZone(
     client,
     tenantId,
     up.rows.map((r) => ({ epc: r.epc, old: r.old_zone ?? "(none)", new: z.name, reason: "zone_assign" })),
     actor,
   );
+  const done = new Map(up.rows.map((r) => [r.epc.toUpperCase(), r.old_zone]));
+  const lines: ZoneReportLine[] = checked.map((c) => {
+    if (!c.ok) return { epc: c.epc, result: "skipped", reason: c.reasonText, details: c.details, zoneAfter: c.details.zone };
+    if (c.details.zoneId === zoneId) return { epc: c.epc, result: "already in zone", reason: null, details: c.details, zoneAfter: z.name };
+    if (done.has(c.epc)) {
+      const old = done.get(c.epc);
+      return { epc: c.epc, result: old ? "moved" : "assigned", reason: old ? `from ${old}` : null, details: c.details, zoneAfter: z.name };
+    }
+    return { epc: c.epc, result: "skipped", reason: "Changed while assigning — scan it again", details: c.details, zoneAfter: c.details.zone };
+  });
   return {
     assigned: up.rows.filter((r) => !r.old_zone).length,
     moved: up.rows.filter((r) => !!r.old_zone).length,
-    alreadyInZone: already.length,
+    alreadyInZone: lines.filter((l) => l.result === "already in zone").length,
     skipped,
     zone: z.name,
+    lines,
   };
 }
 
-/** Takes the zone off the listed tags (whatever zone they're in, at this location). */
+/**
+ * Takes the zone off the listed tags (only those in `onlyZoneId` when given).
+ * Every listed tag gets a report line: removed / not in this zone / skipped
+ * with the reason.
+ */
 export async function removeEpcsFromZone(
+  pool: Pool,
   client: PoolClient,
   tenantId: string,
   locationId: string,
   epcs: string[],
   actor: BinActor,
   onlyZoneId?: string | null,
-): Promise<{ removed: number; notInZone: number }> {
+): Promise<{ removed: number; notInZone: number; lines: ZoneReportLine[] }> {
   const list = [...new Set(epcs.map(normEpc).filter(Boolean))];
-  if (list.length === 0) return { removed: 0, notInZone: 0 };
+  if (list.length === 0) return { removed: 0, notInZone: 0, lines: [] };
+  const checked = await checkEpcsForZone(pool, tenantId, locationId, list);
   const up = await client.query<{ epc: string; old_zone: string }>(
     `WITH prev AS (
        SELECT i.id, oz.name AS old_zone
@@ -468,7 +502,76 @@ export async function removeEpcsFromZone(
     [list, locationId, onlyZoneId ?? null],
   );
   await auditZone(client, tenantId, up.rows.map((r) => ({ epc: r.epc, old: r.old_zone, new: null, reason: "zone_remove" })), actor);
-  return { removed: up.rowCount ?? 0, notInZone: list.length - (up.rowCount ?? 0) };
+  const removed = new Set(up.rows.map((r) => r.epc.toUpperCase()));
+  const lines: ZoneReportLine[] = checked.map((c) => {
+    if (removed.has(c.epc)) return { epc: c.epc, result: "removed", reason: null, details: c.details, zoneAfter: null };
+    if (!c.details.status && !c.ok) return { epc: c.epc, result: "skipped", reason: c.reasonText, details: c.details, zoneAfter: null };
+    return {
+      epc: c.epc,
+      result: "not in this zone",
+      reason: c.details.zone ? `in ${c.details.zone}` : (c.reasonText ?? "in no zone"),
+      details: c.details,
+      zoneAfter: c.details.zone,
+    };
+  });
+  return { removed: up.rowCount ?? 0, notInZone: list.length - (up.rowCount ?? 0), lines };
+}
+
+const ET = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
+
+const ZONE_REPORT_HEADER = [
+  "EPC", "Result", "Reason", "Product", "Color", "Size", "SKU", "Price", "Status", "Bin", "Extra bins",
+  "Location", "Zone before", "Zone after", "Last seen (ET)", "Reader zone last heard", "First seen (ET)", "Serial", "Source",
+];
+
+function csvCell(v: string | number | null | undefined): string {
+  const s = v == null ? "" : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * Saves a zone assign / remove as a report: Reports → Device Upload Logs on
+ * the desktop and Reports → Zones on the handheld. One CSV line per tag of
+ * the scan, couldn't-assign tags included. Mode reads e.g.
+ * "Zone assign · STORE · 1548 done · 12 not". Returns the report id.
+ */
+export async function writeZoneReport(
+  client: PoolClient,
+  tenantId: string,
+  deviceId: string | null,
+  kind: "assign" | "remove",
+  zoneName: string,
+  lines: ZoneReportLine[],
+): Promise<number | null> {
+  if (lines.length === 0) return null;
+  const done = lines.filter((l) => l.result === "assigned" || l.result === "moved" || l.result === "removed").length;
+  const notDone = lines.filter((l) => l.result === "skipped" || l.result === "not in this zone").length;
+  const mode = `Zone ${kind} · ${zoneName} · ${done} done · ${notDone} not`;
+  const rows = lines.map((l) => {
+    const d = l.details;
+    return [
+      l.epc, l.result, l.reason, d.product, d.color, d.size, d.sku, d.retailPrice, d.statusLabel ?? "Not in WMS",
+      d.bin, d.extraBins.join(" "), d.location, d.zone, l.zoneAfter, ET(d.lastSeenAt), d.lastSeenReaderZone,
+      ET(d.firstSeenAt), d.serial, d.source,
+    ].map(csvCell).join(",");
+  });
+  const csv = [ZONE_REPORT_HEADER.join(","), ...rows].join("\n") + "\n";
+  const r = await client.query<{ id: string }>(
+    `INSERT INTO device_upload_logs (tenant_id, device_id, workflow_mode, raw_csv)
+     VALUES ($1::uuid, $2, $3, $4) RETURNING id::text`,
+    [tenantId, (deviceId ?? "web").slice(0, 200), mode, csv],
+  );
+  return r.rows[0] ? Number(r.rows[0].id) : null;
 }
 
 export type ZoneEpcRow = ZoneTagDetails & { assignedBy: string | null };

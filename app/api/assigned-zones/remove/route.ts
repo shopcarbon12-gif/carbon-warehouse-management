@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { binActorFrom } from "@/lib/server/bin-engine";
-import { canChangeZones, removeEpcsFromZone } from "@/lib/server/assigned-zones";
+import { canChangeZones, removeEpcsFromZone, writeZoneReport } from "@/lib/server/assigned-zones";
 import { zoneError } from "@/lib/server/zone-http";
 
 export const runtime = "nodejs";
@@ -31,16 +31,24 @@ async function POST_handler(req: Request) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const actor = binActorFrom(req, session, parsed.data.deviceId);
     const r = await removeEpcsFromZone(
+      pool,
       client,
       session.tid,
       session.lid,
       parsed.data.epcs,
-      binActorFrom(req, session, parsed.data.deviceId),
+      actor,
       parsed.data.zoneId ?? null,
     );
+    let zoneName = "any zone";
+    if (parsed.data.zoneId) {
+      const z = await client.query<{ name: string }>(`SELECT name FROM assigned_zones WHERE id = $1::uuid`, [parsed.data.zoneId]);
+      zoneName = z.rows[0]?.name ?? zoneName;
+    }
+    const reportId = await writeZoneReport(client, session.tid, actor.deviceId, "remove", zoneName, r.lines);
     await client.query("COMMIT");
-    return NextResponse.json({ ok: true, ...r });
+    return NextResponse.json({ ok: true, removed: r.removed, notInZone: r.notInZone, reportId });
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     return zoneError(e, "assigned-zones remove");

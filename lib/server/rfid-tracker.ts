@@ -60,6 +60,9 @@ export async function getTrackerItemByEpc(
     bin_code: string | null;
     extra_bin_codes: string[] | null;
     zone_name: string | null;
+    color: string | null;
+    size: string | null;
+    retail_price: string | null;
     zone_assigned_at: Date | null;
     last_seen_at: Date | null;
     last_seen_reader_zone: string | null;
@@ -96,6 +99,9 @@ export async function getTrackerItemByEpc(
                JOIN bins xb ON xb.id = x.id AND xb.archived_at IS NULL
               WHERE x.id IS DISTINCT FROM i.bin_id ORDER BY xb.code) AS extra_bin_codes,
        az.name AS zone_name,
+       cs.color_code AS color,
+       cs.size,
+       cs.retail_price::text AS retail_price,
        i.zone_assigned_at,
        i.last_seen_at,
        rz.name AS last_seen_reader_zone
@@ -145,6 +151,9 @@ export async function getTrackerItemByEpc(
     bin_code: row.bin_code,
     extra_bin_codes: row.extra_bin_codes ?? [],
     zone_name: row.zone_name,
+    color: row.color,
+    size: row.size,
+    retail_price: row.retail_price,
     zone_assigned_at: row.zone_assigned_at ? row.zone_assigned_at.toISOString() : null,
     last_seen_at: row.last_seen_at ? row.last_seen_at.toISOString() : null,
     last_seen_reader_zone: row.last_seen_reader_zone,

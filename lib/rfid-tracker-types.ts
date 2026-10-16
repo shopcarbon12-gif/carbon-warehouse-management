@@ -41,6 +41,9 @@ export type TrackerItemDetail = {
   extra_bin_codes?: string[];
   /** Assigned zone (Zone Management) — null when none. */
   zone_name?: string | null;
+  color?: string | null;
+  size?: string | null;
+  retail_price?: string | null;
   zone_assigned_at?: string | null;
   last_seen_at?: string | null;
   /** Reader zone where a fixed reader last heard the tag (automatic). */
