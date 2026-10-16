@@ -57,6 +57,8 @@ type BinEpcRow = {
   sku: string;
   upc: string | null;
   description: string;
+  /** Assigned zone (Zone Management). */
+  zone?: string | null;
 };
 
 type BinContentLine = {
@@ -759,6 +761,7 @@ export function LocationsManager({
                         <th className="px-3 py-2 text-xs max-md:hidden">Description</th>
                         <th className="px-3 py-2 text-xs">Serial #</th>
                         <th className="px-3 py-2 text-xs">EPC ID</th>
+                        <th className="px-3 py-2 text-xs">Zone</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-xs text-[var(--wms-fg)]">
@@ -771,6 +774,7 @@ export function LocationsManager({
                           </td>
                           <td className="px-3 py-1.5 tabular-nums">{r.serial_number}</td>
                           <td className="px-3 py-1.5 tabular-nums text-teal-400/85">{r.epc}</td>
+                          <td className="px-3 py-1.5 text-[var(--wms-muted)]">{r.zone ?? "—"}</td>
                         </tr>
                       ))}
                     </tbody>

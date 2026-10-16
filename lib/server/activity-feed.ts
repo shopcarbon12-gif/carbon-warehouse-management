@@ -108,6 +108,9 @@ const REASON_SOURCE: Record<string, [string, string | null]> = {
   clean_bin: ["Web", "Bins & locations"],
   bin_move: ["Web", "Bins & locations"],
   bin_add: ["Web", "Bins & locations"],
+  zone_assign: ["Web", "Zones"],
+  zone_remove: ["Web", "Zones"],
+  zone_deleted: ["Web", "Zones"],
 };
 
 const REASON_WORD: Record<string, string> = {
@@ -119,6 +122,9 @@ const REASON_WORD: Record<string, string> = {
   clean_bin: "Bin cleaned",
   bin_move: "Moved between bins",
   bin_add: "Added to a bin",
+  zone_assign: "Assigned to a zone",
+  zone_remove: "Removed from a zone",
+  zone_deleted: "Zone deleted",
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -188,7 +194,9 @@ export async function listActivity(pool: Pool, tenantId: string, f: ActivityFilt
     aw.push(`al.metadata->>'source' = ${v}`);
     if (f.source === "handheld") iw.push(`l.device_id IS NOT NULL`);
     else if (f.source === "web")
-      iw.push(`l.device_id IS NULL AND l.reason IN ('catalog_rfid_modal', 'clean_bin', 'bin_move', 'bin_add')`);
+      iw.push(
+        `l.device_id IS NULL AND l.reason IN ('catalog_rfid_modal', 'clean_bin', 'bin_move', 'bin_add', 'zone_assign', 'zone_remove', 'zone_deleted')`,
+      );
     else iw.push("false");
   }
   if (f.failedOnly) {
@@ -346,7 +354,7 @@ function shape(r: RawRow): ActivityRow {
   if (r.kind === "i") {
     const d = describeAction(r.action);
     const [src, srcDetail] = r.device_id
-      ? /agent|script|repair/i.test(r.device_id)
+      ? /agent|script|repair|^system-/i.test(r.device_id)
         ? ["System", `Maintenance script (${r.device_id})`]
         : ["Handheld", r.device_id]
       : (REASON_SOURCE[r.reason ?? ""] ?? ["Not recorded", null]);
@@ -362,7 +370,10 @@ function shape(r: RawRow): ActivityRow {
       source: src,
       sourceDetail: srcDetail,
       outcome: "recorded",
-      reason: r.reason ? (REASON_WORD[r.reason] ?? r.reason) : null,
+      reason: r.reason
+        ? (REASON_WORD[r.reason] ??
+          (r.reason.startsWith("zone_cleared: ") ? `Zone cleared automatically — ${r.reason.slice(14)}` : r.reason))
+        : null,
       details: {
         log: r.action,
         entity_type: r.entity_type,

@@ -41,6 +41,8 @@ export type CatalogItemRow = {
   pinned_bin_code: string | null;
   /** Extra (multi-bin) bins the tag is also listed in, live bins only. */
   extra_bin_codes: string[];
+  /** Assigned zone (Zone Management), null when none. */
+  zone_name: string | null;
 };
 
 /** Matrix (UPC) rows with custom SKU / EPC totals for the active location. */
@@ -147,6 +149,7 @@ export async function listCatalogItemsForCustomSku(
     sku: string;
     pinned_bin_code: string | null;
     extra_bin_codes: string[] | null;
+    zone_name: string | null;
   }>(
     `SELECT
        i.serial_number::text AS serial_number,
@@ -159,6 +162,7 @@ export async function listCatalogItemsForCustomSku(
                JOIN bins xb ON xb.id = x.id AND xb.archived_at IS NULL
               WHERE x.id IS DISTINCT FROM i.bin_id
               ORDER BY xb.code) AS extra_bin_codes,
+       az.name AS zone_name,
        i.last_seen_at,
        m.description AS name,
        cs.size,
@@ -170,6 +174,7 @@ export async function listCatalogItemsForCustomSku(
      INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id AND b.archived_at IS NULL
      LEFT JOIN bins pb ON pb.id = i.pinned_bin_id AND pb.archived_at IS NULL
+     LEFT JOIN assigned_zones az ON az.id = i.assigned_zone_id
      WHERE i.custom_sku_id = $1::uuid AND i.location_id = $2::uuid
      ORDER BY i.serial_number ASC`,
     [customSkuId, locationId],
@@ -186,5 +191,6 @@ export async function listCatalogItemsForCustomSku(
     sku: row.sku,
     pinned_bin_code: row.pinned_bin_code ?? null,
     extra_bin_codes: row.extra_bin_codes ?? [],
+    zone_name: row.zone_name ?? null,
   }));
 }

@@ -16,7 +16,8 @@ export default async function OverviewLocationsPage() {
         </h1>
         <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
           <strong>List</strong>: classic dual-pane bin manager. <strong>Shelf Map</strong>: physical
-          5×3 rack view per (aisle, section) — move colors between bins with one click.
+          5×3 rack view per (aisle, section) — move colors between bins with one click.{" "}
+          <strong>Zones</strong>: put specific tags in a zone (e.g. Store) without changing their bins.
         </p>
       </div>
       <LocationsTabs canCleanBins={canCleanBins} />

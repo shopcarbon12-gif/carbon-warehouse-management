@@ -3,16 +3,17 @@
 import { useUrlParam } from "@/lib/use-url-param";
 import { LocationsManager } from "./locations-manager";
 import { ShelfMap } from "./shelf-map";
+import { ZonesManager } from "./zones-manager";
 
-type Tab = "list" | "map";
+type Tab = "list" | "map" | "zones";
 
 /** Tab strip wrapping the existing List view + the new Shelf Map view.
  *  The active tab lives in the URL (?tab=map; List is the default) so a
  *  browser refresh — and a restored ?bin= drawer — lands on the same view. */
 export function LocationsTabs({ canCleanBins }: { canCleanBins: boolean }) {
   const [tabParam, setTabParam] = useUrlParam("tab");
-  const tab: Tab = tabParam === "map" ? "map" : "list";
-  const setTab = (t: Tab) => setTabParam(t === "map" ? "map" : null);
+  const tab: Tab = tabParam === "map" ? "map" : tabParam === "zones" ? "zones" : "list";
+  const setTab = (t: Tab) => setTabParam(t === "list" ? null : t);
 
   return (
     <div className="space-y-4">
@@ -23,12 +24,17 @@ export function LocationsTabs({ canCleanBins }: { canCleanBins: boolean }) {
         <TabButton id="map" active={tab === "map"} onClick={() => setTab("map")}>
           Shelf Map
         </TabButton>
+        <TabButton id="zones" active={tab === "zones"} onClick={() => setTab("zones")}>
+          Zones
+        </TabButton>
       </div>
 
       {tab === "list" ? (
         <LocationsManager canCleanBins={canCleanBins} />
-      ) : (
+      ) : tab === "map" ? (
         <ShelfMap canManage={canCleanBins} />
+      ) : (
+        <ZonesManager />
       )}
     </div>
   );

@@ -58,6 +58,11 @@ export async function getTrackerItemByEpc(
     location_name: string;
     bin_id: string | null;
     bin_code: string | null;
+    extra_bin_codes: string[] | null;
+    zone_name: string | null;
+    zone_assigned_at: Date | null;
+    last_seen_at: Date | null;
+    last_seen_reader_zone: string | null;
   }>(
     `SELECT
        i.id::text,
@@ -86,12 +91,21 @@ export async function getTrackerItemByEpc(
        l.code AS location_code,
        l.name AS location_name,
        i.bin_id::text AS bin_id,
-       b.code AS bin_code
+       b.code AS bin_code,
+       ARRAY(SELECT xb.code FROM unnest(i.additional_bin_ids) AS x(id)
+               JOIN bins xb ON xb.id = x.id AND xb.archived_at IS NULL
+              WHERE x.id IS DISTINCT FROM i.bin_id ORDER BY xb.code) AS extra_bin_codes,
+       az.name AS zone_name,
+       i.zone_assigned_at,
+       i.last_seen_at,
+       rz.name AS last_seen_reader_zone
      FROM items i
      INNER JOIN locations l ON l.id = i.location_id AND l.tenant_id = $1::uuid
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
      LEFT JOIN bins b ON b.id = i.bin_id
+     LEFT JOIN assigned_zones az ON az.id = i.assigned_zone_id
+     LEFT JOIN zones rz ON rz.id = i.last_seen_zone_id
      LEFT JOIN devices sd ON sd.id = i.source_device_id
      LEFT JOIN devices sa ON sa.id = i.source_antenna_id
      LEFT JOIN users   cu ON cu.id = i.created_by_user_id
@@ -129,6 +143,11 @@ export async function getTrackerItemByEpc(
     location_name: row.location_name,
     bin_id: row.bin_id,
     bin_code: row.bin_code,
+    extra_bin_codes: row.extra_bin_codes ?? [],
+    zone_name: row.zone_name,
+    zone_assigned_at: row.zone_assigned_at ? row.zone_assigned_at.toISOString() : null,
+    last_seen_at: row.last_seen_at ? row.last_seen_at.toISOString() : null,
+    last_seen_reader_zone: row.last_seen_reader_zone,
   };
 }
 

@@ -178,6 +178,19 @@ async function POST_handler(req: Request) {
     // items has no FK children. Tenant+location scoped.
     let defectiveDeleted = false;
     if (oldEpc && oldEpc !== newEpc && newIsLive) {
+      // Same garment, new tag: its assigned zone (Zone Management) follows it
+      // to the new number before the old row goes.
+      await client.query(
+        `UPDATE items n
+            SET assigned_zone_id = o.assigned_zone_id,
+                zone_assigned_at = o.zone_assigned_at,
+                zone_assigned_by = o.zone_assigned_by
+           FROM items o
+          WHERE o.epc = $2 AND o.location_id = $3::uuid AND o.assigned_zone_id IS NOT NULL
+            AND n.epc = $1 AND n.location_id = $3::uuid AND n.status = 'in-stock'
+            AND n.assigned_zone_id IS NULL`,
+        [newEpc, oldEpc, session.lid],
+      );
       const del = await client.query(
         `DELETE FROM items i
           USING locations l

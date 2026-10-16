@@ -41,6 +41,8 @@ type Row = {
   passesFormula: boolean | null;
   /** Current items.status for this EPC (null = no items row). */
   liveStatus: string | null;
+  /** Assigned zone (Zone Management), once the tag was looked up. */
+  zone?: string | null;
   /** We auto-added / recovered this EPC to LIVE this session. */
   promoted: boolean;
   /** Whether the post-found formula+status lookup has been attempted. */
@@ -457,17 +459,17 @@ export function BulkGeigerWorkspace() {
             continue;
           }
           const data = (await res.json()) as {
-            rows?: { epcHex: string; valid: boolean; status: string | null }[];
+            rows?: { epcHex: string; valid: boolean; status: string | null; zone?: string | null }[];
           };
-          const byEpc = new Map<string, { valid: boolean; status: string | null }>();
+          const byEpc = new Map<string, { valid: boolean; status: string | null; zone: string | null }>();
           for (const r of data.rows ?? []) {
-            byEpc.set(r.epcHex.toUpperCase(), { valid: r.valid, status: r.status });
+            byEpc.set(r.epcHex.toUpperCase(), { valid: r.valid, status: r.status, zone: r.zone ?? null });
           }
           setRows((prev) =>
             prev.map((r) => {
               const info = byEpc.get(r.epc.toUpperCase());
               if (!info) return r;
-              return { ...r, passesFormula: info.valid, liveStatus: info.status };
+              return { ...r, passesFormula: info.valid, liveStatus: info.status, zone: info.zone };
             }),
           );
 
@@ -718,6 +720,9 @@ export function BulkGeigerWorkspace() {
                       ) : (
                         <span className="text-[var(--wms-muted)]">—</span>
                       )}
+                      {r.zone ? (
+                        <span className="ml-2 text-[0.65rem] text-[var(--wms-muted)]">Zone: {r.zone}</span>
+                      ) : null}
                     </td>
                   </tr>
                 );

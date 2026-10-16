@@ -33,6 +33,8 @@ export type BinEpcRow = {
   sku: string;
   upc: string | null;
   description: string;
+  /** Assigned zone (Zone Management), null when none. */
+  zone: string | null;
 };
 
 export async function listLocationsForTenant(
@@ -216,6 +218,7 @@ export async function listBinEpcs(
     sku: string;
     upc: string | null;
     description: string;
+    zone: string | null;
   }>(
     // 1.2.47: include multi-bin secondaries — see listBinContentsGrouped
     // for the rationale. The bin existence check moves onto the
@@ -227,9 +230,11 @@ export async function listBinEpcs(
        i.serial_number::text AS serial_number,
        cs.sku,
        COALESCE(cs.upc, m.upc) AS upc,
-       m.description
+       m.description,
+       az.name AS zone
      FROM items i
      INNER JOIN bins b ON b.id = $1::uuid AND b.location_id = $2::uuid AND b.archived_at IS NULL
+     LEFT JOIN assigned_zones az ON az.id = i.assigned_zone_id
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE (i.bin_id = $1::uuid OR $1::uuid = ANY(i.additional_bin_ids))
@@ -244,5 +249,6 @@ export async function listBinEpcs(
     sku: row.sku,
     upc: row.upc,
     description: row.description,
+    zone: row.zone ?? null,
   }));
 }

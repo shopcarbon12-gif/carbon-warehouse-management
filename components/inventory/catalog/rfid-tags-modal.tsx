@@ -127,6 +127,59 @@ export function RfidTagsModal({
   const [statusDrawerOpen, setStatusDrawerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [zonePickerOpen, setZonePickerOpen] = useState(false);
+  const [zoneChoice, setZoneChoice] = useState<string>("");
+  const { data: zoneData } = useSWR<{ zones: { id: string; name: string; count: number }[] }>(
+    zonePickerOpen ? "/api/assigned-zones" : null,
+    fetcher,
+  );
+
+  /* Zone Management from the catalog: put the selected tags in a zone (or
+     take them out). Bins are never touched; tags that can't be assigned
+     (not LIVE, …) are reported with the reason. */
+  const applyZone = useCallback(async () => {
+    if (selected.size === 0 || busy) return;
+    const epcs = [...selected];
+    setBusy(true);
+    setMsg(null);
+    try {
+      const remove = zoneChoice === "__none__";
+      const res = await fetch(remove ? "/api/assigned-zones/remove" : `/api/assigned-zones/${zoneChoice}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ epcs }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        assigned?: number;
+        moved?: number;
+        alreadyInZone?: number;
+        removed?: number;
+        zone?: string;
+        skipped?: { epc: string; reasonText: string | null }[];
+      };
+      if (!res.ok) throw new Error(j.error ?? "Zone change failed");
+      if (remove) {
+        setMsg(`Removed ${j.removed ?? 0} tag${j.removed === 1 ? "" : "s"} from their zone.`);
+      } else {
+        const done = (j.assigned ?? 0) + (j.moved ?? 0);
+        const skipped = j.skipped ?? [];
+        setMsg(
+          `${done} tag${done === 1 ? "" : "s"} now in ${j.zone}` +
+            `${j.moved ? ` (${j.moved} moved from another zone)` : ""}` +
+            `${j.alreadyInZone ? ` · ${j.alreadyInZone} already there` : ""}` +
+            `${skipped.length ? ` · ${skipped.length} skipped: ${skipped.map((x) => `${x.epc.slice(-6)} ${x.reasonText ?? ""}`).join("; ")}` : ""}`,
+        );
+      }
+      setZonePickerOpen(false);
+      setSelected(new Set());
+      await mutateItems();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Zone change failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [selected, busy, zoneChoice, mutateItems]);
 
   /* One-click fan-out to every authorized handheld at the operator's active
      location. Unified with the Defective EPCs modal — no more per-device
@@ -312,8 +365,48 @@ export function RfidTagsModal({
               >
                 Change status
               </button>
+              <button
+                type="button"
+                disabled={selectedCount === 0 || busy}
+                onClick={() => setZonePickerOpen((v) => !v)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_14%,var(--wms-surface-elevated))] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--wms-fg)] hover:bg-[color-mix(in_srgb,var(--wms-muted)_22%,var(--wms-surface-elevated))] disabled:opacity-40 max-md:min-h-11"
+                title="Put the selected tags in a zone (Zone Management) — bins stay as they are"
+              >
+                Zone
+              </button>
             </div>
           </div>
+          {zonePickerOpen ? (
+            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--wms-border)] px-5 py-2 font-mono text-xs">
+              <span className="text-[var(--wms-muted)]">
+                {selectedCount} selected →
+              </span>
+              <select
+                value={zoneChoice}
+                onChange={(e) => setZoneChoice(e.target.value)}
+                className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 text-[var(--wms-fg)] max-md:min-h-11"
+              >
+                <option value="">Pick a zone…</option>
+                {(zoneData?.zones ?? []).map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.name} ({z.count})
+                  </option>
+                ))}
+                <option value="__none__">No zone (remove)</option>
+              </select>
+              <button
+                type="button"
+                disabled={!zoneChoice || busy}
+                onClick={() => void applyZone()}
+                className="rounded-md border border-[var(--wms-accent)]/45 bg-[color-mix(in_srgb,var(--wms-accent)_18%,var(--wms-surface-elevated))] px-3 py-1.5 font-semibold text-[var(--wms-accent)] disabled:opacity-40 max-md:min-h-11"
+              >
+                Apply
+              </button>
+              {zoneData && zoneData.zones.length === 0 ? (
+                <span className="text-[var(--wms-muted)]">No zones yet — create one in Bin Locations → Zones.</span>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* List */}
           <div className="flex-1 overflow-y-auto px-5 py-4 max-md:overscroll-contain">
@@ -376,6 +469,15 @@ export function RfidTagsModal({
                               <span className="text-[var(--wms-muted)]"> (+ {it.extra_bin_codes.join(", ")})</span>
                             ) : null}
                           </span>
+                          {it.zone_name ? (
+                            <>
+                              <span>·</span>
+                              <span>
+                                <span className="text-[var(--wms-muted)]">Zone:</span>{" "}
+                                <span className="text-[var(--wms-fg)]">{it.zone_name}</span>
+                              </span>
+                            </>
+                          ) : null}
                           <span>·</span>
                           <span>
                             <span className="text-[var(--wms-muted)]">Last seen:</span>{" "}

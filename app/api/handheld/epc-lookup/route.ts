@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
  * review screen with product info after a scan.
  *
  * Body: { epcs: [...], deviceId?: '...' }   (max 500 EPCs/call)
- * Reply: { rows: [{ epcHex, valid, reason, systemId, serial, sku, color, size, productName, status, bin, ghost }] }
+ * Reply: { rows: [{ epcHex, valid, reason, systemId, serial, sku, color, size, productName, status, bin, zone, ghost }] }
  */
 const bodySchema = z.object({
   epcs: z.array(z.string()).min(1).max(500),
@@ -151,24 +151,28 @@ async function POST_handler(req: Request) {
   // share an EPC over time (chip moves, gets re-encoded). Caller is
   // responsible for treating "in-stock at another location" however they
   // want; we just return the status string.
-  type ItemRow = { epc: string; status: string; bin_code: string | null };
+  type ItemRow = { epc: string; status: string; bin_code: string | null; zone: string | null };
   const itemStatus = new Map<string, string>();
+  // Assigned zone (Zone Management, per tag) — shown next to the bin.
+  const itemZone = new Map<string, string>();
   // The bin this exact tag is assigned to (items.bin_id) — same bin the
   // Catalog / Geiger EPC list shows. Absent when the tag has no bin.
   const itemBin = new Map<string, string>();
   const epcsForLookup = decoded.map((d) => d.epcHex);
   if (epcsForLookup.length > 0) {
     const r = await pool.query<ItemRow>(
-      `SELECT i.epc, i.status, b.code AS bin_code
+      `SELECT i.epc, i.status, b.code AS bin_code, az.name AS zone
          FROM items i
          INNER JOIN locations l ON l.id = i.location_id
          LEFT JOIN bins b ON b.id = i.bin_id
+         LEFT JOIN assigned_zones az ON az.id = i.assigned_zone_id
         WHERE l.tenant_id = $1::uuid
           AND i.epc = ANY($2::text[])`,
       [auth.tenantId, epcsForLookup],
     );
     for (const row of r.rows) {
       itemStatus.set(row.epc, row.status);
+      if (row.zone) itemZone.set(row.epc, row.zone);
       if (row.bin_code) itemBin.set(row.epc, row.bin_code);
       else itemBin.delete(row.epc);
     }
@@ -206,6 +210,8 @@ async function POST_handler(req: Request) {
       status: itemStatus.get(d.epcHex) ?? (retired.has(d.epcHex) ? RETIRED_EPC_STATUS : null),
       // bins.code of the tag's assigned bin (e.g. "6B02C"); null = none.
       bin: itemBin.get(d.epcHex) ?? null,
+      // Assigned zone name (Zone Management); null = none.
+      zone: itemZone.get(d.epcHex) ?? null,
       ghost: retired.has(d.epcHex) || ghostStatuses.has(itemStatus.get(d.epcHex) ?? ""),
     };
   });

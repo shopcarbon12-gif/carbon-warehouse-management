@@ -135,6 +135,12 @@ const MOBILE_GROUPS: MobileGroupDef[] = [
         editable: true,
         actions: [{ id: "clean_empty_bin", label: "Clean & empty bin" }],
       },
+      {
+        id: "zone_management",
+        label: "Zone Management",
+        editable: true,
+        actions: [{ id: "manage_zones", label: "Create / rename / delete zones" }],
+      },
       { id: "bin_assign_settings", label: "Bin assign settings", editable: true },
       { id: "epc_detail", label: "EPC detail" },
     ],

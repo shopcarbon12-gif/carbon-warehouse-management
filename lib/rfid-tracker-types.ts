@@ -37,6 +37,14 @@ export type TrackerItemDetail = {
   created_by_email: string | null;
   created_by_first: string | null;
   created_by_last: string | null;
+  /** Extra (multi-bin) bins the tag is also listed in. */
+  extra_bin_codes?: string[];
+  /** Assigned zone (Zone Management) — null when none. */
+  zone_name?: string | null;
+  zone_assigned_at?: string | null;
+  last_seen_at?: string | null;
+  /** Reader zone where a fixed reader last heard the tag (automatic). */
+  last_seen_reader_zone?: string | null;
 };
 
 export type TrackerSearchPickRow = {
