@@ -407,7 +407,11 @@ export async function listCatalogGrid(
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE ${whereSql}
-     ORDER BY ${(() => {
+     -- Scan lookups (includeArchived): current products before archived ones.
+     -- The handheld takes the FIRST row's matrix — Isla Knit Top OS sorted
+     -- after archived "Isla Knit" 212345607L (same UPC and SKU prefix, no
+     -- tags), so Bin Assign said "No EPCs found" for 46 LIVE tags.
+     ORDER BY ${includeArchived ? "cs.archived ASC, " : ""}${(() => {
        const col = SORT_COLUMNS[sortBy] ?? null;
        const dir = sortDir === "desc" ? "DESC NULLS LAST" : "ASC NULLS LAST";
        if (col === "bin_location" || col === "active_epc_count") return `${col} ${dir}, cs.sku ASC`;
