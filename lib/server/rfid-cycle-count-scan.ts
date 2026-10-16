@@ -1,10 +1,9 @@
 import type { PoolClient } from "pg";
 import { decodeEpc } from "@/lib/server/epc-decode";
 import { legacyEpcSystemId, legacyEpcSerial } from "@/lib/server/legacy-epc-catalog";
-import { loadEpcConfig, readOnEarlierDay } from "@/lib/server/epc-ingress";
+import { holdUnconfirmed, loadEpcConfig } from "@/lib/server/epc-ingress";
 import { isIgnoredEpc } from "@/lib/server/ignored-epcs";
 import { loadRetiredEpcs } from "@/lib/server/retired-epcs";
-import { isIssuableSerial } from "@/lib/server/rfid-serial-allocator";
 import {
   loadStatusLabelBrainMap,
   shouldGhostDropLabel,
@@ -21,17 +20,20 @@ import { labelNameForWmsStatus } from "@/lib/server/wms-status-to-label-name";
  * pending_visibility statuses are protected and never auto-transition.
  *
  * Per-EPC outcome (also written to audit_log on every state change):
- *  - live_added         first-time scan, decoded + catalog matched → in-stock
+ *  - live_added         not used for scans since 2026-10-16 (a first-time scan
+ *                       is 'unconfirmed'); kept for the outcome type
  *  - live_moved         existed in-stock at another location → moved here
  *  - live_revived       existed as 'unknown' → in-stock here (the ONLY status a
  *                       scan may revive — owner rule 2026-10-13)
  *  - live_already_here  no-op: already in-stock at this location
  *  - defective_decode_fail  first-time scan, decode failed → tag_killed
  *  - defective_no_match     first-time scan, no catalog hit → tag_killed
- *  - unconfirmed       a serial no Carbon encoder issues (a damaged chip's
- *                      scrambled read): first read → 'unknown'; a repeat read the
- *                      same day leaves it 'unknown'; a read on a later day
- *                      brings it LIVE as live_revived (owner rule 2026-10-15)
+ *  - unconfirmed       a number never seen before (decoded + catalog matched):
+ *                      first read → 'unknown'; a repeat read the same day leaves
+ *                      it 'unknown'; a read on a later day brings it LIVE as
+ *                      live_revived (owner rule 2026-10-16 — one read used to
+ *                      make a LIVE "phantom" garment; 2026-10-15 did this for
+ *                      damaged-chip serials only)
  *  - locked            any other status, or an existing tag that no longer
  *                      decodes; left untouched
  *  - ghost             status set to "Ignore" on the Statuses page, or an EPC a
@@ -216,11 +218,14 @@ export async function ingestCycleCountEpcs(
       continue;
     }
 
-    // 3. A serial no Carbon encoder issues (primary formula only): UNKNOWN
-    //    until the tag is read again on a later day.
+    // 3. A number never seen before: UNKNOWN until the tag is read again on a
+    //    later day (holdUnconfirmed — owner, 2026-10-16).
     if (
-      viaPrimary && resolvedSerial !== null && !isIssuableSerial(resolvedSerial) &&
-      (!prior || (prior.status === "unknown" && !readOnEarlierDay(prior.first_scanned_at, args.receivedAt)))
+      holdUnconfirmed(
+        prior ? { status: prior.status, firstScannedAt: prior.first_scanned_at } : null,
+        viaPrimary ? resolvedSerial : null,
+        args.receivedAt,
+      )
     ) {
       const r = await upsertItem(client, {
         epc,

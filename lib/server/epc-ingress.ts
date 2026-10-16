@@ -75,7 +75,8 @@ export type EpcIngressResult = {
   /** items.id of the row that was inserted or updated. null on a no-op. */
   itemId: string | null;
   /** Final status written to items.status. 'unknown' = an unconfirmed tag
-   *  number (serial no Carbon encoder issues) waiting for a read on another day. */
+   *  number (never seen before, see holdUnconfirmed) waiting for a read on
+   *  another day. */
   status: "in-stock" | "tag_killed" | "unknown";
   /** When status === 'tag_killed', why. Useful for audit. */
   reason?: "decode_failed" | "unknown_system_id";
@@ -239,8 +240,10 @@ async function tryLegacyCatalogEntrance(
   if (legacySystemId === null) return null;
   const legacyCustomSkuId = await lookupCatalogBySystemId(client, legacySystemId);
   if (!legacyCustomSkuId) return null;
+  // Same never-seen rule as the primary formula (holdUnconfirmed).
+  const hold = isScanSource(input.source) && holdUnconfirmed(prior, primarySerial, input.receivedAt);
   return await writeItem(client, input, prior, {
-    status: "in-stock",
+    status: hold ? "unknown" : "in-stock",
     customSkuId: legacyCustomSkuId,
     serial: primarySerial ?? legacyEpcSerial(input.epc),
   });
@@ -331,17 +334,9 @@ export async function ingestEpc(
     });
   }
 
-  // Scan rule (owner, 2026-10-15): a serial no Carbon encoder issues is almost
-  // always a damaged chip — the product part reads right, the serial comes
-  // back scrambled, and every scrambled read used to become another LIVE
-  // garment that nobody can find. Such a number enters as UNKNOWN and only
-  // goes LIVE when it is read again on a later day; until then a repeat read
-  // just refreshes last-seen. An existing LIVE tag is not touched.
-  if (
-    isScanSource(input.source) &&
-    !isIssuableSerial(decoded.serial!) &&
-    (!prior || (prior.status === "unknown" && !readOnEarlierDay(prior.firstScannedAt, input.receivedAt)))
-  ) {
+  // Scan rule: a number never seen before enters as UNKNOWN until it is read
+  // again on a later day (holdUnconfirmed). An existing LIVE tag is not touched.
+  if (isScanSource(input.source) && holdUnconfirmed(prior, decoded.serial ?? null, input.receivedAt)) {
     return await writeItem(client, input, prior, {
       status: "unknown",
       customSkuId,
@@ -363,6 +358,31 @@ const etDay = (d: Date) =>
 /** True when [first] (a tag's first read) fell on an earlier day than [now]. */
 export function readOnEarlierDay(first: Date | null, now: Date): boolean {
   return first !== null && etDay(first) < etDay(now);
+}
+
+/**
+ * Scan rule (owner, 2026-10-16: "fix the phantom so wms will never produce new
+ * ones"): a number the WMS has never seen enters as UNKNOWN and only goes LIVE
+ * when it is read again on a later day; a repeat read the same day leaves it
+ * UNKNOWN. One read used to make a LIVE garment on the spot — on 2026-10-13
+ * eight numbers read once and never again (a label not on any garment in
+ * stock, or a wrong read) became LIVE stock nobody could find; Rhea Jacket
+ * WHITE S showed 5 with 4 on the shelf. The 2026-10-15 rule for serials no
+ * Carbon encoder issues (damaged chips) is the special case it grew from.
+ *
+ * True = write UNKNOWN. A tag already known revives on a read as before: first
+ * read on an earlier day, or never read at all (encode claims) — except a
+ * never-read number whose [primarySerial] no Carbon encoder issues.
+ */
+export function holdUnconfirmed(
+  prior: { status: string; firstScannedAt: Date | null } | null,
+  primarySerial: bigint | null,
+  receivedAt: Date,
+): boolean {
+  if (!prior) return true;
+  if (prior.status !== "unknown") return false;
+  if (prior.firstScannedAt === null) return primarySerial !== null && !isIssuableSerial(primarySerial);
+  return !readOnEarlierDay(prior.firstScannedAt, receivedAt);
 }
 
 type WriteItemArgs = {
