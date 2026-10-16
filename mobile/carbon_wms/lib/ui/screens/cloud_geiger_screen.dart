@@ -200,6 +200,13 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
       await RfidVendorChannel.setZebraTriggerModeRfid();
     } catch (_) {/* best-effort — no-op when the sled is not connected */}
     await RfidVendorChannel.setEpcInventoryFilter(null);
+    // Quiet mode (owner, 2026-10-16), as in Count and Bulk Geiger: a tag
+    // already read stays silent while the sled keeps powering it, so in a
+    // crowded aisle the radio spends its time on tags not read yet instead of
+    // re-reading the ones it has. This screen only uses a tag's first read.
+    // Re-asserted on every start: Geiger (S0) and Bulk Geiger restore their
+    // own session in dispose.
+    await RfidVendorChannel.setQuietInventory(true);
     await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
     try {
       await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
@@ -245,6 +252,8 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     unawaited(_triggerSub?.cancel());
     unawaited(RfidVendorChannel.stopChainwayInventory());
     unawaited(RfidVendorChannel.stopZebraInventory());
+    // Hand the next screen the default session back.
+    unawaited(RfidVendorChannel.setQuietInventory(false));
     // Restore the native per-tag beep for downstream screens
     // (count / status change / etc rely on it firing for every read).
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
