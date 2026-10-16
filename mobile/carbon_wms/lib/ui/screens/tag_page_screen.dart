@@ -170,6 +170,8 @@ class _TagPageScreenState extends State<TagPageScreen> {
                     targetColor: color,
                     targetSize: size,
                     targetBin: bin,
+                    // TAKE AN ACTION → Encode / Status change / Search & Encode.
+                    showActions: true,
                   ),
                 ),
               ),

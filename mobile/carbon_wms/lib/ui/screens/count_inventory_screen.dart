@@ -30,6 +30,7 @@ import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/ui/widgets/item_line_format.dart';
 import 'package:carbon_wms/ui/widgets/rfid_reading_indicator.dart';
+import 'package:carbon_wms/ui/widgets/scan_range.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 const _countInvPrefsKey = 'count_inventory_module_settings_v1';
@@ -184,10 +185,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
   bool _autoRefreshHeld = false;
   bool _openingContinue = false;
 
-  /// Add-On Catalog is a bulk module: always the RFD8500 maximum. Count keeps
-  /// its gear setting.
+  /// Add-On Catalog: NEAR / MED / FAR and its own power slider (as in Zone
+  /// Management), starting at the sled's maximum. Count keeps its gear
+  /// setting and takes every read.
+  final ScanRangeSetting _addOnRange = ScanRangeSetting('add_on_catalog');
+  final ScanPower _addOnPower = ScanPower();
+
   int get _effectivePowerDbm =>
-      _isAddOnCatalog ? kAntennaPowerDbmMax : _moduleSettings.rfidPowerDbm;
+      _isAddOnCatalog ? _addOnPower.dbm : _moduleSettings.rfidPowerDbm;
 
   /// Location the BIN line is computed for: the picked session location,
   /// else the one the catalog server reported.
@@ -273,6 +278,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     _catalog?.removeListener(_onCatalogChanged);
     _releaseAutoRefresh();
     _beepPacer.dispose();
+    _addOnPower.dispose();
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     // Quiet mode is for this screen's bulk passes only — back to the default.
     unawaited(RfidVendorChannel.setQuietInventory(false));
@@ -449,8 +455,13 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
       // Count gear settings override global settings while inside Count.
       // The override survives any reapplyHandheldHardwareSettings() call so
       // mobile-sync / scan-context flips can't silently reset to the
-      // handheld-config power. Cleared on dispose. (Add-On Catalog: locked
-      // to the maximum, see _effectivePowerDbm.)
+      // handheld-config power. Cleared on dispose. (Add-On Catalog: its own
+      // slider, from the sled's maximum, see _effectivePowerDbm.)
+      if (_isAddOnCatalog) {
+        await _addOnRange.load();
+        await _addOnPower.loadRange();
+        if (mounted) setState(() {});
+      }
       await rfid.setSessionPowerOverrideDbm(_effectivePowerDbm);
       await RfidVendorChannel.setAntennaPowerDbm(_effectivePowerDbm);
 
@@ -504,6 +515,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
         builder: (_) => _CountInventorySettingsScreen(
           initial: _moduleSettings,
           powerLocked: _isAddOnCatalog,
+          lockedPowerDbm: _addOnPower.dbm,
         ),
       ),
     );
@@ -644,6 +656,14 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
 
   // ── Add-On Catalog: local per-tag decision ─────────────────────────────
 
+  void _setAddOnRange(ScanRange r) {
+    setState(() => _addOnRange.range = r);
+    unawaited(_addOnRange.save());
+    // Mid-scan the sled switches session itself (stop → apply → resume);
+    // otherwise the next start applies it.
+    if (_scanOn) unawaited(RfidVendorChannel.setQuietInventory(_addOnRange.quietMode));
+  }
+
   /// Decides one new EPC against the local catalog copy — synchronous, no
   /// network between the read and its beep / line. A read that lands before
   /// the copy is ready waits in [_addOnPendingEpcs] (drained by
@@ -655,6 +675,9 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     // Count's callers pass 0 for "no RSSI" (`read.rssi ?? 0`, the barcode
     // path); never store 0 as a reading.
     final readRssi = rssi != 0 ? rssi : null;
+    // NEAR / MED: a read too weak to be close is ignored, not used up — the
+    // same tag is decided the moment it is read strong enough.
+    if (!_addOnRange.passes(readRssi)) return;
     final decision =
         _catalog?.classifyForAddOnCatalog(epc, locationId: _binLocationId);
     if (decision == null) {
@@ -1209,8 +1232,11 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     // Quiet mode: a tag already read stays silent while the sled keeps
     // powering it, so the radio spends its time on tags not read yet. The
-    // screen also ignores every repeat read for the whole session.
-    unawaited(RfidVendorChannel.setQuietInventory(true));
+    // screen also ignores every repeat read for the whole session. Add-On
+    // Catalog on NEAR / MED: off, so a tag first heard too weak answers again
+    // as you walk up.
+    unawaited(RfidVendorChannel.setQuietInventory(
+        _isAddOnCatalog ? _addOnRange.quietMode : true));
     if (_isAddOnCatalog) {
       unawaited(_rfidManager?.setSessionPowerOverrideDbm(_effectivePowerDbm));
     }
@@ -1778,6 +1804,19 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                     },
                   ),
                 ),
+                if (_isAddOnCatalog)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 0),
+                    child: ScanRangePanel(
+                      setting: _addOnRange,
+                      onRangeChanged: _setAddOnRange,
+                      onGateChanged: (v) => setState(() => _addOnRange.gate[_addOnRange.range] = v),
+                      power: _addOnPower,
+                      onPowerChanged: (v) {
+                        if (_addOnPower.set(v, _rfidManager)) setState(() {});
+                      },
+                    ),
+                  ),
                 SizedBox(height: 12.h),
                 Expanded(
                   child: Padding(
@@ -3174,15 +3213,17 @@ class _CountInventorySettingsScreen extends StatefulWidget {
   const _CountInventorySettingsScreen({
     required this.initial,
     this.powerLocked = false,
+    this.lockedPowerDbm = kAntennaPowerDbmMax,
   });
 
   final _CountInventoryModuleSettings initial;
 
-  /// Add-On Catalog: power is fixed at [kAntennaPowerDbmMax] (bulk module).
-  /// The slider is shown locked, restart re-applies the maximum, and SAVE
-  /// hands back [initial]'s power so Count's saved gear is never changed
-  /// from here.
+  /// Add-On Catalog: power is set by the Power slider on its own screen.
+  /// The slider here is shown locked at [lockedPowerDbm], restart re-applies
+  /// it, and SAVE hands back [initial]'s power so Count's saved gear is never
+  /// changed from here.
   final bool powerLocked;
+  final int lockedPowerDbm;
 
   @override
   State<_CountInventorySettingsScreen> createState() =>
@@ -3209,7 +3250,7 @@ class _CountInventorySettingsScreenState
   void initState() {
     super.initState();
     _power = widget.powerLocked
-        ? kAntennaPowerDbmMax
+        ? widget.lockedPowerDbm
         : widget.initial.rfidPowerDbm;
     _rssi = widget.initial.rssiDistance;
     _loadDeviceMeta();
@@ -3471,7 +3512,7 @@ class _CountInventorySettingsScreenState
             SizedBox(height: 8.h),
             if (widget.powerLocked)
               Text(
-                '$kAntennaPowerDbmMax dBm · locked for Add-On Catalog',
+                '${widget.lockedPowerDbm} dBm · set with Power on the Add-On Catalog screen',
                 style: GoogleFonts.robotoMono(
                   fontSize: 11.sp,
                   fontWeight: FontWeight.w700,

@@ -23,6 +23,7 @@ import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/item_line_format.dart';
 import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
+import 'package:carbon_wms/ui/widgets/scan_range.dart';
 
 /// Find & Locate → Bulk Geiger (owner, 2026-10-15).
 ///
@@ -185,7 +186,8 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
 
   /// Radio hand-back in flight after Geiger closed; a start waits for it.
   Future<void> _radioReady = Future<void>.value();
-  int _maxDbm = 30;
+  final ScanPower _power = ScanPower();
+  final ScanRangeSetting _range = ScanRangeSetting('bulk_geiger');
   final BeepPacer _beeper = BeepPacer();
   Timer? _repaintTimer;
 
@@ -228,10 +230,10 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
       if (mounted && e == 'down') unawaited(_toggle());
     }, onError: (_) {});
 
-    final range = await RfidVendorChannel.getPowerRangeDbm();
-    if (range != null) _maxDbm = range.maxDbm;
-    await rfid.setSessionPowerOverrideDbm(_maxDbm);
-    unawaited(RfidVendorChannel.setAntennaPowerDbm(_maxDbm));
+    await _power.loadRange();
+    await _range.load();
+    if (mounted) setState(() {});
+    unawaited(_power.apply(rfid));
 
     await _loadSaved();
     if (widget.initialEpcs.isNotEmpty) _addEpcs(widget.initialEpcs);
@@ -256,6 +258,7 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
     _rfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _debounce?.cancel();
     _repaintTimer?.cancel();
+    _power.dispose();
     _beeper.dispose();
     unawaited(_vendorSub?.cancel());
     unawaited(_geigerSub?.cancel());
@@ -535,9 +538,20 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
     _rfid?.scanContext = 'GEIGER_FIND';
     await _armRfidTrigger();
     await RfidVendorChannel.setEpcInventoryFilter(null);
-    await RfidVendorChannel.setQuietInventory(true);
-    await _rfid?.setSessionPowerOverrideDbm(_maxDbm);
-    await RfidVendorChannel.setAntennaPowerDbm(_maxDbm);
+    // Quiet mode on FAR only — on NEAR / MED a tag first heard too weak must
+    // answer again as you walk up to it.
+    await RfidVendorChannel.setQuietInventory(_range.quietMode);
+    await _power.apply(_rfid);
+  }
+
+  void _setRange(ScanRange r) {
+    setState(() => _range.range = r);
+    unawaited(_range.save());
+    _radioReady = _applyRadioSetup();
+  }
+
+  void _setPower(int dbm) {
+    if (_power.set(dbm, _rfid)) setState(() {});
   }
 
   /// Starts inventory on the reader this phone has; a message when it didn't.
@@ -595,6 +609,9 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
     final epc = r.exactEpc96 ?? r.epcHex24.toUpperCase();
     // Found once → silent for the rest of the session; not listed → ignored.
     if (_found.containsKey(epc) || !_indexOf.containsKey(epc)) return;
+    // NEAR / MED: found only once it is read close enough (a weaker read is
+    // ignored, not used up).
+    if (!_range.passes(r.rssi)) return;
     _found[epc] = _Hit(DateTime.now(), r.rssi);
     _beeper.request();
     if (_found.length >= _targets.length) {
@@ -626,6 +643,7 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
         targetName: t.name,
         targetColor: t.color,
         targetSize: t.size,
+        showActions: true,
       ),
     );
     // Locate's dispose (beep on, power override off, filter off, session
@@ -683,6 +701,16 @@ class _BulkGeigerScreenState extends State<BulkGeigerScreen> {
                   onPick: _pickFromSku,
                 ),
               ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(20.w, 2.h, 20.w, 0),
+              child: ScanRangePanel(
+                setting: _range,
+                onRangeChanged: _setRange,
+                onGateChanged: (v) => setState(() => _range.gate[_range.range] = v),
+                power: _power,
+                onPowerChanged: _setPower,
+              ),
+            ),
             _ListHeader(
               total: _targets.length,
               found: _found.length,

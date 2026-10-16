@@ -15,8 +15,6 @@ import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/add_on_session_realtime.dart';
 import 'package:carbon_wms/services/add_on_session_state.dart';
 import 'package:carbon_wms/services/epc/epc_codec.dart';
-import 'package:carbon_wms/services/handheld_runtime_config.dart'
-    show kAntennaPowerDbmMax;
 import 'package:carbon_wms/services/beep_pacer.dart';
 import 'package:carbon_wms/services/live_catalog_cache.dart';
 import 'package:carbon_wms/services/live_catalog_models.dart';
@@ -30,6 +28,7 @@ import 'package:carbon_wms/ui/screens/add_on_count_review_screen.dart';
 import 'package:carbon_wms/ui/widgets/add_on_epc_card.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/ui/widgets/rfid_reading_indicator.dart';
+import 'package:carbon_wms/ui/widgets/scan_range.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Add-On Count scan screen.
@@ -113,6 +112,10 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   /// One beep per NEW EPC this session (counted or defective), never closer
   /// than the pacer's gap, so a burst can't pile up behind the tags.
   final BeepPacer _beepPacer = BeepPacer();
+
+  /// NEAR / MED / FAR and this screen's own power (as in Zone Management).
+  final ScanRangeSetting _range = ScanRangeSetting('add_on_count');
+  final ScanPower _power = ScanPower();
 
   /// Tags decided "stay silent" for the rest of the session (ignored
   /// statuses) — a repeat read returns at once, without another lookup.
@@ -218,11 +221,16 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     // Local-first: this screen's EPCs reach the catalog only through the
     // session ledger + scan-finalize, never the edge-ingest firehose.
     _rfid.suppressEdgeStreaming = true;
-    // Bulk module → RFD8500 maximum. The override goes in BEFORE the context
-    // switch: setting scanContext re-applies handheld settings, and without
-    // the override that re-apply pushes the tenant's per-context power
-    // (Transfer In's, 24 dBm by default) — about half the read range.
-    await _rfid.setSessionPowerOverrideDbm(kAntennaPowerDbmMax);
+    // Bulk module → starts at the sled's maximum; the screen's slider changes
+    // it. The override goes in BEFORE the context switch: setting scanContext
+    // re-applies handheld settings, and without the override that re-apply
+    // pushes the tenant's per-context power (Transfer In's, 24 dBm by
+    // default) — about half the read range.
+    await _range.load();
+    await _power.loadRange();
+    if (!mounted) return;
+    setState(() {});
+    await _rfid.setSessionPowerOverrideDbm(_power.dbm);
     // Left during the await: dispose already restored everything — don't
     // re-arm the manager for a screen that is gone.
     if (!mounted) return;
@@ -238,7 +246,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       await RfidVendorChannel.setZebraTriggerModeRfid();
     } catch (_) {/* best-effort — channel may no-op when sled not connected */}
     if (!mounted) return;
-    await RfidVendorChannel.setAntennaPowerDbm(kAntennaPowerDbmMax);
+    await RfidVendorChannel.setAntennaPowerDbm(_power.dbm);
     if (!mounted) return;
 
     _triggerSub = hardwareTriggerFor(this).listen((event) {
@@ -257,7 +265,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     // misses reads. The `_session.scanning` flag inside `_onEpc` gates
     // ingest so tags read between START and STOP are processed.
     _directTagSub = RfidVendorChannel.tagReadStream().listen(
-      (tag) => _onEpc(tag.epcHex24),
+      (tag) => _onEpc(tag.epcHex24, rssi: tag.rssi),
       onError: (_) {},
     );
     // Some rugged handhelds (Chainway broadcast-only mode) emit UHF EPCs
@@ -399,18 +407,31 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
       _session.setScanning(true);
       ScanSounds.instance.play(ScanCue.start);
       _holdAutoRefresh();
-      // Re-assert max power on every start: another screen or a settings
-      // re-apply may have moved it since we armed.
-      unawaited(_rfid.setSessionPowerOverrideDbm(kAntennaPowerDbmMax));
-      unawaited(RfidVendorChannel.setAntennaPowerDbm(kAntennaPowerDbmMax));
-      // Quiet mode: a tag already read stays silent while the sled keeps
-      // powering it, so the radio spends its time on tags not read yet. Re-
-      // asserted every start (a Locate in between puts the sled back on S0/S1).
-      unawaited(RfidVendorChannel.setQuietInventory(true));
+      // Re-assert this screen's power on every start: another screen or a
+      // settings re-apply may have moved it since we armed.
+      unawaited(_power.apply(_rfid));
+      // Quiet mode (FAR only): a tag already read stays silent while the sled
+      // keeps powering it, so the radio spends its time on tags not read yet.
+      // On NEAR / MED it is off, so a tag first heard too weak answers again
+      // as you walk up. Re-asserted every start (a Locate in between puts the
+      // sled back on S0/S1).
+      unawaited(RfidVendorChannel.setQuietInventory(_range.quietMode));
       try {
         await _rfid.startLocateScanning().timeout(_radioCallCap, onTimeout: () {});
       } catch (_) {/* radio may be unconnected — tag stream stays cold */}
     }
+  }
+
+  void _setRange(ScanRange r) {
+    setState(() => _range.range = r);
+    unawaited(_range.save());
+    // Mid-scan the sled switches session itself (stop → apply → resume);
+    // otherwise the next start applies it.
+    if (_session.scanning) unawaited(RfidVendorChannel.setQuietInventory(_range.quietMode));
+  }
+
+  void _setPower(int dbm) {
+    if (_power.set(dbm, _rfid)) setState(() {});
   }
 
   /// Pause for the join popup / review screen (no stop cue, as before).
@@ -497,11 +518,14 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
   // batched background flush. No per-tag network round-trip — that's what made
   // scanning stall at scale. Cross-device dedup still works: the SSE `epc_new`
   // events mark EPCs another operator counted (see _handleSseEvent).
-  void _onEpc(String epc) {
+  void _onEpc(String epc, {int? rssi}) {
     if (!_session.scanning) return;
     _readPulse.mark();
     final clean = epc.replaceAll(RegExp(r'\s+'), '').toUpperCase();
     if (clean.length != 24) return;
+    // NEAR / MED: a read too weak to be close is ignored, not used up — the
+    // same tag is decided the moment it is read strong enough.
+    if (!_range.passes(rssi)) return;
     // Resumed / joined session whose server ledger hasn't landed yet: hold the
     // read and decide it once it has, so an EPC already counted on the server
     // never beeps as NEW (_releaseHeldReads).
@@ -701,6 +725,7 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
     unawaited(ScanSounds.instance.setTagBeepSuppressed(false));
     unawaited(RfidVendorChannel.setQuietInventory(false));
     _beepPacer.dispose();
+    _power.dispose();
     // Restore what we changed on the shared manager so screens we pop back
     // to see the value they had when they pushed us. Cached reference — no
     // context.read here. These setters notify the manager's listeners, which
@@ -747,6 +772,16 @@ class _AddOnCountScreenState extends State<AddOnCountScreen> {
               builder: (_, __) => _CounterRow(
                 newCount: _session.newCount,
                 defectiveCount: _session.failedCount,
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 0),
+              child: ScanRangePanel(
+                setting: _range,
+                onRangeChanged: _setRange,
+                onGateChanged: (v) => setState(() => _range.gate[_range.range] = v),
+                power: _power,
+                onPowerChanged: _setPower,
               ),
             ),
             Expanded(

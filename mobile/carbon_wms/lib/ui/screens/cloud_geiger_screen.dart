@@ -22,6 +22,7 @@ import 'package:carbon_wms/ui/screens/bulk_geiger_screen.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
+import 'package:carbon_wms/ui/widgets/scan_range.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 
 /// Cloud + Geiger — landing pad for EPCs that were "Sent to handheld" from
@@ -110,6 +111,8 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   int _maxDbm = 30;
   int _powerDbm = 23;
 
+  final ScanRangeSetting _range = ScanRangeSetting('cloud_geiger');
+
   RfidManager? _lifecycleRfid;
 
   @override
@@ -179,6 +182,7 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
   /// Entry: slider bounds, then the radio at the reader's MAX achievable dBm
   /// so the first sweep has the widest range without touching the slider.
   Future<void> _initRadio() async {
+    await _range.load();
     await _hydrateSliderRange();
     if (!mounted) return;
     setState(() => _powerDbm = _maxDbm);
@@ -203,14 +207,20 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     // Quiet mode (owner, 2026-10-16), as in Count and Bulk Geiger: a tag
     // already read stays silent while the sled keeps powering it, so in a
     // crowded aisle the radio spends its time on tags not read yet instead of
-    // re-reading the ones it has. This screen only uses a tag's first read.
-    // Re-asserted on every start: Geiger (S0) and Bulk Geiger restore their
-    // own session in dispose.
-    await RfidVendorChannel.setQuietInventory(true);
+    // re-reading the ones it has. FAR only — on NEAR / MED a tag first heard
+    // too weak must answer again as you walk up to it. Re-asserted on every
+    // start: Geiger (S0) and Bulk Geiger restore their own session in dispose.
+    await RfidVendorChannel.setQuietInventory(_range.quietMode);
     await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
     try {
       await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
     } catch (_) {}
+  }
+
+  void _setRange(ScanRange r) {
+    setState(() => _range.range = r);
+    unawaited(_range.save());
+    _radioReady = _applyRadioSetup();
   }
 
   /// Back from a screen opened here: wait until it is really gone (its
@@ -399,7 +409,11 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
     final matched = _seenEpcs.contains(epc)
         ? epc
         : (epc.length >= 16 ? _byTail[epc.substring(epc.length - 16)] : null);
-    if (matched == null || !_foundEpcs.add(matched)) return;
+    if (matched == null || _foundEpcs.contains(matched)) return;
+    // NEAR / MED: found only once it is read close enough (a weaker read is
+    // ignored, not used up).
+    if (!_range.passes(read.rssi)) return;
+    _foundEpcs.add(matched);
     // First time this EPC is heard this pass: one beep (the native per-tag
     // beep is off here, so this is the only sound, and only on a new hit).
     _beeper.request();
@@ -842,6 +856,15 @@ class _CloudGeigerScreenState extends State<CloudGeigerScreen> {
                   ),
                   ],
                 ],
+              ),
+            ),
+            Container(
+              color: const Color(0xFFF0F5F4),
+              padding: EdgeInsets.fromLTRB(14.w, 6.h, 14.w, 0),
+              child: ScanRangePanel(
+                setting: _range,
+                onRangeChanged: _setRange,
+                onGateChanged: (v) => setState(() => _range.gate[_range.range] = v),
               ),
             ),
             _BulkFindPowerSlider(

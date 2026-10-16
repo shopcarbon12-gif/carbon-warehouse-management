@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -18,6 +17,7 @@ import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/covering_route.dart';
 import 'package:carbon_wms/ui/screens/tag_page_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
+import 'package:carbon_wms/ui/widgets/scan_range.dart';
 
 /// Zone Management (owner, 2026-10-16) — Bin Management → Zone Management.
 ///
@@ -28,11 +28,8 @@ import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 /// the LIVE tags of this location in the zone, REMOVE takes them out; bins
 /// never change. The whole scan (couldn't-assign included) becomes a report.
 ///
-/// Range — the RFD8500 reports a signal strength (RSSI) per read but can't
-/// filter on it or read near tags first, so the app does: NEAR / MEDIUM only
-/// take a tag once it is read at or above the minimum signal (close, in
-/// front of the antenna); FAR takes everything. With a gate on, quiet mode is
-/// off — a far tag read once (too weak) must answer again when you walk up.
+/// Range — NEAR / MEDIUM / FAR, see [ScanRange] (shared with Bulk Geiger,
+/// Cloud + Geiger, Add-On Count and Add-On Catalog).
 ///
 /// Swipe a line right to drop it (it won't be assigned, and re-reads are
 /// ignored until CLEAR). Tap a line for its tag page (photo, details, GEIGER).
@@ -47,10 +44,6 @@ const Color _kOk = Color(0xFF16A34A);
 const Color _kWarn = Color(0xFFB45309);
 const Color _kCard = Color(0xFFECECEC);
 const Color _kRed = Color(0xFFBF2E2E);
-
-enum _Range { near, medium, far }
-
-const Map<_Range, int> _defaultGate = {_Range.near: -55, _Range.medium: -65};
 
 class _Zone {
   const _Zone(this.id, this.name, this.count);
@@ -99,9 +92,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   int _checkingTotal = 0;
   int _checkingDone = 0;
 
-  // Range / signal gate.
-  _Range _range = _Range.far;
-  final Map<_Range, int> _gate = Map.of(_defaultGate);
+  // Range / signal gate (keys kept from 1.2.178: zone_mgmt_range, …).
+  final ScanRangeSetting _range = ScanRangeSetting('zone_mgmt');
 
   // Radio — same handling as Cloud + Geiger.
   RfidManager? _rfid;
@@ -113,12 +105,9 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   int _scanGen = 0;
   Future<void> _radioReady = Future<void>.value();
   final BeepPacer _beeper = BeepPacer();
-  Timer? _powerApplyTimer;
+  final ScanPower _power = ScanPower();
   Timer? _repaintTimer;
   bool _dirty = false;
-  int _minDbm = 1;
-  int _maxDbm = 30;
-  int _powerDbm = 23;
 
   _Zone? get _zone {
     for (final z in _zones) {
@@ -126,8 +115,6 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     }
     return null;
   }
-
-  int? get _minRssi => _range == _Range.far ? null : _gate[_range];
 
   @override
   void didChangeDependencies() {
@@ -171,7 +158,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
       _rfid!.scanContext = 'GEIGER_FIND';
       _triggerSub = hardwareTriggerFor(this).listen(_onTrigger, onError: (_) {});
       _vendorSub = RfidVendorChannel.tagReadStream().listen(_onUhfRead, onError: (_) {});
-      await _loadRangePrefs();
+      await _range.load();
+      if (mounted) setState(() {});
       _radioReady = _initRadio();
       unawaited(_loadZones());
     });
@@ -181,7 +169,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   void dispose() {
     _lifecycleRfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
     _repaintTimer?.cancel();
-    _powerApplyTimer?.cancel();
+    _power.dispose();
     _beeper.dispose();
     unawaited(_vendorSub?.cancel());
     unawaited(_triggerSub?.cancel());
@@ -194,51 +182,20 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     super.dispose();
   }
 
-  // ── Range prefs ───────────────────────────────────────────────────────────
+  // ── Range ─────────────────────────────────────────────────────────────────
 
-  static const _kRangePref = 'zone_mgmt_range';
-  static const _kGateNearPref = 'zone_mgmt_gate_near';
-  static const _kGateMediumPref = 'zone_mgmt_gate_medium';
-
-  Future<void> _loadRangePrefs() async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      final r = p.getString(_kRangePref);
-      setState(() {
-        _range = _Range.values.firstWhere((v) => v.name == r, orElse: () => _Range.far);
-        _gate[_Range.near] = p.getInt(_kGateNearPref) ?? _defaultGate[_Range.near]!;
-        _gate[_Range.medium] = p.getInt(_kGateMediumPref) ?? _defaultGate[_Range.medium]!;
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _saveRangePrefs() async {
-    try {
-      final p = await SharedPreferences.getInstance();
-      await p.setString(_kRangePref, _range.name);
-      await p.setInt(_kGateNearPref, _gate[_Range.near]!);
-      await p.setInt(_kGateMediumPref, _gate[_Range.medium]!);
-    } catch (_) {}
-  }
-
-  void _setRange(_Range r) {
-    setState(() => _range = r);
-    unawaited(_saveRangePrefs());
+  void _setRange(ScanRange r) {
+    setState(() => _range.range = r);
+    unawaited(_range.save());
     _radioReady = _applyRadioSetup();
   }
 
   // ── Radio ─────────────────────────────────────────────────────────────────
 
   Future<void> _initRadio() async {
-    final range = await RfidVendorChannel.getPowerRangeDbm();
+    await _power.loadRange();
     if (!mounted) return;
-    if (range != null) {
-      setState(() {
-        _minDbm = range.minDbm;
-        _maxDbm = range.maxDbm;
-        _powerDbm = range.maxDbm;
-      });
-    }
+    setState(() {});
     await _applyRadioSetup();
   }
 
@@ -249,11 +206,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     // FAR: quiet mode (a read tag stays silent while powered — less noise in a
     // crowded rack). NEAR / MEDIUM: off, so a tag that was too far the first
     // time answers again when the operator walks up to it.
-    await RfidVendorChannel.setQuietInventory(_range == _Range.far);
-    await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
-    try {
-      await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
-    } catch (_) {}
+    await RfidVendorChannel.setQuietInventory(_range.quietMode);
+    await _power.apply(_rfid);
   }
 
   Future<void> _loadZones() async {
@@ -357,17 +311,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   }
 
   void _setPower(int dbm) {
-    final v = dbm.clamp(_minDbm, _maxDbm);
-    if (v == _powerDbm) return;
-    setState(() => _powerDbm = v);
-    _powerApplyTimer?.cancel();
-    _powerApplyTimer = Timer(const Duration(milliseconds: 180), () async {
-      if (!mounted) return;
-      await _rfid?.setSessionPowerOverrideDbm(v);
-      try {
-        await RfidVendorChannel.setAntennaPowerDbm(v);
-      } catch (_) {}
-    });
+    if (_power.set(dbm, _rfid)) setState(() {});
   }
 
   /// Hot path: no network, no setState — just record and mark for repaint.
@@ -376,7 +320,6 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     final epc = read.epcHex24.toUpperCase();
     if (epc.length != 24 || _dropped.contains(epc)) return;
     final rssi = read.rssi;
-    final gate = _minRssi;
     final existing = _tags[epc];
     if (existing != null) {
       if (rssi != null && (existing.rssi == null || rssi > existing.rssi!)) {
@@ -386,9 +329,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
       return;
     }
     // Signal gate (NEAR / MEDIUM): too weak = too far or not in front of the
-    // antenna yet — ignored until a stronger read. Readers that report no
-    // RSSI are never gated.
-    if (gate != null && rssi != null && rssi < gate) return;
+    // antenna yet — ignored until a stronger read.
+    if (!_range.passes(rssi)) return;
     _tags[epc] = _Tag(epc, rssi);
     _beeper.request();
     _dirty = true;
@@ -624,58 +566,22 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                   ),
                   SizedBox(width: 8.w),
                   Expanded(
-                    child: SegmentedButton<_Range>(
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(value: _Range.near, label: Text('NEAR')),
-                        ButtonSegment(value: _Range.medium, label: Text('MED')),
-                        ButtonSegment(value: _Range.far, label: Text('FAR')),
-                      ],
-                      selected: {_range},
-                      onSelectionChanged: (s) => _setRange(s.first),
-                    ),
+                    child: ScanRangeButtons(value: _range.range, onChanged: _setRange),
                   ),
                 ],
               ),
             ),
             Padding(
               padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 0),
-              child: Row(
-                children: [
-                  Text('Power', style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted)),
-                  Expanded(
-                    child: Slider(
-                      value: _powerDbm.toDouble().clamp(_minDbm.toDouble(), _maxDbm.toDouble()),
-                      min: _minDbm.toDouble(),
-                      max: _maxDbm.toDouble(),
-                      divisions: (_maxDbm - _minDbm).clamp(1, 40),
-                      label: '$_powerDbm dBm',
-                      onChanged: (v) => _setPower(v.round()),
-                    ),
-                  ),
-                  Text('$_powerDbm dBm', style: GoogleFonts.spaceGrotesk(fontSize: 12.5.sp, fontWeight: FontWeight.w700)),
-                ],
-              ),
+              child: ScanPowerRow(power: _power, onChanged: _setPower),
             ),
-            if (_range != _Range.far)
+            if (_range.range != ScanRange.far)
               Padding(
                 padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 0),
-                child: Row(
-                  children: [
-                    Text('Min signal', style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted)),
-                    Expanded(
-                      child: Slider(
-                        value: _gate[_range]!.toDouble().clamp(-85.0, -30.0),
-                        min: -85,
-                        max: -30,
-                        divisions: 55,
-                        label: '${_gate[_range]} dBm',
-                        onChanged: (v) => setState(() => _gate[_range] = v.round()),
-                        onChangeEnd: (_) => unawaited(_saveRangePrefs()),
-                      ),
-                    ),
-                    Text('${_gate[_range]} dBm', style: GoogleFonts.spaceGrotesk(fontSize: 12.5.sp, fontWeight: FontWeight.w700)),
-                  ],
+                child: ScanMinSignalRow(
+                  setting: _range,
+                  onChanged: (v) => setState(() => _range.gate[_range.range] = v),
+                  onChangeEnd: () => unawaited(_range.save()),
                 ),
               ),
             Padding(
@@ -686,7 +592,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                     : '${rows.length} read · $actionable ${_removeMode ? 'in this zone' : 'ready'}'
                         ' · $cannot can\'t be assigned'
                         '${unchecked > 0 ? ' · $unchecked to check (pause)' : ''}'
-                        '${_range != _Range.far ? ' · only ≥ $_minRssi dBm' : ''}',
+                        '${_range.minRssi != null ? ' · only ≥ ${_range.minRssi} dBm' : ''}',
                 style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted),
               ),
             ),

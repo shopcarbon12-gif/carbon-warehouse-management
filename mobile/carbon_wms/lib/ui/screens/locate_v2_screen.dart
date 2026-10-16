@@ -51,6 +51,7 @@ class LocateV2Screen extends StatefulWidget {
     this.targetSize,
     this.targetPriceText,
     this.cloudGeigerMode = false,
+    this.showActions = false,
     this.anyUnitLineId,
   });
 
@@ -62,6 +63,10 @@ class LocateV2Screen extends StatefulWidget {
   final String? targetSize;
   final String? targetPriceText;
   final bool cloudGeigerMode;
+
+  /// "TAKE AN ACTION" without the Cloud + Geiger queue clean-up (Geiger from
+  /// a tag page or Bulk Geiger).
+  final bool showActions;
 
   /// Store Replenishment sale line → "find any unit" mode.
   final int? anyUnitLineId;
@@ -973,13 +978,13 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
               big: true,
               onPressed: engine == null || _lineDone ? null : () => unawaited(_toggle()),
             ),
-            if (widget.cloudGeigerMode && !_scanning) ...[
+            if ((widget.cloudGeigerMode || widget.showActions) && !_scanning) ...[
               SizedBox(height: 8.h),
               _ActionButton(
                 label: 'TAKE AN ACTION',
                 icon: Icons.bolt,
                 secondary: true,
-                onPressed: () => showLocateActionPicker(context, epc: _epc, cloudGeigerMode: true),
+                onPressed: () => showLocateActionPicker(context, epc: _epc, cloudGeigerMode: widget.cloudGeigerMode),
               ),
             ],
             SizedBox(height: 10.h),

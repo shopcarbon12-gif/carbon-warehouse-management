@@ -88,6 +88,7 @@ class LocateTagScreen extends StatelessWidget {
     this.targetSize,
     this.targetPriceText,
     this.cloudGeigerMode = false,
+    this.showActions = false,
     this.anyUnitLineId,
   });
 
@@ -99,6 +100,11 @@ class LocateTagScreen extends StatelessWidget {
   final String? targetSize;
   final String? targetPriceText;
   final bool cloudGeigerMode;
+
+  /// "TAKE AN ACTION" (Status change / Encode / Search & Encode) without the
+  /// Cloud + Geiger queue clean-up — Geiger opened from a tag page or Bulk
+  /// Geiger. [cloudGeigerMode] always shows it.
+  final bool showActions;
 
   /// Store Replenishment line → "find any unit" (Locate 2.0 only).
   final int? anyUnitLineId;
@@ -119,6 +125,7 @@ class LocateTagScreen extends StatelessWidget {
             targetSize: targetSize,
             targetPriceText: targetPriceText,
             cloudGeigerMode: cloudGeigerMode,
+            showActions: showActions,
             anyUnitLineId: anyUnitLineId,
           );
         }
@@ -131,6 +138,7 @@ class LocateTagScreen extends StatelessWidget {
           targetSize: targetSize,
           targetPriceText: targetPriceText,
           cloudGeigerMode: cloudGeigerMode,
+          showActions: showActions,
         );
       },
     );
@@ -148,6 +156,7 @@ class ClassicLocateTagScreen extends StatefulWidget {
     this.targetSize,
     this.targetPriceText,
     this.cloudGeigerMode = false,
+    this.showActions = false,
   });
 
   final String? targetEpc;
@@ -169,6 +178,9 @@ class ClassicLocateTagScreen extends StatefulWidget {
   /// (visible only while NOT scanning) which routes to Status Change /
   /// Encode / Re-encode for that tag.
   final bool cloudGeigerMode;
+
+  /// "TAKE AN ACTION" without the Cloud + Geiger queue clean-up.
+  final bool showActions;
 
   @override
   State<ClassicLocateTagScreen> createState() => _LocateTagScreenState();
@@ -1505,7 +1517,7 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
               // Re-encode. Hidden while scanning so the trigger flow is
               // never ambiguous (and the operator can't accidentally tap
               // while the radio is sweeping).
-              if (widget.cloudGeigerMode && !_scanning) ...[
+              if ((widget.cloudGeigerMode || widget.showActions) && !_scanning) ...[
                 _TakeActionButton(onPressed: _showActionPicker),
                 SizedBox(height: 8.h),
               ],
