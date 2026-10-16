@@ -6,6 +6,7 @@ import { Eye, EyeOff, Pin, Radio, Send, Tag, X } from "lucide-react";
 import type { CatalogGridRow } from "@/lib/server/inventory-catalog";
 import type { CatalogItemRow } from "@/lib/queries/catalog";
 import { STORE_TZ } from "@/lib/orlando-time";
+import { isStoreZone, StoreZoneIcon } from "@/components/inventory/catalog/store-zone-icon";
 
 type StatusLabelRow = {
   id: number;
@@ -483,7 +484,10 @@ export function RfidTagsModal({
                             <span className="text-[var(--wms-muted)]">Last seen:</span>{" "}
                             <span className="text-[var(--wms-fg)]">{formatLastSeen(it.last_seen_at)}</span>
                           </span>
-                          <span className="ml-auto">
+                          <span className="ml-auto inline-flex items-center gap-1.5">
+                            {isStoreZone(it.zone_name) ? (
+                              <StoreZoneIcon title={`In the ${it.zone_name} zone`} className="h-4 w-4" />
+                            ) : null}
                             <span
                               className={`inline-block rounded-md border px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-wide max-md:text-xs ${statusPillClasses(it.status)}`}
                             >

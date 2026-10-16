@@ -16,6 +16,7 @@ import { BarcodeScanButton } from "@/components/inventory/catalog/barcode-scan-b
 import { CatalogMatrixModal } from "@/components/inventory/catalog/catalog-matrix-modal";
 import { CatalogImageLightbox } from "@/components/inventory/catalog/catalog-image-lightbox";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
+import { StoreZoneIcon } from "@/components/inventory/catalog/store-zone-icon";
 import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
 import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
 import {
@@ -69,6 +70,10 @@ function displayUpc(r: CatalogGridRow): string {
   return r.matrix_upc?.trim() || "—";
 }
 
+function storeZoneTitle(r: CatalogGridRow): string {
+  return `In the STORE zone — ${r.store_zone_count} of ${r.active_epc_count} Live tag${r.active_epc_count === 1 ? "" : "s"}`;
+}
+
 function formatPrice(raw: string | null): string {
   if (raw == null || raw.trim() === "") return "—";
   const n = Number.parseFloat(raw);
@@ -95,6 +100,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
     "Bin",
     "Qty (EPC)",
     "Shopify Linked",
+    "Store Zone (tags)",
     "Category",
     "Subcategory 1",
   ];
@@ -114,6 +120,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
         r.bin_location ?? "",
         String(r.active_epc_count ?? 0),
         r.shopify_linked ? "Yes" : "No",
+        String(r.store_zone_count ?? 0),
         r.category?.trim() ?? "",
         r.subcategory_1?.trim() ?? "",
       ]
@@ -174,7 +181,7 @@ const DEFAULT_COL_WIDTHS: (number | null)[] = [
   80,   // bin
   90,   // qty (epc) — centered numerals
   90,   // rfid (fits 78px badge + table padding)
-  80,   // shopify (linked/not-linked logo)
+  80,   // channels (Shopify linked/not-linked logo + STORE zone icon)
   110,  // category
   120,  // subcategory 1
 ];
@@ -952,7 +959,7 @@ export function CatalogWorkspace({
                       { key: "bin", label: "Bin" },
                       { key: "qty_epc", label: "Qty (EPC)", align: "center" },
                       { key: "rfid", label: "RFID", sortable: false },
-                      { key: "shopify", label: "Shopify", sortable: false, align: "center" },
+                      { key: "shopify", label: "Channels", sortable: false, align: "center" },
                       { key: "category", label: "Category" },
                       { key: "subcategory_1", label: "Subcategory 1" },
                     ] as { key: SortKey | "rfid" | "shopify"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
@@ -1147,24 +1154,28 @@ export function CatalogWorkspace({
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        <span
-                          className="inline-block h-5 w-5 align-middle"
-                          style={{
-                            backgroundColor: r.shopify_linked ? "var(--wms-accent)" : "var(--wms-muted)",
-                            opacity: r.shopify_linked ? 1 : 0.55,
-                            WebkitMaskImage: "url(/shopify-mark.png)",
-                            maskImage: "url(/shopify-mark.png)",
-                            WebkitMaskRepeat: "no-repeat",
-                            maskRepeat: "no-repeat",
-                            WebkitMaskPosition: "center",
-                            maskPosition: "center",
-                            WebkitMaskSize: "contain",
-                            maskSize: "contain",
-                          }}
-                          title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
-                          aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
-                          role="img"
-                        />
+                        {/* Channels: Shopify mark, plus a store icon when tags are in the STORE zone. */}
+                        <span className="inline-flex items-center justify-center gap-1.5 align-middle">
+                          <span
+                            className="inline-block h-5 w-5 align-middle"
+                            style={{
+                              backgroundColor: r.shopify_linked ? "var(--wms-accent)" : "var(--wms-muted)",
+                              opacity: r.shopify_linked ? 1 : 0.55,
+                              WebkitMaskImage: "url(/shopify-mark.png)",
+                              maskImage: "url(/shopify-mark.png)",
+                              WebkitMaskRepeat: "no-repeat",
+                              maskRepeat: "no-repeat",
+                              WebkitMaskPosition: "center",
+                              maskPosition: "center",
+                              WebkitMaskSize: "contain",
+                              maskSize: "contain",
+                            }}
+                            title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                            aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                            role="img"
+                          />
+                          {r.store_zone_count > 0 ? <StoreZoneIcon title={storeZoneTitle(r)} /> : null}
+                        </span>
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.category ?? undefined}>
                         {r.category?.trim() || "—"}
@@ -1245,18 +1256,23 @@ export function CatalogWorkspace({
                           <span className="font-mono text-sm tabular-nums text-[var(--wms-fg)]">
                             {r.active_epc_count}
                           </span>
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-full"
-                            style={{
-                              backgroundColor: r.shopify_linked
-                                ? "var(--wms-accent)"
-                                : "var(--wms-muted)",
-                              opacity: r.shopify_linked ? 1 : 0.45,
-                            }}
-                            title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
-                            aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
-                            role="img"
-                          />
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full"
+                              style={{
+                                backgroundColor: r.shopify_linked
+                                  ? "var(--wms-accent)"
+                                  : "var(--wms-muted)",
+                                opacity: r.shopify_linked ? 1 : 0.45,
+                              }}
+                              title={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                              aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
+                              role="img"
+                            />
+                            {r.store_zone_count > 0 ? (
+                              <StoreZoneIcon title={storeZoneTitle(r)} className="h-3.5 w-3.5" />
+                            ) : null}
+                          </span>
                         </span>
                       </button>
                       {/* UPC row — same behaviour as the desktop UPC cell: tap opens the matrix. */}

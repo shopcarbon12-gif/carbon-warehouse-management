@@ -52,6 +52,12 @@ export type CatalogGridRow = {
    */
   pinned_bin_code: string | null;
   /**
+   * LIVE tags of this SKU at the location that are in the Zone Management
+   * zone named "Store" (any case). The Channels column shows a store icon
+   * next to the Shopify mark when this is above 0.
+   */
+  store_zone_count: number;
+  /**
    * Variant's color-specific Shopify image (cdn.shopify.com URL), or null
    * when not synced. Rendered as the single picture in the item popup.
    * Populated by lib/server/shopify-catalog-images.ts.
@@ -307,6 +313,7 @@ export async function listCatalogGrid(
     is_manual_only: boolean;
     manual_qty: number | null;
     pinned_bin_code: string | null;
+    store_zone_count: number;
     shopify_image_url: string | null;
     shopify_linked: boolean;
   }>(
@@ -386,7 +393,17 @@ export async function listCatalogGrid(
            AND i.pinned_bin_id IS NOT NULL
          ORDER BY b.code ASC
          LIMIT 1
-       ) AS pinned_bin_code
+       ) AS pinned_bin_code,
+       -- LIVE tags in the "Store" zone (Zone Management) → store icon in Channels.
+       (
+         SELECT COUNT(*)::int
+         FROM items i
+         INNER JOIN assigned_zones az ON az.id = i.assigned_zone_id AND az.archived_at IS NULL
+         WHERE i.custom_sku_id = cs.id
+           AND i.location_id = $${locIdx}::uuid
+           AND i.status = 'in-stock'
+           AND lower(btrim(az.name)) = 'store'
+       ) AS store_zone_count
      FROM custom_skus cs
      INNER JOIN matrices m ON m.id = cs.matrix_id
      WHERE ${whereSql}
@@ -487,6 +504,7 @@ export async function listCatalogGrid(
         matrix_archived: row.matrix_archived === true,
         is_manual_only: manual,
         pinned_bin_code: row.pinned_bin_code ?? null,
+        store_zone_count: Number(row.store_zone_count ?? 0),
         shopify_image_url: row.shopify_image_url ?? null,
       };
     }),
