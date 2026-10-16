@@ -225,6 +225,7 @@ const MOBILE_GROUPS: MobileGroupDef[] = [
       { id: "status_reports", label: "Status reports", actions: [{ id: "export_csv", label: "Export CSV" }] },
       { id: "damages_reports", label: "Damages reports", actions: [{ id: "export_csv", label: "Export CSV" }] },
       { id: "re_encode_reports", label: "Re-encode reports", actions: [{ id: "export_csv", label: "Export CSV" }] },
+      { id: "zone_reports", label: "Zone reports" },
       { id: "transfer_out_reports", label: "Transfer reports", actions: [{ id: "export_csv", label: "Export CSV" }] },
       { id: "bin_clearance_report", label: "Bin clearance report" },
       { id: "encode_commission_report", label: "Encode-commission report", actions: [{ id: "export_csv", label: "Export CSV" }] },

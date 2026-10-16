@@ -12,6 +12,7 @@ import 'package:carbon_wms/ui/screens/damages_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/re_encode_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/status_reports_screen.dart';
 import 'package:carbon_wms/ui/screens/transfer_out_reports_screen.dart';
+import 'package:carbon_wms/ui/screens/zone_reports_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 
 /// Inventory → Reports hub. Three families today (Counts / Transfers /
@@ -115,6 +116,18 @@ class ReportsHubScreen extends StatelessWidget {
                   onTap: () => context.pushGuarded<void>(
                     ScreenIds.reEncodeReports,
                     (_) => const ReEncodeReportsScreen(),
+                  ),
+                ),
+              if (perms.canView(ScreenIds.zoneReports))
+                _ReportTile(
+                  label: 'ZONES',
+                  icon: LucideIcons.mapPin,
+                  tileColor: tileColor,
+                  iconColor: iconColor,
+                  textColor: textColor,
+                  onTap: () => context.pushGuarded<void>(
+                    ScreenIds.zoneReports,
+                    (_) => const ZoneReportsScreen(),
                   ),
                 ),
             ],

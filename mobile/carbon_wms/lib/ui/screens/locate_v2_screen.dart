@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/ui/widgets/live_item_photo.dart';
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
@@ -817,6 +818,16 @@ class _LocateV2ScreenState extends State<LocateV2Screen> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 16.h),
           children: [
+            // Product photo, read live from the WMS on every open.
+            if (!_anyUnit || (widget.targetSku ?? '').isNotEmpty) ...[
+              LiveItemPhoto(
+                epc: _anyUnit ? null : _epc,
+                sku: widget.targetSku ?? _unitsInfo?['sku']?.toString(),
+                height: 150,
+                title: widget.targetName,
+              ),
+              SizedBox(height: 8.h),
+            ],
             _ItemCard(
               sku: widget.targetSku ?? _unitsInfo?['sku']?.toString(),
               name: widget.targetName ?? _unitsInfo?['name']?.toString(),

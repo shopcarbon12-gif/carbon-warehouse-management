@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:carbon_wms/hardware/hardware_trigger.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
@@ -15,20 +16,26 @@ import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/guards/covering_route.dart';
+import 'package:carbon_wms/ui/screens/tag_page_screen.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart' show CarbonScaffold;
 
 /// Zone Management (owner, 2026-10-16) — Bin Management → Zone Management.
 ///
-/// Pick a zone (e.g. "Store"), pull the trigger and walk: every tag the sled
-/// reads is checked against the WMS and listed — product, size, colour, bin
-/// and current zone. ASSIGN puts the LIVE tags of this location in the zone;
-/// REMOVE takes them out. Bins never change. Tags that can't be assigned
-/// (not LIVE, another location, not in the WMS, not a Carbon tag,
-/// damaged-chip read, re-encoded old number) are listed with the reason; tap
-/// any row for everything the WMS knows about that tag.
+/// Pick a zone (e.g. "Store"), pull the trigger and walk. While scanning the
+/// screen only counts and lists tags (a light repaint 4×/s, only visible rows
+/// drawn); when you pause, every new tag is checked against the WMS: product,
+/// size, colour, bin, current zone — or why it can't be assigned. ASSIGN puts
+/// the LIVE tags of this location in the zone, REMOVE takes them out; bins
+/// never change. The whole scan (couldn't-assign included) becomes a report.
 ///
-/// One zone per tag (assigning moves it from another zone); a zone clears by
-/// itself when the tag is sold, moves location or stops being LIVE.
+/// Range — the RFD8500 reports a signal strength (RSSI) per read but can't
+/// filter on it or read near tags first, so the app does: NEAR / MEDIUM only
+/// take a tag once it is read at or above the minimum signal (close, in
+/// front of the antenna); FAR takes everything. With a gate on, quiet mode is
+/// off — a far tag read once (too weak) must answer again when you walk up.
+///
+/// Swipe a line right to drop it (it won't be assigned, and re-reads are
+/// ignored until CLEAR). Tap a line for its tag page (photo, details, GEIGER).
 class ZoneManagementScreen extends StatefulWidget {
   const ZoneManagementScreen({super.key});
 
@@ -39,6 +46,11 @@ class ZoneManagementScreen extends StatefulWidget {
 const Color _kOk = Color(0xFF16A34A);
 const Color _kWarn = Color(0xFFB45309);
 const Color _kCard = Color(0xFFECECEC);
+const Color _kRed = Color(0xFFBF2E2E);
+
+enum _Range { near, medium, far }
+
+const Map<_Range, int> _defaultGate = {_Range.near: -55, _Range.medium: -65};
 
 class _Zone {
   const _Zone(this.id, this.name, this.count);
@@ -48,36 +60,31 @@ class _Zone {
 }
 
 class _Tag {
-  _Tag(this.epc);
+  _Tag(this.epc, this.rssi);
   final String epc;
-  Map<String, dynamic>? check; // null = still being checked
+  int? rssi; // strongest read this session
+  Map<String, dynamic>? check; // null = not checked yet
+  Map<String, dynamic> d = const {};
+
+  void setCheck(Map<String, dynamic> c) {
+    check = c;
+    d = (c['details'] is Map) ? Map<String, dynamic>.from(c['details'] as Map) : const {};
+    product = [d['product'], d['color'], d['size']].where((v) => v != null && '$v'.isNotEmpty).join(' · ');
+    final bin = d['bin'] as String?;
+    final extra = (d['extraBins'] is List) ? (d['extraBins'] as List).map((e) => '$e').toList() : <String>[];
+    bins = (bin == null || bin.isEmpty)
+        ? (extra.isEmpty ? '—' : extra.join(', '))
+        : (extra.isEmpty ? bin : '$bin (+ ${extra.join(', ')})');
+  }
+
+  String product = '';
+  String bins = '—';
   bool get checked => check != null;
   bool get ok => check?['ok'] == true;
-  Map<String, dynamic> get d =>
-      (check?['details'] is Map) ? Map<String, dynamic>.from(check!['details'] as Map) : const {};
   String? get zoneId => d['zoneId'] as String?;
   String? get zone => d['zone'] as String?;
   String? get reasonText => check?['reasonText'] as String?;
 }
-
-String _when(Object? iso) {
-  if (iso is! String || iso.isEmpty) return '—';
-  final t = DateTime.tryParse(iso)?.toLocal();
-  if (t == null) return '—';
-  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  return '${m[t.month - 1]} ${t.day} $h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
-}
-
-String _bins(Map<String, dynamic> d) {
-  final bin = d['bin'] as String?;
-  final extra = (d['extraBins'] is List) ? (d['extraBins'] as List).map((e) => '$e').toList() : <String>[];
-  if (bin == null || bin.isEmpty) return extra.isEmpty ? '—' : extra.join(', ');
-  return extra.isEmpty ? bin : '$bin (+ ${extra.join(', ')})';
-}
-
-String _product(Map<String, dynamic> d) =>
-    [d['product'], d['color'], d['size']].where((v) => v != null && '$v'.isNotEmpty).join(' · ');
 
 class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   List<_Zone> _zones = const [];
@@ -88,10 +95,13 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   String? _message;
 
   final Map<String, _Tag> _tags = <String, _Tag>{};
-  final List<String> _order = <String>[];
-  final Set<String> _pending = <String>{};
-  Timer? _checkTimer;
-  bool _checking = false;
+  final Set<String> _dropped = <String>{};
+  int _checkingTotal = 0;
+  int _checkingDone = 0;
+
+  // Range / signal gate.
+  _Range _range = _Range.far;
+  final Map<_Range, int> _gate = Map.of(_defaultGate);
 
   // Radio — same handling as Cloud + Geiger.
   RfidManager? _rfid;
@@ -104,6 +114,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   Future<void> _radioReady = Future<void>.value();
   final BeepPacer _beeper = BeepPacer();
   Timer? _powerApplyTimer;
+  Timer? _repaintTimer;
+  bool _dirty = false;
   int _minDbm = 1;
   int _maxDbm = 30;
   int _powerDbm = 23;
@@ -114,6 +126,8 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     }
     return null;
   }
+
+  int? get _minRssi => _range == _Range.far ? null : _gate[_range];
 
   @override
   void didChangeDependencies() {
@@ -130,25 +144,34 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     _scanGen++;
     _beeper.cancel();
     setState(() => _scanning = false);
+    unawaited(_checkPending());
   }
 
   @override
   void initState() {
     super.initState();
     unawaited(ScanSounds.instance.init());
-    // One beep per NEW tag (paced), not the native per-read beep.
+    // One paced beep per NEW tag, not the native per-read beep.
     unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     unawaited(RfidVendorChannel.scannerDisableTriggerRelay());
     unawaited(RfidVendorChannel.close2dBarcode());
     unawaited(RfidVendorChannel.enableRfidFunctionMode());
     unawaited(RfidVendorChannel.setZebraTriggerModeRfid());
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Light repaint while scanning: the list redraws at most 4×/s.
+    _repaintTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (_dirty && mounted) {
+        _dirty = false;
+        setState(() {});
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _rfid = context.read<RfidManager>();
       // Raw reads only — nothing is ingested or changed by reading.
       _rfid!.scanContext = 'GEIGER_FIND';
       _triggerSub = hardwareTriggerFor(this).listen(_onTrigger, onError: (_) {});
       _vendorSub = RfidVendorChannel.tagReadStream().listen(_onUhfRead, onError: (_) {});
+      await _loadRangePrefs();
       _radioReady = _initRadio();
       unawaited(_loadZones());
     });
@@ -157,7 +180,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   @override
   void dispose() {
     _lifecycleRfid?.lifecycleStopTick.removeListener(_onLifecycleStop);
-    _checkTimer?.cancel();
+    _repaintTimer?.cancel();
     _powerApplyTimer?.cancel();
     _beeper.dispose();
     unawaited(_vendorSub?.cancel());
@@ -170,6 +193,41 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     if (rfid != null) unawaited(rfid.setSessionPowerOverrideDbm(null));
     super.dispose();
   }
+
+  // ── Range prefs ───────────────────────────────────────────────────────────
+
+  static const _kRangePref = 'zone_mgmt_range';
+  static const _kGateNearPref = 'zone_mgmt_gate_near';
+  static const _kGateMediumPref = 'zone_mgmt_gate_medium';
+
+  Future<void> _loadRangePrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      final r = p.getString(_kRangePref);
+      setState(() {
+        _range = _Range.values.firstWhere((v) => v.name == r, orElse: () => _Range.far);
+        _gate[_Range.near] = p.getInt(_kGateNearPref) ?? _defaultGate[_Range.near]!;
+        _gate[_Range.medium] = p.getInt(_kGateMediumPref) ?? _defaultGate[_Range.medium]!;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveRangePrefs() async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kRangePref, _range.name);
+      await p.setInt(_kGateNearPref, _gate[_Range.near]!);
+      await p.setInt(_kGateMediumPref, _gate[_Range.medium]!);
+    } catch (_) {}
+  }
+
+  void _setRange(_Range r) {
+    setState(() => _range = r);
+    unawaited(_saveRangePrefs());
+    _radioReady = _applyRadioSetup();
+  }
+
+  // ── Radio ─────────────────────────────────────────────────────────────────
 
   Future<void> _initRadio() async {
     final range = await RfidVendorChannel.getPowerRangeDbm();
@@ -188,9 +246,10 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     unawaited(ScanSounds.instance.setTagBeepSuppressed(true));
     _rfid?.scanContext = 'GEIGER_FIND';
     await RfidVendorChannel.setEpcInventoryFilter(null);
-    // Quiet mode: a tag already read stays silent while powered, so a crowded
-    // rack doesn't keep re-reading the same tags.
-    await RfidVendorChannel.setQuietInventory(true);
+    // FAR: quiet mode (a read tag stays silent while powered — less noise in a
+    // crowded rack). NEAR / MEDIUM: off, so a tag that was too far the first
+    // time answers again when the operator walks up to it.
+    await RfidVendorChannel.setQuietInventory(_range == _Range.far);
     await _rfid?.setSessionPowerOverrideDbm(_powerDbm);
     try {
       await RfidVendorChannel.setAntennaPowerDbm(_powerDbm);
@@ -217,8 +276,6 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     }
   }
 
-  // ── Scanning ──────────────────────────────────────────────────────────────
-
   void _onTrigger(String event) {
     if (!mounted || event != 'down') return;
     if (_scanning) {
@@ -229,7 +286,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   }
 
   Future<void> _startScan() async {
-    if (_scanning || (_rfid?.isBackgrounded ?? false)) return;
+    if (_scanning || _busy || (_rfid?.isBackgrounded ?? false)) return;
     final gen = ++_scanGen;
     setState(() {
       _scanning = true;
@@ -285,6 +342,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     }
   }
 
+  /// Pause: stop the radio, then look up every tag read since the last check.
   Future<void> _stopScan() async {
     if (!_scanning) return;
     _scanGen++;
@@ -295,6 +353,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     } catch (_) {}
     await RfidVendorChannel.stopZebraInventory();
     await RfidVendorChannel.stopChainwayInventory();
+    await _checkPending();
   }
 
   void _setPower(int dbm) {
@@ -311,62 +370,91 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     });
   }
 
+  /// Hot path: no network, no setState — just record and mark for repaint.
   void _onUhfRead(RfidTagRead read) {
-    if (!mounted || !_scanning) return;
+    if (!_scanning) return;
     final epc = read.epcHex24.toUpperCase();
-    if (epc.length != 24 || _tags.containsKey(epc)) return;
-    _tags[epc] = _Tag(epc);
-    _order.insert(0, epc);
-    _pending.add(epc);
-    _beeper.request();
-    _checkTimer ??= Timer(const Duration(milliseconds: 600), _flushChecks);
-    setState(() {});
-  }
-
-  /// Checks newly read tags in batches (product, bin, current zone, or why
-  /// it can't be assigned).
-  Future<void> _flushChecks() async {
-    _checkTimer = null;
-    if (_checking || _pending.isEmpty || !mounted) return;
-    _checking = true;
-    final batch = _pending.take(400).toList();
-    _pending.removeAll(batch);
-    try {
-      final rows = await context.read<WmsApiClient>().checkZoneEpcs(batch);
-      if (!mounted) return;
-      for (final r in rows) {
-        final t = _tags[('${r['epc']}').toUpperCase()];
-        if (t != null) t.check = r;
+    if (epc.length != 24 || _dropped.contains(epc)) return;
+    final rssi = read.rssi;
+    final gate = _minRssi;
+    final existing = _tags[epc];
+    if (existing != null) {
+      if (rssi != null && (existing.rssi == null || rssi > existing.rssi!)) {
+        existing.rssi = rssi;
+        _dirty = true;
       }
-      setState(() {});
-    } catch (_) {
-      _pending.addAll(batch); // retry on the next flush
-    } finally {
-      _checking = false;
-      if (_pending.isNotEmpty && mounted) {
-        _checkTimer ??= Timer(const Duration(milliseconds: 900), _flushChecks);
-      }
+      return;
     }
+    // Signal gate (NEAR / MEDIUM): too weak = too far or not in front of the
+    // antenna yet — ignored until a stronger read. Readers that report no
+    // RSSI are never gated.
+    if (gate != null && rssi != null && rssi < gate) return;
+    _tags[epc] = _Tag(epc, rssi);
+    _beeper.request();
+    _dirty = true;
   }
 
-  // ── Actions ───────────────────────────────────────────────────────────────
+  /// Checks every not-yet-checked tag, 400 per call, with progress.
+  Future<void> _checkPending() async {
+    final todo = _tags.values.where((t) => !t.checked).map((t) => t.epc).toList();
+    if (todo.isEmpty || !mounted) return;
+    final api = context.read<WmsApiClient>();
+    setState(() {
+      _checkingTotal = todo.length;
+      _checkingDone = 0;
+    });
+    for (var i = 0; i < todo.length; i += 400) {
+      final batch = todo.sublist(i, i + 400 > todo.length ? todo.length : i + 400);
+      try {
+        final rows = await api.checkZoneEpcs(batch);
+        for (final r in rows) {
+          _tags[('${r['epc']}').toUpperCase()]?.setCheck(r);
+        }
+      } catch (e) {
+        if (mounted) setState(() => _message = 'Check failed — pause again to retry ($e)');
+      }
+      if (!mounted) return;
+      setState(() => _checkingDone = i + batch.length);
+    }
+    if (mounted) setState(() => _checkingTotal = 0);
+  }
 
-  List<_Tag> get _all => _order.map((e) => _tags[e]!).toList();
+  // ── Lists ─────────────────────────────────────────────────────────────────
 
   /// ASSIGN: LIVE tags here not already in this zone. REMOVE: tags in this zone.
-  List<_Tag> get _actionable => _all.where((t) {
-        if (!t.ok) return false;
-        return _removeMode ? t.zoneId == _zoneId : t.zoneId != _zoneId;
-      }).toList();
+  bool _isActionable(_Tag t) {
+    if (!t.ok) return false;
+    return _removeMode ? t.zoneId == _zoneId : t.zoneId != _zoneId;
+  }
 
-  List<_Tag> get _cannot => _all.where((t) => t.checked && !t.ok).toList();
+  /// Display order: while scanning, strongest signal first; after the check,
+  /// couldn't-assign first, then by product.
+  List<_Tag> _display() {
+    final list = _tags.values.toList();
+    if (_scanning || list.any((t) => !t.checked)) {
+      list.sort((a, b) => (b.rssi ?? -999).compareTo(a.rssi ?? -999));
+    } else {
+      list.sort((a, b) {
+        final c = (a.ok ? 1 : 0).compareTo(b.ok ? 1 : 0);
+        return c != 0 ? c : a.product.compareTo(b.product);
+      });
+    }
+    return list;
+  }
+
+  void _drop(_Tag t) {
+    setState(() {
+      _tags.remove(t.epc);
+      _dropped.add(t.epc);
+    });
+  }
 
   Future<void> _run() async {
     final zone = _zone;
-    final list = _actionable.map((t) => t.epc).toList();
-    if (zone == null || list.isEmpty || _busy) return;
     final perms = context.read<MobilePermissions>();
     final api = context.read<WmsApiClient>();
+    final actionable = _tags.values.where(_isActionable).length;
+    if (zone == null || actionable == 0 || _busy) return;
     if (!perms.canEdit(ScreenIds.zoneManagement)) {
       setState(() => _message = 'Not allowed to change zones');
       return;
@@ -377,28 +465,30 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
       _busy = true;
       _message = null;
     });
+    // The whole scan (dropped lines excluded) goes to the server: it changes
+    // only what it may and the report keeps every tag, couldn't-assign too.
+    final all = _tags.keys.toList();
     try {
       if (_removeMode) {
-        final j = await api.removeEpcsFromZone(list, zoneId: zone.id);
-        _message = 'Removed ${j['removed'] ?? 0} tag(s) from ${zone.name}.';
+        final j = await api.removeEpcsFromZone(all, zoneId: zone.id);
+        _message = 'Removed ${j['removed'] ?? 0} tag(s) from ${zone.name}. Report saved (Reports → Zones).';
       } else {
-        final j = await api.assignEpcsToZone(zone.id, list);
+        final j = await api.assignEpcsToZone(zone.id, all);
         final done = ((j['assigned'] as num?)?.toInt() ?? 0) + ((j['moved'] as num?)?.toInt() ?? 0);
         final moved = (j['moved'] as num?)?.toInt() ?? 0;
         final skipped = (j['skipped'] is List) ? (j['skipped'] as List).length : 0;
         _message = '$done assigned to ${zone.name}'
             '${moved > 0 ? ' ($moved moved from another zone)' : ''}'
-            '${skipped > 0 ? ' · $skipped couldn\'t be assigned' : ''}.';
+            '${skipped > 0 ? ' · $skipped couldn\'t be assigned' : ''}. Report saved (Reports → Zones).';
         try {
           ScanSounds.instance.play(ScanCue.success);
         } catch (_) {}
       }
-      // Re-check what changed so every row shows its new zone.
-      final rows = await api.checkZoneEpcs(list);
-      for (final r in rows) {
-        final t = _tags[('${r['epc']}').toUpperCase()];
-        if (t != null) t.check = r;
+      // Re-check so every line shows its new zone.
+      for (final t in _tags.values) {
+        t.check = null;
       }
+      await _checkPending();
       await _loadZones();
     } catch (e) {
       _message = 'Failed: $e';
@@ -410,8 +500,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
   void _clear() {
     setState(() {
       _tags.clear();
-      _order.clear();
-      _pending.clear();
+      _dropped.clear();
       _message = null;
     });
   }
@@ -450,12 +539,11 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     }
   }
 
-  Future<void> _openZone() async {
-    final zone = _zone;
-    if (zone == null) return;
+  /// Opens another screen with the radio stopped, then takes it back.
+  Future<void> _openAndReclaim(Widget screen) async {
     if (_scanning) await _stopScan();
     if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _ZoneContentsScreen(zone: zone)));
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
     if (!mounted) return;
     await coveringRouteGone(_route);
     if (!mounted) return;
@@ -463,77 +551,29 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     unawaited(_loadZones());
   }
 
-  void _showTag(_Tag t) {
-    final d = t.d;
-    final rows = <List<String>>[
-      if (!t.ok && t.reasonText != null) ['Why not', t.reasonText!],
-      ['EPC', t.epc],
-      ['Serial', '${d['serial'] ?? '—'}'],
-      ['Product', _product(d).isEmpty ? '—' : _product(d)],
-      ['SKU', '${d['sku'] ?? '—'}'],
-      ['Price', d['retailPrice'] == null ? '—' : '\$${d['retailPrice']}'],
-      ['Status', '${d['statusLabel'] ?? 'Not in WMS'}'],
-      ['Bin', _bins(d)],
-      ['Location', '${d['location'] ?? '—'}'],
-      ['Zone', '${d['zone'] ?? '—'}${d['zoneAssignedAt'] != null ? ' (since ${_when(d['zoneAssignedAt'])})' : ''}'],
-      ['Last seen', '${_when(d['lastSeenAt'])}${d['lastSeenReaderZone'] != null ? ' · ${d['lastSeenReaderZone']} reader' : ''}'],
-      ['First seen', _when(d['firstSeenAt'])],
-      ['Source', '${d['source'] ?? '—'}'],
-    ];
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
-          children: [
-            for (final r in rows)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 4.h),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 92.w,
-                      child: Text(r[0], style: TextStyle(color: AppColors.textMuted, fontSize: 12.sp)),
-                    ),
-                    Expanded(
-                      child: SelectableText(
-                        r[1],
-                        style: TextStyle(
-                          fontSize: 13.sp,
-                          fontWeight: r[0] == 'Why not' ? FontWeight.w700 : FontWeight.w500,
-                          color: r[0] == 'Why not' ? _kWarn : AppColors.textMain,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final zone = _zone;
-    final actionable = _actionable;
-    final cannot = _cannot;
-    final checking = _all.where((t) => !t.checked).length;
+    final rows = _display();
+    final actionable = rows.where(_isActionable).length;
+    final cannot = rows.where((t) => t.checked && !t.ok).length;
+    final unchecked = rows.where((t) => !t.checked).length;
+    final checking = _checkingTotal > 0;
     return CarbonScaffold(
       pageTitle: 'ZONE MANAGEMENT',
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_busy) const LinearProgressIndicator(minHeight: 2),
+            if (_busy || checking)
+              LinearProgressIndicator(
+                minHeight: 3,
+                value: checking && _checkingTotal > 0 ? _checkingDone / _checkingTotal : null,
+              ),
             Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 4.h),
+              padding: EdgeInsets.fromLTRB(16.w, 10.h, 16.w, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -554,7 +594,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                   IconButton(
                     tooltip: 'Tags in this zone',
                     icon: const Icon(Icons.list_alt),
-                    onPressed: zone == null ? null : _openZone,
+                    onPressed: zone == null ? null : () => _openAndReclaim(_ZoneContentsScreen(zone: zone)),
                   ),
                 ],
               ),
@@ -569,17 +609,37 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
               ),
             Padding(
               padding: EdgeInsets.fromLTRB(16.w, 6.h, 16.w, 0),
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('ASSIGN'), icon: Icon(Icons.add_location_alt_outlined)),
-                  ButtonSegment(value: true, label: Text('REMOVE'), icon: Icon(Icons.wrong_location_outlined)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SegmentedButton<bool>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('ASSIGN')),
+                        ButtonSegment(value: true, label: Text('REMOVE')),
+                      ],
+                      selected: {_removeMode},
+                      onSelectionChanged: (s) => setState(() => _removeMode = s.first),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
+                  Expanded(
+                    child: SegmentedButton<_Range>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: _Range.near, label: Text('NEAR')),
+                        ButtonSegment(value: _Range.medium, label: Text('MED')),
+                        ButtonSegment(value: _Range.far, label: Text('FAR')),
+                      ],
+                      selected: {_range},
+                      onSelectionChanged: (s) => _setRange(s.first),
+                    ),
+                  ),
                 ],
-                selected: {_removeMode},
-                onSelectionChanged: (s) => setState(() => _removeMode = s.first),
               ),
             ),
             Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 2.h, 16.w, 0),
+              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 0),
               child: Row(
                 children: [
                   Text('Power', style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted)),
@@ -593,38 +653,62 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                       onChanged: (v) => _setPower(v.round()),
                     ),
                   ),
-                  Text('$_powerDbm dBm', style: GoogleFonts.spaceGrotesk(fontSize: 13.sp, fontWeight: FontWeight.w700)),
+                  Text('$_powerDbm dBm', style: GoogleFonts.spaceGrotesk(fontSize: 12.5.sp, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
+            if (_range != _Range.far)
+              Padding(
+                padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 0),
+                child: Row(
+                  children: [
+                    Text('Min signal', style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted)),
+                    Expanded(
+                      child: Slider(
+                        value: _gate[_range]!.toDouble().clamp(-85.0, -30.0),
+                        min: -85,
+                        max: -30,
+                        divisions: 55,
+                        label: '${_gate[_range]} dBm',
+                        onChanged: (v) => setState(() => _gate[_range] = v.round()),
+                        onChangeEnd: (_) => unawaited(_saveRangePrefs()),
+                      ),
+                    ),
+                    Text('${_gate[_range]} dBm', style: GoogleFonts.spaceGrotesk(fontSize: 12.5.sp, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
             Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 6.h),
+              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 4.h),
               child: Text(
-                '${_order.length} read · ${actionable.length} ${_removeMode ? 'in this zone' : 'ready'}'
-                ' · ${cannot.length} can\'t be assigned${checking > 0 ? ' · $checking checking…' : ''}',
+                checking
+                    ? 'Checking $_checkingDone / $_checkingTotal…'
+                    : '${rows.length} read · $actionable ${_removeMode ? 'in this zone' : 'ready'}'
+                        ' · $cannot can\'t be assigned'
+                        '${unchecked > 0 ? ' · $unchecked to check (pause)' : ''}'
+                        '${_range != _Range.far ? ' · only ≥ $_minRssi dBm' : ''}',
                 style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted),
               ),
             ),
             Expanded(
-              child: _order.isEmpty
+              child: rows.isEmpty
                   ? Center(
                       child: Padding(
                         padding: EdgeInsets.all(24.w),
                         child: Text(
-                          _scanning ? 'Scanning… walk past the tags.' : 'Pull the trigger to read tags.',
+                          _scanning
+                              ? 'Scanning… walk past the tags.'
+                              : 'Pull the trigger to read tags. Pull again (pause) to see their details.\n'
+                                  'Swipe a line right to drop it. Tap a line to open the tag.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 14.sp),
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 13.sp),
                         ),
                       ),
                     )
-                  : ListView(
+                  : ListView.builder(
                       padding: EdgeInsets.symmetric(horizontal: 12.w),
-                      children: [
-                        if (cannot.isNotEmpty) _sectionHeader('Couldn\'t assign (${cannot.length}) — tap for details', _kWarn),
-                        for (final t in cannot) _tagRow(t),
-                        _sectionHeader(_removeMode ? 'Read tags' : 'Read tags (LIVE here)', AppColors.textMuted),
-                        for (final t in _all.where((t) => !t.checked || t.ok)) _tagRow(t),
-                      ],
+                      itemCount: rows.length,
+                      itemBuilder: (_, i) => _tagRow(rows[i]),
                     ),
             ),
             if (_message != null)
@@ -633,11 +717,11 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                 child: Text(_message!, style: TextStyle(fontSize: 12.5.sp, fontWeight: FontWeight.w600)),
               ),
             Padding(
-              padding: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, 12.h),
+              padding: EdgeInsets.fromLTRB(12.w, 8.h, 12.w, 10.h),
               child: Row(
                 children: [
                   OutlinedButton(
-                    onPressed: _order.isEmpty || _busy ? null : _clear,
+                    onPressed: rows.isEmpty || _busy || _scanning ? null : _clear,
                     style: OutlinedButton.styleFrom(
                       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                       minimumSize: Size(0, 48.h),
@@ -647,18 +731,20 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
                   SizedBox(width: 8.w),
                   Expanded(
                     child: FilledButton(
-                      onPressed: zone == null || actionable.isEmpty || _busy ? null : _run,
+                      onPressed: zone == null || actionable == 0 || _busy || checking || unchecked > 0 ? null : _run,
                       style: FilledButton.styleFrom(
-                        backgroundColor: _removeMode ? const Color(0xFFBF2E2E) : AppColors.primary,
+                        backgroundColor: _removeMode ? _kRed : AppColors.primary,
                         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                         minimumSize: Size(0, 48.h),
                       ),
                       child: Text(
                         zone == null
                             ? 'PICK A ZONE'
-                            : _removeMode
-                                ? 'REMOVE ${actionable.length} FROM ${zone.name.toUpperCase()}'
-                                : 'ASSIGN ${actionable.length} TO ${zone.name.toUpperCase()}',
+                            : unchecked > 0
+                                ? 'PAUSE TO CHECK $unchecked'
+                                : _removeMode
+                                    ? 'REMOVE $actionable FROM ${zone.name.toUpperCase()}'
+                                    : 'ASSIGN $actionable TO ${zone.name.toUpperCase()}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -671,7 +757,7 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
               padding: EdgeInsets.symmetric(vertical: 8.h),
               alignment: Alignment.center,
               child: Text(
-                _scanning ? 'SCANNING — PULL TRIGGER TO STOP' : 'PULL TRIGGER TO SCAN',
+                _scanning ? 'SCANNING — PULL TRIGGER TO PAUSE' : 'PULL TRIGGER TO SCAN',
                 style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.sp),
               ),
             ),
@@ -681,54 +767,64 @@ class _ZoneManagementScreenState extends State<ZoneManagementScreen> {
     );
   }
 
-  Widget _sectionHeader(String text, Color color) => Padding(
-        padding: EdgeInsets.fromLTRB(4.w, 10.h, 4.w, 4.h),
-        child: Text(text, style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w800, color: color)),
-      );
-
   Widget _tagRow(_Tag t) {
-    final d = t.d;
     final String sub;
     final Color stripe;
     if (!t.checked) {
-      sub = 'Checking…';
+      sub = _scanning ? 'Read${t.rssi != null ? ' · ${t.rssi} dBm' : ''}' : 'Not checked yet — pause to check';
       stripe = AppColors.border;
     } else if (!t.ok) {
       sub = t.reasonText ?? 'Can\'t be assigned';
       stripe = _kWarn;
     } else if (t.zoneId == _zoneId) {
-      sub = 'Bin ${_bins(d)} · already in ${t.zone}';
-      stripe = _removeMode ? const Color(0xFFBF2E2E) : _kOk;
+      sub = 'Bin ${t.bins} · already in ${t.zone}';
+      stripe = _removeMode ? _kRed : _kOk;
     } else {
-      sub = 'Bin ${_bins(d)}${t.zone != null ? ' · in ${t.zone}${_removeMode ? '' : ' → will move'}' : ''}';
+      sub = 'Bin ${t.bins}${t.zone != null ? ' · in ${t.zone}${_removeMode ? '' : ' → will move'}' : ''}';
       stripe = _removeMode ? AppColors.border : AppColors.primary;
     }
-    return InkWell(
-      onTap: t.checked ? () => _showTag(t) : null,
-      child: Container(
+    return Dismissible(
+      key: ValueKey(t.epc),
+      direction: DismissDirection.startToEnd,
+      background: Container(
         margin: EdgeInsets.only(bottom: 6.h),
-        decoration: BoxDecoration(color: _kCard, border: Border(left: BorderSide(color: stripe, width: 4))),
-        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _product(d).isEmpty ? t.epc : _product(d),
-              style: TextStyle(fontSize: 13.5.sp, fontWeight: FontWeight.w700),
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: 2.h),
-            Text(sub, style: TextStyle(fontSize: 12.sp, color: !t.ok && t.checked ? _kWarn : AppColors.textMuted)),
-            if (_product(d).isNotEmpty)
-              Text(t.epc, style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, fontFamily: 'monospace')),
-          ],
+        color: _kRed,
+        alignment: Alignment.centerLeft,
+        padding: EdgeInsets.only(left: 18.w),
+        child: const Icon(Icons.delete_outline, color: Colors.white),
+      ),
+      onDismissed: (_) => _drop(t),
+      child: InkWell(
+        onTap: () => _openAndReclaim(TagPageScreen(
+          epc: t.epc,
+          fallback: t.d.isEmpty ? null : t.d,
+          reason: t.checked && !t.ok ? t.reasonText : null,
+        )),
+        child: Container(
+          margin: EdgeInsets.only(bottom: 6.h),
+          decoration: BoxDecoration(color: _kCard, border: Border(left: BorderSide(color: stripe, width: 4))),
+          padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                t.product.isEmpty ? t.epc : t.product,
+                style: TextStyle(fontSize: 13.5.sp, fontWeight: FontWeight.w700),
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 2.h),
+              Text(sub, style: TextStyle(fontSize: 12.sp, color: t.checked && !t.ok ? _kWarn : AppColors.textMuted)),
+              if (t.product.isNotEmpty)
+                Text(t.epc, style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, fontFamily: 'monospace')),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Read-only list of the LIVE tags in a zone (pull to refresh).
+/// Read-only list of the LIVE tags in a zone (pull to refresh); tap → tag page.
 class _ZoneContentsScreen extends StatefulWidget {
   const _ZoneContentsScreen({required this.zone});
   final _Zone zone;
@@ -737,8 +833,17 @@ class _ZoneContentsScreen extends StatefulWidget {
   State<_ZoneContentsScreen> createState() => _ZoneContentsScreenState();
 }
 
+String _when(Object? iso) {
+  if (iso is! String || iso.isEmpty) return '—';
+  final t = DateTime.tryParse(iso)?.toLocal();
+  if (t == null) return '—';
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  return '${m[t.month - 1]} ${t.day} $h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
+}
+
 class _ZoneContentsScreenState extends State<_ZoneContentsScreen> {
-  List<Map<String, dynamic>>? _rows;
+  List<_Tag>? _rows;
   String? _error;
 
   @override
@@ -750,7 +855,11 @@ class _ZoneContentsScreenState extends State<_ZoneContentsScreen> {
   Future<void> _load() async {
     try {
       final rows = await context.read<WmsApiClient>().fetchZoneEpcs(widget.zone.id);
-      if (mounted) setState(() => _rows = rows);
+      if (!mounted) return;
+      setState(() => _rows = rows.map((d) {
+            final t = _Tag('${d['epc']}', null)..setCheck({'ok': true, 'details': d});
+            return t;
+          }).toList());
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
@@ -766,10 +875,7 @@ class _ZoneContentsScreenState extends State<_ZoneContentsScreen> {
           onRefresh: _load,
           child: rows == null
               ? ListView(children: [
-                  Padding(
-                    padding: EdgeInsets.all(24.w),
-                    child: Text(_error ?? 'Loading…', textAlign: TextAlign.center),
-                  ),
+                  Padding(padding: EdgeInsets.all(24.w), child: Text(_error ?? 'Loading…', textAlign: TextAlign.center)),
                 ])
               : ListView.builder(
                   padding: EdgeInsets.all(12.w),
@@ -782,22 +888,28 @@ class _ZoneContentsScreenState extends State<_ZoneContentsScreen> {
                             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.sp)),
                       );
                     }
-                    final d = rows[i - 1];
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 6.h),
-                      color: _kCard,
-                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_product(d).isEmpty ? '${d['epc']}' : _product(d),
-                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5.sp)),
-                          Text(
-                            'Bin ${_bins(d)} · since ${_when(d['zoneAssignedAt'])}${d['assignedBy'] != null ? ' · ${d['assignedBy']}' : ''}',
-                            style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted),
-                          ),
-                          Text('${d['epc']}', style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, fontFamily: 'monospace')),
-                        ],
+                    final t = rows[i - 1];
+                    return InkWell(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(builder: (_) => TagPageScreen(epc: t.epc, fallback: t.d)),
+                      ),
+                      child: Container(
+                        margin: EdgeInsets.only(bottom: 6.h),
+                        color: _kCard,
+                        padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 8.h),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(t.product.isEmpty ? t.epc : t.product,
+                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5.sp)),
+                            Text(
+                              'Bin ${t.bins} · since ${_when(t.d['zoneAssignedAt'])}${t.d['assignedBy'] != null ? ' · ${t.d['assignedBy']}' : ''}',
+                              style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted),
+                            ),
+                            Text(t.epc, style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, fontFamily: 'monospace')),
+                          ],
+                        ),
                       ),
                     );
                   },

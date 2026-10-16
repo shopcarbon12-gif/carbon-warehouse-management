@@ -1757,6 +1757,19 @@ class WmsApiClient {
         if (zoneId != null) 'zoneId': zoneId,
       });
 
+  /// Reports → Zones: `[{id, mode, device, createdAt}]`, newest first.
+  Future<List<Map<String, dynamic>>> fetchZoneReports() async {
+    final j = await _zoneCall('GET', '/api/reports/zone-reports');
+    final rows = j['reports'];
+    return rows is List
+        ? rows.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+        : <Map<String, dynamic>>[];
+  }
+
+  /// One zone report: `{ mode, createdAt, lines: [{EPC, Result, Reason, …}] }`.
+  Future<Map<String, dynamic>> fetchZoneReport(int id) =>
+      _zoneCall('GET', '/api/reports/zone-reports/$id');
+
   /// The LIVE tags in a zone (details + assignedBy).
   Future<List<Map<String, dynamic>>> fetchZoneEpcs(String zoneId) async {
     final j = await _zoneCall('GET', '/api/assigned-zones/$zoneId/epcs');

@@ -7,6 +7,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/ui/widgets/live_item_photo.dart';
 import 'package:carbon_wms/services/mobile_permissions.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
 import 'package:carbon_wms/hardware/locate_bearing.dart';
@@ -1456,6 +1457,14 @@ class _LocateTagScreenState extends State<ClassicLocateTagScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(height: 12.h),
+              // Product photo, read live from the WMS on every open.
+              LiveItemPhoto(
+                epc: _epcUpper,
+                sku: widget.targetSku,
+                height: 110,
+                title: widget.targetName,
+              ),
+              SizedBox(height: 8.h),
               if (hasItemContext) ...[
                 _ItemDetailsContainer(
                   sku: widget.targetSku,
