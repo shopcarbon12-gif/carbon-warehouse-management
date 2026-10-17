@@ -8,6 +8,8 @@ import { executeShopifyLinkAll } from "@/lib/server/shopify-link";
 import { executeShopifyInventorySync } from "@/lib/server/shopify-inventory-sync";
 import { executeShopifyTranslate } from "@/lib/server/shopify-translate";
 import { executeShopifyAdsSync } from "@/lib/server/shopify-ads-sync";
+import { signSession } from "@/lib/auth";
+import { nightlySendDue } from "@/lib/server/studio-batch";
 
 loadEnvConfig(process.cwd());
 
@@ -131,6 +133,90 @@ async function maybeEnqueueInventoryAutoSync(pool: Pool): Promise<void> {
   }
 }
 
+const STUDIO_BATCH_TICK_MS = 5 * 60 * 1000;
+/** A night whose send keeps failing stops retrying after this many tries. */
+const STUDIO_BATCH_MAX_TRIES_PER_NIGHT = 3;
+let lastStudioBatchTickAt: Date | null = null;
+
+/**
+ * Studio night batch (lib/server/studio-batch.ts). Every ~5 min: at 1–5 AM
+ * Eastern send what is queued (once a night), and while a batch is with
+ * OpenAI ask the web app to check on it. The OpenAI key lives only in the web
+ * app, so the worker calls its /api/studio/batch/run (send) and /poll (check)
+ * as the person who queued the latest run.
+ */
+async function maybeRunStudioBatch(pool: Pool): Promise<void> {
+  const now = new Date();
+  if (lastStudioBatchTickAt && now.getTime() - lastStudioBatchTickAt.getTime() < STUDIO_BATCH_TICK_MS) return;
+  lastStudioBatchTickAt = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
+  try {
+    const r = await pool.query<{
+      tenant_id: string;
+      queued: number;
+      has_open: boolean;
+      sent_tonight: number;
+      failed_tonight: number;
+      added_by: string | null;
+      added_email: string | null;
+      added_role: string | null;
+      location_id: string | null;
+    }>(
+      `WITH t AS (
+         SELECT DISTINCT tenant_id FROM studio_batch_items WHERE status IN ('queued', 'submitted')
+       ), today AS (SELECT (now() AT TIME ZONE 'America/New_York')::date AS d)
+       SELECT t.tenant_id::text,
+              (SELECT count(*) FROM studio_batch_items i WHERE i.tenant_id = t.tenant_id AND i.status = 'queued')::int AS queued,
+              EXISTS (SELECT 1 FROM studio_batches b
+                       WHERE b.tenant_id = t.tenant_id AND b.openai_batch_id IS NOT NULL
+                         AND b.status IN ('submitted', 'validating', 'in_progress', 'finalizing', 'completed')) AS has_open,
+              (SELECT count(*) FROM studio_batches b, today
+                WHERE b.tenant_id = t.tenant_id AND b.trigger = 'nightly' AND b.status <> 'failed'
+                  AND (b.created_at AT TIME ZONE 'America/New_York')::date = today.d)::int AS sent_tonight,
+              (SELECT count(*) FROM studio_batches b, today
+                WHERE b.tenant_id = t.tenant_id AND b.trigger = 'nightly' AND b.status = 'failed'
+                  AND (b.created_at AT TIME ZONE 'America/New_York')::date = today.d)::int AS failed_tonight,
+              a.added_by::text, a.added_email, a.added_role, a.location_id::text
+         FROM t
+         LEFT JOIN LATERAL (
+           SELECT added_by, added_email, added_role, location_id FROM studio_batch_items i
+            WHERE i.tenant_id = t.tenant_id AND i.added_by IS NOT NULL AND i.location_id IS NOT NULL
+            ORDER BY i.added_at DESC LIMIT 1
+         ) a ON true`,
+    );
+    const etHour = Number(
+      new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(now),
+    );
+    for (const t of r.rows) {
+      if (!t.added_by || !t.location_id) continue;
+      const sentTonight = t.sent_tonight > 0 || t.failed_tonight >= STUDIO_BATCH_MAX_TRIES_PER_NIGHT;
+      const action = nightlySendDue(etHour, sentTonight, t.queued) ? "submit" : t.has_open ? "poll" : null;
+      if (!action) continue;
+      const token = await signSession({
+        sub: t.added_by,
+        email: t.added_email ?? "",
+        tid: t.tenant_id,
+        lid: t.location_id,
+        role: t.added_role ?? "member",
+      });
+      const res = await fetch(`${base}/api/studio/batch/${action === "submit" ? "run" : "poll"}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger: "nightly" }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.status !== 202 && res.status !== 409) {
+        console.error(`[worker] studio batch ${action} → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      } else if (action === "submit") {
+        console.log(`[worker] studio batch: nightly send started (${t.queued} queued run(s))`);
+      }
+    }
+  } catch (e) {
+    console.error("[worker] studio batch tick failed", e);
+  }
+}
+
 async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
     // WMS is the catalog source of truth — Lightspeed pull retired as a source.
@@ -202,6 +288,7 @@ async function main() {
     try {
       await runReportRetentionCleanup(pool);
       await maybeEnqueueInventoryAutoSync(pool);
+      await maybeRunStudioBatch(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

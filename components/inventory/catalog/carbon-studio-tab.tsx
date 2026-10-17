@@ -25,6 +25,7 @@ import {
 import { instructionHasStyling, resolveLookSheet, type ResolvedStyling } from "@/lib/studioLookSheet";
 import { stableLsSystemIdFromString } from "@/lib/utils/ls-id";
 import { imageFilesFromTransfer } from "@/lib/client/image-transfer";
+import type { BatchItemSummary, BatchOverview } from "@/lib/server/studio-batch";
 
 /**
  * Carbon Studio (M2) — the OpenAI V2 generator, product-scoped.
@@ -452,6 +453,49 @@ function cancelPanelJob(jobId: string): void {
 /** We already have the image; drop the server's parked copy. */
 function releasePanelJob(jobId: string): void {
   void fetch(`/api/generate/job?id=${encodeURIComponent(jobId)}`, { method: "DELETE" }).catch(() => {});
+}
+
+/** Night-batch times are read in the warehouse's clock (Eastern). */
+function formatBatchTime(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function batchStatusText(b: BatchItemSummary): string {
+  switch (b.status) {
+    case "queued":
+      return "waits for the 1 AM send";
+    case "preparing":
+      return "being sent to OpenAI…";
+    case "submitted":
+      return b.batchStatus === "completed"
+        ? "finished — storing the images…"
+        : `with OpenAI${b.submittedAt ? ` since ${formatBatchTime(b.submittedAt)}` : ""}`;
+    case "ready":
+      return `ready — ${b.ready.length} of ${b.panels.length} panel(s)`;
+    case "loaded":
+      return `loaded into the Studio (${b.ready.length} of ${b.panels.length} panel(s))`;
+    case "failed":
+      return b.error || "failed";
+    default:
+      return b.status;
+  }
+}
+
+function batchStatusTone(status: string): string {
+  if (status === "ready") return "font-semibold text-[var(--wms-accent)]";
+  if (status === "failed") return "text-[var(--wms-status-danger-fg)]";
+  return "text-[var(--wms-muted)]";
 }
 
 /** One panel response → the two crops the gallery shows (shared by run + resume). */
@@ -1610,7 +1654,10 @@ export function CarbonStudioTab({
   );
 
   const analyzeItem = useCallback(
-    async (views: RefViewLists, signal?: AbortSignal): Promise<{ lockText: string; dropped: number } | null> => {
+    async (
+      views: RefViewLists,
+      signal?: AbortSignal,
+    ): Promise<{ lockText: string; dropped: number; textReadings: { quoted: string; reading: string | null }[] } | null> => {
       const refUrls = orderedRefUrls(views);
       if (!refUrls.length) {
         setErr("Add at least one item photo before analyzing.");
@@ -1683,7 +1730,7 @@ export function CarbonStudioTab({
             [dropped ? `Analyzed ${j.imagesAnalyzed} photos (${dropped} over the limit were skipped).` : "", ...corrected].filter(Boolean).join(" "),
           );
         }
-        return { lockText: j.lockText, dropped };
+        return { lockText: j.lockText, dropped, textReadings: Array.isArray(j.textReadings) ? j.textReadings : [] };
       } catch (e) {
         if (signal?.aborted) {
           setMsg("Aborted — the item analysis was cancelled.");
@@ -1698,9 +1745,150 @@ export function CarbonStudioTab({
     [itemType, productName, rotateStoredRef, swapRefUrls],
   );
 
-  const generate = useCallback(async () => {
+  /* ── Night batch (lib/server/studio-batch.ts) ─────────────────────────────
+     This product's queued / sent / finished batch runs, and what the whole
+     queue holds for tonight. */
+  const [batchItems, setBatchItems] = useState<BatchItemSummary[]>([]);
+  const [batchOverview, setBatchOverview] = useState<BatchOverview | null>(null);
+  /** An item id while its results load, or "send" / "check". */
+  const [batchBusy, setBatchBusy] = useState<string | null>(null);
+  const [confirmBatchSend, setConfirmBatchSend] = useState(false);
+  const refreshBatch = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/studio/batch?matrixId=${encodeURIComponent(matrixId)}`, { cache: "no-store" });
+      if (!r.ok) return;
+      const j = (await r.json()) as { items?: BatchItemSummary[]; overview?: BatchOverview };
+      setBatchItems(Array.isArray(j.items) ? j.items : []);
+      setBatchOverview(j.overview ?? null);
+    } catch {
+      /* offline — the box keeps what it showed */
+    }
+  }, [matrixId]);
+  const batchInFlight = batchItems.some((b) => b.status === "queued" || b.status === "preparing" || b.status === "submitted");
+  useEffect(() => {
+    if (!canManage) return;
+    let alive = true;
+    const tick = () => {
+      if (alive) void refreshBatch();
+    };
+    tick();
+    // While a run of this product is out, look again every 2 minutes.
+    const t = batchInFlight ? window.setInterval(tick, 120_000) : null;
+    return () => {
+      alive = false;
+      if (t) window.clearInterval(t);
+    };
+  }, [canManage, refreshBatch, batchInFlight]);
+
+  /** Bring a finished batch run into the gallery, exactly like a live run's crops. */
+  const loadBatchResults = useCallback(
+    async (item: BatchItemSummary) => {
+      setBatchBusy(item.id);
+      setErr(null);
+      try {
+        const r = await fetch(`/api/studio/batch/${item.id}`, { cache: "no-store" });
+        const j = (await r.json().catch(() => ({}))) as {
+          runTag?: string;
+          accessory?: boolean;
+          panels?: { panel: number; poseA: number | null; poseB: number | null; imageBase64?: string; error?: string }[];
+          error?: string;
+        };
+        if (!r.ok || !j.runTag || !j.panels) throw new Error(j.error || `Could not load the results (HTTP ${r.status})`);
+        const tag = j.runTag;
+        const note = "Rendered in the night batch — the consistency checks do not run on batch renders, so review it yourself.";
+        const fresh: Crop[] = [];
+        for (const p of j.panels) {
+          const crops = await panelResponseToCrops(
+            p.imageBase64 ? { imageBase64: p.imageBase64 } : { error: p.error || "not rendered" },
+            p.panel,
+            p.poseA ?? 0,
+            p.poseB ?? 0,
+            tag,
+            j.accessory ? "Shot" : "Pose",
+          );
+          fresh.push(...crops.map((c) => (c.b64 ? { ...c, qaNotes: [...(c.qaNotes ?? []), note] } : c)));
+        }
+        // Loading the same run twice replaces it instead of doubling the gallery.
+        setCrops((prev) => [...prev.filter((c) => !c.id.endsWith(`-${tag}`)), ...fresh]);
+        await fetch(`/api/studio/batch/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "loaded" }),
+        }).catch(() => {});
+        const got = fresh.filter((c) => c.b64).length;
+        setMsg(`Loaded ${got} crop(s) from the night batch (${item.modelName ?? "model"}). Select what to keep, then push.`);
+        void refreshBatch();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not load the batch results");
+      } finally {
+        setBatchBusy(null);
+      }
+    },
+    [refreshBatch],
+  );
+
+  const removeBatchItem = useCallback(
+    async (item: BatchItemSummary) => {
+      setBatchBusy(item.id);
+      try {
+        const r = await fetch(`/api/studio/batch/${item.id}`, { method: "DELETE" });
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        if (!r.ok) throw new Error(j.error || `Could not remove it (HTTP ${r.status})`);
+        void refreshBatch();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not remove it from the batch");
+      } finally {
+        setBatchBusy(null);
+      }
+    },
+    [refreshBatch],
+  );
+
+  /** "Send now" (everything queued, every product) or "Check now". */
+  const runBatchNow = useCallback(
+    async (what: "send" | "check") => {
+      setBatchBusy(what);
+      setConfirmBatchSend(false);
+      setErr(null);
+      try {
+        const r = await fetch(what === "send" ? "/api/studio/batch/run" : "/api/studio/batch/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trigger: "manual" }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        if (!r.ok && r.status !== 409) throw new Error(j.error || `HTTP ${r.status}`);
+        setMsg(
+          r.status === 409
+            ? "The batch is already being sent or checked — look again in a minute."
+            : what === "send"
+              ? "Sending the batch to OpenAI now — this box updates as it goes (results usually within a few hours)."
+              : "Checking with OpenAI — finished runs show up here in a minute.",
+        );
+        window.setTimeout(() => void refreshBatch(), 20_000);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not reach the batch");
+      } finally {
+        setBatchBusy(null);
+      }
+    },
+    [refreshBatch],
+  );
+
+  /**
+   * `live` renders now. `batch` ("Add to tonight's batch") runs the same checks
+   * and builds byte-for-byte the same panel requests, then queues them for the
+   * 1 AM OpenAI batch (half price) instead of rendering — see
+   * lib/server/studio-batch.ts. A batch run never waits on a live panel 1, and
+   * a missing or outdated spec is analysed and used as is (owner, 2026-10-17).
+   */
+  const generate = useCallback(async (mode: "live" | "batch" = "live") => {
     if (!model) return setErr("Pick a model first.");
-    const refUrls = orderedRefUrls(refViews);
+    const batch = mode === "batch";
+    /* A batch press may analyse first, which can straighten photos — the run
+       then uses the straightened copies. */
+    let runViews = refViews;
+    let refUrls = orderedRefUrls(runViews);
     if (!refUrls.length) {
       return setErr(
         itemRefs.length
@@ -1728,18 +1916,59 @@ export function CarbonStudioTab({
     }
     setErr(null);
     setMsg(null);
-    // A new run replaces any run still holding panels behind a flagged panel 1.
-    setHeldRun(null);
-    forceFollowersRef.current = null;
+    if (!batch) {
+      // A new run replaces any run still holding panels behind a flagged panel 1.
+      setHeldRun(null);
+      forceFollowersRef.current = null;
+    }
     /* Step 1 of a new product: analyze the photos and STOP, so the spec can be
        read and corrected before four panels are paid for. Once the spec exists
        for exactly these photos, Generate goes straight through. */
     // The stopwatch runs from this click, whichever branch the press takes.
-    setClock({ startedAt: Date.now(), endedAt: null });
+    if (!batch) setClock({ startedAt: Date.now(), endedAt: null });
     const abort = new AbortController();
     abortRef.current = { controller: abort, jobIds: [] };
     setAborting(false);
-    if (specStale) {
+    let specForRun = itemSpec.trim();
+    let specConfirmedRun = specConfirmed;
+    /** Said with the "queued" message: red lines on a spec nobody has read yet. */
+    let batchSpecNote = "";
+    const endBatchPrep = () => {
+      abortRef.current = null;
+      setAborting(false);
+      setBusy(null);
+      setProgress("");
+    };
+    if (specStale && batch) {
+      setBusy("batch");
+      setProgress("Analyzing item details before adding to the batch…");
+      const analyzed = await analyzeItem(refViews, abort.signal);
+      if (!analyzed) return endBatchPrep();
+      runViews = groupRefs(itemRefsRef.current);
+      refUrls = orderedRefUrls(runViews);
+      specForRun = analyzed.lockText.trim();
+      specConfirmedRun = false;
+      const freshBack = parseSpecBackState(specForRun);
+      const freshBackKnown =
+        runViews.back.length > 0 || backIsPlain || freshBack === "design" || freshBack === "plain" || specListsBackDesign(specForRun);
+      if (backPanels.length && !freshBackKnown) {
+        endBatchPrep();
+        return setErr(
+          `Item spec ready — but panel ${backPanels.join(" and ")} shows the BACK and nothing shows the back. Add a Back photo or tick "The back is plain", then add to the batch again.`,
+        );
+      }
+      const risk = specRiskReport(specForRun, {
+        productName,
+        itemType,
+        isAccessory: Boolean(accessoryKind),
+        refCount: refUrls.length,
+        specConfirmed: false,
+        textReadings: analyzed.textReadings,
+      });
+      if (risk.blocking.length) {
+        batchSpecNote = ` The new spec has ${risk.blocking.length} red line${risk.blocking.length === 1 ? "" : "s"} — it was queued as is; read them below.`;
+      }
+    } else if (specStale) {
       setBusy("analyze");
       setProgress("Analyzing item details (text, graphics, materials, hardware, stitching)…");
       try {
@@ -1760,16 +1989,15 @@ export function CarbonStudioTab({
     }
     /* The spec contradicts the product's own name ("Double Pleated" trouser,
        spec says "no pleat"). Every panel would render the contradiction. */
-    if (specBlocked) {
+    else if (specBlocked) {
       abortRef.current = null;
       setClock(null);
       return setErr(
         `The spec contradicts the product (red lines under the spec). Fix those lines, or tick "I checked the spec" if the spec is right — nothing was generated.`,
       );
     }
-    const specForRun = itemSpec.trim();
-    setBusy("generate");
-    setNativeBusy(true);
+    setBusy(batch ? "batch" : "generate");
+    if (!batch) setNativeBusy(true);
     // Regenerate flow (carbon-gen): keep the crops you selected, append fresh
     // ones below; unselected old crops are dropped. runTag keeps ids unique.
     const kept = crops.length > 0 ? crops.filter((c) => c.selected && c.b64) : [];
@@ -1799,10 +2027,10 @@ export function CarbonStudioTab({
        the prompt only points at loses to the lock's named default tee. Read once
        per set of photos; a run that cannot read them stops rather than paying
        for four panels that would ignore them. */
-    const hasStyleWith = refViews.styling.length > 0;
+    const hasStyleWith = runViews.styling.length > 0;
     let styleWith: Partial<Record<OutfitSlot, string>> = {};
     if (hasStyleWith) {
-      const key = refViews.styling.join("|") + "::" + itemType;
+      const key = runViews.styling.join("|") + "::" + itemType;
       const cached = stylePiecesRef.current.get(key);
       if (cached) styleWith = cached;
       else {
@@ -1812,7 +2040,7 @@ export function CarbonStudioTab({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             signal: abort.signal,
-            body: JSON.stringify({ urls: refViews.styling, itemType }),
+            body: JSON.stringify({ urls: runViews.styling, itemType }),
           });
           const j = (await r.json().catch(() => ({}))) as { outfit?: Partial<Record<OutfitSlot, string>>; error?: string };
           if (!r.ok || !j.outfit) throw new Error(j.error || "Could not read the Style with photos");
@@ -1895,12 +2123,126 @@ export function CarbonStudioTab({
     /* Panel 1 sets the look: it renders first, the others wait for it on the
        server and render with it attached. Only garment runs that include panel 1
        and at least one other panel. */
-    const anchored = matchPanel1 && !runAccessory && chosen.includes(1) && chosen.length > 1;
+    const anchored = !batch && matchPanel1 && !runAccessory && chosen.includes(1) && chosen.length > 1;
     /* A re-render without panel 1 attaches the saved panel 1 for this model and
        colour, so the new crops match the ones already kept. */
     const savedLook =
       !anchored && keepLook && !runAccessory && !chosen.includes(1) ? lookAnchors[lookAnchorKeyFor(model.model_id, lookColour)] : undefined;
     const lookAnchorUrl = savedLook && savedLook.gate !== "flagged" && savedLook.url ? savedLook.url : undefined;
+    /** One panel's request — exactly what /api/generate receives, live or in the night batch. */
+    const panelRequest = (panel: number) => {
+      const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
+      const panelLabel = runAccessory ? accessoryPanelLabel(panel) : getPanelButtonLabel(model.gender, panel);
+      const prompt = runAccessory
+        ? buildAccessoryPanelPrompt({
+            kind: runAccessory,
+            panelNumber: panel,
+            modelName: model.name,
+            modelGender: model.gender,
+            itemType,
+            itemColour,
+            itemStyleInstructions: instruction,
+            expressionDirective,
+            stylingLock: "",
+            hasStyleWith,
+            lookSheetInServer: true,
+            lookSeed: look.seed,
+          })
+        : buildMasterPanelPrompt({
+        panelNumber: panel,
+        panelLabel,
+        poseA,
+        poseB,
+        modelName: model.name,
+        modelGender: model.gender,
+        modelRefs: model.ref_image_urls,
+        itemRefs: refUrls,
+        itemType,
+        itemStyleInstructions: instruction,
+        expressionDirective,
+        // The LOOK SHEET (below, in the request) replaces the per-panel styling lock.
+        stylingLock: "",
+        lookSheetInServer: true,
+        // Same seed as the request's: the pose blocks lose their "pick ONE" menus,
+        // settled in code to agree with the server's POSE VARIATION.
+        variationSeed: runSeed,
+        hasStyleWith,
+        // itemSpec travels as its own request field (server appends it inside the
+        // protected lock block) — NOT inside the prompt, which is near the
+        // model's length limit and gets trimmed from the middle.
+      });
+      const body = {
+        prompt,
+        size: "1536x1024",
+        modelRefs: model.ref_image_urls,
+        itemRefs: refUrls,
+        itemRefViews: runViews,
+        panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType, accessoryKind: runAccessory ?? "" },
+        itemSpec: specForRun || undefined,
+        matrixId,
+        backIsPlain,
+        // true = a human edited the spec text; false = raw analyzer output.
+        specConfirmed: specConfirmedRun,
+        /* Sent on its own as well as inside the prompt, so the server can
+           give it the last word — see app/api/generate/route.ts. */
+        instruction: instruction.trim() || undefined,
+        /* The run's outfit, identical in every panel; the seed for pose
+           variation, one per run (a colourway's stored seed keeps its poses
+           away from the colours already generated). */
+        lookSheet: look.text,
+        variationSeed: runSeed,
+        /* Which saved look this run's panel 1 becomes (model + colour). */
+        modelId: model.model_id,
+        itemColour: lookColour,
+        ...(lookAnchorUrl ? { lookAnchorUrl } : {}),
+        /* The picked jeans label: the server attaches it to the Pose 4 / Pose 7
+           panels when the spec puts a label on the back waistband. */
+        ...(isJeansType && jeansLabelId && !runAccessory ? { jeansLabelId } : {}),
+        /* A colourway on file turns this into a dye change: same analysis,
+           same construction, new cloth colour, with that colour's own photo
+           attached. */
+        ...(activeColorRun
+          ? {
+              colorOverride: {
+                name: activeColorRun.colorName,
+                refUrl: activeColorRun.colorRefUrl,
+                hardwareNote: activeColorRun.hardwareNote,
+              },
+            }
+          : {}),
+      };
+      return { poseA, poseB, body };
+    };
+    if (batch) {
+      try {
+        setProgress(`Adding ${chosen.length} panel(s) to tonight's batch…`);
+        const r = await fetch("/api/studio/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abort.signal,
+          body: JSON.stringify({
+            matrixId,
+            runTag,
+            modelName: model.name,
+            modelGender: model.gender,
+            itemColour: lookColour,
+            itemType,
+            panels: chosen.map((panel) => ({ panel, body: panelRequest(panel).body })),
+          }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        if (!r.ok) throw new Error(j.error || `Could not add to the batch (HTTP ${r.status})`);
+        setMsg(
+          `Added ${chosen.length} panel(s) with ${model.name} to tonight's batch — it goes to OpenAI at 1 AM Eastern at half price, and the results show up here (usually by morning). Nothing is published until you push.${batchSpecNote}`,
+        );
+        void refreshBatch();
+      } catch (e) {
+        setErr(abort.signal.aborted ? "Aborted — nothing was added to the batch." : e instanceof Error ? e.message : "Could not add to the batch");
+      } finally {
+        endBatchPrep();
+      }
+      return;
+    }
     setProgress(
       anchored
         ? `Panel 1 sets the look — panel${chosen.length > 2 ? "s" : ""} ${chosen.filter((p) => p !== 1).join(", ")} follow (about 3 minutes)…`
@@ -1943,46 +2285,7 @@ export function CarbonStudioTab({
       opts: { jobId: string; signal: AbortSignal; force?: boolean },
     ): Promise<{ crops: Crop[]; json: PanelResponse | null }> => {
       const { jobId, signal } = opts;
-      const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
-      const panelLabel = runAccessory ? accessoryPanelLabel(panel) : getPanelButtonLabel(model.gender, panel);
-      const prompt = runAccessory
-        ? buildAccessoryPanelPrompt({
-            kind: runAccessory,
-            panelNumber: panel,
-            modelName: model.name,
-            modelGender: model.gender,
-            itemType,
-            itemColour,
-            itemStyleInstructions: instruction,
-            expressionDirective,
-            stylingLock: "",
-            hasStyleWith,
-            lookSheetInServer: true,
-            lookSeed: look.seed,
-          })
-        : buildMasterPanelPrompt({
-        panelNumber: panel,
-        panelLabel,
-        poseA,
-        poseB,
-        modelName: model.name,
-        modelGender: model.gender,
-        modelRefs: model.ref_image_urls,
-        itemRefs: refUrls,
-        itemType,
-        itemStyleInstructions: instruction,
-        expressionDirective,
-        // The LOOK SHEET (below, in the request) replaces the per-panel styling lock.
-        stylingLock: "",
-        lookSheetInServer: true,
-        // Same seed as the request's: the pose blocks lose their "pick ONE" menus,
-        // settled in code to agree with the server's POSE VARIATION.
-        variationSeed: runSeed,
-        hasStyleWith,
-        // itemSpec travels as its own request field (server appends it inside the
-        // protected lock block) — NOT inside the prompt, which is near the
-        // model's length limit and gets trimmed from the middle.
-      });
+      const { poseA, poseB, body } = panelRequest(panel);
       const follower = anchored && panel !== 1;
       const deadline = Date.now() + (follower ? FOLLOWER_POLL_TIMEOUT_MS : JOB_POLL_TIMEOUT_MS);
       let json: PanelResponse | null = null;
@@ -2005,45 +2308,8 @@ export function CarbonStudioTab({
           },
           signal,
           body: JSON.stringify({
-            prompt,
-            size: "1536x1024",
-            modelRefs: model.ref_image_urls,
-            itemRefs: refUrls,
-            itemRefViews: refViews,
-            panelQa: { panelNumber: panel, panelLabel, poseA, poseB, modelName: model.name, modelGender: model.gender, itemType, accessoryKind: runAccessory ?? "" },
-            itemSpec: specForRun || undefined,
-            matrixId,
-            backIsPlain,
-            // true = a human edited the spec text; false = raw analyzer output.
-            specConfirmed,
-            /* Sent on its own as well as inside the prompt, so the server can
-               give it the last word — see app/api/generate/route.ts. */
-            instruction: instruction.trim() || undefined,
-            /* The run's outfit, identical in every panel; the seed for pose
-               variation, one per run (a colourway's stored seed keeps its poses
-               away from the colours already generated). */
-            lookSheet: look.text,
-            variationSeed: runSeed,
-            /* Which saved look this run's panel 1 becomes (model + colour). */
-            modelId: model.model_id,
-            itemColour: lookColour,
+            ...body,
             ...(anchored ? { anchor: { runId: runTag, role: panel === 1 ? "source" : "follower", ...(opts.force ? { force: true } : {}) } } : {}),
-            ...(lookAnchorUrl ? { lookAnchorUrl } : {}),
-            /* The picked jeans label: the server attaches it to the Pose 4 / Pose 7
-               panels when the spec puts a label on the back waistband. */
-            ...(isJeansType && jeansLabelId && !runAccessory ? { jeansLabelId } : {}),
-            /* A colourway on file turns this into a dye change: same analysis,
-               same construction, new cloth colour, with that colour's own photo
-               attached. */
-            ...(activeColorRun
-              ? {
-                  colorOverride: {
-                    name: activeColorRun.colorName,
-                    refUrl: activeColorRun.colorRefUrl,
-                    hardwareNote: activeColorRun.hardwareNote,
-                  },
-                }
-              : {}),
           }),
         });
         const parsed = (await resp.json().catch(() => null)) as PanelResponse | null;
@@ -2279,7 +2545,7 @@ export function CarbonStudioTab({
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
       void wakeLock?.release().catch(() => {});
     }
-  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, specBlocked, analyzeItem, colorRun, color, accessoryKind, productName, keepStylingPrints, matchPanel1, keepLook, lookAnchors, isJeansType, jeansLabelId]);
+  }, [model, itemRefs, refViews, panels, itemType, instruction, crops, matrixId, itemSpec, specStale, specBack, specSaysBackDesign, backIsPlain, specConfirmed, specBlocked, analyzeItem, colorRun, color, accessoryKind, productName, keepStylingPrints, matchPanel1, keepLook, lookAnchors, isJeansType, jeansLabelId, refreshBatch]);
 
   /**
    * Resume a run whose page was thrown away mid-flight (tab discarded under
@@ -3547,7 +3813,16 @@ export function CarbonStudioTab({
                   ? `↻ Regenerate ${panels.length}`
                   : `✦ Generate ${panels.length} panel(s)`}
         </button>
-        {busy === "generate" || busy === "analyze" ? (
+        <button
+          type="button"
+          disabled={!canManage || busy !== null || !model || !orderedRefUrls(refViews).length || !panels.length}
+          onClick={() => void generate("batch")}
+          title="Queue exactly this run for tonight's OpenAI batch (sent 1 AM Eastern, half the price). The results come back here for review — nothing is published by itself."
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 disabled:opacity-50 max-md:min-h-11"
+        >
+          {busy === "batch" ? "Adding to batch…" : `☾ Add ${panels.length} to tonight's batch`}
+        </button>
+        {busy === "generate" || busy === "analyze" || busy === "batch" ? (
           <button
             type="button"
             disabled={!canManage || aborting}
@@ -3584,6 +3859,115 @@ export function CarbonStudioTab({
         {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}
         {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
+
+      {/* Night batch: this product's runs waiting for 1 AM, out with OpenAI, or back for review. */}
+      {canManage && (batchItems.some((b) => b.status !== "cancelled") || (batchOverview?.queuedRuns ?? 0) > 0 || (batchOverview?.open.length ?? 0) > 0) ? (
+        <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="font-mono text-[0.74rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">☾ Night batch</p>
+            <span className="font-mono text-[0.72rem] text-[var(--wms-muted)]">
+              {batchOverview
+                ? [
+                    batchOverview.queuedRuns
+                      ? `${batchOverview.queuedRuns} run${batchOverview.queuedRuns === 1 ? "" : "s"} (${batchOverview.queuedPanels} panels) wait for the 1 AM Eastern send`
+                      : "Nothing waiting for tonight",
+                    batchOverview.open.length
+                      ? `${batchOverview.open.reduce((n, b) => n + b.requestCount, 0)} panel(s) with OpenAI now`
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : "Loading…"}
+            </span>
+            {batchOverview?.queuedRuns ? (
+              confirmBatchSend ? (
+                <span className="flex flex-wrap items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-fg)]">
+                  Send all {batchOverview.queuedRuns} queued run(s) now, for every product?
+                  <button
+                    type="button"
+                    disabled={batchBusy !== null}
+                    onClick={() => void runBatchNow("send")}
+                    className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 uppercase tracking-wide disabled:opacity-50 max-md:min-h-11"
+                  >
+                    Yes, send now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmBatchSend(false)}
+                    className="rounded-md border border-[var(--wms-border)] px-2 py-1 uppercase tracking-wide max-md:min-h-11"
+                  >
+                    No
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={batchBusy !== null}
+                  onClick={() => setConfirmBatchSend(true)}
+                  title="Send the queue now instead of waiting for 1 AM — same half price"
+                  className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+                >
+                  {batchBusy === "send" ? "Sending…" : "Send now"}
+                </button>
+              )
+            ) : null}
+            {batchOverview?.open.length ? (
+              <button
+                type="button"
+                disabled={batchBusy !== null}
+                onClick={() => void runBatchNow("check")}
+                title="Ask OpenAI now instead of waiting for the next automatic check (every 5 minutes)"
+                className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+              >
+                {batchBusy === "check" ? "Checking…" : "Check now"}
+              </button>
+            ) : null}
+          </div>
+          {batchItems.filter((b) => b.status !== "cancelled").length ? (
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {batchItems
+                .filter((b) => b.status !== "cancelled")
+                .slice(0, 8)
+                .map((b) => (
+                  <li key={b.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[0.72rem] text-[var(--wms-fg)]">
+                    <span className="tabular-nums text-[var(--wms-muted)]">{formatBatchTime(b.addedAt)}</span>
+                    <span>
+                      {b.modelName ?? "Model"}
+                      {b.itemColour ? ` · ${b.itemColour}` : ""} · P{b.panels.join(", ")}
+                    </span>
+                    <span className={batchStatusTone(b.status)}>{batchStatusText(b)}</span>
+                    {b.status === "queued" ? (
+                      <button
+                        type="button"
+                        disabled={batchBusy !== null}
+                        onClick={() => void removeBatchItem(b)}
+                        className="text-[var(--wms-status-danger-fg)] underline underline-offset-2 disabled:opacity-50 max-md:min-h-11"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                    {(b.status === "ready" || b.status === "loaded") && b.ready.length ? (
+                      <button
+                        type="button"
+                        disabled={batchBusy !== null || busy !== null}
+                        onClick={() => void loadBatchResults(b)}
+                        className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 uppercase tracking-wide disabled:opacity-50 max-md:min-h-11"
+                      >
+                        {batchBusy === b.id ? "Loading…" : b.status === "loaded" ? "Load again" : "Load results"}
+                      </button>
+                    ) : null}
+                    {b.failed.length ? (
+                      <span className="basis-full text-[var(--wms-status-danger-fg)]">
+                        {b.failed.map((f) => `Panel ${f.panel}: ${f.error}`).join(" · ")}
+                      </span>
+                    ) : null}
+                    {b.error && b.status !== "failed" ? <span className="basis-full text-[var(--wms-status-warning-fg)]">{b.error}</span> : null}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Panel 1's check flagged it; the other panels are held, unpaid, until the operator decides. */}
       {heldRun && busy === null ? (

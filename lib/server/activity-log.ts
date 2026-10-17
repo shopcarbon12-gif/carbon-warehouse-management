@@ -38,6 +38,7 @@ const SKIP_ROUTES = new Set<string>([
   "studio/state",
   "generate/run-qa",
   "generate/job",
+  "studio/batch/poll", // night-batch status check, every few minutes while a batch is out
   "image-handoff/session",
   "image-handoff/session/[sessionId]",
   "wishlist",
@@ -68,6 +69,10 @@ export function withActivity<H extends Handler>(route: string, handler: H): H {
   const wrapped = async (...args: unknown[]) => {
     const req = args[0] instanceof Request ? args[0] : null;
     if (!req) return call(...args);
+    /* The Studio night batch builds each panel's request through /api/generate
+       in "prepare only" mode — nothing is rendered or changed. The batch send
+       itself (studio/batch/run) is the action that gets logged. */
+    if (route === "generate" && req.headers.get("x-generate-prepare") === "1") return call(...args);
 
     const started = Date.now();
     const sessionP = sessionFrom(req);

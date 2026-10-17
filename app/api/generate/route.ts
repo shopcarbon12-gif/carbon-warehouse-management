@@ -1075,6 +1075,11 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
   let anchorSource: { runId: string; panel: number } | null = null;
   let anchorSourceSettled = false;
   let anchorSourceFailure = "";
+  /* Studio night batch: build exactly the request Generate would send to
+     OpenAI — same references, prompt, locks and settings — and hand it back
+     instead of rendering it. The batch sends it later at half price
+     (lib/server/studio-batch.ts). Nothing is charged and nothing is logged. */
+  const prepareOnly = req.headers.get("x-generate-prepare") === "1";
   try {
     // WMS auth: authenticated admin session (replaces carbon-gen cookie auth).
     const session = await getSessionFromRequest(req);
@@ -1224,6 +1229,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        sends no anchor there, and one sent anyway is ignored. */
     const anchorParsed = accessoryMode ? null : parseAnchorRequest(anchorRaw);
     const anchorReq = anchorParsed === "invalid" ? null : anchorParsed;
+    if (prepareOnly && anchorReq) {
+      return NextResponse.json(
+        { error: "A batch request cannot wait on a live panel 1 — send it without an anchor." },
+        { status: 400 },
+      );
+    }
     if (anchorReq?.role === "source") {
       anchorSource = { runId: anchorReq.runId, panel: normalizedPanelQa.panelNumber ?? 1 };
     }
@@ -2010,6 +2021,39 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     let b64: string | null = null;
     let imageUsage: Record<string, unknown> | null = null;
     const logRefs = { ...refCounts, promptBytes: promptLen(lockedPrompt), promptTrimmed: clamped.trimmed };
+    if (prepareOnly) {
+      const images = await Promise.all(
+        editImages.map(async (f, i) => {
+          const file = f as unknown as { name?: string; type?: string; arrayBuffer: () => Promise<ArrayBuffer> };
+          return {
+            name: file.name || `ref-${i + 1}.png`,
+            type: file.type || "image/png",
+            b64: Buffer.from(await file.arrayBuffer()).toString("base64"),
+          };
+        }),
+      );
+      return NextResponse.json({
+        prepared: {
+          model: imageModel,
+          prompt: enforcePromptLength(lockedPrompt),
+          size: finalSize,
+          quality: imageQuality,
+          moderation: imageModeration,
+          images,
+        },
+        meta: {
+          ...logRefs,
+          imageQuality,
+          imageSize: finalSize,
+          backState,
+          specConfirmed: specConfirmed === true,
+          specBytes: promptLen(itemSpecText),
+          variationSeed: resolvedVariationSeed,
+          ...(clamped.trimmed ? { promptOverflowBytes } : {}),
+          ...(Object.keys(imagesDropped).length ? { imagesDropped } : {}),
+        },
+      });
+    }
     try {
       // Only the configured model — never silently substitute a different
       // (paid) model. No input_fidelity: on gpt-image edits it forces faithful
