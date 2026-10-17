@@ -48,7 +48,7 @@ try {
       `UPDATE cycle_count_sessions SET status = 'canceled', add_on_locked_by = NULL, updated_at = now(),
               notes = concat_ws(E'\\n', NULLIF(notes, ''), $2::text)
         WHERE id = $1::uuid AND status = 'committed'`,
-      [c.id, `Canceled ${new Date().toISOString().slice(0, 10)} — ${REASON}`],
+      [c.id, `Canceled ${new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })} — ${REASON}`],
     );
     await client.query(
       `UPDATE add_on_sessions SET state = 'cancelled', ended_at = now() WHERE id = $1::uuid AND state = 'paused'`,
