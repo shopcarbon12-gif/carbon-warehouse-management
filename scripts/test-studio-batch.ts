@@ -8,7 +8,8 @@
  * What must hold: only a run Generate could have sent is queued (no anchored
  * panel, no other product's panel); each reference photo is uploaded to OpenAI
  * once per batch however many panels use it; a finished batch lands every
- * image with its own panel and every refusal with its reason; the uploaded
+ * image with its own panel — in Dropbox, under "<Product> (<UPC>)/<date>
+ * <model> <colour>" — and every refusal with its reason; the uploaded
  * files are deleted afterwards; a run that cannot be prepared fails instead of
  * being retried every night; and the nightly window is 1–6 AM Eastern, once.
  */
@@ -18,7 +19,9 @@ import { File as NodeFile } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import type OpenAI from "openai";
+import { studioBatchDropboxRoot } from "@/lib/server/dropbox-upload";
 import {
+  batchRunFolder,
   customId,
   enqueueBatchItem,
   listBatchItems,
@@ -80,6 +83,17 @@ test("custom ids round-trip and reject anything else", () => {
   for (const v of ["", "x:1", `${id}:0`, `${id}:9`, `${id}`, null]) assert.equal(parseCustomId(v), null, String(v));
 });
 
+test("Dropbox folders: <root>/<Product> (<UPC>)/<date> <model> <colour>, a second run same day gets (2)", () => {
+  const root = "/Carbon/Campaign/2026 OPENAI GENERATOR WMS";
+  const base = { root, productName: "Sean Pants", upc: "1123826", etDate: "2026-10-17", modelName: "Victor", colour: "CREAM", seq: 1 };
+  assert.equal(batchRunFolder(base), `${root}/Sean Pants (1123826)/2026-10-17 Victor CREAM`);
+  assert.equal(batchRunFolder({ ...base, seq: 2 }), `${root}/Sean Pants (1123826)/2026-10-17 Victor CREAM (2)`);
+  assert.equal(batchRunFolder({ ...base, upc: null }), `${root}/Sean Pants/2026-10-17 Victor CREAM`);
+  assert.equal(batchRunFolder({ ...base, root: `${root}/` }), `${root}/Sean Pants (1123826)/2026-10-17 Victor CREAM`);
+  // A slash in a name must not make a deeper folder; Dropbox refuses :*?"<>| too.
+  assert.equal(batchRunFolder({ ...base, productName: "Tee / Tank", colour: "BLACK: WASH" }), `${root}/Tee Tank (1123826)/2026-10-17 Victor BLACK WASH`);
+});
+
 test("nightly window: 1:00–5:59 AM Eastern, once, only with something queued", () => {
   assert.equal(nightlySendDue(0, false, 3), false);
   assert.equal(nightlySendDue(1, false, 3), true);
@@ -132,13 +146,15 @@ test("queue → send → store (needs DATABASE_URL)", { skip: !dbUrl }, async ()
   const pool = new Pool({ connectionString: dbUrl, max: 2 });
   const tenantId = randomUUID();
   const session = { sub: randomUUID(), email: "test@example.com", tid: tenantId, lid: randomUUID(), role: "admin" };
-  const m = await pool.query<{ id: string }>(`INSERT INTO matrices (description) VALUES ('studio-batch test') RETURNING id::text`);
+  const m = await pool.query<{ id: string }>(
+    `INSERT INTO matrices (description, upc) VALUES ('studio-batch test', '9990001') RETURNING id::text`,
+  );
   const matrixId = m.rows[0].id;
   try {
     const mk = (panel: number) => ({ panel, body: { ...body(panel), matrixId } });
     const v = validateEnqueue(input([mk(1), mk(2), mk(3)], { matrixId }));
     assert.ok(v.ok);
-    const item = await enqueueBatchItem(pool, session, v.value);
+    await enqueueBatchItem(pool, session, v.value);
 
     /* Panel 3 is refused while being built (as the generate route refuses a
        back pose nobody photographed); 1 and 2 share both reference photos. */
@@ -197,10 +213,12 @@ test("queue → send → store (needs DATABASE_URL)", { skip: !dbUrl }, async ()
       },
     });
     assert.equal(polled.processed, 1);
-    assert.deepEqual(stored, [`carbon-studio/batch/${tenantId}/${matrixId}/${item.id}/panel-1.png`]);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    assert.deepEqual(stored, [`${studioBatchDropboxRoot()}/studio-batch test (9990001)/${today} Victor BLACK/panel-1.png`]);
     [row] = await listBatchItems(pool, tenantId, { matrixId });
     assert.equal(row.status, "ready");
     assert.deepEqual(row.ready, [1]);
+    assert.equal(row.folder, `${studioBatchDropboxRoot()}/studio-batch test (9990001)/${today} Victor BLACK`);
     assert.deepEqual(row.failed.map((f) => f.panel), [2, 3]);
     assert.match(row.failed[0].error, /safety system/);
     assert.match(row.failed[1].error, /no Back photo/);

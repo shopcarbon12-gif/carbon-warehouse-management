@@ -4,8 +4,9 @@
 -- queues exactly what Generate would send for each panel (studio_batch_items).
 -- The worker sends every queued item to OpenAI's Batch API at 1 AM Eastern
 -- (half price, results within 24 h — usually by morning), polls the batch, and
--- stores each finished panel in R2. The product's Studio then shows the results
--- for review; nothing is published by itself.
+-- saves each finished panel in the owner's Dropbox (Campaign › 2026 OPENAI
+-- GENERATOR WMS). The product's Studio then shows the results for review;
+-- nothing is published by itself.
 --
 -- studio_batches is one OpenAI batch; studio_batch_items is one product run
 -- (one model, one colour, the chosen panels) inside it.

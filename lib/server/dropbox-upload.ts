@@ -70,6 +70,35 @@ export async function dropboxUpload(path: string, bytes: Buffer | Uint8Array): P
   return j.path_display || path;
 }
 
+/** Download the file at `path`. */
+export async function dropboxDownload(path: string): Promise<Buffer> {
+  const token = await accessToken();
+  const res = await fetch("https://content.dropboxapi.com/2/files/download", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Dropbox-API-Arg": JSON.stringify({ path }).replace(
+        /[\u007f-\uffff]/g,
+        (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      ),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dropbox download failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Studio night-batch pictures (owner, 2026-10-17): "CARBON JEANS COMPANY
+ * Dropbox › elior perez › Carbon › Campaign › 2026 OPENAI GENERATOR WMS".
+ */
+export function studioBatchDropboxRoot(): string {
+  const v = (process.env.STUDIO_BATCH_DROPBOX_DIR || "").trim().replace(/\/+$/, "");
+  return v || "/Carbon/Campaign/2026 OPENAI GENERATOR WMS";
+}
+
 export function gradingDropboxRoot(): string {
   return ((process.env.CARBONGRADINGAI_DROPBOX_DIR || "/Carbon/Elior/CarbonGradingAI").trim().replace(/\/+$/, "")) || "/Carbon/Elior/CarbonGradingAI";
 }

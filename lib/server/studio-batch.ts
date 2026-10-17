@@ -5,7 +5,9 @@
  * for each panel. Once a night (1 AM Eastern, scripts/worker.ts) every queued
  * product run goes to OpenAI's Batch API in one batch — half the price of a
  * live render, results within 24 hours and usually by morning. Each finished
- * panel is stored in R2 and the product's Studio shows the run for review, the
+ * panel is saved in the owner's Dropbox ("Carbon › Campaign › 2026 OPENAI
+ * GENERATOR WMS" › product (UPC) › date model colour › panel-N.png — no R2,
+ * owner 2026-10-17) and the product's Studio shows the run for review, the
  * same way a live run lands. Nothing is published by itself.
  *
  * The request for each panel is built by the generate route itself in
@@ -16,7 +18,14 @@
 import { createHash } from "node:crypto";
 import OpenAI, { toFile } from "openai";
 import type { Pool } from "pg";
-import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
+import { downloadStorageObject } from "@/lib/storageProvider";
+import {
+  dropboxDownload,
+  dropboxSafe,
+  dropboxUpload,
+  isDropboxConfigured,
+  studioBatchDropboxRoot,
+} from "@/lib/server/dropbox-upload";
 import { recordStudioGeneration } from "@/lib/server/studio-generation-log";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -180,6 +189,8 @@ export type BatchItemSummary = {
   batchStatus: string | null;
   submittedAt: string | null;
   error: string | null;
+  /** The Dropbox folder holding this run's pictures, once any is saved. */
+  folder: string | null;
 };
 
 export async function listBatchItems(
@@ -250,6 +261,7 @@ export async function listBatchItems(
       itemType: x.item_type,
       panels: x.panel_numbers ?? [],
       ready: ready.sort((a, b) => a - b),
+      folder: folderOf(Object.values(results).find((v) => v?.path)?.path),
       failed: failed.sort((a, b) => a.panel - b.panel),
       batchStatus: x.batch_status,
       submittedAt: x.submitted_at,
@@ -291,8 +303,10 @@ export async function loadBatchItemImages(pool: Pool, tenantId: string, id: stri
     const poseB = Number(p.body?.panelQa?.poseB) || null;
     if (res?.path) {
       try {
-        const obj = await downloadStorageObject(res.path);
-        out.push({ panel: p.panel, poseA, poseB, imageBase64: Buffer.from(obj.body).toString("base64") });
+        const bytes = res.path.startsWith("/")
+          ? await dropboxDownload(res.path)
+          : Buffer.from((await downloadStorageObject(res.path)).body);
+        out.push({ panel: p.panel, poseA, poseB, imageBase64: bytes.toString("base64") });
       } catch (e) {
         out.push({ panel: p.panel, poseA, poseB, error: `The stored image could not be read (${e instanceof Error ? e.message : "storage error"}).` });
       }
@@ -533,18 +547,56 @@ type ItemRow = {
   model_name: string | null;
   model_gender: string | null;
   item_type: string | null;
+  item_colour: string | null;
+  product_name: string | null;
+  product_upc: string | null;
+  /** The Eastern date the run was queued, YYYY-MM-DD. */
+  et_date: string;
+  /** 1 for the first run of this product + model + colour that day, 2 for the next… */
+  seq: number;
 };
+
+/**
+ * Where a run's pictures go in Dropbox (owner, 2026-10-17):
+ *   <root>/<Product> (<UPC>)/<YYYY-MM-DD> <Model> <Colour>[ (2)]/panel-N.png
+ * The second run of the same product, model and colour on one day gets " (2)",
+ * so nothing already saved is overwritten.
+ */
+export function batchRunFolder(v: {
+  root: string;
+  productName: string | null;
+  upc: string | null;
+  etDate: string;
+  modelName: string | null;
+  colour: string | null;
+  seq: number;
+}): string {
+  const product = dropboxSafe(`${v.productName?.trim() || "Product"}${v.upc?.trim() ? ` (${v.upc.trim()})` : ""}`);
+  const run = dropboxSafe(
+    [v.etDate, v.modelName?.trim(), v.colour?.trim()].filter(Boolean).join(" ") + (v.seq > 1 ? ` (${v.seq})` : ""),
+  );
+  return `${v.root.replace(/\/+$/, "")}/${product}/${run}`;
+}
+
+/** The folder part of a stored Dropbox path, null for anything else. */
+function folderOf(path: string | undefined): string | null {
+  if (!path || !path.startsWith("/")) return null;
+  return path.slice(0, path.lastIndexOf("/")) || null;
+}
 
 function errorText(body: unknown, fallback: string): { message: string; code: string } {
   const e = (body as { error?: { message?: string; code?: string; type?: string } } | null)?.error;
   return { message: String(e?.message || fallback), code: String(e?.code || e?.type || "") };
 }
 
-/** Where a finished panel's PNG goes — R2 in production (a test passes its own). */
+/** Where a finished panel's PNG goes — the owner's Dropbox in production (a test passes its own). */
 export type StoreImageFn = (path: string, bytes: Buffer) => Promise<{ path: string }>;
-const storeInR2: StoreImageFn = (path, bytes) => uploadBytesToStorage({ path, bytes, contentType: "image/png" });
+const storeInDropbox: StoreImageFn = async (path, bytes) => {
+  if (!isDropboxConfigured()) throw new Error("Dropbox is not connected on the server (DROPBOX_* settings missing).");
+  return { path: await dropboxUpload(path, bytes) };
+};
 
-/** Store one finished OpenAI batch: every panel into R2 + the generation log. */
+/** Store one finished OpenAI batch: every panel into Dropbox + the generation log. */
 async function processFinishedBatch(
   pool: Pool,
   openai: OpenAI,
@@ -560,12 +612,26 @@ async function processFinishedBatch(
   store: StoreImageFn,
 ) {
   const rows = await pool.query<ItemRow>(
-    `SELECT id::text, tenant_id::text, location_id::text, matrix_id::text, run_tag, panels, results,
-            model_name, model_gender, item_type
-       FROM studio_batch_items WHERE batch_id = $1::uuid`,
+    `SELECT i.id::text, i.tenant_id::text, i.location_id::text, i.matrix_id::text, i.run_tag, i.panels, i.results,
+            i.model_name, i.model_gender, i.item_type, i.item_colour,
+            m.description AS product_name, m.upc AS product_upc,
+            to_char(i.added_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD') AS et_date,
+            1 + (SELECT count(*) FROM studio_batch_items o
+                  WHERE o.matrix_id = i.matrix_id AND o.status NOT IN ('cancelled', 'failed')
+                    AND COALESCE(o.model_name, '') = COALESCE(i.model_name, '')
+                    AND COALESCE(o.item_colour, '') = COALESCE(i.item_colour, '')
+                    AND (o.added_at AT TIME ZONE 'America/New_York')::date = (i.added_at AT TIME ZONE 'America/New_York')::date
+                    AND (o.added_at, o.id) < (i.added_at, i.id))::int AS seq
+       FROM studio_batch_items i
+       JOIN matrices m ON m.id = i.matrix_id
+      WHERE i.batch_id = $1::uuid`,
     [batch.id],
   );
+  const root = studioBatchDropboxRoot();
   const items = new Map(rows.rows.map((r) => [r.id, { ...r, results: { ...(r.results ?? {}) } }]));
+  /* Written only once the whole batch is saved: a save that fails half-way is
+     retried from the start, and must not log the same render twice. */
+  const logs: Parameters<typeof recordStudioGeneration>[0][] = [];
   const record = async (itemId: string, panel: number, outcome: "ok" | "failed" | "blocked", extra: Partial<PanelResult>) => {
     const item = items.get(itemId);
     if (!item) return;
@@ -573,7 +639,7 @@ async function processFinishedBatch(
     item.results[String(panel)] = { ...prev, ...extra };
     const body = item.panels.find((p) => p.panel === panel)?.body;
     const meta = (prev.meta ?? {}) as Record<string, unknown>;
-    recordStudioGeneration({
+    logs.push({
       tenantId: item.tenant_id,
       locationId: item.location_id,
       matrixId: item.matrix_id,
@@ -612,10 +678,16 @@ async function processFinishedBatch(
     const response = row.response as { status_code?: number; body?: Record<string, unknown> } | null;
     const b64 = (response?.body?.data as { b64_json?: string }[] | undefined)?.[0]?.b64_json;
     if (response?.status_code === 200 && b64) {
-      const stored = await store(
-        `carbon-studio/batch/${item.tenant_id}/${item.matrix_id}/${item.id}/panel-${id.panel}.png`,
-        Buffer.from(b64, "base64"),
-      );
+      const folder = batchRunFolder({
+        root,
+        productName: item.product_name,
+        upc: item.product_upc,
+        etDate: item.et_date,
+        modelName: item.model_name,
+        colour: item.item_colour,
+        seq: item.seq,
+      });
+      const stored = await store(`${folder}/panel-${id.panel}.png`, Buffer.from(b64, "base64"));
       const usage = (response.body?.usage as Record<string, unknown> | undefined) ?? null;
       await record(id.itemId, id.panel, "ok", { path: stored.path, usage, error: undefined });
       return;
@@ -649,6 +721,7 @@ async function processFinishedBatch(
       [item.id, anyOk ? "ready" : "failed", JSON.stringify(item.results), anyOk ? null : "No panel of this run was rendered."],
     );
   }
+  for (const entry of logs) void recordStudioGeneration(entry);
   log(`batch ${batch.id} stored: ${[...items.values()].filter((i) => Object.values(i.results).some((r) => r?.path)).length}/${items.size} product run(s) have images`);
 }
 
@@ -675,7 +748,7 @@ export async function pollStudioBatches(
   for (const b of open.rows) {
     /* One batch OpenAI cannot answer for right now must not hold up the rest. */
     try {
-      processed += await pollOne(pool, opts.openai, b, log, opts.store ?? storeInR2);
+      processed += await pollOne(pool, opts.openai, b, log, opts.store ?? storeInDropbox);
     } catch (e) {
       log(`batch ${b.id} check failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -709,20 +782,31 @@ async function pollOne(
     ],
   );
   if (!TERMINAL_OPENAI.has(ob.status)) return 0;
-  await processFinishedBatch(
-    pool,
-    openai,
-    {
-      id: b.id,
-      tenant_id: b.tenant_id,
-      output_file_id: ob.output_file_id ?? null,
-      error_file_id: ob.error_file_id ?? null,
-      openai_status: ob.status,
-      errors,
-    },
-    log,
-    store,
-  );
+  try {
+    await processFinishedBatch(
+      pool,
+      openai,
+      {
+        id: b.id,
+        tenant_id: b.tenant_id,
+        output_file_id: ob.output_file_id ?? null,
+        error_file_id: ob.error_file_id ?? null,
+        openai_status: ob.status,
+        errors,
+      },
+      log,
+      store,
+    );
+  } catch (e) {
+    /* The renders are safe in OpenAI's output file until this succeeds (it is
+       deleted only afterwards), so the next check simply tries again. */
+    const msg = e instanceof Error ? e.message : String(e);
+    await pool.query(
+      `UPDATE studio_batch_items SET error = $2, updated_at = now() WHERE batch_id = $1::uuid AND status = 'submitted'`,
+      [b.id, `Finished at OpenAI, but the pictures could not be saved yet — trying again every 5 minutes: ${msg}`],
+    );
+    throw e;
+  }
   await pool.query(`UPDATE studio_batches SET status = 'processed', processed_at = now() WHERE id = $1::uuid`, [b.id]);
   await deleteOpenAiFiles(openai, [...(b.uploaded_file_ids ?? []), b.input_file_id, ob.output_file_id, ob.error_file_id]);
   return 1;

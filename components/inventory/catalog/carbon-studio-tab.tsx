@@ -2233,7 +2233,7 @@ export function CarbonStudioTab({
         const j = (await r.json().catch(() => ({}))) as { error?: string };
         if (!r.ok) throw new Error(j.error || `Could not add to the batch (HTTP ${r.status})`);
         setMsg(
-          `Added ${chosen.length} panel(s) with ${model.name} to tonight's batch — it goes to OpenAI at 1 AM Eastern at half price, and the results show up here (usually by morning). Nothing is published until you push.${batchSpecNote}`,
+          `Added ${chosen.length} panel(s) with ${model.name} to tonight's batch — it goes to OpenAI at 1 AM Eastern at half price; the pictures are saved to Dropbox (Campaign › 2026 OPENAI GENERATOR WMS) and show up here, usually by morning. Nothing is published until you push.${batchSpecNote}`,
         );
         void refreshBatch();
       } catch (e) {
@@ -3817,7 +3817,7 @@ export function CarbonStudioTab({
           type="button"
           disabled={!canManage || busy !== null || !model || !orderedRefUrls(refViews).length || !panels.length}
           onClick={() => void generate("batch")}
-          title="Queue exactly this run for tonight's OpenAI batch (sent 1 AM Eastern, half the price). The results come back here for review — nothing is published by itself."
+          title="Queue exactly this run for tonight's OpenAI batch (sent 1 AM Eastern, half the price). The pictures are saved to Dropbox and come back here for review — nothing is published by itself."
           className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 disabled:opacity-50 max-md:min-h-11"
         >
           {busy === "batch" ? "Adding to batch…" : `☾ Add ${panels.length} to tonight's batch`}
@@ -3962,6 +3962,11 @@ export function CarbonStudioTab({
                       </span>
                     ) : null}
                     {b.error && b.status !== "failed" ? <span className="basis-full text-[var(--wms-status-warning-fg)]">{b.error}</span> : null}
+                    {b.folder ? (
+                      <span className="basis-full text-[var(--wms-muted)]">
+                        In Dropbox: {b.folder.replace(/^\/+/, "").split("/").join(" › ")}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
             </ul>
