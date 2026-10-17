@@ -1,0 +1,22 @@
+{
+ "takenAt": "2026-10-17T00:12:58.132Z",
+ "count": {
+  "id": "be459507-085c-4617-bb44-a1b4c24f5ba4",
+  "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+  "session_number": 29,
+  "status": "committed",
+  "completed_at": "2026-10-13T11:51:54.591Z",
+  "add_on_locked_by": "3c02fbd9-e2a4-4516-a36d-bb5a6c5250d7"
+ },
+ "addOn": {
+  "id": "672c0e37-0404-4893-bcd0-7d9c139d1660",
+  "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+  "source_type": "cycle_count",
+  "source_id": "be459507-085c-4617-bb44-a1b4c24f5ba4",
+  "source_slip": "C-029",
+  "state": "paused",
+  "epc_count": 13817,
+  "started_at": "2026-10-13T10:00:40.725Z",
+  "last_activity_at": "2026-10-14T16:42:01.362Z"
+ }
+}
