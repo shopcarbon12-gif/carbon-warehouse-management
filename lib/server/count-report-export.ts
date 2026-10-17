@@ -37,6 +37,7 @@ function totalPairs(rep: CountReport): [string, string][] {
     ["Unknown found in an earlier count, still not verified", String(t.earlierUnknown)],
     ["Defective (TAG KILLED)", String(t.defective)],
     ["Other (sold, damaged, …)", String(t.other)],
+    ["   of which not in the WMS (count saved, never uploaded)", String(t.notInWms)],
   ];
 }
 

@@ -61,6 +61,9 @@ export type CountReport = {
     earlierUnknown: number;
     defective: number;
     other: number;
+    /** Part of `other`: read, but no tag record — e.g. a count that was only
+     *  SAVED (archived), never uploaded, so nothing was ingested. */
+    notInWms: number;
   };
   unknown: ReportTagRow[];
   defective: ReportDefectRow[];
@@ -215,6 +218,7 @@ async function assemble(
   const defective = new Map<string, ReportDefectRow>(defectiveFromFile.map((d) => [d.epc.toUpperCase(), d]));
   let live = 0;
   let other = 0;
+  let notInWms = 0;
   for (const epc of epcs) {
     const it = items.get(epc);
     const read = byEpc.get(epc)!;
@@ -231,7 +235,10 @@ async function assemble(
       continue;
     }
     if (it && it.status === "in-stock") live++;
-    else other++;
+    else {
+      other++;
+      if (!it) notInWms++;
+    }
   }
   unknown.sort((a, b) => Number(b.foundHere) - Number(a.foundHere) || (a.product ?? "").localeCompare(b.product ?? "") || a.epc.localeCompare(b.epc));
   const defectRows = [...defective.values()].sort((a, b) => a.epc.localeCompare(b.epc));
@@ -245,6 +252,7 @@ async function assemble(
       earlierUnknown: unknown.filter((u) => !u.foundHere).length,
       defective: defectRows.length,
       other,
+      notInWms,
     },
     unknown,
     defective: defectRows,
@@ -448,7 +456,7 @@ export async function buildUnverifiedReport(pool: Pool, tenantId: string): Promi
     endedAt: null,
     by: [],
     devices: [...new Set(unknown.map((u) => u.firstFoundBy).filter((x): x is string => !!x))].sort(),
-    totals: { read: 0, live: 0, cameBack: 0, newUnknown: unknown.length, earlierUnknown: 0, defective: 0, other: 0 },
+    totals: { read: 0, live: 0, cameBack: 0, newUnknown: unknown.length, earlierUnknown: 0, defective: 0, other: 0, notInWms: 0 },
     unknown,
     defective: [],
     generatedAt: new Date().toISOString(),
