@@ -1,0 +1,427 @@
+{
+ "keep-rising-t-shirt": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "MUSTARD",
+   "MUSTARD",
+   "MUSTARD",
+   "MUSTARD",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "nash-swimsuit": {
+  "gone": [
+   "LIGHT BLUE"
+  ],
+  "labels": [
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "YELLOW",
+   "YELLOW",
+   "YELLOW",
+   "YELLOW",
+   "YELLOW"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "bailey-crop-tank": {
+  "gone": [
+   "BLACK",
+   "WHITE"
+  ],
+  "labels": [
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "LILAC",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "PEACH",
+   "STONE",
+   "STONE",
+   "STONE",
+   "STONE",
+   "STONE",
+   "STONE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK"
+  ],
+  "delete_idx": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43,
+   44,
+   45,
+   46,
+   47
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46284828344572",
+   "gid://shopify/MediaImage/46284828442876",
+   "gid://shopify/MediaImage/46284828377340",
+   "gid://shopify/MediaImage/46284828410108",
+   "gid://shopify/MediaImage/46284828475644",
+   "gid://shopify/MediaImage/46284828508412",
+   "gid://shopify/MediaImage/46284394529020",
+   "gid://shopify/MediaImage/46284394594556",
+   "gid://shopify/MediaImage/46284394627324",
+   "gid://shopify/MediaImage/46284394561788",
+   "gid://shopify/MediaImage/46284394660092",
+   "gid://shopify/MediaImage/46284394692860"
+  ]
+ },
+ "jaylah-oversized-shirt": {
+  "gone": [
+   "WHITE"
+  ],
+  "labels": [
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [
+   4,
+   5,
+   6,
+   7
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46440207646972",
+   "gid://shopify/MediaImage/46440207679740",
+   "gid://shopify/MediaImage/46440207712508",
+   "gid://shopify/MediaImage/46440207745276"
+  ]
+ },
+ "painted-king-t-shirt": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "teddyator-t-shirt": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "simplify-t-shirt": {
+  "gone": [
+   "GREY"
+  ],
+  "labels": [
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "don-t-care-mesh-hat": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46404332028156",
+   "gid://shopify/MediaImage/46404332060924",
+   "gid://shopify/MediaImage/46404332093692",
+   "gid://shopify/MediaImage/46404332126460"
+  ]
+ },
+ "amira-bodysuit": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK"
+  ],
+  "delete_idx": [
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46282360094972",
+   "gid://shopify/MediaImage/46282360160508",
+   "gid://shopify/MediaImage/46282360193276",
+   "gid://shopify/MediaImage/46282360127740",
+   "gid://shopify/MediaImage/46282360226044",
+   "gid://shopify/MediaImage/46282360258812"
+  ]
+ },
+ "imagine-hat": {
+  "gone": [
+   "BLACK/NEON"
+  ],
+  "labels": [
+   "BLACK/NEON",
+   "BLACK/NEON",
+   "BLACK/NEON",
+   "BLACK/NEON",
+   "BLACK/PURPLE",
+   "BLACK/PURPLE",
+   "BLACK/PURPLE",
+   "BLACK/PURPLE"
+  ],
+  "delete_idx": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46404358504700",
+   "gid://shopify/MediaImage/46404358537468",
+   "gid://shopify/MediaImage/46404358570236",
+   "gid://shopify/MediaImage/46404358603004"
+  ]
+ },
+ "nia-knit-skirt": {
+  "gone": [
+   "BLUE"
+  ],
+  "labels": [
+   "CREAM",
+   "CREAM",
+   "CREAM",
+   "CREAM",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "GREEN",
+   "BLUE",
+   "BLUE",
+   "BLUE",
+   "BLUE"
+  ],
+  "delete_idx": [
+   8,
+   9,
+   10,
+   11
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/38375189184764",
+   "gid://shopify/MediaImage/46440211939580",
+   "gid://shopify/MediaImage/46440351727868",
+   "gid://shopify/MediaImage/46440211972348"
+  ]
+ },
+ "texture-top": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BEIGE",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY",
+   "GREY"
+  ],
+  "delete_idx": [
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/46298525040892",
+   "gid://shopify/MediaImage/46298525073660",
+   "gid://shopify/MediaImage/46298525106428",
+   "gid://shopify/MediaImage/46298525139196",
+   "gid://shopify/MediaImage/46298525171964",
+   "gid://shopify/MediaImage/46298525204732",
+   "gid://shopify/MediaImage/46298525237500",
+   "gid://shopify/MediaImage/46298525270268"
+  ]
+ },
+ "different-t-shirt": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "MINK",
+   "MINK",
+   "MINK",
+   "MINK",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "BLACK"
+  ],
+  "delete_idx": [
+   8
+  ],
+  "media_ids": [
+   "gid://shopify/MediaImage/38375264223484"
+  ]
+ },
+ "tyson-sweater": {
+  "gone": [
+   "BLACK"
+  ],
+  "labels": [
+   "CREAM",
+   "GREY",
+   "GREY",
+   "BLUE",
+   "BLUE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "element-shirt": {
+  "gone": [
+   "BEIGE"
+  ],
+  "labels": [
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "BLACK",
+   "WHITE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ },
+ "my-rules-t-shirt": {
+  "gone": [
+   "BLACK",
+   "MUSTARD"
+  ],
+  "labels": [
+   "WHITE",
+   "WHITE",
+   "WHITE",
+   "WHITE"
+  ],
+  "delete_idx": [],
+  "media_ids": []
+ }
+}
