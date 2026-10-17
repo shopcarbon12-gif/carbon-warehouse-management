@@ -1,0 +1,315 @@
+{
+ "takenAt": "2026-10-16T23:58:07.798Z",
+ "rows": [
+  {
+   "epc": "F0A0B30E4F9B91B440853BE9",
+   "status": "unknown",
+   "serial": "18262342633",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T08:33:51.447Z",
+   "created_at": "2026-10-13T08:33:51.140Z",
+   "product": "Alexia Top",
+   "size": "M"
+  },
+  {
+   "epc": "F0A0B30E4F9B91E080002550",
+   "status": "unknown",
+   "serial": "2147493200",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-09-02T20:09:20.242Z",
+   "created_at": "2026-09-02T20:09:20.242Z",
+   "product": "Alexia Top",
+   "size": "M"
+  },
+  {
+   "epc": "F0A0B30E4F9B9B8019806098",
+   "status": "unknown",
+   "serial": "427843736",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-05-30T21:12:45.931Z",
+   "created_at": "2026-05-30T21:12:45.918Z",
+   "product": "Finnley Jeans",
+   "size": "31"
+  },
+  {
+   "epc": "F0A0B30E4F9B9D7000002212",
+   "status": "unknown",
+   "serial": "8722",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T14:31:37.987Z",
+   "created_at": "2026-10-13T14:31:37.990Z",
+   "product": "Finn Jeans",
+   "size": "30"
+  },
+  {
+   "epc": "F0A0B30E4F9BB1C02BBF90A9",
+   "status": "unknown",
+   "serial": "733974697",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T17:01:49.988Z",
+   "created_at": "2026-06-07T17:01:49.294Z",
+   "product": "Womens Short Jeans B",
+   "size": "L"
+  },
+  {
+   "epc": "F0A0B30E4F9BB7E000012502",
+   "status": "unknown",
+   "serial": "75010",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T09:16:09.179Z",
+   "created_at": "2026-10-13T09:16:08.908Z",
+   "product": "Rhea Jacket",
+   "size": "S"
+  },
+  {
+   "epc": "F0A0B30E4F9BBF40000126AD",
+   "status": "unknown",
+   "serial": "75437",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T09:33:30.701Z",
+   "created_at": "2026-10-13T09:33:30.351Z",
+   "product": "Marlee Crop Top",
+   "size": "38"
+  },
+  {
+   "epc": "F0A0B30E4F9BDFE800000A63",
+   "status": "unknown",
+   "serial": "34359741027",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-05-31T02:30:20.749Z",
+   "created_at": "2026-05-31T02:30:20.749Z",
+   "product": "City View T-Shirt",
+   "size": "L"
+  },
+  {
+   "epc": "F0A0B30E4F9C0000220A70E0",
+   "status": "unknown",
+   "serial": "571109600",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T08:09:41.233Z",
+   "created_at": "2026-10-13T08:09:40.846Z",
+   "product": "Startdust Denim Jacket",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9C000105140D04",
+   "status": "unknown",
+   "serial": "4380167428",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-09-05T13:30:42.096Z",
+   "created_at": "2026-09-05T13:30:41.878Z",
+   "product": "Startdust Denim Jacket",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9C113CFFF30DF0",
+   "status": "unknown",
+   "serial": "55833726448",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-09-05T05:18:41.853Z",
+   "created_at": "2026-09-05T05:18:41.675Z",
+   "product": "Vera Suit Bottom",
+   "size": "40"
+  },
+  {
+   "epc": "F0A0B30E4F9C28B000013029",
+   "status": "unknown",
+   "serial": "77865",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T16:56:12.947Z",
+   "created_at": "2026-10-13T16:56:12.949Z",
+   "product": "Bracelet Z",
+   "size": "OS"
+  },
+  {
+   "epc": "F0A0B30E4F9C602000899793",
+   "status": "unknown",
+   "serial": "9017235",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-05-30T21:41:17.259Z",
+   "created_at": "2026-05-30T21:41:17.076Z",
+   "product": "Nova String Top",
+   "size": "S"
+  },
+  {
+   "epc": "F0A0B30E4F9C760000018C09",
+   "status": "unknown",
+   "serial": "101385",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T17:35:18.778Z",
+   "created_at": "2026-10-13T17:35:18.791Z",
+   "product": "Men's Boxer Brief 3-Pack",
+   "size": "XXL"
+  },
+  {
+   "epc": "F0A0B30E4F9C7A8D57F2AEBF",
+   "status": "unknown",
+   "serial": "57310097087",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-09-02T20:38:23.626Z",
+   "created_at": "2026-09-02T20:38:23.627Z",
+   "product": "Michelle Heels",
+   "size": "38"
+  },
+  {
+   "epc": "F0A0B30E4F9C8440000191A0",
+   "status": "unknown",
+   "serial": "102816",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T09:16:29.154Z",
+   "created_at": "2026-10-13T09:16:28.910Z",
+   "product": "Apology Hoodie",
+   "size": "L"
+  },
+  {
+   "epc": "F0A0B30E4F9CAB23200024BC",
+   "status": "unknown",
+   "serial": "13421782204",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-05-31T02:30:20.749Z",
+   "created_at": "2026-05-31T02:30:20.749Z",
+   "product": "Excuse Shirt",
+   "size": "L"
+  },
+  {
+   "epc": "F0A0B30E4F9CB3100001A196",
+   "status": "unknown",
+   "serial": "106902",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T14:31:37.987Z",
+   "created_at": "2026-10-13T14:31:37.990Z",
+   "product": "Carbon Classic T",
+   "size": "XXXL"
+  },
+  {
+   "epc": "F0A0B30E4F9CB4040179A3AA",
+   "status": "unknown",
+   "serial": "17204618154",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T15:08:45.816Z",
+   "created_at": "2026-06-07T15:08:45.502Z",
+   "product": "Gabriel Sweater",
+   "size": "OS"
+  },
+  {
+   "epc": "F0A0B30E4F9CB47420018902",
+   "status": "unknown",
+   "serial": "17716840706",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T14:53:39.249Z",
+   "created_at": "2026-06-07T14:53:38.996Z",
+   "product": "Rylie Pants Set",
+   "size": "OS"
+  },
+  {
+   "epc": "F0A0B30E4F9CBB60400187A9",
+   "status": "unknown",
+   "serial": "1073842089",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T17:15:08.041Z",
+   "created_at": "2026-06-07T17:15:07.472Z",
+   "product": "Alpes Top",
+   "size": "OS"
+  },
+  {
+   "epc": "F0A0B30E4F9CBD4553FC106F",
+   "status": "unknown",
+   "serial": "22883864687",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-05-30T21:48:32.198Z",
+   "created_at": "2026-05-30T21:48:32.083Z",
+   "product": "Ayla Dress",
+   "size": "M"
+  },
+  {
+   "epc": "F0A0B30E4F9CBE3400018EAE",
+   "status": "unknown",
+   "serial": "17179971246",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-09-05T05:20:41.970Z",
+   "created_at": "2026-09-05T05:20:41.669Z",
+   "product": "Ayla Dress",
+   "size": "L"
+  },
+  {
+   "epc": "F0A0B30E4F9CC00453696222",
+   "status": "unknown",
+   "serial": "18579284514",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T17:20:19.391Z",
+   "created_at": "2026-06-07T17:20:18.618Z",
+   "product": "Strap Pants Set",
+   "size": "M"
+  },
+  {
+   "epc": "F0A0B30E4F9CC4A1000146E5",
+   "status": "unknown",
+   "serial": "4295050981",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-10-13T08:20:16.375Z",
+   "created_at": "2026-10-13T08:20:16.002Z",
+   "product": "Finaley Romper",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9CD8B021018B7D",
+   "status": "unknown",
+   "serial": "553749373",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-06-07T16:53:24.301Z",
+   "created_at": "2026-06-07T16:53:23.599Z",
+   "product": "Neil Jeans",
+   "size": "31"
+  },
+  {
+   "epc": "F0A0B30E4F9CE8000203F5BD",
+   "status": "unknown",
+   "serial": "33813949",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-09-05T12:54:42.142Z",
+   "created_at": "2026-09-05T12:54:41.864Z",
+   "product": "Culture T-Shirt",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9CE81000FE48CA",
+   "status": "unknown",
+   "serial": "16664778",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-06-07T18:55:24.864Z",
+   "created_at": "2026-06-07T18:55:24.865Z",
+   "product": "Culture T-Shirt",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9CE8158FE78F5B",
+   "status": "unknown",
+   "serial": "23889153883",
+   "source": "cycle_count",
+   "first_scanned_at": "2026-09-05T07:55:41.944Z",
+   "created_at": "2026-09-05T07:55:41.667Z",
+   "product": "Culture T-Shirt",
+   "size": "XL"
+  },
+  {
+   "epc": "F0A0B30E4F9D0810000186FB",
+   "status": "unknown",
+   "serial": "100091",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T17:35:18.778Z",
+   "created_at": "2026-10-13T17:35:18.791Z",
+   "product": "Russell Jacket",
+   "size": "S"
+  },
+  {
+   "epc": "F0A0B30E4F9D52B08082E50A",
+   "status": "unknown",
+   "serial": "2156061962",
+   "source": "add_on_count",
+   "first_scanned_at": "2026-10-13T14:31:37.987Z",
+   "created_at": "2026-10-13T14:31:37.990Z",
+   "product": "Luis Jeans",
+   "size": "32"
+  }
+ ]
+}
