@@ -94,7 +94,7 @@ const nameFor = (names: Map<string, string>, raw: string | null | undefined) =>
   raw ? (names.get(raw.trim().toLowerCase()) ?? raw) : null;
 
 /** "Oct 16 2026 4:12 PM" in the warehouse's time zone. */
-export function fmtET(iso: string | Date | null | undefined, withSeconds = false): string {
+export function fmtET(iso: string | Date | null | undefined, withSeconds = false, withYear = true): string {
   if (!iso) return "";
   const d = typeof iso === "string" ? new Date(iso) : iso;
   if (Number.isNaN(d.getTime())) return String(iso);
@@ -102,7 +102,7 @@ export function fmtET(iso: string | Date | null | undefined, withSeconds = false
     timeZone: "America/New_York",
     month: "short",
     day: "numeric",
-    year: "numeric",
+    ...(withYear ? { year: "numeric" as const } : {}),
     hour: "numeric",
     minute: "2-digit",
     ...(withSeconds ? { second: "2-digit" } : {}),
@@ -292,10 +292,15 @@ export async function buildCycleCountReport(pool: Pool, tenantId: string, sessio
   const sources = s.scanned_epc_sources ?? {};
   const reads: Read[] = [];
   const devices = new Set<string>();
+  // Add-On uploads keep feeding a count after it is committed (C-029: closed
+  // 7:51 AM, Add-On reads until 1:35 PM) — the count runs to its last read.
+  let lastRead = s.completed_at ? s.completed_at.getTime() : 0;
   for (const [epc, v] of Object.entries(sources)) {
     const who = v?.name ? `${v.kind === "reader" ? "Fixed reader" : v.kind === "mobile" ? "Handheld" : "Reader"} ${v.name.replace(" · A1", "")}` : null;
     if (who) devices.add(who);
     reads.push({ epc, at: v?.ts ?? null, by: who });
+    const t = v?.ts ? new Date(v.ts).getTime() : NaN;
+    if (Number.isFinite(t) && t > lastRead) lastRead = t;
   }
   if (Array.isArray(s.scanned_epcs)) {
     for (const e of s.scanned_epcs) if (typeof e === "string" && !(e in sources)) reads.push({ epc: e, at: null, by: null });
@@ -311,7 +316,7 @@ export async function buildCycleCountReport(pool: Pool, tenantId: string, sessio
       activity: "CYCLE COUNT",
       location: s.loc,
       startedAt: (s.started_at ?? s.created_at).toISOString(),
-      endedAt: s.completed_at ? s.completed_at.toISOString() : null,
+      endedAt: s.completed_at ? new Date(Math.max(lastRead, s.completed_at.getTime())).toISOString() : null,
       by: startedBy ? [startedBy] : [],
       devices: [...devices].sort(),
     },

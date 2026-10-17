@@ -46,11 +46,11 @@ const s = (v: unknown) => (v == null ? "" : String(v));
 function unknownCols(rep: CountReport, full: boolean): Col[] {
   const inCount = rep.kind !== "unverified";
   const cols: Col[] = [
-    { label: "EPC", width: full ? 28 : 132, get: (r) => s(r.epc) },
-    { label: "Product", width: full ? 30 : 104, get: (r) => s(r.product) },
-    { label: "Color", width: full ? 14 : 56, get: (r) => s(r.color) },
-    { label: "Size", width: full ? 8 : 34, get: (r) => s(r.size) },
-    { label: "SKU", width: full ? 16 : 78, get: (r) => s(r.sku) },
+    { label: "EPC", width: full ? 28 : 128, get: (r) => s(r.epc) },
+    { label: "Product", width: full ? 30 : 96, get: (r) => s(r.product) },
+    { label: "Color", width: full ? 14 : 50, get: (r) => s(r.color) },
+    { label: "Size", width: full ? 8 : 30, get: (r) => s(r.size) },
+    { label: "SKU", width: full ? 16 : 72, get: (r) => s(r.sku) },
   ];
   if (full) {
     cols.push(
@@ -59,11 +59,11 @@ function unknownCols(rep: CountReport, full: boolean): Col[] {
       { label: "Serial", width: 11, get: (r) => s(r.serial) },
     );
   }
-  cols.push({ label: "Bin", width: full ? 9 : 40, get: (r) => s(r.bin) });
+  cols.push({ label: "Bin", width: full ? 9 : 36, get: (r) => s(r.bin) });
   if (inCount) {
     cols.push(
-      { label: full ? "Read in this count (ET)" : "Read (ET)", width: full ? 22 : 86, get: (r) => fmtET(s(r.readAt) || null, full) },
-      { label: "Read by", width: full ? 26 : 80, get: (r) => s(r.readBy) },
+      { label: full ? "Read in this count (ET)" : "Read (ET)", width: full ? 22 : 70, get: (r) => fmtET(s(r.readAt) || null, full, full) },
+      { label: "Read by", width: full ? 26 : 140, get: (r) => s(r.readBy) },
     );
     if (full) {
       cols.push(
@@ -71,19 +71,19 @@ function unknownCols(rep: CountReport, full: boolean): Col[] {
         { label: "First found by", width: 26, get: (r) => s(r.firstFoundBy) },
       );
     }
-    cols.push({ label: full ? "Found in this count?" : "Found", width: full ? 18 : 46, get: (r) => (full ? yes(r.foundHere) : r.foundHere ? "NEW" : "Earlier") });
+    cols.push({ label: full ? "Found in this count?" : "Found", width: full ? 18 : 42, get: (r) => (full ? yes(r.foundHere) : r.foundHere ? "NEW" : "Earlier") });
   } else {
     cols.push(
-      { label: "First found (ET)", width: full ? 22 : 92, get: (r) => fmtET(s(r.firstFoundAt) || null, full) },
-      { label: "First found by", width: full ? 26 : 110, get: (r) => s(r.firstFoundBy) },
-      { label: "Last seen (ET)", width: full ? 22 : 74, get: (r) => fmtET(s(r.lastSeenAt) || null, full) },
+      { label: "First found (ET)", width: full ? 22 : 80, get: (r) => fmtET(s(r.firstFoundAt) || null, full, full) },
+      { label: "First found by", width: full ? 26 : 148, get: (r) => s(r.firstFoundBy) },
+      { label: "Last seen (ET)", width: full ? 22 : 80, get: (r) => fmtET(s(r.lastSeenAt) || null, full, full) },
     );
   }
   // PDF of the waiting list: every row is "Unknown — not verified" — no column.
   if (full || inCount) {
     cols.push({
       label: "Status now",
-      width: full ? 34 : 58,
+      width: full ? 34 : 50,
       // PDF: "Unknown" / "Live, verified Oct 18" — the full text is in Excel.
       get: (r) => (full ? s(r.statusNow) : s(r.statusNow).replace(" — not verified", "").replace(/ — verified (\w+ \d+).*/, " $1")),
     });
