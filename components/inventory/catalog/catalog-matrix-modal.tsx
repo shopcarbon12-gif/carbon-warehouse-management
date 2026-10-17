@@ -2097,6 +2097,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                 <MatrixGallery
                   urls={data.matrix.image_urls ?? []}
                   title={data.matrix.description}
+                  variants={data.variants}
                 />
 
                 {/* Phones never see the rail's SKU list — same SKUs and qty here. */}
@@ -3038,13 +3039,61 @@ function MoneyInput({
   );
 }
 
+/** Same picture whatever the CDN `?v=` cache-buster says. */
+const picKey = (u: string | null | undefined) => (u ?? "").split("?")[0];
+
+type GalleryBlock = { colour: string | null; start: number; end: number; mainIdx: number | null };
+
+/**
+ * Colour blocks exactly as the storefront shows them: each colour's set runs
+ * from its main picture (the one its sizes are linked to) up to the next
+ * colour's main picture. Pictures before the first main are "not tied to a
+ * colour". Colours that share another colour's main (or have none) get no
+ * block of their own and are reported separately.
+ */
+function galleryBlocks(
+  urls: string[],
+  variants: Array<{ color: string | null; archived: boolean; shopify_image_url?: string | null }>,
+): { blocks: GalleryBlock[]; borrowed: Array<{ colour: string; from: string | null }> } {
+  const idxByKey = new Map(urls.map((u, i) => [picKey(u), i] as const));
+  const colours: string[] = [];
+  const mainOf = new Map<string, number | null>();
+  for (const v of variants) {
+    if (v.archived) continue;
+    const c = v.color || "—";
+    if (!mainOf.has(c)) { colours.push(c); mainOf.set(c, null); }
+    const i = idxByKey.get(picKey(v.shopify_image_url));
+    if (i !== undefined && mainOf.get(c) === null) mainOf.set(c, i);
+  }
+  // A picture index belongs to the first colour (in colour order) that uses it as its main.
+  const owner = new Map<number, string>();
+  for (const c of colours) { const i = mainOf.get(c); if (i != null && !owner.has(i)) owner.set(i, c); }
+  const borrowed = colours
+    .filter((c) => { const i = mainOf.get(c); return i == null || owner.get(i) !== c; })
+    .map((c) => { const i = mainOf.get(c); return { colour: c, from: i == null ? null : owner.get(i) ?? null }; });
+  const starts = [...owner.keys()].sort((a, b) => a - b);
+  const blocks: GalleryBlock[] = [];
+  if (starts.length === 0) return { blocks: [{ colour: null, start: 0, end: urls.length, mainIdx: null }], borrowed };
+  if (starts[0] > 0) blocks.push({ colour: null, start: 0, end: starts[0], mainIdx: null });
+  starts.forEach((s, k) => blocks.push({ colour: owner.get(s)!, start: s, end: starts[k + 1] ?? urls.length, mainIdx: s }));
+  return { blocks, borrowed };
+}
+
 /**
  * Full Shopify product gallery for the matrix window. Links are Shopify CDN
- * URLs (never re-hosted). Layout: one FROZEN main picture (~4 thumbnail cards)
- * on the left, plus the rest in a 2-row strip that scrolls horizontally inside
- * its own container. Clicking any picture opens the full-screen slider.
+ * URLs (never re-hosted). Pictures are shown in their real order as COLOUR
+ * BLOCKS (one row per colour, main picture marked), read left-to-right like
+ * the storefront. Clicking any picture opens the full-screen slider.
  */
-function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
+function MatrixGallery({
+  urls,
+  title,
+  variants = [],
+}: {
+  urls: string[];
+  title: string;
+  variants?: Array<{ color: string | null; archived: boolean; shopify_image_url?: string | null }>;
+}) {
   // null = closed; number = open slider at that start index.
   const [zoomIdx, setZoomIdx] = useState<number | null>(null);
   if (!urls || urls.length === 0) {
@@ -3054,7 +3103,7 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
       </div>
     );
   }
-  const [main, ...rest] = urls;
+  const { blocks, borrowed } = galleryBlocks(urls, variants);
   return (
     <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
       <div className="flex items-center justify-between border-b border-[var(--wms-border)]/70 bg-[var(--wms-surface-elevated)]/70 px-3 py-1.5">
@@ -3063,43 +3112,57 @@ function MatrixGallery({ urls, title }: { urls: string[]; title: string }) {
         </span>
         <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{urls.length}</span>
       </div>
-      <div className="flex gap-3 p-3 max-sm:flex-col">
-        {/* FROZEN main picture — stays put while the thumbnails scroll. */}
-        <button
-          type="button"
-          onClick={() => setZoomIdx(0)}
-          className="block w-56 shrink-0 self-start aspect-[3/4] cursor-zoom-in overflow-hidden rounded-md border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)] max-sm:mx-auto max-sm:w-40"
-          title={`${title} — click to open slider`}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={main} alt={`${title} 1`} className="h-full w-full object-cover" />
-        </button>
-        {/* The rest — 2 rows, hidden in the container, scroll/slide to see all. */}
-        {rest.length > 0 ? (
-          <div className="min-w-0 flex-1 overflow-x-auto max-sm:w-full">
-            <div className="grid w-max auto-cols-max grid-flow-col grid-rows-2 gap-2">
-              {rest.map((u, idx) => {
-                const i = idx + 1;
+      <div className="space-y-3 p-3">
+        {blocks.map((b) => (
+          <div key={`${b.colour ?? "none"}-${b.start}`} className="space-y-1.5">
+            <div className="flex items-baseline gap-2 font-mono text-[0.74rem] uppercase tracking-wide">
+              <span className="text-[var(--wms-fg)]">{b.colour ?? (blocks.length > 1 ? "Not tied to a colour" : "All pictures")}</span>
+              <span className="text-[var(--wms-muted)]">
+                {b.end - b.start} picture{b.end - b.start === 1 ? "" : "s"} · #{b.start + 1}–#{b.end}
+              </span>
+            </div>
+            {/* Real order, left to right, wrapping into rows — reads like the storefront. */}
+            <div className="flex flex-wrap gap-2">
+              {urls.slice(b.start, b.end).map((u, k) => {
+                const i = b.start + k;
+                const isMain = b.mainIdx === i;
                 return (
                   <button
                     key={u}
                     type="button"
                     onClick={() => setZoomIdx(i)}
-                    className="block h-[8.75rem] aspect-[3/4] shrink-0 cursor-zoom-in overflow-hidden rounded border border-[var(--wms-border)] bg-white hover:border-[var(--wms-accent)]"
-                    title={`${title} — image ${i + 1} (click to open slider)`}
+                    className={`relative block h-[8.75rem] aspect-[3/4] shrink-0 cursor-zoom-in overflow-hidden rounded border bg-white hover:border-[var(--wms-accent)] max-sm:h-[7.5rem] ${
+                      isMain ? "border-2 border-[var(--wms-accent)]" : "border-[var(--wms-border)]"
+                    }`}
+                    title={`${title} — image ${i + 1}${isMain ? ` (main picture for ${b.colour})` : ""} — click to open slider`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={u}
                       alt={`${title} ${i + 1}`}
                       className="h-full w-full object-cover"
-                      loading="lazy"
+                      loading={i < 6 ? "eager" : "lazy"}
                     />
+                    <span className="absolute left-1 top-1 rounded bg-black/70 px-1 font-mono text-[0.62rem] text-white">
+                      #{i + 1}
+                    </span>
+                    {isMain ? (
+                      <span className="absolute bottom-1 left-1 rounded bg-[var(--wms-accent)] px-1 font-mono text-[0.62rem] font-bold uppercase text-black">
+                        Main
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
             </div>
           </div>
+        ))}
+        {borrowed.length > 0 ? (
+          <p className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg,var(--wms-muted))]">
+            {borrowed
+              .map((x) => (x.from ? `${x.colour}: no picture of its own — sizes show ${x.from}'s main` : `${x.colour}: no main picture linked`))
+              .join(" · ")}
+          </p>
         ) : null}
       </div>
       {zoomIdx !== null ? (
