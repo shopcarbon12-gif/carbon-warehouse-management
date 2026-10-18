@@ -170,6 +170,8 @@ export async function pushMatrixToShopify(
   }
 
   // ---- persist ids (match returned variants by SKU) ---------------------
+  // A replacement inventory item has no stock yet; discard the old item's
+  // synced quantity so the delta worker sends the WMS stock to the new ID.
   const bySku = new Map<string, ShopVariant>();
   for (const sv of set.variants) {
     if (sv.sku) bySku.set(sv.sku.trim().toLowerCase(), sv);
@@ -191,7 +193,9 @@ export async function pushMatrixToShopify(
     }
     await pool.query(
       `UPDATE custom_skus
-          SET shopify_variant_id = $2, shopify_inventory_item_id = $3
+          SET shopify_qty_synced = CASE WHEN shopify_inventory_item_id IS DISTINCT FROM $3::text THEN NULL ELSE shopify_qty_synced END,
+              shopify_qty_synced_at = CASE WHEN shopify_inventory_item_id IS DISTINCT FROM $3::text THEN NULL ELSE shopify_qty_synced_at END,
+              shopify_variant_id = $2, shopify_inventory_item_id = $3
         WHERE id = $1::uuid`,
       [v.id, sv.id, sv.inventoryItem?.id || null],
     );

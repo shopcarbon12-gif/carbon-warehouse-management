@@ -72,7 +72,8 @@ export async function linkMatrixToShopify(pool: Pool, matrixId: string): Promise
     return { ok: true, linked: false, message: "No SKU overlap with a Shopify product." };
   }
 
-  // Map Shopify variants by SKU and persist.
+  // Map Shopify variants by SKU and persist. A changed inventory identity must
+  // invalidate the old stock marker so the next delta sync stocks the new item.
   const bySku = new Map<string, { id: string; inv?: string; img?: string }>();
   for (const v of best.variants?.nodes || []) {
     if (v.sku) bySku.set(v.sku.trim().toLowerCase(), { id: v.id, inv: v.inventoryItem?.id, img: v.image?.url });
@@ -92,7 +93,9 @@ export async function linkMatrixToShopify(pool: Pool, matrixId: string): Promise
     mapped += 1;
     await pool.query(
       `UPDATE custom_skus
-          SET shopify_variant_id = $2,
+          SET shopify_qty_synced = CASE WHEN shopify_inventory_item_id IS DISTINCT FROM COALESCE($3::text, shopify_inventory_item_id) THEN NULL ELSE shopify_qty_synced END,
+              shopify_qty_synced_at = CASE WHEN shopify_inventory_item_id IS DISTINCT FROM COALESCE($3::text, shopify_inventory_item_id) THEN NULL ELSE shopify_qty_synced_at END,
+              shopify_variant_id = $2,
               shopify_inventory_item_id = COALESCE($3, shopify_inventory_item_id),
               shopify_image_url = COALESCE(shopify_image_url, $4)
         WHERE id = $1::uuid`,
