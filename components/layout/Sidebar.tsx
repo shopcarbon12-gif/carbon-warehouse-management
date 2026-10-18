@@ -165,6 +165,7 @@ const sections: NavSection[] = [
       { href: "/reports/replenishments", label: "Replenishments", icon: PackagePlus },
       { href: "/reports/bulk-imports", label: "Bulk imports", icon: FolderInput },
       { href: "/reports/external-systems", label: "External systems", icon: Webhook },
+      { href: "/reports/studio-batches", label: "Studio batches", icon: ClipboardList },
     ],
   },
   {
