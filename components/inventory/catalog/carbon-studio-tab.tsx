@@ -22,7 +22,7 @@ import {
   pickExpressionDirective,
   splitPanelToThreeByFour,
 } from "@/lib/panelGeneration";
-import { instructionHasStyling, resolveLookSheet, type ResolvedStyling } from "@/lib/studioLookSheet";
+import { instructionHasStyling, lookConflicts, resolveLookSheet, withNoteFootwear, type ResolvedStyling } from "@/lib/studioLookSheet";
 import { stableLsSystemIdFromString } from "@/lib/utils/ls-id";
 import { imageFilesFromTransfer } from "@/lib/client/image-transfer";
 import type { BatchItemSummary, BatchOverview } from "@/lib/server/studio-batch";
@@ -667,6 +667,8 @@ export function CarbonStudioTab({
   const stylePiecesRef = useRef(new Map<string, Partial<Record<OutfitSlot, string>>>());
   /** Styling words of the item instruction turned into pieces, by (instruction, type, gender, colour). */
   const lookResolveRef = useRef(new Map<string, ResolvedStyling | null>());
+  /** The look/instruction conflict the operator has already been warned about (press again = go ahead). */
+  const conflictAckRef = useRef("");
   /** The same two reads, as state, so the look preview refreshes once a run has made them. */
   const [readCache, setReadCache] = useState<{
     style: Record<string, Partial<Record<OutfitSlot, string>>>;
@@ -1362,14 +1364,16 @@ export function CarbonStudioTab({
       productName,
       specOutfit: parseOutfitFromSpec(itemSpec),
       styleWith: readCache.style[styleKey] ?? {},
-      instructionStyling: readCache.styling[resolveKey] ?? null,
+      instructionStyling: withNoteFootwear(readCache.styling[resolveKey] ?? null, instr),
       itemColour,
       accessoryKind,
       seedKey: `${matrixId}|${model.model_id}|${color || itemColour}`,
       keepStylingPrints,
       backWaistbandLabel: !accessoryKind && needsBackWaistbandTuck(itemType, itemSpec),
     });
-    return { text: sheet.text, pendingReads };
+    /* Shown only once the instruction has been read: before that the reader may still supply the piece. */
+    const conflicts = pendingReads.length ? [] : lookConflicts(instr, sheet);
+    return { text: sheet.text, pendingReads, conflicts };
   }, [model, itemSpec, colorRun, color, refViews.styling, itemType, instruction, productName, accessoryKind, matrixId, keepStylingPrints, readCache]);
 
   const uploadItems = useCallback(async (files: File[], view?: RefView) => {
@@ -2099,6 +2103,9 @@ export function CarbonStudioTab({
         }
       }
     }
+    /* Shoes the note names that the reader missed become the named footwear
+       (owner 2026-10-19: "white sneakers" was read as no shoes at all). */
+    instructionStyling = withNoteFootwear(instructionStyling, instr);
     /* Everything the model wears that is not the product, decided here once
        and sent byte-for-byte to every panel (the server puts it in the part of
        the prompt that is never trimmed). The seed is per product + model +
@@ -2117,6 +2124,21 @@ export function CarbonStudioTab({
       keepStylingPrints,
       backWaistbandLabel: !runAccessory && needsBackWaistbandTuck(itemType, specForRun),
     });
+    /* The note and the look sheet disagree (a piece the note mentions is taken
+       from a photo): every separately rendered panel would settle it its own way.
+       Stop once and say so; pressing again with the same setup goes ahead. */
+    const conflicts = lookConflicts(instr, look);
+    const conflictKey = conflicts.length ? `${look.text}::${instr}` : "";
+    if (conflicts.length && conflictAckRef.current !== conflictKey) {
+      conflictAckRef.current = conflictKey;
+      abortRef.current = null;
+      setAborting(false);
+      setBusy(null);
+      setNativeBusy(false);
+      setProgress("");
+      setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+      return setErr(`${conflicts.join(" ")} Nothing was generated. Fix the instruction or the Style-with photo — or press the same button again to go ahead anyway.`);
+    }
     /* One pose-variation seed for the whole run (a colourway keeps its stored
        one); every panel used to take the second its request arrived. */
     const runSeed = activeColorRun ? activeColorRun.variationSeed : stableLsSystemIdFromString(`${matrixId}|${runTag}`);
@@ -3711,6 +3733,11 @@ export function CarbonStudioTab({
             Look for this shoot — the same in every panel
           </summary>
           <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[0.72rem] leading-snug text-[var(--wms-fg)]">{lookPreview.text}</pre>
+          {lookPreview.conflicts.length ? (
+            <p className="mt-2 rounded border border-amber-500/55 bg-amber-950/25 px-2 py-1 font-mono text-[0.7rem] text-amber-200">
+              {lookPreview.conflicts.join(" ")} Fix the instruction or the Style-with photo before generating.
+            </p>
+          ) : null}
           {lookPreview.pendingReads.length ? (
             <p className="mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]">
               Generate first reads {lookPreview.pendingReads.join(" and ")} — the pieces they name replace the matching lines above.

@@ -14,8 +14,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   LOOK_SHEET_BUDGET_BYTES,
+  footwearFromNote,
   instructionHasStyling,
+  lookConflicts,
   resolveLookSheet,
+  withNoteFootwear,
   withoutChoiceWords,
   type LookSheetInput,
 } from "@/lib/studioLookSheet";
@@ -157,9 +160,13 @@ test("keepStylingPrints=false: a photographed styling piece keeps its colour and
   assert.match(on.slots.top, /copied FROM THE PHOTO/);
 });
 
-test("precedence: Style-with > named instruction piece > photo OUTFIT > implied instruction > default", () => {
+test("precedence: named instruction piece > Style-with > photo OUTFIT > implied instruction > default", () => {
+  /* Owner 2026-10-19: the piece the instruction names wins over the Style-with photo. */
   const style = resolveLookSheet(base({ styleWith: { footwear: "red suede loafers" }, instructionStyling: { slots: { footwear: "black boots" }, explicit: ["footwear"] } }));
-  assert.match(style.slots.footwear, /^red suede loafers/);
+  assert.match(style.slots.footwear, /^black boots/);
+  assert.equal(style.sources?.footwear, "instr");
+  const styleOnly = resolveLookSheet(base({ styleWith: { footwear: "red suede loafers" }, instructionStyling: { slots: { footwear: "black boots" } } }));
+  assert.match(styleOnly.slots.footwear, /^red suede loafers/);
   const named = resolveLookSheet(base({ instructionStyling: { slots: { footwear: "black low-top sneakers with black soles and black laces" }, explicit: ["footwear"] } }));
   assert.match(named.slots.footwear, /^black low-top sneakers/);
   const implied = resolveLookSheet(base({ instructionStyling: { slots: { footwear: "black boots" } } }));
@@ -403,4 +410,48 @@ test("lock text: surface, distressing map (mirrored in code) and the bead sequen
   assert.match(lock, /DISTRESSING: nowhere else/);
   const acc = buildLockText({ garment_type: "anklet", sequence: "clasp → gold disc ×1 → tube bead ×4 → spacer ×1" }, { accessory: true });
   assert.match(acc, /SEQUENCE \(from the clasp, all the way round\): clasp → gold disc ×1/);
+});
+
+test("shoes the note names reach the sheet even when the styling reader misses them (2026-10-19)", () => {
+  /* Jesus Cargo Pants: the reader returned the shirt only; the sheet fell back to the photos' black-and-white pair. */
+  assert.equal(footwearFromNote("oversized shirt white and white sneakers"), "white sneakers");
+  const pablo =
+    "Pants colour: light grey. Shoes in EVERY frame: all-black high-top sneakers — black upper, black laces, black sole, no white anywhere (not the black-and-white pair in the Style-with photo); the same pair front, side and back. Keep the grey turtleneck.";
+  assert.equal(footwearFromNote(pablo), "all-black high-top sneakers — black upper, black laces, black sole, no white anywhere");
+  assert.equal(footwearFromNote("no sneakers, barefoot only"), "barefoot only");
+  assert.equal(footwearFromNote("make the jeans darker"), null);
+  assert.equal(footwearFromNote("not the white sneakers"), null);
+
+  const readerMissed = { slots: { top: "a white oversized shirt with long sleeves and a crew neckline" }, explicit: ["top" as const] };
+  const jesusNote = "oversized shirt white and white sneakers";
+  const before = resolveLookSheet(base({ itemType: "PANTS", instructionStyling: readerMissed }));
+  assert.match(before.slots.footwear, /^white sneakers with black stripes/); // the photos' pair (JAY spec)
+  assert.equal(lookConflicts(jesusNote, before).length, 1);
+  const after = resolveLookSheet(base({ itemType: "PANTS", instructionStyling: withNoteFootwear(readerMissed, jesusNote) }));
+  assert.match(after.slots.footwear, /^white sneakers — as the item instruction asks/);
+  assert.match(after.slots.top, /^a white oversized shirt/);
+  assert.deepEqual(lookConflicts(jesusNote, after), []);
+
+  /* Pablo Pants: a Style-with photo with black-and-white high-tops no longer beats the note. */
+  const styleWith = { top: "dark grey turtleneck sweater, slim fit", footwear: "black high-top sneakers, canvas, white laces, white rubber toe cap, white sole" };
+  const p = resolveLookSheet(base({ itemType: "EVENING PANTS", styleWith, instructionStyling: withNoteFootwear(null, pablo) }));
+  assert.match(p.slots.footwear, /^all-black high-top sneakers — black upper, black laces, black sole, no white anywhere/);
+  assert.match(p.slots.top, /^dark grey turtleneck sweater/);
+  assert.deepEqual(lookConflicts(pablo, p), []);
+  /* An explicit reader answer is kept as it is. */
+  const kept = withNoteFootwear({ slots: { footwear: "black leather loafers" }, explicit: ["footwear"] }, "white sneakers");
+  assert.equal(kept?.slots?.footwear, "black leather loafers");
+});
+
+test("owner styling rules still hold for a male and a female jeans run after the precedence change", () => {
+  for (const gender of ["male", "female"] as const) {
+    const note = "white t-shirt and black sneakers";
+    const sheet = resolveLookSheet(base({ gender, instructionStyling: withNoteFootwear({ slots: { top: "a plain white t-shirt" }, explicit: ["top"] }, note) }));
+    assert.match(sheet.slots.top, /worn untucked over the waistband in every frame/);
+    assert.match(sheet.slots.top, /no skin shows between the top and the waistband/);
+    assert.match(sheet.slots.footwear, /^black sneakers/);
+    assert.match(sheet.slots.accessories, /^exactly the accessories the item photos show the model wearing/);
+    assert.equal(/Pose 7/.test(sheet.text), gender === "male");
+    assert.deepEqual(lookConflicts(note, sheet), []);
+  }
 });

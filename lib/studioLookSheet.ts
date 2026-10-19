@@ -68,7 +68,14 @@ export type LookSheetInput = {
   backWaistbandLabel: boolean;
 };
 
-export type LookSheet = { version: 1; seed: number; slots: Record<string, string>; text: string };
+export type LookSheet = {
+  version: 1;
+  seed: number;
+  slots: Record<string, string>;
+  text: string;
+  /** Where each styling line came from: the instruction, a Style-with photo, the item photos, or the default. */
+  sources?: Partial<Record<string, "style" | "instr" | "photo" | "default">>;
+};
 
 type LookCategory = "top" | "bottom" | "outerwear" | "full-look" | "footwear" | "accessory" | "item" | "swim";
 type Source = "style" | "instr" | "photo" | "default";
@@ -215,11 +222,16 @@ function clip(s: string, max: number): string {
 
 function pieceFor(slot: OutfitSlot, input: LookSheetInput, maxDesc: number): Piece | null {
   const take = (v: unknown) => clip(clean(v), maxDesc);
-  const style = take(input.styleWith?.[slot]);
-  if (style) return { text: style, source: "style" };
   const st = input.instructionStyling;
   const fromInstr = take(st?.slots?.[slot]);
+  /* Owner 2026-10-19: a piece the item instruction NAMES ("white sneakers")
+     wins over the Style-with photo and the item photos. Before, a Style-with
+     photo's shoes beat it, so the sheet said one pair and the instruction —
+     which every panel also reads — another, and separately rendered panels
+     split between the two (Jesus Cargo Pants, Pablo Pants). */
   if (fromInstr && st?.explicit?.includes(slot)) return { text: fromInstr, source: "instr" };
+  const style = take(input.styleWith?.[slot]);
+  if (style) return { text: style, source: "style" };
   const photo = take(input.specOutfit?.[slot]);
   if (photo) return { text: photo, source: "photo" };
   if (fromInstr) return { text: fromInstr, source: "instr" };
@@ -293,7 +305,7 @@ function tuckOf(st: ResolvedStyling | null | undefined): string | null {
   return null;
 }
 
-type SheetLine = { slot: string; label: string; text: string };
+type SheetLine = { slot: string; label: string; text: string; source?: Source };
 
 const HAIR_DEFAULT =
   "the model's own hair, styled exactly as in the first MODEL reference image — the same length, parting and styling in every frame, kept clear of the neckline, the prints and the product";
@@ -340,7 +352,7 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
   }
 
   const lines: SheetLine[] = [];
-  const put = (slot: string, label: string, text: string) => lines.push({ slot, label, text });
+  const put = (slot: string, label: string, text: string, source?: Source) => lines.push({ slot, label, text, source });
   const instrTuck = tuckOf(input.instructionStyling);
   let tuck: string | null = null;
   const top = resolved.top;
@@ -364,10 +376,10 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
           ? ` — except in Pose ${labelPose}, the zoomed-in back crop, where only the back hem is lifted to the top edge of the waistband and rests on it, so the label below that edge shows in full (the full-body back view keeps the top over it)`
           : ""
       }; it always covers the stomach and the lower back — no skin shows between the top and the waistband in any frame, even where the item photos show a bare back; a close-up of the waistband may raise the hem a little, only up to the waistband's top edge, where it rests — never above it`;
-    put("top", "TOP", renderPiece("top", top, input, { tuck }));
+    put("top", "TOP", renderPiece("top", top, input, { tuck }), top.source);
   }
-  if (resolved.top_under) put("top_under", "TOP UNDERNEATH", renderPiece("top_under", resolved.top_under, input));
-  if (resolved.bottom) put("bottom", "BOTTOM", renderPiece("bottom", resolved.bottom, input));
+  if (resolved.top_under) put("top_under", "TOP UNDERNEATH", renderPiece("top_under", resolved.top_under, input), resolved.top_under.source);
+  if (resolved.bottom) put("bottom", "BOTTOM", renderPiece("bottom", resolved.bottom, input), resolved.bottom.source);
   if (!occupied.has("outerwear")) {
     put(
       "outerwear",
@@ -375,11 +387,12 @@ function garmentLines(input: LookSheetInput, seed: number, maxDesc: number): { l
       resolved.outerwear
         ? renderPiece("outerwear", resolved.outerwear, input)
         : `none — nothing is worn over the ${cat === "top" || cat === "full-look" || swim ? "product" : "top"}`,
+      resolved.outerwear?.source ?? "default",
     );
   }
   const shoes = resolved.footwear;
   if (shoes) {
-    put("footwear", "FOOTWEAR", renderPiece("footwear", shoes, input));
+    put("footwear", "FOOTWEAR", renderPiece("footwear", shoes, input), shoes.source);
     put(
       "socks",
       "SOCKS",
@@ -431,6 +444,7 @@ function accessoryLines(
         slot,
         label: labels[slot] ?? slot.toUpperCase(),
         text: renderPiece(slot, piece, input, { tuck: slotTuck, pairingExtra: true }),
+        source: piece.source,
       });
     } else if (d) {
       lines.push({
@@ -438,6 +452,7 @@ function accessoryLines(
         label: d.label,
         // The kind's own accessories line already names the PAIRING exception.
         text: slot === "accessories" ? d.text : renderPiece(slot, { text: d.text, source: "default" }, input, { tuck: slotTuck }),
+        source: "default",
       });
     }
   }
@@ -463,9 +478,13 @@ export function resolveLookSheet(input: LookSheetInput): LookSheet {
   }
   const { lines, tuck, text } = built!;
   const slots: Record<string, string> = {};
-  for (const l of lines) slots[l.slot] = l.text;
+  const sources: NonNullable<LookSheet["sources"]> = {};
+  for (const l of lines) {
+    slots[l.slot] = l.text;
+    if (l.source) sources[l.slot] = l.source;
+  }
   if (tuck && !slots.tuck) slots.tuck = tuck;
-  return { version: 1, seed, slots, text };
+  return { version: 1, seed, slots, text, sources };
 }
 
 /* Words that mean the item instruction talks about what is worn WITH the
@@ -477,4 +496,107 @@ const STYLING_WORDS =
 
 export function instructionHasStyling(instruction: string): boolean {
   return STYLING_WORDS.test(String(instruction || ""));
+}
+
+const SHOE_WORDS = /\b(?:sneakers?|trainers?|shoes?|heels?|boots?|sandals?|loafers?|slides?|flip-?flops?|high-?tops?|low-?tops?|mules?|clogs?|espadrilles?|barefoot)\b/i;
+const OTHER_GARMENT =
+  /\b(?:shirt|tee|t-?shirt|tshirt|tank|top|blouse|hoodie|sweater|turtleneck|jumper|cardigan|jacket|blazer|coat|vest|jeans?|trousers?|pants|shorts|skirt|leggings?|joggers?|belt|bag|watch|necklace|bracelet|hat|cap|beanie|sunglasses)\b/i;
+
+/**
+ * The shoes an item instruction names, in its own words — "white sneakers"
+ * from "oversized shirt white and white sneakers"; "all-black high-top
+ * sneakers — black upper, black laces, black sole, no white anywhere" from a
+ * longer note. null when the note names no shoes, or only says which shoes
+ * NOT to wear. Parentheses are dropped (asides like "(not the pair in the
+ * Style-with photo)").
+ */
+export function footwearFromNote(note: string): string | null {
+  const text = String(note || "").replace(/\([^)]*\)/g, " ");
+  for (const sentence of text.split(/[.;\n!]+/)) {
+    if (!SHOE_WORDS.test(sentence)) continue;
+    const body = sentence.replace(/^[^:]{0,40}:\s*/, "").trim();
+    const parts = body.split(/\s+(?:and|plus|with)\s+|,\s*/).map((p) => p.trim()).filter(Boolean);
+    /* "no sneakers, barefoot only" → "barefoot only": a part that says what NOT to wear is skipped. */
+    const at = parts.findIndex((p) => SHOE_WORDS.test(p) && !/^(?:no|not|without|never)\b/i.test(p));
+    if (at < 0) continue;
+    const kept: string[] = [];
+    for (const p of parts.slice(at)) {
+      if (kept.length && OTHER_GARMENT.test(p) && !SHOE_WORDS.test(p)) break;
+      kept.push(p);
+    }
+    const phrase = kept.join(", ").replace(/\s{2,}/g, " ").trim().slice(0, 240);
+    if (phrase) return phrase;
+  }
+  return null;
+}
+
+/**
+ * Backstop for the styling reader: when the note names shoes and the reader
+ * returned none (it read "oversized shirt white and white sneakers" as a shirt
+ * only — Jesus Cargo Pants 2026-10-19), the note's own shoe words become the
+ * named footwear piece, so the sheet and the instruction can no longer disagree.
+ */
+export function withNoteFootwear(styling: ResolvedStyling | null, note: string): ResolvedStyling | null {
+  if (styling?.explicit?.includes("footwear") && styling.slots?.footwear) return styling;
+  const shoes = footwearFromNote(note);
+  if (!shoes) return styling;
+  return {
+    ...(styling ?? {}),
+    slots: { ...(styling?.slots ?? {}), footwear: shoes },
+    explicit: [...new Set([...(styling?.explicit ?? []), "footwear" as OutfitSlot])],
+  };
+}
+
+const NOTE_SLOT_WORDS: Partial<Record<OutfitSlot, RegExp>> = {
+  top: /\b(?:shirt|tee|t-?shirt|tshirt|tank|blouse|hoodie|sweater|turtleneck|jumper|cardigan|polo)\b/i,
+  outerwear: /\b(?:jacket|blazer|coat|overcoat|parka|bomber)\b/i,
+  footwear: SHOE_WORDS,
+};
+const SOURCE_WORDS: Record<string, string> = { style: "the Style-with photo", photo: "the item photos", default: "the Studio's default outfit" };
+
+/**
+ * The pieces the note names that the sheet still takes from somewhere else —
+ * a run with one would be told two different things. Shown in the Studio and
+ * checked before anything is generated or queued (owner 2026-10-19).
+ */
+const COLOUR_WORDS =
+  /\b(?:black|white|grey|gray|charcoal|silver|gold|blue|navy|denim|indigo|red|burgundy|maroon|pink|purple|lilac|green|olive|khaki|teal|turquoise|yellow|mustard|orange|brown|tan|beige|cream|ivory|nude|camel|taupe|stone|sand|coral)\b/gi;
+/** Colour words of a phrase, leaving out the ones it says NOT to use ("no white anywhere"). */
+function coloursOf(phrase: string): Set<string> {
+  const kept = phrase.replace(/\b(?:no|not|without|never)\s+(?:\w+[\s-]+){0,2}?\w+/gi, " ");
+  return new Set([...kept.matchAll(COLOUR_WORDS)].map((m) => m[0].toLowerCase().replace("gray", "grey")));
+}
+
+/** The note's own words for one slot: the clause that names the garment. */
+function notePhraseFor(slot: OutfitSlot, note: string, re: RegExp): string | null {
+  if (slot === "footwear") return footwearFromNote(note);
+  for (const sentence of note.split(/[.;\n!]+/)) {
+    for (const part of sentence.split(/\s+(?:and|plus)\s+|,\s*/)) {
+      if (re.test(part) && !/^\s*(?:no|not|without|never)\b/i.test(part)) return part.trim();
+    }
+  }
+  return null;
+}
+
+export function lookConflicts(note: string, sheet: LookSheet): string[] {
+  const text = String(note || "").replace(/\([^)]*\)/g, " ");
+  const out: string[] = [];
+  for (const [slot, re] of Object.entries(NOTE_SLOT_WORDS) as [OutfitSlot, RegExp][]) {
+    const src = sheet.sources?.[slot];
+    if (!src || src === "instr") continue;
+    const phrase = notePhraseFor(slot, text, re);
+    if (!phrase) continue;
+    const line = String(sheet.slots[slot] || "").split(" — ")[0];
+    const noun = re.exec(phrase)?.[0]?.toLowerCase() ?? "";
+    /* Agreement: the sheet names the same garment in the same colours ("grey
+       turtleneck" vs "dark grey turtleneck sweater"). "white sneakers" vs
+       "black and white sneakers" is a conflict. */
+    const want = coloursOf(phrase);
+    const have = coloursOf(line);
+    const sameColours = !want.size || (want.size === have.size && [...want].every((c) => have.has(c)));
+    const sameGarment = !noun || line.toLowerCase().includes(noun.replace(/s$/, ""));
+    if (sameColours && sameGarment) continue;
+    out.push(`Your instruction says "${phrase}", but the look sheet takes the ${slot} from ${SOURCE_WORDS[src] ?? src}: ${line.slice(0, 110)}.`);
+  }
+  return out;
 }
