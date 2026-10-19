@@ -86,9 +86,9 @@ export function factsFromStudioSpec(lockText: string, maxBytes = VERIFIED_FACTS_
     /* Directives aimed at the image model; the observation is what precedes them. */
     const v = line
       /* The Studio names the logo by its shape so the image model can draw it;
-         in copy it is "the Carbon logo" and nothing more. */
+         in copy it is "the CARBON logo" and nothing more. */
       .replace(/\s*\([^)]*hexagon[^)]*\)/gi, "")
-      .replace(/\b(?:a |an )?(?:cluster of )?(?:linked )?hexagon(?:al)?(?: outlines?)? (logo|emblem|mark)\b/gi, "the Carbon logo")
+      .replace(/\b(?:a |an )?(?:cluster of )?(?:linked )?hexagon(?:al)?(?: outlines?)? (logo|emblem|mark)\b/gi, "the CARBON logo")
       .replace(/\s*Reproduce verbatim[\s\S]*$/i, ".")
       .replace(/\s*[-—]\s*(?:same|exact)\b[^.]*\.?\s*$/i, ".")
       .replace(/[;,]?\s*(?:never|do not|don't)\s+(?:invent|add|paraphrase|move|resize|recolou?r)[\s\S]*$/i, ".")
@@ -209,24 +209,26 @@ function buildGenInstruction(
   altImageIds: string[],
   extras: GenExtras,
 ) {
-  const onSale = context.colorsOnSale?.length ? context.colorsOnSale : context.colors || [];
-  const colors = onSale.join(", ") || "(not specified)";
-  const multiColour = onSale.length > 1;
+  /* Every variant colour, in stock or not (owner, 2026-10-18): copy that lists
+     only today's stock goes wrong the day a colour sells out or comes back. */
+  const variantColours = context.colors?.length ? context.colors : context.colorsOnSale || [];
+  const colors = variantColours.join(", ") || "(not specified)";
+  const multiColour = variantColours.length > 1;
   const gender = context.gender === "men" ? "Men's" : context.gender === "women" ? "Women's" : "";
   const partners = (context.setPartnerDetails || []).filter((p) => p.live);
   /* The model never writes the SEO title itself: it suggests a short
-     descriptor and finishSeoTitle builds "Name – Descriptor | Carbon". Every
+     descriptor and finishSeoTitle builds "Name – Descriptor | CARBON". Every
      doubled "Alex Denim Shorts - Alex Denim Shorts" title came from free-text
      titles being padded with the name to reach a length target. */
   const asked = fieldsToGenerate.map((f) => (f === "seoTitle" ? "titleDescriptor" : f));
   return [
-    "You write product copy for Carbon's online store from the product PHOTOS.",
+    "You write product copy for CARBON's online store from the product PHOTOS.",
     "",
     CARBON_VOICE,
     "",
     "Inputs:",
     `  • Product name: "${context.title}" (fixed — never change it, never repeat it twice)`,
-    `  • Colours on sale: ${colors} (the only colour names you may use; if the photos clearly show another colour, name none)`,
+    `  • Colours (every variant colour, in stock or not): ${colors}. Describe the colour and denim wash as the photos show it ("black ripped denim shorts", "faded mid-blue wash"). When you LIST colours (the meta ending, a bullet), list these variant colours — all of them, in plain lower case — and never a colour that is not one of them`,
     gender ? `  • Gender: ${gender}` : "  • Gender: not given — decide from the photos or leave it out",
     context.fabric ? `  • Fabric (VERIFIED, from purchase orders): ${context.fabric}` : "  • Fabric: not recorded",
     ...(partners.length
@@ -261,8 +263,8 @@ function buildGenInstruction(
     "FIELDS:",
     `  • titleDescriptor: 2-6 words, "${gender || "<Men's|Women's>"} <what a shopper types>" — the key visible attribute(s) + the garment type, e.g. "Men's Ripped Knee Skinny Jeans", "Men's Black Ripped Denim Shorts", "Women's Metallic Ruched Mini Dress", "Men's Double Strand Beaded Bracelet", "Women's Faux Fur Slides". The garment type may repeat a word of the name ("Women's Dark Wash Flare Jeans" for Nora Flare Jeans); never the whole name, never a feel word` +
       (multiColour ? ", and NO colour (this product comes in several colours)." : ".") +
-      " It becomes \"Name – Descriptor | Carbon\", which is also the Google Shopping title, so it names ONLY this item.",
-    "  • metaDescription: 110-155 characters, one or two plain sentences. Start with the gender + garment phrase (the name is already in the title), then the most distinctive visible details; end with the colours on sale when there are 2-3 (\"In black or white.\"). Never open with Shop, Discover, Explore, Meet. It is also the Google Shopping description.",
+      " It becomes \"Name – Descriptor | CARBON\", which is also the Google Shopping title, so it names ONLY this item.",
+    "  • metaDescription: 110-155 characters, one or two plain sentences. Start with the gender + garment phrase (the name is already in the title), then the most distinctive visible details; end with the variant colours when there are 2-3 (\"In black or white.\"). Never open with Shop, Discover, Explore, Meet. It is also the Google Shopping description.",
     "  • bodyHtml: <p> 1-2 sentences: the look and its most distinctive details, concrete (colour, wash, print with its exact wording, distressing, neckline, cut)</p><p> 1-2 sentences: one more detail and how to wear it — a specific outfit (\"Black tee, black sneakers, done.\")</p><ul> 3-6 short <li> spec bullets a shopper scans: cut/length, wash or colour, print wording, neckline/sleeves, pockets, closures, hardware, colours on sale — no periods, not a repeat of the paragraphs</ul>. About 45-80 words in the paragraphs. For a set piece, the second paragraph may say \"Part of the <X> set: pair it with the <a href=\\\"/products/<partner handle>\\\">Partner Name</a>.\" Only <p>, <ul>, <li>, <a>.",
     "",
     "Three approved examples (match this standard, never copy their words):",
@@ -385,7 +387,7 @@ function hasText(haystack: string, needle: string): boolean {
 
 
 /**
- * Build the SEO title: "Name – Descriptor | Carbon", or "Name | Carbon".
+ * Build the SEO title: "Name – Descriptor | CARBON", or "Name | CARBON".
  *
  * The model only suggests the descriptor. The old finisher padded a free-text
  * title with the product name and the keyword until it reached 30 characters,
@@ -427,12 +429,12 @@ export function finishSeoTitle(
   words = words.map((w) => (/^[a-z]/.test(w) ? w[0].toUpperCase() + w.slice(1) : w));
   /* Too long: drop the attribute right after the gender word, keep the garment type at the end. */
   while (words.length) {
-    const t = `${name} – ${words.join(" ")} | Carbon`;
+    const t = `${name} – ${words.join(" ")} | CARBON`;
     if (t.length <= max) return t;
     if (words.length <= 2) break;
     words.splice(/'s$/i.test(words[0]) ? 1 : 0, 1);
   }
-  const plain = `${name} | Carbon`;
+  const plain = `${name} | CARBON`;
   return plain.length <= max ? plain : cut(name, max);
 }
 
@@ -463,6 +465,20 @@ export function finishMetaDescription(
     if (!/[.!?]$/.test(v)) v = `${v}.`;
   }
   return v;
+}
+
+/**
+ * Write the brand as "CARBON" (owner, 2026-10-18: titles end in " | CARBON"
+ * and the brand is always in capitals). Only the capitalised word changes, so
+ * a lowercase "/products/carbon-…" link is left alone, and so is the product's
+ * own name when it contains the word ("Carbon Classic T" stays as the owner
+ * named it).
+ */
+export function brandCase(text: string, productTitle = ""): string {
+  const name = String(productTitle || "").trim();
+  const fix = (s: string) => s.replace(/\bCarbon\b/g, "CARBON");
+  if (!name || !/\bCarbon\b/.test(name)) return fix(String(text || ""));
+  return String(text || "").split(name).map(fix).join(name);
 }
 
 export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult> {
@@ -858,10 +874,15 @@ export async function optimizeSeo(input: OptimizeInput): Promise<OptimizeResult>
   /* A meta left thin by the strip (it is also the Shopping description) is
      rebuilt from the description's opening sentences, which have just been
      checked — never padded with filler. */
-  if (proposed.metaDescription.replace(/\s*Shop it at Carbon\.$/, "").length < SEO_LIMITS.metaDescriptionMin) {
+  if (proposed.metaDescription.replace(/\s*Shop it at Carbon\.$/i, "").length < SEO_LIMITS.metaDescriptionMin) {
     const intro = stripClaimsFromText(plainText(proposed.bodyHtml).split("\n")[0] || "", claimCtx);
     if (intro) proposed.metaDescription = finishMetaDescription(intro, focusKeyword, cur.title);
   }
+  /* The brand is written CARBON everywhere (owner, 2026-10-18) — also on a
+     field the clamp handed back from the live copy. */
+  proposed.seoTitle = brandCase(proposed.seoTitle, cur.title);
+  proposed.metaDescription = brandCase(proposed.metaDescription, cur.title);
+  proposed.bodyHtml = brandCase(proposed.bodyHtml, cur.title);
   /* Tags only ever ADD: other systems (collections, filters, feeds) may rely on
      a tag the model does not think of, so none is removed here. New tags with a
      claim in them are dropped. */

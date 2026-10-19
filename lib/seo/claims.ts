@@ -11,7 +11,7 @@
  *
  * Also removed, by the owner's rules: labels and patches (the CARBON JEANS
  * waistband label is not a reason to buy), the logo described by its shape
- * ("hexagon logo" — it is the Carbon logo), "Carbon Jeans" as the brand, and
+ * ("hexagon logo" — it is the CARBON logo), "Carbon Jeans" as the brand, and
  * on a set piece any wording that says the purchase includes the other piece
  * (each piece of a set is its own product at its own price).
  *
@@ -220,11 +220,11 @@ export function describeFindings(findings: ClaimFinding[]): string[] {
 
 /** The Carbon voice, shared by every prompt that writes product copy. */
 export const CARBON_VOICE = [
-  "Carbon is a streetwear-led fashion brand for men and women (shopcarbon.com, Orlando FL). Write like Carbon talks:",
+  "CARBON is a streetwear-led fashion brand for men and women (shopcarbon.com, Orlando FL). Write like CARBON talks:",
   "- Short, confident, specific. Say what it is, how it looks and how to wear it.",
   '- Concrete over hype: "ripped and frayed across the front" beats "edgy distressed detailing".',
   '- Second person sparingly ("Wear them with…"), never "you\'ll love". One idea per sentence. Plain US English. No exclamation marks, no questions.',
-  '- The brand is "Carbon" — never "Carbon Jeans", never "CARBON". The Carbon logo is called "the Carbon logo", never described by its shape.',
+  '- The brand is always written "CARBON" (all capitals, owner 2026-10-18) — never "Carbon" and never "Carbon Jeans". The logo is called "the CARBON logo", never described by its shape.',
   '- Open each description with the product itself (its colour, print, cut) — never "<Name> features…" or "The <Name> is a…", and never end on "completes the design/look".',
   "- No clichés: elevate, versatile, must-have, boasts, adorned, wardrobe staple/essential, statement piece, make a statement, trendy, stylish, chic, sleek, timeless, iconic, edgy, vibe, effortless, flattering, perfect for, step into, turn heads, own the night, add a touch, standard.",
 ].join("\n");
@@ -242,7 +242,7 @@ export function claimRulesFor(ctx: ClaimContext): string {
     "  - measurements, lengths or sizes, care instructions, where it was made",
     "  - the fly type (zip fly, button fly, button and zip) unless exposed buttons or a zip are clearly visible in the photos — it is almost always hidden, and earlier copy got it wrong",
     '  - labels, patches or tags of any kind — never mention the waistband label, a back patch or a brand tag, and never quote the "CARBON JEANS" text printed on them',
-    '  - the logo\'s shape: it is "the Carbon logo", and only mention it when it is printed or embroidered as the design',
+    '  - the logo\'s shape: it is "the CARBON logo", and only mention it when it is printed or embroidered as the design',
     "Describe the design instead: colour, wash, print and its wording, graphics, distressing, neckline, sleeves, pockets, closures, hardware, hem, silhouette as it looks.",
   ];
   if (ctx.isSet) {

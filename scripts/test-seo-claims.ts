@@ -10,7 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findClaims, stripClaimsFromHtml, stripClaimsFromText } from "@/lib/seo/claims";
-import { finishSeoTitle, factsFromStudioSpec } from "@/lib/seo/optimizeCore";
+import { finishSeoTitle, factsFromStudioSpec, brandCase } from "@/lib/seo/optimizeCore";
 
 const shorts = { productTitle: "Alex Denim Shorts" };
 const kinds = (t: string, ctx = shorts) => findClaims(t, ctx).map((f) => f.kind);
@@ -95,17 +95,17 @@ test("stripping removes only the offending sentences and bullets", () => {
 });
 
 test("SEO title is the name, an optional descriptor and the brand — never doubled", () => {
-  assert.equal(finishSeoTitle("", "alex denim shorts", "Alex Denim Shorts"), "Alex Denim Shorts | Carbon");
-  assert.equal(finishSeoTitle("Men's Ripped", "alex denim shorts", "Alex Denim Shorts"), "Alex Denim Shorts – Men's Ripped | Carbon");
+  assert.equal(finishSeoTitle("", "alex denim shorts", "Alex Denim Shorts"), "Alex Denim Shorts | CARBON");
+  assert.equal(finishSeoTitle("Men's Ripped", "alex denim shorts", "Alex Denim Shorts"), "Alex Denim Shorts – Men's Ripped | CARBON");
   /* A descriptor that repeats the name adds nothing. */
-  assert.equal(finishSeoTitle("Alex Denim Shorts", "x", "Alex Denim Shorts"), "Alex Denim Shorts | Carbon");
-  assert.equal(finishSeoTitle("Denim Shorts", "x", "Alex Denim Shorts"), "Alex Denim Shorts | Carbon");
+  assert.equal(finishSeoTitle("Alex Denim Shorts", "x", "Alex Denim Shorts"), "Alex Denim Shorts | CARBON");
+  assert.equal(finishSeoTitle("Denim Shorts", "x", "Alex Denim Shorts"), "Alex Denim Shorts | CARBON");
   /* Claim words in the descriptor are dropped. */
-  assert.equal(finishSeoTitle("Soft Stretch", "x", "Ella Legging"), "Ella Legging | Carbon");
+  assert.equal(finishSeoTitle("Soft Stretch", "x", "Ella Legging"), "Ella Legging | CARBON");
   /* Too long for 70 characters → the attribute after the gender word goes first. */
   assert.equal(
     finishSeoTitle("Women's Floral Off-Shoulder Ruffled Midi Dress", "x", "Sapphire Tropics Midi Dress"),
-    "Sapphire Tropics Midi Dress – Women's Ruffled Midi Dress | Carbon",
+    "Sapphire Tropics Midi Dress – Women's Ruffled Midi Dress | CARBON",
   );
 });
 
@@ -113,21 +113,21 @@ test("SEO title carries the search phrase (owner-approved answer key, 2026-10-13
   /* The garment words may repeat the name when they are the search term. */
   assert.equal(
     finishSeoTitle("Men's Black Ripped Denim Shorts", "", "Alex Denim Shorts"),
-    "Alex Denim Shorts – Men's Black Ripped Denim Shorts | Carbon",
+    "Alex Denim Shorts – Men's Black Ripped Denim Shorts | CARBON",
   );
   assert.equal(
     finishSeoTitle("Women's Dark Wash Flare Jeans", "", "Nora Flare Jeans"),
-    "Nora Flare Jeans – Women's Dark Wash Flare Jeans | Carbon",
+    "Nora Flare Jeans – Women's Dark Wash Flare Jeans | CARBON",
   );
   /* Idempotent: a finished title passed back in comes out unchanged. */
-  const done = "Vick Jeans – Men's Ripped Knee Skinny Jeans | Carbon";
+  const done = "Vick Jeans – Men's Ripped Knee Skinny Jeans | CARBON";
   assert.equal(finishSeoTitle(done, "", "Vick Jeans"), done);
   /* A fibre word stays only when the verified fabric backs it. */
   assert.equal(
     finishSeoTitle("Women's Faux Fur Slides", "", "Furry Slippers", "", "Upper: Faux Fur, Sole: EVA"),
-    "Furry Slippers – Women's Faux Fur Slides | Carbon",
+    "Furry Slippers – Women's Faux Fur Slides | CARBON",
   );
-  assert.equal(finishSeoTitle("Women's Faux Fur Slides", "", "Furry Slippers"), "Furry Slippers – Women's Slides | Carbon");
+  assert.equal(finishSeoTitle("Women's Faux Fur Slides", "", "Furry Slippers"), "Furry Slippers – Women's Slides | CARBON");
 });
 
 test("verified fabric words are facts; percentages and unbacked fibres are not", () => {
@@ -156,4 +156,15 @@ test("Studio spec lines about labels and patches never reach the copywriter", ()
   assert.ok(!/label|patch|hexagon/i.test(facts), facts);
   assert.ok(/ripped and frayed/.test(facts));
   assert.ok(/the Carbon logo printed on the chest/.test(facts), facts);
+});
+
+test("the brand is written CARBON (owner, 2026-10-18), product names stay as named", () => {
+  assert.equal(brandCase("Black tee with the Carbon logo on the chest.", "Logo Tee"), "Black tee with the CARBON logo on the chest.");
+  assert.equal(brandCase("Alex Denim Shorts | Carbon", "Alex Denim Shorts"), "Alex Denim Shorts | CARBON");
+  assert.equal(
+    brandCase("Carbon Classic T – Men's Crew Neck Tee | Carbon", "Carbon Classic T"),
+    "Carbon Classic T – Men's Crew Neck Tee | CARBON",
+  );
+  /* A link handle is lowercase and is never touched. */
+  assert.equal(brandCase('<a href="/products/carbon-classic-t">x</a>', "Logo Tee"), '<a href="/products/carbon-classic-t">x</a>');
 });

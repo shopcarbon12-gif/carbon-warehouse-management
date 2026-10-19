@@ -72,7 +72,7 @@ export interface ProductContext {
   fabric?: string;
   /** "men" / "women" from the store type, empty when the type does not say. */
   gender?: "men" | "women" | "";
-  /** Colours with at least one variant for sale — the only colours copy may name. */
+  /** Colours with at least one variant for sale. Copy lists `colors` (every variant colour, owner 2026-10-18), not this. */
   colorsOnSale?: string[];
 }
 
