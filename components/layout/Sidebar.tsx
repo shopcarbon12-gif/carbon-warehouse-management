@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   BadgeAlert,
+  Bell,
   Activity,
   AlertTriangle,
   ArrowRightLeft,
@@ -55,7 +56,6 @@ import useSWR from "swr";
 import { LocationSwitcher } from "@/components/location-switcher";
 import { useShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { logoutAction } from "@/app/actions/auth";
-import { AlertsControl } from "@/components/wms-alerts";
 
 type NavItem = {
   href: string;
@@ -198,6 +198,7 @@ const sections: NavSection[] = [
     items: [
       { href: "/settings/general-settings", label: "General settings", icon: Settings },
       { href: "/settings/theme", label: "Theme & style", icon: Palette },
+      { href: "/settings/alerts", label: "Alerts", icon: Bell },
       { href: "/settings/handheld", label: "Handheld settings", icon: Smartphone },
       { href: "/settings/updates", label: "Mobile OTA", icon: Download },
       { href: "/settings/devices", label: "Device binding", icon: Shield },
@@ -557,7 +558,6 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-[var(--wms-border)] p-4">
-          <AlertsControl />
           <form action={logoutAction}>
             <button
               type="submit"
