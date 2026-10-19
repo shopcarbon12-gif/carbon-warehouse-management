@@ -1,6 +1,7 @@
 import { withActivity } from "@/lib/server/activity-log";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getPool } from "@/lib/db";
+import { notifyShopifyOrder } from "@/lib/server/web-push";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
 import { ORDER_HOLD_STATUS } from "@/lib/server/order-hold-status";
 
@@ -39,6 +40,8 @@ async function POST_handler(req: Request) {
   let order: {
     id?: number | string;
     name?: string;
+    total_price?: string | number;
+    currency?: string;
     line_items?: LineItem[];
     discount_codes?: { code?: string | null }[];
   };
@@ -78,6 +81,11 @@ async function POST_handler(req: Request) {
     [orderId, order.name ?? null, lineItems.length],
   );
   if (claim.rowCount === 0) return NextResponse.json({ ok: true, duplicate: true });
+
+  /* Phone/computer alert for the new order (owner 2026-10-19). After the
+     duplicate check so a re-delivered webhook never alerts twice; sent after
+     the response so Shopify is answered at once. */
+  after(() => notifyShopifyOrder(pool, order));
 
   let flipped = 0;
   let manualDec = 0;

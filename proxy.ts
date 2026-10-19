@@ -11,6 +11,9 @@ import {
 function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/docs")) return true;
   if (pathname === "/login") return true;
+  /* Service worker for phone/computer alerts: a static script the browser
+     fetches on its own schedule; it carries no data. */
+  if (pathname === "/sw.js") return true;
   if (pathname.startsWith("/api/health")) return true;
   /* Ops smoke: header secret only; disabled when WMS_OPS_SMOKE_SECRET unset (route returns 404). */
   if (pathname === "/api/internal/smoke/worker-queue") return true;

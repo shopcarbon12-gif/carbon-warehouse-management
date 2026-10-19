@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { SyncProgressFloater } from "@/components/inventory/sync/sync-progress-floater";
+import { AlertSoundListener } from "@/components/wms-alerts";
 
 /** localStorage key for the pin state (sidebar stays open across navigation). */
 const PIN_KEY = "wms.sidebar.pinned";
@@ -89,6 +90,7 @@ export function WmsShellClient({
 
   return (
     <ThemeProvider>
+      <AlertSoundListener />
       <div className="flex min-h-full flex-1 bg-[var(--wms-bg)]">
         <Sidebar
           activeLocationId={activeLocationId}

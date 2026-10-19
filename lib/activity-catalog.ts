@@ -75,6 +75,8 @@ const ROUTES: Record<string, Entry> = {
   "generate": { module: "Studio", label: "Generated Studio panel" },
   "generate/job/cancel": { module: "Studio", label: "Aborted Studio generation" },
   "studio/batch": { module: "Studio", label: "Added a run to the night batch" },
+  "push": { module: "Settings", label: { POST: "Turned on phone/computer alerts", DELETE: "Turned off phone/computer alerts" } },
+  "push/test": { module: "Settings", label: "Sent a test alert" },
   "studio/batch/[id]": { module: "Studio", label: { PATCH: "Loaded night-batch results", DELETE: "Removed a run from the night batch" } },
   "studio/batch/run": { module: "Studio", label: "Sent the Studio night batch" },
   "studio/color-run": { module: "Studio", label: { PUT: "Saved colourway run", DELETE: "Deleted colourway run", POST: "Started colourway run" } },

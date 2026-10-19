@@ -101,10 +101,21 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    /* The alerts service worker must never be cached, so a fixed version
+       reaches every phone at once (Next.js PWA guide). */
+    const serviceWorker = {
+      source: "/sw.js",
+      headers: [
+        { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+        { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+      ],
+    };
     if (process.env.NODE_ENV !== "development") {
-      return [];
+      return [serviceWorker];
     }
     return [
+      serviceWorker,
       {
         source: "/:path*",
         headers: [

@@ -27,6 +27,7 @@ import {
   studioBatchDropboxRoot,
 } from "@/lib/server/dropbox-upload";
 import { recordStudioGeneration } from "@/lib/server/studio-generation-log";
+import { notifyStudioBatchResults } from "@/lib/server/web-push";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RUN_TAG_RE = /^[a-z0-9]{4,24}$/;
@@ -809,6 +810,9 @@ async function pollOne(
   }
   await pool.query(`UPDATE studio_batches SET status = 'processed', processed_at = now() WHERE id = $1::uuid`, [b.id]);
   await deleteOpenAiFiles(openai, [...(b.uploaded_file_ids ?? []), b.input_file_id, ob.output_file_id, ob.error_file_id]);
+  /* Phone/computer alert per run (owner 2026-10-19). Once per batch: this line
+     is reached only the first time the batch is stored as processed. */
+  await notifyStudioBatchResults(pool, b.id, b.tenant_id);
   return 1;
 }
 

@@ -55,6 +55,7 @@ import useSWR from "swr";
 import { LocationSwitcher } from "@/components/location-switcher";
 import { useShopifyToFulfill } from "@/lib/use-shopify-to-fulfill";
 import { logoutAction } from "@/app/actions/auth";
+import { AlertsControl } from "@/components/wms-alerts";
 
 type NavItem = {
   href: string;
@@ -556,6 +557,7 @@ export function Sidebar({
         </nav>
 
         <div className="border-t border-[var(--wms-border)] p-4">
+          <AlertsControl />
           <form action={logoutAction}>
             <button
               type="submit"
