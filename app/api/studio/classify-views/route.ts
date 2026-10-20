@@ -24,9 +24,9 @@ const cache = new Map<string, View>();
 const key = (u: string) => u.split("?")[0];
 
 const PROMPT = `Each photo is from a clothing store's product gallery. For each, give ONE label for the view it shows of the product:
-- "full-front": the whole person head-to-toe (or the whole garment) facing the camera
-- "front-close": a front crop or close-up (waist up, torso, chest, waist to knee) — clearly the front
-- "side": a full-length side / three-quarter turned view
+- "full-front": FULL LENGTH facing the camera — the head AND the feet/shoes are both in the photo (or the whole garment laid flat)
+- "front-close": the front, but cut off above the feet — waist up, torso, mid-thigh up, waist to knee, chest
+- "side": FULL LENGTH (head and feet both in the photo) turned to the side or three-quarter
 - "detail": a close-up of a label, fabric, neckline, hardware, print or stitching
 - "seated": a person sitting
 - "back-close": a back crop or over-the-shoulder back view (not full length)
