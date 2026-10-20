@@ -260,7 +260,7 @@ export function CarbonShieldWorkspace() {
           head={["Country", "Visitors", "Bots"]}
           rows={data.countries.map((r) => [r.country ?? "Unknown", r.visitors, `${r.botVisitors} (${pct(r.botVisitors, r.visitors)})`])}
         />
-        <div className={card}>
+        <div className={`${card} lg:col-span-2`}>
           <p className="mb-2 font-mono text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">Networks · 7 days</p>
           {data.networks.length ? (
             <div className="overflow-x-auto">
@@ -461,7 +461,7 @@ function Flagged({
                     {allowed(r) ? (
                       <span className="font-mono text-[0.68rem] text-[var(--wms-status-success-fg)]">allowed</span>
                     ) : (
-                      <span className="flex justify-end gap-1">
+                      <span className="flex flex-col items-end gap-1">
                         {r.ip ? (
                           <button type="button" disabled={busy !== null} onClick={() => onAllow("ip", r.ip as string, r.org ?? undefined)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
                             Allow IP
