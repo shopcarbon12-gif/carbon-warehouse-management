@@ -169,6 +169,19 @@ export function BulkUploadTab({ active }: { active: boolean }) {
   const seenRuns = useRef(new Set<string>());
   /** Older finished runs of a colour that has a newer one — removed with their row. */
   const older = useRef<Run[]>([]);
+  /* Three products load at a time, top of the list first. */
+  const queue = useRef<[string, Run[]][]>([]);
+  const running = useRef(0);
+  const pump = () => {
+    while (running.current < 3 && queue.current.length) {
+      const [matrixId, runs] = queue.current.shift() as [string, Run[]];
+      running.current++;
+      void buildRow(matrixId, runs).finally(() => {
+        running.current--;
+        pump();
+      });
+    }
+  };
 
   const patchRow = useCallback((matrixId: string, fn: (r: Row) => Row) => {
     setRows((p) => p.map((r) => (r.matrixId === matrixId ? fn(r) : r)));
@@ -219,8 +232,9 @@ export function BulkUploadTab({ active }: { active: boolean }) {
             },
           ];
         });
-        void buildRow(matrixId, runs);
+        queue.current.push([matrixId, runs]);
       }
+      pump();
     } catch (e) {
       setMsg({ text: `Could not load the finished runs (${e instanceof Error ? e.message : "error"}).`, tone: "err" });
     } finally {
@@ -262,15 +276,15 @@ export function BulkUploadTab({ active }: { active: boolean }) {
       /* Generated pictures: each finished panel split into its two 3:4 pictures. */
       const gen = genRef.current.get(matrixId) ?? new Map<string, Card[]>();
       for (const run of runs) {
-        const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string }[] }>(
-          `/api/studio/batch/${run.id}`,
+        const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string; mime?: string }[] }>(
+          `/api/studio/batch/${run.id}?jpeg=1`,
         );
         const female = (run.modelGender || "").toLowerCase() === "female";
         const colour = (run.itemColour || colours[0] || "").trim();
         const list: { card: Card; rank: number }[] = [];
         for (const p of rj.panels) {
           if (!p.imageBase64) continue;
-          const { left, right } = await splitPanelToThreeByFour(p.imageBase64);
+          const { left, right } = await splitPanelToThreeByFour(p.imageBase64, p.mime || "image/png");
           for (const [b64png, pose] of [[left, p.poseA], [right, p.poseB]] as const) {
             const b64 = await toJpeg(b64png);
             const rank = rj.accessory ? pose : (female ? RANK_FEMALE : RANK_MALE)[pose] ?? 9;

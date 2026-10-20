@@ -37,7 +37,7 @@ async function authed(req: NextRequest, ctx: Ctx) {
 export async function GET(req: NextRequest, ctx: Ctx) {
   const a = await authed(req, ctx);
   if ("error" in a) return a.error;
-  const out = await loadBatchItemImages(a.pool, a.session.tid, a.id);
+  const out = await loadBatchItemImages(a.pool, a.session.tid, a.id, { jpeg: new URL(req.url).searchParams.get("jpeg") === "1" });
   if (!out) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
 }

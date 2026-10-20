@@ -887,15 +887,16 @@ function loadImageSource(src: string, errorMessage: string) {
   });
 }
 
-export function loadBase64Image(b64: string) {
-  return loadImageSource(`data:image/png;base64,${b64}`, "Failed to load generated panel image");
+export function loadBase64Image(b64: string, mime = "image/png") {
+  return loadImageSource(`data:${mime};base64,${b64}`, "Failed to load generated panel image");
 }
 
 // Splits a 2-up 1536x1024 panel into left/right strict-3:4 portrait crops (base64, no data: prefix).
 export async function splitPanelToThreeByFour(
-  b64: string
+  b64: string,
+  mime = "image/png",
 ): Promise<{ left: string; right: string }> {
-  const img = await loadBase64Image(b64);
+  const img = await loadBase64Image(b64, mime);
   const halfW = Math.floor(img.width / 2);
   const halfH = img.height;
   const targetRatio = SPLIT_TARGET_WIDTH / SPLIT_TARGET_HEIGHT;

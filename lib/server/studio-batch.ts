@@ -16,6 +16,7 @@
  * are uploaded to OpenAI once per batch and referenced by file id.
  */
 import { createHash } from "node:crypto";
+import sharp from "sharp";
 import OpenAI, { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject } from "@/lib/storageProvider";
@@ -310,31 +311,51 @@ export async function markBatchItemDismissed(pool: Pool, tenantId: string, id: s
 }
 
 /** The finished panels of one item, as the base64 PNGs the Studio turns into crops. */
-export async function loadBatchItemImages(pool: Pool, tenantId: string, id: string) {
+/* Bulk Studio › Upload loads dozens of runs: the four panels come in parallel,
+   as JPEG (≈8× smaller than the stored PNGs), and recent runs are kept in
+   memory so a reload is instant. A finished run's pictures never change. */
+const jpegCache = new Map<string, { at: number; value: Awaited<ReturnType<typeof loadBatchItemImagesRaw>> }>();
+const JPEG_CACHE_MAX = 60;
+
+export async function loadBatchItemImages(pool: Pool, tenantId: string, id: string, opts: { jpeg?: boolean } = {}) {
+  if (!opts.jpeg) return loadBatchItemImagesRaw(pool, tenantId, id, false);
+  const key = `${tenantId}:${id}`;
+  const hit = jpegCache.get(key);
+  if (hit) return hit.value;
+  const value = await loadBatchItemImagesRaw(pool, tenantId, id, true);
+  if (value && value.panels.every((p) => p.imageBase64 || p.error)) {
+    jpegCache.set(key, { at: Date.now(), value });
+    if (jpegCache.size > JPEG_CACHE_MAX) {
+      const oldest = [...jpegCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+      if (oldest) jpegCache.delete(oldest[0]);
+    }
+  }
+  return value;
+}
+
+async function loadBatchItemImagesRaw(pool: Pool, tenantId: string, id: string, jpeg: boolean) {
   const r = await pool.query<{ results: Record<string, PanelResult>; panels: BatchPanel[]; run_tag: string; model_gender: string | null }>(
     `SELECT results, panels, run_tag, model_gender FROM studio_batch_items WHERE id = $1::uuid AND tenant_id = $2::uuid`,
     [id, tenantId],
   );
   const row = r.rows[0];
   if (!row) return null;
-  const out: { panel: number; poseA: number | null; poseB: number | null; imageBase64?: string; error?: string }[] = [];
-  for (const p of row.panels ?? []) {
-    const res = row.results?.[String(p.panel)];
-    const poseA = Number(p.body?.panelQa?.poseA) || null;
-    const poseB = Number(p.body?.panelQa?.poseB) || null;
-    if (res?.path) {
+  type PanelOut = { panel: number; poseA: number | null; poseB: number | null; imageBase64?: string; mime?: string; error?: string };
+  const out: PanelOut[] = await Promise.all(
+    (row.panels ?? []).map(async (p): Promise<PanelOut> => {
+      const res = row.results?.[String(p.panel)];
+      const poseA = Number(p.body?.panelQa?.poseA) || null;
+      const poseB = Number(p.body?.panelQa?.poseB) || null;
+      if (!res?.path) return { panel: p.panel, poseA, poseB, error: res?.error ?? "Not rendered yet." };
       try {
-        const bytes = res.path.startsWith("/")
-          ? await dropboxDownload(res.path)
-          : Buffer.from((await downloadStorageObject(res.path)).body);
-        out.push({ panel: p.panel, poseA, poseB, imageBase64: bytes.toString("base64") });
+        let bytes = res.path.startsWith("/") ? await dropboxDownload(res.path) : Buffer.from((await downloadStorageObject(res.path)).body);
+        if (jpeg) bytes = await sharp(bytes).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+        return { panel: p.panel, poseA, poseB, imageBase64: bytes.toString("base64"), mime: jpeg ? "image/jpeg" : "image/png" };
       } catch (e) {
-        out.push({ panel: p.panel, poseA, poseB, error: `The stored image could not be read (${e instanceof Error ? e.message : "storage error"}).` });
+        return { panel: p.panel, poseA, poseB, error: `The stored image could not be read (${e instanceof Error ? e.message : "storage error"}).` };
       }
-    } else {
-      out.push({ panel: p.panel, poseA, poseB, error: res?.error ?? "Not rendered yet." });
-    }
-  }
+    }),
+  );
   return {
     runTag: row.run_tag,
     gender: row.model_gender,
