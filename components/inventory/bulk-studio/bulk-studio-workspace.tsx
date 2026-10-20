@@ -57,9 +57,10 @@ function readItems(): Item[] {
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     const list = raw ? (JSON.parse(raw) as Item[]) : [];
-    return Array.isArray(list) ? list.filter((x) => x && typeof x.key === "string") : [];
+    const ok = Array.isArray(list) ? list.filter((x) => x && typeof x.key === "string") : [];
+    return ok.length ? ok : [{ key: newKey(), matrixId: null }];
   } catch {
-    return [];
+    return [{ key: newKey(), matrixId: null }];
   }
 }
 
@@ -68,7 +69,7 @@ const btn =
 
 export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   const [tab, setTab] = useState<"studio" | "upload">("studio");
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Item[]>([{ key: "init", matrixId: null }]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     // localStorage is only readable after mount (no SSR mismatch).
@@ -110,10 +111,10 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     const s = st(i);
     return s && !s.busy && s.sendProblems.length === 0;
   });
-  const photoTotal = picked.reduce((n, i) => n + (st(i)?.photoCount ?? 0), 0);
-  const analysedTotal = picked.filter((i) => st(i)?.spec === "ready").length;
+  /** Analyze button colour: green once every product on the page analysed with no problem left. */
+  const analysisPassed =
+    picked.length > 0 && picked.every((i) => st(i)?.spec === "ready" && !(st(i)?.analyzeProblems.length));
   const openTotal = picked.reduce((n, i) => n + (st(i)?.batchOpen ?? 0), 0);
-  const readyTotal = picked.reduce((n, i) => n + (st(i)?.batchReady ?? 0), 0);
 
   const analyzeAll = useCallback(async () => {
     const list = analyzable;
@@ -226,10 +227,17 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     }
   }, []);
 
-  const addItem = () => setItems((p) => [...p, { key: newKey(), matrixId: null }]);
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const addItem = () => {
+    const key = newKey();
+    setItems((p) => [...p, { key, matrixId: null }]);
+    setFocusKey(key);
+    setScrollTo(key);
+  };
   const removeItem = (key: string) => {
     setItems((p) => {
-      return p.filter((x) => x.key !== key);
+      const next = p.filter((x) => x.key !== key);
+      return next.length ? next : [{ key: newKey(), matrixId: null }];
     });
     setStatuses((p) => {
       const n = { ...p };
@@ -244,18 +252,23 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
      opens that product's full Studio card straight away — into the first empty
      item if there is one, otherwise as a new item at the end. */
   const [scrollTo, setScrollTo] = useState<string | null>(null);
-  const addScanned = (matrixId: string) => {
+  /* A scan in an EMPTY item's field loads the product into it; a scan in a
+     loaded item's field adds the scanned product as the next item, so tags can
+     be scanned one after another. */
+  const addScanned = (fromKey: string, matrixId: string) => {
     const already = items.find((x) => x.matrixId === matrixId);
     if (already) {
       setBarMsg({ text: `That product is already item ${items.indexOf(already) + 1} — scrolled to it.`, tone: "info" });
       setScrollTo(already.key);
       return;
     }
-    const empty = items.find((x) => !x.matrixId);
+    const from = items.find((x) => x.key === fromKey);
+    const empty = from && !from.matrixId ? from : items.find((x) => !x.matrixId);
     const key = empty?.key ?? newKey();
     setItems((p) => (empty ? p.map((x) => (x.key === key ? { ...x, matrixId } : x)) : [...p, { key, matrixId }]));
     setBarMsg(null);
-    setScrollTo(key);
+    setFocusKey(key);
+    if (key !== fromKey) setScrollTo(key);
   };
   useEffect(() => {
     if (!scrollTo) return;
@@ -305,45 +318,22 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       ) : (
         <>
           {/* Top bar — sticks while the item list scrolls. */}
-          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 shadow-sm">
-            <div className="basis-full">
-              <ProductPicker scan takenIds={[]} onPick={addScanned} />
-            </div>
-            <div className="flex min-w-[14rem] flex-1 flex-wrap gap-x-4 gap-y-1 font-mono text-[0.74rem] text-[var(--wms-muted)]">
-              <span>
-                <b className="text-[var(--wms-fg)] tabular-nums">{picked.length}</b> items
-              </span>
-              <span>
-                <b className="text-[var(--wms-fg)] tabular-nums">{photoTotal}</b> photos
-              </span>
-              <span>
-                <b className="text-[var(--wms-fg)] tabular-nums">{analysedTotal}</b> analysed
-              </span>
-              <span>
-                <b className="text-[var(--wms-fg)] tabular-nums">{sendable.length}</b> ready to send
-              </span>
-              <span>
-                ≈ <b className="text-[var(--wms-fg)] tabular-nums">${(sendable.length * PANELS_PER_ITEM * BATCH_COST_PER_PANEL).toFixed(2)}</b> batch
-              </span>
-              {openTotal ? (
-                <span>
-                  <b className="text-[var(--wms-accent)] tabular-nums">{openTotal}</b> out with OpenAI / queued
-                </span>
-              ) : null}
-              {readyTotal ? (
-                <span>
-                  <b className="text-[var(--wms-status-success-fg)] tabular-nums">{readyTotal}</b> back — load on the item
-                </span>
-              ) : null}
-            </div>
+          {picked.length ? (
+          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 shadow-sm">
+            <div className="flex-1" />
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={!canManage || running !== null || analyzable.length === 0}
                 onClick={() => void analyzeAll()}
-                className={`${btn} border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60`}
+                title={analysisPassed ? "Every item's analysis passed" : "Analysis not passed yet on every item"}
+                className={`${btn} ${
+                  analysisPassed
+                    ? "border-emerald-500 bg-emerald-600 text-white hover:brightness-110"
+                    : "border-orange-500 bg-orange-500 text-black hover:brightness-110"
+                }`}
               >
-                {running === "analyze" ? "Analyzing…" : `🔍 Analyze${analyzable.length ? ` ${analyzable.length}` : " all"}`}
+                {running === "analyze" ? "Analyzing…" : analysisPassed ? "✓ Analyzed" : "🔍 Analyze"}
               </button>
               <button
                 type="button"
@@ -399,6 +389,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
             ) : null}
             {barMsg ? <p className={`basis-full font-mono text-[0.74rem] ${toneCls[barMsg.tone]}`}>{barMsg.text}</p> : null}
           </div>
+          ) : barMsg ? (
+            <p className={`font-mono text-[0.74rem] ${toneCls[barMsg.tone]}`}>{barMsg.text}</p>
+          ) : null}
 
           {items.map((it, idx) => (
             <BulkItemCard
@@ -408,8 +401,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               canManage={canManage}
               status={statuses[it.key]}
               stepNote={stepNote[it.key]}
-              takenIds={items.filter((x) => x.key !== it.key && x.matrixId).map((x) => x.matrixId as string)}
               onPick={(id) => setMatrix(it.key, id)}
+              onScan={(id) => addScanned(it.key, id)}
+              focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
               onRemove={() => removeItem(it.key)}
               register={register}
               report={report}
@@ -435,8 +429,9 @@ function BulkItemCard({
   canManage,
   status,
   stepNote,
-  takenIds,
   onPick,
+  onScan,
+  focus,
   onRemove,
   register,
   report,
@@ -446,8 +441,9 @@ function BulkItemCard({
   canManage: boolean;
   status?: BulkStudioStatus;
   stepNote?: string;
-  takenIds: string[];
   onPick: (matrixId: string | null) => void;
+  onScan: (matrixId: string) => void;
+  focus: boolean;
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
@@ -488,23 +484,36 @@ function BulkItemCard({
       className="scroll-mt-40 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]"
       aria-label={`Item ${index + 1}`}
     >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--wms-border)] px-3 py-2">
-        <span className="font-mono text-[0.72rem] font-bold uppercase tracking-wide text-[var(--wms-muted)]">Item {index + 1}</span>
-        {item.matrixId ? (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-[var(--wms-fg)]">
-              {m?.description ?? (isLoading ? "Loading…" : error ? "Could not load this product" : "")}
-            </p>
-            <p className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
-              {m ? [m.upc ? `UPC ${m.upc}` : null, m.category, m.subcategory_1].filter(Boolean).join(" · ") : ""}
-            </p>
-          </div>
-        ) : (
-          <div className="min-w-0 flex-1">
-            <ProductPicker takenIds={takenIds} onPick={onPick} />
-          </div>
-        )}
-        <span className={`rounded-full border px-2 py-0.5 font-mono text-[0.66rem] uppercase tracking-wide ${pill.cls}`}>{pill.text}</span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+        <span className="text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">Item {index + 1}:</span>
+        <div className="min-w-[16rem] max-w-3xl flex-1">
+          <ProductPicker
+            scan
+            autoFocus={focus}
+            takenIds={[]}
+            onPick={onScan}
+            placeholder={
+              item.matrixId && m
+                ? `${m.description ?? ""}${m.upc ? ` · UPC ${m.upc}` : ""} — scan the next tag to add it`
+                : "scan the hang tag (or type a barcode / UPC / name)…"
+            }
+          />
+        </div>
+        {item.matrixId && m ? (
+          <p className="min-w-0 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+            <span className="text-sm font-semibold text-[var(--wms-fg)]">{m.description}</span>
+            {[m.upc ? ` · UPC ${m.upc}` : null, m.category, m.subcategory_1].filter(Boolean).join(" · ")}
+          </p>
+        ) : item.matrixId ? (
+          <p className="font-mono text-[0.7rem] text-[var(--wms-muted)]">{isLoading ? "Loading…" : error ? "Could not load this product" : ""}</p>
+        ) : null}
+        <div className="flex-1" />
+        <span
+          title={status?.sendProblems.length ? status.sendProblems.join("\n") : undefined}
+          className={`rounded-full border px-3 py-1 font-mono text-[0.7rem] font-semibold uppercase tracking-wide ${pill.cls}`}
+        >
+          {pill.text}
+        </span>
         {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
         <div className="flex gap-1.5">
           {item.matrixId ? (
@@ -529,18 +538,8 @@ function BulkItemCard({
         </div>
       </div>
 
-      {status && (status.sendProblems.length || status.batchLine) && !status.busy ? (
-        <div className="space-y-0.5 border-b border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.7rem]">
-          {status.batchLine ? <p className="text-[var(--wms-muted)]">Last batch run: {status.batchLine}</p> : null}
-          {status.batchOpen || status.batchReady
-            ? null
-            : status.sendProblems.map((p) => (
-                <p key={p} className="text-[var(--wms-status-warning-fg)]">
-                  • {p}
-                </p>
-              ))}
-        </div>
-      ) : null}
+
+      {!item.matrixId ? <EmptyItemLayout /> : null}
 
       {item.matrixId && m ? (
         archived ? (
@@ -548,7 +547,7 @@ function BulkItemCard({
             This product is archived in the WMS — it is not shot. Pick another product.
           </p>
         ) : (
-          <div className="p-3">
+          <div className="px-3 pb-3">
             <CarbonStudioTab
               key={item.matrixId}
               matrixId={item.matrixId}
@@ -572,9 +571,13 @@ function ProductPicker({
   takenIds,
   onPick,
   scan = false,
+  autoFocus = false,
+  placeholder,
 }: {
   takenIds: string[];
   onPick: (matrixId: string) => void;
+  autoFocus?: boolean;
+  placeholder?: string;
   /** The big scan box at the top: Enter looks the code up at once (a scanner
       types faster than the search delay), one match opens it, and the box
       clears for the next tag. */
@@ -589,8 +592,8 @@ function ProductPicker({
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     /* Ready to scan on arrival — desktop only, so a phone keyboard never pops up. */
-    if (scan && window.matchMedia("(hover: hover)").matches) inputRef.current?.focus();
-  }, [scan]);
+    if (autoFocus && window.matchMedia("(hover: hover)").matches) inputRef.current?.focus();
+  }, [autoFocus]);
   const search = useCallback(async (term: string, signal?: AbortSignal) => {
     const r = await fetch(`/api/inventory/catalog/search?scope=matrix&q=${encodeURIComponent(term)}`, { signal, cache: "no-store" });
     const j = (await r.json().catch(() => ({}))) as { rows?: SearchRow[] };
@@ -624,7 +627,7 @@ function ProductPicker({
     if (scan) {
       setQ("");
       setRows([]);
-      setNote(`Opened ${r.name}${r.upc ? ` (UPC ${r.upc})` : ""} — scan the next tag.`);
+      setNote("");
       inputRef.current?.focus();
     }
   };
@@ -655,19 +658,13 @@ function ProductPicker({
   };
   return (
     <div className={`relative ${scan ? "w-full" : "max-w-md"}`}>
-      {scan ? (
-        <label htmlFor="bulk-scan" className="mb-1 block font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-muted)]">
-          Scan a hang tag — or type a barcode, UPC or product name and press Enter
-        </label>
-      ) : null}
       <input
-        id={scan ? "bulk-scan" : undefined}
         ref={inputRef}
         type="search"
         value={q}
         autoComplete="off"
         enterKeyHint="search"
-        placeholder={scan ? "▮▮▯▮▯▮▮  scan the barcode…" : "UPC or product name…"}
+        placeholder={placeholder ?? "UPC or product name…"}
         aria-label={scan ? "Scan a hang tag barcode" : "UPC or product name"}
         onChange={(e) => {
           setQ(e.target.value);
@@ -730,6 +727,37 @@ function ProductPicker({
           })}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** An item with no product yet: the card's layout, dimmed, until a tag is scanned. */
+function EmptyItemLayout() {
+  const box = "rounded-md border border-dashed border-[var(--wms-border)] p-3";
+  const title = "font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-muted)]";
+  const sub = "mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]/70";
+  return (
+    <div className="pointer-events-none select-none px-3 pb-3 opacity-60" aria-hidden>
+      <div className="grid gap-2 md:grid-cols-3">
+        <div className={box}>
+          <p className={title}>Accessories · General</p>
+          <p className={sub}>Accessories, flats, any view — works exactly as before.</p>
+        </div>
+        <div className={box}>
+          <p className={title}>Front</p>
+          <p className={sub}>The FRONT of the item (jeans, shirts, dresses…).</p>
+        </div>
+        <div className={box}>
+          <p className={title}>Back</p>
+          <p className={sub}>The BACK of the item.</p>
+        </div>
+        <div className={`${box} md:col-span-2`}>
+          <p className={title}>Model · Item type · Colour</p>
+        </div>
+        <div className={box}>
+          <p className={title}>Style with</p>
+        </div>
+      </div>
     </div>
   );
 }

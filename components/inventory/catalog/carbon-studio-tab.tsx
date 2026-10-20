@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import { parseSpecBackState, specListsBackDesign, specRiskReport, studioRefViewKey, type SpecIssue } from "@/lib/studio-item-spec";
 import {
@@ -3062,15 +3062,306 @@ export function CarbonStudioTab({
   /** The Colourway box sits beside Style with (md+), stacked on phones. */
   const showColourway = !bulk && canManage && colors.length > 0 && !!color;
 
+  /* Blocks Bulk Studio places inside the photo grid (beside Style with); the
+     Studio tab keeps them where they always were. */
+  const labelBlock = (
+    <>
+      {/* Jeans label — only for JEANS / DENIM SHORTS. The library is shared by
+          every product; the pick is this product's. Pose 7 leaves a placeholder
+          and the server pastes the cropped photo into it; Pose 4 always keeps
+          the shirt over the waistband (owner's hard lock). */}
+      {canManage && isJeansType ? (
+        <LabelDrawer
+          bulk={Boolean(bulk)}
+          summary={`Jeans label${chosenLabel ? ` · ${chosenLabel.name || "picked"}` : " · none picked"}`}
+          defaultOpen={!jeansLabelId}
+        >
+        <div
+          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3"
+          onDragOver={(e) => {
+            if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const files = imageFilesFromTransfer(e.dataTransfer);
+            if (!files.length) return;
+            e.preventDefault();
+            e.stopPropagation();
+            void uploadLabelPhotos(files);
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className={`${label} mb-0`}>
+              Jeans label{chosenLabel ? <span className="text-[var(--wms-fg)]"> · {chosenLabel.name || "picked"}</span> : null}
+            </span>
+            <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
+              {labelBusy ? "saving…" : "＋ upload label photos"}
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                disabled={labelBusy}
+                onChange={(e) => {
+                  void uploadLabelPhotos(Array.from(e.target.files ?? []));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
+            Pick the patch sewn on the back of this product&apos;s waistband. Its photo is sent to the AI with Pose 7 (the
+            zoomed-in back) with the command to put exactly this label on the back waistband; the shirt rests on the top edge
+            of the waistband — no skin. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label shows
+            there. Upload every label once — they are kept for all products.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={labelBusy}
+              onClick={() => {
+                handoffTargetRef.current = "label";
+                setLabelPhoneOpen(true);
+                void startPhoneCamera();
+              }}
+              title="Phone camera (QR) — every photo goes into the jeans-label library"
+              className="rounded border border-dashed border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
+            >
+              📱 phone camera
+            </button>
+            {labelPhoneOpen && qr ? (
+              <span className="font-mono text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+                Scan the QR code in the photo area above — every photo the phone sends now goes into this label library. Press Done there when finished.
+              </span>
+            ) : null}
+          </div>
+          {!jeansLabelId && specHasBackWaistbandLabel(itemSpec) ? (
+            <p className="mt-2 rounded border border-[var(--wms-status-warning-fg)]/50 bg-[var(--wms-status-warning-fg)]/10 px-2 py-1.5 text-[0.75rem] font-semibold text-[var(--wms-status-warning-fg)]">
+              No label picked for this product — Pose 7 will draw a label of its own. Pick this product&apos;s label below.
+            </p>
+          ) : null}
+          {jeansLabelId && !specHasBackWaistbandLabel(itemSpec) ? (
+            <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
+              The item spec has no label on the back waistband, so the label is not attached. Add a LABEL/PATCH line for the
+              back waistband if this product has one.
+            </p>
+          ) : null}
+          {jeansLabels.length ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setJeansLabelId(null)}
+                className={`flex h-20 w-20 items-center justify-center rounded border font-mono text-[0.68rem] ${
+                  !jeansLabelId ? "border-[var(--wms-accent)] text-[var(--wms-fg)]" : "border-[var(--wms-border)] text-[var(--wms-muted)]"
+                }`}
+              >
+                none
+              </button>
+              {jeansLabels.map((l) => (
+                <div key={l.id} className="relative">
+                  <button
+                    type="button"
+                    title={l.name || "label"}
+                    onClick={() => setJeansLabelId(l.id)}
+                    className={`block h-20 w-20 overflow-hidden rounded border-2 ${
+                      jeansLabelId === l.id ? "border-[var(--wms-accent)]" : "border-[var(--wms-border)]"
+                    }`}
+                  >
+                    <img src={previewFor(l.url)} alt={l.name || "jeans label"} className="h-full w-full object-cover" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${l.name || "label"} from the library`}
+                    disabled={labelBusy}
+                    onClick={() => void removeLabel(l)}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--wms-status-danger-fg)]/60 bg-[var(--wms-surface)] text-[0.7rem] leading-none text-[var(--wms-status-danger-fg)] max-md:h-7 max-md:w-7"
+                  >
+                    ×
+                  </button>
+                  <span className="mt-0.5 block w-20 truncate text-center font-mono text-[0.62rem] text-[var(--wms-muted)]">{l.name}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+              No label photos yet — upload or drop photos of your back-waistband labels here.
+            </p>
+          )}
+        </div>
+        </LabelDrawer>
+      ) : null}
+    </>
+  );
+  const specBlock = (
+    <>
+      {/* Item spec — what the render is locked to. Visible and editable:
+          a wrong line here is a wrong garment in every paid panel. */}
+      <div
+        className={`rounded-md border p-3 ${
+          productRefCount && specStale
+            ? "border-amber-500/55 bg-amber-950/20"
+            : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
+        }`}
+      >
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <span className={`${label} mb-0`}>Item spec — what the AI is locked to</span>
+          <span
+            className={`font-mono text-[0.62rem] uppercase tracking-wide ${
+              !productRefCount
+                ? "text-[var(--wms-muted)]"
+                : specStale
+                  ? "text-amber-300"
+                  : "text-[var(--wms-status-success-fg)]"
+            }`}
+          >
+            {!productRefCount
+              ? "add photos first"
+              : !itemSpec.trim()
+                ? "not analyzed yet"
+                : specStale
+                  ? "photos changed — re-analyze"
+                  : `ready · ${itemSpec.split("\n").filter(Boolean).length} lines`}
+          </span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            disabled={!canManage || !productRefCount || specBusy || busy !== null}
+            onClick={() => void analyzeItem(refViews)}
+            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
+          >
+            {specBusy ? "Analyzing…" : itemSpec.trim() ? "↻ Re-analyze photos" : "🔍 Analyze photos"}
+          </button>
+        </div>
+        <p className="mb-2 font-mono text-[0.66rem] leading-snug text-[var(--wms-muted)]">
+          Every line below is enforced on the render. Read it before generating and fix anything wrong —
+          fit, colour, where each print sits, and the <b>BACK</b> line. Your edits are kept for this product
+          and used as-is; only <b>Re-analyze</b> replaces them.
+        </p>
+        <textarea
+          className={`${field} min-h-[7rem] max-md:text-base`}
+          rows={itemSpec.trim() ? Math.min(14, Math.max(5, itemSpec.split("\n").length + 1)) : 3}
+          placeholder="Press Analyze photos (or Generate) — the numbered spec of the garment appears here. You can also type one."
+          value={itemSpec}
+          disabled={!canManage}
+          onChange={(e) => {
+            setItemSpec(e.target.value);
+            // A human edit covers the photos on screen: Generate must not
+            // re-analyze and throw the correction away, and a spec typed
+            // after a failed analysis must be usable.
+            setSpecRefsKey(refsKey);
+            setSpecConfirmed(true);
+          }}
+        />
+        {/* The lines most likely to be wrong — checked before anything is paid for. */}
+        {specRisk.blocking.length || specRisk.warnings.length ? (
+          <div className="mt-2 space-y-1">
+            {specRisk.blocking.map((x, i) => (
+              <p key={`b${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-danger-fg)]">
+                ✕ {x.message}
+              </p>
+            ))}
+            {specRisk.warnings.map((x, i) => (
+              <p key={`w${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-warning-fg)]">
+                ⚠ {x.message}
+              </p>
+            ))}
+            {specRisk.blocking.length ? (
+              <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-fg)] max-md:min-h-11">
+                <input
+                  type="checkbox"
+                  className="max-md:h-5 max-md:w-5"
+                  checked={specConfirmed}
+                  disabled={!canManage}
+                  onChange={(e) => setSpecConfirmed(e.target.checked)}
+                />
+                I checked the spec against the real garment — it is right
+              </label>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+    </>
+  );
+  const optionsBlock = (
+    <>
+      {/* Options */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div>
+          <span className={label}>
+            Model{itemGender ? <span className="text-[var(--wms-muted)]"> · {itemGender} only</span> : null}
+          </span>
+          <select ref={modelSelectRef} className={field} value={modelId} onChange={(e) => setModelId(e.target.value)}>
+            {visibleModels.length === 0 ? (
+              <option value="">{models.length ? `No ${itemGender ?? ""} models` : "No models"}</option>
+            ) : null}
+            {visibleModels.map((m) => (
+              <option key={m.model_id} value={m.model_id}>
+                {m.name} ({m.gender})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <span className={label}>{accessoryKind ? "Accessory type" : "Item type"}</span>
+          {accessoryKind ? (
+            /* Accessory mode picks its shot list and outfit from this, so it is a
+               choice, not free text: a typo would quietly fall back to the
+               generic shots. */
+            <select
+              className={`${field} max-md:text-base`}
+              value={ACCESSORY_TYPE_OPTIONS.includes(itemType.trim().toUpperCase()) ? itemType.trim().toUpperCase() : ""}
+              onChange={(e) => setItemType(e.target.value)}
+            >
+              <option value="">{itemType.trim() ? `${itemType.trim()} — choose a type` : "Choose a type"}</option>
+              {ACCESSORY_TYPE_OPTIONS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input className={field} value={itemType} onChange={(e) => setItemType(e.target.value)} />
+          )}
+        </div>
+        <div>
+          <span className={label}>Colour</span>
+          <select className={field} value={color} onChange={(e) => setColor(e.target.value)}>
+            {colors.map((c) => (
+              <option key={c.color} value={c.color}>
+                {c.color}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+
+      <div>
+        <span className={label}>Item instruction (optional)</span>
+        <input
+          className={field}
+          placeholder="e.g. oversized cut, super skinny fit, high-waist…"
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+        />
+      </div>
+
+    </>
+  );
+
   return (
     <div className="space-y-3">
       {/* Item photos — three sections: General (exactly the old box), Front, Back */}
       <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40 p-3">
-        <span className={label}>Item photo(s) — the garment reference</span>
-        <p className="mb-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-          Sort the photos by view so the front and the back can never be mixed up. Drag &amp; drop into a section,
-          {bulk ? " upload" : " paste from clipboard (⌘/Ctrl+V — lands in the highlighted section), upload"}, or use the phone camera.
-        </p>
+        {!bulk ? (
+          <>
+            <span className={label}>Item photo(s) — the garment reference</span>
+            <p className="mb-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+              Sort the photos by view so the front and the back can never be mixed up. Drag &amp; drop into a section,
+              paste from clipboard (⌘/Ctrl+V — lands in the highlighted section), upload, or use the phone camera.
+            </p>
+          </>
+        ) : null}
         <input
           ref={fileRef}
           type="file"
@@ -3105,8 +3396,14 @@ export function CarbonStudioTab({
             const isActive = activeView === zone.view;
             const isOver = dragOverView === zone.view;
             return (
+              <Fragment key={zone.view}>
+              {bulk && zone.view === "styling" ? (
+                <div className="space-y-2 md:col-span-2">
+                  {optionsBlock}
+                  {labelBlock}
+                </div>
+              ) : null}
               <div
-                key={zone.view}
                 // Hit target for the touch drag (document.elementFromPoint).
                 data-ref-zone={zone.view}
                 onClick={() => selectView(zone.view)}
@@ -3139,7 +3436,7 @@ export function CarbonStudioTab({
                   const imgs = imageFilesFromTransfer(e.dataTransfer);
                   if (imgs.length) void uploadItems(imgs, zone.view);
                 }}
-                className={`rounded-md border p-2 transition-colors ${zone.view === "styling" ? (showColourway ? "md:col-span-2" : "md:col-span-3") : ""} ${
+                className={`rounded-md border p-2 transition-colors ${zone.view === "styling" && !bulk ? (showColourway ? "md:col-span-2" : "md:col-span-3") : ""} ${
                   isOver
                     ? "border-2 border-dashed border-[var(--wms-accent)] bg-[var(--wms-accent)]/10"
                     : isActive
@@ -3158,7 +3455,11 @@ export function CarbonStudioTab({
                     </span>
                   ) : null}
                 </div>
-                <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">{zone.hint}</p>
+                {bulk && zone.view === "styling" ? null : (
+                  <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">
+                    {bulk && zone.view === "general" ? "Accessories, flats, any view — works exactly as before." : zone.hint}
+                  </p>
+                )}
                 {zone.view === "back" ? (
                   /* The alternative to a back photo: the operator's word,
                      after looking at the garment. Required before any
@@ -3390,6 +3691,7 @@ export function CarbonStudioTab({
                   ) : null}
                 </div>
               </div>
+              </Fragment>
             );
           })}
           {/* Another colourway: same product, same analysis, one photo of the new
@@ -3541,278 +3843,12 @@ export function CarbonStudioTab({
         ) : null}
       </div>
 
-      {/* Jeans label — only for JEANS / DENIM SHORTS. The library is shared by
-          every product; the pick is this product's. Pose 7 leaves a placeholder
-          and the server pastes the cropped photo into it; Pose 4 always keeps
-          the shirt over the waistband (owner's hard lock). */}
-      {canManage && isJeansType ? (
-        <LabelDrawer
-          bulk={Boolean(bulk)}
-          summary={`Jeans label${chosenLabel ? ` · ${chosenLabel.name || "picked"}` : " · none picked"}`}
-          defaultOpen={!jeansLabelId}
-        >
-        <div
-          className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3"
-          onDragOver={(e) => {
-            if (Array.from(e.dataTransfer?.types ?? []).includes("Files")) e.preventDefault();
-          }}
-          onDrop={(e) => {
-            const files = imageFilesFromTransfer(e.dataTransfer);
-            if (!files.length) return;
-            e.preventDefault();
-            e.stopPropagation();
-            void uploadLabelPhotos(files);
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className={`${label} mb-0`}>
-              Jeans label{chosenLabel ? <span className="text-[var(--wms-fg)]"> · {chosenLabel.name || "picked"}</span> : null}
-            </span>
-            <label className="cursor-pointer rounded border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)] max-md:min-h-11 max-md:px-3 max-md:py-2">
-              {labelBusy ? "saving…" : "＋ upload label photos"}
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                disabled={labelBusy}
-                onChange={(e) => {
-                  void uploadLabelPhotos(Array.from(e.target.files ?? []));
-                  e.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-          <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
-            Pick the patch sewn on the back of this product&apos;s waistband. Its photo is sent to the AI with Pose 7 (the
-            zoomed-in back) with the command to put exactly this label on the back waistband; the shirt rests on the top edge
-            of the waistband — no skin. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label shows
-            there. Upload every label once — they are kept for all products.
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={labelBusy}
-              onClick={() => {
-                handoffTargetRef.current = "label";
-                setLabelPhoneOpen(true);
-                void startPhoneCamera();
-              }}
-              title="Phone camera (QR) — every photo goes into the jeans-label library"
-              className="rounded border border-dashed border-[var(--wms-border)] px-2 py-1 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11 max-md:px-3"
-            >
-              📱 phone camera
-            </button>
-            {labelPhoneOpen && qr ? (
-              <span className="font-mono text-[0.72rem] text-[var(--wms-status-warning-fg)]">
-                Scan the QR code in the photo area above — every photo the phone sends now goes into this label library. Press Done there when finished.
-              </span>
-            ) : null}
-          </div>
-          {!jeansLabelId && specHasBackWaistbandLabel(itemSpec) ? (
-            <p className="mt-2 rounded border border-[var(--wms-status-warning-fg)]/50 bg-[var(--wms-status-warning-fg)]/10 px-2 py-1.5 text-[0.75rem] font-semibold text-[var(--wms-status-warning-fg)]">
-              No label picked for this product — Pose 7 will draw a label of its own. Pick this product&apos;s label below.
-            </p>
-          ) : null}
-          {jeansLabelId && !specHasBackWaistbandLabel(itemSpec) ? (
-            <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
-              The item spec has no label on the back waistband, so the label is not attached. Add a LABEL/PATCH line for the
-              back waistband if this product has one.
-            </p>
-          ) : null}
-          {jeansLabels.length ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setJeansLabelId(null)}
-                className={`flex h-20 w-20 items-center justify-center rounded border font-mono text-[0.68rem] ${
-                  !jeansLabelId ? "border-[var(--wms-accent)] text-[var(--wms-fg)]" : "border-[var(--wms-border)] text-[var(--wms-muted)]"
-                }`}
-              >
-                none
-              </button>
-              {jeansLabels.map((l) => (
-                <div key={l.id} className="relative">
-                  <button
-                    type="button"
-                    title={l.name || "label"}
-                    onClick={() => setJeansLabelId(l.id)}
-                    className={`block h-20 w-20 overflow-hidden rounded border-2 ${
-                      jeansLabelId === l.id ? "border-[var(--wms-accent)]" : "border-[var(--wms-border)]"
-                    }`}
-                  >
-                    <img src={previewFor(l.url)} alt={l.name || "jeans label"} className="h-full w-full object-cover" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${l.name || "label"} from the library`}
-                    disabled={labelBusy}
-                    onClick={() => void removeLabel(l)}
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--wms-status-danger-fg)]/60 bg-[var(--wms-surface)] text-[0.7rem] leading-none text-[var(--wms-status-danger-fg)] max-md:h-7 max-md:w-7"
-                  >
-                    ×
-                  </button>
-                  <span className="mt-0.5 block w-20 truncate text-center font-mono text-[0.62rem] text-[var(--wms-muted)]">{l.name}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-2 font-mono text-[0.72rem] text-[var(--wms-muted)]">
-              No label photos yet — upload or drop photos of your back-waistband labels here.
-            </p>
-          )}
-        </div>
-        </LabelDrawer>
-      ) : null}
+      {!bulk ? labelBlock : null}
 
-      {/* Item spec — what the render is locked to. Visible and editable:
-          a wrong line here is a wrong garment in every paid panel. */}
-      <div
-        className={`rounded-md border p-3 ${
-          productRefCount && specStale
-            ? "border-amber-500/55 bg-amber-950/20"
-            : "border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40"
-        }`}
-      >
-        <div className="mb-1 flex flex-wrap items-center gap-2">
-          <span className={`${label} mb-0`}>Item spec — what the AI is locked to</span>
-          <span
-            className={`font-mono text-[0.62rem] uppercase tracking-wide ${
-              !productRefCount
-                ? "text-[var(--wms-muted)]"
-                : specStale
-                  ? "text-amber-300"
-                  : "text-[var(--wms-status-success-fg)]"
-            }`}
-          >
-            {!productRefCount
-              ? "add photos first"
-              : !itemSpec.trim()
-                ? "not analyzed yet"
-                : specStale
-                  ? "photos changed — re-analyze"
-                  : `ready · ${itemSpec.split("\n").filter(Boolean).length} lines`}
-          </span>
-          <div className="flex-1" />
-          <button
-            type="button"
-            disabled={!canManage || !productRefCount || specBusy || busy !== null}
-            onClick={() => void analyzeItem(refViews)}
-            className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
-          >
-            {specBusy ? "Analyzing…" : itemSpec.trim() ? "↻ Re-analyze photos" : "🔍 Analyze photos"}
-          </button>
-        </div>
-        <p className="mb-2 font-mono text-[0.66rem] leading-snug text-[var(--wms-muted)]">
-          Every line below is enforced on the render. Read it before generating and fix anything wrong —
-          fit, colour, where each print sits, and the <b>BACK</b> line. Your edits are kept for this product
-          and used as-is; only <b>Re-analyze</b> replaces them.
-        </p>
-        <textarea
-          className={`${field} min-h-[7rem] max-md:text-base`}
-          rows={itemSpec.trim() ? Math.min(14, Math.max(5, itemSpec.split("\n").length + 1)) : 3}
-          placeholder="Press Analyze photos (or Generate) — the numbered spec of the garment appears here. You can also type one."
-          value={itemSpec}
-          disabled={!canManage}
-          onChange={(e) => {
-            setItemSpec(e.target.value);
-            // A human edit covers the photos on screen: Generate must not
-            // re-analyze and throw the correction away, and a spec typed
-            // after a failed analysis must be usable.
-            setSpecRefsKey(refsKey);
-            setSpecConfirmed(true);
-          }}
-        />
-        {/* The lines most likely to be wrong — checked before anything is paid for. */}
-        {specRisk.blocking.length || specRisk.warnings.length ? (
-          <div className="mt-2 space-y-1">
-            {specRisk.blocking.map((x, i) => (
-              <p key={`b${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-danger-fg)]">
-                ✕ {x.message}
-              </p>
-            ))}
-            {specRisk.warnings.map((x, i) => (
-              <p key={`w${i}`} className="font-mono text-[0.72rem] leading-snug text-[var(--wms-status-warning-fg)]">
-                ⚠ {x.message}
-              </p>
-            ))}
-            {specRisk.blocking.length ? (
-              <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-fg)] max-md:min-h-11">
-                <input
-                  type="checkbox"
-                  className="max-md:h-5 max-md:w-5"
-                  checked={specConfirmed}
-                  disabled={!canManage}
-                  onChange={(e) => setSpecConfirmed(e.target.checked)}
-                />
-                I checked the spec against the real garment — it is right
-              </label>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      {/* Bulk Studio: the spec works in the background — the page's Analyze button shows whether it passed. */}
+      {!bulk ? specBlock : null}
 
-      {/* Options */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div>
-          <span className={label}>
-            Model{itemGender ? <span className="text-[var(--wms-muted)]"> · {itemGender} only</span> : null}
-          </span>
-          <select ref={modelSelectRef} className={field} value={modelId} onChange={(e) => setModelId(e.target.value)}>
-            {visibleModels.length === 0 ? (
-              <option value="">{models.length ? `No ${itemGender ?? ""} models` : "No models"}</option>
-            ) : null}
-            {visibleModels.map((m) => (
-              <option key={m.model_id} value={m.model_id}>
-                {m.name} ({m.gender})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <span className={label}>{accessoryKind ? "Accessory type" : "Item type"}</span>
-          {accessoryKind ? (
-            /* Accessory mode picks its shot list and outfit from this, so it is a
-               choice, not free text: a typo would quietly fall back to the
-               generic shots. */
-            <select
-              className={`${field} max-md:text-base`}
-              value={ACCESSORY_TYPE_OPTIONS.includes(itemType.trim().toUpperCase()) ? itemType.trim().toUpperCase() : ""}
-              onChange={(e) => setItemType(e.target.value)}
-            >
-              <option value="">{itemType.trim() ? `${itemType.trim()} — choose a type` : "Choose a type"}</option>
-              {ACCESSORY_TYPE_OPTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input className={field} value={itemType} onChange={(e) => setItemType(e.target.value)} />
-          )}
-        </div>
-        <div>
-          <span className={label}>Colour</span>
-          <select className={field} value={color} onChange={(e) => setColor(e.target.value)}>
-            {colors.map((c) => (
-              <option key={c.color} value={c.color}>
-                {c.color}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-
-      <div>
-        <span className={label}>Item instruction (optional)</span>
-        <input
-          className={field}
-          placeholder="e.g. oversized cut, super skinny fit, high-waist…"
-          value={instruction}
-          onChange={(e) => setInstruction(e.target.value)}
-        />
-      </div>
+      {!bulk ? optionsBlock : null}
 
       {bulk ? (
         /* Bulk Studio: the page's Analyze all / Send batch replace the buttons
