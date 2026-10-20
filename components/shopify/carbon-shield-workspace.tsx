@@ -457,7 +457,7 @@ function Flagged({
                   <td className={td}>{r.reasons.map((x) => REASONS[x] ?? x).join(" · ")}</td>
                   <td className={`${td} max-w-[12rem] break-words font-mono text-[0.7rem]`}>{r.path ?? "—"}</td>
                   <td className={td}>{SOURCES[r.source ?? ""] ?? r.source ?? "—"}</td>
-                  <td className={`${td} whitespace-nowrap text-right`}>
+                  <td className={`${td} min-w-[8.5rem] whitespace-nowrap text-right`}>
                     {allowed(r) ? (
                       <span className="font-mono text-[0.68rem] text-[var(--wms-status-success-fg)]">allowed</span>
                     ) : (
