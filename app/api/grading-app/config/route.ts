@@ -42,11 +42,13 @@ export async function GET(req: Request) {
     plausible: PLAUSIBLE,
     ai: ai ? { enabled: true, model: ai.model, scope } : { enabled: false, model: null, scope },
     capture: {
-      // Size AI's working distance; the depth sensor is accurate across it.
-      distanceCm: [60, 120],
-      idealDistanceCm: [70, 110],
+      // Working distance; the Note10+ depth sensor is accurate across it. 45 cm lets
+      // small items (tees, shorts) be shot closer — the owner could not read the
+      // screen held at 110 cm (2026-10-20). Hold 0.8 s (was 1.2 s).
+      distanceCm: [45, 120],
+      idealDistanceCm: [55, 110],
       maxTiltDeg: 8,
-      holdStillMs: 1200,
+      holdStillMs: 800,
       pairLimitCm: 1,
     },
     devices: {
