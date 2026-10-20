@@ -584,7 +584,15 @@ object Outline {
             t++
         }
         val backPx = maxOf(2.0, pxPerCm)
-        val opening = across(end.first - dx * backPx, end.second - dy * backPx)
+        /* The opening runs along the hem, corner to corner. Legs lying splayed
+           (shorts above all) have a SLANTED hem: a line square across the leg
+           near the low inner corner runs off the bottom edge long before the
+           outer side, which read John Denim Shorts' 23 cm openings as 10–13 cm
+           (owner's first Note10+ scan, 2026-10-20). The hem's two corners are
+           the leg's extreme points along the two diagonals of its own axis;
+           square-across stays the fallback. */
+        val opening = hemCorners(m, crotch, span, dx, dy, nx, ny, ::on)
+            ?: across(end.first - dx * backPx, end.second - dy * backPx)
         val (h0, h1) = opening.pts
         val inner = if (abs(h0.x - crotchX) < abs(h1.x - crotchX)) h0 else h1
         val outer = if (inner === h0) h1 else h0
@@ -598,6 +606,29 @@ object Outline {
         val kneeC = centre(kneeY)
         val knee = if (on(kneeC.first, kneeC.second)) across(kneeC.first, kneeC.second) else null
         return Leg(inseam, outseam, opening, thigh, knee)
+    }
+
+    /**
+     * The two bottom corners of one leg: among its pixels in the lower 60% of
+     * the leg, the ones furthest along (axis + normal) and (axis − normal).
+     * Null when the leg is too small to trust (the caller falls back).
+     */
+    private fun hemCorners(
+        m: Mask, crotch: Int, span: Int, dx: Double, dy: Double, nx: Double, ny: Double,
+        on: (Double, Double) -> Boolean,
+    ): MLine? {
+        val from = crotch + (span * 0.4).roundToInt()
+        var bestA = Double.NEGATIVE_INFINITY; var bestB = Double.NEGATIVE_INFINITY
+        var a: Pt? = null; var b: Pt? = null; var n = 0
+        for (y in from until m.h) for (x in 0 until m.w) {
+            if (!m[x, y] || !on(x.toDouble(), y.toDouble())) continue
+            n++
+            val along = x * dx + y * dy; val side = x * nx + y * ny
+            if (along + side > bestA) { bestA = along + side; a = Pt(x.toFloat(), y.toFloat()) }
+            if (along - side > bestB) { bestB = along - side; b = Pt(x.toFloat(), y.toFloat()) }
+        }
+        if (a == null || b == null || n < 50) return null
+        return MLine(listOf(b, a))
     }
 
     /* ─────────────────────────── tilt ─────────────────────────── */

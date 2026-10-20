@@ -115,6 +115,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         }
     }
 
+    val cues = remember { Cues(ctx) }
+    DisposableEffect(Unit) { onDispose { cues.release() } }
     val camera = remember {
         ArCamera(
             activity, requireTof = !testPhone,
@@ -153,7 +155,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
     val st = live
     val plane = st?.plane?.takeIf { st.depthAgeMs < 1500 }
     val dist = plane?.axisDistanceM?.times(100)
-    val range = cap?.distanceCm ?: 60f..120f
+    val range = cap?.distanceCm ?: 45f..120f
     val ideal = cap?.idealDistanceCm ?: 70f..110f
     val maxTilt = cap?.maxTiltDeg ?: 8f
     val checks = listOf(
@@ -165,11 +167,19 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
     val allGreen = checks.all { it.ok == true } && st?.tracking == true
     val ready = allGreen && st.still
     val now = System.currentTimeMillis()
+    // Sound + vibration: the phone is held too high to read (see Cues).
+    var wasGreen by remember { mutableStateOf(false) }
+    LaunchedEffect(allGreen, processing) {
+        if (processing != null || fired) return@LaunchedEffect
+        if (allGreen && !wasGreen) cues.ready()
+        if (!allGreen && wasGreen) cues.lost()
+        wasGreen = allGreen
+    }
     LaunchedEffect(ready, auto, processing) {
         if (!ready || !auto || processing != null) { readySince = 0L; return@LaunchedEffect }
         readySince = System.currentTimeMillis()
-        kotlinx.coroutines.delay(cap?.holdStillMs ?: 1200)
-        if (!fired) { fired = true; camera.requestCapture() }
+        kotlinx.coroutines.delay(cap?.holdStillMs ?: 800)
+        if (!fired) { fired = true; cues.captured(); camera.requestCapture() }
     }
     val hint = when {
         processing != null -> processing!!
@@ -189,6 +199,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         AndroidView({ camera.view }, Modifier.fillMaxSize())
         // Frame guide: where the garment should sit.
         Box(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 150.dp).border(2.dp, if (ready) Palette.accent else Color.White.copy(alpha = 0.5f), RoundedCornerShape(16.dp)))
+        // Readable from a metre away: the whole screen edge turns green when every check passes.
+        if (allGreen && processing == null) Box(Modifier.fillMaxSize().border(14.dp, Palette.accent))
         Column(Modifier.fillMaxWidth().statusBarsPadding().background(Color.Black.copy(alpha = 0.55f)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
@@ -220,9 +232,9 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
             else Box(
                 Modifier.size(74.dp).border(4.dp, Color.White, CircleShape).padding(7.dp)
                     .background(if (allGreen) Palette.accent else Color.White.copy(alpha = 0.35f), CircleShape)
-                    .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; camera.requestCapture() }),
+                    .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; cues.captured(); camera.requestCapture() }),
             )
-            if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 1200) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
+            if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 800) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

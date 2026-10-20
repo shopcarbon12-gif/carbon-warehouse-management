@@ -8,7 +8,7 @@ plugins {
 }
 
 /** Dotted-only version (X.Y.Z). versionCode is derived — same scheme as the other Carbon apps. */
-val appVersionName = "1.0.4"
+val appVersionName = "1.0.5"
 
 fun computeVersionCode(versionName: String): Int {
     val parts = versionName.trim().split('.')

@@ -111,10 +111,10 @@ data class AppConfig(
                 aiEnabled = ai.optBoolean("enabled"),
                 aiModel = ai.optStringOrNull("model"),
                 capture = CaptureParams(
-                    distanceCm = range("distanceCm", 60f, 120f),
+                    distanceCm = range("distanceCm", 45f, 120f),
                     idealDistanceCm = range("idealDistanceCm", 70f, 110f),
                     maxTiltDeg = c.optDouble("maxTiltDeg", 8.0).toFloat(),
-                    holdStillMs = c.optLong("holdStillMs", 1200),
+                    holdStillMs = c.optLong("holdStillMs", 800),
                     pairLimitCm = c.optDouble("pairLimitCm", 1.0).toFloat(),
                 ),
                 supportedModels = dev.optJSONArray("supported").strings().ifEmpty { listOf("SM-N975", "SM-N976", "SM-G986", "SM-G988") },
