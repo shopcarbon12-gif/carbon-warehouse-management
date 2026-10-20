@@ -308,9 +308,22 @@ export type BulkStudioApi = {
   queue: () => Promise<boolean>;
   refreshBatch: () => Promise<void>;
 };
+/** What was filled in on an empty Bulk Studio item before its barcode was
+    scanned. Applied once, after the product's saved state has loaded. */
+export type BulkStudioDraft = {
+  files: { file: File; view: "general" | "front" | "back" | "styling" }[];
+  modelId?: string;
+  itemType?: string;
+  instruction?: string;
+  backIsPlain?: boolean;
+};
+
 export type BulkStudioHooks = {
   register: (api: BulkStudioApi | null) => void;
   onStatus: (s: BulkStudioStatus) => void;
+  draft?: BulkStudioDraft | null;
+  /** The draft has been applied — the page can drop it. */
+  onDraftUsed?: () => void;
 };
 
 const PANELS = [1, 2, 3, 4];
@@ -1447,6 +1460,28 @@ export function CarbonStudioTab({
       setBusy(null);
     }
   }, []);
+
+  /* Bulk Studio: apply what was filled in before the barcode was scanned —
+     once, after this product's saved state is in (so nothing saved is lost). */
+  const draftDone = useRef(false);
+  const bulkDraft = bulk?.draft;
+  const bulkDraftUsed = bulk?.onDraftUsed;
+  useEffect(() => {
+    if (draftDone.current || !stateLoaded || !bulkDraft) return;
+    if (bulkDraft.modelId && !models.length) return; // wait for the model list
+    draftDone.current = true;
+    if (bulkDraft.modelId && models.some((m0) => m0.model_id === bulkDraft.modelId)) setModelId(bulkDraft.modelId);
+    if (bulkDraft.itemType?.trim()) setItemType(bulkDraft.itemType.trim());
+    if (bulkDraft.instruction?.trim()) setInstruction(bulkDraft.instruction.trim());
+    if (bulkDraft.backIsPlain) setBackIsPlain(true);
+    void (async () => {
+      for (const view of ["general", "front", "back", "styling"] as const) {
+        const files = bulkDraft.files.filter((f) => f.view === view).map((f) => f.file);
+        if (files.length) await uploadItems(files, view);
+      }
+      bulkDraftUsed?.();
+    })();
+  }, [stateLoaded, bulkDraft, bulkDraftUsed, models, uploadItems]);
 
   /**
    * Take a stored photo as THIS colour's sample: read the colour off it, note
@@ -3108,12 +3143,14 @@ export function CarbonStudioTab({
               />
             </label>
           </div>
-          <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
-            Pick the patch sewn on the back of this product&apos;s waistband. Its photo is sent to the AI with Pose 7 (the
-            zoomed-in back) with the command to put exactly this label on the back waistband; the shirt rests on the top edge
-            of the waistband — no skin. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label shows
-            there. Upload every label once — they are kept for all products.
-          </p>
+          {!bulk ? (
+            <p className="mt-1 text-[0.72rem] text-[var(--wms-muted)]">
+              Pick the patch sewn on the back of this product&apos;s waistband. Its photo is sent to the AI with Pose 7 (the
+              zoomed-in back) with the command to put exactly this label on the back waistband; the shirt rests on the top edge
+              of the waistband — no skin. Pose 4 (the full-body back) always keeps the shirt over the jeans, so no label shows
+              there. Upload every label once — they are kept for all products.
+            </p>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -3391,24 +3428,27 @@ export function CarbonStudioTab({
           </div>
         ) : null}
         <div ref={photosRef} className="grid gap-2 md:grid-cols-3">
-          {REF_VIEWS.map((zone) => {
+          {(() => {
+          /* Bulk Studio: Style with lives inside the Accessories · General box
+             (owner 2026-10-20) — still its own kind of photo (worn with the item,
+             never analyzed), drawn as a nested section of that box. */
+          const stylingZone = REF_VIEWS.find((z) => z.view === "styling")!;
+          const renderZone = (zone: (typeof REF_VIEWS)[number], nested = false): ReactNode => {
             const zoneRefs = itemRefs.filter((r) => (r.view ?? "general") === zone.view);
             const isActive = activeView === zone.view;
             const isOver = dragOverView === zone.view;
             return (
               <Fragment key={zone.view}>
-              {bulk && zone.view === "styling" ? (
-                <div className="space-y-2 md:col-span-2">
-                  {optionsBlock}
-                  {labelBlock}
-                </div>
-              ) : null}
               <div
                 // Hit target for the touch drag (document.elementFromPoint).
                 data-ref-zone={zone.view}
-                onClick={() => selectView(zone.view)}
+                onClick={(e) => {
+                  if (nested) e.stopPropagation();
+                  selectView(zone.view);
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
+                  if (nested) e.stopPropagation();
                   if (canManage) setDragOverView(zone.view);
                 }}
                 onDragLeave={(e) => {
@@ -3417,6 +3457,7 @@ export function CarbonStudioTab({
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
+                  if (nested) e.stopPropagation();
                   setDragOverView(null);
                   if (!canManage) return;
                   selectView(zone.view);
@@ -3460,8 +3501,9 @@ export function CarbonStudioTab({
                     {bulk && zone.view === "general" ? "Accessories, flats, any view — works exactly as before." : zone.hint}
                   </p>
                 )}
-                {zone.view === "back" ? (
+                {zone.view === "back" && !(bulk && zoneRefs.length > 0) ? (
                   /* The alternative to a back photo: the operator's word,
+                     (Bulk Studio: hidden once a back photo is in; short label, no warning.)
                      after looking at the garment. Required before any
                      back-facing pose renders. */
                   <label
@@ -3475,6 +3517,11 @@ export function CarbonStudioTab({
                       disabled={!canManage}
                       onChange={(e) => setBackIsPlain(e.target.checked)}
                     />
+                    {bulk ? (
+                      <span>
+                        The back is <b>plain</b>
+                      </span>
+                    ) : (
                     <span>
                       The back is <b>plain</b> — no print, text, logo or graphic (I checked the real garment)
                       {backIsPlain && specSaysBackDesign ? (
@@ -3483,6 +3530,7 @@ export function CarbonStudioTab({
                         </span>
                       ) : null}
                     </span>
+                    )}
                   </label>
                 ) : null}
                 <div className="flex flex-wrap items-center gap-2">
@@ -3690,10 +3738,19 @@ export function CarbonStudioTab({
                     </button>
                   ) : null}
                 </div>
+                {bulk && zone.view === "general" && !nested ? <div className="mt-2">{renderZone(stylingZone, true)}</div> : null}
               </div>
+              {bulk && zone.view === "back" && !nested ? (
+                <div className="space-y-2 md:col-span-3">
+                  {optionsBlock}
+                  {labelBlock}
+                </div>
+              ) : null}
               </Fragment>
             );
-          })}
+          };
+          return (bulk ? REF_VIEWS.filter((z) => z.view !== "styling") : REF_VIEWS).map((z) => renderZone(z));
+          })()}
           {/* Another colourway: same product, same analysis, one photo of the new
               colour. Only rendered when the catalogue actually has colours. */}
           {showColourway ? (

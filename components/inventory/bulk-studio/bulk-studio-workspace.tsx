@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import {
   CarbonStudioTab,
   type BulkStudioApi,
+  type BulkStudioDraft,
   type BulkStudioStatus,
 } from "@/components/inventory/catalog/carbon-studio-tab";
 
@@ -36,6 +37,7 @@ type MatrixDetail = { matrix: Matrix; variants: Variant[] };
 type SearchRow = { matrix_id: string; upc: string | null; name: string; vendor: string | null };
 
 type Item = { key: string; matrixId: string | null };
+type DraftUpdate = BulkStudioDraft | null | ((prev: BulkStudioDraft) => BulkStudioDraft | null);
 
 const STORE_KEY = "wms_bulk_studio_items_v1";
 const PANELS_PER_ITEM = 4;
@@ -228,6 +230,17 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   }, []);
 
   const [focusKey, setFocusKey] = useState<string | null>(null);
+  /** Filled in on an empty item before its barcode is scanned (kept in memory only). */
+  const [drafts, setDrafts] = useState<Record<string, BulkStudioDraft>>({});
+  const setDraft = useCallback((key: string, d: DraftUpdate) => {
+    setDrafts((p) => {
+      const next = typeof d === "function" ? d(p[key] ?? { files: [] }) : d;
+      const n = { ...p };
+      if (next) n[key] = next;
+      else delete n[key];
+      return n;
+    });
+  }, []);
   const addItem = () => {
     const key = newKey();
     setItems((p) => [...p, { key, matrixId: null }]);
@@ -399,6 +412,8 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               status={statuses[it.key]}
               stepNote={stepNote[it.key]}
               onScan={(id) => addScanned(it.key, id)}
+              draft={drafts[it.key] ?? null}
+              setDraft={setDraft}
               focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
               onRemove={() => removeItem(it.key)}
               register={register}
@@ -427,6 +442,8 @@ function BulkItemCard({
   stepNote,
   onScan,
   focus,
+  draft,
+  setDraft,
   onRemove,
   register,
   report,
@@ -438,6 +455,8 @@ function BulkItemCard({
   stepNote?: string;
   onScan: (matrixId: string) => void;
   focus: boolean;
+  draft: BulkStudioDraft | null;
+  setDraft: (key: string, d: DraftUpdate) => void;
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
@@ -453,8 +472,10 @@ function BulkItemCard({
     () => ({
       register: (api: BulkStudioApi | null) => register(key, api),
       onStatus: (s: BulkStudioStatus) => report(key, s),
+      draft,
+      onDraftUsed: () => setDraft(key, null),
     }),
-    [key, register, report],
+    [key, register, report, draft, setDraft],
   );
   const m = data?.matrix;
   const variants = data?.variants ?? [];
@@ -480,32 +501,16 @@ function BulkItemCard({
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
         <span className="text-2xl font-semibold uppercase tracking-tight text-[var(--wms-fg)]">Item {index + 1}:</span>
-        <div className="min-w-[16rem] max-w-[60%] flex-[3] max-md:max-w-full">
-          <ProductPicker
-            scan
-            autoFocus={focus}
-            takenIds={[]}
-            onPick={onScan}
-            placeholder={
-              item.matrixId && m
-                ? `${m.description ?? ""}${m.upc ? ` · ${m.upc}` : ""}`
-                : "scan the hang tag…"
-            }
-          />
-        </div>
-        {item.matrixId && !m ? (
-          <p className="font-mono text-[0.7rem] text-[var(--wms-muted)]">{isLoading ? "Loading…" : error ? "Could not load this product" : ""}</p>
-        ) : null}
-        <div className="flex-1" />
-        <span
-          title={status?.sendProblems.length ? status.sendProblems.join("\n") : undefined}
-          className={`rounded-full border px-3 py-1 font-mono text-[0.7rem] font-semibold uppercase tracking-wide ${pill.cls}`}
-        >
-          {pill.text}
-        </span>
-        {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
-        <div className="flex gap-1.5">
-          <button
+        {item.matrixId ? (
+          /* Scanned: the field gives way to the product, with its ✕ beside it. */
+          <div className="flex min-w-0 items-center gap-3">
+            <p className="min-w-0 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+              <span className="text-base font-semibold text-[var(--wms-fg)]">
+                {m?.description ?? (isLoading ? "Loading…" : error ? "Could not load this product" : "")}
+              </span>
+              {m ? [m.upc ? ` · UPC ${m.upc}` : null, m.category, m.subcategory_1].filter(Boolean).join(" · ") : ""}
+            </p>
+            <button
             type="button"
             onClick={onRemove}
             aria-label={`Remove item ${index + 1}`}
@@ -514,11 +519,38 @@ function BulkItemCard({
           >
             ✕
           </button>
-        </div>
+          </div>
+        ) : (
+          <>
+            <div className="min-w-[16rem] max-w-[60%] flex-[3] max-md:max-w-full">
+              <ProductPicker scan autoFocus={focus} takenIds={[]} onPick={onScan} placeholder="scan the hang tag…" />
+            </div>
+            <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove item ${index + 1}`}
+            title="Remove from this page (the product's photos and spec stay saved with it)"
+            className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.7rem] text-[var(--wms-status-danger-fg)] max-md:min-h-11 max-md:min-w-11"
+          >
+            ✕
+          </button>
+          </>
+        )}
+        <div className="flex-1" />
+        {item.matrixId ? (
+          <span
+            title={status?.sendProblems.length ? status.sendProblems.join("\n") : undefined}
+            className={`rounded-full border px-3 py-1 font-mono text-[0.7rem] font-semibold uppercase tracking-wide ${pill.cls}`}
+          >
+            {pill.text}
+          </span>
+        ) : null}
+        {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
       </div>
 
-
-      {!item.matrixId ? <EmptyItemLayout /> : null}
+      {!item.matrixId ? (
+        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onTag={onScan} />
+      ) : null}
 
       {item.matrixId && m ? (
         archived ? (
@@ -710,33 +742,229 @@ function ProductPicker({
   );
 }
 
-/** An item with no product yet: the card's layout, dimmed, until a tag is scanned. */
-function EmptyItemLayout() {
-  const box = "rounded-md border border-dashed border-[var(--wms-border)] p-3";
-  const title = "font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-muted)]";
-  const sub = "mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]/70";
+/** One picked photo, shown from the local file. */
+function DraftThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const url = useMemo(() => URL.createObjectURL(file), [file]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return (
-    <div className="pointer-events-none select-none px-3 pb-3 opacity-60" aria-hidden>
-      <div className="grid gap-2 md:grid-cols-3">
-        <div className={box}>
-          <p className={title}>Accessories · General</p>
-          <p className={sub}>Accessories, flats, any view — works exactly as before.</p>
+    <div className="relative">
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element -- a local file preview, not an optimisable asset
+        <img src={url} alt="" className="h-16 w-12 rounded border border-[var(--wms-border)] object-cover" />
+      ) : null}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove photo"
+        className="absolute -right-1.5 -top-1.5 rounded-full bg-black/80 px-1.5 text-[0.65rem] text-white max-md:min-h-11 max-md:min-w-11"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+type DraftModel = { model_id: string; name: string; gender: string; ref_image_urls?: string[] };
+
+/**
+ * An item before its barcode is scanned: every field is already open. What is
+ * filled in here is handed to the product's Studio the moment the tag is
+ * scanned (photos uploaded into their sections, model / type / instruction set).
+ * Colour comes from the product, so it opens after the scan.
+ */
+function DraftForm({
+  draft,
+  update,
+  onTag,
+}: {
+  draft: BulkStudioDraft;
+  update: (d: DraftUpdate) => void;
+  /** A photo turned out to be a hang tag naming one product: load it, as a scan would. */
+  onTag: (matrixId: string) => void;
+}) {
+  const onChange = (d: BulkStudioDraft) => update(d);
+  const [tagNote, setTagNote] = useState("");
+  const [checking, setChecking] = useState(0);
+  const tagFound = useRef(false);
+  const { data } = useSWR<{ models?: DraftModel[] }>("/api/models/list", fetcher, { revalidateOnFocus: false });
+  const models = (data?.models ?? []).filter((x) => (x.ref_image_urls ?? []).length >= 3);
+  const label = "mb-1 block font-mono text-[0.62rem] uppercase tracking-wide text-[var(--wms-muted)]";
+  const field =
+    "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base";
+  const zoneCls = "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]/60 p-2";
+  const ztitle = "font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-fg)]";
+  const zsub = "mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]";
+  const chip =
+    "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] hover:border-[var(--wms-accent)] max-md:min-h-11";
+  const add = (view: BulkStudioDraft["files"][number]["view"], list: FileList | null) => {
+    const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+    const entries = files.map((file) => ({ file, view }));
+    update((prev) => ({ ...prev, files: [...prev.files, ...entries] }));
+    /* Every photo is checked for a hang tag. A tag naming one product loads it
+       (exactly as scanning it would) and its photo is taken off the item. */
+    for (const entry of entries) {
+      setChecking((n) => n + 1);
+      void readTag(entry.file)
+        .then((res) => {
+          if (!res || !res.isTag) return;
+          update((prev) => ({ ...prev, files: prev.files.filter((x) => x !== entry) }));
+          const ids = [...new Set((res.matches ?? []).map((x) => x.matrixId))];
+          if (ids.length === 1 && !tagFound.current) {
+            tagFound.current = true;
+            setTagNote("");
+            onTag(ids[0]);
+          } else if (!ids.length) setTagNote(`Tag read (${res.sku || res.upc || "no code"}) — no product has that code. Scan it or type it instead.`);
+          else setTagNote(`Tag ${res.sku || res.upc} matches ${ids.length} products — scan or type it to pick one.`);
+        })
+        .finally(() => setChecking((n) => n - 1));
+    }
+  };
+  const zone = (
+    view: BulkStudioDraft["files"][number]["view"],
+    title: string,
+    sub: string | null,
+    extra?: ReactNode,
+    after?: ReactNode,
+  ) => {
+    const mine = draft.files.filter((f) => f.view === view);
+    return (
+      <div className={zoneCls}>
+        <p className={ztitle}>{title}</p>
+        {sub ? <p className={zsub}>{sub}</p> : <div className="mb-2" />}
+        {extra}
+        {mine.length ? (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {mine.map((f, i) => (
+              <DraftThumb
+                key={`${f.file.name}-${f.file.lastModified}-${i}`}
+                file={f.file}
+                onRemove={() => onChange({ ...draft, files: draft.files.filter((x) => x !== f) })}
+              />
+            ))}
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <label className={chip}>
+            ＋ Upload
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+              add(view, e.target.files);
+              e.target.value = "";
+            }} />
+          </label>
+          <span className={`${chip} cursor-not-allowed opacity-50`} title="Scan the barcode first">
+            📱 Phone camera
+          </span>
         </div>
-        <div className={box}>
-          <p className={title}>Front</p>
-          <p className={sub}>The FRONT of the item (jeans, shirts, dresses…).</p>
+        {after ? <div className="mt-2">{after}</div> : null}
+      </div>
+    );
+  };
+  const backHasPhotos = draft.files.some((f) => f.view === "back");
+  return (
+    <div className="grid gap-2 px-3 pb-3 md:grid-cols-3">
+      {checking > 0 || tagNote ? (
+        <p className={`font-mono text-[0.72rem] md:col-span-3 ${tagNote ? "text-[var(--wms-status-warning-fg)]" : "text-[var(--wms-muted)]"}`}>
+          {checking > 0 ? "Checking the photos for a hang tag…" : tagNote}
+        </p>
+      ) : null}
+      {zone("general", "Accessories · General", "Accessories, flats, any view — works exactly as before.", null, zone("styling", "Style with", null))}
+      {zone("front", "Front", "The FRONT of the item (jeans, shirts, dresses…).")}
+      {zone(
+        "back",
+        "Back",
+        "The BACK of the item.",
+        backHasPhotos ? null : (
+          <label className="mb-2 flex cursor-pointer items-center gap-1.5 font-mono text-[0.66rem] text-[var(--wms-fg)] max-md:py-2">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5 cursor-pointer accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+              checked={draft.backIsPlain === true}
+              onChange={(e) => onChange({ ...draft, backIsPlain: e.target.checked })}
+            />
+            <span>
+              The back is <b>plain</b>
+            </span>
+          </label>
+        ),
+      )}
+      <div className="space-y-2 md:col-span-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <span className={label}>Model</span>
+            <select className={field} value={draft.modelId ?? models[0]?.model_id ?? ""} onChange={(e) => onChange({ ...draft, modelId: e.target.value })}>
+              {models.map((x) => (
+                <option key={x.model_id} value={x.model_id}>
+                  {x.name} ({x.gender})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <span className={label}>Item type</span>
+            <input className={field} value={draft.itemType ?? ""} onChange={(e) => onChange({ ...draft, itemType: e.target.value })} />
+          </div>
+          <div>
+            <span className={label}>Colour</span>
+            <select className={`${field} opacity-60`} disabled title="The product's colours open after the scan">
+              <option>after the scan</option>
+            </select>
+          </div>
         </div>
-        <div className={box}>
-          <p className={title}>Back</p>
-          <p className={sub}>The BACK of the item.</p>
-        </div>
-        <div className={`${box} md:col-span-2`}>
-          <p className={title}>Model · Item type · Colour</p>
-        </div>
-        <div className={box}>
-          <p className={title}>Style with</p>
+        <div>
+          <span className={label}>Item instruction (optional)</span>
+          <input
+            className={field}
+            placeholder="e.g. oversized cut, super skinny fit, high-waist…"
+            value={draft.instruction ?? ""}
+            onChange={(e) => onChange({ ...draft, instruction: e.target.value })}
+          />
         </div>
       </div>
     </div>
   );
+}
+
+type TagResult = { isTag: boolean; sku?: string; upc?: string; matches?: { matrixId: string; name: string; upc: string | null }[] };
+
+/** Smaller copy for the tag read (the printed code stays readable at this size). */
+async function fileToDataUrl(file: File, max = 1600): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k);
+  c.height = Math.round(bmp.height * k);
+  c.getContext("2d")?.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return c.toDataURL("image/jpeg", 0.88);
+}
+
+type BarcodeDetectorLike = { detect: (src: ImageBitmapSource) => Promise<{ rawValue: string }[]> };
+
+/** Is this photo a hang tag? The browser's barcode reader when it has one, else the server reads it. */
+async function readTag(file: File): Promise<TagResult | null> {
+  try {
+    const W = window as unknown as { BarcodeDetector?: new (o?: { formats: string[] }) => BarcodeDetectorLike };
+    let code = "";
+    if (typeof W.BarcodeDetector === "function") {
+      try {
+        const det = new W.BarcodeDetector({ formats: ["code_93", "code_128", "upc_a", "ean_13"] });
+        const bmp = await createImageBitmap(file);
+        const found = await det.detect(bmp);
+        bmp.close();
+        code = found[0]?.rawValue?.trim() ?? "";
+      } catch {
+        code = "";
+      }
+    }
+    const r = await fetch("/api/studio/read-tag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(code ? { code } : { image: await fileToDataUrl(file) }),
+    });
+    if (!r.ok) return null;
+    return (await r.json()) as TagResult;
+  } catch {
+    return null;
+  }
 }
