@@ -23,6 +23,7 @@ import { splitPanelToThreeByFour } from "@/lib/panelGeneration";
 
 type Run = {
   id: string;
+  addedAt?: string;
   matrixId: string;
   productName: string | null;
   status: string;
@@ -166,6 +167,8 @@ export function BulkUploadTab({ active }: { active: boolean }) {
   /** Gallery rank of every generated card, so several runs of one colour sort together. */
   const rankRef = useRef(new Map<string, number>());
   const seenRuns = useRef(new Set<string>());
+  /** Older finished runs of a colour that has a newer one — removed with their row. */
+  const older = useRef<Run[]>([]);
 
   const patchRow = useCallback((matrixId: string, fn: (r: Row) => Row) => {
     setRows((p) => p.map((r) => (r.matrixId === matrixId ? fn(r) : r)));
@@ -176,7 +179,18 @@ export function BulkUploadTab({ active }: { active: boolean }) {
     setLoading(true);
     try {
       const j = await getJson<{ items?: Run[] }>("/api/studio/batch");
-      const ready = (j.items ?? []).filter((x) => x.status === "ready" && x.ready.length > 0 && !seenRuns.current.has(x.id));
+      /* Every finished run belongs here until it is published or removed — also
+         the ones already opened in the Studio ("loaded"); of several runs of the
+         same product + colour only the newest shows. */
+      const finished = (j.items ?? []).filter((x) => (x.status === "ready" || x.status === "loaded") && x.ready.length > 0);
+      const newest = new Map<string, Run>();
+      for (const x of finished) {
+        const k = `${x.matrixId}|${(x.itemColour || "").trim().toUpperCase()}`;
+        const at = newest.get(k);
+        if (!at || String(x.addedAt ?? "") > String(at.addedAt ?? "")) newest.set(k, x);
+      }
+      older.current = finished.filter((x) => !Array.from(newest.values()).includes(x));
+      const ready = [...newest.values()].filter((x) => !seenRuns.current.has(x.id));
       if (!ready.length) return;
       ready.forEach((x) => seenRuns.current.add(x.id));
       const byMatrix = new Map<string, Run[]>();
@@ -427,6 +441,8 @@ export function BulkUploadTab({ active }: { active: boolean }) {
       const hard = (j.warnings ?? []).filter((w) => /^(stage|create)/i.test(w) || /FAILED/i.test(w));
       if (hard.length) throw new Error(hard.join("; "));
       for (const run of r.runs) await fetch(`/api/studio/batch/${run.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "published" }) });
+      for (const run of older.current.filter((x) => x.matrixId === r.matrixId))
+        await fetch(`/api/studio/batch/${run.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "dismissed" }) }).catch(() => {});
       patchRow(r.matrixId, (x) => ({ ...x, state: "published", approved: false, msg: `Published — ${items.length} picture${items.length === 1 ? "" : "s"} on Shopify.` }));
       return true;
     } catch (e) {
@@ -443,6 +459,13 @@ export function BulkUploadTab({ active }: { active: boolean }) {
     for (const r of list) if (await publishRow(r)) ok++;
     setBusy(null);
     setMsg({ text: `Published ${ok} of ${list.length} product${list.length === 1 ? "" : "s"}.`, tone: ok === list.length ? "ok" : "warn" });
+  };
+
+  /* "Remove from list": handled elsewhere — its runs (older ones too) leave this tab. */
+  const dismissRow = async (r: Row) => {
+    const runs = [...r.runs, ...older.current.filter((x) => x.matrixId === r.matrixId)];
+    for (const run of runs) await fetch(`/api/studio/batch/${run.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "dismissed" }) }).catch(() => {});
+    setRows((p) => p.filter((x) => x.matrixId !== r.matrixId));
   };
 
   const openOnline = async (matrixId: string) => {
@@ -539,6 +562,16 @@ export function BulkUploadTab({ active }: { active: boolean }) {
             {r.state === "ready" ? (
               <button type="button" disabled={busy !== null} onClick={() => void publishRow(r)} className={`${btn} border-[var(--wms-accent)] text-[var(--wms-accent)]`}>
                 ⤴ Publish
+              </button>
+            ) : null}
+            {r.state !== "publishing" ? (
+              <button
+                type="button"
+                title="Remove from this list (nothing is published; the pictures stay in Dropbox)"
+                onClick={() => void dismissRow(r)}
+                className={`${btn} border-[var(--wms-border)] text-[var(--wms-status-danger-fg)]`}
+              >
+                ✕
               </button>
             ) : null}
           </div>

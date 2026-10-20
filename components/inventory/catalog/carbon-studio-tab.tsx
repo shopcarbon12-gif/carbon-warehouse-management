@@ -547,6 +547,8 @@ function batchStatusText(b: BatchItemSummary): string {
       return `ready — ${b.ready.length} of ${b.panels.length} panel(s)`;
     case "loaded":
       return `loaded into the Studio (${b.ready.length} of ${b.panels.length} panel(s))`;
+    case "dismissed":
+      return `removed from Bulk Studio › Upload (${b.ready.length} of ${b.panels.length} panel(s))`;
     case "published":
       return `published to Shopify from Bulk Studio (${b.ready.length} of ${b.panels.length} panel(s))`;
     case "failed":

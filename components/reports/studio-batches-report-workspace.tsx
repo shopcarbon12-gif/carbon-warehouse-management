@@ -30,7 +30,7 @@ export function StudioBatchesReportWorkspace() {
   const items = data?.items ?? [];
   const rows = items.filter((item) => {
     const matches = `${item.productName ?? ""} ${item.itemColour ?? ""} ${item.modelName ?? ""} ${item.runTag}`.toLowerCase().includes(search.trim().toLowerCase());
-    const matchesStatus = status === "all" || (status === "active" ? ["queued", "preparing", "submitted"].includes(item.status) : status === "issues" ? Boolean(item.error || item.failed.length || item.status === "failed") : ["ready", "loaded", "published"].includes(item.status));
+    const matchesStatus = status === "all" || (status === "active" ? ["queued", "preparing", "submitted"].includes(item.status) : status === "issues" ? Boolean(item.error || item.failed.length || item.status === "failed") : ["ready", "loaded", "published", "dismissed"].includes(item.status));
     return matches && matchesStatus;
   });
   async function checkNow() {

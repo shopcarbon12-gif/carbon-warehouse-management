@@ -13,7 +13,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { cancelBatchItem, loadBatchItemImages, markBatchItemLoaded, markBatchItemPublished } from "@/lib/server/studio-batch";
+import { cancelBatchItem, loadBatchItemImages, markBatchItemDismissed, markBatchItemLoaded, markBatchItemPublished } from "@/lib/server/studio-batch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +47,7 @@ async function PATCH_handler(req: NextRequest, ctx: Ctx) {
   if ("error" in a) return a.error;
   const body = (await req.json().catch(() => ({}))) as { status?: string };
   if (body.status === "published") return NextResponse.json({ ok: await markBatchItemPublished(a.pool, a.session.tid, a.id) });
+  if (body.status === "dismissed") return NextResponse.json({ ok: await markBatchItemDismissed(a.pool, a.session.tid, a.id) });
   if (body.status !== "loaded") return NextResponse.json({ error: 'Only { status: "loaded" | "published" } is supported' }, { status: 400 });
   const ok = await markBatchItemLoaded(a.pool, a.session.tid, a.id);
   return NextResponse.json({ ok });
