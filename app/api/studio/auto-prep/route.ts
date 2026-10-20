@@ -150,14 +150,15 @@ async function POST_handler(req: Request) {
       const meta = await sharp(img).metadata();
       const h = meta.height ?? 0;
       const w = meta.width ?? 0;
-      /* One line of margin under the pick; then look again, and trim a little
-         more while any of the head is still there (a sliver of chin left behind
-         was the failure seen in testing). */
-      let cut = Math.min(LINES[line - 1] + 1 / 31 * REGION, REGION);
+      /* Cut at the pick, then look again and trim a little more while any of
+         the head is still there (a sliver of chin left behind was the failure
+         seen in testing; a fixed margin cut into turtleneck collars instead). */
+      let cut = Math.min(LINES[line - 1], REGION);
       const cropAt = (f: number) => sharp(img).extract({ left: 0, top: Math.round(f * h), width: w, height: h - Math.round(f * h) }).toBuffer();
       let out = await cropAt(cut);
-      for (let k = 0; k < 2 && (await headLeft(client, model, out).catch(() => false)); k++) {
-        cut = Math.min(cut + 0.025, REGION + 0.1);
+      /* Small steps, so a collar right under the chin is not cut into. */
+      for (let k = 0; k < 4 && (await headLeft(client, model, out).catch(() => false)); k++) {
+        cut = Math.min(cut + 0.012, REGION + 0.1);
         out = await cropAt(cut);
       }
       if (h && h * (1 - cut) > h * 0.35) {
