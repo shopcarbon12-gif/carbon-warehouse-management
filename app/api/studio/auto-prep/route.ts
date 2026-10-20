@@ -52,7 +52,7 @@ const PROMPT = `This is one photo for a clothing catalog, with numbered red line
    - "front": the front of the garment (worn on a person facing the camera, on a hanger or laid flat)
    - "back": the back of the garment (a person's back to the camera, or the garment turned over)
    - "general": anything else — a close-up of a detail, a label, fabric, a side view, an accessory, several items
-2. "headLine": if a PERSON'S HEAD (face, chin or hair) shows at the top of the photo, the number of the red line that runs just BELOW THE CHIN (on a back view: just below where the head meets the neck), so cutting there removes only the head and keeps the neck, the collar and the whole garment. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
+2. "headLine": if a PERSON'S HEAD (face, chin, beard or hair) shows at the top of the photo: the number of the FIRST red line that has NO part of the head below it — every bit of the face, the chin, the beard and the hair (on a back view: the hair and the back of the head, down to the hairline on the neck) lies ABOVE that line, and only neck, collar and garment lie below it. Cutting there removes the whole head and nothing else. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
 
 JSON only: {"view": "front"|"back"|"general", "headLine": number|null}`;
 
@@ -102,7 +102,9 @@ async function POST_handler(req: Request) {
     if (Number.isInteger(line) && line >= 1 && line <= LINES.length) {
       const meta = await sharp(img).metadata();
       const h = meta.height ?? 0;
-      const top = Math.round(LINES[line - 1] * h);
+      /* One line (2 %) of margin under the model's pick: a sliver of chin left behind
+         was the failure seen in testing, a sliver of neck taken is not a problem. */
+      const top = Math.round(Math.min(LINES[line - 1] + 0.02, 0.62) * h);
       if (h && top > 0 && h - top > h * 0.35) {
         img = await sharp(img).extract({ left: 0, top, width: meta.width ?? 0, height: h - top }).toBuffer();
         headCut = true;
