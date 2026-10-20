@@ -8,12 +8,14 @@ import { focusReading, sampleForFocus, type FocusVerdict } from "@/lib/size-grad
 /**
  * Carbon Studio phone-camera capture page (public, opened via QR on a phone).
  * The rear camera opens immediately at the highest resolution it offers; tap
- * the preview to focus; take up to 6 photos in a row, or pick them from the
+ * the preview to focus; take as many photos in a row as you need, or pick them from the
  * phone's gallery; then upload them all at once to the desktop's generation
  * session. Falls back to the native file picker if the live camera is
  * unavailable/denied.
  */
-const MAX_PHOTOS = 6;
+/* No small per-visit limit (owner 2026-10-20): photos upload one per request, so the
+   only ceiling is the session's own (MAX_IMAGES_PER_SESSION = 60 in image-handoff-store). */
+const MAX_PHOTOS = 60;
 type Shot = { id: string; dataUrl: string; blob: Blob; focus: FocusVerdict | null };
 
 /* ImageCapture (Chrome / Android) takes a full-sensor still, which is sharper
@@ -719,7 +721,7 @@ export default function ImageUploadPage() {
               ))}
             </div>
           ) : null}
-          <p style={{ fontSize: 12, opacity: 0.7 }}>{shots.length}/{MAX_PHOTOS} photos</p>
+          <p style={{ fontSize: 12, opacity: 0.7 }}>{shots.length} photo{shots.length === 1 ? "" : "s"}</p>
           {shots.some((s) => s.focus === "soft") ? (
             <p style={{ fontSize: 12, color: "#f87171", textAlign: "center", maxWidth: 360, margin: 0 }}>
               {purpose === "size-grading"
@@ -756,7 +758,7 @@ export default function ImageUploadPage() {
           {cam === "live" ? (
             <button style={btn} disabled={full || capturing || uploading} onClick={() => void capture()}>
               {full
-                ? "Max 6 reached"
+                ? `Max ${MAX_PHOTOS} reached`
                 : capturePhase === "focusing"
                   ? "Focusing…"
                   : capturePhase === "shooting"
@@ -765,7 +767,7 @@ export default function ImageUploadPage() {
             </button>
           ) : null}
           <button style={cam === "live" ? btnAlt : btn} disabled={full || uploading} onClick={() => cameraInputRef.current?.click()}>
-            {full ? "Max 6 reached" : cam === "live" ? "📸 Take photo with the camera app" : "📷 Take photo"}
+            {full ? `Max ${MAX_PHOTOS} reached` : cam === "live" ? "📸 Take photo with the camera app" : "📷 Take photo"}
           </button>
           <button style={btnAlt} disabled={full || uploading} onClick={() => galleryInputRef.current?.click()}>
             🖼 Upload from this phone

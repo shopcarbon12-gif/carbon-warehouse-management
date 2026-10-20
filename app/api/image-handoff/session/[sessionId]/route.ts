@@ -81,7 +81,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
   } catch {
     return NextResponse.json({ error: "Expected multipart/form-data" }, { status: 400 });
   }
-  // Accept one OR many files (phone burst of up to 6): all form entries named
+  // Accept one OR many files (the phone page sends one per request): all form entries named
   // "file". Falls back to the single legacy "file" field.
   const files = form.getAll("file").filter((f): f is File => f instanceof File);
   if (files.length === 0) return NextResponse.json({ error: "file required" }, { status: 400 });
