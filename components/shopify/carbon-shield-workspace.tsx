@@ -435,7 +435,7 @@ function Flagged({
           <table className="w-full min-w-[44rem] border-collapse">
             <thead className="sticky top-0 bg-[var(--wms-surface)]">
               <tr>
-                {["When (ET)", "Country", "Network", "Why", "Page", "Source", ""].map((h) => (
+                {["When (ET)", "Country", "Network", "Why", "Page", "Source"].map((h) => (
                   <th key={h} className={th}>
                     {h}
                   </th>
@@ -445,7 +445,28 @@ function Flagged({
             <tbody>
               {rows.map((r) => (
                 <tr key={`${r.visitorId ?? r.ip}-${r.at}`} className="border-t border-[var(--wms-border)]">
-                  <td className={`${td} whitespace-nowrap`}>{when(r.at)}</td>
+                  <td className={`${td} whitespace-nowrap`}>
+                    {when(r.at)}
+                    {/* The fix for a wrong flag sits right under the time — always in view. */}
+                    <span className="mt-1 flex flex-col items-start gap-1">
+                      {allowed(r) ? (
+                        <span className="font-mono text-[0.68rem] text-[var(--wms-status-success-fg)]">allowed</span>
+                      ) : (
+                        <>
+                          {r.ip ? (
+                            <button type="button" disabled={busy !== null} onClick={() => onAllow("ip", r.ip as string, r.org ?? undefined)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
+                              Allow IP
+                            </button>
+                          ) : null}
+                          {r.visitorId ? (
+                            <button type="button" disabled={busy !== null} onClick={() => onAllow("visitor", (r.visitorId as string).slice(0, 8), r.org ?? undefined)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
+                              Allow visitor
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </span>
+                  </td>
                   <td className={td}>{r.country ?? "—"}</td>
                   <td className={td}>
                     {r.org ?? "—"}
@@ -457,24 +478,6 @@ function Flagged({
                   <td className={td}>{r.reasons.map((x) => REASONS[x] ?? x).join(" · ")}</td>
                   <td className={`${td} max-w-[12rem] break-words font-mono text-[0.7rem]`}>{r.path ?? "—"}</td>
                   <td className={td}>{SOURCES[r.source ?? ""] ?? r.source ?? "—"}</td>
-                  <td className={`${td} min-w-[8.5rem] whitespace-nowrap text-right`}>
-                    {allowed(r) ? (
-                      <span className="font-mono text-[0.68rem] text-[var(--wms-status-success-fg)]">allowed</span>
-                    ) : (
-                      <span className="flex flex-col items-end gap-1">
-                        {r.ip ? (
-                          <button type="button" disabled={busy !== null} onClick={() => onAllow("ip", r.ip as string, r.org ?? undefined)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
-                            Allow IP
-                          </button>
-                        ) : null}
-                        {r.visitorId ? (
-                          <button type="button" disabled={busy !== null} onClick={() => onAllow("visitor", (r.visitorId as string).slice(0, 8), r.org ?? undefined)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
-                            Allow visitor
-                          </button>
-                        ) : null}
-                      </span>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
