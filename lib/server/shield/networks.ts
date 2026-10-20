@@ -102,7 +102,7 @@ export function claimedCrawler(ua: string): "google" | "bing" | "apple" | "meta"
   if (/Googlebot|AdsBot-Google|Mediapartners-Google|Storebot-Google|Google-InspectionTool|GoogleOther|Google-Extended|FeedFetcher-Google|Google-Read-Aloud|APIs-Google/i.test(ua)) return "google";
   if (/bingbot|BingPreview|msnbot|adidxbot/i.test(ua)) return "bing";
   if (/Applebot/i.test(ua)) return "apple";
-  if (/facebookexternalhit|Facebot|meta-externalagent|meta-externalfetcher/i.test(ua)) return "meta";
+  if (/facebookexternalhit|Facebot|meta-externalagent|meta-externalfetcher|meta-webindexer/i.test(ua)) return "meta";
   if (/Pinterestbot|Pinterest\/0\./i.test(ua)) return "pinterest";
   if (/DuckDuckBot|DuckAssistBot/i.test(ua)) return "duckduckgo";
   return null;

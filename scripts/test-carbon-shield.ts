@@ -185,6 +185,20 @@ test("Meta crawler only from Meta's network", () => {
   assert.equal(decide(input({ ua: "facebookexternalhit/1.1", asn: 32934, org: "Facebook, Inc." }), S, []).goodBot, "Meta crawler");
   assert.equal(decide(input({ ua: "facebookexternalhit/1.1", asn: 14061, org: "DigitalOcean, LLC" }), S, []).would, "block");
 });
+test("Meta's catalog indexer (headless Chrome on Meta's network) is allowed", () => {
+  const v = decide(
+    input({
+      ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 (compatible; meta-webindexer/1.1)",
+      webdriver: true,
+      asn: 32934,
+      org: "Facebook, Inc.",
+    }),
+    S,
+    [],
+  );
+  assert.equal(v.would, "allow");
+  assert.equal(v.goodBot, "Meta crawler");
+});
 test("headless browser / webdriver is automation", () => {
   assert.ok(decide(input({ webdriver: true }), S, []).reasons.includes("automation"));
   assert.ok(decide(input({ ua: "HeadlessChrome/126" }), S, []).reasons.includes("automation"));

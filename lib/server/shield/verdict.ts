@@ -83,7 +83,10 @@ function verifiedCrawler(v: VerdictInput): string | null {
     // Inside Google / Bing / Apple published ranges — trust it whatever the user agent.
     return v.goodBotRange;
   }
-  if (claim === "meta" && v.asn === 32934) return "Meta crawler";
+  /* Meta's own network: its crawlers (link previews, ad review, the catalog's
+     meta-webindexer) run a real Chrome there, so they look like automation —
+     blocking them breaks the catalog and gets ads rejected. */
+  if (v.asn === 32934) return "Meta crawler";
   // Pinterest and DuckDuckGo publish no IPv4 list we can check against; their
   // crawlers do not run the theme script anyway. Let them through.
   if (claim === "pinterest") return "Pinterest crawler";
