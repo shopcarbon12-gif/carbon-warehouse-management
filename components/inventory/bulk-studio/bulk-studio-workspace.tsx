@@ -57,10 +57,9 @@ function readItems(): Item[] {
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
     const list = raw ? (JSON.parse(raw) as Item[]) : [];
-    const ok = Array.isArray(list) ? list.filter((x) => x && typeof x.key === "string") : [];
-    return ok.length ? ok : [{ key: newKey(), matrixId: null }];
+    return Array.isArray(list) ? list.filter((x) => x && typeof x.key === "string") : [];
   } catch {
-    return [{ key: newKey(), matrixId: null }];
+    return [];
   }
 }
 
@@ -69,7 +68,7 @@ const btn =
 
 export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   const [tab, setTab] = useState<"studio" | "upload">("studio");
-  const [items, setItems] = useState<Item[]>([{ key: "init", matrixId: null }]);
+  const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     // localStorage is only readable after mount (no SSR mismatch).
@@ -230,8 +229,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   const addItem = () => setItems((p) => [...p, { key: newKey(), matrixId: null }]);
   const removeItem = (key: string) => {
     setItems((p) => {
-      const next = p.filter((x) => x.key !== key);
-      return next.length ? next : [{ key: newKey(), matrixId: null }];
+      return p.filter((x) => x.key !== key);
     });
     setStatuses((p) => {
       const n = { ...p };
@@ -241,6 +239,32 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   };
   const setMatrix = (key: string, matrixId: string | null) =>
     setItems((p) => p.map((x) => (x.key === key ? { ...x, matrixId } : x)));
+
+  /* Scan box (owner 2026-10-20): a scanned hang tag (or typed barcode / UPC)
+     opens that product's full Studio card straight away — into the first empty
+     item if there is one, otherwise as a new item at the end. */
+  const [scrollTo, setScrollTo] = useState<string | null>(null);
+  const addScanned = (matrixId: string) => {
+    const already = items.find((x) => x.matrixId === matrixId);
+    if (already) {
+      setBarMsg({ text: `That product is already item ${items.indexOf(already) + 1} — scrolled to it.`, tone: "info" });
+      setScrollTo(already.key);
+      return;
+    }
+    const empty = items.find((x) => !x.matrixId);
+    const key = empty?.key ?? newKey();
+    setItems((p) => (empty ? p.map((x) => (x.key === key ? { ...x, matrixId } : x)) : [...p, { key, matrixId }]));
+    setBarMsg(null);
+    setScrollTo(key);
+  };
+  useEffect(() => {
+    if (!scrollTo) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(`bulk-item-${scrollTo}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollTo(null);
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [scrollTo]);
 
   const toneCls = {
     info: "text-[var(--wms-muted)]",
@@ -282,6 +306,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
         <>
           {/* Top bar — sticks while the item list scrolls. */}
           <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 shadow-sm">
+            <div className="basis-full">
+              <ProductPicker scan takenIds={[]} onPick={addScanned} />
+            </div>
             <div className="flex min-w-[14rem] flex-1 flex-wrap gap-x-4 gap-y-1 font-mono text-[0.74rem] text-[var(--wms-muted)]">
               <span>
                 <b className="text-[var(--wms-fg)] tabular-nums">{picked.length}</b> items
@@ -456,7 +483,11 @@ function BulkItemCard({
   }
 
   return (
-    <section className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]" aria-label={`Item ${index + 1}`}>
+    <section
+      id={`bulk-item-${item.key}`}
+      className="scroll-mt-40 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]"
+      aria-label={`Item ${index + 1}`}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--wms-border)] px-3 py-2">
         <span className="font-mono text-[0.72rem] font-bold uppercase tracking-wide text-[var(--wms-muted)]">Item {index + 1}</span>
         {item.matrixId ? (
@@ -537,12 +568,34 @@ function BulkItemCard({
   );
 }
 
-function ProductPicker({ takenIds, onPick }: { takenIds: string[]; onPick: (matrixId: string) => void }) {
+function ProductPicker({
+  takenIds,
+  onPick,
+  scan = false,
+}: {
+  takenIds: string[];
+  onPick: (matrixId: string) => void;
+  /** The big scan box at the top: Enter looks the code up at once (a scanner
+      types faster than the search delay), one match opens it, and the box
+      clears for the next tag. */
+  scan?: boolean;
+}) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<SearchRow[]>([]);
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    /* Ready to scan on arrival — desktop only, so a phone keyboard never pops up. */
+    if (scan && window.matchMedia("(hover: hover)").matches) inputRef.current?.focus();
+  }, [scan]);
+  const search = useCallback(async (term: string, signal?: AbortSignal) => {
+    const r = await fetch(`/api/inventory/catalog/search?scope=matrix&q=${encodeURIComponent(term)}`, { signal, cache: "no-store" });
+    const j = (await r.json().catch(() => ({}))) as { rows?: SearchRow[] };
+    return Array.isArray(j.rows) ? j.rows : [];
+  }, []);
   useEffect(() => {
     const term = q.trim();
     if (!term) return;
@@ -550,9 +603,7 @@ function ProductPicker({ takenIds, onPick }: { takenIds: string[]; onPick: (matr
     const t = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await fetch(`/api/inventory/catalog/search?scope=matrix&q=${encodeURIComponent(term)}`, { signal: ctl.signal, cache: "no-store" });
-        const j = (await r.json().catch(() => ({}))) as { rows?: SearchRow[] };
-        setRows(Array.isArray(j.rows) ? j.rows : []);
+        setRows(await search(term, ctl.signal));
         setCursor(-1);
       } catch {
         /* typing again retries */
@@ -564,29 +615,73 @@ function ProductPicker({ takenIds, onPick }: { takenIds: string[]; onPick: (matr
       ctl.abort();
       window.clearTimeout(t);
     };
-  }, [q]);
+  }, [q, search]);
   const shown = q.trim() ? rows : [];
   const choose = (r: SearchRow | undefined) => {
     if (!r || takenIds.includes(r.matrix_id)) return;
     onPick(r.matrix_id);
     setOpen(false);
+    if (scan) {
+      setQ("");
+      setRows([]);
+      setNote(`Opened ${r.name}${r.upc ? ` (UPC ${r.upc})` : ""} — scan the next tag.`);
+      inputRef.current?.focus();
+    }
+  };
+  /* Enter in the scan box: look the code up now. A barcode or UPC that names
+     one product opens it; several (or a name) show the list to pick from. */
+  const submit = async () => {
+    const term = q.trim();
+    if (!term) return;
+    if (cursor >= 0 && shown[cursor]) return choose(shown[cursor]);
+    setLoading(true);
+    try {
+      const found = await search(term);
+      setRows(found);
+      setCursor(-1);
+      const exact = found.filter((r) => (r.upc ?? "").toUpperCase() === term.toUpperCase());
+      if (found.length === 1) choose(found[0]);
+      else if (exact.length === 1) choose(exact[0]);
+      else if (!found.length) setNote(`No product matches “${term}”.`);
+      else {
+        setNote("");
+        setOpen(true);
+      }
+    } catch {
+      setNote("Could not search — scan again.");
+    } finally {
+      setLoading(false);
+    }
   };
   return (
-    <div className="relative max-w-md">
+    <div className={`relative ${scan ? "w-full" : "max-w-md"}`}>
+      {scan ? (
+        <label htmlFor="bulk-scan" className="mb-1 block font-mono text-[0.7rem] uppercase tracking-wide text-[var(--wms-muted)]">
+          Scan a hang tag — or type a barcode, UPC or product name and press Enter
+        </label>
+      ) : null}
       <input
+        id={scan ? "bulk-scan" : undefined}
+        ref={inputRef}
         type="search"
         value={q}
         autoComplete="off"
         enterKeyHint="search"
-        placeholder="UPC or product name…"
-        aria-label="UPC or product name"
+        placeholder={scan ? "▮▮▯▮▯▮▮  scan the barcode…" : "UPC or product name…"}
+        aria-label={scan ? "Scan a hang tag barcode" : "UPC or product name"}
         onChange={(e) => {
           setQ(e.target.value);
+          setNote("");
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
         onBlur={() => window.setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => {
+          if (scan && e.key === "Enter") {
+            e.preventDefault();
+            void submit();
+            return;
+          }
           if (!open || !shown.length) return;
           if (e.key === "ArrowDown") {
             e.preventDefault();
@@ -599,8 +694,13 @@ function ProductPicker({ takenIds, onPick }: { takenIds: string[]; onPick: (matr
             choose(shown[Math.max(0, cursor)]);
           } else if (e.key === "Escape") setOpen(false);
         }}
-        className="w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
+        className={
+          scan
+            ? "w-full rounded-md border-2 border-[var(--wms-accent)]/60 bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-lg tracking-wide text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:min-h-12"
+            : "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
+        }
       />
+      {scan && note ? <p className="mt-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">{note}</p> : null}
       {open && q.trim() ? (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-lg">
           {loading && !shown.length ? <p className="px-3 py-2 font-mono text-xs text-[var(--wms-muted)]">Searching…</p> : null}

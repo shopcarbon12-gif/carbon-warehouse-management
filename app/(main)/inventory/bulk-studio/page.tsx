@@ -11,7 +11,7 @@ export default async function BulkStudioPage() {
   const canManage = session.role?.trim().toLowerCase() === "admin";
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-4">
+    <div className="flex w-full min-w-0 flex-col gap-4">
       <div className="border-b border-[var(--wms-border)] pb-3">
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Bulk Studio</h1>
         <p className="mt-1 max-w-3xl font-mono text-xs text-[var(--wms-muted)]">
