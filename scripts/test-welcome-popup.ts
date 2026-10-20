@@ -129,7 +129,7 @@ test("snippet: posts to the public route, honours off / preview / Shield blocks,
   assert.ok(s.includes("shop.metafields.carbon.welcome_popup.value"));
   assert.ok(s.includes("carbon_welcome=preview"));
   // Off (and not previewing) → nothing runs, so the footer form stays Shopify's own.
-  assert.ok(s.includes("if (!(preview || CFG.enabled) || navigator.webdriver) return;"));
+  assert.ok(s.includes("if (!preview && (!CFG.enabled || navigator.webdriver)) return;"));
   // Signed-in subscribers and visitors who already signed up / closed it never get the popup.
   assert.ok(s.includes("if (SUBSCRIBED || seen) popupAllowed = false;"));
   assert.ok(s.includes('st.s === "done"'));

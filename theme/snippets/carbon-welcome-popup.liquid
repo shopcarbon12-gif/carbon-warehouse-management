@@ -50,7 +50,7 @@
     var d = document, w = window, loc = w.location;
     var preview = /[?&]carbon_welcome=preview\b/.test(loc.search);
 
-    if (!(preview || CFG.enabled) || navigator.webdriver) return; // off: the footer form stays Shopify's own
+    if (!preview && (!CFG.enabled || navigator.webdriver)) return; // off: the footer form stays Shopify's own
     if (/(?:^|; )cs_v=b(?:;|$)/.test(d.cookie)) return; // Carbon Shield blocked this visitor
 
     function remember(v) { if (preview) return; try { localStorage.setItem(KEY, JSON.stringify(v)); sessionStorage.setItem(KEY, "1"); } catch (e) {} }
@@ -165,10 +165,14 @@
       if (!btn) return;
       btn.addEventListener("click", function () {
         var done = function () { btn.textContent = T.copied; setTimeout(function () { btn.textContent = T.copy; }, 2000); };
+        // Older / stricter browsers: select the code and copy it the old way.
+        var legacy = function () {
+          try { var r = d.createRange(); r.selectNodeContents(output); var s = w.getSelection(); s.removeAllRanges(); s.addRange(r); if (d.execCommand("copy")) done(); } catch (e) {}
+        };
         try {
-          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, function () {});
-          else { var r = d.createRange(); r.selectNodeContents(output); var s = w.getSelection(); s.removeAllRanges(); s.addRange(r); d.execCommand("copy"); done(); }
-        } catch (e) {}
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(done, legacy);
+          else legacy();
+        } catch (e) { legacy(); }
       });
     }
 
@@ -353,7 +357,7 @@
       ".cwf .cwf-head{margin:0 0 10px;font-family:" + FONT_HEAD + ";font-weight:" + FONT_HEAD_WEIGHT + ";font-size:20px;line-height:1.2;letter-spacing:.08em;text-transform:uppercase}" +
       ".cwf .cwf-code{display:flex;align-items:stretch;border:1px dashed currentColor;margin:0 0 10px}" +
       ".cwf .cwf-code output{flex:1;display:flex;align-items:center;padding:10px 12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;font-weight:700;letter-spacing:.08em;user-select:all;-webkit-user-select:all;word-break:break-all}" +
-      ".cwf .cwf-copy{min-width:84px;min-height:44px;border:0;border-left:1px dashed currentColor;background:transparent;color:inherit;font:inherit;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}" +
+      ".cwf .cwf-copy{position:static;display:flex;align-items:center;justify-content:center;flex:0 0 auto;width:auto;height:auto;min-width:84px;min-height:44px;margin:0;padding:0 14px;border:0;border-left:1px dashed currentColor;border-radius:0;background:transparent;color:inherit;font:inherit;font-size:12px;font-weight:700;line-height:1;letter-spacing:.1em;text-transform:uppercase;opacity:1;visibility:visible;cursor:pointer}" +
       ".cwf .cwf-msg{margin:0 0 4px;font-size:14px;line-height:1.5}.cwf .cwf-msg b{word-break:break-all}" +
       ".cwf :focus-visible{outline:2px solid currentColor;outline-offset:2px}";
 
@@ -409,8 +413,9 @@
             done.setAttribute("role", "status");
             done.innerHTML = '<p class="cwf-head">' + esc(o.head) + "</p>" + (o.code ? codeBox("cwf", o.code) : "") +
               o.msgs.map(function (m) { return '<p class="cwf-msg"' + (m.cart ? " data-cart" : "") + ">" + m.html + "</p>"; }).join("");
-            container.innerHTML = "";
-            container.appendChild(done);
+            // Outside the theme's .signup-container, whose button rules (an icon-only, absolutely placed arrow) would hide Copy.
+            container.style.display = "none";
+            container.insertAdjacentElement("afterend", done);
             wireCopy(done.querySelector(".cwf-copy"), o.code, done.querySelector(".cwf-code output"));
             if (o.code) applyToCart(o.code, done.querySelector("[data-cart]"), email);
           })
