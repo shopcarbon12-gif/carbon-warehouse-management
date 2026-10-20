@@ -8,7 +8,7 @@ import { withActivity } from "@/lib/server/activity-log";
  * Chrome on Windows has no BarcodeDetector, so the printed SKU is read by one
  * small vision call; the SKU then resolves to the product here.
  *
- * POST { image: "data:image/…;base64,…" }
+ * POST { image: "data:image/…;base64,…" } | { url: <a phone-camera photo in our storage> } | { code }
  * → { isTag: false } | { isTag: true, sku, upc, matches: [{ matrixId, name, upc }] }
  */
 import OpenAI from "openai";
@@ -20,6 +20,7 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { assertDataUrlSize, getImageFetchMaxBytes } from "@/lib/remoteImage";
+import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,12 +44,23 @@ async function POST_handler(req: NextRequest) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
-  const body = (await req.json().catch(() => ({}))) as { image?: unknown; code?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { image?: unknown; code?: unknown; url?: unknown };
   /* A code already decoded in the browser (BarcodeDetector) skips the vision call. */
   let sku = s(body.code).toUpperCase().replace(/\s+/g, "");
   let upc = "";
   if (!sku) {
-    const image = s(body.image);
+    let image = s(body.image);
+    /* A phone-camera photo is already in our storage: read it from there. */
+    const storagePath = !image && s(body.url) ? tryGetStoragePathFromUrl(s(body.url)) : null;
+    if (storagePath) {
+      try {
+        const { body: bytes0, contentType } = await downloadStorageObject(storagePath);
+        const bytes = Buffer.isBuffer(bytes0) ? bytes0 : Buffer.from(bytes0);
+        image = `data:${s(contentType) || "image/jpeg"};base64,${bytes.toString("base64")}`;
+      } catch {
+        return NextResponse.json({ error: "Could not read that photo" }, { status: 400 });
+      }
+    }
     if (!image.startsWith("data:image/")) return NextResponse.json({ error: "image required" }, { status: 400 });
     try {
       assertDataUrlSize(image, getImageFetchMaxBytes());

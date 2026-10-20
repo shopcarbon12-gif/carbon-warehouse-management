@@ -311,7 +311,8 @@ export type BulkStudioApi = {
 /** What was filled in on an empty Bulk Studio item before its barcode was
     scanned. Applied once, after the product's saved state has loaded. */
 export type BulkStudioDraft = {
-  files: { file: File; view: "general" | "front" | "back" | "styling" }[];
+  /** An uploaded file, or a photo the phone camera already stored (url). */
+  files: { file?: File; url?: string; view: "general" | "front" | "back" | "styling" }[];
   modelId?: string;
   itemType?: string;
   instruction?: string;
@@ -1474,9 +1475,13 @@ export function CarbonStudioTab({
     if (bulkDraft.itemType?.trim()) setItemType(bulkDraft.itemType.trim());
     if (bulkDraft.instruction?.trim()) setInstruction(bulkDraft.instruction.trim());
     if (bulkDraft.backIsPlain) setBackIsPlain(true);
+    const stored = bulkDraft.files
+      .filter((f) => f.url)
+      .map((f): ItemRef => ({ url: f.url as string, view: f.view, preview: previewFor(f.url as string) }));
+    if (stored.length) setItemRefs((prev) => [...prev, ...stored.filter((b) => !prev.some((p0) => p0.url === b.url))]);
     void (async () => {
       for (const view of ["general", "front", "back", "styling"] as const) {
-        const files = bulkDraft.files.filter((f) => f.view === view).map((f) => f.file);
+        const files = bulkDraft.files.filter((f) => f.view === view && f.file).map((f) => f.file as File);
         if (files.length) await uploadItems(files, view);
       }
       bulkDraftUsed?.();

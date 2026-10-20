@@ -743,9 +743,12 @@ function ProductPicker({
 }
 
 /** One picked photo, shown from the local file. */
-function DraftThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+function DraftThumb({ file, stored, onRemove }: { file?: File; stored?: string; onRemove: () => void }) {
+  const local = useMemo(() => (file ? URL.createObjectURL(file) : ""), [file]);
+  useEffect(() => () => {
+    if (local) URL.revokeObjectURL(local);
+  }, [local]);
+  const url = local || (stored ? (/r2\.cloudflarestorage\.com/i.test(stored) ? `/api/studio/ref-image?u=${encodeURIComponent(stored)}` : stored) : "");
   return (
     <div className="relative">
       {url ? (
@@ -801,11 +804,14 @@ function DraftForm({
     if (!files.length) return;
     const entries = files.map((file) => ({ file, view }));
     update((prev) => ({ ...prev, files: [...prev.files, ...entries] }));
-    /* Every photo is checked for a hang tag. A tag naming one product loads it
-       (exactly as scanning it would) and its photo is taken off the item. */
+    check(entries);
+  };
+  /* Every photo is checked for a hang tag. A tag naming one product loads it
+     (exactly as scanning it would) and its photo is taken off the item. */
+  const check = (entries: BulkStudioDraft["files"]) => {
     for (const entry of entries) {
       setChecking((n) => n + 1);
-      void readTag(entry.file)
+      void readTag(entry)
         .then((res) => {
           if (!res || !res.isTag) return;
           update((prev) => ({ ...prev, files: prev.files.filter((x) => x !== entry) }));
@@ -837,8 +843,9 @@ function DraftForm({
           <div className="mb-2 flex flex-wrap gap-2">
             {mine.map((f, i) => (
               <DraftThumb
-                key={`${f.file.name}-${f.file.lastModified}-${i}`}
+                key={`${f.url ?? `${f.file?.name}-${f.file?.lastModified}`}-${i}`}
                 file={f.file}
+                stored={f.url}
                 onRemove={() => onChange({ ...draft, files: draft.files.filter((x) => x !== f) })}
               />
             ))}
@@ -852,17 +859,86 @@ function DraftForm({
               e.target.value = "";
             }} />
           </label>
-          <span className={`${chip} cursor-not-allowed opacity-50`} title="Scan the barcode first">
+          <button type="button" className={chip} onClick={() => void startPhone(view)} title="Take the photos with your phone (scan the QR code)">
             📱 Phone camera
-          </span>
+          </button>
         </div>
         {after ? <div className="mt-2">{after}</div> : null}
       </div>
     );
   };
+  const [phone, setPhone] = useState<{ sessionId: string; qr: string; scanUrl: string } | null>(null);
+  const [phoneErr, setPhoneErr] = useState("");
+  const phoneView = useRef<BulkStudioDraft["files"][number]["view"]>("general");
+  const phoneSeen = useRef<Set<string>>(new Set());
+  const startPhone = async (view: BulkStudioDraft["files"][number]["view"]) => {
+    phoneView.current = view;
+    setPhoneErr("");
+    if (phone) return; // already open — the click only changed where photos land
+    try {
+      const r = await fetch("/api/image-handoff/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId: null }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { sessionId?: string; qrCodeUrl?: string; scanUrl?: string; error?: string };
+      if (!r.ok || !j.sessionId || !j.qrCodeUrl) throw new Error(j.error || "Could not start the phone camera.");
+      phoneSeen.current = new Set();
+      setPhone({ sessionId: j.sessionId, qr: j.qrCodeUrl, scanUrl: j.scanUrl || "" });
+    } catch (e) {
+      setPhoneErr(e instanceof Error ? e.message : "Could not start the phone camera.");
+    }
+  };
+  const pollPhone = useCallback(
+    async (sessionId: string, all = false) => {
+      const r = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}${all ? "?all=1" : ""}`, { cache: "no-store" });
+      if (r.status === 404) return "gone" as const;
+      const j = (await r.json().catch(() => ({}))) as { images?: { imageUrl: string }[] };
+      const fresh = (j.images ?? []).map((x) => x.imageUrl).filter((u) => u && !phoneSeen.current.has(u));
+      if (!fresh.length) return "ok" as const;
+      fresh.forEach((u) => phoneSeen.current.add(u));
+      const entries = fresh.map((url) => ({ url, view: phoneView.current }));
+      update((prev) => ({ ...prev, files: [...prev.files, ...entries] }));
+      check(entries);
+      return "ok" as const;
+    },
+    // check/update are recreated each render; the latest ones are always the right ones here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  useEffect(() => {
+    if (!phone) return;
+    const t = window.setInterval(() => {
+      void pollPhone(phone.sessionId).then((st) => {
+        if (st === "gone") setPhone(null);
+      });
+    }, 2500);
+    return () => window.clearInterval(t);
+  }, [phone, pollPhone]);
   const backHasPhotos = draft.files.some((f) => f.view === "back");
   return (
     <div className="grid gap-2 px-3 pb-3 md:grid-cols-3">
+      {phone ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-surface)] p-3 md:col-span-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- remote QR image */}
+          <img src={phone.qr} alt="QR code for the phone camera" className="h-32 w-32 rounded bg-white p-1" />
+          <div className="min-w-0 flex-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+            <p className="text-[var(--wms-fg)]">Scan with your phone and take the photos — a tag photo loads the product.</p>
+            {phone.scanUrl ? <p className="mt-1 break-all">{phone.scanUrl}</p> : null}
+          </div>
+          <button
+            type="button"
+            className={chip}
+            onClick={() => {
+              const s0 = phone;
+              void pollPhone(s0.sessionId, true).finally(() => setPhone(null));
+            }}
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
+      {phoneErr ? <p className="font-mono text-[0.72rem] text-[var(--wms-status-danger-fg)] md:col-span-3">{phoneErr}</p> : null}
       {checking > 0 || tagNote ? (
         <p className={`font-mono text-[0.72rem] md:col-span-3 ${tagNote ? "text-[var(--wms-status-warning-fg)]" : "text-[var(--wms-muted)]"}`}>
           {checking > 0 ? "Checking the photos for a hang tag…" : tagNote}
@@ -942,8 +1018,18 @@ async function fileToDataUrl(file: File, max = 1600): Promise<string> {
 type BarcodeDetectorLike = { detect: (src: ImageBitmapSource) => Promise<{ rawValue: string }[]> };
 
 /** Is this photo a hang tag? The browser's barcode reader when it has one, else the server reads it. */
-async function readTag(file: File): Promise<TagResult | null> {
+async function readTag(entry: { file?: File; url?: string }): Promise<TagResult | null> {
   try {
+    if (!entry.file) {
+      if (!entry.url) return null;
+      const r0 = await fetch("/api/studio/read-tag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: entry.url }),
+      });
+      return r0.ok ? ((await r0.json()) as TagResult) : null;
+    }
+    const file = entry.file;
     const W = window as unknown as { BarcodeDetector?: new (o?: { formats: string[] }) => BarcodeDetectorLike };
     let code = "";
     if (typeof W.BarcodeDetector === "function") {
