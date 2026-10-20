@@ -27,7 +27,22 @@
 
   var busy = false;
   var cache = {};      /* handle -> partner handles */
+  var byColour = {};   /* handle -> true when each colour pairs only with that colour (carbon_set.by_colour) */
+  var colours = {};    /* handle -> { COLOUR: true } for every colour the product is made in */
   var notice = null;
+
+  function norm(v) { return String(v == null ? "" : v).trim().toUpperCase(); }
+  function lineColour(i) {
+    var o = i.options_with_values || [];
+    for (var k = 0; k < o.length; k += 1) {
+      var n = norm(o[k].name);
+      if (n === "COLOR" || n === "COLOUR") return norm(o[k].value);
+    }
+    return "";
+  }
+  /* The unit a set is counted in: the product, or for a by-colour product the
+     product in one colour — a blue blazer and a green blazer are two sets. */
+  function unitOf(i) { return byColour[i.handle] ? i.handle + "|" + lineColour(i) : i.handle; }
 
   function get(url) {
     return fetch(url, { credentials: "same-origin" })
@@ -46,7 +61,11 @@
         var m = html.match(/data-carbon-set-config[^>]*>([\s\S]*?)<\/script>/);
         var list = [];
         if (m) {
-          try { list = (JSON.parse(m[1]).partners || []).filter(Boolean); } catch (e) { list = []; }
+          try {
+            var c = JSON.parse(m[1]);
+            list = (c.partners || []).filter(Boolean);
+            if (c.byColour) byColour[handle] = true;
+          } catch (e) { list = []; }
         }
         cache[handle] = list;
         return list;
@@ -75,8 +94,17 @@
            real partner for the rest of the page's life. Treating the unknown
            as "not a partner" is the safe direction either way: it can only make
            the guard remove less, never empty a cart it should have left. */
-        if (r.ok) alive[handle] = true;
-        return r.ok;
+        if (!r.ok) return false;
+        return r.json().then(function (p) {
+          /* Which colours it is made in, for by-colour sets. */
+          var names = (p.options || []).map(function (o) { return norm(typeof o === "string" ? o : o.name); });
+          var at = names.indexOf("COLOR") >= 0 ? names.indexOf("COLOR") : names.indexOf("COLOUR");
+          var set = {};
+          (p.variants || []).forEach(function (v) { if (at >= 0) set[norm((v.options || [])[at])] = true; });
+          colours[handle] = set;
+          alive[handle] = true;
+          return true;
+        }, function () { return false; });
       })
       .catch(function () { return false; });
   }
@@ -142,7 +170,24 @@
             if (!setOf[h].length) delete setOf[h];   /* no real partners left */
           });
           if (!Object.keys(setOf).length) return;
-          return balance(cart, setOf);
+
+          /* By-colour products are judged one colour at a time: a blue blazer's
+             set is the partners made in blue, keyed "handle|BLUE" on both sides.
+             A partner not made in that colour is not part of that set. */
+          var units = {};
+          Object.keys(setOf).forEach(function (h) {
+            if (!byColour[h]) { units[h] = setOf[h]; return; }
+            cart.items.forEach(function (i) {
+              if (i.handle !== h) return;
+              var c = lineColour(i);
+              var list = setOf[h]
+                .filter(function (pp) { return colours[pp] && colours[pp][c]; })
+                .map(function (pp) { return pp + "|" + c; });
+              if (list.length) units[h + "|" + c] = list;
+            });
+          });
+          if (!Object.keys(units).length) return;
+          return balance(cart, units);
         });
       });
     });
@@ -175,7 +220,7 @@
         var qty = {};
         cart.items.forEach(function (i) {
           if (isExempt(i)) return;
-          qty[i.handle] = (qty[i.handle] || 0) + i.quantity;
+          qty[unitOf(i)] = (qty[unitOf(i)] || 0) + i.quantity;
         });
 
         var updates = {};
@@ -204,7 +249,7 @@
              */
             group.forEach(function (g) {
               cart.items.forEach(function (i) {
-                if (i.handle === g && !isExempt(i)) updates[i.key] = 0;
+                if (unitOf(i) === g && !isExempt(i)) updates[i.key] = 0;
               });
             });
             removed = h;
@@ -219,7 +264,7 @@
             group.forEach(function (ph) {
               var seen = 0;
               cart.items.forEach(function (i) {
-                if (i.handle !== ph || isExempt(i)) return;
+                if (unitOf(i) !== ph || isExempt(i)) return;
                 var want = Math.max(0, Math.min(i.quantity, min - seen));
                 seen += want;
                 if (want !== i.quantity) updates[i.key] = want;

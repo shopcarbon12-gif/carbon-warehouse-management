@@ -32,6 +32,12 @@
   {%- endcomment -%}
   {% assign carbon_set_partners = product.metafields.carbon_set.partners.value %}
   {% assign carbon_set_surplus = product.metafields.carbon_set.surplus.value %}
+  {%- comment -%}
+    by_colour: each colour of this product pairs only with the partner that is
+    made in that colour (Vera: blue blazer ↔ blue shorts, green blazer ↔ green
+    shorts, and the two shorts are never each other's partner). Off by default.
+  {%- endcomment -%}
+  {% assign carbon_set_by_colour = product.metafields.carbon_set.by_colour.value | default: false %}
 {% endif %}
 {% if carbon_set_partners != blank %}
   <script type="application/json" data-carbon-set-config>
@@ -39,6 +45,7 @@
       "product": {{ product.handle | json }},
       "partners": {{ carbon_set_partners | json }},
       "surplus": {{ carbon_set_surplus | json }},
+      "byColour": {{ carbon_set_by_colour | json }},
       "currency": {{ cart.currency.symbol | default: '$' | json }}
     }
   </script>
@@ -790,7 +797,15 @@
     var colour = optOf(mine, "COLOR") || optOf(mine, "COLOUR");
     var size = optOf(mine, "SIZE");
 
-    return partners.map(function (p) {
+    /* by_colour: a partner not made in this colour at all is not part of this
+       colour's set (sold-out is different — that still shows as unavailable). */
+    var pool = !cfg.byColour ? partners : partners.filter(function (p) {
+      return (p.variants || []).some(function (v) {
+        return (optOf(v, "COLOR") || optOf(v, "COLOUR")) === colour;
+      });
+    });
+
+    return pool.map(function (p) {
       var avail = (p.variants || []).filter(function (v) { return v.available; });
       var sameColour = avail.filter(function (v) {
         var c = optOf(v, "COLOR") || optOf(v, "COLOUR");

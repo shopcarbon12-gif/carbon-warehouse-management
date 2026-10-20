@@ -26,6 +26,9 @@ async function live(path) {
   return { ok: false, text: "" };
 }
 
+/* Products whose page config is treated as carbon_set.by_colour = true, before
+   that metafield is live (the test runs the local snippet, not the live one). */
+let BY_COLOUR = new Set();
 async function run(name, lines, expect) {
   let updates = null;
   const noop = { setAttribute(){}, style:{cssText:""}, textContent:"", insertBefore(){}, querySelectorAll:()=>[], firstChild:null };
@@ -37,7 +40,13 @@ async function run(name, lines, expect) {
     const u = String(url);
     if (u === "/cart.js") return { ok:true, json: async () => ({ items: lines, item_count: lines.length }) };
     if (u === "/cart/update.js") { updates = JSON.parse(opt.body).updates; return { ok:true, json: async () => ({}) }; }
-    if (u.startsWith("/products/")) { const r = await live(u); return { ok:r.ok, text: async () => r.text, json: async () => JSON.parse(r.text || "{}") }; }
+    if (u.startsWith("/products/")) {
+      const r = await live(u);
+      let text = r.text;
+      const h = u.slice("/products/".length);
+      if (BY_COLOUR.has(h) && !text.includes('"byColour": true')) text = text.replace('"partners":', '"byColour": true, "partners":');
+      return { ok:r.ok, text: async () => text, json: async () => JSON.parse(r.text || "{}") };
+    }
     return { ok:false };
   };
   global.window.fetch = global.fetch;
@@ -50,6 +59,10 @@ async function run(name, lines, expect) {
   return ok;
 }
 const L = (h, q = 1, props = {}) => ({ key: h, handle: h, quantity: q, properties: props });
+/* A line in one colour, for by-colour sets: the key names the colour so two
+   colours of one product are two lines. */
+const C = (h, colour, q = 1) => ({ key: `${h}:${colour}`, handle: h, quantity: q, properties: {},
+  options_with_values: [{ name: "Color", value: colour }, { name: "Size", value: "38" }] });
 
 console.log("\nREAL partner data from shopcarbon.com\n");
 const res = [];
@@ -67,5 +80,21 @@ res.push(await run("complete set + unrelated product → nothing removed",
   [L("lily-top-set"), L("lily-jacket-set"), L("lily-pants-set"), L("maci-legging")], []));
 res.push(await run("solo-tagged piece is left alone",
   [L("alia-crop-set", 1, { _carbon_set_solo:"1" })], []));
+
+console.log("\nVera (by colour: blue blazer ↔ blue shorts, green blazer ↔ green shorts)\n");
+BY_COLOUR = new Set(["vera-blazer-set", "vera-shorts", "vera-shorts-set"]);
+res.push(await run("blue blazer + blue shorts survives (the green shorts are not part of it)",
+  [C("vera-blazer-set", "BLUE"), C("vera-shorts", "BLUE")], []));
+res.push(await run("green blazer + green shorts survives",
+  [C("vera-blazer-set", "GREEN"), C("vera-shorts-set", "GREEN")], []));
+res.push(await run("both colours, both complete → nothing removed",
+  [C("vera-blazer-set", "BLUE"), C("vera-shorts", "BLUE"), C("vera-blazer-set", "GREEN"), C("vera-shorts-set", "GREEN")], []));
+res.push(await run("blue blazer alone → it goes",
+  [C("vera-blazer-set", "BLUE")], ["vera-blazer-set:BLUE"]));
+res.push(await run("blue blazer + GREEN shorts is not a set → both go",
+  [C("vera-blazer-set", "BLUE"), C("vera-shorts-set", "GREEN")], ["vera-blazer-set:BLUE", "vera-shorts-set:GREEN"]));
+res.push(await run("blue + green complete, green shorts removed → only the green blazer goes",
+  [C("vera-blazer-set", "BLUE"), C("vera-shorts", "BLUE"), C("vera-blazer-set", "GREEN")], ["vera-blazer-set:GREEN"]));
+BY_COLOUR = new Set();
 console.log(`\n${res.filter(Boolean).length}/${res.length} passed`);
 process.exit(res.every(Boolean) ? 0 : 1);

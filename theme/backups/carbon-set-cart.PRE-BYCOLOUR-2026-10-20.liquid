@@ -1,0 +1,1173 @@
+{% comment %}
+  Matching sets — buy the pieces together.
+
+  A product flagged "Set" in the WMS carries a carbon_set.partners metafield
+  listing the handles of the other pieces. This pairs them at the cart:
+
+    • picking a colour + size resolves the partner's matching variant
+    • adding to cart adds every piece in one request
+    • the cart keeps the pieces in lockstep, so a customer cannot end up
+      checking out with half an outfit
+
+  When the exact size is not available in the partner, the shopper is asked to
+  pick from the sizes that ARE available in the colour they chose, rather than
+  being blocked — a set that is missing an M should still sell as S+L if that is
+  what the customer wants.
+
+  Partner data comes from Shopify's own /products/<handle>.js, so stock and
+  variants are read live rather than from a snapshot that can go stale.
+{% endcomment %}
+
+{%- comment -%}
+  Rendered from layout/theme.liquid alongside the other carbon-* snippets, so it
+  is guarded here rather than at the call site: `product` only exists on a
+  product template, and reading its metafields anywhere else is an error.
+{%- endcomment -%}
+{% assign carbon_set_partners = blank %}
+{% if template.name == 'product' and product != blank %}
+  {%- comment -%}
+    .value, not the metafield itself: a list metafield is an object and Liquid's
+    json filter refuses it ("json not allowed for this object"). .value is the
+    plain array of handles.
+  {%- endcomment -%}
+  {% assign carbon_set_partners = product.metafields.carbon_set.partners.value %}
+  {% assign carbon_set_surplus = product.metafields.carbon_set.surplus.value %}
+{% endif %}
+{% if carbon_set_partners != blank %}
+  <script type="application/json" data-carbon-set-config>
+    {
+      "product": {{ product.handle | json }},
+      "partners": {{ carbon_set_partners | json }},
+      "surplus": {{ carbon_set_surplus | json }},
+      "currency": {{ cart.currency.symbol | default: '$' | json }}
+    }
+  </script>
+{% endif %}
+
+<style>
+  .carbon-set-pair {
+    /* Full width of the buy column, so it lines up with the option selects and
+       the Add to Cart button rather than floating at some inner width. */
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 14px 0;
+    padding: 12px 14px;
+    border: 1px solid #d7e3f4;
+    border-radius: 8px;
+    background: #f2f8ff;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .carbon-set-pair__me { font-weight: 600; }
+  /* Product names read in capitals here, matching the panel heading. Done in CSS
+     rather than by upper-casing the strings so the underlying title is untouched
+     — it still goes to the cart, and is still what a screen reader announces. */
+  .carbon-set-pair__name { text-transform: uppercase; letter-spacing: .02em; }
+  .carbon-set-pair__link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .carbon-set-pair__link:hover { text-decoration-thickness: 2px; }
+  .carbon-set-pair__sub { color: #4a5568; font-size: 0.85rem; }
+  .carbon-set-pair__hr { border: 0; border-top: 1px solid #d7e3f4; margin: 10px 0; }
+  .carbon-set-pair[hidden] { display: none; }
+  .carbon-set-pair__title {
+    font-weight: 700;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .carbon-set-pair__row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .carbon-set-pair__row img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+  .carbon-set-pair__sizes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .carbon-set-pair__size {
+    border: 1px solid #9db8dc; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  }
+  /* Same black-on-hover as every other control in the buy column, so a size
+     chip reacts to the pointer the way the buttons beside it do. */
+  .carbon-set-pair__size:hover,
+  .carbon-set-pair__size:focus-visible {
+    background: #151515; border-color: #151515; color: #fff;
+  }
+  .carbon-set-pair__size[aria-pressed="true"] { background: #0a58ca; border-color: #0a58ca; color: #fff; }
+  /* The chosen size stays blue when hovered. Turning it black would read as
+     "not selected any more" at the exact moment the shopper points at it. */
+  .carbon-set-pair__size[aria-pressed="true"]:hover,
+  .carbon-set-pair__size[aria-pressed="true"]:focus-visible {
+    background: #084298; border-color: #084298; color: #fff;
+  }
+  .carbon-set-pair--warn { border-color: #e6c98a; background: #fff8e8; }
+  /* Set apart from the size chips: it is a different decision, not another size. */
+  .carbon-set-pair__solo {
+    border: 1px solid #151515; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.85rem;
+    margin-left: auto;
+  }
+  /* Sits at the right end of the row it undoes, so it reads as belonging to
+     that choice rather than to the panel as a whole. */
+  .carbon-set-pair__change {
+    margin-left: auto; flex: 0 0 auto;
+    border: 1px solid #9db8dc; background: #fff; border-radius: 4px;
+    padding: 5px 12px; cursor: pointer; font: inherit; font-size: 0.82rem;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease;
+  }
+  .carbon-set-pair__change:hover,
+  .carbon-set-pair__change:focus-visible { background: #151515; border-color: #151515; color: #fff; }
+  .carbon-set-pair__solo {
+    transition: background-color .2s ease, color .2s ease;
+  }
+
+  /* ---------- Quick view ----------
+     Shopify sends X-Frame-Options: DENY and frame-ancestors 'none' on
+     storefront pages, so an iframe of the product is not an option even on the
+     same origin. This is built from the product JSON the panel already fetched,
+     which also means opening it costs no extra request. */
+  .carbon-qv[hidden] { display: none; }
+  .carbon-qv {
+    position: fixed; inset: 0; z-index: 2147483000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; box-sizing: border-box;
+  }
+  .carbon-qv__scrim { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
+  .carbon-qv__box {
+    position: relative; background: #fff; border-radius: 12px;
+    width: min(1080px, 100%); max-height: min(92vh, 900px);
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 70px rgba(0,0,0,.4);
+  }
+  .carbon-qv__head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 20px; border-bottom: 1px solid #ececec; flex: 0 0 auto;
+  }
+  .carbon-qv__title {
+    margin: 0; font-size: 1.05rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .carbon-qv__x {
+    margin-left: auto; border: 0; background: transparent; cursor: pointer;
+    font-size: 1.6rem; line-height: 1; padding: 4px 10px; border-radius: 6px;
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .carbon-qv__x:hover, .carbon-qv__x:focus-visible { background: #151515; color: #fff; }
+
+  /* Two columns of comparable weight: the photo is why the dialog exists, and
+     the copy needs enough width not to read as a narrow gutter beside it. */
+  .carbon-qv__body {
+    display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 28px; padding: 20px 22px 24px; overflow: auto;
+  }
+  @media (max-width: 780px) {
+    .carbon-qv__body { grid-template-columns: 1fr; gap: 18px; padding: 16px; }
+  }
+
+  .carbon-qv__stage { position: relative; }
+  .carbon-qv__main {
+    /* A bounded height rather than an aspect ratio: at 4/5 the image grew with
+       the dialog and pushed the thumbnail strip past the bottom of the scroll
+       area, where it was clipped. */
+    /* 44vh, not 52: at the taller setting the second row of thumbnails fell
+       below the visible part of the dialog on a 820px-high window, which is the
+       same "there are only eight photos" impression the scrolling row gave. */
+    width: 100%; height: clamp(220px, 44vh, 460px);
+    /* contain, not cover: these are full-length studio shots and cropping them
+       to a box cuts off the garment the shopper came to look at. */
+    object-fit: contain; background: #f6f6f6;
+    border-radius: 8px; display: block;
+  }
+  .carbon-qv__nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1px solid #e0e0e0; background: rgba(255,255,255,.94);
+    cursor: pointer; font-size: 1.1rem; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.14);
+    transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+  }
+  .carbon-qv__nav:hover, .carbon-qv__nav:focus-visible {
+    background: #151515; border-color: #151515; color: #fff;
+  }
+  .carbon-qv__nav--prev { left: 10px; }
+  .carbon-qv__nav--next { right: 10px; }
+  .carbon-qv__count {
+    position: absolute; right: 10px; bottom: 10px;
+    background: rgba(0,0,0,.62); color: #fff; border-radius: 999px;
+    font-size: .72rem; padding: 3px 9px; letter-spacing: .03em;
+  }
+
+  /* Every thumbnail on screen at once. A single scrolling row hid the last few
+     off the right edge, which reads as "that is all the photos there are" —
+     the gallery wraps instead, and the image above is height-bounded so the
+     extra row has somewhere to go. */
+  .carbon-qv__thumbs {
+    display: flex; gap: 8px; margin-top: 10px;
+    flex-wrap: wrap; padding-bottom: 2px;
+  }
+  .carbon-qv__thumb {
+    width: 56px; height: 70px; object-fit: cover; border-radius: 6px;
+    border: 1px solid #e2e2e2; cursor: pointer; padding: 0; background: #fff;
+    flex: 0 0 auto; transition: border-color .15s ease, opacity .15s ease;
+    opacity: .72;
+  }
+  .carbon-qv__thumb:hover { opacity: 1; border-color: #999; }
+  .carbon-qv__thumb[aria-current="true"] {
+    border-color: #151515; border-width: 2px; opacity: 1;
+  }
+
+  .carbon-qv__info { min-width: 0; font-size: .95rem; line-height: 1.65; }
+  .carbon-qv__price { font-weight: 700; font-size: 1.5rem; margin: 0 0 8px; }
+  .carbon-qv__variant {
+    display: inline-block; margin: 0 0 14px;
+    border: 1px solid #ddd; border-radius: 999px; padding: 4px 12px;
+    font-size: .82rem; letter-spacing: .04em; color: #333;
+  }
+  .carbon-qv__desc { color: #3a3a3a; }
+  .carbon-qv__desc img { max-width: 100%; height: auto; }
+  .carbon-qv__desc p:first-child { margin-top: 0; }
+
+  .carbon-qv__foot {
+    padding: 14px 22px; border-top: 1px solid #ececec; flex: 0 0 auto;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  }
+  .carbon-qv__full {
+    border: 1px solid #151515; background: #151515; color: #fff;
+    border-radius: 6px; padding: 10px 20px; font: inherit; font-size: .88rem;
+    text-decoration: none; display: inline-block; letter-spacing: .02em;
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .carbon-qv__full:hover, .carbon-qv__full:focus-visible { background: #fff; color: #151515; }
+  .carbon-qv__note { color: #5a6472; font-size: .85rem; }
+</style>
+
+<script>
+(function () {
+  "use strict";
+
+  var cfgEl = document.querySelector("[data-carbon-set-config]");
+  if (!cfgEl) return;
+
+  var cfg;
+  try { cfg = JSON.parse(cfgEl.textContent); } catch (e) { return; }
+  var handles = (cfg.partners || []).filter(Boolean);
+  if (!handles.length) return;
+  /* Partner units that are spare — not needed to complete their own same-size
+     pair. Only these may be offered as a substitute size. */
+  var surplus = cfg.surplus || {};
+  var CUR = cfg.currency || "$";
+
+  /* Shopper-facing words in the store's languages. The pairing logic keeps
+     reading the English product JSON (option names like SIZE / COLOR are
+     matched there); only what is DISPLAYED comes from the shopper's language. */
+  var LANG = String((window.Shopify && window.Shopify.locale) || "en").toLowerCase().slice(0, 2);
+  var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
+  var WORDS = {
+    es: {
+      together: "Conjunto completo — se añaden juntos",
+      thisItem: "Este artículo",
+      viewing: " — el artículo que estás viendo",
+      single: "Se vende como artículo individual",
+      noSpare: "No hay ",
+      availIn: " disponible en ",
+      thisColour: "este color",
+      reserved: " — el stock restante está reservado para completar otros conjuntos. Esta pieza se añadirá <strong>sola</strong>, a su propio precio.",
+      chooseSize: "Elige una talla para la pieza a juego",
+      notInSize: " no está disponible en tu talla. Estas tallas están disponibles en ",
+      orAlone: ", o puedes comprar esta pieza sola.",
+      buyOnly: "Comprar solo esta pieza",
+      autoAdded: " — se añade a tu carrito automáticamente",
+      change: "Cambiar",
+      pickSize: " \u2022 elige una talla",
+      full: "Ver todos los detalles",
+      atCheckout: "Se añade con tu conjunto al pagar.",
+      oos: " — agotado",
+      close: "Cerrar", prevImg: "Imagen anterior", nextImg: "Imagen siguiente"
+    },
+    pt: {
+      together: "Conjunto completo — adicionados juntos",
+      thisItem: "Este item",
+      viewing: " — o item que você está vendo",
+      single: "Vendido como item individual",
+      noSpare: "Não há ",
+      availIn: " disponível em ",
+      thisColour: "esta cor",
+      reserved: " — o estoque restante está reservado para completar outros conjuntos. Esta peça será adicionada <strong>sozinha</strong>, pelo seu próprio preço.",
+      chooseSize: "Escolha um tamanho para a peça correspondente",
+      notInSize: " não está disponível no seu tamanho. Estes tamanhos estão em estoque em ",
+      orAlone: ", ou você pode comprar esta peça sozinha.",
+      buyOnly: "Comprar só esta peça",
+      autoAdded: " — adicionada ao seu carrinho automaticamente",
+      change: "Alterar",
+      pickSize: " \u2022 escolha um tamanho",
+      full: "Ver todos os detalhes",
+      atCheckout: "Adicionada com o seu conjunto no checkout.",
+      oos: " — esgotado",
+      close: "Fechar", prevImg: "Imagem anterior", nextImg: "Próxima imagem"
+    },
+    en: {
+      together: "Complete set — added together",
+      thisItem: "This item",
+      viewing: " — the item you are viewing",
+      single: "Sold as an individual item",
+      noSpare: "No spare ",
+      availIn: " is available in ",
+      thisColour: "this colour",
+      reserved: " — the remaining stock is reserved to keep other sets complete. This piece will be added <strong>on its own</strong>, at its own price.",
+      chooseSize: "Choose a size for the matching piece",
+      notInSize: " is not available in your size. These sizes are in stock in ",
+      orAlone: ", or you can buy this piece on its own.",
+      buyOnly: "Buy this piece only",
+      autoAdded: " — added to your cart automatically",
+      change: "Change",
+      pickSize: " \u2022 choose a size",
+      full: "View full details",
+      atCheckout: "Added with your set at checkout.",
+      oos: " — out of stock",
+      close: "Close", prevImg: "Previous image", nextImg: "Next image"
+    }
+  };
+  var T = WORDS[LANG] || WORDS.en;
+
+  /* Display names in the shopper's language, falling back to English. */
+  function tName(p) { return (p && (p.__locTitle || p.title)) || ""; }
+  function vName(v) { return (v && (v.__locTitle || v.title)) || ""; }
+  function colourName(v, fallback) {
+    if (v && v.__locOptions && v.__optionNames) {
+      for (var i = 0; i < v.__optionNames.length; i += 1) {
+        var n = norm(v.__optionNames[i]);
+        if (n === "COLOR" || n === "COLOUR") return v.__locOptions[i] || fallback;
+      }
+    }
+    return fallback;
+  }
+  function pUrl(handle) { return ROOT + "products/" + handle; }
+
+  /* Copy the translated title / description / variant names onto the English
+     product. Failure just leaves English — never blocks the panel. */
+  function localise(p) {
+    if (!p || ROOT === "/") return Promise.resolve(p);
+    return fetch(ROOT + "products/" + p.handle + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (l) {
+        if (!l || !l.variants) return p;
+        p.__locTitle = l.title;
+        p.__locDescription = l.description;
+        var byId = {};
+        l.variants.forEach(function (v) { byId[String(v.id)] = v; });
+        (p.variants || []).forEach(function (v) {
+          var lv = byId[String(v.id)];
+          if (lv) { v.__locTitle = lv.title; v.__locOptions = lv.options; }
+        });
+        return p;
+      });
+  }
+
+  function money(cents) {
+    return CUR + (Number(cents || 0) / 100).toFixed(2);
+  }
+
+  /* Option lookup is case- and whitespace-insensitive: the same colour is
+     spelled "BLACK" on one product and "Black" on another often enough that
+     matching on the raw string loses real pairs. */
+  function norm(v) { return String(v == null ? "" : v).trim().toUpperCase(); }
+  function optOf(variant, name) {
+    var opts = variant.options || [];
+    var names = (variant.__optionNames || []);
+    for (var i = 0; i < names.length; i += 1) {
+      if (norm(names[i]) === name) return norm(opts[i]);
+    }
+    return "";
+  }
+
+  var partners = [];
+  var loaded = false;
+
+  /*
+   * Fetch product JSON, once retried.
+   *
+   * When this fails the panel never renders and the button becomes an ordinary
+   * Add to Cart — which quietly adds half a set. A single retry covers the
+   * transient case (a 429, a dropped connection) that would otherwise cost the
+   * shopper the pairing without either of us knowing.
+   *
+   * A rate-limited response is HTML, not JSON, so r.ok is not enough on its own
+   * — parsing has to succeed too.
+   */
+  var RETRY_MS = [700, 1800, 3500];
+
+  function productJson(handle, attempt) {
+    attempt = attempt || 0;
+    return fetch("/products/" + handle + ".js", { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; })
+      .then(function (j) {
+        if (j && j.variants) return j;
+        if (attempt >= RETRY_MS.length) return null;
+        /* Backing off rather than hammering: the failure this is most likely to
+           meet is a rate limit, and retrying immediately extends it. */
+        return new Promise(function (done) {
+          setTimeout(function () { done(productJson(handle, attempt + 1)); }, RETRY_MS[attempt]);
+        });
+      });
+  }
+
+  function load() {
+    return Promise.all(handles.map(function (h) {
+      return productJson(h);
+    })).then(function (list) {
+      partners = list.filter(Boolean).map(function (p) {
+        var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
+        (p.variants || []).forEach(function (v) { v.__optionNames = names; });
+        return p;
+      });
+      return Promise.all(partners.map(localise));
+    }).then(function () {
+      loaded = true;
+    });
+  }
+
+  /* The variant the shopper currently has selected on this page. */
+  function currentVariantId() {
+    var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
+    return input ? String(input.value) : "";
+  }
+  function currentVariant() {
+    var id = currentVariantId();
+    if (!id || !window.__carbonSetProduct) return null;
+    var vs = window.__carbonSetProduct.variants || [];
+    for (var i = 0; i < vs.length; i += 1) if (String(vs[i].id) === id) return vs[i];
+    return null;
+  }
+
+  /*
+   * Quick view — the matching piece, without leaving this page.
+   *
+   * An iframe was the obvious build and is not possible: Shopify serves
+   * storefront pages with X-Frame-Options: DENY and frame-ancestors 'none', so
+   * the browser refuses to embed them even from the same origin. This renders
+   * from the /products/<handle>.js payload the panel already holds, so opening
+   * it costs nothing and cannot go stale against what the panel is offering.
+   *
+   * "View full details" is kept as a real link for anything this summary does
+   * not carry — reviews, size guides, whatever the theme adds later.
+   */
+  var qv = null;
+  var qvReturn = null;   /* element to hand focus back to on close */
+  var qvShow = null;     /* image stepper for the dialog currently open */
+
+  /* The set banner is stripped out of the description here. The shopper is
+     looking at this piece from inside the set panel; telling them it belongs to
+     a set is the one thing they already know. */
+  /* Compare CDN URLs by filename: the same image is served with different query
+     strings (?v=…) and sometimes a size suffix depending on where it came from,
+     so a string equality test on the whole URL misses matches that are real. */
+  function imgKey(src) {
+    var s = String(src || "").split("?")[0];
+    return s.slice(s.lastIndexOf("/") + 1).replace(/_\d+x\d*(\.[a-z]+)$/i, "$1");
+  }
+
+  /*
+   * Every image the product has, with the ones for the chosen colour first.
+   *
+   * A set piece usually carries every colourway in one gallery, so opening the
+   * black variant and being shown five cream photos first is disorienting — the
+   * shopper cannot tell whether they are looking at the right thing. Nothing is
+   * dropped, it is only ordered.
+   */
+  /* Words that follow a colour when it is describing something other than the
+     garment. Without these, "paired with white sneakers" on a photo of the
+     black set counts as a white photo — and every black image in the gallery
+     says exactly that. */
+  var NOT_THE_GARMENT = [
+    "sneaker", "sneakers", "shoe", "shoes", "trainer", "trainers", "sole", "soles",
+    "background", "backdrop", "wall", "cube", "floor", "studio", "surface"
+  ];
+
+  function altDescribes(text, colour) {
+    if (!text || !colour) return false;
+    var word = String(colour).toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
+    if (!word) return false;
+    var re = new RegExp("\\b" + word.replace(/\s+/g, "\\s+") + "\\b\\s*([a-z]+)?", "gi");
+    var m;
+    while ((m = re.exec(text))) {
+      if (NOT_THE_GARMENT.indexOf((m[1] || "").toLowerCase()) === -1) return true;
+    }
+    return false;
+  }
+
+  function galleryFor(product, colour) {
+    var all = (product.images || []).slice();
+    if (!colour) return all;
+
+    /* Two signals, because neither is enough alone. A variant's featured_image
+       finds at most one photo per colour — the other five black shots are not
+       attached to any variant — while the alt text names the colour on every
+       one of them, but only because the SEO pass wrote it that way. */
+    var wanted = {};
+    (product.variants || []).forEach(function (v) {
+      var c = optOf(v, "COLOR") || optOf(v, "COLOUR");
+      if (c !== colour) return;
+      var src = v.featured_image && v.featured_image.src;
+      if (src) wanted[imgKey(src)] = true;
+    });
+    (product.media || []).forEach(function (m) {
+      if (m && m.src && altDescribes(String(m.alt || ""), colour)) wanted[imgKey(m.src)] = true;
+    });
+    if (!Object.keys(wanted).length) return all;
+
+    var first = [], rest = [];
+    all.forEach(function (src) {
+      (wanted[imgKey(src)] ? first : rest).push(src);
+    });
+    return first.concat(rest);
+  }
+
+  /*
+   * The thumbnail for one row of the set panel.
+   *
+   * These rows used to show product.featured_image, which is one fixed photo
+   * per product: pick PINK and the panel still showed the black set, so the
+   * words and the picture disagreed about what was going in the cart.
+   *
+   * The variant's own photo is the exact answer when Shopify has one, and most
+   * variants do not — a colourway usually has one image attached and the rest
+   * loose in the gallery. galleryFor already knows how to order a gallery by
+   * colour for the quick view, so its first entry is the right fallback.
+   */
+  function thumbFor(product, variant, colour) {
+    var v = variant && variant.featured_image && variant.featured_image.src;
+    if (v) return v;
+    var byColour = galleryFor(product || {}, colour || "")[0];
+    if (byColour) return byColour;
+    return (product && (product.featured_image || (product.images || [])[0])) || "";
+  }
+
+  function descriptionOf(product) {
+    var html = String(product.__locDescription || product.description || "");
+    var d = document.createElement("div");
+    d.innerHTML = html;
+    d.querySelectorAll(".carbon-set-note, script, style, iframe").forEach(function (n) {
+      n.parentNode.removeChild(n);
+    });
+    return d.innerHTML;
+  }
+
+  function buildQv() {
+    if (qv) return qv;
+    qv = document.createElement("div");
+    qv.className = "carbon-qv";
+    qv.hidden = true;
+    qv.setAttribute("role", "dialog");
+    qv.setAttribute("aria-modal", "true");
+    qv.innerHTML =
+      '<div class="carbon-qv__scrim" data-close></div>' +
+      '<div class="carbon-qv__box">' +
+        '<div class="carbon-qv__head">' +
+          '<h2 class="carbon-qv__title"></h2>' +
+          '<button type="button" class="carbon-qv__x" data-close aria-label="' + T.close + '">&times;</button>' +
+        "</div>" +
+        '<div class="carbon-qv__body">' +
+          '<div class="carbon-qv__media">' +
+            '<div class="carbon-qv__stage">' +
+              '<img class="carbon-qv__main" alt="" />' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--prev" aria-label="' + T.prevImg + '">&#8249;</button>' +
+              '<button type="button" class="carbon-qv__nav carbon-qv__nav--next" aria-label="' + T.nextImg + '">&#8250;</button>' +
+              '<span class="carbon-qv__count"></span>' +
+            "</div>" +
+            '<div class="carbon-qv__thumbs"></div>' +
+          "</div>" +
+          '<div class="carbon-qv__info">' +
+            '<p class="carbon-qv__price"></p>' +
+            '<p class="carbon-qv__variant"></p>' +
+            '<div class="carbon-qv__desc"></div>' +
+          "</div>" +
+        "</div>" +
+        '<div class="carbon-qv__foot">' +
+          '<a class="carbon-qv__full" href="#">' + T.full + '</a>' +
+          '<span class="carbon-qv__note"></span>' +
+        "</div>" +
+      "</div>";
+    document.body.appendChild(qv);
+
+    qv.addEventListener("click", function (e) {
+      if (e.target.closest("[data-close]")) closeQv();
+    });
+    /* Escape closes and the arrows step through the gallery. The listener lives
+       on the document so it works wherever focus has landed in the dialog. */
+    document.addEventListener("keydown", function (e) {
+      if (qv.hidden) return;
+      if (e.key === "Escape" || e.key === "Esc") { closeQv(); return; }
+      if (!qvShow) return;
+      if (e.key === "ArrowLeft") { e.preventDefault(); qvShow(qvAt() - 1); }
+      if (e.key === "ArrowRight") { e.preventDefault(); qvShow(qvAt() + 1); }
+    });
+    return qv;
+  }
+
+  /* The stepper closes over its own index, so read the position back off the
+     thumbnails rather than keeping a second copy that can drift out of step. */
+  function qvAt() {
+    if (!qv) return 0;
+    var all = qv.querySelectorAll(".carbon-qv__thumb");
+    for (var i = 0; i < all.length; i += 1) {
+      if (all[i].getAttribute("aria-current") === "true") return i;
+    }
+    return 0;
+  }
+
+  function closeQv() {
+    if (!qv || qv.hidden) return;
+    qv.hidden = true;
+    qvShow = null;
+    document.documentElement.style.overflow = "";
+    document.body.style.overflow = "";
+    if (qvReturn && qvReturn.focus) { try { qvReturn.focus(); } catch (e) {} }
+    qvReturn = null;
+  }
+
+  /*
+   * Show a partner. Returns false when there is nothing to show, so the caller
+   * can let the link navigate normally rather than opening an empty dialog.
+   */
+  function openQuickView(handle, variantId, href, opener, colourHint) {
+    var product = null;
+    for (var i = 0; i < partners.length; i += 1) {
+      if (partners[i].handle === handle) { product = partners[i]; break; }
+    }
+    if (!product) return false;
+
+    var variant = null;
+    if (variantId) {
+      var vs = product.variants || [];
+      for (var j = 0; j < vs.length; j += 1) {
+        if (String(vs[j].id) === String(variantId)) { variant = vs[j]; break; }
+      }
+    }
+
+    var box = buildQv();
+    qvReturn = opener || null;
+
+    /* Every image, not a slice of them — an arbitrary cap meant a shopper could
+       not see photos the product actually has. */
+    var colour = variant
+      ? (optOf(variant, "COLOR") || optOf(variant, "COLOUR"))
+      : norm(colourHint);
+    var images = galleryFor(product, colour);
+    var lead = (variant && variant.featured_image && variant.featured_image.src) || "";
+    var at = 0;
+    if (lead) {
+      for (var k = 0; k < images.length; k += 1) {
+        if (imgKey(images[k]) === imgKey(lead)) { at = k; break; }
+      }
+    }
+    if (!images.length) images = [product.featured_image || ""];
+
+    box.querySelector(".carbon-qv__title").textContent = tName(product);
+    var main = box.querySelector(".carbon-qv__main");
+    var thumbs = box.querySelector(".carbon-qv__thumbs");
+    var count = box.querySelector(".carbon-qv__count");
+    var prev = box.querySelector(".carbon-qv__nav--prev");
+    var next = box.querySelector(".carbon-qv__nav--next");
+
+    main.alt = tName(product);
+    thumbs.innerHTML = "";
+    images.forEach(function (src, i) {
+      var t = document.createElement("img");
+      t.className = "carbon-qv__thumb";
+      t.src = src;
+      t.alt = "";
+      t.setAttribute("aria-current", "false");
+      t.addEventListener("click", function () { show(i); });
+      thumbs.appendChild(t);
+    });
+
+    function show(i) {
+      /* Wrap around, so the arrows never dead-end on the first or last photo. */
+      at = (i + images.length) % images.length;
+      main.src = images[at];
+      count.textContent = (at + 1) + " / " + images.length;
+      var all = thumbs.querySelectorAll(".carbon-qv__thumb");
+      all.forEach(function (o, j) {
+        o.setAttribute("aria-current", j === at ? "true" : "false");
+      });
+      var cur = all[at];
+      /* Keep the active thumbnail in view — with every image present the strip
+         scrolls, and the arrows would otherwise select something off-screen. */
+      if (cur && cur.scrollIntoView) {
+        try { cur.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+      }
+    }
+
+    qvShow = show;
+    var single = images.length < 2;
+    prev.hidden = single;
+    next.hidden = single;
+    count.hidden = single;
+    thumbs.hidden = single;
+    prev.onclick = function () { show(at - 1); };
+    next.onclick = function () { show(at + 1); };
+    show(at);
+
+    /* The variant price, not the product's "from" price — this dialog is about
+       the exact piece that will be added to the cart. */
+    var price = variant ? variant.price : (product.price || 0);
+    box.querySelector(".carbon-qv__price").textContent = money(price);
+    var chip = box.querySelector(".carbon-qv__variant");
+    var chipText = variant
+      ? vName(variant) + (variant.available === false ? T.oos : "")
+      : (colour || "");
+    chip.textContent = chipText;
+    /* An empty pill is just a stray outline, so it goes rather than sitting
+       there with nothing in it. */
+    chip.hidden = !chipText;
+    box.querySelector(".carbon-qv__desc").innerHTML = descriptionOf(product);
+    box.querySelector(".carbon-qv__full").setAttribute("href", href);
+    box.querySelector(".carbon-qv__note").textContent = variant
+      ? T.atCheckout
+      : "";
+
+    box.hidden = false;
+    /* Stop the page behind from scrolling under the dialog. */
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    var x = box.querySelector(".carbon-qv__x");
+    if (x && x.focus) { try { x.focus(); } catch (e) {} }
+    return true;
+  }
+
+  var panel = null;
+  /* Sizes the shopper has chosen for partners that had no exact match, keyed by
+     partner handle so switching size on this product re-asks rather than
+     silently keeping a stale choice. */
+  var chosen = {};
+
+  /*
+   * Where the panel goes.
+   *
+   * Themes lay the quantity stepper and Add to Cart out as one row. Dropping the
+   * panel immediately before the button lands it INSIDE that row, which pushes
+   * the button onto its own line and breaks the layout. So walk up from the
+   * button until we find the ancestor that also contains the quantity input —
+   * that is the row — and put the panel above the whole thing.
+   */
+  function ensurePanel() {
+    if (panel) return panel;
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (!form) return null;
+    panel = document.createElement("div");
+    panel.className = "carbon-set-pair";
+    panel.setAttribute("data-carbon-set-panel", "");
+
+    var btn = form.querySelector('[type="submit"], [name="add"]');
+    if (!btn) { form.appendChild(panel); return panel; }
+    var qty = form.querySelector('[name="quantity"]');
+    var row = btn;
+    if (qty) {
+      while (row && row !== form && !row.contains(qty)) row = row.parentNode;
+      if (!row || row === form) row = btn;
+    }
+
+    /*
+     * Insert ABOVE the row's container, not beside the row.
+     *
+     * The theme's hover fill is a rotated ::before that slides into place, and
+     * the rule driving it is position-dependent — dropping a sibling in next to
+     * .add_to_cart_holder stopped it matching, so Add to Cart and the quantity
+     * stepper lost their black hover entirely. Going one level up leaves every
+     * sibling index in that container untouched, which keeps the theme's own
+     * selectors intact while still putting the panel directly above the buy row.
+     */
+    var anchor = row.parentNode && row.parentNode !== form ? row.parentNode : row;
+    if (anchor.parentNode) anchor.parentNode.insertBefore(panel, anchor);
+    else form.insertBefore(panel, form.firstChild);
+    return panel;
+  }
+
+  /* What will be added alongside this product, and what the shopper still has
+     to decide. Returns one entry per partner. */
+  function resolve() {
+    var mine = currentVariant();
+    if (!mine) return [];
+    var colour = optOf(mine, "COLOR") || optOf(mine, "COLOUR");
+    var size = optOf(mine, "SIZE");
+
+    return partners.map(function (p) {
+      var avail = (p.variants || []).filter(function (v) { return v.available; });
+      var sameColour = avail.filter(function (v) {
+        var c = optOf(v, "COLOR") || optOf(v, "COLOUR");
+        return c === colour;
+      });
+      var exact = sameColour.filter(function (v) { return optOf(v, "SIZE") === size; })[0];
+      if (exact) return { partner: p, variant: exact, needsChoice: false, options: [] };
+
+      /* No exact match. Offer ONLY spare units — a size whose stock is already
+         spoken for by its own counterpart cannot be sold here without leaving
+         that counterpart unsellable as a set. */
+      var spare = surplus[p.handle] || {};
+      var offerable = sameColour.filter(function (v) {
+        return (spare[colour + "|" + optOf(v, "SIZE")] || 0) > 0;
+      });
+      if (offerable.length) {
+        var pick = chosen[p.handle];
+        var picked = pick ? offerable.filter(function (v) { return String(v.id) === String(pick); })[0] : null;
+        /* substituted: the shopper chose a size that is not their own, so this
+           pair is deliberately mismatched. The cart guard needs to know, and the
+           panel offers a way back out of the choice. */
+        return {
+          partner: p, variant: picked || null, needsChoice: !picked,
+          options: offerable, substituted: !!picked
+        };
+      }
+      return { partner: p, variant: null, needsChoice: false, options: [], unavailable: true };
+    });
+  }
+
+  function render() {
+    var el = ensurePanel();
+    if (!el) return;
+    var rows = resolve();
+    if (!rows.length) { el.hidden = true; return; }
+
+    var mine = currentVariant();
+    var colour = mine ? (optOf(mine, "COLOR") || optOf(mine, "COLOUR")) : "";
+    var html = "";
+    var warn = false;
+
+    /* This product first, with its own price — the total on the button is the
+       sum of what is listed here, and leaving the item you are looking at out
+       of that list makes the arithmetic look wrong. */
+    if (mine) {
+      html += '<p class="carbon-set-pair__title">' + T.together + '</p>';
+      var meImg = thumbFor(window.__carbonSetProduct, mine, colour);
+      html += '<div class="carbon-set-pair__row">' +
+        (meImg ? '<img src="' + meImg + '" alt="" />' : "") +
+        '<span><span class="carbon-set-pair__me carbon-set-pair__name">' +
+        (tName(window.__carbonSetProduct) || T.thisItem) +
+        '</span><span class="carbon-set-pair__me"> — ' + money(mine.price) + "</span><br>" +
+        '<span class="carbon-set-pair__sub">' + vName(mine) + T.viewing + "</span></span></div>" +
+        '<hr class="carbon-set-pair__hr" />';
+    }
+
+    var colourShown = colourName(mine, colour) || T.thisColour;
+    rows.forEach(function (r) {
+      var img = thumbFor(r.partner, r.variant, colour);
+      if (r.unavailable) {
+        warn = true;
+        html += '<p class="carbon-set-pair__title">' + T.single + '</p>' +
+          '<p>' + T.noSpare + '<a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
+          'href="' + pUrl(r.partner.handle) + '">' + tName(r.partner) +
+          "</a>" + T.availIn + colourShown + T.reserved + "</p>";
+        return;
+      }
+      if (r.needsChoice) {
+        warn = true;
+        html += '<p class="carbon-set-pair__title">' + T.chooseSize + '</p>' +
+          '<p><a class="carbon-set-pair__link carbon-set-pair__name carbon-set-pair__pop" ' +
+          'data-qv-handle="' + r.partner.handle + '" data-qv-colour="' + (colour || "") + '" ' +
+          'href="' + pUrl(r.partner.handle) + '">' + tName(r.partner) +
+          "</a>" + T.notInSize + colourShown + T.orAlone + "</p>" +
+          '<div class="carbon-set-pair__sizes">';
+        r.options.forEach(function (v) {
+          var sz = optOf(v, "SIZE") || v.title;
+          var on = String(chosen[r.partner.handle] || "") === String(v.id);
+          /* Size only. The price is already on the button total and repeating it
+             on every chip turned a size picker into a price list. */
+          html += '<button type="button" class="carbon-set-pair__size" aria-pressed="' + (on ? "true" : "false") + '" ' +
+            'data-partner="' + r.partner.handle + '" data-variant="' + v.id + '">' + sz + "</button>";
+        });
+        html += '<button type="button" class="carbon-set-pair__solo" data-action="solo">' +
+          T.buyOnly + "</button></div>";
+        return;
+      }
+      /* The partner's name links to its own page. It is the one item in this
+         panel the shopper cannot otherwise inspect — they are already on the
+         page for the other one — and being told something will be added to the
+         cart without being able to look at it first is a fair objection. The
+         variant is carried in the URL so the link lands on the exact colour and
+         size that will be added. */
+      var pHref = pUrl(r.partner.handle) + "?variant=" + r.variant.id;
+      html += '<div class="carbon-set-pair__row">' +
+        (img ? '<a class="carbon-set-pair__pop" data-qv-handle="' + r.partner.handle +
+          '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '"><img src="' + img + '" alt="" /></a>' : "") +
+        '<span><a class="carbon-set-pair__link carbon-set-pair__me carbon-set-pair__name carbon-set-pair__pop" ' +
+        'data-qv-handle="' + r.partner.handle + '" data-qv-variant="' + r.variant.id + '" href="' + pHref + '">' +
+        tName(r.partner) + "</a> — " +
+        '<span class="carbon-set-pair__me">' + money(r.variant.price) + "</span><br>" +
+        '<span class="carbon-set-pair__sub">' + vName(r.variant) +
+        T.autoAdded + "</span></span>" +
+        (r.substituted
+          ? '<button type="button" class="carbon-set-pair__change" data-change="' +
+            r.partner.handle + '">' + T.change + '</button>'
+          : "") +
+        "</div>";
+    });
+
+    el.className = "carbon-set-pair" + (warn ? " carbon-set-pair--warn" : "");
+    el.innerHTML = html;
+    el.hidden = false;
+    updateButton(rows);
+
+    el.querySelectorAll(".carbon-set-pair__size").forEach(function (b) {
+      b.addEventListener("click", function () {
+        chosen[b.getAttribute("data-partner")] = b.getAttribute("data-variant");
+        render();
+      });
+    });
+    var solo = el.querySelector('[data-action="solo"]');
+    if (solo) solo.addEventListener("click", addSolo);
+
+    /* Back to the chooser. Dropping the pick is all it takes — resolve() finds
+       no exact match again and re-renders the amber panel with the sizes and the
+       buy-alone option, exactly as it was before the choice. */
+    el.querySelectorAll("[data-change]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        delete chosen[b.getAttribute("data-change")];
+        render();
+      });
+    });
+
+    /* The matching piece opens in a dialog on this page rather than replacing
+       it. Looking at the partner is a glance, not a destination: navigating away
+       loses the colour and size already chosen here, and the shopper has to find
+       their way back and set them again. */
+    el.querySelectorAll("a.carbon-set-pair__pop").forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        /* Leave the browser's own gestures alone — ctrl/cmd/shift-click and
+           middle-click mean "open it my way", and hijacking those is rude. */
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        var opened = openQuickView(
+          a.getAttribute("data-qv-handle"),
+          a.getAttribute("data-qv-variant"),
+          a.getAttribute("href"),
+          a,
+          a.getAttribute("data-qv-colour")
+        );
+        /* Only suppress the navigation if the dialog actually opened, so a
+           product we could not load still takes the shopper to its page. */
+        if (opened) e.preventDefault();
+      });
+    });
+  }
+
+  /*
+   * Put the running total on the Add to Cart button.
+   *
+   * A set costs more than the price beside the title, and finding that out at
+   * checkout is exactly the surprise the notice is meant to prevent.
+   *
+   * Writing the label once is not enough. Themes re-render this button — on a
+   * variant change, after a cart update, when a section reloads — and each time
+   * they do, the total is replaced by the theme's own text. So the label we want
+   * is remembered and re-applied whenever the button changes underneath us.
+   */
+  var wantSuffix = null;   /* " • $101.00", or null to leave the theme alone */
+
+  function buyButton() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    return form ? form.querySelector('[type="submit"], [name="add"]') : null;
+  }
+
+  function baseLabel(btn) {
+    if (btn.__carbonSetBase) return btn.__carbonSetBase;
+    var label = btn.querySelector("span") || btn;
+    var text = (label.textContent || "").trim();
+    /* Split on the separator: after a re-render we may be reading our own
+       output back, and appending to that gives "Add to cart • $101 • $101". */
+    text = text.split("\u2022")[0].trim();
+    btn.__carbonSetBase = text || "Add to cart";
+    return btn.__carbonSetBase;
+  }
+
+  function applyLabel() {
+    if (!wantSuffix) return;
+    var btn = buyButton();
+    if (!btn) return;
+    var label = btn.querySelector("span") || btn;
+    var want = baseLabel(btn) + wantSuffix;
+    /* Only write when it differs, so the observer below cannot loop on its own
+       mutations. */
+    if ((label.textContent || "").trim() !== want) label.textContent = want;
+  }
+
+  /* Re-apply after the theme rewrites the button. Cheap because applyLabel is a
+     no-op when the text already matches. */
+  function watchButton() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (!form || form.__carbonSetWatched) return;
+    form.__carbonSetWatched = true;
+    if (typeof MutationObserver !== "function") return;
+    var pending = false;
+    new MutationObserver(function () {
+      if (pending) return;
+      pending = true;
+      /* Coalesce a burst of mutations into one write, after the theme has
+         finished its own. */
+      setTimeout(function () { pending = false; applyLabel(); }, 0);
+    }).observe(form, { childList: true, subtree: true, characterData: true });
+  }
+
+  function updateButton(rows) {
+    var btn = buyButton();
+    if (!btn) return;
+
+    var mine = currentVariant();
+    if (!mine) {
+      /* Nothing resolved — leave the theme's own label rather than showing a
+         total we cannot stand behind. */
+      wantSuffix = null;
+      return;
+    }
+
+    var total = Number(mine.price || 0);
+    var pending = false;
+    rows.forEach(function (r) {
+      if (r.needsChoice) pending = true;
+      else if (r.variant) total += Number(r.variant.price || 0);
+    });
+
+    wantSuffix = pending
+      ? T.pickSize
+      : " \u2022 " + money(total * currentQty());
+    applyLabel();
+    watchButton();
+  }
+
+  /* The stepper sets the field programmatically, and a programmatic value
+     change fires no input or change event — which is why the total could sit at
+     one unit while the field said three. It is polled instead. */
+  function currentQty() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    var el = form && form.querySelector('[name="quantity"]');
+    var n = el ? Number(el.value) : 1;
+    return n > 0 ? n : 1;
+  }
+
+  /*
+   * Buy this piece on its own.
+   *
+   * Tagged with a line-item property so the cart guard leaves it alone. Without
+   * that the guard would see a set piece with no partner in the cart and remove
+   * it as an orphan — undoing a choice the shopper made deliberately. The
+   * underscore prefix keeps the property out of the customer's view at checkout.
+   */
+  function addSolo() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    var qtyEl = form && form.querySelector('[name="quantity"]');
+    var qty = qtyEl && Number(qtyEl.value) > 0 ? Number(qtyEl.value) : 1;
+    fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        items: [{ id: Number(currentVariantId()), quantity: qty, properties: { _carbon_set_solo: "1" } }],
+      }),
+    })
+      .then(function () { window.location.href = "/cart"; })
+      .catch(function () { window.location.href = "/cart"; });
+  }
+
+  /* Add every piece in ONE request. Shopify's /cart/add.js takes an items array,
+     so the set lands atomically — two sequential calls could leave half a set in
+     the cart if the second failed. */
+  function addAll(e) {
+    var rows = resolve();
+    var extras = rows.filter(function (r) { return r.variant; });
+    var pending = rows.filter(function (r) { return r.needsChoice; });
+
+    if (pending.length) {
+      e.preventDefault();
+      e.stopPropagation();
+      render();
+      var el = document.querySelector("[data-carbon-set-panel]");
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    if (!extras.length) return;   /* nothing to pair — let the theme proceed */
+
+    e.preventDefault();
+    e.stopPropagation();
+    var form = e.target.closest ? e.target.closest('form[action*="/cart/add"]') : null;
+    form = form || document.querySelector('form[action*="/cart/add"]');
+    var qty = 1;
+    var qtyEl = form && form.querySelector('[name="quantity"]');
+    if (qtyEl && Number(qtyEl.value) > 0) qty = Number(qtyEl.value);
+
+    /*
+     * A pair the shopper had to mix — their size in one piece, a different size
+     * in the other — is not a matching set, and the cart must not police it like
+     * one. Both lines are tagged so the guard leaves them alone: these pieces
+     * are sold separately and either can be removed on its own.
+     *
+     * A set where every piece matched carries no tag, and stays in lockstep.
+     */
+    var mixed = rows.some(function (r) { return r.substituted; });
+    var props = mixed ? { _carbon_set_mixed: "1" } : null;
+
+    var items = [{ id: Number(currentVariantId()), quantity: qty }];
+    extras.forEach(function (r) { items.push({ id: Number(r.variant.id), quantity: qty }); });
+    if (props) items.forEach(function (it) { it.properties = props; });
+
+    fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ items: items }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error((res.j && res.j.description) || "Could not add the set");
+        /* Let the theme refresh its own drawer/count if it listens for this. */
+        document.dispatchEvent(new CustomEvent("carbon:set:added"));
+        window.location.href = "/cart";
+      })
+      .catch(function () { window.location.href = "/cart"; });
+  }
+
+  function boot() {
+    /* The theme prints the product JSON for its variant picker; reuse it rather
+       than re-fetching what is already on the page. */
+    productJson(cfg.product)
+      .then(function (p) {
+        if (!p) return;
+        var names = (p.options || []).map(function (o) { return typeof o === "string" ? o : o.name; });
+        (p.variants || []).forEach(function (v) { v.__optionNames = names; });
+        window.__carbonSetProduct = p;
+        return localise(p).then(load);
+      })
+      .then(function () {
+        if (!loaded) return;
+        render();
+        /* Variant pickers differ by theme, so watch the hidden id input rather
+           than any particular picker implementation. */
+        var input = document.querySelector('form[action*="/cart/add"] [name="id"]');
+        var qtyEl = document.querySelector('form[action*="/cart/add"] [name="quantity"]');
+        var lastId = input ? input.value : "";
+        var lastQty = qtyEl ? qtyEl.value : "";
+        setInterval(function () {
+          if (input && input.value !== lastId) {
+            lastId = input.value;
+            /* A different variant means the previous size choice may no longer
+               apply, so it is dropped rather than silently carried over. */
+            chosen = {};
+            render();
+            return;
+          }
+          if (qtyEl && qtyEl.value !== lastQty) { lastQty = qtyEl.value; render(); return; }
+          /* Backstop for a theme that swaps the button without touching the form
+             we are observing. */
+          applyLabel();
+        }, 300);
+
+        var form = document.querySelector('form[action*="/cart/add"]');
+        if (form) {
+          form.addEventListener("submit", addAll, true);
+          var q = form.querySelector('[name="quantity"]');
+          if (q) q.addEventListener("change", function () { render(); });
+        }
+      });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
+  else boot();
+})();
+</script>
