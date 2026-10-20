@@ -77,6 +77,28 @@ const EX_RANK: Record<string, number> = { "full-front": 0, "front-close": 1, det
 const VIEW_MALE: Record<number, string> = { 1: "front", 2: "front", 3: "front close-up", 4: "back", 5: "front close-up", 6: "detail", 7: "back close-up", 8: "lifestyle" };
 const VIEW_FEMALE: Record<number, string> = { 1: "front", 2: "back", 3: "three-quarter", 4: "front close-up", 5: "detail", 6: "front", 7: "front close-up", 8: "lifestyle" };
 
+/** Shopify's green bag, for "View in Shopify". */
+function ShopifyBag() {
+  return (
+    <svg viewBox="0 0 24 27" width="16" height="18" aria-hidden="true">
+      <path fill="#95BF47" d="M20.6 5.2c0-.1-.1-.2-.3-.2l-2.3-.2-1.7-1.6c-.2-.2-.5-.1-.6-.1l-.8.3C14.4 2.2 13.6 1 12.2 1h-.1C11.7.5 11.2.3 10.8.3 7.4.3 5.8 4.5 5.3 6.7l-2.4.7c-.7.2-.8.3-.9 1L0 24.1 15.3 27 23.6 25.2S20.6 5.3 20.6 5.2Zm-6.4-1.6-1.3.4v-.3c0-.9-.1-1.6-.3-2.2.7.1 1.2.9 1.6 2.1Zm-2.6-1.8c.2.6.4 1.4.4 2.5v.2l-2.7.8c.5-2 1.5-3 2.3-3.5Zm-1-.9c.1 0 .3 0 .4.1-1.1.5-2.3 1.8-2.8 4.4l-2.1.7C6.7 4.1 8.1.9 10.6.9Z" />
+      <path fill="#5E8E3E" d="M20.3 5c-.1 0-2.3-.2-2.3-.2l-1.7-1.6c-.1-.1-.1-.1-.2-.1L15.3 27l8.3-1.8S20.6 5.3 20.6 5.2c0-.1-.2-.2-.3-.2Z" />
+      <path fill="#fff" d="m12.2 9.3-1 3s-.9-.5-2-.5c-1.6 0-1.7 1-1.7 1.3 0 1.4 3.6 1.9 3.6 5.1 0 2.5-1.6 4.2-3.8 4.2-2.6 0-3.9-1.6-3.9-1.6l.7-2.3s1.4 1.2 2.5 1.2c.8 0 1.1-.6 1.1-1 0-1.8-2.9-1.9-2.9-4.8 0-2.5 1.8-4.9 5.4-4.9 1.4 0 2 .4 2 .4Z" />
+    </svg>
+  );
+}
+
+/** Download: a tray with an arrow into it. */
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+    </svg>
+  );
+}
+
 const picKey = (u: string | null | undefined) => (u ?? "").split("?")[0];
 const newKey = () => Math.random().toString(36).slice(2, 10);
 const btn =
@@ -578,6 +600,11 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         <button type="button" disabled={loading} onClick={() => void load()} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
           {loading ? "Checking…" : "↻ Refresh"}
         </button>
+        <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:min-h-11">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5" checked={include} onChange={(e) => toggleInclude(e.target.checked)} />
+          include current Shopify pictures
+        </label>
+        <div className="flex-1" />
         <button
           type="button"
           disabled={busy !== null || !rows.some((r) => r.cards.some((c) => c.selected && !c.alt.trim()))}
@@ -586,11 +613,6 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         >
           {busy === "alt" ? "Writing…" : "✨ Alt all"}
         </button>
-        <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:min-h-11">
-          <input type="checkbox" className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5" checked={include} onChange={(e) => toggleInclude(e.target.checked)} />
-          include current Shopify pictures
-        </label>
-        <div className="flex-1" />
         <button
           type="button"
           disabled={busy !== null || approvedCount === 0}
@@ -643,6 +665,20 @@ export function BulkUploadTab({ active }: { active: boolean }) {
               </label>
             ))}
             <div className="flex-1" />
+            {r.existing.length && r.cards.some((c) => c.kind === "existing") ? (
+              <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.7rem] text-[var(--wms-fg)] max-md:min-h-11" title="Untick to untick every current Shopify picture of this product (they are removed on publish)">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                  checked={r.cards.some((c) => c.kind === "existing" && c.selected)}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setCards(r.matrixId, (cs) => cs.map((c) => (c.kind === "existing" ? { ...c, selected: on } : c)));
+                  }}
+                />
+                include current Shopify pictures
+              </label>
+            ) : null}
             <label className={`${btn} cursor-pointer border-dashed border-[var(--wms-border)] text-[var(--wms-accent)]`} title="Add your own pictures to this product">
               ＋ Upload
               <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
@@ -658,7 +694,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
                 title="View in Shopify"
                 className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}
               >
-                🛍
+                <ShopifyBag />
               </a>
             ) : null}
             <button type="button" title="View online" onClick={() => void openOnline(r.matrixId)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
@@ -752,12 +788,12 @@ export function BulkUploadTab({ active }: { active: boolean }) {
                         <span className="min-w-0 flex-1 truncate font-mono text-[0.6rem] text-[var(--wms-muted)]">{c.color || c.label}</span>
                       )}
                       {i > 0 ? (
-                        <button type="button" title="Make it the hero (first picture)" onClick={() => makeHero(r.matrixId, c.key)} className="rounded px-1 font-mono text-[0.7rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]">
-                          ⇤
+                        <button type="button" title="Make it the hero (first picture)" onClick={() => makeHero(r.matrixId, c.key)} className="rounded px-1 text-[0.8rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]">
+                          👑
                         </button>
                       ) : null}
                       <button type="button" title="Download" onClick={() => void download(c, `${r.name}-${i + 1}`)} className="rounded px-1 text-[0.8rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]">
-                        ⬇
+                        <DownloadIcon />
                       </button>
                       {c.kind === "new" ? (
                         <button type="button" title="Remove" onClick={() => removeCard(r.matrixId, c.key)} className="rounded px-1 text-[0.75rem] text-[var(--wms-status-danger-fg)]">
