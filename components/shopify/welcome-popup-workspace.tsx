@@ -84,8 +84,9 @@ export function WelcomePopupWorkspace() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Email Popup</h1>
           <p className="mt-1 max-w-2xl font-mono text-xs text-[var(--wms-muted)]">
-            Shoppers on shopcarbon.com leave their email and get {s.percentOff}% off their first order. Each email is subscribed in Shopify
-            and gets its own code: one use, linked to that email, never on top of another discount, never on shipping.
+            Shoppers on shopcarbon.com leave their email — in the popup or the footer newsletter — and get {s.percentOff}% off their first
+            order. Each email is subscribed in Shopify and gets its own code: one use, linked to that email, never on top of another
+            discount, never on shipping. While it is off, the footer newsletter works as before (no code).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -115,7 +116,9 @@ export function WelcomePopupWorkspace() {
             ))}
           </div>
           <p className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
-            {s.enabled ? `Opens after ${s.delaySeconds} s or half a page of scrolling.` : "Shoppers don't see it. The preview still works."}
+            {s.enabled
+              ? `Popup opens after ${s.delaySeconds} s or a screen of scrolling; the footer shows the offer too.`
+              : "Shoppers don't see it. The preview still works."}
           </p>
         </div>
       </div>
@@ -175,7 +178,11 @@ export function WelcomePopupWorkspace() {
         {(
           [
             ["Signups · today", t.today.toLocaleString(), `${t.week} in 7 days · ${t.month} in 30 days`],
-            ["Emails collected", t.all.toLocaleString(), `${t.newCustomers} new to Carbon · ${t.all - t.newCustomers} already customers`],
+            [
+              "Emails collected",
+              t.all.toLocaleString(),
+              `${t.fromPopup} from the popup · ${t.fromFooter} from the footer · ${t.newCustomers} new to Carbon`,
+            ],
             ["Codes used", t.used.toLocaleString(), `${pct(t.used, t.all)} of signups`],
             ["Orders with a code", money(t.revenue), t.unsubscribed ? `${t.unsubscribed} unsubscribed since` : "order totals, paid"],
           ] as const
@@ -302,7 +309,7 @@ function Signups({ report }: { report: WelcomeReport }) {
   const rows = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return report.recent;
-    return report.recent.filter((r) => [r.email, r.code, r.path, r.orderName, r.country].some((x) => (x ?? "").toLowerCase().includes(t)));
+    return report.recent.filter((r) => [r.email, r.code, r.path, r.orderName, r.country, r.form].some((x) => (x ?? "").toLowerCase().includes(t)));
   }, [q, report.recent]);
   const status = (r: WelcomeReport["recent"][number]) =>
     r.status === "used" ? (
@@ -326,10 +333,11 @@ function Signups({ report }: { report: WelcomeReport }) {
       </div>
       {rows.length ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] border-collapse">
+          <table className="w-full min-w-[48rem] border-collapse">
             <thead>
               <tr>
                 <th className={th}>When</th>
+                <th className={th}>From</th>
                 <th className={th}>Email</th>
                 <th className={th}>Code</th>
                 <th className={th}>Status</th>
@@ -342,6 +350,7 @@ function Signups({ report }: { report: WelcomeReport }) {
               {rows.map((r) => (
                 <tr key={r.code} className="border-t border-[var(--wms-border)]">
                   <td className={`${td} whitespace-nowrap`}>{when(r.createdAt)}</td>
+                  <td className={`${td} whitespace-nowrap`}>{r.form === "footer" ? "Footer" : "Popup"}</td>
                   <td className={td}>
                     {r.email}
                     {r.unsubscribed ? <span className="ml-1 font-mono text-[0.66rem] text-[var(--wms-muted)]">unsubscribed</span> : null}

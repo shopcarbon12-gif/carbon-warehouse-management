@@ -15,6 +15,8 @@ export type SaleDiscount = { title: string; percent: number; minQuantity: number
 
 export type WelcomeSignupRow = {
   createdAt: string;
+  /** Where on the store: the popup or the footer newsletter. */
+  form: "popup" | "footer";
   email: string;
   code: string;
   percent: number;
@@ -40,6 +42,8 @@ export type WelcomeReport = {
     week: number;
     month: number;
     all: number;
+    fromPopup: number;
+    fromFooter: number;
     newCustomers: number;
     used: number;
     revenue: number;
@@ -102,6 +106,8 @@ export async function getWelcomeReport(pool: Pool): Promise<WelcomeReport> {
          count(*) FILTER (WHERE created_at > now() - interval '7 days') AS week,
          count(*) FILTER (WHERE created_at > now() - interval '30 days') AS month,
          count(*) AS all,
+         count(*) FILTER (WHERE form = 'popup') AS from_popup,
+         count(*) FILTER (WHERE form = 'footer') AS from_footer,
          count(*) FILTER (WHERE NOT existing_customer) AS new_customers,
          count(*) FILTER (WHERE used_at IS NOT NULL) AS used,
          COALESCE(sum(used_order_total) FILTER (WHERE used_at IS NOT NULL), 0) AS revenue,
@@ -120,6 +126,7 @@ export async function getWelcomeReport(pool: Pool): Promise<WelcomeReport> {
     ),
     pool.query<{
       created_at: Date;
+      form: "popup" | "footer";
       email: string;
       code: string;
       percent_off: number;
@@ -134,7 +141,7 @@ export async function getWelcomeReport(pool: Pool): Promise<WelcomeReport> {
       used_order_name: string | null;
       used_order_total: string | null;
     }>(
-      `SELECT created_at, email, code, percent_off, ends_at, used_at, existing_customer, emailed_at, email_error,
+      `SELECT created_at, form, email, code, percent_off, ends_at, used_at, existing_customer, emailed_at, email_error,
               unsubscribed_at, source_path, country, used_order_name, used_order_total
          FROM welcome_signups ORDER BY created_at DESC LIMIT 100`,
     ),
@@ -152,6 +159,8 @@ export async function getWelcomeReport(pool: Pool): Promise<WelcomeReport> {
       week: n("week"),
       month: n("month"),
       all: n("all"),
+      fromPopup: n("from_popup"),
+      fromFooter: n("from_footer"),
       newCustomers: n("new_customers"),
       used: n("used"),
       revenue: Math.round(n("revenue") * 100) / 100,
@@ -161,6 +170,7 @@ export async function getWelcomeReport(pool: Pool): Promise<WelcomeReport> {
     daily: daily.rows.map((r) => ({ day: r.day, signups: Number(r.signups), used: Number(r.used) })),
     recent: recent.rows.map((r) => ({
       createdAt: r.created_at.toISOString(),
+      form: r.form,
       email: r.email,
       code: r.code,
       percent: r.percent_off,

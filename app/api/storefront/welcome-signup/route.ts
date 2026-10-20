@@ -1,8 +1,9 @@
 import { withActivity } from "@/lib/server/activity-log";
 /**
- * POST /api/storefront/welcome-signup — the email popup on shopcarbon.com
- * (snippets/carbon-welcome-popup.liquid). A shopper's email → subscribed in
- * Shopify + one unique, single-use code (lib/server/welcome/signup.ts).
+ * POST /api/storefront/welcome-signup — the email popup and the footer
+ * newsletter on shopcarbon.com (snippets/carbon-welcome-popup.liquid). A
+ * shopper's email → subscribed in Shopify + one unique, single-use code
+ * (lib/server/welcome/signup.ts).
  *
  * Called from shoppers' browsers, so it is public (proxy.ts) and answers CORS
  * for the storefront origins only. text/plain JSON body: a "simple" request,
@@ -67,6 +68,7 @@ async function POST_handler(req: Request) {
     openMs: body.t,
     path: body.p,
     locale: body.l,
+    form: body.f,
     ip,
     ua: req.headers.get("user-agent") ?? "",
   });

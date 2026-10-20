@@ -49,6 +49,12 @@ export function screenRequest(input: { honeypot: unknown; openMs: unknown; ua: s
   return null;
 }
 
+/** Which signup form on the store: the popup or the footer newsletter. */
+export type WelcomeForm = "popup" | "footer";
+export function formOf(raw: unknown): WelcomeForm {
+  return raw === "footer" ? "footer" : "popup";
+}
+
 export type WelcomeLang = "en" | "es" | "pt";
 
 /** Shopify locale ("es", "pt-BR", "en-US", …) → the popup / email language. */

@@ -26,6 +26,7 @@ import {
   MAX_SIGNUPS_PER_IP_PER_DAY,
   WELCOME_TAG,
   emailDomain,
+  formOf,
   normalizeEmail,
   screenRequest,
   welcomeCode,
@@ -39,6 +40,8 @@ export type SignupInput = {
   openMs: unknown;
   path: unknown;
   locale: unknown;
+  /** "popup" or "footer" (the footer newsletter uses the same signup). */
+  form: unknown;
   ip: string | null;
   ua: string;
 };
@@ -274,8 +277,8 @@ export async function runWelcomeSignup(pool: Pool, input: SignupInput): Promise<
     const ins = await client.query<{ id: number }>(
       `INSERT INTO welcome_signups
          (email, shopify_customer_gid, existing_customer, code, discount_gid, percent_off, ends_at,
-          locale, source_path, ip, country, asn, unsub_token)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          locale, source_path, ip, country, asn, unsub_token, form)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id`,
       [
         email,
@@ -291,6 +294,7 @@ export async function runWelcomeSignup(pool: Pool, input: SignupInput): Promise<
         info.country,
         info.asn,
         randomBytes(24).toString("base64url"),
+        formOf(input.form),
       ],
     );
     await client.query("COMMIT");

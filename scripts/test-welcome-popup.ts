@@ -9,6 +9,7 @@ import {
   EMAIL_COPY,
   MIN_OPEN_MS,
   emailDomain,
+  formOf,
   langOf,
   longDate,
   normalizeEmail,
@@ -114,12 +115,24 @@ test("email escapes what it prints", () => {
 test("themeConfig ships only what the snippet reads", () => {
   assert.deepEqual(themeConfig({ ...WELCOME_DEFAULTS, enabled: true, percentOff: 15 }), { enabled: true, percent: 15, delay: 8, validDays: 30 });
 });
+test("formOf: popup unless it says footer", () => {
+  assert.equal(formOf("footer"), "footer");
+  assert.equal(formOf("popup"), "popup");
+  assert.equal(formOf(undefined), "popup");
+  assert.equal(formOf("<script>"), "popup");
+});
+
+const snippet = readFileSync(path.join(process.cwd(), "theme/snippets/carbon-welcome-popup.liquid"), "utf8");
 test("snippet: posts to the public route, honours off / preview / Shield blocks, never replaces a cart code", () => {
-  const s = readFileSync(path.join(process.cwd(), "theme/snippets/carbon-welcome-popup.liquid"), "utf8");
+  const s = snippet;
   assert.ok(s.includes('"https://wms.shopcarbon.com/api/storefront/welcome-signup"'));
   assert.ok(s.includes("shop.metafields.carbon.welcome_popup.value"));
   assert.ok(s.includes("carbon_welcome=preview"));
-  assert.ok(s.includes("if (!CFG.enabled || SUBSCRIBED || navigator.webdriver) return;"));
+  // Off (and not previewing) → nothing runs, so the footer form stays Shopify's own.
+  assert.ok(s.includes("if (!(preview || CFG.enabled) || navigator.webdriver) return;"));
+  // Signed-in subscribers and visitors who already signed up / closed it never get the popup.
+  assert.ok(s.includes("if (SUBSCRIBED || seen) popupAllowed = false;"));
+  assert.ok(s.includes('st.s === "done"'));
   assert.ok(s.includes("cs_v=b"));
   assert.ok(s.includes("c.discount_codes && c.discount_codes.length"));
   assert.ok(/name="cwp_x"/.test(s), "honeypot name no autofill fills");
@@ -129,6 +142,19 @@ test("snippet: posts to the public route, honours off / preview / Shield blocks,
   const css = s.slice(s.indexOf("var CSS ="), s.indexOf("var root, card"));
   const bare = css.match(/(?:^|[}"])\s*\.cwp-[a-z]/g) ?? [];
   assert.equal(bare.length, 0, `unscoped rules: ${bare.join(" ")}`);
+});
+test("snippet: the footer newsletter uses the same signup (form=footer), keeps its consent box, stops the popup", () => {
+  const s = snippet;
+  assert.ok(s.includes('d.querySelectorAll(".signup-container form")'));
+  assert.ok(s.includes('postSignup(email, hp.value,') && s.includes('"footer")'));
+  assert.ok(s.includes('"popup")'));
+  assert.ok(s.includes("e.stopImmediatePropagation();") && s.includes("}, true);"), "captures submit before other scripts");
+  assert.ok(!/required\s*=\s*false|removeAttribute\("required"\)/.test(s), "consent checkbox stays required");
+  assert.ok(s.includes("if (shown || signedUp) return;"), "a footer signup stops the popup on this page");
+  const foot = s.slice(s.indexOf("var FOOT_CSS ="), s.indexOf("function wireFooterForm"));
+  const bare = foot.match(/(?:^|[}"])\s*\.cwf-[a-z]/g) ?? [];
+  assert.equal(bare.length, 0, `unscoped footer rules: ${bare.join(" ")}`);
+  for (const lang of ["Sign up and get", "Suscríbete y recibe", "Cadastre-se e ganhe"]) assert.ok(s.includes(lang), lang);
 });
 
 console.log(`welcome-popup: ${passed} tests passed`);
