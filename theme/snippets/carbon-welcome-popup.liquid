@@ -101,8 +101,13 @@
     function fill(s, v) { return esc(s).replace("{email}", "<b>" + esc(v.email || "") + "</b>").replace("{date}", esc(v.date || "")); }
     function longDate(iso) { try { return new Date(iso).toLocaleDateString(dateLocale, { year: "numeric", month: "long", day: "numeric" }); } catch (e) { return ""; } }
 
+    /* The theme's own fonts (already loaded by the theme). Font family names
+       come out of Liquid with their CSS quotes, so they go through | json. */
+    var FONT_HEAD = {{ settings.heading_font.family | append: ', ' | append: settings.heading_font.fallback_families | json }};
+    var FONT_BODY = {{ settings.body_font.family | append: ', ' | append: settings.body_font.fallback_families | json }};
+    var FONT_HEAD_WEIGHT = {{ settings.heading_font.weight | default: 600 | json }};
     var CSS =
-      ".cwp{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'{{ settings.body_font.family }}',{{ settings.body_font.fallback_families }};color:#111;-webkit-text-size-adjust:100%}" +
+      ".cwp{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:16px;font-family:" + FONT_BODY + ";color:#111;-webkit-text-size-adjust:100%}" +
       ".cwp *{box-sizing:border-box}" +
       ".cwp .cwp-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:opacity .2s ease}" +
       ".cwp .cwp-card{position:relative;width:100%;max-width:440px;max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain;background:#fff;padding:44px 32px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.28);opacity:0;transform:translateY(14px);transition:opacity .2s ease,transform .25s ease}" +
@@ -110,17 +115,18 @@
       ".cwp .cwp-x{position:absolute;top:4px;right:4px;width:44px;height:44px;border:0;background:none;color:#111;font-size:28px;line-height:1;letter-spacing:0;text-transform:none;cursor:pointer}" +
       ".cwp .cwp-pv{display:inline-block;margin:0 0 14px;padding:3px 8px;background:#fff3cd;color:#6b4e00;font-size:11px;letter-spacing:.06em;text-transform:uppercase}" +
       ".cwp .cwp-brand{margin:0 0 22px;font-size:13px;font-weight:700;letter-spacing:.5em;padding-left:.5em}" +
-      ".cwp .cwp-h,.cwp .cwp-line,.cwp .cwp-btn,.cwp .cwp-done{font-family:'{{ settings.heading_font.family }}',{{ settings.heading_font.fallback_families }};font-weight:{{ settings.heading_font.weight | default: 600 }};text-transform:uppercase}" +
+      ".cwp .cwp-h,.cwp .cwp-line,.cwp .cwp-btn,.cwp .cwp-done{font-family:" + FONT_HEAD + ";font-weight:" + FONT_HEAD_WEIGHT + ";text-transform:uppercase}" +
       ".cwp .cwp-h{margin:0;font-size:54px;line-height:.95;letter-spacing:.01em;text-wrap:balance}" +
       ".cwp .cwp-line{margin:10px 0 0;font-size:17px;letter-spacing:.18em}" +
-      ".cwp .cwp-sub{margin:16px auto 22px;max-width:30ch;font-size:15px;line-height:1.5;color:#444}" +
+      ".cwp .cwp-h.cwp-long{font-size:44px}" +
+      ".cwp .cwp-sub{margin:16px auto 22px;max-width:32ch;font-size:15px;line-height:1.5;color:#444;text-wrap:balance}" +
       ".cwp .cwp-form{display:flex;flex-direction:column;gap:10px;margin:0}" +
       ".cwp .cwp-in{width:100%;height:52px;padding:0 14px;border:1px solid #111;border-radius:0;background:#fff;color:#111;font:inherit;font-size:16px;text-align:left}" +
       ".cwp .cwp-in::placeholder{color:#777}" +
       ".cwp .cwp-btn{width:100%;min-height:52px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-size:16px;letter-spacing:.14em;cursor:pointer}" +
       ".cwp .cwp-btn[disabled]{opacity:.6;cursor:wait}" +
       ".cwp .cwp-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0}" +
-      ".cwp .cwp-err{min-height:20px;margin:2px 0 0;font-size:13px;color:#b00020;text-align:left}" +
+      ".cwp .cwp-err{margin:0;font-size:13px;color:#b00020;text-align:left}.cwp .cwp-err:empty{display:none}" +
       ".cwp .cwp-no{display:inline-block;margin:6px 0 0;min-height:44px;padding:0 12px;border:0;background:none;color:#555;font:inherit;font-size:14px;letter-spacing:0;text-transform:none;text-decoration:underline;cursor:pointer}" +
       ".cwp .cwp-fine{margin:10px 0 0;font-size:11.5px;line-height:1.5;color:#777}.cwp .cwp-fine a{color:#777}" +
       ".cwp .cwp-done{margin:0 0 18px;font-size:38px;line-height:1}" +
@@ -131,7 +137,12 @@
       ".cwp .cwp-msg{margin:0 0 6px;font-size:14px;line-height:1.5;color:#333}.cwp .cwp-msg b{color:#111;word-break:break-all}" +
       ".cwp .cwp-msgs{margin:0 0 20px}" +
       ".cwp :focus-visible{outline:2px solid #111;outline-offset:2px}.cwp .cwp-btn:focus-visible{outline-offset:3px}" +
-      "@media (max-width:767px){.cwp{align-items:flex-end;padding:0}.cwp .cwp-card{max-width:none;max-height:88dvh;padding:40px 20px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(100%)}.cwp .cwp-h{font-size:44px}.cwp .cwp-line{font-size:15px}}" +
+      "@media (max-width:767px){.cwp{align-items:flex-end;padding:0}" +
+      ".cwp .cwp-card{max-width:none;max-height:88dvh;padding:26px 20px calc(14px + env(safe-area-inset-bottom,0px));transform:translateY(100%)}" +
+      ".cwp .cwp-pv{margin-bottom:10px}.cwp .cwp-brand{margin-bottom:12px}" +
+      ".cwp .cwp-h{font-size:44px}.cwp .cwp-h.cwp-long{font-size:34px}.cwp .cwp-line{margin-top:6px;font-size:14px}" +
+      ".cwp .cwp-sub{margin:10px auto 14px;font-size:14px}.cwp .cwp-in,.cwp .cwp-btn{height:50px;min-height:50px}" +
+      ".cwp .cwp-no{margin-top:2px}.cwp .cwp-fine{margin-top:6px;font-size:11px}.cwp .cwp-done{font-size:32px;margin-bottom:14px}}" +
       "@media (prefers-reduced-motion:reduce){.cwp .cwp-scrim,.cwp .cwp-card{transition:none}}";
 
     var root, card, lastFocus, prevOverflow, openedAt = 0;
@@ -160,7 +171,7 @@
     function formView() {
       return (preview ? '<p class="cwp-pv">' + esc(T.preview) + "</p>" : "") +
         '<p class="cwp-brand" aria-hidden="true">CARBON</p>' +
-        '<h2 class="cwp-h" id="cwp-t">' + esc(T.big) + "</h2>" +
+        '<h2 class="cwp-h' + (T.big.length > 9 ? " cwp-long" : "") + '" id="cwp-t">' + esc(T.big) + "</h2>" +
         '<p class="cwp-line">' + esc(T.line) + "</p>" +
         '<p class="cwp-sub" id="cwp-d">' + esc(T.sub) + "</p>" +
         '<form class="cwp-form" novalidate>' +
