@@ -52,6 +52,7 @@ const SKIP_ROUTES = new Set<string>([
   "inventory/putaway-preview",
   "shopify/metafields/suggest",
   "mobile/locate-sessions", // telemetry, one row per Locate use — not a change
+  "shield/check", // Carbon Shield: one call per storefront page view — not a change
 ]);
 
 const MAX_BODY_BYTES = 256 * 1024;

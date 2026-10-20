@@ -29,6 +29,9 @@ function isPublicPath(pathname: string): boolean {
    * which has no WMS session. Authenticates inside the route via an HMAC that
    * Shopify's Liquid mints for the logged-in customer. */
   if (pathname === "/api/wishlist") return true;
+  /* Carbon Shield: the theme script on shopcarbon.com asks for a verdict on
+     every page view — shoppers have no WMS session. */
+  if (pathname === "/api/shield/check") return true;
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;

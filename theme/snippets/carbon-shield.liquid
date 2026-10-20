@@ -1,0 +1,101 @@
+{%- comment -%}
+  Carbon Shield — WMS → Shopify → Carbon Shield.
+  Rendered first thing in <head> (layout/theme.liquid). On every page view it
+  asks wms.shopcarbon.com/api/shield/check for a verdict:
+    - allowed visitors notice nothing;
+    - blocked visitors (enforce mode only) see "Access restricted" with a
+      reference code, and are marked "no tracking" for Shopify's pixels so the
+      ad platforms do not learn from bots.
+  Fails open: no answer, an error or a timeout means the page shows normally.
+  Not rendered in the theme editor. QA: ?carbon_shield_test=block shows the
+  block page to this browser only; ?carbon_shield_test=clear forgets a cached
+  block.
+  Deployed by scripts/deploy-carbon-shield.mjs — edit this file, not the theme.
+{%- endcomment -%}
+{%- unless request.design_mode -%}
+<script>
+(function () {
+  try {
+    var API = "https://wms.shopcarbon.com/api/shield/check";
+    var d = document, loc = window.location;
+    function getC(n) { var m = d.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
+    function setC(n, v, minutes) { d.cookie = n + "=" + encodeURIComponent(v) + "; path=/; max-age=" + Math.round(minutes * 60) + "; SameSite=Lax; Secure"; }
+
+    var vid = getC("cs_vid");
+    if (!vid) {
+      vid = window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+      setC("cs_vid", vid, 60 * 24 * 365);
+    }
+    var q = loc.search || "";
+    if (/[?&]carbon_shield_test=clear\b/.test(q)) setC("cs_v", "", 0);
+    var test = /[?&]carbon_shield_test=block\b/.test(q);
+
+    var silenced = false;
+    function silence() {
+      if (silenced) return;
+      silenced = true;
+      var set = function () {
+        try { window.Shopify.customerPrivacy.setTrackingConsent({ analytics: false, marketing: false, preferences: false, sale_of_data: false }, function () {}); } catch (e) {}
+      };
+      var load = function () {
+        try {
+          if (window.Shopify && window.Shopify.customerPrivacy) set();
+          else if (window.Shopify && window.Shopify.loadFeatures) window.Shopify.loadFeatures([{ name: "consent-tracking-api", version: "0.1" }], function (err) { if (!err) set(); });
+          else return false;
+        } catch (e) {}
+        return true;
+      };
+      if (!load()) d.addEventListener("DOMContentLoaded", load);
+    }
+
+    var shown = false;
+    function block() {
+      silence();
+      if (shown) return;
+      shown = true;
+      var html =
+        '<div style="font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:12vh auto;padding:0 20px;color:#111;text-align:center">' +
+        '<p style="font-weight:800;letter-spacing:6px;font-size:18px;margin:0 0 28px">CARBON</p>' +
+        '<h1 style="font-size:22px;margin:0 0 12px">Access restricted</h1>' +
+        "<p style=\"margin:0 0 10px;color:#444\">We couldn't verify your connection. If you use a VPN or proxy, turn it off and reload the page.</p>" +
+        '<p style="margin:0;color:#777;font-size:13px">Reference: ' + String(vid).slice(0, 8) + "</p></div>";
+      var paint = function () {
+        try {
+          d.title = "Access restricted";
+          d.body.innerHTML = html;
+          d.body.style.background = "#fff";
+        } catch (e) {}
+        try { d.documentElement.style.visibility = "visible"; } catch (e) {}
+      };
+      try { d.documentElement.style.visibility = "hidden"; } catch (e) {}
+      if (d.body && d.readyState !== "loading") paint();
+      else d.addEventListener("DOMContentLoaded", paint);
+    }
+
+    var cached = getC("cs_v");
+    if (cached === "b" || test) block();
+
+    if (!window.fetch) return;
+    var p = new URLSearchParams(q);
+    var ad = p.get("fbclid") ? "meta" : p.get("gclid") || p.get("gbraid") || p.get("wbraid") ? "google" : p.get("ttclid") ? "tiktok" : "";
+    var ref = "";
+    try { ref = d.referrer ? new URL(d.referrer).hostname : ""; } catch (e) {}
+    var body = JSON.stringify({ v: vid, p: loc.pathname, r: ref, wd: !!navigator.webdriver, ad: ad, utm: p.get("utm_source") || "" });
+    fetch(API, { method: "POST", headers: { "Content-Type": "text/plain" }, body: body, credentials: "omit", keepalive: true })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || j.mode === "off") return;
+        if (j.action === "block") {
+          setC("cs_v", "b", j.ttl || 60);
+          block();
+        } else if (cached === "b" && !test) {
+          // Let back in (an "Allow" rule, or blocking switched off): forget the block and show the store.
+          setC("cs_v", "", 0);
+          loc.reload();
+        } else if (j.silence) silence();
+      })
+      .catch(function () {});
+  } catch (e) {}
+})();
+</script>
+{%- endunless -%}

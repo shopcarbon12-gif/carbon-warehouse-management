@@ -95,6 +95,10 @@ const ROUTES: Record<string, Entry> = {
 
   "shopify/publish": { module: "Shopify", label: "Published to Shopify" },
   "shopify/sales/[id]/thank-you-code": { module: "Shopify", label: { PUT: "Switched thank-you code on/off" } },
+  "shopify/carbon-shield/settings": { module: "Shopify", label: "Changed Carbon Shield settings" },
+  "shopify/carbon-shield/rules": { module: "Shopify", label: "Added a Carbon Shield rule" },
+  "shopify/carbon-shield/rules/[id]": { module: "Shopify", label: "Removed a Carbon Shield rule" },
+  "shopify/carbon-shield/refresh": { module: "Shopify", label: "Refreshed Carbon Shield IP data" },
   "shopify/status": { module: "Shopify", label: "Changed Shopify product status" },
   "shopify/media": { module: "Shopify", label: { POST: "Changed Shopify images", PUT: "Changed Shopify images", PATCH: "Reordered Shopify images", DELETE: "Deleted Shopify image" } },
   "shopify/image-upload": { module: "Shopify", label: "Uploaded image to Shopify" },
