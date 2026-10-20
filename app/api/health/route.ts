@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getBuildId } from "@/lib/server/build-id";
 
 /**
  * Liveness only (Docker / Coolify / Traefik). Must stay fast and must not depend on Postgres —
@@ -6,7 +7,7 @@ import { NextResponse } from "next/server";
  */
 export async function GET() {
   return NextResponse.json(
-    { ok: true },
+    { ok: true, build: getBuildId() },
     {
       status: 200,
       headers: { "Cache-Control": "no-store" },

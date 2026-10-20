@@ -70,7 +70,21 @@ function readItems(): Item[] {
 const btn =
   "inline-flex items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide disabled:opacity-50 max-md:min-h-11";
 
-export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
+export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: boolean; buildId?: string }) {
+  /* A newer version went live while this page was open: say so, once a minute. */
+  const [stale, setStale] = useState(false);
+  useEffect(() => {
+    if (!buildId) return;
+    const check = () =>
+      void fetch("/api/health", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j: { build?: string }) => {
+          if (j.build && j.build !== buildId) setStale(true);
+        })
+        .catch(() => {});
+    const t = window.setInterval(check, 60_000);
+    return () => window.clearInterval(t);
+  }, [buildId]);
   const [tab, setTab] = useState<"studio" | "upload">("studio");
   const [items, setItems] = useState<Item[]>([{ key: "init", matrixId: null }]);
   const [loaded, setLoaded] = useState(false);
@@ -340,7 +354,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       let seg = 1;
       let maxSeen = 1;
       photos = photos.map((p) => {
-        if (p.isTag || p.group > maxSeen) seg += 1;
+        /* Items split ONLY at a hang tag: the "different garment" guess split a
+           shirt's back print into its own item (owner 2026-10-20). */
+        if (p.isTag) seg += 1;
         maxSeen = Math.max(maxSeen, p.group);
         return { ...p, group: seg };
       });
@@ -437,6 +453,18 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      {stale ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/60 bg-amber-950/30 px-3 py-2 font-mono text-[0.78rem] text-amber-200">
+          A new version of Bulk Studio is live — reload this page before uploading more.
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border border-amber-400 px-3 py-1 uppercase tracking-wide text-amber-100 max-md:min-h-11"
+          >
+            Reload
+          </button>
+        </div>
+      ) : null}
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[var(--wms-border)]">
         {(
           [

@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/get-session";
 import { BulkStudioWorkspace } from "@/components/inventory/bulk-studio/bulk-studio-workspace";
+import { getBuildId } from "@/lib/server/build-id";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export default async function BulkStudioPage() {
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Bulk Studio</h1>
       </div>
       {canManage ? (
-        <BulkStudioWorkspace canManage={canManage} />
+        <BulkStudioWorkspace canManage={canManage} buildId={getBuildId()} />
       ) : (
         <p className="font-mono text-xs text-[var(--wms-status-warning-fg)]">Bulk Studio is for admins.</p>
       )}
