@@ -245,9 +245,6 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       return n;
     });
   };
-  const setMatrix = (key: string, matrixId: string | null) =>
-    setItems((p) => p.map((x) => (x.key === key ? { ...x, matrixId } : x)));
-
   /* Scan box (owner 2026-10-20): a scanned hang tag (or typed barcode / UPC)
      opens that product's full Studio card straight away — into the first empty
      item if there is one, otherwise as a new item at the end. */
@@ -319,7 +316,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
         <>
           {/* Top bar — sticks while the item list scrolls. */}
           {picked.length ? (
-          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1.5 shadow-sm">
+          <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 bg-[var(--wms-bg)] py-1.5">
             <div className="flex-1" />
             <div className="flex flex-wrap gap-2">
               <button
@@ -401,7 +398,6 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               canManage={canManage}
               status={statuses[it.key]}
               stepNote={stepNote[it.key]}
-              onPick={(id) => setMatrix(it.key, id)}
               onScan={(id) => addScanned(it.key, id)}
               focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
               onRemove={() => removeItem(it.key)}
@@ -429,7 +425,6 @@ function BulkItemCard({
   canManage,
   status,
   stepNote,
-  onPick,
   onScan,
   focus,
   onRemove,
@@ -441,7 +436,6 @@ function BulkItemCard({
   canManage: boolean;
   status?: BulkStudioStatus;
   stepNote?: string;
-  onPick: (matrixId: string | null) => void;
   onScan: (matrixId: string) => void;
   focus: boolean;
   onRemove: () => void;
@@ -485,8 +479,8 @@ function BulkItemCard({
       aria-label={`Item ${index + 1}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
-        <span className="text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">Item {index + 1}:</span>
-        <div className="min-w-[16rem] max-w-3xl flex-1">
+        <span className="text-2xl font-semibold uppercase tracking-tight text-[var(--wms-fg)]">Item {index + 1}:</span>
+        <div className="min-w-[16rem] max-w-[60%] flex-[3] max-md:max-w-full">
           <ProductPicker
             scan
             autoFocus={focus}
@@ -494,17 +488,12 @@ function BulkItemCard({
             onPick={onScan}
             placeholder={
               item.matrixId && m
-                ? `${m.description ?? ""}${m.upc ? ` · UPC ${m.upc}` : ""} — scan the next tag to add it`
-                : "scan the hang tag (or type a barcode / UPC / name)…"
+                ? `${m.description ?? ""}${m.upc ? ` · ${m.upc}` : ""}`
+                : "scan the hang tag…"
             }
           />
         </div>
-        {item.matrixId && m ? (
-          <p className="min-w-0 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-            <span className="text-sm font-semibold text-[var(--wms-fg)]">{m.description}</span>
-            {[m.upc ? ` · UPC ${m.upc}` : null, m.category, m.subcategory_1].filter(Boolean).join(" · ")}
-          </p>
-        ) : item.matrixId ? (
+        {item.matrixId && !m ? (
           <p className="font-mono text-[0.7rem] text-[var(--wms-muted)]">{isLoading ? "Loading…" : error ? "Could not load this product" : ""}</p>
         ) : null}
         <div className="flex-1" />
@@ -516,16 +505,6 @@ function BulkItemCard({
         </span>
         {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
         <div className="flex gap-1.5">
-          {item.matrixId ? (
-            <button
-              type="button"
-              onClick={() => onPick(null)}
-              title="Pick a different product (this product's photos stay saved with it)"
-              className="rounded-md border border-[var(--wms-border)] px-2 py-1 font-mono text-[0.7rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:min-h-11"
-            >
-              change
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={onRemove}
