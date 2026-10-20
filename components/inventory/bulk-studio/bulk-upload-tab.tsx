@@ -47,6 +47,8 @@ type Card = {
   color: string;
   selected: boolean;
   label: string;
+  /** Current Shopify pictures: the view it shows (for the order). */
+  view?: string;
 };
 type Row = {
   matrixId: string;
@@ -65,9 +67,13 @@ type Row = {
   msg: string;
 };
 
-/** Gallery position of each generated pose (lib/panelGeneration.ts pose sets). */
-const RANK_MALE: Record<number, number> = { 1: 0, 2: 1, 3: 2, 5: 3, 6: 4, 8: 5, 7: 6, 4: 7 };
-const RANK_FEMALE: Record<number, number> = { 1: 0, 6: 1, 4: 2, 7: 3, 3: 4, 5: 5, 8: 6, 2: 7 };
+/* Gallery position of each generated pose (owner 2026-10-20, Challenge T-Shirt):
+   hero full-length front, then the front crops / close-ups / detail, then the
+   second full-length shot, seated, back close-up, full back last. */
+const RANK_MALE: Record<number, number> = { 1: 0, 3: 1, 5: 2, 6: 3, 2: 4, 8: 5, 7: 6, 4: 7 };
+const RANK_FEMALE: Record<number, number> = { 1: 0, 4: 1, 7: 2, 5: 3, 6: 4, 3: 5, 8: 6, 2: 7 };
+/* The same order for the product's current Shopify pictures, by the view each shows. */
+const EX_RANK: Record<string, number> = { "full-front": 0, "front-close": 1, detail: 2, side: 3, other: 4, seated: 5, "back-close": 6, back: 7 };
 const VIEW_MALE: Record<number, string> = { 1: "front", 2: "front", 3: "front close-up", 4: "back", 5: "front close-up", 6: "detail", 7: "back close-up", 8: "lifestyle" };
 const VIEW_FEMALE: Record<number, string> = { 1: "front", 2: "back", 3: "three-quarter", 4: "front close-up", 5: "detail", 6: "front", 7: "front close-up", 8: "lifestyle" };
 
@@ -140,6 +146,16 @@ function arrange(gen: Map<string, Card[]>, existing: Card[], include: boolean, c
     if (cur) blocks.set(cur, [...(blocks.get(cur) ?? []), { ...c }]);
     else untied.push({ ...c });
   }
+  /* Each colour's current pictures in the owner's order: a full-length shot
+     first (a three-quarter one if there is no straight front), then crops and
+     details, seated, back close-up, back last. */
+  for (const [colour, list] of blocks) {
+    const hasFront = list.some((c) => c.view === "full-front");
+    const r = (c: Card) => (!hasFront && c.view === "side" ? -1 : EX_RANK[c.view ?? "other"] ?? 4);
+    const sorted = list.map((c, i) => ({ c, i })).sort((a, b) => r(a.c) - r(b.c) || a.i - b.i).map((x) => x.c);
+    sorted.forEach((c, i) => (c.color = i === 0 ? colour : ""));
+    blocks.set(colour, sorted);
+  }
   const order = [...colours, ...[...gen.keys()].filter((c) => !colours.includes(c))];
   const out: Card[] = [];
   for (const colour of order) {
@@ -163,7 +179,17 @@ export function BulkUploadTab({ active }: { active: boolean }) {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; tone: "info" | "ok" | "warn" | "err" } | null>(null);
   const [busy, setBusy] = useState<null | "alt" | "publish">(null);
-  const genRef = useRef(new Map<string, Map<string, Card[]>>());
+  /** Each finished run's pictures and the colour block they go in (changeable). */
+  const runCards = useRef(new Map<string, { matrixId: string; colour: string; cards: Card[] }>());
+  const genFor = (matrixId: string) => {
+    const gen = new Map<string, Card[]>();
+    for (const rc of runCards.current.values()) {
+      if (rc.matrixId !== matrixId) continue;
+      gen.set(rc.colour, [...(gen.get(rc.colour) ?? []), ...rc.cards.map((c) => ({ ...c, label: c.label.replace(/^[^·]*·/, `${rc.colour} ·`) }))]);
+    }
+    for (const [c, list] of gen) gen.set(c, list.sort((a, b) => (rankRef.current.get(a.key) ?? 9) - (rankRef.current.get(b.key) ?? 9)));
+    return gen;
+  };
   /** Gallery rank of every generated card, so several runs of one colour sort together. */
   const rankRef = useRef(new Map<string, number>());
   const seenRuns = useRef(new Set<string>());
@@ -262,7 +288,18 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         const mj = await getJson<{ media?: { id: string; url: string; alt: string | null }[] }>(`/api/shopify/media?matrixId=${matrixId}`);
         const mainOf = new Map<string, string>();
         for (const v of live) if (v.shopify_image_url && v.color && !mainOf.has(picKey(v.shopify_image_url))) mainOf.set(picKey(v.shopify_image_url), v.color.trim());
-        existing = (mj.media ?? []).map((m, i) => ({
+        const media = mj.media ?? [];
+        const vj = media.length
+          ? await fetch("/api/studio/classify-views", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ urls: media.map((m) => m.url) }),
+            })
+              .then((x) => x.json() as Promise<{ views?: string[] }>)
+              .catch(() => ({ views: [] as string[] }))
+          : { views: [] as string[] };
+        existing = media.map((m, i) => ({
+          view: vj.views?.[i] ?? "other",
           key: `ex-${m.id}`,
           kind: "existing" as const,
           mediaId: m.id,
@@ -274,7 +311,6 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         }));
       }
       /* Generated pictures: each finished panel split into its two 3:4 pictures. */
-      const gen = genRef.current.get(matrixId) ?? new Map<string, Card[]>();
       for (const run of runs) {
         const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string; mime?: string }[] }>(
           `/api/studio/batch/${run.id}?jpeg=1`,
@@ -305,11 +341,9 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           }
         }
         for (const x of list) rankRef.current.set(x.card.key, x.rank);
-        const merged = [...(gen.get(colour) ?? []), ...list.map((x) => x.card)];
-        merged.sort((a, b) => (rankRef.current.get(a.key) ?? 9) - (rankRef.current.get(b.key) ?? 9));
-        gen.set(colour, merged);
+        runCards.current.set(run.id, { matrixId, colour, cards: list.map((x) => x.card) });
       }
-      genRef.current.set(matrixId, gen);
+      const gen = genFor(matrixId);
       /* Blocks follow the colour order the Shopify gallery already has (the
          owner's option order); colours not on Shopify yet follow. */
       const shopOrder = existing.map((c) => c.color).filter((c, i, a) => c && a.indexOf(c) === i);
@@ -346,9 +380,9 @@ export function BulkUploadTab({ active }: { active: boolean }) {
       p.map((r) => {
         if (r.state !== "ready") return r;
         if (!next) return { ...r, cards: r.cards.filter((c) => c.kind !== "existing") };
-        const have = new Set(r.cards.map((c) => c.key));
-        const missing = r.existing.filter((c) => !have.has(c.key)).map((c) => ({ ...c, color: r.cards.some((x) => x.color && x.color === c.color) ? "" : c.color }));
-        return { ...r, cards: [...r.cards, ...missing] };
+        /* Back in, each in its colour's block and in order. */
+        const ups = r.cards.filter((c) => c.key.startsWith("up-"));
+        return { ...r, cards: [...arrange(genFor(r.matrixId), r.existing, true, r.colours), ...ups] };
       }),
     );
   };
@@ -482,6 +516,29 @@ export function BulkUploadTab({ active }: { active: boolean }) {
     setRows((p) => p.filter((x) => x.matrixId !== r.matrixId));
   };
 
+  /* A run's pictures came out as another colour: move the whole set to that colour's block. */
+  const setRunColour = (r: Row, runId: string, colour: string) => {
+    const rc = runCards.current.get(runId);
+    if (!rc) return;
+    rc.colour = colour;
+    patchRow(r.matrixId, (x) => ({ ...x, cards: arrange(genFor(r.matrixId), x.existing, includeRef.current, x.colours), msg: `Moved to ${colour} — the order was rebuilt.` }));
+  };
+
+  /* Click a card: the picture big, ← → to step through the row, Esc to close. */
+  const [zoom, setZoom] = useState<{ matrixId: string; idx: number } | null>(null);
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoom(null);
+      if (e.key === "ArrowRight") setZoom((z) => (z ? { ...z, idx: z.idx + 1 } : z));
+      if (e.key === "ArrowLeft") setZoom((z) => (z ? { ...z, idx: Math.max(0, z.idx - 1) } : z));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoom]);
+  const zoomRow = zoom ? rows.find((x) => x.matrixId === zoom.matrixId) : null;
+  const zoomCard = zoomRow ? zoomRow.cards[Math.min(zoom?.idx ?? 0, zoomRow.cards.length - 1)] : null;
+
   const openOnline = async (matrixId: string) => {
     const w = window.open("about:blank", "_blank");
     try {
@@ -549,8 +606,25 @@ export function BulkUploadTab({ active }: { active: boolean }) {
             </label>
             <p className="min-w-0 font-mono text-[0.72rem] text-[var(--wms-muted)]">
               <span className="text-sm font-semibold text-[var(--wms-fg)]">{r.name}</span>
-              {r.upc ? ` · UPC ${r.upc}` : ""} · {r.runs.map((x) => `${x.itemColour ?? ""} ${x.modelName ?? ""}`.trim()).join(", ")}
+              {r.upc ? ` · UPC ${r.upc}` : ""}
             </p>
+            {r.runs.map((run) => (
+              <label key={run.id} className="flex items-center gap-1 font-mono text-[0.68rem] text-[var(--wms-muted)]" title="The colour these pictures show — change it if the pictures came out as another colour">
+                {run.modelName}:
+                <select
+                  value={runCards.current.get(run.id)?.colour ?? run.itemColour ?? ""}
+                  disabled={r.state !== "ready" || r.colours.length < 2}
+                  onChange={(e) => setRunColour(r, run.id, e.target.value)}
+                  className="rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1 py-0.5 font-mono text-[0.68rem] text-[var(--wms-fg)] max-md:min-h-11"
+                >
+                  {[...new Set([run.itemColour ?? "", ...r.colours])].filter(Boolean).map((col) => (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
             <div className="flex-1" />
             <label className={`${btn} cursor-pointer border-dashed border-[var(--wms-border)] text-[var(--wms-accent)]`} title="Add your own pictures to this product">
               ＋ Upload
@@ -617,7 +691,14 @@ export function BulkUploadTab({ active }: { active: boolean }) {
                     className={`relative w-40 shrink-0 rounded-md border p-1.5 ${c.selected ? "border-[var(--wms-accent)]/60" : "border-[var(--wms-border)] opacity-50"}`}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- generated / Shopify picture preview */}
-                    <img src={c.src} alt={c.alt} draggable={false} className="aspect-[3/4] w-full rounded object-cover" />
+                    <img
+                      src={c.src}
+                      alt={c.alt}
+                      draggable={false}
+                      title="Click to see it big"
+                      onClick={() => setZoom({ matrixId: r.matrixId, idx: i })}
+                      className="aspect-[3/4] w-full cursor-zoom-in rounded object-cover"
+                    />
                     <div className="absolute left-2 top-2 flex flex-col gap-1">
                       {i === 0 ? <span className="rounded bg-black/70 px-1.5 font-mono text-[0.58rem] uppercase text-white">Hero</span> : null}
                       {c.kind === "existing" ? <span className="rounded bg-black/70 px-1.5 font-mono text-[0.58rem] uppercase text-white">Shopify</span> : null}
@@ -682,6 +763,24 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           ) : null}
         </section>
       ))}
+      {zoom && zoomRow && zoomCard ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4" onClick={() => setZoom(null)} role="dialog" aria-modal="true">
+          {/* eslint-disable-next-line @next/next/no-img-element -- full-size preview */}
+          <img src={zoomCard.src} alt={zoomCard.alt} className="max-h-[92vh] max-w-[92vw] rounded object-contain" onClick={(e) => e.stopPropagation()} />
+          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded bg-black/70 px-3 py-1 font-mono text-xs text-white">
+            {zoomRow.name} · {Math.min(zoom.idx, zoomRow.cards.length - 1) + 1} / {zoomRow.cards.length} · {zoomCard.label}
+          </p>
+          <button type="button" aria-label="Previous" onClick={(e) => { e.stopPropagation(); setZoom({ ...zoom, idx: Math.max(0, zoom.idx - 1) }); }} className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-4 py-3 text-2xl text-white hover:bg-white/25">
+            ‹
+          </button>
+          <button type="button" aria-label="Next" onClick={(e) => { e.stopPropagation(); setZoom({ ...zoom, idx: Math.min(zoomRow.cards.length - 1, zoom.idx + 1) }); }} className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/15 px-4 py-3 text-2xl text-white hover:bg-white/25">
+            ›
+          </button>
+          <button type="button" aria-label="Close" onClick={() => setZoom(null)} className="absolute right-4 top-4 rounded-md bg-white/15 px-3 py-1.5 font-mono text-sm text-white hover:bg-white/25">
+            ✕ Close
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
