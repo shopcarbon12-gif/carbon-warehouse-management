@@ -3069,7 +3069,7 @@ export function CarbonStudioTab({
         <span className={label}>Item photo(s) — the garment reference</span>
         <p className="mb-2 font-mono text-[0.68rem] text-[var(--wms-muted)]">
           Sort the photos by view so the front and the back can never be mixed up. Drag &amp; drop into a section,
-          paste from clipboard (⌘/Ctrl+V — lands in the highlighted section), upload, or use the phone camera.
+          {bulk ? " upload" : " paste from clipboard (⌘/Ctrl+V — lands in the highlighted section), upload"}, or use the phone camera.
         </p>
         <input
           ref={fileRef}
@@ -3149,12 +3149,12 @@ export function CarbonStudioTab({
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
-                    {zone.title}
+                    {bulk && zone.view === "general" ? "Accessories · General" : zone.title}
                     {zoneRefs.length ? ` · ${zoneRefs.length}` : ""}
                   </span>
                   {isActive ? (
                     <span className="font-mono text-[0.6rem] uppercase tracking-wide text-[var(--wms-accent)]">
-                      paste / camera target
+                      {bulk ? "camera target" : "paste / camera target"}
                     </span>
                   ) : null}
                 </div>
