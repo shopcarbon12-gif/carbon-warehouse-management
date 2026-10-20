@@ -85,6 +85,7 @@ const ROUTES: Record<string, Entry> = {
   "openai/item-spec": { module: "Studio", label: "Analysed item photos" },
   "openai/style-pieces": { module: "Studio", label: "Read the Style with photos" },
   "studio/read-tag": { module: "Studio", label: "Read a hang-tag photo (Bulk Studio)" },
+  "studio/auto-prep": { module: "Studio", label: "Sorted, straightened and cropped an item photo (Bulk Studio)" },
   "openai/look-resolve": { module: "Studio", label: "Turned the item instruction's styling into a look" },
   "openai/color-check": { module: "Studio", label: "Checked colourway photo" },
   "openai/image-alt": { module: "Studio", label: "Wrote image alt text" },

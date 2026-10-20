@@ -673,6 +673,7 @@ export function CarbonStudioTab({
 }: Props) {
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
+  const bulkMode = Boolean(bulk);
   /** Phone pose-plan banner's "Change model" jumps here. */
   const modelSelectRef = useRef<HTMLSelectElement | null>(null);
   const [itemType, setItemType] = useState<string>(() =>
@@ -988,7 +989,9 @@ export function CarbonStudioTab({
         }
         const s = j.state;
         if (s) {
-          const restored = s.itemRefs.map((x): ItemRef => ({ url: x.url, view: x.view, preview: previewFor(x.url) }));
+          /* Bulk Studio (owner 2026-10-20): a scanned product opens with empty
+             photo boxes — its earlier photos are not brought back. */
+          const restored = bulkMode ? [] : s.itemRefs.map((x): ItemRef => ({ url: x.url, view: x.view, preview: previewFor(x.url) }));
           // Merge, never replace: a photo pasted or uploaded before this
           // answer arrived must not vanish.
           setItemRefs((prev) => [...restored, ...prev.filter((p) => !restored.some((r0) => sameRef(r0, p)))]);
@@ -1015,7 +1018,7 @@ export function CarbonStudioTab({
     return () => {
       alive = false;
     };
-  }, [matrixId, productName]);
+  }, [matrixId, productName, bulkMode]);
 
   // Save it back, debounced, on every change after the restore. The pending
   // body lives in a ref so it can also be flushed on unmount / page hide —
@@ -1461,6 +1464,46 @@ export function CarbonStudioTab({
       setBusy(null);
     }
   }, []);
+
+  /* Bulk Studio (owner 2026-10-20): every photo added to General / Front / Back
+     — uploaded, from the phone, or handed over from before the scan — is
+     prepared on its own: moved to the box it belongs in, turned upright, and
+     a person's head cut off just under the chin. It shows at once where it was
+     dropped and moves when it is ready; the manual rotate / crop / drag still
+     work afterwards. Style with photos are other products and are left alone. */
+  const prepSeen = useRef<Set<string>>(new Set());
+  const [prepping, setPrepping] = useState(0);
+  useEffect(() => {
+    if (!bulkMode || !stateLoaded) return;
+    const fresh = itemRefs.filter((r) => (r.view ?? "general") !== "styling" && !prepSeen.current.has(r.url));
+    if (!fresh.length) return;
+    for (const r of fresh) prepSeen.current.add(r.url);
+    for (const r of fresh) {
+      setPrepping((n) => n + 1);
+      void fetch("/api/studio/auto-prep", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: r.url }),
+      })
+        .then(async (res) => {
+          const j = (await res.json().catch(() => ({}))) as { url?: string; view?: RefView };
+          if (!res.ok || !j.url) return;
+          const nextUrl = j.url;
+          const nextView: RefView = j.view === "front" || j.view === "back" ? j.view : "general";
+          prepSeen.current.add(nextUrl);
+          setItemRefs((prev) => {
+            const at = prev.findIndex((p0) => p0.url === r.url);
+            if (at < 0) return prev; // removed meanwhile
+            const changed = nextUrl !== r.url;
+            const ref: ItemRef = { url: nextUrl, view: nextView, preview: changed ? previewFor(nextUrl) : prev[at].preview };
+            const rest = prev.filter((p0, i) => i !== at && !(p0.url === nextUrl && p0.view === nextView));
+            return [...rest.slice(0, at), ref, ...rest.slice(at)];
+          });
+        })
+        .catch(() => {})
+        .finally(() => setPrepping((n) => n - 1));
+    }
+  }, [bulkMode, stateLoaded, itemRefs]);
 
   /* Bulk Studio: apply what was filled in before the barcode was scanned —
      once, after this product's saved state is in (so nothing saved is lost). */
@@ -3917,6 +3960,11 @@ export function CarbonStudioTab({
            below; all four panels are sent, the live-only options do not apply. */
         <div className="flex flex-wrap items-center gap-3">
           {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
+          {prepping > 0 ? (
+            <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">
+              Sorting, straightening and cropping {prepping} photo{prepping === 1 ? "" : "s"}…
+            </span>
+          ) : null}
           {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
           {photoWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{photoWarn}</span> : null}
           {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}
