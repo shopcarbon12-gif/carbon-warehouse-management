@@ -163,6 +163,8 @@ export function BulkUploadTab({ active }: { active: boolean }) {
   const [msg, setMsg] = useState<{ text: string; tone: "info" | "ok" | "warn" | "err" } | null>(null);
   const [busy, setBusy] = useState<null | "alt" | "publish">(null);
   const genRef = useRef(new Map<string, Map<string, Card[]>>());
+  /** Gallery rank of every generated card, so several runs of one colour sort together. */
+  const rankRef = useRef(new Map<string, number>());
   const seenRuns = useRef(new Set<string>());
 
   const patchRow = useCallback((matrixId: string, fn: (r: Row) => Row) => {
@@ -274,19 +276,25 @@ export function BulkUploadTab({ active }: { active: boolean }) {
             });
           }
         }
-        list.sort((a, b) => a.rank - b.rank);
-        gen.set(colour, [...(gen.get(colour) ?? []), ...list.map((x) => x.card)]);
+        for (const x of list) rankRef.current.set(x.card.key, x.rank);
+        const merged = [...(gen.get(colour) ?? []), ...list.map((x) => x.card)];
+        merged.sort((a, b) => (rankRef.current.get(a.key) ?? 9) - (rankRef.current.get(b.key) ?? 9));
+        gen.set(colour, merged);
       }
       genRef.current.set(matrixId, gen);
+      /* Blocks follow the colour order the Shopify gallery already has (the
+         owner's option order); colours not on Shopify yet follow. */
+      const shopOrder = existing.map((c) => c.color).filter((c, i, a) => c && a.indexOf(c) === i);
+      const colourOrder = [...shopOrder, ...colours.filter((c) => !shopOrder.includes(c))];
       patchRow(matrixId, (r) => ({
         ...r,
         name: d.matrix.description ?? r.name,
         upc: d.matrix.upc ?? "",
         shopifyProductId: d.matrix.shopify_product_id ?? null,
-        colours,
+        colours: colourOrder,
         variantIdsByColour,
         existing,
-        cards: arrange(gen, existing, includeRef.current, colours),
+        cards: arrange(gen, existing, includeRef.current, colourOrder),
         state: "ready",
         msg: "",
       }));
