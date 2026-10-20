@@ -50,7 +50,7 @@ For each photo decide:
   · A tag photo of a product starts that product's group; the photos after it belong to it until the next tag or until the photos clearly switch to a DIFFERENT garment.
   · A clearly different garment with no tag before it also starts a new group.
   · Shoes, a shirt, a bracelet or other pieces shot to STYLE the product stay in the product's group.
-  · Group 1 is the photos before any tag${current ? ` — they most likely show "${current}", the item already open` : ""}.
+  · ${current ? `Group 1 is RESERVED for "${current}", the item already open: photos of that garment (and pieces styling it) that come before any tag are group 1. If the first photos already show a DIFFERENT garment, they start group 2 — group 1 then stays empty.` : "Group 1 is the photos before any tag."}
 
 JSON only: {"photos": [{"photo": 1, "group": 1, "tag": false}, …]} with one entry per photo.`;
 }

@@ -323,8 +323,9 @@ export type BulkStudioHooks = {
   register: (api: BulkStudioApi | null) => void;
   onStatus: (s: BulkStudioStatus) => void;
   draft?: BulkStudioDraft | null;
-  /** The draft has been applied — the page can drop it. */
-  onDraftUsed?: () => void;
+  /** These draft photos have been taken in — the page drops them (more may
+      have arrived meanwhile; those stay for the next pass). */
+  onDraftUsed?: (used: BulkStudioDraft["files"]) => void;
   /** Bulk Studio: photos dropped on this item go to the page, which splits them
       into products (a new hang tag starts a new item) before they land. */
   ingest?: (entries: { file?: File; url?: string }[]) => void;
@@ -1516,27 +1517,35 @@ export function CarbonStudioTab({
 
   /* Bulk Studio: apply what was filled in before the barcode was scanned —
      once, after this product's saved state is in (so nothing saved is lost). */
-  const draftDone = useRef<BulkStudioDraft | null>(null);
+  /* Each draft photo is taken in exactly once (photos keep arriving while
+     earlier ones upload); the fields are applied the first time only. */
+  const draftTaken = useRef(new Set<object>());
+  const draftFieldsDone = useRef(false);
   const bulkDraft = bulk?.draft;
   const bulkDraftUsed = bulk?.onDraftUsed;
   useEffect(() => {
-    if (!stateLoaded || !bulkDraft || draftDone.current === bulkDraft) return;
+    if (!stateLoaded || !bulkDraft) return;
     if (bulkDraft.modelId && !models.length) return; // wait for the model list
-    draftDone.current = bulkDraft; // each new draft (more photos for this item) is applied once
-    if (bulkDraft.modelId && models.some((m0) => m0.model_id === bulkDraft.modelId)) setModelId(bulkDraft.modelId);
-    if (bulkDraft.itemType?.trim()) setItemType(bulkDraft.itemType.trim());
-    if (bulkDraft.instruction?.trim()) setInstruction(bulkDraft.instruction.trim());
-    if (bulkDraft.backIsPlain) setBackIsPlain(true);
-    const stored = bulkDraft.files
+    if (!draftFieldsDone.current) {
+      draftFieldsDone.current = true;
+      if (bulkDraft.modelId && models.some((m0) => m0.model_id === bulkDraft.modelId)) setModelId(bulkDraft.modelId);
+      if (bulkDraft.itemType?.trim()) setItemType(bulkDraft.itemType.trim());
+      if (bulkDraft.instruction?.trim()) setInstruction(bulkDraft.instruction.trim());
+      if (bulkDraft.backIsPlain) setBackIsPlain(true);
+    }
+    const fresh = bulkDraft.files.filter((f) => !draftTaken.current.has(f));
+    if (!fresh.length) return;
+    fresh.forEach((f) => draftTaken.current.add(f));
+    const stored = fresh
       .filter((f) => f.url)
       .map((f): ItemRef => ({ url: f.url as string, view: f.view, preview: previewFor(f.url as string) }));
     if (stored.length) setItemRefs((prev) => [...prev, ...stored.filter((b) => !prev.some((p0) => p0.url === b.url))]);
     void (async () => {
       for (const view of ["general", "front", "back", "styling"] as const) {
-        const files = bulkDraft.files.filter((f) => f.view === view && f.file).map((f) => f.file as File);
+        const files = fresh.filter((f) => f.view === view && f.file).map((f) => f.file as File);
         if (files.length) await uploadItems(files, view);
       }
-      bulkDraftUsed?.();
+      bulkDraftUsed?.(fresh);
     })();
   }, [stateLoaded, bulkDraft, bulkDraftUsed, models, uploadItems]);
 

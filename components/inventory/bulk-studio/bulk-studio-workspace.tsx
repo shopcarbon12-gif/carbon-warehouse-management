@@ -263,6 +263,11 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
      item if there is one, otherwise as a new item at the end. */
   const [scrollTo, setScrollTo] = useState<string | null>(null);
   const itemsRef = useRef(items);
+  /** Each item's product name, for the photo sorter's "the item already open". */
+  const namesRef = useRef(new Map<string, string>());
+  const onName = useCallback((key: string, name: string) => {
+    namesRef.current.set(key, name);
+  }, []);
   itemsRef.current = items;
   /**
    * Photos dropped on an item (owner 2026-10-20): split into products in
@@ -303,10 +308,12 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     let photos: Ph[] = [];
     try {
       const images = await Promise.all(entries.map(async (e) => (e.file ? { data: await fileToDataUrl(e.file, 1600) } : { url: e.url })));
+      const prev0 = streamRef.current.get(fromKey);
+      const leadKey = prev0 && Date.now() - prev0.at < 10 * 60_000 ? prev0.key : fromKey;
       const r = await fetch("/api/studio/group-photos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images }),
+        body: JSON.stringify({ images, current: namesRef.current.get(leadKey) ?? "" }),
       });
       const j = (await r.json().catch(() => ({}))) as { photos?: Ph[] };
       if (r.ok && Array.isArray(j.photos)) photos = j.photos;
@@ -318,10 +325,11 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
        photos switch to a garment not seen yet — a photo is never sent back to
        an earlier item. */
     {
+      /* Group 1 = the item the photos continue (the model is told its name). */
       let seg = 1;
-      let maxSeen = photos[0]?.group ?? 1;
-      photos = photos.map((p, i) => {
-        if (i > 0 && (p.isTag || p.group > maxSeen)) seg += 1;
+      let maxSeen = 1;
+      photos = photos.map((p) => {
+        if (p.isTag || p.group > maxSeen) seg += 1;
         maxSeen = Math.max(maxSeen, p.group);
         return { ...p, group: seg };
       });
@@ -350,8 +358,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       const matrixId = ids.length === 1 ? ids[0] : null;
       if (tag && !matrixId) notes.push(ids.length ? `tag ${tag.sku} matches ${ids.length} products` : `tag ${tag.sku || "?"} — no product has that code`);
       let key: string;
+      void gi;
       if (matrixId && byMatrix.has(matrixId)) key = byMatrix.get(matrixId) as string;
-      else if (gi === 0 && (!tag || (from && !from.matrixId))) {
+      else if (g === 1 || (g === 2 && !order.includes(1) && tag && from && !from.matrixId)) {
         key = lead;
         if (matrixId) fromMatrix = matrixId;
       } else {
@@ -532,6 +541,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               stepNote={stepNote[it.key]}
               onScan={(id) => addScanned(it.key, id)}
               ingest={ingest}
+              onName={onName}
               draft={drafts[it.key] ?? null}
               setDraft={setDraft}
               focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
@@ -565,6 +575,7 @@ function BulkItemCard({
   draft,
   setDraft,
   ingest,
+  onName,
   onRemove,
   register,
   report,
@@ -579,6 +590,7 @@ function BulkItemCard({
   draft: BulkStudioDraft | null;
   setDraft: (key: string, d: DraftUpdate) => void;
   ingest: (fromKey: string, entries: { file?: File; url?: string }[]) => Promise<void>;
+  onName: (key: string, name: string) => void;
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
@@ -591,18 +603,69 @@ function BulkItemCard({
   const key = item.key;
   /* Stable, so the Studio hooks below do not change on every render. */
   const onIngest = useCallback((entries: { file?: File; url?: string }[]) => void ingest(key, entries), [ingest, key]);
+  const [phone, setPhone] = useState<{ sessionId: string; qr: string; scanUrl: string } | null>(null);
+  const [phoneErr, setPhoneErr] = useState("");
+  const phoneSeen = useRef<Set<string>>(new Set());
+  const startPhone = async () => {
+    setPhoneErr("");
+    if (phone) return; // already open
+    try {
+      const r = await fetch("/api/image-handoff/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId: null }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { sessionId?: string; qrCodeUrl?: string; scanUrl?: string; error?: string };
+      if (!r.ok || !j.sessionId || !j.qrCodeUrl) throw new Error(j.error || "Could not start the phone camera.");
+      phoneSeen.current = new Set();
+      setPhone({ sessionId: j.sessionId, qr: j.qrCodeUrl, scanUrl: j.scanUrl || "" });
+    } catch (e) {
+      setPhoneErr(e instanceof Error ? e.message : "Could not start the phone camera.");
+    }
+  };
+  const pollPhone = useCallback(
+    async (sessionId: string, all = false) => {
+      const r = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}${all ? "?all=1" : ""}`, { cache: "no-store" });
+      if (r.status === 404) return "gone" as const;
+      const j = (await r.json().catch(() => ({}))) as { images?: { imageUrl: string }[] };
+      const fresh = (j.images ?? []).map((x) => x.imageUrl).filter((u) => u && !phoneSeen.current.has(u));
+      if (!fresh.length) return "ok" as const;
+      fresh.forEach((u) => phoneSeen.current.add(u));
+      onIngest(fresh.map((url) => ({ url })));
+      return "ok" as const;
+    },
+    [onIngest],
+  );
+  useEffect(() => {
+    if (!phone) return;
+    const t = window.setInterval(() => {
+      void pollPhone(phone.sessionId).then((st) => {
+        if (st === "gone") setPhone(null);
+      });
+    }, 2500);
+    return () => window.clearInterval(t);
+  }, [phone, pollPhone]);
+  const chip =
+    "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] hover:border-[var(--wms-accent)] max-md:min-h-11";
   /* Stable per item, so the Studio tab registers once (not on every render). */
   const hooks = useMemo(
     () => ({
       register: (api: BulkStudioApi | null) => register(key, api),
       onStatus: (s: BulkStudioStatus) => report(key, s),
       draft,
-      onDraftUsed: () => setDraft(key, null),
+      onDraftUsed: (used: BulkStudioDraft["files"]) =>
+        setDraft(key, (prev) => {
+          const files = prev.files.filter((f) => !used.includes(f));
+          return files.length ? { ...prev, files } : null;
+        }),
       ingest: onIngest,
     }),
     [key, register, report, draft, setDraft, onIngest],
   );
   const m = data?.matrix;
+  useEffect(() => {
+    if (m?.description) onName(key, m.description);
+  }, [m?.description, key, onName]);
   const variants = data?.variants ?? [];
   const live = variants.some((v) => !v.archived) ? variants.filter((v) => !v.archived) : variants;
   const archived = variants.length > 0 && variants.every((v) => v.archived);
@@ -673,8 +736,33 @@ function BulkItemCard({
         {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
       </div>
 
+      {phone || phoneErr ? (
+        <div className="px-3 pb-2">
+      {phone ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-surface)] p-3 ">
+          {/* eslint-disable-next-line @next/next/no-img-element -- remote QR image */}
+          <img src={phone.qr} alt="QR code for the phone camera" className="h-32 w-32 rounded bg-white p-1" />
+          <div className="min-w-0 flex-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+            <p className="text-[var(--wms-fg)]">Scan with your phone and take the photos — each hang tag starts its product.</p>
+            {phone.scanUrl ? <p className="mt-1 break-all">{phone.scanUrl}</p> : null}
+          </div>
+          <button
+            type="button"
+            className={chip}
+            onClick={() => {
+              const s0 = phone;
+              void pollPhone(s0.sessionId, true).finally(() => setPhone(null));
+            }}
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
+      {phoneErr ? <p className="font-mono text-[0.72rem] text-[var(--wms-status-danger-fg)] ">{phoneErr}</p> : null}
+        </div>
+      ) : null}
       {!item.matrixId ? (
-        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onIngest={onIngest} />
+        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onIngest={onIngest} onPhone={() => void startPhone()} />
       ) : null}
 
       {item.matrixId && m ? (
@@ -904,11 +992,15 @@ function DraftForm({
   draft,
   update,
   onIngest,
+  onPhone,
 }: {
   draft: BulkStudioDraft;
   update: (d: DraftUpdate) => void;
   /** Photos go to the page, which splits them into products by their hang tags. */
   onIngest: (entries: { file?: File; url?: string }[]) => void;
+  /** Open the phone camera — its session belongs to the card, so it keeps
+      listening after a tag loads the product. */
+  onPhone: () => void;
 }) {
   const onChange = (d: BulkStudioDraft) => update(d);
   const { data } = useSWR<{ models?: DraftModel[] }>("/api/models/list", fetcher, { revalidateOnFocus: false });
@@ -959,7 +1051,7 @@ function DraftForm({
                 e.target.value = "";
               }} />
             </label>
-            <button type="button" className={chip} onClick={() => void startPhone()} title="Take the photos with your phone (scan the QR code)">
+            <button type="button" className={chip} onClick={onPhone} title="Take the photos with your phone (scan the QR code)">
               📱 Phone camera
             </button>
           </div>
@@ -968,72 +1060,9 @@ function DraftForm({
       </div>
     );
   };
-  const [phone, setPhone] = useState<{ sessionId: string; qr: string; scanUrl: string } | null>(null);
-  const [phoneErr, setPhoneErr] = useState("");
-  const phoneSeen = useRef<Set<string>>(new Set());
-  const startPhone = async () => {
-    setPhoneErr("");
-    if (phone) return; // already open
-    try {
-      const r = await fetch("/api/image-handoff/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrixId: null }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { sessionId?: string; qrCodeUrl?: string; scanUrl?: string; error?: string };
-      if (!r.ok || !j.sessionId || !j.qrCodeUrl) throw new Error(j.error || "Could not start the phone camera.");
-      phoneSeen.current = new Set();
-      setPhone({ sessionId: j.sessionId, qr: j.qrCodeUrl, scanUrl: j.scanUrl || "" });
-    } catch (e) {
-      setPhoneErr(e instanceof Error ? e.message : "Could not start the phone camera.");
-    }
-  };
-  const pollPhone = useCallback(
-    async (sessionId: string, all = false) => {
-      const r = await fetch(`/api/image-handoff/session/${encodeURIComponent(sessionId)}${all ? "?all=1" : ""}`, { cache: "no-store" });
-      if (r.status === 404) return "gone" as const;
-      const j = (await r.json().catch(() => ({}))) as { images?: { imageUrl: string }[] };
-      const fresh = (j.images ?? []).map((x) => x.imageUrl).filter((u) => u && !phoneSeen.current.has(u));
-      if (!fresh.length) return "ok" as const;
-      fresh.forEach((u) => phoneSeen.current.add(u));
-      onIngest(fresh.map((url) => ({ url })));
-      return "ok" as const;
-    },
-    [onIngest],
-  );
-  useEffect(() => {
-    if (!phone) return;
-    const t = window.setInterval(() => {
-      void pollPhone(phone.sessionId).then((st) => {
-        if (st === "gone") setPhone(null);
-      });
-    }, 2500);
-    return () => window.clearInterval(t);
-  }, [phone, pollPhone]);
   const backHasPhotos = draft.files.some((f) => f.view === "back");
   return (
     <div className="grid gap-2 px-3 pb-3 md:grid-cols-3">
-      {phone ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-surface)] p-3 md:col-span-3">
-          {/* eslint-disable-next-line @next/next/no-img-element -- remote QR image */}
-          <img src={phone.qr} alt="QR code for the phone camera" className="h-32 w-32 rounded bg-white p-1" />
-          <div className="min-w-0 flex-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">
-            <p className="text-[var(--wms-fg)]">Scan with your phone and take the photos — each hang tag starts its product.</p>
-            {phone.scanUrl ? <p className="mt-1 break-all">{phone.scanUrl}</p> : null}
-          </div>
-          <button
-            type="button"
-            className={chip}
-            onClick={() => {
-              const s0 = phone;
-              void pollPhone(s0.sessionId, true).finally(() => setPhone(null));
-            }}
-          >
-            Done
-          </button>
-        </div>
-      ) : null}
-      {phoneErr ? <p className="font-mono text-[0.72rem] text-[var(--wms-status-danger-fg)] md:col-span-3">{phoneErr}</p> : null}
       {zone("general", "Accessories · General · Style with", "Accessories, flats, any view — works exactly as before.")}
       {zone("front", "Front", "The FRONT of the item (jeans, shirts, dresses…).")}
       {zone(
