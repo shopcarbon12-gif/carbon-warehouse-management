@@ -74,7 +74,7 @@ async function headLeft(client: OpenAI, model: string, img: Buffer): Promise<boo
       {
         role: "user",
         content: [
-          { type: "text", text: 'This is the top edge of a cropped clothing photo. Can you CLEARLY see part of a person\'s lips, chin, beard or head hair in it? A neck, a throat, a collar, a turtleneck, a shadow or skin above a neckline does NOT count — answer false for those. JSON only: {"head": true|false}' },
+          { type: "text", text: 'This is the top of a cropped clothing photo. Is ANY part of a person\'s face, mouth, chin, beard, ear or head hair visible in it (a neck or a collar alone does not count)? JSON only: {"head": true|false}' },
           { type: "image_url", image_url: { url: `data:image/jpeg;base64,${strip.toString("base64")}`, detail: "high" } },
         ],
       },
@@ -150,15 +150,15 @@ async function POST_handler(req: Request) {
       const meta = await sharp(img).metadata();
       const h = meta.height ?? 0;
       const w = meta.width ?? 0;
-      /* Cut at the pick, then look again and trim a little more while any of
-         the head is still there (a sliver of chin left behind was the failure
-         seen in testing; a fixed margin cut into turtleneck collars instead). */
-      let cut = Math.min(LINES[line - 1], REGION);
+      /* One line of margin under the pick, then look again and trim a little
+         more while any of the head is still there. Tuned on real model photos
+         (2026-10-20): every head fully removed; a high collar (turtleneck) can
+         lose its top edge — the manual crop is there for that. */
+      let cut = Math.min(LINES[line - 1] + (1 / 31) * REGION, REGION);
       const cropAt = (f: number) => sharp(img).extract({ left: 0, top: Math.round(f * h), width: w, height: h - Math.round(f * h) }).toBuffer();
       let out = await cropAt(cut);
-      /* Small steps, so a collar right under the chin is not cut into. */
-      for (let k = 0; k < 3 && (await headLeft(client, model, out).catch(() => false)); k++) {
-        cut = Math.min(cut + 0.012, REGION + 0.1);
+      for (let k = 0; k < 2 && (await headLeft(client, model, out).catch(() => false)); k++) {
+        cut = Math.min(cut + 0.025, REGION + 0.1);
         out = await cropAt(cut);
       }
       if (h && h * (1 - cut) > h * 0.35) {
