@@ -289,6 +289,16 @@ export async function markBatchItemLoaded(pool: Pool, tenantId: string, id: stri
   return (r.rowCount ?? 0) > 0;
 }
 
+/** Bulk Studio › Upload: the run's pictures went to Shopify — it leaves the Upload tab. */
+export async function markBatchItemPublished(pool: Pool, tenantId: string, id: string): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE studio_batch_items SET status = 'published', updated_at = now()
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND status IN ('ready', 'loaded')`,
+    [id, tenantId],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 /** The finished panels of one item, as the base64 PNGs the Studio turns into crops. */
 export async function loadBatchItemImages(pool: Pool, tenantId: string, id: string) {
   const r = await pool.query<{ results: Record<string, PanelResult>; panels: BatchPanel[]; run_tag: string; model_gender: string | null }>(

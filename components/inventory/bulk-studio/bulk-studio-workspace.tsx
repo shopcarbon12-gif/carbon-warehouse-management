@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
+import { BulkUploadTab } from "@/components/inventory/bulk-studio/bulk-upload-tab";
 import {
   CarbonStudioTab,
   type BulkStudioApi,
@@ -487,12 +488,11 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
         ))}
       </div>
 
-      {tab === "upload" ? (
-        <div className="rounded-md border border-dashed border-[var(--wms-border)] p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
-          The upload page for finished generations comes next. Until then, open each item&apos;s results in its
-          Bulk Studio card (Load results) or in the product&apos;s Studio tab, and publish from there.
-        </div>
-      ) : (
+      {/* Kept mounted so finished runs keep arriving while the Studio tab is open. */}
+      <div hidden={tab !== "upload"}>
+        <BulkUploadTab active={tab === "upload"} />
+      </div>
+      {tab === "upload" ? null : (
         <>
           {/* Top bar — sticks while the item list scrolls. */}
           {picked.length ? (

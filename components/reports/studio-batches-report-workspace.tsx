@@ -30,7 +30,7 @@ export function StudioBatchesReportWorkspace() {
   const items = data?.items ?? [];
   const rows = items.filter((item) => {
     const matches = `${item.productName ?? ""} ${item.itemColour ?? ""} ${item.modelName ?? ""} ${item.runTag}`.toLowerCase().includes(search.trim().toLowerCase());
-    const matchesStatus = status === "all" || (status === "active" ? ["queued", "preparing", "submitted"].includes(item.status) : status === "issues" ? Boolean(item.error || item.failed.length || item.status === "failed") : ["ready", "loaded"].includes(item.status));
+    const matchesStatus = status === "all" || (status === "active" ? ["queued", "preparing", "submitted"].includes(item.status) : status === "issues" ? Boolean(item.error || item.failed.length || item.status === "failed") : ["ready", "loaded", "published"].includes(item.status));
     return matches && matchesStatus;
   });
   async function checkNow() {
@@ -67,7 +67,7 @@ export function StudioBatchesReportWorkspace() {
       <div className="flex flex-wrap gap-3">
         <input aria-label="Search batch runs" placeholder="Search product, colour, model or run…" value={search} onChange={(event) => setSearch(event.target.value)} className="min-w-64 flex-1 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 text-sm" />
         <select aria-label="Filter batch status" value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2 text-sm">
-          <option value="all">All statuses</option><option value="active">Active</option><option value="ready">Ready / loaded</option><option value="issues">With issues</option>
+          <option value="all">All statuses</option><option value="active">Active</option><option value="ready">Ready / loaded / published</option><option value="issues">With issues</option>
         </select>
       </div>
       {isLoading ? <p role="status">Loading batches…</p> : null}

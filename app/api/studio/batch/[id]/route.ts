@@ -4,6 +4,7 @@ import { withActivity } from "@/lib/server/activity-log";
  *
  *   GET    /api/studio/batch/<id>        → { runTag, gender, panels: [{ panel, poseA, poseB, imageBase64? | error? }] }
  *   PATCH  /api/studio/batch/<id>  { status: "loaded" }   — the results were brought into the Studio
+ *   PATCH  /api/studio/batch/<id>  { status: "published" } — Bulk Studio › Upload pushed them to Shopify
  *   DELETE /api/studio/batch/<id>        — take a run out of the queue before it is sent
  */
 import { NextResponse } from "next/server";
@@ -12,7 +13,7 @@ import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { cancelBatchItem, loadBatchItemImages, markBatchItemLoaded } from "@/lib/server/studio-batch";
+import { cancelBatchItem, loadBatchItemImages, markBatchItemLoaded, markBatchItemPublished } from "@/lib/server/studio-batch";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,8 @@ async function PATCH_handler(req: NextRequest, ctx: Ctx) {
   const a = await authed(req, ctx);
   if ("error" in a) return a.error;
   const body = (await req.json().catch(() => ({}))) as { status?: string };
-  if (body.status !== "loaded") return NextResponse.json({ error: 'Only { status: "loaded" } is supported' }, { status: 400 });
+  if (body.status === "published") return NextResponse.json({ ok: await markBatchItemPublished(a.pool, a.session.tid, a.id) });
+  if (body.status !== "loaded") return NextResponse.json({ error: 'Only { status: "loaded" | "published" } is supported' }, { status: 400 });
   const ok = await markBatchItemLoaded(a.pool, a.session.tid, a.id);
   return NextResponse.json({ ok });
 }

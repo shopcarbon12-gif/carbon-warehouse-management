@@ -547,6 +547,8 @@ function batchStatusText(b: BatchItemSummary): string {
       return `ready — ${b.ready.length} of ${b.panels.length} panel(s)`;
     case "loaded":
       return `loaded into the Studio (${b.ready.length} of ${b.panels.length} panel(s))`;
+    case "published":
+      return `published to Shopify from Bulk Studio (${b.ready.length} of ${b.panels.length} panel(s))`;
     case "failed":
       return b.error || "failed";
     default:
@@ -4327,7 +4329,7 @@ export function CarbonStudioTab({
                         Remove
                       </button>
                     ) : null}
-                    {(b.status === "ready" || b.status === "loaded") && b.ready.length ? (
+                    {(b.status === "ready" || b.status === "loaded" || b.status === "published") && b.ready.length ? (
                       <button
                         type="button"
                         disabled={batchBusy !== null || busy !== null}

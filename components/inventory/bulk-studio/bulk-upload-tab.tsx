@@ -1,0 +1,632 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { splitPanelToThreeByFour } from "@/lib/panelGeneration";
+
+/**
+ * Bulk Studio › Upload (owner, 2026-10-20).
+ *
+ * Every night-batch run that has come back shows here on its own — no "Load
+ * results" click — one row per product with its generated pictures, already
+ * in the owner's gallery order:
+ *  - one block per colour, in the product's colour order;
+ *  - each block: full-length front first (that colour's ★ main picture), then
+ *    the other fronts, front close-ups, side / three-quarter, details, seated,
+ *    back close-up, and the full back last (analysed on every active product,
+ *    men and women alike, 2026-10-20);
+ *  - the product's current Shopify pictures stay in, in their colour's block,
+ *    unless "include current Shopify pictures" is unticked.
+ * Cards can be unselected, dragged (left = first picture in Shopify), starred,
+ * made the hero, downloaded and given alt text; Publish pushes the approved
+ * rows and the runs leave this tab.
+ */
+
+type Run = {
+  id: string;
+  matrixId: string;
+  productName: string | null;
+  status: string;
+  modelName: string | null;
+  modelGender: string | null;
+  itemColour: string | null;
+  itemType: string | null;
+  panels: number[];
+  ready: number[];
+};
+type Variant = { color: string | null; shopify_variant_id?: string | null; shopify_image_url?: string | null; archived?: boolean };
+type Card = {
+  key: string;
+  kind: "existing" | "new";
+  mediaId?: string;
+  /** JPEG base64 (no data: prefix) for new pictures. */
+  b64?: string;
+  src: string;
+  alt: string;
+  /** The colour this picture is the ★ main picture for ("" = none). */
+  color: string;
+  selected: boolean;
+  label: string;
+};
+type Row = {
+  matrixId: string;
+  name: string;
+  upc: string;
+  shopifyProductId: string | null;
+  itemType: string;
+  modelName: string;
+  colours: string[];
+  variantIdsByColour: Record<string, string[]>;
+  runs: Run[];
+  cards: Card[];
+  existing: Card[];
+  approved: boolean;
+  state: "loading" | "ready" | "publishing" | "published" | "error";
+  msg: string;
+};
+
+/** Gallery position of each generated pose (lib/panelGeneration.ts pose sets). */
+const RANK_MALE: Record<number, number> = { 1: 0, 2: 1, 3: 2, 5: 3, 6: 4, 8: 5, 7: 6, 4: 7 };
+const RANK_FEMALE: Record<number, number> = { 1: 0, 6: 1, 4: 2, 7: 3, 3: 4, 5: 5, 8: 6, 2: 7 };
+const VIEW_MALE: Record<number, string> = { 1: "front", 2: "front", 3: "front close-up", 4: "back", 5: "front close-up", 6: "detail", 7: "back close-up", 8: "lifestyle" };
+const VIEW_FEMALE: Record<number, string> = { 1: "front", 2: "back", 3: "three-quarter", 4: "front close-up", 5: "detail", 6: "front", 7: "front close-up", 8: "lifestyle" };
+
+const picKey = (u: string | null | undefined) => (u ?? "").split("?")[0];
+const newKey = () => Math.random().toString(36).slice(2, 10);
+const btn =
+  "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide disabled:opacity-50 max-md:min-h-11";
+
+async function getJson<T>(u: string): Promise<T> {
+  const r = await fetch(u, { cache: "no-store" });
+  const j = (await r.json().catch(() => ({}))) as T & { error?: string };
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+
+/** PNG base64 → JPEG base64 (much smaller to publish; Shopify recompresses anyway). */
+async function toJpeg(pngB64: string): Promise<string> {
+  const img = new Image();
+  img.src = `data:image/png;base64,${pngB64}`;
+  await img.decode();
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  c.getContext("2d")?.drawImage(img, 0, 0);
+  return c.toDataURL("image/jpeg", 0.93).replace(/^data:image\/jpeg;base64,/, "");
+}
+
+/** A local file → JPEG base64 (long side ≤ 2048). */
+async function fileToJpeg(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 2048 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * k);
+  c.height = Math.round(bmp.height * k);
+  c.getContext("2d")?.drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return c.toDataURL("image/jpeg", 0.92).replace(/^data:image\/jpeg;base64,/, "");
+}
+
+async function download(card: Card, name: string) {
+  try {
+    const blob = card.b64
+      ? await (await fetch(`data:image/jpeg;base64,${card.b64}`)).blob()
+      : await (await fetch(card.src, { mode: "cors" })).blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${name}.${blob.type.includes("png") ? "png" : "jpg"}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch {
+    window.open(card.src, "_blank");
+  }
+}
+
+/** The colour of the block a position sits in: the nearest ★ to its left, else the first colour. */
+function blockColourAt(cards: Card[], idx: number, colours: string[]): string {
+  for (let i = idx; i >= 0; i--) if (cards[i].color) return cards[i].color;
+  return colours[0] ?? "";
+}
+
+/** Generated + current pictures in the owner's order (see the file header). */
+function arrange(gen: Map<string, Card[]>, existing: Card[], include: boolean, colours: string[]): Card[] {
+  const blocks = new Map<string, Card[]>();
+  const untied: Card[] = [];
+  let cur = "";
+  for (const c of existing) {
+    if (c.color) cur = c.color;
+    if (cur) blocks.set(cur, [...(blocks.get(cur) ?? []), { ...c }]);
+    else untied.push({ ...c });
+  }
+  const order = [...colours, ...[...gen.keys()].filter((c) => !colours.includes(c))];
+  const out: Card[] = [];
+  for (const colour of order) {
+    const g = gen.get(colour) ?? [];
+    const e = include ? blocks.get(colour) ?? [] : [];
+    if (g.length) {
+      /* The new full-length front becomes this colour's ★ main picture. */
+      e.forEach((c) => (c.color = ""));
+      g.forEach((c, i) => (c.color = i === 0 ? colour : ""));
+    }
+    out.push(...g, ...e);
+  }
+  if (include) out.push(...untied);
+  return out;
+}
+
+export function BulkUploadTab({ active }: { active: boolean }) {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [include, setInclude] = useState(true);
+  const includeRef = useRef(true);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; tone: "info" | "ok" | "warn" | "err" } | null>(null);
+  const [busy, setBusy] = useState<null | "alt" | "publish">(null);
+  const genRef = useRef(new Map<string, Map<string, Card[]>>());
+  const seenRuns = useRef(new Set<string>());
+
+  const patchRow = useCallback((matrixId: string, fn: (r: Row) => Row) => {
+    setRows((p) => p.map((r) => (r.matrixId === matrixId ? fn(r) : r)));
+  }, []);
+
+  /* Finished runs come in by themselves: every 2 minutes, and whenever the tab opens. */
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const j = await getJson<{ items?: Run[] }>("/api/studio/batch");
+      const ready = (j.items ?? []).filter((x) => x.status === "ready" && x.ready.length > 0 && !seenRuns.current.has(x.id));
+      if (!ready.length) return;
+      ready.forEach((x) => seenRuns.current.add(x.id));
+      const byMatrix = new Map<string, Run[]>();
+      for (const r of ready) byMatrix.set(r.matrixId, [...(byMatrix.get(r.matrixId) ?? []), r]);
+      for (const [matrixId, runs] of byMatrix) {
+        setRows((p) => {
+          const at = p.find((r) => r.matrixId === matrixId);
+          if (at) return p.map((r) => (r.matrixId === matrixId ? { ...r, runs: [...r.runs, ...runs], state: "loading" } : r));
+          return [
+            ...p,
+            {
+              matrixId,
+              name: runs[0].productName ?? "Product",
+              upc: "",
+              shopifyProductId: null,
+              itemType: runs[0].itemType ?? "",
+              modelName: runs[0].modelName ?? "",
+              colours: [],
+              variantIdsByColour: {},
+              runs,
+              cards: [],
+              existing: [],
+              approved: false,
+              state: "loading",
+              msg: "Loading the pictures…",
+            },
+          ];
+        });
+        void buildRow(matrixId, runs);
+      }
+    } catch (e) {
+      setMsg({ text: `Could not load the finished runs (${e instanceof Error ? e.message : "error"}).`, tone: "err" });
+    } finally {
+      setLoading(false);
+    }
+    // buildRow only uses refs and stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const buildRow = async (matrixId: string, runs: Run[]) => {
+    try {
+      const d = await getJson<{ matrix: { description: string | null; upc: string | null; shopify_product_id?: string | null }; variants: Variant[] }>(
+        `/api/inventory/catalog/matrices/${matrixId}`,
+      );
+      const live = d.variants.filter((v) => !v.archived);
+      const colours = [...new Set(live.map((v) => (v.color || "").trim()).filter(Boolean))];
+      const variantIdsByColour: Record<string, string[]> = {};
+      for (const v of live) {
+        const c = (v.color || "").trim();
+        if (c && v.shopify_variant_id) variantIdsByColour[c] = [...(variantIdsByColour[c] ?? []), v.shopify_variant_id];
+      }
+      /* Current Shopify pictures, each colour's main picture marked. */
+      let existing: Card[] = [];
+      if (d.matrix.shopify_product_id) {
+        const mj = await getJson<{ media?: { id: string; url: string; alt: string | null }[] }>(`/api/shopify/media?matrixId=${matrixId}`);
+        const mainOf = new Map<string, string>();
+        for (const v of live) if (v.shopify_image_url && v.color && !mainOf.has(picKey(v.shopify_image_url))) mainOf.set(picKey(v.shopify_image_url), v.color.trim());
+        existing = (mj.media ?? []).map((m, i) => ({
+          key: `ex-${m.id}`,
+          kind: "existing" as const,
+          mediaId: m.id,
+          src: m.url,
+          alt: m.alt ?? "",
+          color: mainOf.get(picKey(m.url)) ?? "",
+          selected: true,
+          label: `Shopify ${i + 1}`,
+        }));
+      }
+      /* Generated pictures: each finished panel split into its two 3:4 pictures. */
+      const gen = genRef.current.get(matrixId) ?? new Map<string, Card[]>();
+      for (const run of runs) {
+        const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string }[] }>(
+          `/api/studio/batch/${run.id}`,
+        );
+        const female = (run.modelGender || "").toLowerCase() === "female";
+        const colour = (run.itemColour || colours[0] || "").trim();
+        const list: { card: Card; rank: number }[] = [];
+        for (const p of rj.panels) {
+          if (!p.imageBase64) continue;
+          const { left, right } = await splitPanelToThreeByFour(p.imageBase64);
+          for (const [b64png, pose] of [[left, p.poseA], [right, p.poseB]] as const) {
+            const b64 = await toJpeg(b64png);
+            const rank = rj.accessory ? pose : (female ? RANK_FEMALE : RANK_MALE)[pose] ?? 9;
+            const view = rj.accessory ? `shot ${pose}` : (female ? VIEW_FEMALE : VIEW_MALE)[pose] ?? `pose ${pose}`;
+            list.push({
+              rank,
+              card: {
+                key: `gen-${run.id}-${pose}`,
+                kind: "new",
+                b64,
+                src: `data:image/jpeg;base64,${b64}`,
+                alt: "",
+                color: "",
+                selected: true,
+                label: `${colour} · ${run.modelName ?? ""} · ${view}`,
+              },
+            });
+          }
+        }
+        list.sort((a, b) => a.rank - b.rank);
+        gen.set(colour, [...(gen.get(colour) ?? []), ...list.map((x) => x.card)]);
+      }
+      genRef.current.set(matrixId, gen);
+      patchRow(matrixId, (r) => ({
+        ...r,
+        name: d.matrix.description ?? r.name,
+        upc: d.matrix.upc ?? "",
+        shopifyProductId: d.matrix.shopify_product_id ?? null,
+        colours,
+        variantIdsByColour,
+        existing,
+        cards: arrange(gen, existing, includeRef.current, colours),
+        state: "ready",
+        msg: "",
+      }));
+    } catch (e) {
+      patchRow(matrixId, (r) => ({ ...r, state: "error", msg: `Could not load this product's pictures (${e instanceof Error ? e.message : "error"}).` }));
+    }
+  };
+
+  useEffect(() => {
+    if (!active) return;
+    void load();
+    const t = window.setInterval(() => void load(), 120_000);
+    return () => window.clearInterval(t);
+  }, [active, load]);
+
+  /* "Include current Shopify pictures" (ticked by default): put them back in, or take them out. */
+  const toggleInclude = (next: boolean) => {
+    setInclude(next);
+    includeRef.current = next;
+    setRows((p) =>
+      p.map((r) => {
+        if (r.state !== "ready") return r;
+        if (!next) return { ...r, cards: r.cards.filter((c) => c.kind !== "existing") };
+        const have = new Set(r.cards.map((c) => c.key));
+        const missing = r.existing.filter((c) => !have.has(c.key)).map((c) => ({ ...c, color: r.cards.some((x) => x.color && x.color === c.color) ? "" : c.color }));
+        return { ...r, cards: [...r.cards, ...missing] };
+      }),
+    );
+  };
+
+  /* ── card actions ─────────────────────────────────────────────────────── */
+  const setCards = (matrixId: string, fn: (cards: Card[], r: Row) => Card[]) => patchRow(matrixId, (r) => ({ ...r, cards: fn(r.cards, r) }));
+  const toggleSel = (matrixId: string, key: string) =>
+    setCards(matrixId, (cs) => cs.map((c) => (c.key === key ? { ...c, selected: !c.selected } : c)));
+  const star = (matrixId: string, key: string) =>
+    setCards(matrixId, (cs, r) => {
+      const idx = cs.findIndex((c) => c.key === key);
+      const card = cs[idx];
+      if (card.color) return cs.map((c) => (c.key === key ? { ...c, color: "" } : c));
+      const colour = blockColourAt(cs, idx - 1, r.colours) || r.colours[0] || "";
+      return cs.map((c) => (c.key === key ? { ...c, color: colour } : c.color === colour ? { ...c, color: "" } : c));
+    });
+  const setStarColour = (matrixId: string, key: string, colour: string) =>
+    setCards(matrixId, (cs) => cs.map((c) => (c.key === key ? { ...c, color: colour } : colour && c.color === colour ? { ...c, color: "" } : c)));
+  const makeHero = (matrixId: string, key: string) =>
+    setCards(matrixId, (cs) => {
+      const c = cs.find((x) => x.key === key);
+      return c ? [c, ...cs.filter((x) => x.key !== key)] : cs;
+    });
+  const removeCard = (matrixId: string, key: string) => setCards(matrixId, (cs) => cs.filter((c) => c.key !== key));
+  const setAlt = (matrixId: string, key: string, alt: string) =>
+    setCards(matrixId, (cs) => cs.map((c) => (c.key === key ? { ...c, alt } : c)));
+  const drag = useRef<{ matrixId: string; key: string } | null>(null);
+  const dropBefore = (matrixId: string, targetKey: string | null) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d || d.matrixId !== matrixId || d.key === targetKey) return;
+    setCards(matrixId, (cs) => {
+      const moving = cs.find((c) => c.key === d.key);
+      if (!moving) return cs;
+      const rest = cs.filter((c) => c.key !== d.key);
+      const at = targetKey ? rest.findIndex((c) => c.key === targetKey) : rest.length;
+      return [...rest.slice(0, at), moving, ...rest.slice(at)];
+    });
+  };
+  const addFiles = async (matrixId: string, files: FileList | null) => {
+    const list = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+    const cards: Card[] = [];
+    for (const f of list) {
+      const b64 = await fileToJpeg(f);
+      cards.push({ key: `up-${newKey()}`, kind: "new", b64, src: `data:image/jpeg;base64,${b64}`, alt: "", color: "", selected: true, label: `Uploaded · ${f.name}` });
+    }
+    if (cards.length) setCards(matrixId, (cs) => [...cs, ...cards]);
+  };
+
+  /* ── Alt all: only the pictures that have no alt yet ──────────────────── */
+  const altAll = async () => {
+    setBusy("alt");
+    const jobs: { matrixId: string; key: string; src: string; itemType: string }[] = [];
+    for (const r of rows) for (const c of r.cards) if (c.selected && !c.alt.trim()) jobs.push({ matrixId: r.matrixId, key: c.key, src: c.src, itemType: r.itemType });
+    setMsg({ text: `Writing alt text for ${jobs.length} picture${jobs.length === 1 ? "" : "s"} (the others already have one)…`, tone: "info" });
+    let done = 0;
+    let next = 0;
+    const worker = async () => {
+      while (next < jobs.length) {
+        const j = jobs[next++];
+        try {
+          const res = await fetch("/api/openai/image-alt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: j.src, itemType: j.itemType }),
+          });
+          const out = (await res.json().catch(() => ({}))) as { altText?: string; alt?: string };
+          const alt = (out.altText || out.alt || "").trim();
+          if (alt) {
+            setAlt(j.matrixId, j.key, alt);
+            done++;
+          }
+        } catch {
+          /* left empty — press again */
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
+    setBusy(null);
+    setMsg({ text: `Alt text written for ${done} of ${jobs.length} picture${jobs.length === 1 ? "" : "s"}.`, tone: done === jobs.length ? "ok" : "warn" });
+  };
+
+  /* ── Publish ───────────────────────────────────────────────────────────── */
+  const publishRow = async (r: Row): Promise<boolean> => {
+    patchRow(r.matrixId, (x) => ({ ...x, state: "publishing", msg: "Publishing to Shopify…" }));
+    try {
+      const chosen = r.cards.filter((c) => c.selected);
+      const single = r.colours.length === 1 ? r.colours[0] : null;
+      const anyStar = chosen.some((c) => c.color);
+      const items = chosen.map((c, idx) => {
+        const colour = single ? (anyStar ? c.color : idx === 0 ? single : "") : c.color;
+        const variantIds = colour ? r.variantIdsByColour[colour] : undefined;
+        return c.kind === "existing"
+          ? { kind: "existing", mediaId: c.mediaId, alt: c.alt, variantIds }
+          : { kind: "new", b64: c.b64, alt: c.alt, variantIds };
+      });
+      const res = await fetch("/api/shopify/media", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matrixId: r.matrixId, items, studioModelName: r.modelName }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; warnings?: string[] };
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      const hard = (j.warnings ?? []).filter((w) => /^(stage|create)/i.test(w) || /FAILED/i.test(w));
+      if (hard.length) throw new Error(hard.join("; "));
+      for (const run of r.runs) await fetch(`/api/studio/batch/${run.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "published" }) });
+      patchRow(r.matrixId, (x) => ({ ...x, state: "published", approved: false, msg: `Published — ${items.length} picture${items.length === 1 ? "" : "s"} on Shopify.` }));
+      return true;
+    } catch (e) {
+      patchRow(r.matrixId, (x) => ({ ...x, state: "ready", msg: `Not published: ${e instanceof Error ? e.message : "error"}` }));
+      return false;
+    }
+  };
+  const publishApproved = async () => {
+    const list = rows.filter((r) => r.approved && r.state === "ready");
+    if (!list.length) return;
+    setBusy("publish");
+    setMsg({ text: `Publishing ${list.length} product${list.length === 1 ? "" : "s"} to Shopify…`, tone: "info" });
+    let ok = 0;
+    for (const r of list) if (await publishRow(r)) ok++;
+    setBusy(null);
+    setMsg({ text: `Published ${ok} of ${list.length} product${list.length === 1 ? "" : "s"}.`, tone: ok === list.length ? "ok" : "warn" });
+  };
+
+  const openOnline = async (matrixId: string) => {
+    const w = window.open("about:blank", "_blank");
+    try {
+      const j = await getJson<{ url?: string }>(`/api/shopify/product-url?matrixId=${matrixId}`);
+      if (j.url && w) w.location.href = j.url;
+      else w?.close();
+    } catch {
+      w?.close();
+    }
+  };
+
+  const approvedCount = rows.filter((r) => r.approved && r.state === "ready").length;
+  const shown = rows.filter((r) => r.state !== "published" || r.msg);
+  const tone = { info: "text-[var(--wms-muted)]", ok: "text-[var(--wms-status-success-fg)]", warn: "text-[var(--wms-status-warning-fg)]", err: "text-[var(--wms-status-danger-fg)]" } as const;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-3">
+      {/* Command line */}
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 bg-[var(--wms-bg)] py-1.5">
+        <button type="button" disabled={loading} onClick={() => void load()} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
+          {loading ? "Checking…" : "↻ Refresh"}
+        </button>
+        <button
+          type="button"
+          disabled={busy !== null || !rows.some((r) => r.cards.some((c) => c.selected && !c.alt.trim()))}
+          onClick={() => void altAll()}
+          className={`${btn} border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)]`}
+        >
+          {busy === "alt" ? "Writing…" : "✨ Alt all"}
+        </button>
+        <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.74rem] text-[var(--wms-fg)] max-md:min-h-11">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5" checked={include} onChange={(e) => toggleInclude(e.target.checked)} />
+          include current Shopify pictures
+        </label>
+        <div className="flex-1" />
+        <button
+          type="button"
+          disabled={busy !== null || approvedCount === 0}
+          onClick={() => void publishApproved()}
+          className={`${btn} border-[var(--wms-accent)] bg-[var(--wms-accent)] text-[var(--wms-accent-fg)] hover:brightness-110`}
+        >
+          {busy === "publish" ? "Publishing…" : `⤴ Publish to Shopify${approvedCount ? ` (${approvedCount})` : ""}`}
+        </button>
+        {msg ? <p className={`basis-full font-mono text-[0.74rem] ${tone[msg.tone]}`}>{msg.text}</p> : null}
+      </div>
+
+      {!shown.length ? (
+        <p className="rounded-md border border-dashed border-[var(--wms-border)] p-6 text-center font-mono text-xs text-[var(--wms-muted)]">
+          {loading ? "Checking for finished runs…" : "No finished runs yet — they show up here by themselves when the batch comes back."}
+        </p>
+      ) : null}
+
+      {shown.map((r) => (
+        <section key={r.matrixId} className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
+            <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-fg)] max-md:min-h-11">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                disabled={r.state !== "ready"}
+                checked={r.approved}
+                onChange={(e) => patchRow(r.matrixId, (x) => ({ ...x, approved: e.target.checked }))}
+              />
+              Approve
+            </label>
+            <p className="min-w-0 font-mono text-[0.72rem] text-[var(--wms-muted)]">
+              <span className="text-sm font-semibold text-[var(--wms-fg)]">{r.name}</span>
+              {r.upc ? ` · UPC ${r.upc}` : ""} · {r.runs.map((x) => `${x.itemColour ?? ""} ${x.modelName ?? ""}`.trim()).join(", ")}
+            </p>
+            <div className="flex-1" />
+            <label className={`${btn} cursor-pointer border-dashed border-[var(--wms-border)] text-[var(--wms-accent)]`} title="Add your own pictures to this product">
+              ＋ Upload
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+                void addFiles(r.matrixId, e.target.files);
+                e.target.value = "";
+              }} />
+            </label>
+            {r.shopifyProductId ? (
+              <a
+                href={`https://admin.shopify.com/store/shopcarbon1/products/${String(r.shopifyProductId).split("/").pop()}`}
+                target="_blank"
+                rel="noreferrer"
+                title="View in Shopify"
+                className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}
+              >
+                🛍
+              </a>
+            ) : null}
+            <button type="button" title="View online" onClick={() => void openOnline(r.matrixId)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}>
+              🌐
+            </button>
+            {r.state === "ready" ? (
+              <button type="button" disabled={busy !== null} onClick={() => void publishRow(r)} className={`${btn} border-[var(--wms-accent)] text-[var(--wms-accent)]`}>
+                ⤴ Publish
+              </button>
+            ) : null}
+          </div>
+          {r.msg ? (
+            <p className={`px-3 pb-1 font-mono text-[0.72rem] ${r.state === "error" || r.msg.startsWith("Not published") ? tone.err : r.state === "published" ? tone.ok : tone.info}`}>{r.msg}</p>
+          ) : null}
+          {r.state !== "published" ? (
+            <div
+              className="flex gap-2 overflow-x-auto px-3 pb-3"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropBefore(r.matrixId, null);
+              }}
+            >
+              {r.cards.map((c, i) => {
+                const blockColour = blockColourAt(r.cards, i, r.colours);
+                return (
+                  <div
+                    key={c.key}
+                    draggable
+                    onDragStart={() => (drag.current = { matrixId: r.matrixId, key: c.key })}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      dropBefore(r.matrixId, c.key);
+                    }}
+                    className={`relative w-40 shrink-0 rounded-md border p-1.5 ${c.selected ? "border-[var(--wms-accent)]/60" : "border-[var(--wms-border)] opacity-50"}`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- generated / Shopify picture preview */}
+                    <img src={c.src} alt={c.alt} draggable={false} className="aspect-[3/4] w-full rounded object-cover" />
+                    <div className="absolute left-2 top-2 flex flex-col gap-1">
+                      {i === 0 ? <span className="rounded bg-black/70 px-1.5 font-mono text-[0.58rem] uppercase text-white">Hero</span> : null}
+                      {c.kind === "existing" ? <span className="rounded bg-black/70 px-1.5 font-mono text-[0.58rem] uppercase text-white">Shopify</span> : null}
+                    </div>
+                    <input
+                      type="checkbox"
+                      title={c.kind === "existing" && c.selected ? "Untick to remove it from Shopify on publish" : "Include in the publish"}
+                      checked={c.selected}
+                      onChange={() => toggleSel(r.matrixId, c.key)}
+                      className="absolute right-2 top-2 h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                    />
+                    <div className="mt-1 flex items-center gap-1">
+                      <button
+                        type="button"
+                        title={c.color ? `★ main picture for ${c.color}` : `Make it the main picture for ${blockColour || "its colour"}`}
+                        onClick={() => star(r.matrixId, c.key)}
+                        className={`rounded px-1 text-sm ${c.color ? "text-amber-300" : "text-[var(--wms-muted)] hover:text-amber-300"}`}
+                      >
+                        {c.color ? "★" : "☆"}
+                      </button>
+                      {c.color && r.colours.length > 1 ? (
+                        <select
+                          value={c.color}
+                          onChange={(e) => setStarColour(r.matrixId, c.key, e.target.value)}
+                          className="min-w-0 flex-1 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)]"
+                        >
+                          {r.colours.map((col) => (
+                            <option key={col} value={col}>
+                              {col}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="min-w-0 flex-1 truncate font-mono text-[0.6rem] text-[var(--wms-muted)]">{c.color || c.label}</span>
+                      )}
+                      {i > 0 ? (
+                        <button type="button" title="Make it the hero (first picture)" onClick={() => makeHero(r.matrixId, c.key)} className="rounded px-1 font-mono text-[0.7rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]">
+                          ⇤
+                        </button>
+                      ) : null}
+                      <button type="button" title="Download" onClick={() => void download(c, `${r.name}-${i + 1}`)} className="rounded px-1 text-[0.8rem] text-[var(--wms-muted)] hover:text-[var(--wms-fg)]">
+                        ⬇
+                      </button>
+                      {c.kind === "new" ? (
+                        <button type="button" title="Remove" onClick={() => removeCard(r.matrixId, c.key)} className="rounded px-1 text-[0.75rem] text-[var(--wms-status-danger-fg)]">
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+                    <textarea
+                      value={c.alt}
+                      placeholder="alt text"
+                      rows={2}
+                      onChange={(e) => setAlt(r.matrixId, c.key, e.target.value)}
+                      className="mt-1 w-full resize-none rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1 py-0.5 font-mono text-[0.6rem] text-[var(--wms-fg)] max-md:text-base"
+                    />
+                  </div>
+                );
+              })}
+              {r.state === "loading" ? <p className="self-center font-mono text-xs text-[var(--wms-muted)]">Loading the pictures…</p> : null}
+            </div>
+          ) : null}
+        </section>
+      ))}
+    </div>
+  );
+}
