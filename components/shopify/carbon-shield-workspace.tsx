@@ -63,7 +63,7 @@ function ago(iso: string | null): string {
 }
 const pct = (a: number, b: number) => (b ? `${Math.round((a / b) * 100)}%` : "—");
 
-const card = "rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3";
+const card = "min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3";
 const th = "px-2 py-1.5 text-left font-mono text-[0.66rem] font-semibold uppercase tracking-wide text-[var(--wms-muted)]";
 const td = "px-2 py-1.5 align-top text-[0.8rem] text-[var(--wms-fg)]";
 const btn =
