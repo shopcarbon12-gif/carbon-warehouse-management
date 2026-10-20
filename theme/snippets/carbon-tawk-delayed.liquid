@@ -1,0 +1,33 @@
+{%- comment -%}
+  Tawk.to chat, loaded late (owner 2026-10-20: "after few seconds").
+  Replaces the Tawk app embed (switched off in the theme's App embeds), which
+  loaded ~240 KB of chat code on every page view up front. Same widget, same
+  behaviour as the app's embed, loaded 5 s after the page, or sooner if the
+  shopper scrolls / taps / moves the mouse / types.
+{%- endcomment -%}
+<script>
+(function () {
+  window.Tawk_API = window.Tawk_API || {};
+  window.Tawk_LoadStart = new Date();
+  window.Tawk_API.onTranscriptRequest = function (email) {
+    window.Tawk_API.setAttributes({ email: email });
+  };
+  var loaded = false;
+  var events = ["scroll", "pointerdown", "touchstart", "keydown", "mousemove"];
+  function load() {
+    if (loaded) return;
+    loaded = true;
+    events.forEach(function (e) { window.removeEventListener(e, load, { passive: true }); });
+    var s = document.createElement("script");
+    s.async = true;
+    s.src = "https://embed.tawk.to/widget-script/62a3c06e7b967b117993ee42/1g57qfcau";
+    s.charset = "UTF-8";
+    s.setAttribute("crossorigin", "*");
+    document.body.appendChild(s);
+  }
+  events.forEach(function (e) { window.addEventListener(e, load, { passive: true, once: true }); });
+  function arm() { setTimeout(load, 5000); }
+  if (document.readyState === "complete") arm();
+  else window.addEventListener("load", arm);
+})();
+</script>

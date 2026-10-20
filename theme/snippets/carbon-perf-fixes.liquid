@@ -1,0 +1,18 @@
+{%- comment -%}
+  Carbon speed fixes (owner 2026-10-20) — rendered in <head> right after
+  carbon-shield. CSS only.
+
+  Hidden loading spinners: the theme hides its loading overlays with
+  opacity:0 (product cards, the Add to Cart button, …) but leaves them
+  displayed, so every spinner ran its two infinite animations (rotate +
+  stroke-dashoffset — which the GPU cannot take over) forever: 48 at once on a
+  collection page, plus the Add to Cart button on every product page.
+  Measured on a throttled phone: the CPU was busy ~100% of the time a shopper
+  just looked at a collection; with this, ~28%. A spinner still spins while its
+  form / button / card is actually loading (.loading or [loading=true]).
+{%- endcomment -%}
+<style>
+  .product-card .product-card-quickview:not(.loading) .loading-overlay { visibility: hidden; }
+  .loading-overlay:not(.loading .loading-overlay, [loading="true"] .loading-overlay) .spinner,
+  .loading-overlay:not(.loading .loading-overlay, [loading="true"] .loading-overlay) .spinner-path { animation: none; }
+</style>
