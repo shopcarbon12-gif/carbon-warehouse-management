@@ -710,9 +710,7 @@ function BulkItemCard({
       freshScan: item.fresh === true,
       onStateLoaded: () => onLoaded(key),
     }),
-    // freshScan is read once, when the Studio first loads
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, register, report, draft, setDraft, onIngest, onLoaded],
+    [key, register, report, draft, setDraft, onIngest, onLoaded, item.fresh],
   );
   const m = data?.matrix;
   useEffect(() => {
