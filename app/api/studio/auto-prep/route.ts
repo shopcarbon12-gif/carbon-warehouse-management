@@ -30,29 +30,67 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
 const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-/** Cut lines offered for the head: 2 %, 4 % … 60 % of the height. */
-const LINES = Array.from({ length: 30 }, (_, i) => (i + 1) * 0.02);
+/** The head is looked for in the top half only, zoomed, with 30 numbered lines
+    across it (each line ≈ 1.7 % of the full height). */
+const REGION = 0.5;
+const LINES = Array.from({ length: 30 }, (_, i) => ((i + 1) / 31) * REGION);
 
 async function linedCopy(img: Buffer): Promise<string> {
-  const small = await sharp(img).resize(900, 900, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer();
-  const { width = 900, height = 900 } = await sharp(small).metadata();
+  const meta = await sharp(img).metadata();
+  const W0 = meta.width ?? 0;
+  const H0 = meta.height ?? 0;
+  const top = await sharp(img).extract({ left: 0, top: 0, width: W0, height: Math.max(1, Math.round(H0 * REGION)) }).toBuffer();
+  const small = await sharp(top).resize(1000, 1000, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
+  const { width = 1000, height = 1000 } = await sharp(small).metadata();
   const marks = LINES.map((f, i) => {
-    const y = Math.round(f * height);
-    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#ff2d2d" stroke-width="1.5" opacity="0.85"/>
+    const y = Math.round((f / REGION) * height);
+    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}" stroke="#ff2d2d" stroke-width="1.5" opacity="0.8"/>
       <text x="6" y="${y - 2}" font-family="Arial" font-size="15" font-weight="700" fill="#ff2d2d" stroke="#fff" stroke-width="3" paint-order="stroke">${i + 1}</text>`;
   }).join("");
   const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${marks}</svg>`);
-  const out = await sharp(small).composite([{ input: svg, top: 0, left: 0 }]).jpeg({ quality: 85 }).toBuffer();
+  const out = await sharp(small).composite([{ input: svg, top: 0, left: 0 }]).jpeg({ quality: 88 }).toBuffer();
   return `data:image/jpeg;base64,${out.toString("base64")}`;
 }
 
-const PROMPT = `This is one photo for a clothing catalog, with numbered red lines drawn across it (line 1 near the top … line 30 at 60 % of the height).
+async function wholeCopy(img: Buffer): Promise<string> {
+  const b = await sharp(img).resize(768, 768, { fit: "inside" }).jpeg({ quality: 82 }).toBuffer();
+  return `data:image/jpeg;base64,${b.toString("base64")}`;
+}
 
-1. "view": which side of the GARMENT does the photo show?
+/** After a cut: is any of the head still showing along the top edge? */
+async function headLeft(client: OpenAI, model: string, img: Buffer): Promise<boolean> {
+  const meta = await sharp(img).metadata();
+  const strip = await sharp(img)
+    .extract({ left: 0, top: 0, width: meta.width ?? 0, height: Math.max(1, Math.round((meta.height ?? 0) * 0.25)) })
+    .resize(900, 900, { fit: "inside" })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+  const c = await client.chat.completions.create({
+    model,
+    temperature: 0,
+    max_tokens: 20,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: 'This is the top of a cropped clothing photo. Is ANY part of a person\'s face, mouth, chin, beard or head hair visible in it (a neck or a collar alone does not count)? JSON only: {"head": true|false}' },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${strip.toString("base64")}`, detail: "high" } },
+        ],
+      },
+    ],
+  });
+  const j = JSON.parse(s(c.choices?.[0]?.message?.content) || "{}") as { head?: unknown };
+  return j.head === true;
+}
+
+const PROMPT = `IMAGE 1 is one photo for a clothing catalog. IMAGE 2 is the TOP HALF of the same photo, zoomed, with numbered red lines drawn across it (line 1 near the top … line 30 at the bottom of that half).
+
+1. "view" (judge from IMAGE 1): which side of the GARMENT does the photo show?
    - "front": the front of the garment (worn on a person facing the camera, on a hanger or laid flat)
    - "back": the back of the garment (a person's back to the camera, or the garment turned over)
    - "general": anything else — a close-up of a detail, a label, fabric, a side view, an accessory, several items
-2. "headLine": if a PERSON'S HEAD (face, chin, beard or hair) shows at the top of the photo: the number of the FIRST red line that has NO part of the head below it — every bit of the face, the chin, the beard and the hair (on a back view: the hair and the back of the head, down to the hairline on the neck) lies ABOVE that line, and only neck, collar and garment lie below it. Cutting there removes the whole head and nothing else. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
+2. "headLine" (use IMAGE 2): if a PERSON'S HEAD (face, chin, beard or hair) shows at the top of the photo: the number of the FIRST red line that has NO part of the head below it — every bit of the face, the chin, the beard and the hair (on a back view: the hair and the back of the head, down to the hairline on the neck) lies ABOVE that line, and only neck, collar and garment lie below it. Cutting there removes the whole head and nothing else. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
 
 JSON only: {"view": "front"|"back"|"general", "headLine": number|null}`;
 
@@ -88,11 +126,20 @@ async function POST_handler(req: Request) {
     const c = await client.chat.completions.create({
       model,
       temperature: 0,
-      max_tokens: 60,
+      max_tokens: 80,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: "You sort clothing catalog photos. Output valid JSON only." },
-        { role: "user", content: [{ type: "text", text: PROMPT }, { type: "image_url", image_url: { url: await linedCopy(img), detail: "high" } }] },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: PROMPT },
+            { type: "text", text: "IMAGE 1:" },
+            { type: "image_url", image_url: { url: await wholeCopy(img), detail: "low" } },
+            { type: "text", text: "IMAGE 2:" },
+            { type: "image_url", image_url: { url: await linedCopy(img), detail: "high" } },
+          ],
+        },
       ],
     });
     const j = JSON.parse(s(c.choices?.[0]?.message?.content) || "{}") as { view?: unknown; headLine?: unknown };
@@ -102,11 +149,19 @@ async function POST_handler(req: Request) {
     if (Number.isInteger(line) && line >= 1 && line <= LINES.length) {
       const meta = await sharp(img).metadata();
       const h = meta.height ?? 0;
-      /* About a line and a half (3.5 %) of margin under the model's pick: a sliver of chin left behind
-         was the failure seen in testing, a sliver of neck taken is not a problem. */
-      const top = Math.round(Math.min(LINES[line - 1] + 0.035, 0.62) * h);
-      if (h && top > 0 && h - top > h * 0.35) {
-        img = await sharp(img).extract({ left: 0, top, width: meta.width ?? 0, height: h - top }).toBuffer();
+      const w = meta.width ?? 0;
+      /* One line of margin under the pick; then look again, and trim a little
+         more while any of the head is still there (a sliver of chin left behind
+         was the failure seen in testing). */
+      let cut = Math.min(LINES[line - 1] + 1 / 31 * REGION, REGION);
+      const cropAt = (f: number) => sharp(img).extract({ left: 0, top: Math.round(f * h), width: w, height: h - Math.round(f * h) }).toBuffer();
+      let out = await cropAt(cut);
+      for (let k = 0; k < 2 && (await headLeft(client, model, out).catch(() => false)); k++) {
+        cut = Math.min(cut + 0.025, REGION + 0.1);
+        out = await cropAt(cut);
+      }
+      if (h && h * (1 - cut) > h * 0.35) {
+        img = out;
         headCut = true;
       }
     }
