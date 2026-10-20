@@ -273,10 +273,30 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
    * photo then lands in its item's General box, where the Studio sorts it to
    * Front / Back / General / Style with, turns it upright and cuts the head.
    */
-  const ingest = useCallback(async (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
-    const entries = [...entriesIn].sort((a, b) =>
-      a.file && b.file ? a.file.lastModified - b.file.lastModified || a.file.name.localeCompare(b.file.name) : 0,
-    );
+  /* One batch at a time: the phone delivers its photos in several polls a few
+     seconds apart, and two batches sorted at once each saw the page before the
+     other's items existed (owner's 2026-10-20 upload: the photos after a tag
+     landed on the wrong item). */
+  const ingestChain = useRef<Promise<void>>(Promise.resolve());
+  /** Where each item's photo stream left off: the next batch from the same
+      place continues that item until a new tag appears. */
+  const streamRef = useRef(new Map<string, { key: string; at: number }>());
+  const ingest = useCallback(
+    (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
+      ingestChain.current = ingestChain.current.then(() => ingestOne(fromKey, entriesIn)).catch(() => {});
+      return ingestChain.current;
+    },
+    // ingestOne only uses stable setters and refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const ingestOne = async (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
+    /* Shooting order. Files: their own time stamp. Phone photos: the phone page
+       sends them one after another, and each stored name carries its arrival
+       time — the polls themselves can come back in any order. */
+    const stamp = (e: { file?: File; url?: string }) =>
+      e.file ? e.file.lastModified : Number((e.url ?? "").match(/\/(\d{12,14})(?:-\d+)?\.\w+$/)?.[1] ?? 0);
+    const entries = [...entriesIn].sort((a, b) => stamp(a) - stamp(b) || (a.file && b.file ? a.file.name.localeCompare(b.file.name) : 0));
     if (!entries.length) return;
     setBarMsg({ text: `Sorting ${entries.length} photo${entries.length === 1 ? "" : "s"} into items…`, tone: "info" });
     type Ph = { group: number; isTag: boolean; sku?: string; matches?: { matrixId: string; name: string }[] };
@@ -294,9 +314,25 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       /* falls back to "all on this item" */
     }
     if (photos.length !== entries.length) photos = entries.map(() => ({ group: 1, isTag: false }));
+    /* Forward only, in shooting order: a new item starts at a tag, or where the
+       photos switch to a garment not seen yet — a photo is never sent back to
+       an earlier item. */
+    {
+      let seg = 1;
+      let maxSeen = photos[0]?.group ?? 1;
+      photos = photos.map((p, i) => {
+        if (i > 0 && (p.isTag || p.group > maxSeen)) seg += 1;
+        maxSeen = Math.max(maxSeen, p.group);
+        return { ...p, group: seg };
+      });
+    }
 
     const now = itemsRef.current;
-    const from = now.find((x) => x.key === fromKey);
+    /* A batch continues where the last one from this item left off (a few
+       minutes at most), so a tag's photos keep following it across polls. */
+    const prev = streamRef.current.get(fromKey);
+    const lead = prev && Date.now() - prev.at < 10 * 60_000 && now.some((x) => x.key === prev.key) ? prev.key : fromKey;
+    const from = now.find((x) => x.key === lead);
     const order: number[] = [];
     photos.forEach((p) => {
       if (!order.includes(p.group)) order.push(p.group);
@@ -306,6 +342,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     let fromMatrix: string | null = null;
     const files = new Map<string, { file?: File; url?: string }[]>();
     const notes: string[] = [];
+    const groupKeys: string[] = [];
     order.forEach((g, gi) => {
       const idx = photos.map((p, i) => (p.group === g ? i : -1)).filter((i) => i >= 0);
       const tag = idx.map((i) => photos[i]).find((p) => p.isTag);
@@ -315,18 +352,22 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       let key: string;
       if (matrixId && byMatrix.has(matrixId)) key = byMatrix.get(matrixId) as string;
       else if (gi === 0 && (!tag || (from && !from.matrixId))) {
-        key = fromKey;
+        key = lead;
         if (matrixId) fromMatrix = matrixId;
       } else {
         key = newKey();
         added.push({ key, matrixId });
       }
       if (matrixId) byMatrix.set(matrixId, key);
+      groupKeys.push(key);
       const mine = idx.filter((i) => !photos[i].isTag).map((i) => entries[i]);
       if (mine.length) files.set(key, [...(files.get(key) ?? []), ...mine]);
     });
 
-    setItems((p) => [...p.map((x) => (x.key === fromKey && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added]);
+    setItems((p) => [...p.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added]);
+    /* Keep the page's own copy current for the next batch in the chain. */
+    itemsRef.current = [...now.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added];
+    streamRef.current.set(fromKey, { key: groupKeys[groupKeys.length - 1] ?? lead, at: Date.now() });
     for (const [key, list] of files) {
       setDraft(key, (prev) => ({ ...(prev ?? { files: [] }), files: [...(prev?.files ?? []), ...list.map((e) => ({ ...e, view: "general" as const }))] }));
     }
@@ -339,7 +380,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       tone: notes.length ? "warn" : "ok",
     });
     if (added[0]) setScrollTo(added[0].key);
-  }, [setDraft]);
+  };
   /* A scan in an EMPTY item's field loads the product into it; a scan in a
      loaded item's field adds the scanned product as the next item, so tags can
      be scanned one after another. */

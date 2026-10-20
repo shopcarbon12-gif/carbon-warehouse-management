@@ -23,7 +23,7 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { downloadStorageObject, tryGetStoragePathFromUrl, uploadBytesToStorage } from "@/lib/storageProvider";
-import { detectUprightTurns } from "@/lib/server/studio-upright";
+import { confirmTurn, detectUprightTurns } from "@/lib/server/studio-upright";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,9 +92,9 @@ const promptFor = (item: string) => PROMPT.replace(
 const PROMPT = `IMAGE 1 is one photo for a clothing catalog. IMAGE 2 is the TOP HALF of the same photo, zoomed, with numbered red lines drawn across it (line 1 near the top … line 30 at the bottom of that half).
 
 1. "view" (judge from IMAGE 1): which side of the GARMENT does the photo show?
-   - "front": the front of the garment (worn on a person facing the camera, on a hanger or laid flat)
-   - "back": the back of the garment (a person's back to the camera, or the garment turned over)
-   - "general": the product itself in any other way — a close-up of a detail, a label, fabric, a side view
+   - "front": the FRONT side of the product — the whole garment, OR a close-up of any part of its front (front pockets, fly, buttons, a cargo pocket or drawstring on the front of the leg, a front print). Detail shots of the front belong here so the generator sees them.
+   - "back": the BACK side of the product — the whole garment, OR a close-up of any part of its back (back pockets, back yoke, back waistband, a back print).
+   - "general": only when the side cannot be told or does not apply — the inside or a care label, a fabric swatch, a true side view, an accessory or several items together
    - "styling": a DIFFERENT product that is only worn WITH the product being shot — e.g. shoes, a shirt or top when the product is a bottom, pants when the product is a top, a bracelet, a bag — photographed on its own
 2. "headLine" (use IMAGE 2): if a PERSON'S HEAD (face, chin, beard or hair) shows at the top of the photo: the number of the FIRST red line that has NO part of the head below it — every bit of the face, the chin, the beard and the hair (on a back view: the hair and the back of the head, down to the hairline on the neck) lies ABOVE that line, and only neck, collar and garment lie below it. Cutting there removes the whole head and nothing else. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
 
@@ -126,7 +126,9 @@ async function POST_handler(req: Request) {
 
     // 1. Upright.
     const turns = await detectUprightTurns(client, model, [{ data: img.toString("base64") }]).catch(() => new Map<number, number>());
-    const turn = turns.get(1) ?? 0;
+    const proposed = (turns.get(1) ?? 0) as 0 | 90 | 180 | 270;
+    /* A turn needs a second opinion: the first check alone turned upright photos. */
+    const turn = proposed && (await confirmTurn(client, model, img, proposed).catch(() => false)) ? proposed : 0;
     if (turn) img = await sharp(img).rotate(turn).toBuffer();
 
     // 2 + 3. View and head line, on the upright photo.

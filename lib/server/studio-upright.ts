@@ -64,3 +64,39 @@ export async function detectUprightTurns(
   );
   return out;
 }
+
+/**
+ * Second opinion before turning a photo (Bulk Studio, 2026-10-20). On the
+ * owner's own photos — garments on a hanger or lying on the floor, shot at an
+ * angle — the pick-one-of-four check turned 4 of 6 already-upright photos 90°
+ * or 180°. Shown only the photo as taken next to the proposed turn, the model
+ * keeps the original unless the turned one is clearly more upright.
+ */
+export async function confirmTurn(client: OpenAI, model: string, img: Buffer, turn: 90 | 180 | 270): Promise<boolean> {
+  const a = await sharp(img).resize(512, 512, { fit: "inside" }).jpeg({ quality: 80 }).toBuffer();
+  const b = await sharp(a).rotate(turn).jpeg({ quality: 80 }).toBuffer();
+  const r = await client.chat.completions.create({
+    model,
+    temperature: 0,
+    max_tokens: 30,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              'Two versions of one clothing photo. Which one shows the garment the right way up — the way it hangs or is worn: the hanger, waistband or collar toward the TOP, hems toward the bottom, any printed text reading normally? A close-up or a photo where up and down cannot be told counts as already right: answer "A". Answer "B" only when version A is clearly sideways or upside down and B is clearly upright. JSON only: {"upright": "A"|"B"}',
+          },
+          { type: "text", text: "Version A:" },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${a.toString("base64")}`, detail: "low" } },
+          { type: "text", text: "Version B:" },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b.toString("base64")}`, detail: "low" } },
+        ],
+      },
+    ],
+  });
+  const j = JSON.parse(text(r.choices?.[0]?.message?.content) || "{}") as { upright?: unknown };
+  return String(j.upright ?? "").trim().toUpperCase() === "B";
+}
