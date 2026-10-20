@@ -500,12 +500,12 @@ function BulkItemCard({
       aria-label={`Item ${index + 1}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
-        <span className="text-2xl font-semibold uppercase tracking-tight text-[var(--wms-fg)]">Item {index + 1}:</span>
+        <span className="font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-fg)]">Item {index + 1}:</span>
         {item.matrixId ? (
           /* Scanned: the field gives way to the product, with its ✕ beside it. */
           <div className="flex min-w-0 items-center gap-3">
             <p className="min-w-0 font-mono text-[0.72rem] text-[var(--wms-muted)]">
-              <span className="text-base font-semibold text-[var(--wms-fg)]">
+              <span className="text-sm font-semibold text-[var(--wms-fg)]">
                 {m?.description ?? (isLoading ? "Loading…" : error ? "Could not load this product" : "")}
               </span>
               {m ? [m.upc ? ` · UPC ${m.upc}` : null, m.category, m.subcategory_1].filter(Boolean).join(" · ") : ""}
@@ -522,7 +522,7 @@ function BulkItemCard({
           </div>
         ) : (
           <>
-            <div className="min-w-[16rem] max-w-[60%] flex-[3] max-md:max-w-full">
+            <div className="w-full max-w-md">
               <ProductPicker scan autoFocus={focus} takenIds={[]} onPick={onScan} placeholder="scan the hang tag…" />
             </div>
             <button
@@ -704,7 +704,7 @@ function ProductPicker({
         }}
         className={
           scan
-            ? "w-full rounded-md border-2 border-[var(--wms-accent)]/60 bg-[var(--wms-surface-elevated)] px-3 py-2.5 font-mono text-lg tracking-wide text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:min-h-12"
+            ? "w-full rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] focus:border-[var(--wms-accent)] focus:outline-none max-md:min-h-11 max-md:text-base"
             : "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
         }
       />
