@@ -102,9 +102,9 @@ async function POST_handler(req: Request) {
     if (Number.isInteger(line) && line >= 1 && line <= LINES.length) {
       const meta = await sharp(img).metadata();
       const h = meta.height ?? 0;
-      /* One line (2 %) of margin under the model's pick: a sliver of chin left behind
+      /* About a line and a half (3.5 %) of margin under the model's pick: a sliver of chin left behind
          was the failure seen in testing, a sliver of neck taken is not a problem. */
-      const top = Math.round(Math.min(LINES[line - 1] + 0.02, 0.62) * h);
+      const top = Math.round(Math.min(LINES[line - 1] + 0.035, 0.62) * h);
       if (h && top > 0 && h - top > h * 0.35) {
         img = await sharp(img).extract({ left: 0, top, width: meta.width ?? 0, height: h - top }).toBuffer();
         headCut = true;
