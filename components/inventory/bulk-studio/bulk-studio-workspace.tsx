@@ -36,7 +36,8 @@ type Variant = { id: string; color: string | null; shopify_variant_id?: string |
 type MatrixDetail = { matrix: Matrix; variants: Variant[] };
 type SearchRow = { matrix_id: string; upc: string | null; name: string; vendor: string | null };
 
-type Item = { key: string; matrixId: string | null };
+/** fresh: scanned / tag-added this session — opens with empty photo boxes once. */
+type Item = { key: string; matrixId: string | null; fresh?: boolean };
 type DraftUpdate = BulkStudioDraft | null | ((prev: BulkStudioDraft) => BulkStudioDraft | null);
 
 const STORE_KEY = "wms_bulk_studio_items_v1";
@@ -268,6 +269,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   const onName = useCallback((key: string, name: string) => {
     namesRef.current.set(key, name);
   }, []);
+  const markLoaded = useCallback((key: string) => {
+    setItems((p) => (p.some((x) => x.key === key && x.fresh) ? p.map((x) => (x.key === key ? { ...x, fresh: false } : x)) : p));
+  }, []);
   itemsRef.current = items;
   /**
    * Photos dropped on an item (owner 2026-10-20): split into products in
@@ -365,7 +369,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
         if (matrixId) fromMatrix = matrixId;
       } else {
         key = newKey();
-        added.push({ key, matrixId });
+        added.push({ key, matrixId, fresh: true });
       }
       if (matrixId) byMatrix.set(matrixId, key);
       groupKeys.push(key);
@@ -373,9 +377,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       if (mine.length) files.set(key, [...(files.get(key) ?? []), ...mine]);
     });
 
-    setItems((p) => [...p.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added]);
+    setItems((p) => [...p.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix, fresh: true } : x)), ...added]);
     /* Keep the page's own copy current for the next batch in the chain. */
-    itemsRef.current = [...now.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added];
+    itemsRef.current = [...now.map((x) => (x.key === lead && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix, fresh: true } : x)), ...added];
     streamRef.current.set(fromKey, { key: groupKeys[groupKeys.length - 1] ?? lead, at: Date.now() });
     for (const [key, list] of files) {
       setDraft(key, (prev) => ({ ...(prev ?? { files: [] }), files: [...(prev?.files ?? []), ...list.map((e) => ({ ...e, view: "general" as const }))] }));
@@ -403,7 +407,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     const from = items.find((x) => x.key === fromKey);
     const empty = from && !from.matrixId ? from : items.find((x) => !x.matrixId);
     const key = empty?.key ?? newKey();
-    setItems((p) => (empty ? p.map((x) => (x.key === key ? { ...x, matrixId } : x)) : [...p, { key, matrixId }]));
+    setItems((p) => (empty ? p.map((x) => (x.key === key ? { ...x, matrixId, fresh: true } : x)) : [...p, { key, matrixId, fresh: true }]));
     setBarMsg(null);
     setFocusKey(key);
     if (key !== fromKey) setScrollTo(key);
@@ -508,9 +512,15 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
                   ))}
                 </ul>
                 {picked.length > sendable.length ? (
-                  <p className="mt-1 text-[var(--wms-status-warning-fg)]">
-                    {picked.length - sendable.length} item(s) are not ready and stay here — see the notes on each.
-                  </p>
+                  <ul className="mt-1 list-disc pl-5 text-[var(--wms-status-warning-fg)]">
+                    {picked
+                      .filter((i) => !sendable.includes(i))
+                      .map((i) => (
+                        <li key={i.key}>
+                          Not sent — item {items.findIndex((x) => x.key === i.key) + 1}: {st(i)?.sendProblems[0] ?? "still loading"}
+                        </li>
+                      ))}
+                  </ul>
                 ) : null}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button type="button" onClick={() => void sendBatch("now")} className={`${btn} border-[var(--wms-accent)] bg-[var(--wms-accent)] text-[var(--wms-accent-fg)]`}>
@@ -542,6 +552,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               onScan={(id) => addScanned(it.key, id)}
               ingest={ingest}
               onName={onName}
+              onLoaded={markLoaded}
               draft={drafts[it.key] ?? null}
               setDraft={setDraft}
               focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
@@ -576,6 +587,7 @@ function BulkItemCard({
   setDraft,
   ingest,
   onName,
+  onLoaded,
   onRemove,
   register,
   report,
@@ -591,6 +603,7 @@ function BulkItemCard({
   setDraft: (key: string, d: DraftUpdate) => void;
   ingest: (fromKey: string, entries: { file?: File; url?: string }[]) => Promise<void>;
   onName: (key: string, name: string) => void;
+  onLoaded: (key: string) => void;
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
@@ -659,8 +672,12 @@ function BulkItemCard({
           return files.length ? { ...prev, files } : null;
         }),
       ingest: onIngest,
+      freshScan: item.fresh === true,
+      onStateLoaded: () => onLoaded(key),
     }),
-    [key, register, report, draft, setDraft, onIngest],
+    // freshScan is read once, when the Studio first loads
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key, register, report, draft, setDraft, onIngest, onLoaded],
   );
   const m = data?.matrix;
   useEffect(() => {
@@ -725,6 +742,11 @@ function BulkItemCard({
           </>
         )}
         <div className="flex-1" />
+        {item.matrixId && status && !status.busy && !status.batchOpen && !status.batchReady && status.sendProblems.length ? (
+          <span className="max-w-[28rem] truncate font-mono text-[0.68rem] text-[var(--wms-status-warning-fg)]" title={status.sendProblems.join("\n")}>
+            {status.error || status.sendProblems[0]}
+          </span>
+        ) : null}
         {item.matrixId ? (
           <span
             title={status?.sendProblems.length ? status.sendProblems.join("\n") : undefined}

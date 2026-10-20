@@ -329,6 +329,12 @@ export type BulkStudioHooks = {
   /** Bulk Studio: photos dropped on this item go to the page, which splits them
       into products (a new hang tag starts a new item) before they land. */
   ingest?: (entries: { file?: File; url?: string }[]) => void;
+  /** Freshly scanned into the page: open with empty photo boxes (its earlier
+      photos are not brought back). An item that was already on the page always
+      loads its saved photos — never wipe them on a reload. */
+  freshScan?: boolean;
+  /** This product's saved state is in (the page clears freshScan). */
+  onStateLoaded?: () => void;
 };
 
 const PANELS = [1, 2, 3, 4];
@@ -678,6 +684,9 @@ export function CarbonStudioTab({
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
   const bulkMode = Boolean(bulk);
+  const freshScanRef = useRef(Boolean(bulk?.freshScan));
+  const onStateLoadedRef = useRef<(() => void) | undefined>(undefined);
+  onStateLoadedRef.current = bulk?.onStateLoaded;
   const bulkIngestRef = useRef<BulkStudioHooks["ingest"]>(undefined);
   bulkIngestRef.current = bulk?.ingest;
   /** Phone pose-plan banner's "Change model" jumps here. */
@@ -997,9 +1006,11 @@ export function CarbonStudioTab({
         if (s) {
           /* Bulk Studio (owner 2026-10-20): a scanned product opens with empty
              photo boxes — its earlier photos are not brought back. */
-          const restored = bulkMode ? [] : s.itemRefs.map((x): ItemRef => ({ url: x.url, view: x.view, preview: previewFor(x.url) }));
+          const restored = bulkMode && freshScanRef.current ? [] : s.itemRefs.map((x): ItemRef => ({ url: x.url, view: x.view, preview: previewFor(x.url) }));
           // Merge, never replace: a photo pasted or uploaded before this
           // answer arrived must not vanish.
+          /* Saved photos were prepared when they were added — never again. */
+          for (const r0 of restored) prepSeen.current.add(r0.url);
           setItemRefs((prev) => [...restored, ...prev.filter((p) => !restored.some((r0) => sameRef(r0, p)))]);
           /* A product saved before accessory mode existed has "ACCESSORIES" on
              file, which says nothing about what to shoot; its own type word
@@ -1017,6 +1028,7 @@ export function CarbonStudioTab({
           setJeansLabelId(typeof s.jeansLabelId === "string" && s.jeansLabelId ? s.jeansLabelId : null);
         }
         setStateLoaded(true);
+        onStateLoadedRef.current?.();
       } catch {
         if (alive) setErr("Could not reach the server to load this product's saved Studio state — changes will not be saved until the page is reopened.");
       }
