@@ -1,0 +1,313 @@
+{%- comment -%}
+  Email popup — WMS → Shopify → Email Popup (owner 2026-10-20). Replaces the
+  pop-convert app. A shopper leaves an email → wms.shopcarbon.com subscribes
+  them in Shopify and answers with ONE unique code (single use, linked to that
+  email, never stacked with another discount, never on shipping). The code is
+  shown, put in the cart (unless the cart already has a code) and emailed.
+
+  On/off, percent, delay and days come from the shop metafield
+  carbon.welcome_popup, which the WMS writes on save — no theme deploy needed.
+  Opens once per visitor: after the delay, or after scrolling past the first
+  screen (never in the first 3 s). Closing it hides it for 7 days; signing up
+  hides it for good. Never on the cart, account, password or gift-card pages,
+  in the theme editor, for signed-in subscribers, or for visitors Carbon Shield
+  blocked.
+  QA: ?carbon_welcome=preview opens it at once in this browser, even while it
+  is off, and remembers nothing (a signup there still makes a real code).
+  Deployed by scripts/deploy-welcome-popup.mjs — edit this file, not the theme.
+{%- endcomment -%}
+{%- liquid
+  assign cwp_skip = false
+  if request.design_mode
+    assign cwp_skip = true
+  endif
+  if template.directory == 'customers'
+    assign cwp_skip = true
+  endif
+  case template.name
+    when 'cart', 'password', 'gift_card'
+      assign cwp_skip = true
+  endcase
+  assign cwp_cfg = shop.metafields.carbon.welcome_popup.value
+-%}
+{%- unless cwp_skip -%}
+<script>
+(function () {
+  try {
+    var CFG = {{ cwp_cfg | json }} || {};
+    var LOCALE = {{ request.locale.iso_code | json }};
+    var PREFILL = {% if customer %}{{ customer.email | json }}{% else %}""{% endif %};
+    var SUBSCRIBED = {% if customer and customer.accepts_marketing %}true{% else %}false{% endif %};
+    var API = "https://wms.shopcarbon.com/api/storefront/welcome-signup";
+    var KEY = "carbon_welcome";
+    var d = document, w = window, loc = w.location;
+    var preview = /[?&]carbon_welcome=preview\b/.test(loc.search);
+
+    function remember(v) { if (preview) return; try { localStorage.setItem(KEY, JSON.stringify(v)); sessionStorage.setItem(KEY, "1"); } catch (e) {} }
+    if (!preview) {
+      if (!CFG.enabled || SUBSCRIBED || navigator.webdriver) return;
+      if (/(?:^|; )cs_v=b(?:;|$)/.test(d.cookie)) return; // Carbon Shield blocked this visitor
+      var st = null;
+      try { st = JSON.parse(localStorage.getItem(KEY) || "null"); if (sessionStorage.getItem(KEY)) return; } catch (e) {}
+      if (st && (st.s === "done" || (st.s === "closed" && Date.now() - st.at < 7 * 864e5))) return;
+    }
+
+    var P = Math.max(1, Math.min(50, Math.round(Number(CFG.percent) || 10)));
+    var lang = /^es/i.test(LOCALE) ? "es" : /^pt/i.test(LOCALE) ? "pt" : "en";
+    var dateLocale = { en: "en-US", es: "es-US", pt: "pt-BR" }[lang];
+    var T = {
+      en: {
+        big: P + "% off", line: "your first order", sub: "Join our email list and get a one-time code.",
+        email: "Email address", go: "Get my code", sending: "One moment…", no: "No thanks",
+        consent: "By signing up, you agree to receive marketing emails from Carbon. Unsubscribe anytime.", privacy: "Privacy policy",
+        terms: "One use, linked to your email. Can't be combined with other discounts — at checkout you always get whichever saves you more. Shipping not included.",
+        done: "You're in.", yourCode: "Your code", copy: "Copy", copied: "Copied",
+        applied: "It's in your cart. Use {email} at checkout.", enter: "Enter it at checkout and use {email}.",
+        valid: "Valid until {date}.", emailed: "We've also emailed it to you.", shop: "Start shopping",
+        already: "You're already on our list.", resent: "We've emailed your code to {email} again.", inbox: "Your code is in your inbox at {email}.",
+        used: "This email has already used its welcome code.", expired: "This email's welcome code expired on {date}.",
+        errEmail: "Please enter a valid email address.", errServer: "Something went wrong. Please try again in a moment.",
+        close: "Close", preview: "Preview — only you see this"
+      },
+      es: {
+        big: P + "% de descuento", line: "en tu primera compra", sub: "Suscríbete a nuestros emails y recibe un código de un solo uso.",
+        email: "Correo electrónico", go: "Quiero mi código", sending: "Un momento…", no: "No, gracias",
+        consent: "Al suscribirte, aceptas recibir emails de marketing de Carbon. Puedes darte de baja cuando quieras.", privacy: "Política de privacidad",
+        terms: "Un solo uso, vinculado a tu email. No se combina con otros descuentos: al pagar siempre recibes el que más te ahorra. No incluye el envío.",
+        done: "¡Listo!", yourCode: "Tu código", copy: "Copiar", copied: "Copiado",
+        applied: "Ya está en tu carrito. Usa {email} al pagar.", enter: "Ingrésalo al pagar y usa {email}.",
+        valid: "Válido hasta el {date}.", emailed: "También te lo enviamos por email.", shop: "Ir a comprar",
+        already: "Ya estás en nuestra lista.", resent: "Te volvimos a enviar tu código a {email}.", inbox: "Tu código está en tu bandeja de entrada de {email}.",
+        used: "Este email ya usó su código de bienvenida.", expired: "El código de bienvenida de este email venció el {date}.",
+        errEmail: "Introduce un email válido.", errServer: "Algo salió mal. Inténtalo de nuevo en un momento.",
+        close: "Cerrar", preview: "Vista previa: solo tú la ves"
+      },
+      pt: {
+        big: P + "% de desconto", line: "na sua primeira compra", sub: "Cadastre-se na nossa lista de emails e receba um código de uso único.",
+        email: "Seu e-mail", go: "Quero meu código", sending: "Um momento…", no: "Não, obrigado",
+        consent: "Ao se cadastrar, você concorda em receber emails de marketing da Carbon. Cancele quando quiser.", privacy: "Política de privacidade",
+        terms: "Uso único, vinculado ao seu email. Não é cumulativo com outros descontos: na finalização você sempre recebe o que mais economiza. Frete não incluso.",
+        done: "Pronto!", yourCode: "Seu código", copy: "Copiar", copied: "Copiado",
+        applied: "Já está no seu carrinho. Use {email} na finalização da compra.", enter: "Digite-o na finalização da compra e use {email}.",
+        valid: "Válido até {date}.", emailed: "Também enviamos por email.", shop: "Começar a comprar",
+        already: "Você já está na nossa lista.", resent: "Reenviamos seu código para {email}.", inbox: "Seu código está na caixa de entrada de {email}.",
+        used: "Este email já usou o código de boas-vindas.", expired: "O código de boas-vindas deste email expirou em {date}.",
+        errEmail: "Digite um email válido.", errServer: "Algo deu errado. Tente novamente em instantes.",
+        close: "Fechar", preview: "Prévia — só você vê isto"
+      }
+    }[lang];
+
+    function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+    function fill(s, v) { return esc(s).replace("{email}", "<b>" + esc(v.email || "") + "</b>").replace("{date}", esc(v.date || "")); }
+    function longDate(iso) { try { return new Date(iso).toLocaleDateString(dateLocale, { year: "numeric", month: "long", day: "numeric" }); } catch (e) { return ""; } }
+
+    var CSS =
+      ".cwp{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;font-family:'{{ settings.body_font.family }}',{{ settings.body_font.fallback_families }};color:#111;-webkit-text-size-adjust:100%}" +
+      ".cwp *{box-sizing:border-box}" +
+      ".cwp .cwp-scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:opacity .2s ease}" +
+      ".cwp .cwp-card{position:relative;width:100%;max-width:440px;max-height:calc(100dvh - 32px);overflow:auto;overscroll-behavior:contain;background:#fff;padding:44px 32px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.28);opacity:0;transform:translateY(14px);transition:opacity .2s ease,transform .25s ease}" +
+      ".cwp.is-open .cwp-scrim{opacity:1}.cwp.is-open .cwp-card{opacity:1;transform:none}" +
+      ".cwp .cwp-x{position:absolute;top:4px;right:4px;width:44px;height:44px;border:0;background:none;color:#111;font-size:28px;line-height:1;letter-spacing:0;text-transform:none;cursor:pointer}" +
+      ".cwp .cwp-pv{display:inline-block;margin:0 0 14px;padding:3px 8px;background:#fff3cd;color:#6b4e00;font-size:11px;letter-spacing:.06em;text-transform:uppercase}" +
+      ".cwp .cwp-brand{margin:0 0 22px;font-size:13px;font-weight:700;letter-spacing:.5em;padding-left:.5em}" +
+      ".cwp .cwp-h,.cwp .cwp-line,.cwp .cwp-btn,.cwp .cwp-done{font-family:'{{ settings.heading_font.family }}',{{ settings.heading_font.fallback_families }};font-weight:{{ settings.heading_font.weight | default: 600 }};text-transform:uppercase}" +
+      ".cwp .cwp-h{margin:0;font-size:54px;line-height:.95;letter-spacing:.01em;text-wrap:balance}" +
+      ".cwp .cwp-line{margin:10px 0 0;font-size:17px;letter-spacing:.18em}" +
+      ".cwp .cwp-sub{margin:16px auto 22px;max-width:30ch;font-size:15px;line-height:1.5;color:#444}" +
+      ".cwp .cwp-form{display:flex;flex-direction:column;gap:10px;margin:0}" +
+      ".cwp .cwp-in{width:100%;height:52px;padding:0 14px;border:1px solid #111;border-radius:0;background:#fff;color:#111;font:inherit;font-size:16px;text-align:left}" +
+      ".cwp .cwp-in::placeholder{color:#777}" +
+      ".cwp .cwp-btn{width:100%;min-height:52px;border:1px solid #111;border-radius:0;background:#111;color:#fff;font-size:16px;letter-spacing:.14em;cursor:pointer}" +
+      ".cwp .cwp-btn[disabled]{opacity:.6;cursor:wait}" +
+      ".cwp .cwp-hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;opacity:0}" +
+      ".cwp .cwp-err{min-height:20px;margin:2px 0 0;font-size:13px;color:#b00020;text-align:left}" +
+      ".cwp .cwp-no{display:inline-block;margin:6px 0 0;min-height:44px;padding:0 12px;border:0;background:none;color:#555;font:inherit;font-size:14px;letter-spacing:0;text-transform:none;text-decoration:underline;cursor:pointer}" +
+      ".cwp .cwp-fine{margin:10px 0 0;font-size:11.5px;line-height:1.5;color:#777}.cwp .cwp-fine a{color:#777}" +
+      ".cwp .cwp-done{margin:0 0 18px;font-size:38px;line-height:1}" +
+      ".cwp .cwp-label{margin:0 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#555}" +
+      ".cwp .cwp-code{display:flex;align-items:stretch;border:2px dashed #111;margin:0 0 16px}" +
+      ".cwp .cwp-code output{flex:1;display:flex;align-items:center;justify-content:center;padding:12px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:21px;font-weight:700;letter-spacing:.08em;user-select:all;-webkit-user-select:all;word-break:break-all}" +
+      ".cwp .cwp-copy{min-width:88px;border:0;border-left:2px dashed #111;background:#fff;color:#111;font:inherit;font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}" +
+      ".cwp .cwp-msg{margin:0 0 6px;font-size:14px;line-height:1.5;color:#333}.cwp .cwp-msg b{color:#111;word-break:break-all}" +
+      ".cwp .cwp-msgs{margin:0 0 20px}" +
+      ".cwp :focus-visible{outline:2px solid #111;outline-offset:2px}.cwp .cwp-btn:focus-visible{outline-offset:3px}" +
+      "@media (max-width:767px){.cwp{align-items:flex-end;padding:0}.cwp .cwp-card{max-width:none;max-height:88dvh;padding:40px 20px calc(18px + env(safe-area-inset-bottom,0px));transform:translateY(100%)}.cwp .cwp-h{font-size:44px}.cwp .cwp-line{font-size:15px}}" +
+      "@media (prefers-reduced-motion:reduce){.cwp .cwp-scrim,.cwp .cwp-card{transition:none}}";
+
+    var root, card, lastFocus, prevOverflow, openedAt = 0;
+
+    function focusables() { return card ? [].slice.call(card.querySelectorAll("button,input:not(.cwp-hp),a[href]")) : []; }
+    function onKey(e) {
+      if (e.key === "Escape") { close(); return; }
+      if (e.key !== "Tab") return;
+      var f = focusables(); if (!f.length) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && d.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && d.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+
+    function close() {
+      if (!root) return;
+      if (!root.getAttribute("data-done")) remember({ s: "closed", at: Date.now() });
+      root.classList.remove("is-open");
+      d.removeEventListener("keydown", onKey, true);
+      d.documentElement.style.overflow = prevOverflow;
+      var r = root; root = null;
+      setTimeout(function () { if (r.parentNode) r.parentNode.removeChild(r); }, 260);
+      try { if (lastFocus && lastFocus.focus) lastFocus.focus(); } catch (e) {}
+    }
+
+    function formView() {
+      return (preview ? '<p class="cwp-pv">' + esc(T.preview) + "</p>" : "") +
+        '<p class="cwp-brand" aria-hidden="true">CARBON</p>' +
+        '<h2 class="cwp-h" id="cwp-t">' + esc(T.big) + "</h2>" +
+        '<p class="cwp-line">' + esc(T.line) + "</p>" +
+        '<p class="cwp-sub" id="cwp-d">' + esc(T.sub) + "</p>" +
+        '<form class="cwp-form" novalidate>' +
+        '<label for="cwp-email" class="cwp-hp">' + esc(T.email) + "</label>" +
+        '<input class="cwp-in" id="cwp-email" type="email" name="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" enterkeyhint="send" required placeholder="' + esc(T.email) + '" aria-label="' + esc(T.email) + '" aria-describedby="cwp-err">' +
+        '<input class="cwp-hp" type="text" name="cwp_x" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+        '<p class="cwp-err" id="cwp-err" role="alert" aria-live="polite"></p>' +
+        '<button class="cwp-btn" type="submit">' + esc(T.go) + "</button>" +
+        "</form>" +
+        '<button class="cwp-no" type="button">' + esc(T.no) + "</button>" +
+        '<p class="cwp-fine">' + esc(T.consent) + ' <a href="/policies/privacy-policy">' + esc(T.privacy) + "</a></p>" +
+        '<p class="cwp-fine">' + esc(T.terms) + "</p>";
+    }
+
+    function resultView(j, email) {
+      var v = { email: email, date: j.endsAt ? longDate(j.endsAt) : "" };
+      var head, body = "", codeBox = "";
+      if (j.code) {
+        codeBox = '<p class="cwp-label">' + esc(T.yourCode) + '</p><div class="cwp-code"><output>' + esc(j.code) + '</output><button type="button" class="cwp-copy">' + esc(T.copy) + "</button></div>";
+      }
+      if (j.status === "created" || (j.status === "existing" && j.code)) {
+        head = j.status === "created" ? T.done : T.already;
+        body = '<p class="cwp-msg" data-cart>' + fill(T.enter, v) + "</p>" +
+          '<p class="cwp-msg">' + fill(T.valid, v) + (j.emailing ? " " + esc(T.emailed) : "") + "</p>";
+      } else if (j.status === "existing") {
+        head = T.already;
+        body = '<p class="cwp-msg">' + fill(j.emailing ? T.resent : T.inbox, v) + "</p>";
+      } else if (j.status === "used") {
+        head = T.already;
+        body = '<p class="cwp-msg">' + esc(T.used) + "</p>";
+      } else {
+        head = T.already;
+        body = '<p class="cwp-msg">' + fill(T.expired, v) + "</p>";
+      }
+      return '<p class="cwp-brand" aria-hidden="true">CARBON</p>' +
+        '<h2 class="cwp-done" id="cwp-t">' + esc(head) + "</h2>" + codeBox +
+        '<div class="cwp-msgs" id="cwp-d">' + body + "</div>" +
+        '<button class="cwp-btn cwp-shop" type="button">' + esc(T.shop) + "</button>";
+    }
+
+    /* Put the code in the cart so checkout picks it up — unless the cart already
+       carries a code (a Carbon Rewards reward, say), which it must not replace. */
+    function applyToCart(code, el, email) {
+      fetch("/cart.js", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (c) {
+          if (c && c.discount_codes && c.discount_codes.length) return;
+          return fetch("/discount/" + encodeURIComponent(code) + "?redirect=%2Fcart.js", { credentials: "same-origin" }).then(function (r) {
+            if (r.ok && el) el.innerHTML = fill(T.applied, { email: email });
+          });
+        })
+        .catch(function () {});
+    }
+
+    function wireResult(j, email) {
+      var copy = card.querySelector(".cwp-copy");
+      if (copy) copy.addEventListener("click", function () {
+        var done = function () { copy.textContent = T.copied; setTimeout(function () { copy.textContent = T.copy; }, 2000); };
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(j.code).then(done, function () {});
+          else { var r = d.createRange(); r.selectNodeContents(card.querySelector(".cwp-code output")); var s = w.getSelection(); s.removeAllRanges(); s.addRange(r); d.execCommand("copy"); done(); }
+        } catch (e) {}
+      });
+      card.querySelector(".cwp-shop").addEventListener("click", close);
+      if (j.code) applyToCart(j.code, card.querySelector("[data-cart]"), email);
+      var b = card.querySelector(".cwp-shop"); if (b) b.focus();
+    }
+
+    function wireForm() {
+      var form = card.querySelector("form"), input = card.querySelector("#cwp-email"), hp = card.querySelector(".cwp-hp[name=cwp_x]");
+      var err = card.querySelector("#cwp-err"), btn = card.querySelector(".cwp-btn"), busy = false;
+      if (PREFILL) input.value = PREFILL;
+      card.querySelector(".cwp-no").addEventListener("click", close);
+      input.addEventListener("input", function () { err.textContent = ""; });
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (busy) return;
+        var email = input.value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { err.textContent = T.errEmail; input.focus(); return; }
+        busy = true; btn.disabled = true; btn.textContent = T.sending; err.textContent = "";
+        fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain" },
+          credentials: "omit",
+          body: JSON.stringify({ email: email, hp: hp ? hp.value : "", t: Date.now() - openedAt, p: loc.pathname, l: LOCALE })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j || !j.ok) {
+              err.textContent = j && j.error === "invalid_email" ? T.errEmail : T.errServer;
+              busy = false; btn.disabled = false; btn.textContent = T.go;
+              return;
+            }
+            root.setAttribute("data-done", "1");
+            remember({ s: "done", at: Date.now() });
+            card.innerHTML = '<button class="cwp-x" type="button" aria-label="' + esc(T.close) + '">&times;</button>' + resultView(j, email);
+            card.querySelector(".cwp-x").addEventListener("click", close);
+            wireResult(j, email);
+          })
+          .catch(function () { err.textContent = T.errServer; busy = false; btn.disabled = false; btn.textContent = T.go; });
+      });
+    }
+
+    function open() {
+      if (!d.getElementById("cwp-css")) { var st = d.createElement("style"); st.id = "cwp-css"; st.textContent = CSS; d.head.appendChild(st); }
+      lastFocus = d.activeElement;
+      root = d.createElement("div");
+      root.className = "cwp";
+      root.innerHTML = '<div class="cwp-scrim"></div><div class="cwp-card" role="dialog" aria-modal="true" aria-labelledby="cwp-t" aria-describedby="cwp-d" tabindex="-1">' +
+        '<button class="cwp-x" type="button" aria-label="' + esc(T.close) + '">&times;</button>' + formView() + "</div>";
+      d.body.appendChild(root);
+      card = root.querySelector(".cwp-card");
+      root.querySelector(".cwp-scrim").addEventListener("click", close);
+      card.querySelector(".cwp-x").addEventListener("click", close);
+      wireForm();
+      prevOverflow = d.documentElement.style.overflow;
+      d.documentElement.style.overflow = "hidden";
+      d.addEventListener("keydown", onKey, true);
+      openedAt = Date.now();
+      requestAnimationFrame(function () { requestAnimationFrame(function () { if (root) root.classList.add("is-open"); }); });
+      // Keyboard and mouse users start in the email box; on phones the keyboard would cover the offer.
+      var hover = w.matchMedia && w.matchMedia("(hover: hover)").matches;
+      setTimeout(function () { try { (hover ? card.querySelector("#cwp-email") : card).focus({ preventScroll: true }); } catch (e) {} }, 60);
+      if (!preview) try { sessionStorage.setItem(KEY, "1"); } catch (e) {}
+    }
+
+    var shown = false, earliest = Date.now() + 3000, timer = 0;
+    function trigger() {
+      if (shown) return;
+      var wait = earliest - Date.now();
+      if (!preview && wait > 0) { clearTimeout(timer); timer = setTimeout(trigger, wait); return; }
+      var a = d.activeElement; // don't interrupt someone typing (search, a form)
+      if (!preview && a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) { clearTimeout(timer); timer = setTimeout(trigger, 4000); return; }
+      shown = true;
+      clearTimeout(timer);
+      w.removeEventListener("scroll", onScroll);
+      open();
+    }
+    function onScroll() { if (w.scrollY > w.innerHeight) trigger(); }
+    function start() {
+      if (preview) { trigger(); return; }
+      timer = setTimeout(trigger, Math.max(0, Number(CFG.delay) || 8) * 1000);
+      w.addEventListener("scroll", onScroll, { passive: true });
+    }
+    if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", start);
+    else start();
+  } catch (e) {}
+})();
+</script>
+{%- endunless -%}

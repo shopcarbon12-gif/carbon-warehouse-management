@@ -51,6 +51,7 @@ import {
   Wand2,
   ShoppingBag,
   ShieldCheck,
+  MailPlus,
   Undo2,
   X,
 } from "lucide-react";
@@ -112,6 +113,7 @@ const sections: NavSection[] = [
       { href: "/shopify/sales", label: "Orders", icon: ShoppingBag, count: "shopifyToFulfill" },
       { href: "/shopify/returns", label: "Returns", icon: Undo2, count: "shopifyReturns" },
       { href: "/shopify/carbon-shield", label: "Carbon Shield", icon: ShieldCheck },
+      { href: "/shopify/welcome-popup", label: "Email Popup", icon: MailPlus },
     ],
   },
   {

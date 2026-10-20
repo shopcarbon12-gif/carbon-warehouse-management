@@ -99,6 +99,7 @@ const ROUTES: Record<string, Entry> = {
   "shopify/carbon-shield/rules": { module: "Shopify", label: "Added a Carbon Shield rule" },
   "shopify/carbon-shield/rules/[id]": { module: "Shopify", label: "Removed a Carbon Shield rule" },
   "shopify/carbon-shield/refresh": { module: "Shopify", label: "Refreshed Carbon Shield IP data" },
+  "shopify/welcome-popup/settings": { module: "Shopify", label: "Changed the email popup" },
   "shopify/status": { module: "Shopify", label: "Changed Shopify product status" },
   "shopify/media": { module: "Shopify", label: { POST: "Changed Shopify images", PUT: "Changed Shopify images", PATCH: "Reordered Shopify images", DELETE: "Deleted Shopify image" } },
   "shopify/image-upload": { module: "Shopify", label: "Uploaded image to Shopify" },

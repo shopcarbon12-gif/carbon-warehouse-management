@@ -32,6 +32,11 @@ function isPublicPath(pathname: string): boolean {
   /* Carbon Shield: the theme script on shopcarbon.com asks for a verdict on
      every page view — shoppers have no WMS session. */
   if (pathname === "/api/shield/check") return true;
+  /* Email popup on shopcarbon.com (signup from a shopper's browser) and the
+     unsubscribe link in its welcome email — no WMS session; the unsubscribe
+     link carries a random per-signup token. */
+  if (pathname === "/api/storefront/welcome-signup") return true;
+  if (pathname === "/api/storefront/welcome-unsubscribe") return true;
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;

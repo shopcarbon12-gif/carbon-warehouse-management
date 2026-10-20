@@ -53,6 +53,9 @@ const SKIP_ROUTES = new Set<string>([
   "shopify/metafields/suggest",
   "mobile/locate-sessions", // telemetry, one row per Locate use — not a change
   "shield/check", // Carbon Shield: one call per storefront page view — not a change
+  // Email popup: shoppers' own signups / unsubscribes, recorded in welcome_signups (Shopify → Email Popup)
+  "storefront/welcome-signup",
+  "storefront/welcome-unsubscribe",
 ]);
 
 const MAX_BODY_BYTES = 256 * 1024;

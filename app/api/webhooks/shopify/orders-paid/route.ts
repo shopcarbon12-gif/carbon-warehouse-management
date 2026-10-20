@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { notifyShopifyOrder } from "@/lib/server/web-push";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
 import { ORDER_HOLD_STATUS } from "@/lib/server/order-hold-status";
+import { markWelcomeCodesUsed } from "@/lib/server/welcome/signup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,6 +73,11 @@ async function POST_handler(req: Request) {
         [usedCodes, order.name ?? null],
       )
       .catch((e) => console.error("[orders-paid] thank-you code", e));
+    // An email-popup welcome code: marked used for Shopify → Email Popup.
+    const total = Number(order.total_price);
+    await markWelcomeCodesUsed(pool, usedCodes, order.name ?? null, Number.isFinite(total) ? total : null).catch((e) =>
+      console.error("[orders-paid] welcome code", e),
+    );
   }
 
   // Idempotency: claim the order id. If already processed, ack and stop.
