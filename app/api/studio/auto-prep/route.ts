@@ -74,7 +74,7 @@ async function headLeft(client: OpenAI, model: string, img: Buffer): Promise<boo
       {
         role: "user",
         content: [
-          { type: "text", text: 'This is the top of a cropped clothing photo. Is ANY part of a person\'s face, mouth, chin, beard or head hair visible in it (a neck or a collar alone does not count)? JSON only: {"head": true|false}' },
+          { type: "text", text: 'This is the top edge of a cropped clothing photo. Can you CLEARLY see part of a person\'s lips, chin, beard or head hair in it? A neck, a throat, a collar, a turtleneck, a shadow or skin above a neckline does NOT count — answer false for those. JSON only: {"head": true|false}' },
           { type: "image_url", image_url: { url: `data:image/jpeg;base64,${strip.toString("base64")}`, detail: "high" } },
         ],
       },
@@ -157,7 +157,7 @@ async function POST_handler(req: Request) {
       const cropAt = (f: number) => sharp(img).extract({ left: 0, top: Math.round(f * h), width: w, height: h - Math.round(f * h) }).toBuffer();
       let out = await cropAt(cut);
       /* Small steps, so a collar right under the chin is not cut into. */
-      for (let k = 0; k < 4 && (await headLeft(client, model, out).catch(() => false)); k++) {
+      for (let k = 0; k < 3 && (await headLeft(client, model, out).catch(() => false)); k++) {
         cut = Math.min(cut + 0.012, REGION + 0.1);
         out = await cropAt(cut);
       }
