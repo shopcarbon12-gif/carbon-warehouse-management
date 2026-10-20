@@ -48,6 +48,7 @@ import {
   Star,
   Share2,
   Shirt,
+  Wand2,
   ShoppingBag,
   Undo2,
   X,
@@ -88,7 +89,8 @@ const sections: NavSection[] = [
       p.startsWith("/inventory/locations") ||
       p.startsWith("/inventory/cycle-counts") ||
       p.startsWith("/inventory/transfers") ||
-      p.startsWith("/inventory/size-grading"),
+      p.startsWith("/inventory/size-grading") ||
+      p.startsWith("/inventory/bulk-studio"),
     items: [
       { href: "/inventory/catalog", label: "Catalog", icon: Package },
       { href: "/inventory/categories", label: "Categories", icon: Layers },
@@ -98,6 +100,7 @@ const sections: NavSection[] = [
       { href: "/inventory/transfers/in", label: "Transfer In", icon: FolderInput },
       { href: "/inventory/bulk-import", label: "Bulk Import", icon: PackagePlus },
       { href: "/inventory/size-grading", label: "Size Grading", icon: Shirt },
+      { href: "/inventory/bulk-studio", label: "Bulk Studio", icon: Wand2 },
     ],
   },
   {

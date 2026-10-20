@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import { parseSpecBackState, specListsBackDesign, specRiskReport, studioRefViewKey, type SpecIssue } from "@/lib/studio-item-spec";
 import {
@@ -273,6 +273,44 @@ type Props = {
   productName?: string;
   variants: StudioVariant[];
   canManage: boolean;
+  /** Bulk Studio (Inventory › Bulk Studio): the same tab, trimmed to photos,
+   *  label, spec and options, driven by the page's Analyze all / Send batch. */
+  bulk?: BulkStudioHooks;
+};
+
+/** What one product in the Bulk Studio reports to the page on every change. */
+export type BulkStudioStatus = {
+  matrixId: string;
+  modelName: string | null;
+  photoCount: number;
+  /** none = never analysed; stale = photos changed since; ready = spec covers these photos. */
+  spec: "none" | "stale" | "ready";
+  /** Something is running in this product (upload, analysis, adding to the batch). */
+  busy: boolean;
+  /** What stops Analyze (missing photos) — empty when it can run. */
+  analyzeProblems: string[];
+  /** What stops adding to the batch, the same gates as "Add to tonight's batch". */
+  sendProblems: string[];
+  /** This product's batch runs not yet back (queued / preparing / with OpenAI). */
+  batchOpen: number;
+  /** Runs back from OpenAI and waiting to be loaded. */
+  batchReady: number;
+  /** The latest run's status line, for the item header. */
+  batchLine: string | null;
+  clockText: string;
+  error: string | null;
+  message: string | null;
+};
+export type BulkStudioApi = {
+  /** Analyze the photos if the spec does not cover them yet. True = a spec covers them. */
+  analyze: () => Promise<boolean>;
+  /** Queue all four panels for the batch, exactly like "Add to tonight's batch". True = queued. */
+  queue: () => Promise<boolean>;
+  refreshBatch: () => Promise<void>;
+};
+export type BulkStudioHooks = {
+  register: (api: BulkStudioApi | null) => void;
+  onStatus: (s: BulkStudioStatus) => void;
 };
 
 const PANELS = [1, 2, 3, 4];
@@ -617,6 +655,7 @@ export function CarbonStudioTab({
   productName = "",
   variants,
   canManage,
+  bulk,
 }: Props) {
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
@@ -1565,8 +1604,11 @@ export function CarbonStudioTab({
 
   // Paste an image from the clipboard (⌘/Ctrl+V) anywhere in Studio → item ref.
   // Guarded to image payloads only, so pasting text into inputs is untouched.
+  /* Bulk Studio mounts many products on one page: a window-wide paste would land
+     in every one of them, so pasting is a single-product (Studio tab) feature. */
+  const pasteOff = Boolean(bulk);
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || pasteOff) return;
     const onPaste = (e: ClipboardEvent) => {
       const imgs = imageFilesFromTransfer(e.clipboardData);
       if (imgs.length) {
@@ -1576,7 +1618,7 @@ export function CarbonStudioTab({
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [canManage, uploadItems]);
+  }, [canManage, pasteOff, uploadItems]);
 
   const startPhoneCamera = useCallback(async () => {
     setErr(null);
@@ -1757,6 +1799,8 @@ export function CarbonStudioTab({
   /** An item id while its results load, or "send" / "check". */
   const [batchBusy, setBatchBusy] = useState<string | null>(null);
   const [confirmBatchSend, setConfirmBatchSend] = useState(false);
+  /** The runTag of the last run generate("batch") queued — how Bulk Studio learns it worked. */
+  const batchQueuedRef = useRef<string | null>(null);
   const refreshBatch = useCallback(async () => {
     try {
       const r = await fetch(`/api/studio/batch?matrixId=${encodeURIComponent(matrixId)}`, { cache: "no-store" });
@@ -2254,6 +2298,7 @@ export function CarbonStudioTab({
         });
         const j = (await r.json().catch(() => ({}))) as { error?: string };
         if (!r.ok) throw new Error(j.error || `Could not add to the batch (HTTP ${r.status})`);
+        batchQueuedRef.current = runTag;
         setMsg(
           `Added ${chosen.length} panel(s) with ${model.name} to tonight's batch — it goes to OpenAI at 1 AM Eastern at half price; the pictures are saved to Dropbox (Campaign › 2026 OPENAI GENERATOR WMS) and show up here, usually by morning. Nothing is published until you push.${batchSpecNote}`,
         );
@@ -2929,6 +2974,85 @@ export function CarbonStudioTab({
     }
   }, [matrixId, mediaItems, colorOpts, model?.name]);
 
+  /* ── Bulk Studio hooks ─────────────────────────────────────────────────────
+     The page drives many products at once; each one still runs THIS code, so
+     Analyze is the same analysis and Send queues the same panel requests. */
+  const bulkAnalyze = useCallback(async (): Promise<boolean> => {
+    if (!specStale) return true;
+    if (!productRefCount || busy !== null || specBusy) return false;
+    setErr(null);
+    setClock({ startedAt: Date.now(), endedAt: null });
+    setProgress("Analyzing item details…");
+    try {
+      return (await analyzeItem(refViews)) !== null;
+    } finally {
+      setProgress("");
+      setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+    }
+  }, [specStale, productRefCount, busy, specBusy, analyzeItem, refViews]);
+  const bulkQueue = useCallback(async (): Promise<boolean> => {
+    if (busy !== null) return false;
+    batchQueuedRef.current = null;
+    setClock({ startedAt: Date.now(), endedAt: null });
+    await generate("batch");
+    setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
+    return batchQueuedRef.current !== null;
+  }, [busy, generate]);
+  const bulkApiRef = useRef<BulkStudioApi>({ analyze: async () => false, queue: async () => false, refreshBatch: async () => {} });
+  bulkApiRef.current = { analyze: bulkAnalyze, queue: bulkQueue, refreshBatch };
+  const bulkRegister = bulk?.register;
+  useEffect(() => {
+    if (!bulkRegister) return;
+    bulkRegister({
+      analyze: () => bulkApiRef.current.analyze(),
+      queue: () => bulkApiRef.current.queue(),
+      refreshBatch: () => bulkApiRef.current.refreshBatch(),
+    });
+    return () => bulkRegister(null);
+  }, [bulkRegister]);
+  const bulkStatus = useMemo((): BulkStudioStatus | null => {
+    if (!bulk) return null;
+    const analyzeProblems: string[] = [];
+    if (!stateLoaded) analyzeProblems.push("Loading this product's saved Studio…");
+    if (!productRefCount) analyzeProblems.push("Add a Front, Back or Accessories photo.");
+    const sendProblems = [...analyzeProblems];
+    if (!model) sendProblems.push("Choose a model.");
+    if (refViews.styling.length > MAX_STYLING_REFS) sendProblems.push(`Style with holds up to ${MAX_STYLING_REFS} photos.`);
+    if (specStale) sendProblems.push(itemSpec.trim() ? "Photos changed since the analysis — Analyze again." : "Analyze first.");
+    if (model && !accessoryKind) {
+      const backFacing = PANELS.some((p) => getPanelPosePair(model.gender, p).some((pose) => isBackFacingPose(model.gender, pose)));
+      const backKnown = refViews.back.length > 0 || backIsPlain || specSaysBackDesign || specBack === "plain";
+      if (backFacing && !backKnown) sendProblems.push('The back is unknown — add a Back photo or tick "The back is plain".');
+    }
+    if (!specStale && specBlocked) sendProblems.push('The spec has red lines — fix them or tick "I checked the spec".');
+    if (isJeansType && !accessoryKind && !jeansLabelId && specHasBackWaistbandLabel(itemSpec)) {
+      sendProblems.push("Pick this product's jeans label.");
+    }
+    const live = batchItems.filter((b) => b.status !== "cancelled");
+    const latest = live[0] ?? null;
+    return {
+      matrixId,
+      modelName: model?.name ?? null,
+      photoCount: itemRefs.length,
+      spec: !itemSpec.trim() ? "none" : specStale ? "stale" : "ready",
+      busy: busy !== null || specBusy,
+      analyzeProblems,
+      sendProblems,
+      batchOpen: live.filter((b) => b.status === "queued" || b.status === "preparing" || b.status === "submitted").length,
+      batchReady: live.filter((b) => b.status === "ready").length,
+      batchLine: latest ? `${latest.modelName ?? "Model"}${latest.itemColour ? ` · ${latest.itemColour}` : ""} — ${batchStatusText(latest)}` : null,
+      clockText,
+      error: err,
+      message: progress || msg,
+    };
+  }, [bulk, stateLoaded, productRefCount, model, refViews, specStale, itemSpec, accessoryKind, backIsPlain, specSaysBackDesign, specBack, specBlocked, isJeansType, jeansLabelId, batchItems, matrixId, itemRefs.length, busy, specBusy, clockText, err, progress, msg]);
+  const bulkOnStatus = bulk?.onStatus;
+  const bulkStatusKey = bulkStatus ? JSON.stringify(bulkStatus) : "";
+  useEffect(() => {
+    if (bulkOnStatus && bulkStatus) bulkOnStatus(bulkStatus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- report only when the content changes
+  }, [bulkOnStatus, bulkStatusKey]);
+
   const label = "block text-[0.74rem] uppercase tracking-wide text-[var(--wms-muted)] mb-1";
   const field =
     "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-2 py-1.5 font-mono text-[0.85rem] text-[var(--wms-fg)]";
@@ -2936,7 +3060,7 @@ export function CarbonStudioTab({
   // operator picks one image per colour (each pick locks that colour out of the rest).
   const singleColor = colorOpts.length === 1 ? colorOpts[0] : null;
   /** The Colourway box sits beside Style with (md+), stacked on phones. */
-  const showColourway = canManage && colors.length > 0 && !!color;
+  const showColourway = !bulk && canManage && colors.length > 0 && !!color;
 
   return (
     <div className="space-y-3">
@@ -3422,6 +3546,11 @@ export function CarbonStudioTab({
           and the server pastes the cropped photo into it; Pose 4 always keeps
           the shirt over the waistband (owner's hard lock). */}
       {canManage && isJeansType ? (
+        <LabelDrawer
+          bulk={Boolean(bulk)}
+          summary={`Jeans label${chosenLabel ? ` · ${chosenLabel.name || "picked"}` : " · none picked"}`}
+          defaultOpen={!jeansLabelId}
+        >
         <div
           className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3"
           onDragOver={(e) => {
@@ -3533,6 +3662,7 @@ export function CarbonStudioTab({
             </p>
           )}
         </div>
+        </LabelDrawer>
       ) : null}
 
       {/* Item spec — what the render is locked to. Visible and editable:
@@ -3684,6 +3814,28 @@ export function CarbonStudioTab({
         />
       </div>
 
+      {bulk ? (
+        /* Bulk Studio: the page's Analyze all / Send batch replace the buttons
+           below; all four panels are sent, the live-only options do not apply. */
+        <div className="flex flex-wrap items-center gap-3">
+          {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
+          {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
+          {photoWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{photoWarn}</span> : null}
+          {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}
+          {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
+          {busy === "batch" || specBusy ? (
+            <button
+              type="button"
+              disabled={!canManage || aborting}
+              onClick={abortGeneration}
+              className="rounded-md border border-[var(--wms-status-danger-fg)]/70 bg-[var(--wms-status-danger-fg)]/10 px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-status-danger-fg)] disabled:opacity-50 max-md:min-h-11"
+            >
+              {aborting ? "Aborting…" : "■ Abort"}
+            </button>
+          ) : null}
+        </div>
+      ) : (
+      <>
       {/* How the four panels are tied together, and what the model wears. */}
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {(
@@ -3886,9 +4038,11 @@ export function CarbonStudioTab({
         {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}
         {err ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}
       </div>
+      </>
+      )}
 
       {/* Night batch: this product's runs waiting for 1 AM, out with OpenAI, or back for review. */}
-      {canManage && (batchItems.some((b) => b.status !== "cancelled") || (batchOverview?.queuedRuns ?? 0) > 0 || (batchOverview?.open.length ?? 0) > 0) ? (
+      {canManage && (batchItems.some((b) => b.status !== "cancelled") || (!bulk && ((batchOverview?.queuedRuns ?? 0) > 0 || (batchOverview?.open.length ?? 0) > 0))) ? (
         <div className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <p className="font-mono text-[0.74rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">☾ Night batch</p>
@@ -3906,7 +4060,7 @@ export function CarbonStudioTab({
                     .join(" · ")
                 : "Loading…"}
             </span>
-            {batchOverview?.queuedRuns ? (
+            {!bulk && batchOverview?.queuedRuns ? (
               confirmBatchSend ? (
                 <span className="flex flex-wrap items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-fg)]">
                   Send all {batchOverview.queuedRuns} queued run(s) now, for every product?
@@ -3938,7 +4092,7 @@ export function CarbonStudioTab({
                 </button>
               )
             ) : null}
-            {batchOverview?.open.length ? (
+            {!bulk && batchOverview?.open.length ? (
               <button
                 type="button"
                 disabled={batchBusy !== null}
@@ -4038,7 +4192,7 @@ export function CarbonStudioTab({
         </div>
       ) : null}
 
-      {!shopifyProductId ? (
+      {!shopifyProductId && !bulk ? (
         <p className="font-mono text-[0.68rem] text-[var(--wms-muted)]">
           Generation &amp; download work here without Shopify. To <b>push</b> images, link this
           product (🔗 Link to Shopify) or ✔ Check &amp; Publish it first.
@@ -4394,5 +4548,28 @@ export function CarbonStudioTab({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** The jeans-label box: as is in the Studio tab, a fold-out drawer in Bulk Studio. */
+function LabelDrawer({
+  bulk,
+  summary,
+  defaultOpen,
+  children,
+}: {
+  bulk: boolean;
+  summary: string;
+  defaultOpen: boolean;
+  children: ReactNode;
+}) {
+  if (!bulk) return <>{children}</>;
+  return (
+    <details open={defaultOpen} className="group rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
+      <summary className="cursor-pointer px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] max-md:min-h-11">
+        {summary}
+      </summary>
+      <div className="px-1 pb-1">{children}</div>
+    </details>
   );
 }
