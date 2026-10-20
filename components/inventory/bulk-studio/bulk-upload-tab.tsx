@@ -311,6 +311,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         }));
       }
       /* Generated pictures: each finished panel split into its two 3:4 pictures. */
+      const notes: string[] = [];
       for (const run of runs) {
         const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string; mime?: string }[] }>(
           `/api/studio/batch/${run.id}?jpeg=1`,
@@ -341,7 +342,23 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           }
         }
         for (const x of list) rankRef.current.set(x.card.key, x.rank);
-        runCards.current.set(run.id, { matrixId, colour, cards: list.map((x) => x.card) });
+        /* The colour the pictures actually show decides their block. */
+        let shown = colour;
+        if (colours.length > 1 && list[0]) {
+          const hero = list.slice().sort((a, b) => a.rank - b.rank)[0].card;
+          const wj = await fetch("/api/studio/which-colour", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: hero.src, colours, item: d.matrix.description ?? "" }),
+          })
+            .then((x) => x.json() as Promise<{ colour?: string | null }>)
+            .catch(() => ({ colour: null }));
+          if (wj.colour && wj.colour.toUpperCase() !== colour.toUpperCase()) {
+            shown = wj.colour;
+            notes.push(`${run.modelName ?? "The"} run was requested as ${colour} but the pictures show ${wj.colour} — they are in ${wj.colour}'s block (change it at the top of the row).`);
+          }
+        }
+        runCards.current.set(run.id, { matrixId, colour: shown, cards: list.map((x) => x.card) });
       }
       const gen = genFor(matrixId);
       /* Blocks follow the colour order the Shopify gallery already has (the
@@ -358,7 +375,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         existing,
         cards: arrange(gen, existing, includeRef.current, colourOrder),
         state: "ready",
-        msg: "",
+        msg: notes.join(" "),
       }));
     } catch (e) {
       patchRow(matrixId, (r) => ({ ...r, state: "error", msg: `Could not load this product's pictures (${e instanceof Error ? e.message : "error"}).` }));
