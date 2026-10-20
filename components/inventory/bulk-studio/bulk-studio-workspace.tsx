@@ -90,7 +90,9 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
 
   const apis = useRef(new Map<string, BulkStudioApi>());
   const [statuses, setStatuses] = useState<Record<string, BulkStudioStatus>>({});
-  const [running, setRunning] = useState<null | "analyze" | "send">(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [sending, setSending] = useState(false);
+  /* Analyze and Send are independent: one never waits for the other. */
   const [barMsg, setBarMsg] = useState<{ text: string; tone: "info" | "ok" | "warn" | "err" } | null>(null);
   const [confirmSend, setConfirmSend] = useState(false);
   /** Per item: what the last Analyze all / Send batch did to it. */
@@ -122,8 +124,8 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   const analyzeAll = useCallback(async () => {
     const list = analyzable;
     if (!list.length) return;
-    setRunning("analyze");
-    setBarMsg({ text: `Analyzing ${list.length} item${list.length === 1 ? "" : "s"} — two at a time, exactly as the Studio tab does…`, tone: "info" });
+    setAnalyzing(true);
+    setBarMsg({ text: `Analyzing ${list.length} item${list.length === 1 ? "" : "s"} — up to six at a time…`, tone: "info" });
     let next = 0;
     let ok = 0;
     const failed: string[] = [];
@@ -139,8 +141,8 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
         else failed.push(String(items.findIndex((x) => x.key === it.key) + 1));
       }
     };
-    await Promise.all([worker(), worker()]);
-    setRunning(null);
+    await Promise.all(Array.from({ length: Math.min(6, list.length) }, () => worker()));
+    setAnalyzing(false);
     setBarMsg(
       failed.length
         ? { text: `${ok} analysed; item${failed.length === 1 ? "" : "s"} ${failed.join(", ")} failed — the reason is on the item.`, tone: "warn" }
@@ -153,27 +155,32 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
       setConfirmSend(false);
       const list = sendable;
       if (!list.length) return;
-      setRunning("send");
+      setSending(true);
       setBarMsg({ text: `Adding ${list.length} item${list.length === 1 ? "" : "s"} to the batch…`, tone: "info" });
       let queued = 0;
       const failed: string[] = [];
-      // One at a time: each queue call builds that product's four panel requests.
-      for (const it of list) {
-        const api = apis.current.get(it.key);
-        if (!api) continue;
-        setStepNote((p) => ({ ...p, [it.key]: "Adding to the batch…" }));
-        const done = await api.queue().catch(() => false);
-        setStepNote((p) => ({ ...p, [it.key]: done ? (when === "now" ? "Added — sending" : "Queued for 1 AM") : "Not added — see the item" }));
-        if (done) queued++;
-        else failed.push(String(items.findIndex((x) => x.key === it.key) + 1));
-      }
+      // Up to four at once: each queue call builds that product's four panel requests.
+      let next = 0;
+      const worker = async () => {
+        while (next < list.length) {
+          const it = list[next++];
+          const api = apis.current.get(it.key);
+          if (!api) continue;
+          setStepNote((p) => ({ ...p, [it.key]: "Adding to the batch…" }));
+          const done = await api.queue().catch(() => false);
+          setStepNote((p) => ({ ...p, [it.key]: done ? (when === "now" ? "Added — sending" : "Queued for 1 AM") : "Not added — see the item" }));
+          if (done) queued++;
+          else failed.push(String(items.findIndex((x) => x.key === it.key) + 1));
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(4, list.length) }, () => worker()));
       if (!queued) {
-        setRunning(null);
+        setSending(false);
         setBarMsg({ text: "Nothing was added — the reason is on each item.", tone: "err" });
         return;
       }
       if (when === "night") {
-        setRunning(null);
+        setSending(false);
         setBarMsg({
           text: `${queued} item${queued === 1 ? "" : "s"} (${queued * PANELS_PER_ITEM} panels) wait for tonight's 1 AM send.${failed.length ? ` Not added: item ${failed.join(", ")}.` : ""}`,
           tone: failed.length ? "warn" : "ok",
@@ -201,7 +208,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
           tone: "err",
         });
       } finally {
-        setRunning(null);
+        setSending(false);
         window.setTimeout(() => {
           for (const api of apis.current.values()) void api.refreshBatch();
         }, 20_000);
@@ -211,7 +218,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
   );
 
   const checkNow = useCallback(async () => {
-    setRunning("send");
+    setSending(true);
     try {
       const r = await fetch("/api/studio/batch/poll", {
         method: "POST",
@@ -226,7 +233,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
     } catch (e) {
       setBarMsg({ text: `Could not check (${e instanceof Error ? e.message : "error"}).`, tone: "err" });
     } finally {
-      setRunning(null);
+      setSending(false);
     }
   }, []);
 
@@ -466,7 +473,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!canManage || running !== null || analyzable.length === 0}
+                disabled={!canManage || analyzing || analyzable.length === 0}
                 onClick={() => void analyzeAll()}
                 title={analysisPassed ? "Every item's analysis passed" : "Analysis not passed yet on every item"}
                 className={`${btn} ${
@@ -475,20 +482,20 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
                     : "border-orange-500 bg-orange-500 text-black hover:brightness-110"
                 }`}
               >
-                {running === "analyze" ? "Analyzing…" : analysisPassed ? "✓ Analyzed" : "🔍 Analyze"}
+                {analyzing ? "Analyzing…" : analysisPassed ? "✓ Analyzed" : "🔍 Analyze"}
               </button>
               <button
                 type="button"
-                disabled={!canManage || running !== null || sendable.length === 0}
+                disabled={!canManage || sending || sendable.length === 0}
                 onClick={() => setConfirmSend(true)}
                 className={`${btn} border-[var(--wms-accent)] bg-[var(--wms-accent)] text-[var(--wms-accent-fg)] hover:brightness-110`}
               >
-                {running === "send" ? "Sending…" : `➤ Send batch${sendable.length ? ` (${sendable.length})` : ""}`}
+                {sending ? "Sending…" : `➤ Send batch${sendable.length ? ` (${sendable.length})` : ""}`}
               </button>
               {openTotal ? (
                 <button
                   type="button"
-                  disabled={running !== null}
+                  disabled={sending}
                   onClick={() => void checkNow()}
                   title="Ask OpenAI now instead of waiting for the automatic check (every 5 minutes)"
                   className={`${btn} border-[var(--wms-border)] text-[var(--wms-fg)]`}

@@ -1454,6 +1454,7 @@ export function CarbonStudioTab({
     return { text: sheet.text, pendingReads, conflicts };
   }, [model, itemSpec, colorRun, color, refViews.styling, itemType, instruction, productName, accessoryKind, matrixId, keepStylingPrints, readCache]);
 
+  const prepRefsRef = useRef<(refs: ItemRef[]) => void>(() => {});
   const uploadItems = useCallback(async (files: File[], view?: RefView) => {
     const list = files.filter((f) => f.type.startsWith("image/"));
     if (!list.length) return;
@@ -1476,6 +1477,7 @@ export function CarbonStudioTab({
         .filter((x): x is PromiseFulfilledResult<ItemRef> => x.status === "fulfilled")
         .map((x) => x.value);
       if (ok.length) setItemRefs((prev) => [...prev, ...ok]);
+      prepRefsRef.current(ok);
       const failed = results.length - ok.length;
       if (failed) {
         const firstErr = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
@@ -1495,37 +1497,44 @@ export function CarbonStudioTab({
      work afterwards. Style with photos are other products and are left alone. */
   const prepSeen = useRef<Set<string>>(new Set());
   const [prepping, setPrepping] = useState(0);
-  useEffect(() => {
-    if (!bulkMode || !stateLoaded) return;
-    const fresh = itemRefs.filter((r) => (r.view ?? "general") !== "styling" && !prepSeen.current.has(r.url));
-    if (!fresh.length) return;
-    for (const r of fresh) prepSeen.current.add(r.url);
-    for (const r of fresh) {
-      setPrepping((n) => n + 1);
-      void fetch("/api/studio/auto-prep", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: r.url, item: [productName, itemType].filter(Boolean).join(" — ") }),
-      })
-        .then(async (res) => {
-          const j = (await res.json().catch(() => ({}))) as { url?: string; view?: RefView };
-          if (!res.ok || !j.url) return;
-          const nextUrl = j.url;
-          const nextView: RefView = j.view === "front" || j.view === "back" || j.view === "styling" ? j.view : "general";
-          prepSeen.current.add(nextUrl);
-          setItemRefs((prev) => {
-            const at = prev.findIndex((p0) => p0.url === r.url);
-            if (at < 0) return prev; // removed meanwhile
-            const changed = nextUrl !== r.url;
-            const ref: ItemRef = { url: nextUrl, view: nextView, preview: changed ? previewFor(nextUrl) : prev[at].preview };
-            const rest = prev.filter((p0, i) => i !== at && !(p0.url === nextUrl && p0.view === nextView));
-            return [...rest.slice(0, at), ref, ...rest.slice(at)];
-          });
+  /* Called only where photos are ADDED (upload, phone, the pre-scan draft) —
+     never for a copy made by rotate / crop / drag, so a manual fix is never
+     re-sorted or turned back (owner 2026-10-20). One call per photo address. */
+  const prepItemRefs = useCallback(
+    (refs: ItemRef[]) => {
+      if (!bulkMode) return;
+      const fresh = refs.filter((r) => (r.view ?? "general") !== "styling" && !prepSeen.current.has(r.url));
+      const urls = [...new Set(fresh.map((r) => r.url))];
+      for (const u of urls) prepSeen.current.add(u);
+      for (const srcUrl of urls) {
+        setPrepping((n) => n + 1);
+        void fetch("/api/studio/auto-prep", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: srcUrl, item: [productName, itemType].filter(Boolean).join(" — ") }),
         })
-        .catch(() => {})
-        .finally(() => setPrepping((n) => n - 1));
-    }
-  }, [bulkMode, stateLoaded, itemRefs, productName, itemType]);
+          .then(async (res) => {
+            const j = (await res.json().catch(() => ({}))) as { url?: string; view?: RefView };
+            if (!res.ok || !j.url) return;
+            const nextUrl = j.url;
+            const nextView: RefView = j.view === "front" || j.view === "back" || j.view === "styling" ? j.view : "general";
+            prepSeen.current.add(nextUrl);
+            setItemRefs((prev) => {
+              const at = prev.findIndex((p0) => p0.url === srcUrl);
+              if (at < 0) return prev; // removed meanwhile
+              const changed = nextUrl !== srcUrl;
+              const ref: ItemRef = { url: nextUrl, view: nextView, preview: changed ? previewFor(nextUrl) : prev[at].preview };
+              const rest = prev.filter((p0, i) => i !== at && p0.url !== srcUrl && !(p0.url === nextUrl && p0.view === nextView));
+              return [...rest.slice(0, at), ref, ...rest.slice(at)];
+            });
+          })
+          .catch(() => {})
+          .finally(() => setPrepping((n) => n - 1));
+      }
+    },
+    [bulkMode, productName, itemType],
+  );
+  prepRefsRef.current = prepItemRefs;
 
   /* Bulk Studio: apply what was filled in before the barcode was scanned —
      once, after this product's saved state is in (so nothing saved is lost). */
@@ -1551,7 +1560,10 @@ export function CarbonStudioTab({
     const stored = fresh
       .filter((f) => f.url)
       .map((f): ItemRef => ({ url: f.url as string, view: f.view, preview: previewFor(f.url as string) }));
-    if (stored.length) setItemRefs((prev) => [...prev, ...stored.filter((b) => !prev.some((p0) => p0.url === b.url))]);
+    if (stored.length) {
+      setItemRefs((prev) => [...prev, ...stored.filter((b) => !prev.some((p0) => p0.url === b.url))]);
+      prepRefsRef.current(stored);
+    }
     void (async () => {
       for (const view of ["general", "front", "back", "styling"] as const) {
         const files = fresh.filter((f) => f.view === view && f.file).map((f) => f.file as File);
@@ -3092,7 +3104,7 @@ export function CarbonStudioTab({
      Analyze is the same analysis and Send queues the same panel requests. */
   const bulkAnalyze = useCallback(async (): Promise<boolean> => {
     if (!specStale) return true;
-    if (!productRefCount || busy !== null || specBusy) return false;
+    if (!productRefCount || busy !== null || specBusy || prepping > 0) return false;
     setErr(null);
     setClock({ startedAt: Date.now(), endedAt: null });
     setProgress("Analyzing item details…");
@@ -3102,7 +3114,7 @@ export function CarbonStudioTab({
       setProgress("");
       setClock((c) => (c && c.endedAt === null ? { ...c, endedAt: Date.now() } : c));
     }
-  }, [specStale, productRefCount, busy, specBusy, analyzeItem, refViews]);
+  }, [specStale, productRefCount, busy, specBusy, prepping, analyzeItem, refViews]);
   const bulkQueue = useCallback(async (): Promise<boolean> => {
     if (busy !== null) return false;
     batchQueuedRef.current = null;
@@ -3128,6 +3140,7 @@ export function CarbonStudioTab({
     const analyzeProblems: string[] = [];
     if (!stateLoaded) analyzeProblems.push("Loading this product's saved Studio…");
     if (!productRefCount) analyzeProblems.push("Add a Front, Back or Accessories photo.");
+    if (prepping > 0) analyzeProblems.push("Photos are still being sorted…");
     const sendProblems = [...analyzeProblems];
     if (!model) sendProblems.push("Choose a model.");
     if (refViews.styling.length > MAX_STYLING_REFS) sendProblems.push(`Style with holds up to ${MAX_STYLING_REFS} photos.`);
@@ -3148,7 +3161,7 @@ export function CarbonStudioTab({
       modelName: model?.name ?? null,
       photoCount: itemRefs.length,
       spec: !itemSpec.trim() ? "none" : specStale ? "stale" : "ready",
-      busy: busy !== null || specBusy,
+      busy: busy !== null || specBusy || prepping > 0,
       analyzeProblems,
       sendProblems,
       batchOpen: live.filter((b) => b.status === "queued" || b.status === "preparing" || b.status === "submitted").length,
@@ -3158,7 +3171,7 @@ export function CarbonStudioTab({
       error: err,
       message: progress || msg,
     };
-  }, [bulk, stateLoaded, productRefCount, model, refViews, specStale, itemSpec, accessoryKind, backIsPlain, specSaysBackDesign, specBack, specBlocked, isJeansType, jeansLabelId, batchItems, matrixId, itemRefs.length, busy, specBusy, clockText, err, progress, msg]);
+  }, [bulk, stateLoaded, prepping, productRefCount, model, refViews, specStale, itemSpec, accessoryKind, backIsPlain, specSaysBackDesign, specBack, specBlocked, isJeansType, jeansLabelId, batchItems, matrixId, itemRefs.length, busy, specBusy, clockText, err, progress, msg]);
   const bulkOnStatus = bulk?.onStatus;
   const bulkStatusKey = bulkStatus ? JSON.stringify(bulkStatus) : "";
   useEffect(() => {

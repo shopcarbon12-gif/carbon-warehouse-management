@@ -87,7 +87,7 @@ export async function confirmTurn(client: OpenAI, model: string, img: Buffer, tu
           {
             type: "text",
             text:
-              'Two versions of one clothing photo. Which one shows the garment the right way up — the way it hangs or is worn: the hanger, waistband or collar toward the TOP, hems toward the bottom, any printed text reading normally? A close-up or a photo where up and down cannot be told counts as already right: answer "A". Answer "B" only when version A is clearly sideways or upside down and B is clearly upright. JSON only: {"upright": "A"|"B"}',
+              'Two versions of one clothing photo. Which one shows the garment the right way up — the way it hangs or is worn: the hanger, waistband or collar toward the TOP, hems toward the bottom, any printed text reading normally? If any text, a label or a logo is visible, the right way up is the one where it reads normally — horizontal, left to right, not upside down — and that decides it, even on a close-up. Only when nothing shows which way is up (a plain close-up with no text) counts version A as already right. Answer "B" only when B is clearly more upright than A. JSON only: {"upright": "A"|"B"}',
           },
           { type: "text", text: "Version A:" },
           { type: "image_url", image_url: { url: `data:image/jpeg;base64,${a.toString("base64")}`, detail: "low" } },
