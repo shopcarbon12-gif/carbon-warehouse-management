@@ -12,7 +12,7 @@ import { withActivity } from "@/lib/server/activity-log";
  * The prepared copy is a NEW object (the original stays, like a crop or a
  * rotate), so the manual rotate / crop / drag tools still work on it.
  *
- * POST { url } → { url, view, turned, headCut }
+ * POST { url, item? } → { url, view, turned, headCut }   (view "styling" = another product worn with it)
  */
 import OpenAI from "openai";
 import sharp from "sharp";
@@ -84,15 +84,21 @@ async function headLeft(client: OpenAI, model: string, img: Buffer): Promise<boo
   return j.head === true;
 }
 
+const promptFor = (item: string) => PROMPT.replace(
+  "1. \"view\" (judge from IMAGE 1): which side of the GARMENT does the photo show?",
+  `1. "view" (judge from IMAGE 1)${item ? ` — the product being shot is: ${item}` : ""}. Which does the photo show?`,
+);
+
 const PROMPT = `IMAGE 1 is one photo for a clothing catalog. IMAGE 2 is the TOP HALF of the same photo, zoomed, with numbered red lines drawn across it (line 1 near the top … line 30 at the bottom of that half).
 
 1. "view" (judge from IMAGE 1): which side of the GARMENT does the photo show?
    - "front": the front of the garment (worn on a person facing the camera, on a hanger or laid flat)
    - "back": the back of the garment (a person's back to the camera, or the garment turned over)
-   - "general": anything else — a close-up of a detail, a label, fabric, a side view, an accessory, several items
+   - "general": the product itself in any other way — a close-up of a detail, a label, fabric, a side view
+   - "styling": a DIFFERENT product that is only worn WITH the product being shot — e.g. shoes, a shirt or top when the product is a bottom, pants when the product is a top, a bracelet, a bag — photographed on its own
 2. "headLine" (use IMAGE 2): if a PERSON'S HEAD (face, chin, beard or hair) shows at the top of the photo: the number of the FIRST red line that has NO part of the head below it — every bit of the face, the chin, the beard and the hair (on a back view: the hair and the back of the head, down to the hairline on the neck) lies ABOVE that line, and only neck, collar and garment lie below it. Cutting there removes the whole head and nothing else. The line must never cut into the garment or its collar. No head, a mannequin without a head, or a garment with no person: null.
 
-JSON only: {"view": "front"|"back"|"general", "headLine": number|null}`;
+JSON only: {"view": "front"|"back"|"general"|"styling", "headLine": number|null}`;
 
 async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -102,8 +108,9 @@ async function POST_handler(req: Request) {
   const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
   if (denied) return denied;
 
-  const body = (await req.json().catch(() => ({}))) as { url?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { url?: unknown; item?: unknown };
   const url = s(body.url);
+  const item = s(body.item).slice(0, 160);
   const path = tryGetStoragePathFromUrl(url);
   if (!path || !(path.startsWith(`carbon-studio/item-refs/${session.tid}/`) || path.startsWith("carbon-studio/handoff/"))) {
     return NextResponse.json({ error: "Not a Studio photo." }, { status: 400 });
@@ -133,7 +140,7 @@ async function POST_handler(req: Request) {
         {
           role: "user",
           content: [
-            { type: "text", text: PROMPT },
+            { type: "text", text: promptFor(item) },
             { type: "text", text: "IMAGE 1:" },
             { type: "image_url", image_url: { url: await wholeCopy(img), detail: "low" } },
             { type: "text", text: "IMAGE 2:" },
@@ -143,7 +150,7 @@ async function POST_handler(req: Request) {
       ],
     });
     const j = JSON.parse(s(c.choices?.[0]?.message?.content) || "{}") as { view?: unknown; headLine?: unknown };
-    const view = j.view === "front" || j.view === "back" ? j.view : "general";
+    const view = j.view === "front" || j.view === "back" || (j.view === "styling" && item) ? j.view : "general";
     const line = Number(j.headLine);
     let headCut = false;
     if (Number.isInteger(line) && line >= 1 && line <= LINES.length) {

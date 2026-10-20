@@ -325,6 +325,9 @@ export type BulkStudioHooks = {
   draft?: BulkStudioDraft | null;
   /** The draft has been applied — the page can drop it. */
   onDraftUsed?: () => void;
+  /** Bulk Studio: photos dropped on this item go to the page, which splits them
+      into products (a new hang tag starts a new item) before they land. */
+  ingest?: (entries: { file?: File; url?: string }[]) => void;
 };
 
 const PANELS = [1, 2, 3, 4];
@@ -674,6 +677,8 @@ export function CarbonStudioTab({
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState<string>("");
   const bulkMode = Boolean(bulk);
+  const bulkIngestRef = useRef<BulkStudioHooks["ingest"]>(undefined);
+  bulkIngestRef.current = bulk?.ingest;
   /** Phone pose-plan banner's "Change model" jumps here. */
   const modelSelectRef = useRef<HTMLSelectElement | null>(null);
   const [itemType, setItemType] = useState<string>(() =>
@@ -1258,6 +1263,10 @@ export function CarbonStudioTab({
       setItemRefs((prev) => [...prev, ...more.filter((b) => !prev.some((p) => p.url === b.url))]);
       return fresh.length;
     }
+    if (bulkIngestRef.current) {
+      bulkIngestRef.current(fresh.map((im) => ({ url: im.imageUrl })));
+      return fresh.length;
+    }
     // Displayed through the durable admin proxy (the session-scoped preview
     // route dies with the session; the R2 object does not).
     const batch = fresh.map((im): ItemRef => ({ url: im.imageUrl, preview: previewFor(im.imageUrl), view }));
@@ -1483,13 +1492,13 @@ export function CarbonStudioTab({
       void fetch("/api/studio/auto-prep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: r.url }),
+        body: JSON.stringify({ url: r.url, item: [productName, itemType].filter(Boolean).join(" — ") }),
       })
         .then(async (res) => {
           const j = (await res.json().catch(() => ({}))) as { url?: string; view?: RefView };
           if (!res.ok || !j.url) return;
           const nextUrl = j.url;
-          const nextView: RefView = j.view === "front" || j.view === "back" ? j.view : "general";
+          const nextView: RefView = j.view === "front" || j.view === "back" || j.view === "styling" ? j.view : "general";
           prepSeen.current.add(nextUrl);
           setItemRefs((prev) => {
             const at = prev.findIndex((p0) => p0.url === r.url);
@@ -1503,17 +1512,17 @@ export function CarbonStudioTab({
         .catch(() => {})
         .finally(() => setPrepping((n) => n - 1));
     }
-  }, [bulkMode, stateLoaded, itemRefs]);
+  }, [bulkMode, stateLoaded, itemRefs, productName, itemType]);
 
   /* Bulk Studio: apply what was filled in before the barcode was scanned —
      once, after this product's saved state is in (so nothing saved is lost). */
-  const draftDone = useRef(false);
+  const draftDone = useRef<BulkStudioDraft | null>(null);
   const bulkDraft = bulk?.draft;
   const bulkDraftUsed = bulk?.onDraftUsed;
   useEffect(() => {
-    if (draftDone.current || !stateLoaded || !bulkDraft) return;
+    if (!stateLoaded || !bulkDraft || draftDone.current === bulkDraft) return;
     if (bulkDraft.modelId && !models.length) return; // wait for the model list
-    draftDone.current = true;
+    draftDone.current = bulkDraft; // each new draft (more photos for this item) is applied once
     if (bulkDraft.modelId && models.some((m0) => m0.model_id === bulkDraft.modelId)) setModelId(bulkDraft.modelId);
     if (bulkDraft.itemType?.trim()) setItemType(bulkDraft.itemType.trim());
     if (bulkDraft.instruction?.trim()) setInstruction(bulkDraft.instruction.trim());
@@ -3455,7 +3464,8 @@ export function CarbonStudioTab({
           className="hidden"
           onChange={(e) => {
             const files = e.target.files ? Array.from(e.target.files) : [];
-            if (files.length) void uploadItems(files, uploadViewRef.current);
+            if (files.length && bulkIngestRef.current) bulkIngestRef.current(files.map((file) => ({ file })));
+            else if (files.length) void uploadItems(files, uploadViewRef.current);
             e.target.value = "";
           }}
         />
@@ -3480,9 +3490,11 @@ export function CarbonStudioTab({
           /* Bulk Studio: Style with lives inside the Accessories · General box
              (owner 2026-10-20) — still its own kind of photo (worn with the item,
              never analyzed), drawn as a nested section of that box. */
-          const stylingZone = REF_VIEWS.find((z) => z.view === "styling")!;
           const renderZone = (zone: (typeof REF_VIEWS)[number], nested = false): ReactNode => {
-            const zoneRefs = itemRefs.filter((r) => (r.view ?? "general") === zone.view);
+            /* Bulk: one box holds General and Style with (each photo keeps its own kind). */
+            const zoneRefs = itemRefs.filter((r) =>
+              bulk && zone.view === "general" ? (r.view ?? "general") === "general" || r.view === "styling" : (r.view ?? "general") === zone.view,
+            );
             const isActive = activeView === zone.view;
             const isOver = dragOverView === zone.view;
             return (
@@ -3535,7 +3547,7 @@ export function CarbonStudioTab({
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
-                    {bulk && zone.view === "general" ? "Accessories · General" : zone.title}
+                    {bulk && zone.view === "general" ? "Accessories · General · Style with" : zone.title}
                     {zoneRefs.length ? ` · ${zoneRefs.length}` : ""}
                   </span>
                   {isActive ? (
@@ -3660,7 +3672,7 @@ export function CarbonStudioTab({
                            drop looks the photo up in state instead. */
                         e.dataTransfer.setData(
                           REF_DRAG_TYPE,
-                          JSON.stringify({ url: ref.url, view: zone.view }),
+                          JSON.stringify({ url: ref.url, view: ref.view ?? zone.view }),
                         );
                         e.dataTransfer.effectAllowed = "copy";
                       }}
@@ -3691,7 +3703,7 @@ export function CarbonStudioTab({
                           e.stopPropagation();
                           // Only this copy: the same photo may also be
                           // labelled in another section, which stays.
-                          setItemRefs((p) => p.filter((x) => !sameRef(x, { url: ref.url, view: zone.view })));
+                          setItemRefs((p) => p.filter((x) => !sameRef(x, { url: ref.url, view: ref.view ?? zone.view })));
                         }}
                         className="absolute -right-1 -top-1 rounded-full bg-[var(--wms-surface)] px-1 text-[0.74rem] text-[var(--wms-status-danger-fg)]"
                       >
@@ -3711,6 +3723,11 @@ export function CarbonStudioTab({
                           {rotatingUrl === ref.url ? "…" : "⟳"}
                         </button>
                       ) : null}
+                      {bulk && ref.view === "styling" && zone.view !== "styling" ? (
+                        <span className="pointer-events-none absolute inset-x-0 top-5 bg-black/65 py-0.5 text-center font-mono text-[0.55rem] uppercase tracking-wide text-white">
+                          Style with
+                        </span>
+                      ) : null}
                       {ref.preview ? (
                         <button
                           type="button"
@@ -3727,6 +3744,8 @@ export function CarbonStudioTab({
                       ) : null}
                     </div>
                   ))}
+                  {!bulk || zone.view === "general" ? (
+                  <>
                   <button
                     type="button"
                     disabled={!canManage || busy === "upload"}
@@ -3766,6 +3785,8 @@ export function CarbonStudioTab({
                   >
                     📱 Phone camera
                   </button>
+                  </>
+                  ) : null}
                   {zone.view === "general" && catalogPhotosLeft.length ? (
                     /* Explicit, never automatic: the catalog images are usually
                        the previous renders. Only real product photos belong here. */
@@ -3786,7 +3807,6 @@ export function CarbonStudioTab({
                     </button>
                   ) : null}
                 </div>
-                {bulk && zone.view === "general" && !nested ? <div className="mt-2">{renderZone(stylingZone, true)}</div> : null}
               </div>
               {bulk && zone.view === "back" && !nested ? (
                 <div className="space-y-2 md:col-span-3">

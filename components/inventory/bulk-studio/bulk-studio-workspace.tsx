@@ -262,6 +262,84 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
      opens that product's full Studio card straight away — into the first empty
      item if there is one, otherwise as a new item at the end. */
   const [scrollTo, setScrollTo] = useState<string | null>(null);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  /**
+   * Photos dropped on an item (owner 2026-10-20): split into products in
+   * shooting order. A hang tag starts its product's item — an item already on
+   * the page, the empty item the photos were dropped on, or a new one; photos
+   * before the first tag stay on the item they were dropped on; a different
+   * garment with no tag becomes a new item waiting for its barcode. Every
+   * photo then lands in its item's General box, where the Studio sorts it to
+   * Front / Back / General / Style with, turns it upright and cuts the head.
+   */
+  const ingest = useCallback(async (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
+    const entries = [...entriesIn].sort((a, b) =>
+      a.file && b.file ? a.file.lastModified - b.file.lastModified || a.file.name.localeCompare(b.file.name) : 0,
+    );
+    if (!entries.length) return;
+    setBarMsg({ text: `Sorting ${entries.length} photo${entries.length === 1 ? "" : "s"} into items…`, tone: "info" });
+    type Ph = { group: number; isTag: boolean; sku?: string; matches?: { matrixId: string; name: string }[] };
+    let photos: Ph[] = [];
+    try {
+      const images = await Promise.all(entries.map(async (e) => (e.file ? { data: await fileToDataUrl(e.file, 1600) } : { url: e.url })));
+      const r = await fetch("/api/studio/group-photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { photos?: Ph[] };
+      if (r.ok && Array.isArray(j.photos)) photos = j.photos;
+    } catch {
+      /* falls back to "all on this item" */
+    }
+    if (photos.length !== entries.length) photos = entries.map(() => ({ group: 1, isTag: false }));
+
+    const now = itemsRef.current;
+    const from = now.find((x) => x.key === fromKey);
+    const order: number[] = [];
+    photos.forEach((p) => {
+      if (!order.includes(p.group)) order.push(p.group);
+    });
+    const byMatrix = new Map(now.filter((x) => x.matrixId).map((x) => [x.matrixId as string, x.key]));
+    const added: Item[] = [];
+    let fromMatrix: string | null = null;
+    const files = new Map<string, { file?: File; url?: string }[]>();
+    const notes: string[] = [];
+    order.forEach((g, gi) => {
+      const idx = photos.map((p, i) => (p.group === g ? i : -1)).filter((i) => i >= 0);
+      const tag = idx.map((i) => photos[i]).find((p) => p.isTag);
+      const ids = [...new Set((tag?.matches ?? []).map((m) => m.matrixId))];
+      const matrixId = ids.length === 1 ? ids[0] : null;
+      if (tag && !matrixId) notes.push(ids.length ? `tag ${tag.sku} matches ${ids.length} products` : `tag ${tag.sku || "?"} — no product has that code`);
+      let key: string;
+      if (matrixId && byMatrix.has(matrixId)) key = byMatrix.get(matrixId) as string;
+      else if (gi === 0 && (!tag || (from && !from.matrixId))) {
+        key = fromKey;
+        if (matrixId) fromMatrix = matrixId;
+      } else {
+        key = newKey();
+        added.push({ key, matrixId });
+      }
+      if (matrixId) byMatrix.set(matrixId, key);
+      const mine = idx.filter((i) => !photos[i].isTag).map((i) => entries[i]);
+      if (mine.length) files.set(key, [...(files.get(key) ?? []), ...mine]);
+    });
+
+    setItems((p) => [...p.map((x) => (x.key === fromKey && fromMatrix && !x.matrixId ? { ...x, matrixId: fromMatrix } : x)), ...added]);
+    for (const [key, list] of files) {
+      setDraft(key, (prev) => ({ ...(prev ?? { files: [] }), files: [...(prev?.files ?? []), ...list.map((e) => ({ ...e, view: "general" as const }))] }));
+    }
+    const count = (k: string) => files.get(k)?.length ?? 0;
+    setBarMsg({
+      text:
+        `${entries.length} photo${entries.length === 1 ? "" : "s"} sorted` +
+        (added.length ? ` — ${added.length} new item${added.length === 1 ? "" : "s"} added (${added.map((a) => `${count(a.key)} photo${count(a.key) === 1 ? "" : "s"}`).join(", ")})` : "") +
+        (notes.length ? `. Check: ${notes.join("; ")}.` : "."),
+      tone: notes.length ? "warn" : "ok",
+    });
+    if (added[0]) setScrollTo(added[0].key);
+  }, [setDraft]);
   /* A scan in an EMPTY item's field loads the product into it; a scan in a
      loaded item's field adds the scanned product as the next item, so tags can
      be scanned one after another. */
@@ -412,6 +490,7 @@ export function BulkStudioWorkspace({ canManage }: { canManage: boolean }) {
               status={statuses[it.key]}
               stepNote={stepNote[it.key]}
               onScan={(id) => addScanned(it.key, id)}
+              ingest={ingest}
               draft={drafts[it.key] ?? null}
               setDraft={setDraft}
               focus={focusKey === it.key || (!it.matrixId && idx === 0 && items.length === 1)}
@@ -444,6 +523,7 @@ function BulkItemCard({
   focus,
   draft,
   setDraft,
+  ingest,
   onRemove,
   register,
   report,
@@ -457,6 +537,7 @@ function BulkItemCard({
   focus: boolean;
   draft: BulkStudioDraft | null;
   setDraft: (key: string, d: DraftUpdate) => void;
+  ingest: (fromKey: string, entries: { file?: File; url?: string }[]) => Promise<void>;
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
@@ -467,6 +548,8 @@ function BulkItemCard({
     { revalidateOnFocus: false },
   );
   const key = item.key;
+  /* Stable, so the Studio hooks below do not change on every render. */
+  const onIngest = useCallback((entries: { file?: File; url?: string }[]) => void ingest(key, entries), [ingest, key]);
   /* Stable per item, so the Studio tab registers once (not on every render). */
   const hooks = useMemo(
     () => ({
@@ -474,8 +557,9 @@ function BulkItemCard({
       onStatus: (s: BulkStudioStatus) => report(key, s),
       draft,
       onDraftUsed: () => setDraft(key, null),
+      ingest: onIngest,
     }),
-    [key, register, report, draft, setDraft],
+    [key, register, report, draft, setDraft, onIngest],
   );
   const m = data?.matrix;
   const variants = data?.variants ?? [];
@@ -549,7 +633,7 @@ function BulkItemCard({
       </div>
 
       {!item.matrixId ? (
-        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onTag={onScan} />
+        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onIngest={onIngest} />
       ) : null}
 
       {item.matrixId && m ? (
@@ -778,17 +862,14 @@ type DraftModel = { model_id: string; name: string; gender: string; ref_image_ur
 function DraftForm({
   draft,
   update,
-  onTag,
+  onIngest,
 }: {
   draft: BulkStudioDraft;
   update: (d: DraftUpdate) => void;
-  /** A photo turned out to be a hang tag naming one product: load it, as a scan would. */
-  onTag: (matrixId: string) => void;
+  /** Photos go to the page, which splits them into products by their hang tags. */
+  onIngest: (entries: { file?: File; url?: string }[]) => void;
 }) {
   const onChange = (d: BulkStudioDraft) => update(d);
-  const [tagNote, setTagNote] = useState("");
-  const [checking, setChecking] = useState(0);
-  const tagFound = useRef(false);
   const { data } = useSWR<{ models?: DraftModel[] }>("/api/models/list", fetcher, { revalidateOnFocus: false });
   const models = (data?.models ?? []).filter((x) => (x.ref_image_urls ?? []).length >= 3);
   const label = "mb-1 block font-mono text-[0.62rem] uppercase tracking-wide text-[var(--wms-muted)]";
@@ -799,32 +880,9 @@ function DraftForm({
   const zsub = "mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]";
   const chip =
     "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-[var(--wms-border)] px-3 py-1.5 font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-accent)] hover:border-[var(--wms-accent)] max-md:min-h-11";
-  const add = (view: BulkStudioDraft["files"][number]["view"], list: FileList | null) => {
+  const add = (list: FileList | null) => {
     const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
-    if (!files.length) return;
-    const entries = files.map((file) => ({ file, view }));
-    update((prev) => ({ ...prev, files: [...prev.files, ...entries] }));
-    check(entries);
-  };
-  /* Every photo is checked for a hang tag. A tag naming one product loads it
-     (exactly as scanning it would) and its photo is taken off the item. */
-  const check = (entries: BulkStudioDraft["files"]) => {
-    for (const entry of entries) {
-      setChecking((n) => n + 1);
-      void readTag(entry)
-        .then((res) => {
-          if (!res || !res.isTag) return;
-          update((prev) => ({ ...prev, files: prev.files.filter((x) => x !== entry) }));
-          const ids = [...new Set((res.matches ?? []).map((x) => x.matrixId))];
-          if (ids.length === 1 && !tagFound.current) {
-            tagFound.current = true;
-            setTagNote("");
-            onTag(ids[0]);
-          } else if (!ids.length) setTagNote(`Tag read (${res.sku || res.upc || "no code"}) — no product has that code. Scan it or type it instead.`);
-          else setTagNote(`Tag ${res.sku || res.upc} matches ${ids.length} products — scan or type it to pick one.`);
-        })
-        .finally(() => setChecking((n) => n - 1));
-    }
+    if (files.length) onIngest(files.map((file) => ({ file })));
   };
   const zone = (
     view: BulkStudioDraft["files"][number]["view"],
@@ -833,7 +891,7 @@ function DraftForm({
     extra?: ReactNode,
     after?: ReactNode,
   ) => {
-    const mine = draft.files.filter((f) => f.view === view);
+    const mine = draft.files.filter((f) => f.view === view || (view === "general" && f.view === "styling"));
     return (
       <div className={zoneCls}>
         <p className={ztitle}>{title}</p>
@@ -851,30 +909,30 @@ function DraftForm({
             ))}
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-2">
-          <label className={chip}>
-            ＋ Upload
-            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
-              add(view, e.target.files);
-              e.target.value = "";
-            }} />
-          </label>
-          <button type="button" className={chip} onClick={() => void startPhone(view)} title="Take the photos with your phone (scan the QR code)">
-            📱 Phone camera
-          </button>
-        </div>
+        {view === "general" ? (
+          <div className="flex flex-wrap gap-2">
+            <label className={chip}>
+              ＋ Upload
+              <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => {
+                add(e.target.files);
+                e.target.value = "";
+              }} />
+            </label>
+            <button type="button" className={chip} onClick={() => void startPhone()} title="Take the photos with your phone (scan the QR code)">
+              📱 Phone camera
+            </button>
+          </div>
+        ) : null}
         {after ? <div className="mt-2">{after}</div> : null}
       </div>
     );
   };
   const [phone, setPhone] = useState<{ sessionId: string; qr: string; scanUrl: string } | null>(null);
   const [phoneErr, setPhoneErr] = useState("");
-  const phoneView = useRef<BulkStudioDraft["files"][number]["view"]>("general");
   const phoneSeen = useRef<Set<string>>(new Set());
-  const startPhone = async (view: BulkStudioDraft["files"][number]["view"]) => {
-    phoneView.current = view;
+  const startPhone = async () => {
     setPhoneErr("");
-    if (phone) return; // already open — the click only changed where photos land
+    if (phone) return; // already open
     try {
       const r = await fetch("/api/image-handoff/session", {
         method: "POST",
@@ -897,14 +955,10 @@ function DraftForm({
       const fresh = (j.images ?? []).map((x) => x.imageUrl).filter((u) => u && !phoneSeen.current.has(u));
       if (!fresh.length) return "ok" as const;
       fresh.forEach((u) => phoneSeen.current.add(u));
-      const entries = fresh.map((url) => ({ url, view: phoneView.current }));
-      update((prev) => ({ ...prev, files: [...prev.files, ...entries] }));
-      check(entries);
+      onIngest(fresh.map((url) => ({ url })));
       return "ok" as const;
     },
-    // check/update are recreated each render; the latest ones are always the right ones here
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [onIngest],
   );
   useEffect(() => {
     if (!phone) return;
@@ -923,7 +977,7 @@ function DraftForm({
           {/* eslint-disable-next-line @next/next/no-img-element -- remote QR image */}
           <img src={phone.qr} alt="QR code for the phone camera" className="h-32 w-32 rounded bg-white p-1" />
           <div className="min-w-0 flex-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">
-            <p className="text-[var(--wms-fg)]">Scan with your phone and take the photos — a tag photo loads the product.</p>
+            <p className="text-[var(--wms-fg)]">Scan with your phone and take the photos — each hang tag starts its product.</p>
             {phone.scanUrl ? <p className="mt-1 break-all">{phone.scanUrl}</p> : null}
           </div>
           <button
@@ -939,12 +993,7 @@ function DraftForm({
         </div>
       ) : null}
       {phoneErr ? <p className="font-mono text-[0.72rem] text-[var(--wms-status-danger-fg)] md:col-span-3">{phoneErr}</p> : null}
-      {checking > 0 || tagNote ? (
-        <p className={`font-mono text-[0.72rem] md:col-span-3 ${tagNote ? "text-[var(--wms-status-warning-fg)]" : "text-[var(--wms-muted)]"}`}>
-          {checking > 0 ? "Checking the photos for a hang tag…" : tagNote}
-        </p>
-      ) : null}
-      {zone("general", "Accessories · General", "Accessories, flats, any view — works exactly as before.", null, zone("styling", "Style with", null))}
+      {zone("general", "Accessories · General · Style with", "Accessories, flats, any view — works exactly as before.")}
       {zone("front", "Front", "The FRONT of the item (jeans, shirts, dresses…).")}
       {zone(
         "back",
@@ -1001,8 +1050,6 @@ function DraftForm({
   );
 }
 
-type TagResult = { isTag: boolean; sku?: string; upc?: string; matches?: { matrixId: string; name: string; upc: string | null }[] };
-
 /** Smaller copy for the tag read (the printed code stays readable at this size). */
 async function fileToDataUrl(file: File, max = 1600): Promise<string> {
   const bmp = await createImageBitmap(file);
@@ -1013,44 +1060,4 @@ async function fileToDataUrl(file: File, max = 1600): Promise<string> {
   c.getContext("2d")?.drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
   return c.toDataURL("image/jpeg", 0.88);
-}
-
-type BarcodeDetectorLike = { detect: (src: ImageBitmapSource) => Promise<{ rawValue: string }[]> };
-
-/** Is this photo a hang tag? The browser's barcode reader when it has one, else the server reads it. */
-async function readTag(entry: { file?: File; url?: string }): Promise<TagResult | null> {
-  try {
-    if (!entry.file) {
-      if (!entry.url) return null;
-      const r0 = await fetch("/api/studio/read-tag", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: entry.url }),
-      });
-      return r0.ok ? ((await r0.json()) as TagResult) : null;
-    }
-    const file = entry.file;
-    const W = window as unknown as { BarcodeDetector?: new (o?: { formats: string[] }) => BarcodeDetectorLike };
-    let code = "";
-    if (typeof W.BarcodeDetector === "function") {
-      try {
-        const det = new W.BarcodeDetector({ formats: ["code_93", "code_128", "upc_a", "ean_13"] });
-        const bmp = await createImageBitmap(file);
-        const found = await det.detect(bmp);
-        bmp.close();
-        code = found[0]?.rawValue?.trim() ?? "";
-      } catch {
-        code = "";
-      }
-    }
-    const r = await fetch("/api/studio/read-tag", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(code ? { code } : { image: await fileToDataUrl(file) }),
-    });
-    if (!r.ok) return null;
-    return (await r.json()) as TagResult;
-  } catch {
-    return null;
-  }
 }
