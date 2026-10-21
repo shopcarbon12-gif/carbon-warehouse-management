@@ -399,17 +399,17 @@ function ScanWindow({
     await Promise.all([mutate(), onChanged()]);
   }, [mutate, onChanged]);
 
-  const startEdit = () => {
-    if (!scan) return;
-    setEditErr(null);
-    setEditMsg(null);
-    setDraft({
-      main: JSON.parse(JSON.stringify(scan.lines ?? {})),
-      crotch: scan.crotch?.lines ? JSON.parse(JSON.stringify(scan.crotch.lines)) : null,
-    });
-  };
+  const canEdit = Boolean(scan && scan.status !== "redo" && Object.keys(scan.lines ?? {}).length);
+  /* Lines can be dragged straight away — the first drag starts the edit (no
+     mode to find first; owner, 2026-10-20). */
   const moveEnd = (which: "main" | "crotch") => (key: string, index: number, to: [number, number]) =>
-    setDraft((d) => {
+    setDraft((cur) => {
+      type Draft = { main: Record<string, Line>; crotch: Record<string, Line> | null };
+      const d: Draft | null =
+        cur ??
+        (scan
+          ? { main: JSON.parse(JSON.stringify(scan.lines ?? {})), crotch: scan.crotch?.lines ? JSON.parse(JSON.stringify(scan.crotch.lines)) : null }
+          : null);
       if (!d) return d;
       const set = which === "main" ? d.main : d.crotch;
       const l = set?.[key];
@@ -529,21 +529,19 @@ function ScanWindow({
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save the new lines
                         </button>
                         <button type="button" className={plainBtn} onClick={() => setDraft(null)} disabled={saving}>
-                          <X className="h-4 w-4" /> Cancel
+                          <X className="h-4 w-4" /> Undo my changes
                         </button>
-                        <span className="text-xs text-[var(--wms-muted)]">Drag any end. The numbers update as you go.</span>
                       </>
-                    ) : (
-                      <button
-                        type="button"
-                        className={plainBtn}
-                        onClick={startEdit}
-                        disabled={scan.status === "redo" || !Object.keys(scan.lines ?? {}).length}
-                        title={scan.status === "redo" ? "This scan was redone — measure the garment again." : "Move the measuring lines on the photo"}
-                      >
-                        <Move className="h-4 w-4" /> Adjust lines
-                      </button>
-                    )}
+                    ) : null}
+                    {canEdit ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-[var(--wms-muted)]">
+                        <Move className="h-3.5 w-3.5" /> Drag any line end to move it — the numbers update as you go.
+                      </span>
+                    ) : scan.status === "redo" ? (
+                      <span className="text-xs text-[var(--wms-status-warning-fg)]">
+                        This scan was redone, so its lines can&apos;t be moved — open the newer scan of this size.
+                      </span>
+                    ) : null}
                     {scan.adjusted_at && !draft ? (
                       <span className="text-xs text-[var(--wms-muted)]">Lines adjusted on the WMS {when(scan.adjusted_at)}</span>
                     ) : null}
@@ -556,7 +554,7 @@ function ScanWindow({
                     lines={draft?.main ?? scan.lines ?? {}}
                     selected={selected}
                     onSelect={setSelected}
-                    editing={Boolean(draft)}
+                    editing={canEdit}
                     onMove={moveEnd("main")}
                   />
                   {scan.crotch ? (
@@ -568,7 +566,7 @@ function ScanWindow({
                         lines={draft?.crotch ?? scan.crotch.lines ?? {}}
                         selected={selected}
                         onSelect={setSelected}
-                        editing={Boolean(draft)}
+                        editing={canEdit}
                         onMove={moveEnd("crotch")}
                       />
                     </>

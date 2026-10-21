@@ -55,6 +55,32 @@ export function LineEditor({
     [width, height],
   );
 
+  /* Press anywhere near an end (within ~28 screen pixels) and it is picked up:
+     the owner clicked the line ends and nothing moved when the hit area was the
+     dot itself (2026-10-20). */
+  const grab = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!editing) return;
+    const p = toPhoto(e);
+    const svg = svgRef.current;
+    if (!p || !svg) return;
+    const perPx = width / (svg.clientWidth || width);
+    let best: { key: string; index: number; d: number } | null = null;
+    for (const [key, l] of Object.entries(lines)) {
+      l.pts.forEach(([x, y], index) => {
+        const d = Math.hypot(x - p[0], y - p[1]) / perPx;
+        if (d < 28 && (!best || d < best.d)) best = { key, index, d };
+      });
+    }
+    if (!best) return;
+    const hit: { key: string; index: number } = best;
+    e.preventDefault();
+    svg.setPointerCapture?.(e.pointerId);
+    setDrag({ key: hit.key, index: hit.index });
+    setShown({ w: svg.clientWidth || width, h: svg.clientHeight || height });
+    setAt(lines[hit.key].pts[hit.index]);
+    onSelect?.(hit.key);
+  };
+
   const move = (e: React.PointerEvent) => {
     if (!drag) return;
     const p = toPhoto(e);
@@ -85,19 +111,22 @@ export function LineEditor({
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
-        className={`absolute inset-0 h-full w-full select-none ${editing ? "touch-none" : ""}`}
+        className={`absolute inset-0 h-full w-full select-none ${editing ? "touch-none" : ""} ${drag ? "cursor-grabbing" : ""}`}
         aria-label="Measurement lines"
+        onPointerDown={grab}
         onPointerMove={move}
         onPointerUp={end}
         onPointerCancel={end}
-        onPointerLeave={end}
       >
         {Object.entries(lines).map(([key, l]) => {
           const on = selected === key;
           const pts = (l.closed ? [...l.pts, l.pts[0]] : l.pts).map(([x, y]) => `${x},${y}`).join(" ");
-          const [fx, fy] = l.pts[0];
+          const mid = l.pts[Math.floor((l.pts.length - 1) / 2)];
+          const nxt = l.pts[Math.floor((l.pts.length - 1) / 2) + 1] ?? mid;
+          const mx = (mid[0] + nxt[0]) / 2;
+          const my = (mid[1] + nxt[1]) / 2;
           return (
-            <g key={key} className={editing ? "" : "cursor-pointer"} onClick={() => !editing && onSelect?.(on ? null : key)}>
+            <g key={key} className="cursor-pointer" onClick={() => !drag && onSelect?.(on ? null : key)}>
               {l.title ? <title>{l.title}</title> : null}
               <polyline points={pts} fill="none" stroke="#000" strokeOpacity={0.6} strokeWidth={on ? 8 : 5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
               <polyline points={pts} fill="none" stroke={l.color} strokeWidth={on ? 4.5 : 2.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
@@ -106,28 +135,19 @@ export function LineEditor({
                   key={i}
                   cx={x}
                   cy={y}
-                  r={editing ? S / 90 : S / 260}
-                  fill={editing ? "transparent" : l.color}
+                  r={editing ? S / 80 : S / 260}
+                  fill={editing ? "rgba(0,0,0,0.25)" : l.color}
                   stroke={editing ? l.color : "#000"}
-                  strokeWidth={editing ? 2.5 : 1}
+                  strokeWidth={editing ? 3 : 1}
                   vectorEffect="non-scaling-stroke"
                   className={editing ? "cursor-grab" : ""}
-                  onPointerDown={(e) => {
-                    if (!editing) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    (e.target as Element).setPointerCapture?.(e.pointerId);
-                    setDrag({ key, index: i });
-                    setShown({ w: svgRef.current?.clientWidth || width, h: svgRef.current?.clientHeight || height });
-                    setAt([x, y]);
-                    onSelect?.(key);
-                  }}
                 />
               ))}
               {l.letter ? (
+                // The letter sits mid-line, so it never covers an end that may be dragged.
                 <>
-                  <circle cx={fx} cy={fy} r={S / 55} fill={l.color} stroke="#000" strokeWidth={1.5} vectorEffect="non-scaling-stroke" pointerEvents="none" />
-                  <text x={fx} y={fy} textAnchor="middle" dominantBaseline="central" fontSize={S / 42} fontWeight={700} fontFamily="ui-monospace, monospace" fill="#000" pointerEvents="none">
+                  <circle cx={mx} cy={my} r={S / 60} fill={l.color} stroke="#000" strokeWidth={1.5} vectorEffect="non-scaling-stroke" pointerEvents="none" />
+                  <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={S / 46} fontWeight={700} fontFamily="ui-monospace, monospace" fill="#000" pointerEvents="none">
                     {l.letter}
                   </text>
                 </>
