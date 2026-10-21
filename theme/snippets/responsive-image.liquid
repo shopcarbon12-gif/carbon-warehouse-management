@@ -61,4 +61,26 @@
 	endcapture
 -%}
 {% comment %}theme-check-disable ImgLazyLoading{% endcomment %}
+{%- comment -%}
+  Carbon speed fix (owner 2026-10-21): an image marked priority 'high' — the
+  product page's first photo, the collection banner — is the first thing a
+  shopper waits for. The lazy loader below shows a 20 px blur and only fetches
+  the real photo once the theme's scripts run (3–5 s later on a phone). These
+  go out as a normal image instead: real src + srcset, fetched at once at top
+  priority, already in the theme's "loaded" state (.lazyloaded), so it looks
+  the same, only sooner. `display_sizes` = how wide it shows (default: full
+  width on phones, half the screen on computers).
+{%- endcomment -%}
+{%- if priority == 'high' -%}
+{%- liquid
+	assign eager_size = image_sizes[1] | default: image_sizes[0]
+	assign eager_array = eager_size | split: "x"
+	assign eager_width = eager_array[0]
+	if eager_width == "0"
+		assign eager_width = image.width | times: eager_array[1] | divided_by: image.height | floor
+	endif
+-%}
+<img class="lazyloaded no-blur{% if retina %} retina_size{% endif %} {{ class | escape }}" width="{{ w }}" height="{{ h }}" src="{{ image.src | image_url: width: eager_width }}" srcset="{{ srcset | slice: 0, l | strip_newlines -}}" sizes="{{ display_sizes | default: '(min-width: 768px) 50vw, 100vw' }}" data-srcset="{{ srcset | slice: 0, l | strip_newlines -}}" fetchpriority="high" loading="eager" decoding="async" alt="{{ image.alt | escape }}" {% if focal_point -%}style="object-position: {{ focal_point }};"{% endif %} />
+{%- else -%}
 <img class="lazyload{% unless lazy_loading %} no-blur{% endunless %}{% if retina %} retina_size{% endif %} {{ class | escape }}" width="{{ w }}" height="{{ h }}" data-sizes="auto" {% if defer %}data-{% endif %}src="{{- src -}}" data-srcset="{{ srcset | slice: 0, l | strip_newlines -}}" fetchpriority="{{ fetchpriority }}"{% if loading != blank %} loading="{{ loading }}"{% endif %} alt="{{ image.alt | escape }}" {% if focal_point -%}style="object-position: {{ focal_point }};"{% endif %} />
+{%- endif -%}

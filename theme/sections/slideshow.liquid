@@ -169,6 +169,8 @@
 									assign hv_poster = video.preview_image | image_url: width: 1600
 								-%}
 								{%- if hv_d_url != '' -%}
+									{%- comment -%} Speed fix (owner 2026-10-21): the video's cover picture is what a shopper sees first; browsers fetch posters late, so the first slide asks for it at top priority. {%- endcomment -%}
+									{%- if priority == 'high' -%}<link rel="preload" as="image" href="{{ hv_poster }}" fetchpriority="high">{%- endif -%}
 									<video playsinline="playsinline"{% if autoplay %} autoplay="autoplay"{% endif %} loop="loop" muted="muted" preload="metadata" poster="{{ hv_poster }}">
 										{%- if hv_m_url != hv_d_url -%}<source media="(max-width: 767px)" src="{{ hv_m_url }}" type="video/mp4">{%- endif -%}
 										<source src="{{ hv_d_url }}" type="video/mp4">
