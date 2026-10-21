@@ -1,0 +1,42 @@
+{% comment %}
+  CARBON | Men's Slim Fit Shorts — garment measurements after washing.
+  Shown by carbon-size-guide-router when custom.size_guide_type = mens-slim-shorts.
+  All width values are FLAT, not circumference. Source: ELECTRA model 13106 factory spec.
+{% endcomment %}
+<div id="carbon-size-guide-mens-slim-shorts" class="carbon-ssg" data-unit="in">
+  <div class="carbon-ssg__top">
+    <div><span class="carbon-ssg__brand">CARBON</span><h2>MEN'S SLIM FIT SHORTS</h2><p class="carbon-ssg__sub">SIZE GUIDE</p></div>
+    <div class="carbon-ssg__units" role="group" aria-label="Measurement units"><button type="button" class="is-active" data-unit-choice="in" aria-pressed="true">IN</button><button type="button" data-unit-choice="cm" aria-pressed="false">CM</button></div>
+  </div>
+  <p class="carbon-ssg__intro">All measurements are taken with the garment laid flat, after washing. Widths are not doubled.</p>
+  <div class="carbon-ssg__scroll" role="region" tabindex="0" aria-label="Men's slim fit shorts measurements; scroll horizontally on smaller screens">
+    <table><thead><tr><th scope="col">SIZE</th><th scope="col">WAIST<br>WIDTH <span class="carbon-ssg__unit-label">(IN)</span></th><th scope="col">HIP<br>WIDTH <span class="carbon-ssg__unit-label">(IN)</span></th><th scope="col">THIGH<br>WIDTH <span class="carbon-ssg__unit-label">(IN)</span></th><th scope="col">FRONT<br>RISE <span class="carbon-ssg__unit-label">(IN)</span></th><th scope="col">LEG<br>OPENING <span class="carbon-ssg__unit-label">(IN)</span></th><th scope="col">OUTSEAM <span class="carbon-ssg__unit-label">(IN)</span></th></tr></thead>
+    <tbody>
+      {% assign carbon_shorts_sizes = '30,31,32,33,34,36,38,40,42' | split: ',' %}
+      {% assign carbon_shorts_waist = '39.4,40.6,41.8,43.0,44.2,46.6,49.0,51.4,53.8' | split: ',' %}
+      {% assign carbon_shorts_hip = '50.6,51.8,53.0,54.2,55.4,57.8,60.2,62.6,65.0' | split: ',' %}
+      {% assign carbon_shorts_thigh = '30.6,31.2,31.8,32.4,33.0,34.2,35.4,36.6,37.8' | split: ',' %}
+      {% assign carbon_shorts_rise = '21.0,21.5,22.0,22.5,23.0,24.0,25.0,26.0,27.0' | split: ',' %}
+      {% assign carbon_shorts_opening = '22.5,22.9,23.3,23.7,24.1,24.9,25.7,26.5,27.3' | split: ',' %}
+      {% assign carbon_shorts_outseam = '51.0,51.5,52.0,52.5,53.0,54.0,55.0,56.0,57.0' | split: ',' %}
+      {% for size in carbon_shorts_sizes %}
+      <tr data-size="{{ size }}"{% if size == '32' %} class="is-selected"{% endif %} tabindex="0" aria-selected="{% if size == '32' %}true{% else %}false{% endif %}"><th scope="row">{{ size }}</th><td data-cm="{{ carbon_shorts_waist[forloop.index0] }}"></td><td data-cm="{{ carbon_shorts_hip[forloop.index0] }}"></td><td data-cm="{{ carbon_shorts_thigh[forloop.index0] }}"></td><td data-cm="{{ carbon_shorts_rise[forloop.index0] }}"></td><td data-cm="{{ carbon_shorts_opening[forloop.index0] }}"></td><td data-cm="{{ carbon_shorts_outseam[forloop.index0] }}"></td></tr>
+      {% endfor %}
+    </tbody></table>
+  </div>
+  <div class="carbon-ssg__notes"><p><strong>HOW TO MEASURE:</strong> Compare these numbers with a pair of shorts you already own, measured flat.</p><p><strong>Measurement tolerance:</strong> ±2 cm / ±0.8 in.</p><p><strong>Note:</strong> Outseam runs from the top of the waistband to the bottom hem. Hip width follows the factory measurement line 16 cm below the waistband.</p></div>
+</div>
+<style>
+#carbon-size-guide-mens-slim-shorts{--carbon-blue:#005bc0;--carbon-ink:#142039;--carbon-edge:#dfe4ec;color:var(--carbon-ink);font-family:Montserrat,Arial,sans-serif;max-width:1120px;margin:0 auto;padding:28px 24px;background:#fff}#carbon-size-guide-mens-slim-shorts *{box-sizing:border-box}#carbon-size-guide-mens-slim-shorts .carbon-ssg__top{display:flex;justify-content:space-between;align-items:start;gap:16px}#carbon-size-guide-mens-slim-shorts .carbon-ssg__brand{display:block;font-size:12px;letter-spacing:4px;font-weight:800;margin-bottom:10px}#carbon-size-guide-mens-slim-shorts h2{font-family:'Bebas Neue',Impact,sans-serif;font-size:clamp(27px,4vw,42px);line-height:1;margin:0;letter-spacing:.3px;color:#111927}#carbon-size-guide-mens-slim-shorts .carbon-ssg__sub{font-size:17px;font-weight:500;margin:2px 0 9px;border-bottom:3px solid var(--carbon-blue);padding-bottom:7px;display:inline-block}#carbon-size-guide-mens-slim-shorts .carbon-ssg__units{display:flex;gap:3px;padding:4px;border-radius:30px;background:#f1f3f7;flex-shrink:0}#carbon-size-guide-mens-slim-shorts .carbon-ssg__units button{border:0;background:none;border-radius:24px;min-width:55px;padding:8px 12px;color:#263650;font-size:12px;font-weight:800;letter-spacing:1px;cursor:pointer}#carbon-size-guide-mens-slim-shorts .carbon-ssg__units button.is-active{color:#fff;background:var(--carbon-blue)}#carbon-size-guide-mens-slim-shorts .carbon-ssg__intro{font-size:13px;line-height:1.6;margin:20px 0 18px;color:#4c5870}#carbon-size-guide-mens-slim-shorts .carbon-ssg__scroll{overflow-x:auto;border:1px solid var(--carbon-edge);border-radius:7px}#carbon-size-guide-mens-slim-shorts table{border-collapse:collapse;width:100%;min-width:750px;text-align:center;font-variant-numeric:tabular-nums}#carbon-size-guide-mens-slim-shorts th,#carbon-size-guide-mens-slim-shorts td{padding:14px 10px;border-right:1px solid var(--carbon-edge);border-bottom:1px solid var(--carbon-edge);font-size:13px}#carbon-size-guide-mens-slim-shorts tr>*:last-child{border-right:0}#carbon-size-guide-mens-slim-shorts tbody tr:last-child>*{border-bottom:0}#carbon-size-guide-mens-slim-shorts thead th{background:var(--carbon-ink);color:#fff;font-size:11px;font-weight:800;line-height:1.5;white-space:nowrap}#carbon-size-guide-mens-slim-shorts tbody th{font-weight:800}#carbon-size-guide-mens-slim-shorts tbody tr{cursor:pointer}#carbon-size-guide-mens-slim-shorts tbody tr:nth-child(even){background:#f7f9fc}#carbon-size-guide-mens-slim-shorts tbody tr:hover{background:#e7f1ff}#carbon-size-guide-mens-slim-shorts tbody tr.is-selected,#carbon-size-guide-mens-slim-shorts tbody tr.is-selected th{background:var(--carbon-blue);color:#fff;font-weight:700}#carbon-size-guide-mens-slim-shorts tbody tr:focus-visible{outline:3px solid #efac36;outline-offset:-3px}#carbon-size-guide-mens-slim-shorts .carbon-ssg__notes{margin-top:18px;font-size:12px;line-height:1.7;color:#4c5870}#carbon-size-guide-mens-slim-shorts .carbon-ssg__notes p{margin:6px 0}#carbon-size-guide-mens-slim-shorts .carbon-ssg__notes strong{color:var(--carbon-ink)}@media(max-width:650px){#carbon-size-guide-mens-slim-shorts{padding:18px 12px}#carbon-size-guide-mens-slim-shorts .carbon-ssg__units button{min-width:42px;padding:7px}#carbon-size-guide-mens-slim-shorts th,#carbon-size-guide-mens-slim-shorts td{padding:12px 8px}#carbon-size-guide-mens-slim-shorts .carbon-ssg__intro{margin:13px 0}}
+</style>
+<script>
+(function(){
+  const root=document.getElementById('carbon-size-guide-mens-slim-shorts');if(!root||root.dataset.ready==='true')return;root.dataset.ready='true';
+  const buttons=[...root.querySelectorAll('[data-unit-choice]')];const cells=[...root.querySelectorAll('[data-cm]')];
+  function setUnit(unit){root.dataset.unit=unit;buttons.forEach(b=>{const active=b.dataset.unitChoice===unit;b.classList.toggle('is-active',active);b.setAttribute('aria-pressed',String(active))});root.querySelectorAll('.carbon-ssg__unit-label').forEach(el=>el.textContent='('+unit.toUpperCase()+')');cells.forEach(c=>{const cm=Number(c.dataset.cm);c.textContent=unit==='cm'?cm.toFixed(1):(cm/2.54).toFixed(1)})}
+  buttons.forEach(b=>b.addEventListener('click',()=>setUnit(b.dataset.unitChoice)));
+  function selectRow(row){root.querySelectorAll('tbody tr').forEach(r=>{const selected=r===row;r.classList.toggle('is-selected',selected);r.setAttribute('aria-selected',String(selected))})}
+  root.querySelectorAll('tbody tr').forEach(r=>{r.addEventListener('click',()=>selectRow(r));r.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();selectRow(r)}})});
+  setUnit('in');
+})();
+</script>
