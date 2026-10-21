@@ -1,6 +1,6 @@
 /**
  * Deploy the Men's Slim Fit Denim Shorts size guide (John Denim Shorts) to the
- * live theme: the snippet and its six measuring pictures. Owner's package,
+ * live theme: the snippet and its measuring pictures. Owner's package,
  * 2026-10-20. The live snippet is saved to theme/backups first.
  *
  *   node scripts/deploy-slim-shorts-guide.mjs            # dry run
@@ -37,7 +37,8 @@ async function gql(query, variables) {
 }
 
 const SNIPPET = "snippets/carbon-size-guide-mens-slim-shorts.liquid";
-const IMAGES = ["waist", "hip", "thigh", "front-rise", "leg-opening", "outseam"].map((k) => `assets/carbon-denim-shorts-measure-${k}.webp`);
+/* Jeans-style guide (owner, 2026-10-20): three photos of the real John Denim Shorts. */
+const IMAGES = ["waist", "hip", "inseam"].map((k) => `assets/carbon-denim-shorts-john-${k}.webp`);
 
 const theme = (await gql(`{ themes(first: 5, roles: [MAIN]) { nodes { id name role } } }`)).themes.nodes[0];
 console.log(`theme: ${theme.name} (${theme.role}) ${theme.id}`);
@@ -52,7 +53,7 @@ for (const f of [SNIPPET, ...IMAGES, "assets/carbon-size-guide-tape-icon.png"]) 
 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
 const prev = have.get(SNIPPET)?.body?.content;
 if (prev && WRITE) {
-  const bak = path.join(ROOT, `theme/backups/carbon-size-guide-mens-slim-shorts.PRE-DENIM-PACKAGE-${stamp}.liquid`);
+  const bak = path.join(ROOT, `theme/backups/carbon-size-guide-mens-slim-shorts.PRE-JEANS-STYLE-${stamp}.liquid`);
   writeFileSync(bak, prev);
   console.log(`backup: ${path.relative(ROOT, bak)}`);
 }
@@ -79,4 +80,4 @@ const back = await gql(
   { id: theme.id, f: [SNIPPET, ...IMAGES] },
 );
 const ok = back.theme.files.nodes.find((n) => n.filename === SNIPPET)?.body?.content === files[0].body.value;
-console.log(`read back: snippet ${ok ? "matches" : "DIFFERS"}; images present ${back.theme.files.nodes.filter((n) => n.filename.endsWith(".webp")).length}/6`);
+console.log(`read back: snippet ${ok ? "matches" : "DIFFERS"}; images present ${back.theme.files.nodes.filter((n) => n.filename.endsWith(".webp")).length}/${IMAGES.length}`);
