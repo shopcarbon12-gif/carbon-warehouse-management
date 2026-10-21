@@ -93,7 +93,9 @@ const R = {
   cuff: (side: string) => `Sleeve opening, ${side}: straight across the end of the sleeve, edge to edge, square to the sleeve.`,
   strap: "Strap as it lies flat, the strap on the left of the photo: from where it is sewn to the top edge of the front, along the strap, to the top of its fold (where it turns over to the back).",
   waistBottom: "Straight across the top edge of the waistband, button and zip closed, edge to edge.",
-  rise: "From the top of the waistband at centre front, along the front seam, to the crotch seam point — where the four seams meet. On jeans the crotch point is just below where the fly's J-stitching ends, usually above where the legs visibly separate.",
+  /* Owner's John Denim Shorts, 2026-10-20: "just below the J-stitching" sent the AI to the bottom of the fly,
+     5–6 cm too high (factory front rise 25.2 cm with the waistband; one placement gave 20.6). */
+  rise: "From the top of the front waistband at centre front, along the front seam, down to the crotch seam point — the fork where the front seam splits into the two inseams (where the four seams meet). On jeans this fork is several centimetres BELOW the bottom of the fly's J-stitching — never at the J-stitch, the zip end or the last fly stitch. It sits at the top of the V where the two inner leg seams meet, a little above the open gap between the legs.",
   thigh: (side: string) => `Thigh, leg ${side}: 2.5 cm (1") below the crotch point, straight across that leg, square to the leg, inside edge to outside edge.`,
   knee: (side: string) => `Knee, leg ${side}: halfway down the inseam, straight across that leg, square to the leg.`,
   inseam: (side: string) => `Inseam, leg ${side}: from the crotch seam point to the hem, along the inside leg seam.`,

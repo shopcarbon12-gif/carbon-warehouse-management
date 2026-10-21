@@ -14,8 +14,9 @@ import { PROFILE_BY_ID, type GradingProfileId } from "@/lib/size-grading/grading
  * multipart: photo (JPEG), meta {"profile":"tee","pxPerCm":15.8,"keys":["shoulder","sleeveL"],"repeat":2}
  *
  * repeat 2 (the crotch photo): two independent placements run side by side.
- * When they agree the ends are averaged; `spreadCm` says how far apart each
- * point's ends landed, so the phone can flag a crotch the AI is unsure of
+ * When they agree the ends are averaged; when they are more than 1.5 cm apart
+ * a third runs and the closest pair is kept. `spreadCm` says how far apart the
+ * kept pair landed, so the phone can still flag a crotch the AI is unsure of
  * (owner, 2026-10-20: scan 1 put the crotch 5.6 cm too high).
  */
 export const runtime = "nodejs";
@@ -63,11 +64,25 @@ async function POST_handler(req: Request) {
     );
     if (meta.repeat === 2) {
       const [a, b] = await Promise.all([run(), run().catch(() => null)]);
-      const { lines, spreadCm } = mergeRuns(a.lines as Lines, (b?.lines ?? {}) as Lines, pxPerCm);
-      const cost = (Number.isFinite(a.costUsd) ? a.costUsd : 0) + (b && Number.isFinite(b.costUsd) ? b.costUsd : 0);
+      let runs = [a, ...(b ? [b] : [])];
+      let pick = mergeRuns(a.lines as Lines, (b?.lines ?? {}) as Lines, pxPerCm);
+      /* Two answers far apart: averaging them gives a point neither chose
+         (owner's scan 2026-10-21: 6 cm apart, the mean landed 3 cm too high).
+         A third placement breaks the tie and the two that agree are kept. */
+      if (b && Math.max(0, ...Object.values(pick.spreadCm)) > 1.5) {
+        const c3 = await run().catch(() => null);
+        if (c3) {
+          runs = [a, b, c3];
+          const pairs: [number, number][] = [[0, 1], [0, 2], [1, 2]];
+          const merged = pairs.map(([i, j]) => mergeRuns(runs[i].lines as Lines, runs[j].lines as Lines, pxPerCm));
+          const worst = (m: ReturnType<typeof mergeRuns>) => Math.max(0, ...Object.values(m.spreadCm));
+          pick = merged.reduce((best, m) => (worst(m) < worst(best) ? m : best));
+        }
+      }
+      const cost = runs.reduce((s, r) => s + (Number.isFinite(r.costUsd) ? r.costUsd : 0), 0);
       return NextResponse.json({
-        lines, cm: a.cm, skipped: a.skipped, remarks: a.remarks, model: a.model, costUsd: cost || null,
-        ms: Math.max(a.ms, b?.ms ?? 0), rounds: a.rounds, zooms: a.zooms, spreadCm, runs: b ? 2 : 1,
+        lines: pick.lines, cm: a.cm, skipped: a.skipped, remarks: a.remarks, model: a.model, costUsd: cost || null,
+        ms: Math.max(...runs.map((r) => r.ms)), rounds: a.rounds, zooms: a.zooms, spreadCm: pick.spreadCm, runs: runs.length,
       });
     }
     const result = await run();
