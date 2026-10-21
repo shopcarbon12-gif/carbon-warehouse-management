@@ -29,6 +29,13 @@ class Prefs(ctx: Context) {
     var calibratedAt: Long
         get() = sp.getLong("calibratedAt", 0L)
         set(v) = sp.edit().putLong("calibratedAt", v).apply()
+    /** Last true width / height typed on the accuracy check (the same object is reused). */
+    var checkW: String
+        get() = sp.getString("checkW", "24") ?: "24"
+        set(v) = sp.edit().putString("checkW", v).apply()
+    var checkH: String
+        get() = sp.getString("checkH", "18") ?: "18"
+        set(v) = sp.edit().putString("checkH", v).apply()
 
     /**
      * Test mode: lets the app run on a phone without a time-of-flight sensor

@@ -28,8 +28,18 @@ data class DepthFacts(
     val tablePxPerCm: Double,
     val depthPoints: Int,
     val segMethod: String,
+    /** Depth image age against the photo's own ARCore frame (ms) — 1.0.6 freshness rule. */
+    val depthAgeMs: Double = -1.0,
+    /** Depth pixels with a reading at the confidence used (0–1). */
+    val highConfFrac: Double = -1.0,
+    /** Depth points on the fitted table plane. */
+    val inlierCount: Int = 0,
+    val appVersion: String = "",
+    val deviceModel: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
+        .put("depthAgeMs", round1(depthAgeMs)).put("highConfPct", round1(highConfFrac * 100)).put("inlierCount", inlierCount)
+        .put("inlierPct", round1(inlierFrac * 100)).put("appVersion", appVersion).put("deviceModel", deviceModel)
         .put("distanceCm", round1(distanceCm)).put("tiltDeg", round1(tiltDeg)).put("garmentHeightCm", round1(garmentHeightCm))
         .put("inlierFrac", (inlierFrac * 1000).roundToInt() / 1000.0).put("planeRmsMm", round1(planeRmsMm))
         .put("tof", tof).put("calibration", calibration.toDouble()).put("tablePxPerCm", (tablePxPerCm * 1000).roundToInt() / 1000.0)
@@ -54,8 +64,27 @@ class Scan(
 
 class MeasureFailure(message: String) : Exception(message)
 
-/** Phase 0 / calibration: the squared-up photo only, at the depth sensor's raw scale (no calibration applied). */
-class Flat(val photo: Bitmap, val pxPerCm: Double, val plane: com.shopcarbon.gradingai.ar.Plane, val depthPoints: Int)
+fun appVersion(ctx: Context): String = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" }.getOrDefault("")
+
+/** Depth sensor check / accuracy check: the squared-up photo only, at the depth sensor's raw scale (no calibration applied). */
+class Flat(
+    val photo: Bitmap,
+    val pxPerCm: Double,
+    val plane: com.shopcarbon.gradingai.ar.Plane,
+    val depthPoints: Int,
+    val tof: Boolean,
+    val depthAgeMs: Double,
+    val highConfFrac: Double,
+) {
+    /** The same depth-quality facts a scan saves, for an accuracy check. */
+    fun depthJson(ctx: Context): JSONObject = DepthFacts(
+        distanceCm = plane.axisDistanceM * 100, tiltDeg = plane.tiltDeg, garmentHeightCm = 0.0,
+        inlierFrac = plane.inlierFrac, planeRmsMm = plane.rmsMm, tof = tof, calibration = 1f,
+        tablePxPerCm = pxPerCm, depthPoints = depthPoints, segMethod = "",
+        depthAgeMs = depthAgeMs, highConfFrac = highConfFrac, inlierCount = plane.count,
+        appVersion = appVersion(ctx), deviceModel = android.os.Build.MODEL ?: "",
+    ).toJson()
+}
 
 object Pipeline {
     /** The same photo measured as another garment type (no new capture). */
@@ -67,20 +96,22 @@ object Pipeline {
     suspend fun flatten(b: CaptureBundle): Flat = withContext(Dispatchers.Default) {
         val src = b.yuv.toBitmap()
         val pts = b.depth?.points(step = 1, minConf = if (b.tof) 128 else 64)
-        val plane = pts?.let { PlaneFit.fit(it, iterations = 260) } ?: b.livePlane
-            ?: throw MeasureFailure("The depth sensor did not find the table.")
+        // From THIS photo's depth only, the same as a scan.
+        val plane = pts?.let { PlaneFit.fit(it, iterations = 260) }
+            ?: throw MeasureFailure("The depth sensor did not find the table in this photo.")
         val rect = Rectifier(plane, b.fx.toDouble(), b.fy.toDouble(), b.cx.toDouble(), b.cy.toDouble(), src.width, src.height, b.sensorOrientation)
         val flat = rect.render(src)
         src.recycle()
-        Flat(flat, rect.pxPerCm, plane, pts?.n ?: 0)
+        Flat(flat, rect.pxPerCm, plane, pts.n, b.tof, b.depthAgeMs, b.highConfFrac)
     }
 
     suspend fun process(ctx: Context, b: CaptureBundle, profile: Profile, calibration: Float): Scan = withContext(Dispatchers.Default) {
         val src = b.yuv.toBitmap()
         val snap = b.depth
         val pts = snap?.points(step = 1, minConf = if (b.tof) 128 else 64)
-        val plane = pts?.let { PlaneFit.fit(it, iterations = 260) } ?: b.livePlane
-            ?: throw MeasureFailure("The depth sensor did not find the table. Hold the phone 70–110 cm above the table and try again.")
+        // The plane comes from THIS photo's depth only (no older live fit to fall back on).
+        val plane = pts?.let { PlaneFit.fit(it, iterations = 260) }
+            ?: throw MeasureFailure("The depth sensor did not find the table in this photo. Hold the phone level above the table and try again.")
         if (plane.tiltDeg > 20) throw MeasureFailure("The phone was tilted ${plane.tiltDeg.roundToInt()}°. Hold it level over the garment.")
 
         val rect = Rectifier(plane, b.fx.toDouble(), b.fy.toDouble(), b.cx.toDouble(), b.cy.toDouble(), src.width, src.height, b.sensorOrientation)
@@ -136,6 +167,8 @@ object Pipeline {
                 distanceCm = plane.axisDistanceM * 100, tiltDeg = plane.tiltDeg, garmentHeightCm = hG * 100,
                 inlierFrac = plane.inlierFrac, planeRmsMm = plane.rmsMm, tof = b.tof, calibration = calibration,
                 tablePxPerCm = rect.pxPerCm * scale, depthPoints = pts?.n ?: 0, segMethod = cut.method,
+                depthAgeMs = b.depthAgeMs, highConfFrac = b.highConfFrac, inlierCount = plane.count,
+                appVersion = appVersion(ctx), deviceModel = android.os.Build.MODEL ?: "",
             ),
             warnings = warnings, capturedAt = System.currentTimeMillis(),
         )

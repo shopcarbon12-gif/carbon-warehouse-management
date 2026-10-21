@@ -48,6 +48,10 @@ class CaptureBundle(
     val tof: Boolean,
     val livePlane: Plane?,
     val capturedAtMs: Long,
+    /** Depth image age against the photo's own ARCore frame (ms). */
+    val depthAgeMs: Double,
+    /** Share of depth pixels at the confidence the measurement uses (0–1). */
+    val highConfFrac: Double,
 )
 
 /**
@@ -64,7 +68,15 @@ class ArCamera(
     private val onLive: (LiveStatus) -> Unit,
     private val onCaptured: (CaptureBundle) -> Unit,
     private val onFailure: (String) -> Unit,
+    /** No fresh depth frame came in time for a requested photo (the screen re-arms). */
+    private val onDepthTimeout: (String) -> Unit = onFailure,
 ) : GLSurfaceView.Renderer {
+    companion object {
+        /** Depth may be at most this much older than the camera frame it is measured with. */
+        const val MAX_DEPTH_AGE_MS = 100.0
+        /** How long a requested photo waits for fresh depth before saying so. */
+        const val DEPTH_WAIT_MS = 1000L
+    }
 
     val view: GLSurfaceView = GLSurfaceView(activity).apply {
         preserveEGLContextOnPause = true
@@ -98,7 +110,8 @@ class ArCamera(
     @Volatile private var plane: Plane? = null
     @Volatile private var planeAt = 0L
     @Volatile private var cutOff: Set<String>? = null
-    @Volatile private var lastSnapshot: DepthSnapshot? = null
+    /** Set when a capture is asked for; the photo waits for a fresh depth frame. */
+    private var pendingSince = 0L
     private val poses = ArrayDeque<Triple<Long, FloatArray, FloatArray>>()
 
     /** Create (once) and resume the session. Returns a reason when the phone cannot measure. */
@@ -193,12 +206,13 @@ class ArCamera(
         val now = SystemClock.uptimeMillis()
         if (tracking) trackStillness(now, cam.pose.translation, cam.pose.rotationQuaternion)
 
-        if (captureRequested.getAndSet(false)) capture(frame, now)
+        if (captureRequested.getAndSet(false)) pendingSince = now
+        if (pendingSince > 0) tryCapture(frame, now)
 
         if (tracking && now - lastDepthAt > 220 && !analyzing.get()) {
             lastDepthAt = now
-            depthSnapshot(frame)?.let { snap ->
-                lastSnapshot = snap
+            // Only fresh depth may move the live checks (an old frame reprojected forward must not keep them green).
+            depthSnapshot(frame)?.takeIf { it.ageMs <= MAX_DEPTH_AGE_MS }?.let { snap ->
                 analyzing.set(true)
                 worker.execute {
                     try {
@@ -232,15 +246,35 @@ class ArCamera(
 
     private fun minConf() = if (tof) 128 else 64
 
-    private fun capture(frame: Frame, now: Long) {
+    /**
+     * Take the photo only with FRESH depth from the same ARCore frame: the
+     * depth image at most [MAX_DEPTH_AGE_MS] older than the camera frame. No
+     * cached snapshot. If none arrives within [DEPTH_WAIT_MS], give up with a
+     * message (the screen re-arms auto-capture).
+     */
+    private fun tryCapture(frame: Frame, now: Long) {
+        val depth = depthSnapshot(frame)
+        if (depth == null || depth.ageMs > MAX_DEPTH_AGE_MS || depth.ageMs < -5) {
+            if (now - pendingSince > DEPTH_WAIT_MS) {
+                pendingSince = 0
+                val why = if (depth == null) "no depth frame" else "depth ${depth.ageMs.toInt()} ms old"
+                main.post { onDepthTimeout("Depth not ready ($why) — hold still, it will try again.") }
+            }
+            return
+        }
+        pendingSince = 0
+        capture(frame, now, depth)
+    }
+
+    private fun capture(frame: Frame, now: Long, depth: DepthSnapshot) {
         try {
             val yuv = frame.acquireCameraImage().use { YuvFrame.copy(it) }
-            val depth = depthSnapshot(frame) ?: lastSnapshot
             val ii = frame.camera.imageIntrinsics
             val f = ii.focalLength; val c = ii.principalPoint; val dim = ii.imageDimensions
             // Intrinsics belong to the CPU image; scale if ARCore reports another size.
             val sx = yuv.w.toFloat() / dim[0]; val sy = yuv.h.toFloat() / dim[1]
-            val b = CaptureBundle(yuv, depth, f[0] * sx, f[1] * sy, c[0] * sx, c[1] * sy, sensorOrientation, tof, plane, now)
+            val b = CaptureBundle(yuv, depth, f[0] * sx, f[1] * sy, c[0] * sx, c[1] * sy, sensorOrientation, tof, plane, now,
+                depthAgeMs = depth.ageMs, highConfFrac = depth.highConfFrac(minConf()))
             main.post { onCaptured(b) }
         } catch (e: Exception) {
             main.post { onFailure("Capture failed: ${e.message ?: e.javaClass.simpleName}") }
@@ -264,7 +298,8 @@ class ArCamera(
                 val ti = frame.camera.textureIntrinsics
                 val tf = ti.focalLength; val tc = ti.principalPoint; val td = ti.imageDimensions
                 val kx = w.toFloat() / td[0]; val ky = h.toFloat() / td[1]
-                DepthSnapshot(w, h, mm, conf, tf[0] * kx, tf[1] * ky, tc[0] * kx, tc[1] * ky)
+                val ageMs = (frame.timestamp - d.timestamp) / 1e6
+                DepthSnapshot(w, h, mm, conf, tf[0] * kx, tf[1] * ky, tc[0] * kx, tc[1] * ky, ageMs)
             }
         }
     } catch (_: NotYetAvailableException) {

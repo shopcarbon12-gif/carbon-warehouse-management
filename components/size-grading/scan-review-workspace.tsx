@@ -821,9 +821,21 @@ function DepthFacts({ scan }: { scan: ScanDetail }) {
   if (distance !== null) facts.push(["Camera distance", `${distance.toFixed(1)} cm (${(distance / 2.54).toFixed(1)}")`]);
   if (tilt !== null) facts.push(["Tilt", `${tilt.toFixed(1)}°`]);
   if (height !== null) facts.push(["Garment height above the table", `${height.toFixed(1)} cm`]);
+  const age = num(d.depthAgeMs);
+  const highConf = num(d.highConfPct);
+  const rms = num(d.planeRmsMm);
+  const inliers = num(d.inlierCount);
+  const inlierPct = num(d.inlierPct) ?? (num(d.inlierFrac) !== null ? num(d.inlierFrac)! * 100 : null);
+  // Older scans (before 1.0.6) saved -1 for "not measured".
+  if (age !== null && age >= 0) facts.push(["Depth age", `${age.toFixed(1)} ms older than the photo`]);
+  if (highConf !== null && highConf >= 0) facts.push(["Confident depth", `${highConf.toFixed(1)}% of the depth image`]);
+  if (rms !== null) facts.push(["Table flatness (RMS)", `${rms.toFixed(1)} mm`]);
+  if (inlierPct !== null)
+    facts.push(["Table points", `${inliers !== null && inliers > 0 ? `${Math.round(inliers).toLocaleString()} · ` : ""}${inlierPct.toFixed(1)}%`]);
   if (calibration !== null) facts.push(["Calibration", `× ${calibration.toFixed(3)}`]);
   else if (d.calibration && typeof d.calibration === "object") facts.push(["Calibration", JSON.stringify(d.calibration)]);
   if (deviceName) facts.push(["Phone", deviceName]);
+  else if (typeof d.deviceModel === "string" && d.deviceModel) facts.push(["Phone", d.deviceModel]);
   if (scan.app_version) facts.push(["App version", scan.app_version]);
 
   return (

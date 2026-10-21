@@ -55,7 +55,7 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
             val cal = app.prefs.calibration
             KeyValue("Scale correction", if (cal == 1f) "none" else "×${"%.4f".format(cal)}")
             if (app.prefs.calibratedAt > 0) Muted("Calibrated ${DateFormat.getDateTimeInstance().format(Date(app.prefs.calibratedAt))}")
-            Secondary("Depth sensor check and calibration") { nav.go(Screen.Probe) }
+            Secondary("Depth sensor and accuracy check") { nav.go(Screen.Probe) }
             if (cal != 1f) Secondary("Clear the scale correction") { app.prefs.calibration = 1f; app.prefs.calibratedAt = 0; msg = "Scale correction cleared." }
         }
         Card {

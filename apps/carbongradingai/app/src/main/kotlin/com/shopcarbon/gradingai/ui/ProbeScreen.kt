@@ -51,15 +51,17 @@ import com.shopcarbon.gradingai.ar.ArCamera
 import com.shopcarbon.gradingai.ar.LiveStatus
 import com.shopcarbon.gradingai.measure.Flat
 import com.shopcarbon.gradingai.measure.Pipeline
+import com.shopcarbon.gradingai.measure.appVersion
+import org.json.JSONObject
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * Phase 0: prove the depth sensor. Live: is it the time-of-flight sensor, the
- * distance to the table, its tilt and how flat the reading is. Then measure a
- * known length (a ruler, the 24 cm side of the printed target, a US Letter
- * sheet's 27.94 cm) and see the error; accept it as this phone's correction.
+ * Depth sensor and accuracy check. Live: is it the time-of-flight sensor, the
+ * distance to the table, its tilt and how flat the reading is. Then capture a
+ * flat, rigid object of known size (the printed 18×24 cm target, a board, a
+ * tile) and compare width, height and diagonal — diagnostic only.
  */
 @Composable
 fun ProbeScreen(nav: Nav) {
@@ -78,7 +80,7 @@ fun ProbeScreen(nav: Nav) {
 
     if (!granted) { Page("Depth sensor check", onBack = { nav.back() }) { Notice("The camera permission is needed.") }; return }
     val f = flat
-    if (f != null) { KnownLength(nav, f, readings, onAgain = { flat = null }); return }
+    if (f != null) { CheckAccuracy(nav, f, readings, onAgain = { flat = null }); return }
 
     val camera = remember {
         ArCamera(activity, requireTof = !app.prefs.testMode, coverage = { null }, onLive = { live = it },
@@ -105,7 +107,7 @@ fun ProbeScreen(nav: Nav) {
             Text("Camera image: ${camera.imageSize.first}×${camera.imageSize.second}", color = Palette.muted)
             Text("Distance to table: ${p?.let { "${(it.axisDistanceM * 100).roundToInt()} cm" } ?: "—"}", color = Color.White)
             Text("Tilt: ${p?.let { "${"%.1f".format(it.tiltDeg)}°" } ?: "—"}   Flatness (noise): ${p?.let { "${"%.1f".format(it.rmsMm)} mm" } ?: "—"}   Surface: ${p?.let { "${(it.inlierFrac * 100).roundToInt()}%" } ?: "—"}", color = Color.White)
-            Text("Lay a ruler (or the printed target, or a US Letter sheet) flat on the table, hold the phone 70–110 cm above it, level, and capture.", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
+            Text("Lay a flat, rigid object of known size (the printed 18×24 cm target, a board, a tile) on the table, hold the phone level above it as for a scan, and capture.", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
             problem?.let { Text(it, color = Palette.bad) }
         }
         Column(Modifier.align(androidx.compose.ui.Alignment.BottomCenter).padding(24.dp)) {
@@ -115,18 +117,37 @@ fun ProbeScreen(nav: Nav) {
     }
 }
 
+/** Width, height and diagonal of the four corners (TL, TR, BR, BL), in cm: each the mean of its two opposite sides. */
+internal fun quadSizes(c: List<Offset>, pxPerCm: Double): Triple<Double, Double, Double> {
+    fun d(i: Int, j: Int) = hypot((c[j].x - c[i].x).toDouble(), (c[j].y - c[i].y).toDouble()) / pxPerCm
+    return Triple((d(0, 1) + d(3, 2)) / 2, (d(0, 3) + d(1, 2)) / 2, (d(0, 2) + d(1, 3)) / 2)
+}
+
+/**
+ * Accuracy check — diagnostic only. Drag the four corners onto a flat, rigid
+ * object of known size; width, height and diagonal are compared with the
+ * truth and the result is saved to the WMS so a drift shows over time. The
+ * scale is never corrected from a check (one reading is not enough to trust).
+ */
 @Composable
-private fun KnownLength(nav: Nav, f: Flat, readings: MutableList<Double>, onAgain: () -> Unit) {
-    val app = App.get(LocalContext.current)
+private fun CheckAccuracy(nav: Nav, f: Flat, readings: MutableList<Double>, onAgain: () -> Unit) {
+    val ctx = LocalContext.current
+    val app = App.get(ctx)
+    val scope = rememberCoroutineScope()
     val density = LocalDensity.current
-    var a by remember { mutableStateOf(Offset(f.photo.width * 0.35f, f.photo.height * 0.5f)) }
-    var b by remember { mutableStateOf(Offset(f.photo.width * 0.65f, f.photo.height * 0.5f)) }
-    var truth by remember { mutableStateOf("") }
+    val corners = remember(f) {
+        val w = f.photo.width; val h = f.photo.height
+        mutableStateListOf(Offset(w * 0.3f, h * 0.3f), Offset(w * 0.7f, h * 0.3f), Offset(w * 0.7f, h * 0.7f), Offset(w * 0.3f, h * 0.7f))
+    }
+    var trueW by remember { mutableStateOf(app.prefs.checkW) }
+    var trueH by remember { mutableStateOf(app.prefs.checkH) }
     var msg by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var saved by remember(f) { mutableStateOf(false) }
     val img = remember(f) { f.photo.asImageBitmap() }
-    val measured = hypot((b.x - a.x).toDouble(), (b.y - a.y).toDouble()) / f.pxPerCm
-    Page("Known length", onBack = { nav.back() }) {
-        Muted("Drag the two ends onto the known length. Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away.")
+    val (mw, mh, md) = quadSizes(corners, f.pxPerCm)
+    Page("Check accuracy", onBack = { nav.back() }) {
+        Muted("Drag the four corners onto the object's corners. Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away, tilt ${"%.1f".format(f.plane.tiltDeg)}°, depth ${"%.0f".format(f.depthAgeMs)} ms old.")
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val scale = with(density) { maxWidth.toPx() } / f.photo.width
             Canvas(
@@ -134,37 +155,61 @@ private fun KnownLength(nav: Nav, f: Flat, readings: MutableList<Double>, onAgai
                     .pointerInput(f) {
                         var which = 0
                         detectDragGestures(
-                            onDragStart = { o -> which = if (hypot(o.x - a.x * scale, o.y - a.y * scale) < hypot(o.x - b.x * scale, o.y - b.y * scale)) 0 else 1 },
-                            onDrag = { ch, _ -> ch.consume(); val p = Offset(ch.position.x / scale, ch.position.y / scale); if (which == 0) a = p else b = p },
+                            onDragStart = { o -> which = corners.indices.minBy { hypot(o.x - corners[it].x * scale, o.y - corners[it].y * scale) } },
+                            onDrag = { ch, _ -> ch.consume(); corners[which] = Offset(ch.position.x / scale, ch.position.y / scale) },
                         )
                     },
             ) {
                 drawImage(img, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
-                drawLine(Palette.manual, a * scale, b * scale, 4f)
-                drawCircle(Palette.manual, 12f, a * scale); drawCircle(Palette.manual, 12f, b * scale)
+                for (i in 0 until 4) drawLine(Palette.manual, corners[i] * scale, corners[(i + 1) % 4] * scale, 4f)
+                drawLine(Palette.manual.copy(alpha = 0.5f), corners[0] * scale, corners[2] * scale, 2f)
+                drawLine(Palette.manual.copy(alpha = 0.5f), corners[1] * scale, corners[3] * scale, 2f)
+                corners.forEach { drawCircle(Palette.manual, 14f, it * scale) }
             }
         }
-        KeyValue("Measured (no correction)", "${"%.2f".format(measured)} cm")
-        OutlinedTextField(truth, { truth = it }, Modifier.fillMaxWidth(), label = { Text("True length, cm") }, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-        val t = truth.replace(',', '.').toDoubleOrNull()
-        if (t != null && t > 0) {
-            val err = (measured - t) / t * 100
-            KeyValue("Error", "${"%+.2f".format(measured - t)} cm (${"%+.2f".format(err)}%)", if (kotlin.math.abs(err) < 1) Palette.accent else Palette.warn)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(trueW, { trueW = it; saved = false }, Modifier.weight(1f), label = { Text("True width, cm") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+            OutlinedTextField(trueH, { trueH = it; saved = false }, Modifier.weight(1f), label = { Text("True height, cm") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+        }
+        val tw = trueW.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }
+        val th = trueH.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }
+        @Composable fun row(name: String, m: Double, t: Double?) {
+            if (t == null) { KeyValue(name, "${"%.2f".format(m)} cm"); return }
+            val err = (m - t) / t * 100
+            KeyValue(name, "${"%.2f".format(m)} / ${"%.2f".format(t)} cm  (${"%+.2f".format(m - t)} cm, ${"%+.2f".format(err)}%)",
+                if (kotlin.math.abs(err) < 1) Palette.accent else Palette.warn)
+        }
+        row("Width", mw, tw)
+        row("Height", mh, th)
+        row("Diagonal", md, if (tw != null && th != null) hypot(tw, th) else null)
+        if (tw != null && th != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Secondary("Add to repeat test", Modifier.weight(1f)) { readings.add(measured) }
-                Primary("Use as correction", Modifier.weight(1f)) {
-                    val k = (t / measured).toFloat()
-                    if (k !in 0.9f..1.1f) msg = "That is more than 10% off — check the ends and the true length first."
-                    else { app.prefs.calibration = k; app.prefs.calibratedAt = System.currentTimeMillis(); msg = "Saved: every scan is now corrected ×${"%.4f".format(k)}." }
+                Secondary("Add to repeat test", Modifier.weight(1f)) { readings.add(md) }
+                Primary(if (saving) "Saving…" else if (saved) "Saved ✓" else "Save check", Modifier.weight(1f), enabled = !saving && !saved) {
+                    saving = true; msg = null
+                    app.prefs.checkW = trueW; app.prefs.checkH = trueH
+                    val body = JSONObject().put("trueW", tw).put("trueH", th).put("measuredW", mw).put("measuredH", mh).put("measuredDiag", md)
+                        .put("depth", f.depthJson(ctx)).put("appVersion", appVersion(ctx)).put("deviceModel", android.os.Build.MODEL ?: "")
+                    scope.launch {
+                        try { app.api.saveAccuracyCheck(body); saved = true; msg = "Saved to the WMS (Size Grading › Scan review › Accuracy checks)." }
+                        catch (e: Exception) { msg = "Not saved: ${e.message}" }
+                        finally { saving = false }
+                    }
                 }
             }
         }
         if (readings.isNotEmpty()) {
             val spread = readings.max() - readings.min()
-            Muted("Repeat test (${readings.size}): ${readings.joinToString { "%.2f".format(it) }} cm — spread ${"%.2f".format(spread)} cm ${if (spread <= 0.5) "✓ within 0.5 cm" else "(the plan's pass mark is 0.5 cm)"}")
+            Muted("Repeat test, diagonal (${readings.size}): ${readings.joinToString { "%.2f".format(it) }} cm — spread ${"%.2f".format(spread)} cm ${if (spread <= 0.5) "✓ within 0.5 cm" else "(the pass mark is 0.5 cm)"}")
         }
-        msg?.let { Notice(it, Palette.accent) }
+        Muted("This is a check only — scans are never corrected from it.")
+        if (app.prefs.calibration != 1f) {
+            Notice("An older scale correction (×${"%.4f".format(app.prefs.calibration)}) is still applied to every scan.")
+            Secondary("Clear the old correction") { app.prefs.calibration = 1f; app.prefs.calibratedAt = 0; msg = "Old correction cleared — scans use the depth sensor's scale only." }
+        }
+        msg?.let { Notice(it, if (it.startsWith("Not saved")) Palette.bad else Palette.accent) }
         Secondary("Capture again (move the phone between shots)") { onAgain() }
     }
 }

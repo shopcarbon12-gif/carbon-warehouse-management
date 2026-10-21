@@ -99,7 +99,11 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         return
     }
 
+    val cues = remember { Cues(ctx) }
+    DisposableEffect(Unit) { onDispose { cues.release() } }
+
     fun onCaptured(b: CaptureBundle) {
+        cues.captured()
         processing = "Squaring up the photo…"
         scope.launch {
             try {
@@ -115,8 +119,6 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         }
     }
 
-    val cues = remember { Cues(ctx) }
-    DisposableEffect(Unit) { onDispose { cues.release() } }
     val camera = remember {
         ArCamera(
             activity, requireTof = !testPhone,
@@ -124,6 +126,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
             onLive = { live = it },
             onCaptured = { onCaptured(it) },
             onFailure = { problem = it },
+            // No fresh depth for the photo: say so and let auto-capture try again.
+            onDepthTimeout = { problem = it; fired = false; readySince = 0L; cues.lost() },
         )
     }
     val owner = LocalLifecycleOwner.current
@@ -175,11 +179,12 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         if (!allGreen && wasGreen) cues.lost()
         wasGreen = allGreen
     }
-    LaunchedEffect(ready, auto, processing) {
+    // `fired` is a key so a depth timeout (fired → false) re-arms the hold while it stays green.
+    LaunchedEffect(ready, auto, processing, fired) {
         if (!ready || !auto || processing != null) { readySince = 0L; return@LaunchedEffect }
         readySince = System.currentTimeMillis()
         kotlinx.coroutines.delay(cap?.holdStillMs ?: 800)
-        if (!fired) { fired = true; cues.captured(); camera.requestCapture() }
+        if (!fired) { fired = true; problem = null; camera.requestCapture() }
     }
     val hint = when {
         processing != null -> processing!!
@@ -232,7 +237,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
             else Box(
                 Modifier.size(74.dp).border(4.dp, Color.White, CircleShape).padding(7.dp)
                     .background(if (allGreen) Palette.accent else Color.White.copy(alpha = 0.35f), CircleShape)
-                    .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; cues.captured(); camera.requestCapture() }),
+                    .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; camera.requestCapture() }),
             )
             if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 800) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
         }

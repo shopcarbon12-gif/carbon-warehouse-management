@@ -20,7 +20,20 @@ class DepthSnapshot(
     val fy: Float,
     val cx: Float,
     val cy: Float,
+    /**
+     * How much older the depth image is than the camera frame it was read with
+     * (ARCore frame timestamp − depth image timestamp). ARCore's raw depth can
+     * carry an earlier depth frame reprojected forward; this is how stale it is.
+     */
+    val ageMs: Double = 0.0,
 ) {
+    /** Share of depth pixels with a reading and confidence ≥ [minConf] (0–1). */
+    fun highConfFrac(minConf: Int): Double {
+        var ok = 0
+        for (i in mm.indices) if ((mm[i].toInt() and 0xffff) > 0 && (conf[i].toInt() and 0xff) >= minConf) ok++
+        return if (mm.isEmpty()) 0.0 else ok.toDouble() / mm.size
+    }
+
     /** Camera-space points (metres; x right, y down, z forward), every `step` pixels, confidence ≥ minConf. */
     fun points(step: Int = 1, minConf: Int = 128, maxPoints: Int = 60_000): Points {
         var n = 0

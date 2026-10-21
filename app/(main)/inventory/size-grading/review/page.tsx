@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSession } from "@/lib/get-session";
 import { ScanReviewWorkspace } from "@/components/size-grading/scan-review-workspace";
+import { AccuracyChecks } from "@/components/size-grading/accuracy-checks";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function SizeGradingReviewPage() {
         </p>
       </div>
       <ScanReviewWorkspace />
+      <AccuracyChecks />
     </div>
   );
 }

@@ -89,6 +89,12 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
         call { Request.Builder().url("$origin/api/grading-app/label").post(body) }
     }
 
+    /** An accuracy check (known-size object, corner to corner) → the WMS list. Diagnostic only. */
+    suspend fun saveAccuracyCheck(check: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+        val body = check.toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/accuracy-checks").post(body) }
+    }
+
     /** AI assist: the squared-up photo and the points to place. */
     suspend fun assist(photo: File, profile: String, pxPerCm: Double, keys: List<String>): JSONObject {
         val meta = JSONObject().put("profile", profile).put("pxPerCm", pxPerCm).put("keys", org.json.JSONArray(keys))
