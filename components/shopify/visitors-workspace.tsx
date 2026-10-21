@@ -115,7 +115,7 @@ export function VisitorsWorkspace() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
-        <div className={`${card} col-span-2 md:col-span-1`}>
+        <div className={card}>
           <p className="font-mono text-[0.66rem] uppercase tracking-wide text-[var(--wms-muted)]">On the site now</p>
           <p className="mt-1 flex items-center gap-2 text-2xl font-semibold tabular-nums text-[var(--wms-fg)]">
             <span className={`inline-block h-2.5 w-2.5 rounded-full ${data?.liveNow ? "bg-emerald-500" : "bg-[var(--wms-border)]"}`} aria-hidden />
