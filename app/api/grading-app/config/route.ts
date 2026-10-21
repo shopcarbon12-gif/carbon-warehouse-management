@@ -42,11 +42,12 @@ export async function GET(req: Request) {
     plausible: PLAUSIBLE,
     ai: ai ? { enabled: true, model: ai.model, scope } : { enabled: false, model: null, scope },
     capture: {
-      // Working distance; the Note10+ depth sensor is accurate across it. 45 cm lets
+      // Working distance. 45 cm lets
       // small items (tees, shorts) be shot closer — the owner could not read the
       // screen held at 110 cm (2026-10-20). Hold 0.8 s (was 1.2 s).
-      distanceCm: [45, 120],
-      idealDistanceCm: [55, 110],
+      // 150 cm (owner, 2026-10-21): an XXL tee with its sleeves out did not fit the frame at 120.
+      distanceCm: [45, 150],
+      idealDistanceCm: [55, 130],
       maxTiltDeg: 8,
       holdStillMs: 800,
       pairLimitCm: 1,

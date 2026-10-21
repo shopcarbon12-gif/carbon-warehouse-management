@@ -559,7 +559,16 @@ function ScanWindow({
                   />
                   {scan.crotch ? (
                     <>
-                      <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Crotch photo (legs spread) — front rise and inseam</h3>
+                      <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
+                        {scan.profileDef?.family === "top" || scan.profileDef?.family === "dress"
+                          ? "Second photo (sleeves up) — chest"
+                          : "Crotch photo (legs spread) — front rise"}
+                        {(() => {
+                          const keys = Object.keys(scan.crotch?.lines ?? {});
+                          const extra = keys.filter((k) => k !== "rise" && k !== "chest").map((k) => scan.profileDef?.points.find((p) => p.key === k)?.label ?? k);
+                          return extra.length ? ` and ${[...new Set(extra.map((l) => l.replace(/ [LR]$/, "").toLowerCase()))].join(", ")}` : "";
+                        })()}
+                      </h3>
                       <ScanPhoto
                         scan={scan}
                         which="crotch"

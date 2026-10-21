@@ -72,6 +72,15 @@ export type GradingProfile = {
    * on the first photo.
    */
   crotchPhoto?: { keys: GradingPointKey[]; lay: string };
+  /**
+   * The second photo, for every type that takes one (app 1.1.0+): bottoms with
+   * the legs spread for the crotch, tops with the sleeves lifted so the
+   * underarms lie flat for the chest (owner, 2026-10-21: "the chest line is
+   * folded under the sleeves"). `sidesOk` are the frame edges the garment may
+   * run past on it — only the body is measured there. `crotchPhoto` stays for
+   * older apps, which read only that.
+   */
+  secondPhoto?: { keys: GradingPointKey[]; lay: string; title: string; sidesOk: ("left" | "right" | "top" | "bottom")[] };
   /** Guide picture (generated from the ChatGPT prompts), with line ends as fractions of its size. */
   guide?: { image: string; lines: Partial<Record<GradingPointKey, [[number, number], [number, number]]>> };
 };
@@ -163,21 +172,36 @@ const LAY = {
   crotch: "Second photo, for the crotch only: keep it front up, then pull the legs apart to the sides so the crotch lies flat and its seams show. Waistband at the top of the screen.",
 };
 
-/** The points the crotch photo gives on bottoms (they all end at the crotch seam point). */
+/** The points the crotch photo gives on shorts (they all end at the crotch seam point). */
 const CROTCH = { keys: ["rise", "inseamL", "inseamR"] as GradingPointKey[], lay: LAY.crotch };
+/* Trousers: the rise only. Spread, the long legs run out of the frame and the
+   inseams were cut short (owner's Colin Evening Pants 29, 2026-10-21: 44 and
+   54 cm) — the inseam stays on the first photo, where the hems are in it. */
+const CROTCH_TROUSERS = { keys: ["rise"] as GradingPointKey[], lay: LAY.crotch };
+const SECOND_SHORTS = { ...CROTCH, title: "crotch", sidesOk: ["left", "right"] as ("left" | "right")[] };
+const SECOND_TROUSERS = { ...CROTCH_TROUSERS, title: "crotch", sidesOk: ["left", "right", "bottom"] as ("left" | "right" | "bottom")[] };
+const SECOND_TOP = {
+  keys: ["chest", "waist"] as GradingPointKey[],
+  lay: "Second photo, for the chest only: keep it front up, then lift both sleeves up and out so the underarms lie flat and the side seams show. The sleeves may run past the frame.",
+  title: "sleeves up",
+  sidesOk: ["left", "right", "top"] as ("left" | "right" | "top")[],
+};
 
 export const GRADING_PROFILES: GradingProfile[] = [
   {
     id: "tee", label: "T-shirt / top / shirt / hoodie", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "tee", lay: LAY.top,
     points: [P.chest, P.length, P.shoulder, P.waistTop, P.hem, P.sleeveL, P.sleeveR, P.cuffL, P.cuffR],
+    secondPhoto: SECOND_TOP,
   },
   {
     id: "jacket", label: "Jacket / coat", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "jacket", lay: LAY.jacket,
     points: [P.chest, P.length, P.shoulder, P.sleeve, P.cuff, P.hem],
+    secondPhoto: { ...SECOND_TOP, keys: ["chest"] },
   },
   {
     id: "campshirt", label: "Short-sleeve jacket / camp shirt", family: "top", group: "sleeves", sleeveless: "tank", silhouette: "tee", lay: LAY.top,
     points: [P.chest, P.length, P.shoulder, P.waistTop, P.hem, P.sleeve, P.cuff],
+    secondPhoto: SECOND_TOP,
   },
   {
     id: "tank", label: "Tank / vest", family: "top", group: "sleeveless", silhouette: "tank", lay: LAY.sleeveless,
@@ -190,7 +214,8 @@ export const GRADING_PROFILES: GradingProfile[] = [
   {
     id: "trousers", label: "Trousers / jeans / leggings / joggers", family: "trousers", group: "bottoms", silhouette: "trousers", lay: LAY.trousers,
     points: [P.waistBottom, P.rise, P.thighL, P.thighR, P.kneeL, P.kneeR, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
-    crotchPhoto: CROTCH,
+    crotchPhoto: CROTCH_TROUSERS,
+    secondPhoto: SECOND_TROUSERS,
   },
   {
     id: "shorts", label: "Shorts / swim shorts", family: "shorts", group: "bottoms", silhouette: "shorts", lay: LAY.shorts,
@@ -198,6 +223,7 @@ export const GRADING_PROFILES: GradingProfile[] = [
     points: [P.waistBottom, P.hipDenim, P.rise, P.thighL, P.thighR, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
     hipBelowTopCm: 20,
     crotchPhoto: CROTCH,
+    secondPhoto: SECOND_SHORTS,
   },
   {
     id: "skirt", label: "Skirt", family: "skirt", group: "bottoms", silhouette: "skirt", lay: LAY.skirt,
