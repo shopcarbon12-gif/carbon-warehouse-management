@@ -638,6 +638,7 @@ const lineLen = (l: ScanLine) => l.pts.slice(1).reduce((s, p, i) => s + Math.hyp
  */
 export async function adjustScan(
   pool: Pool, id: string, lines: Record<string, ScanLine>, crotchLines: Record<string, ScanLine> | null, userId: string | null,
+  note = "lines adjusted on the WMS",
 ) {
   const client = await pool.connect();
   try {
@@ -653,19 +654,25 @@ export async function adjustScan(
     const known = new Set<string>(profile.points.map((p) => p.key));
     const ppc = Number(s.px_per_cm);
     // Only the points the scan already has: the editor moves lines, it does not add or drop them.
+    /* A line keeps what it was unless its ends actually moved: the editor sends
+       every line, and marking untouched ones "moved by hand" hid where they came
+       from. A re-placement by the AI arrives as source "ai", not moved. */
+    const same = (a: ScanLine, b: ScanLine) => a.pts.length === b.pts.length && a.pts.every((p, i) => Math.abs(p[0] - b.pts[i][0]) < 0.01 && Math.abs(p[1] - b.pts[i][1]) < 0.01);
+    const take = (old: ScanLine, next: ScanLine | undefined): ScanLine =>
+      !next || same(old, next) ? old : next.source === "ai" && !next.moved ? { pts: next.pts, source: "ai" } : { pts: next.pts, source: "manual", moved: true };
     const mainOut: Record<string, ScanLine> = {};
-    for (const [k, l] of Object.entries(s.lines ?? {})) mainOut[k] = lines[k] && known.has(k) ? { ...lines[k], source: "manual", moved: true } : l;
+    for (const [k, l] of Object.entries(s.lines ?? {})) mainOut[k] = known.has(k) ? take(l, lines[k]) : l;
     let crotch = s.crotch;
     if (crotch && crotchLines) {
       const c: Record<string, ScanLine> = {};
-      for (const [k, l] of Object.entries(crotch.lines ?? {})) c[k] = crotchLines[k] ? { ...crotchLines[k], source: "manual", moved: true } : l;
+      for (const [k, l] of Object.entries(crotch.lines ?? {})) c[k] = take(l, crotchLines[k]);
       crotch = { ...crotch, lines: c };
     }
     const cm: Record<string, number> = {};
     for (const [k, l] of Object.entries(mainOut)) if (known.has(k)) cm[k] = lineLen(l) / ppc;
     if (crotch) for (const [k, l] of Object.entries(crotch.lines ?? {})) if (known.has(k)) cm[k] = lineLen(l) / Number(crotch.pxPerCm);
     const pointsCm = withPairAverages(profile, cm);
-    const flags = [...new Set([...(s.flags ?? []).filter((f) => !/L\/R differ|left and right differ/.test(f)), ...pairMismatches(profile, pointsCm), "lines adjusted on the WMS"])];
+    const flags = [...new Set([...(s.flags ?? []).filter((f) => !/L\/R differ|left and right differ/.test(f)), ...pairMismatches(profile, pointsCm), note])];
     await client.query(
       `UPDATE size_grading_scans
           SET lines = $2::jsonb, crotch = $3::jsonb, points_cm = $4::jsonb, flags = $5::jsonb, adjusted_at = now(), adjusted_by = $6
