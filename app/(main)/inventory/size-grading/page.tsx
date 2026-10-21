@@ -9,7 +9,7 @@ export default async function SizeGradingPage() {
   if (!session) return null;
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6 max-md:w-full">
       <div className="border-b border-[var(--wms-border)] pb-3">
         <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Size Grading</h1>
         <p className="mt-1 max-w-2xl font-mono text-xs text-[var(--wms-muted)]">

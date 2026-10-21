@@ -9,7 +9,7 @@ export default async function SizeGradingCutGroupsPage() {
   if (!session) return null;
 
   return (
-    <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6">
+    <div className="mx-auto flex min-w-0 max-w-6xl flex-col gap-6 max-md:w-full">
       <div className="border-b border-[var(--wms-border)] pb-3">
         <Link
           href="/inventory/size-grading"
