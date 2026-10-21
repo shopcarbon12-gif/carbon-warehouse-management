@@ -175,7 +175,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
     /* The crotch photo needs only the waistband, the crotch and the inner hems:
        with the legs spread the outer sides often run past the frame, and that is
        fine for the rise and inseams (owner, 2026-10-20: "it says the item is cut"). */
-    val sidesOk = if (crotchFor != null) setOf("left", "right") else emptySet()
+    val sidesOk = if (crotchFor != null) target.profile.secondSidesOk else emptySet()
     val checks = listOf(
         Check("Surface", plane?.let { it.inlierFrac >= 0.45 }, plane?.let { "${(it.inlierFrac * 100).roundToInt()}%" } ?: "—"),
         Check("Distance", dist?.let { it.toFloat() in range }, dist?.let { "${it.roundToInt()} cm" } ?: "—"),
@@ -226,7 +226,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
                 Column(Modifier.weight(1f)) {
                     Text("${target.lookup.name} · ${target.sizeLabel}", style = MaterialTheme.typography.titleMedium, color = Color.White)
                     Text(
-                        (if (crotchFor != null) "Photo 2 of 2 · crotch" else if (target.profile.crotchKeys.isNotEmpty()) "Photo 1 of 2 · ${target.profile.label}" else target.profile.label) + if (testPhone) " · TEST MODE" else "",
+                        (if (crotchFor != null) "Photo 2 of 2 · ${target.profile.secondTitle}" else if (target.profile.crotchKeys.isNotEmpty()) "Photo 1 of 2 · ${target.profile.label}" else target.profile.label) + if (testPhone) " · TEST MODE" else "",
                         style = MaterialTheme.typography.bodySmall, color = if (testPhone) Palette.warn else if (crotchFor != null) Palette.accent else Palette.muted,
                     )
                 }
@@ -242,7 +242,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
                     }
                 }
             }
-            if (crotchFor != null) Text(target.profile.crotchLay.ifBlank { "Pull the legs apart to the sides so the crotch lies flat." }, style = MaterialTheme.typography.bodyMedium, color = Palette.accent)
+            if (crotchFor != null) Text(target.profile.crotchLay.ifBlank { "Second photo: lay it as shown for the ${target.profile.secondTitle}." }, style = MaterialTheme.typography.bodyMedium, color = Palette.accent)
             else Text(target.profile.lay, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
         }
         Column(
@@ -260,7 +260,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
             if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 800) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
             // The crotch photo can be skipped: the crotch is then placed on the first photo.
             if (crotchFor != null && processing == null && crotchFor.crotch == null) Text(
-                "Skip — measure the crotch on the first photo",
+                "Skip — measure it all on the first photo",
                 color = Palette.muted, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.clickable { crotchFor.skipCrotch(app); nav.replace(Screen.Result(crotchFor)) }.padding(6.dp),
             )

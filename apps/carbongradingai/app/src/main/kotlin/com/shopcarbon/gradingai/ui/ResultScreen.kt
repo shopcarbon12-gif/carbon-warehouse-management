@@ -169,14 +169,14 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
         PhotoEditor(s, Photo.MAIN, selected, units, allCm, onSelect = { selected = it })
         if (crotch != null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Crotch photo — front rise and inseam", style = MaterialTheme.typography.bodyMedium, color = Palette.text, modifier = Modifier.weight(1f))
+                Text("Photo 2 (${s.profile.secondTitle}) — " + s.crotchKeys.map { k -> s.profile.points.firstOrNull { it.key == k }?.label?.removeSuffix(" L")?.removeSuffix(" R") ?: k }.distinct().joinToString(), style = MaterialTheme.typography.bodyMedium, color = Palette.text, modifier = Modifier.weight(1f))
                 Pill("Retake", Palette.muted) { crotch.job?.cancel(); ScanStore.discard(ctx, crotch.scan.id); nav.replace(Screen.Capture(s.target, s)) }
             }
             when (val a = crotch.ai) {
-                is AiState.Running -> Notice("AI is placing the crotch (twice, to check itself)… ${((tick - a.startedAt) / 1000).coerceAtLeast(0)} s.", Palette.ai)
-                is AiState.Done -> Muted("AI placed the crotch in ${a.ms / 1000} s." + (crotch.spreadCm.values.maxOrNull()?.let { " Its two placements agree within ${Units.cm(it)} cm." } ?: ""))
+                is AiState.Running -> Notice("AI is placing the ${s.profile.secondTitle} points (twice, to check itself)… ${((tick - a.startedAt) / 1000).coerceAtLeast(0)} s.", Palette.ai)
+                is AiState.Done -> Muted("AI placed photo 2 in ${a.ms / 1000} s." + (crotch.spreadCm.values.maxOrNull()?.let { " Its two placements agree within ${Units.cm(it)} cm." } ?: ""))
                 is AiState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Notice("AI assist failed on the crotch photo: ${a.message}.", Palette.warn)
+                    Notice("AI assist failed on photo 2: ${a.message}.", Palette.warn)
                     Secondary("Try the AI again") { s.startCrotchAi(app) }
                 }
                 is AiState.Off -> Muted(a.why)
@@ -184,7 +184,7 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
             }
             PhotoEditor(s, Photo.CROTCH, selected, units, allCm, onSelect = { selected = it })
         } else if (s.crotchKeys.isNotEmpty()) {
-            Secondary("Take the crotch photo (legs spread)") { s.cancelAi(); nav.replace(Screen.Capture(s.target, s)) }
+            Secondary("Take photo 2 (${s.profile.secondTitle})") { s.cancelAi(); nav.replace(Screen.Capture(s.target, s)) }
         }
         Legend()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

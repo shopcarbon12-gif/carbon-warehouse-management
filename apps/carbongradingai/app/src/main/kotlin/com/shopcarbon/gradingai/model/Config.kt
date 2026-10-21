@@ -34,9 +34,17 @@ data class Profile(
     val sleeveless: String?,
     /** How far below the top of the waistband the hip line sits (cm). */
     val hipBelowTopCm: Double = 18.0,
-    /** Bottoms: the points taken from a second, legs-spread "crotch photo" (empty = no second photo). */
+    /**
+     * The points taken from a second photo (empty = no second photo): bottoms
+     * with the legs spread for the crotch, tops with the sleeves lifted for the
+     * chest. Named "crotch" from when only bottoms had one.
+     */
     val crotchKeys: List<String> = emptyList(),
     val crotchLay: String = "",
+    /** What the second photo is, for the screens: "crotch", "sleeves up". */
+    val secondTitle: String = "crotch",
+    /** Frame edges the garment may run past on the second photo (only the body is measured there). */
+    val secondSidesOk: Set<String> = setOf("left", "right"),
 )
 
 data class CaptureParams(
@@ -92,8 +100,11 @@ data class AppConfig(
                     group = p.optString("group", when (p.optString("family")) { "trousers", "shorts", "skirt" -> "bottoms"; "onepiece" -> "onepiece"; else -> "sleeves" }),
                     sleeveless = p.optStringOrNull("sleeveless"),
                     hipBelowTopCm = p.optDouble("hipBelowTopCm", 18.0),
-                    crotchKeys = p.optJSONObject("crotchPhoto")?.optJSONArray("keys").strings(),
-                    crotchLay = p.optJSONObject("crotchPhoto")?.optString("lay").orEmpty(),
+                    // "secondPhoto" (WMS 2026-10-21) wins; older WMS builds only send "crotchPhoto".
+                    crotchKeys = (p.optJSONObject("secondPhoto") ?: p.optJSONObject("crotchPhoto"))?.optJSONArray("keys").strings(),
+                    crotchLay = (p.optJSONObject("secondPhoto") ?: p.optJSONObject("crotchPhoto"))?.optString("lay").orEmpty(),
+                    secondTitle = p.optJSONObject("secondPhoto")?.optString("title")?.takeIf { it.isNotBlank() } ?: "crotch",
+                    secondSidesOk = p.optJSONObject("secondPhoto")?.optJSONArray("sidesOk")?.strings()?.toSet() ?: setOf("left", "right"),
                     guide = p.optJSONObject("guide")?.let { g ->
                         val lines = mutableMapOf<String, List<Pair<Float, Float>>>()
                         g.optJSONObject("lines")?.let { l ->

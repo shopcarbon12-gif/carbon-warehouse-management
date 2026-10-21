@@ -225,7 +225,8 @@ class MeasureSession(
         val out = mutableListOf<String>()
         if (testPhone) out += "test phone: no time-of-flight depth sensor — not written to the item"
         out += scan.warnings
-        crotch?.scan?.warnings?.forEach { out += "crotch photo: $it" }
+        // On photo 2 the garment may run off the frame (legs spread, sleeves up): that is expected there.
+        crotch?.scan?.warnings?.filterNot { it.startsWith("garment touches the photo edge") }?.forEach { out += "photo 2: $it" }
         val cmNow = cm()
         out += pairWarnings(profile, cmNow, app.config?.capture?.pairLimitCm ?: 1f)
         fun label(k: String) = profile.points.firstOrNull { it.key == k }?.label ?: k
@@ -236,8 +237,8 @@ class MeasureSession(
             if (d > 3) out += "AI and outline differ on ${label(k)} by ${Units.cm(d)} cm"
         }
         crotch?.let { c ->
-            for ((k, d) in c.spreadCm) if (k !in removed && d > 1.5) out += "AI unsure of the crotch: its two placements differ by ${Units.cm(d)} cm on ${label(k)}"
-            if (c.ai !is AiState.Done && crotchKeys.any { it !in removed }) out += "crotch not placed by the AI (outline guess) — check the front rise and inseam"
+            for ((k, d) in c.spreadCm) if (k !in removed && d > 1.5) out += "AI unsure on photo 2: its two placements differ by ${Units.cm(d)} cm on ${label(k)}"
+            if (c.ai !is AiState.Done && crotchKeys.any { it !in removed }) out += "photo 2 not placed by the AI (outline guess) — check ${crotchKeys.filter { it !in removed }.joinToString { label(it) }}"
         }
         // Seam points the AI was asked for but never answered: the outline's guess was saved instead.
         if (ai !is AiState.Done && ai !is AiState.Off) {
