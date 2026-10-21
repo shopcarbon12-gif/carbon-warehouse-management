@@ -16,7 +16,8 @@
  */
 import crypto from "node:crypto";
 import type { Pool } from "pg";
-import { decodeEntities, describeDevice, shortName } from "./rules";
+import { decodeEntities, describeDevice, shortName, visitorLabel } from "./rules";
+import { notifyVisitor } from "./alerts";
 
 const clip = (s: unknown, n: number) => (typeof s === "string" ? s.trim().slice(0, n) : "");
 export const VISIT_GAP_MINUTES = 30;
@@ -65,6 +66,14 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
     const dev = describeDevice(v.ua);
     v = { ...v, title: v.title ? decodeEntities(v.title) : null };
     const who = verifiedCustomer(v.customer);
+    // Before the write: is this someone new, or the start of a new visit? (for the alerts)
+    const prev = (
+      await pool.query<{ fresh_visit: boolean; nickname: string | null; customer_name: string | null; email: string | null }>(
+        `SELECT last_seen < now() - make_interval(mins => ${VISIT_GAP_MINUTES}) AS fresh_visit, nickname, customer_name, email
+           FROM visitors WHERE visitor_id = $1`,
+        [v.visitorId],
+      )
+    ).rows[0];
     const r = await pool.query<{ visits: number }>(
       `INSERT INTO visitors
          (visitor_id, ip, country, asn, network, device, os, browser, first_source, first_ad, landing_path,
@@ -105,6 +114,22 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
        VALUES ($1, $2, 'view', $3, $4, $5, $6)`,
       [v.visitorId, r.rows[0]?.visits ?? 1, v.path, v.title, v.source, v.product ? { product: v.product } : null],
     );
+    if (!prev || prev.fresh_visit) {
+      const label = prev
+        ? visitorLabel({ visitor_id: v.visitorId, nickname: prev.nickname, customer_name: who?.name ?? prev.customer_name, email: who?.email ?? prev.email })
+        : who?.name ?? null;
+      void notifyVisitor(pool, {
+        kind: prev ? "visitor_back" : "visitor_new",
+        visitorId: v.visitorId,
+        visit: r.rows[0]?.visits ?? 1,
+        label: label && !label.startsWith("Visitor ") ? label : null,
+        country: v.country,
+        source: v.source,
+        device: dev.device,
+        pageTitle: v.title,
+        path: v.path,
+      });
+    }
   } catch (e) {
     console.warn("[visitors] page view not recorded:", e instanceof Error ? e.message : e);
   }
@@ -123,10 +148,20 @@ export type VisitorEvent = {
  */
 export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<boolean> {
   const counter = ev.kind === "cart_add" ? ", cart_adds = cart_adds + 1" : ev.kind === "checkout" ? ", checkouts = checkouts + 1" : "";
-  const r = await pool.query<{ visits: number }>(
+  const r = await pool.query<{
+    visits: number;
+    nickname: string | null;
+    customer_name: string | null;
+    email: string | null;
+    country: string | null;
+    last_source: string | null;
+    device: string | null;
+    last_title: string | null;
+    last_path: string | null;
+  }>(
     `UPDATE visitors SET last_seen = now()${counter}
       WHERE visitor_id = $1 AND last_seen > now() - interval '6 hours'
-      RETURNING visits`,
+      RETURNING visits, nickname, customer_name, email, country, last_source, device, last_title, last_path`,
     [ev.visitorId],
   );
   if (!r.rowCount) return false;
@@ -135,6 +170,34 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
       `INSERT INTO visitor_events (visitor_id, visit, kind, path, title, detail) VALUES ($1, $2, $3, $4, $5, $6)`,
       [ev.visitorId, r.rows[0].visits, ev.kind, ev.path, clip(ev.detail?.title, 200) || null, ev.detail ?? null],
     );
+    const row = r.rows[0];
+    const label = visitorLabel({ visitor_id: ev.visitorId, ...row });
+    const base = {
+      visitorId: ev.visitorId,
+      visit: row.visits,
+      label: label.startsWith("Visitor ") ? null : label,
+      country: row.country,
+      source: row.last_source,
+      device: row.device,
+      pageTitle: row.last_title,
+      path: row.last_path,
+    };
+    if (ev.kind === "cart_add") {
+      const d = ev.detail ?? {};
+      void notifyVisitor(pool, {
+        ...base,
+        kind: "visitor_cart",
+        product: typeof d.title === "string" ? d.title : null,
+        variant: typeof d.variant === "string" ? d.variant : null,
+        price: typeof d.price === "number" ? d.price : null,
+      });
+    } else {
+      const items = await pool.query<{ title: string | null }>(
+        `SELECT detail->>'title' AS title FROM visitor_events WHERE visitor_id = $1 AND visit = $2 AND kind = 'cart_add' ORDER BY at`,
+        [ev.visitorId, row.visits],
+      );
+      void notifyVisitor(pool, { ...base, kind: "visitor_checkout", cartItems: items.rows.map((i) => i.title || "a product") });
+    }
   }
   return true;
 }
@@ -220,5 +283,6 @@ export async function pruneVisitors(pool: Pool): Promise<{ events: number; visit
       WHERE last_seen < now() - make_interval(days => ${KEEP_DAYS})
         AND nickname IS NULL AND note IS NULL AND customer_id IS NULL AND email IS NULL AND orders = 0`,
   );
+  await pool.query(`DELETE FROM visitor_alerts WHERE at < now() - make_interval(days => ${KEEP_DAYS})`);
   return { events: ev.rowCount ?? 0, visitors: vi.rowCount ?? 0 };
 }

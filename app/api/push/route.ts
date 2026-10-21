@@ -20,7 +20,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KINDS = new Set(["orders", "studio"]);
+const KINDS = new Set(["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "visitor_cart"]);
+const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout"];
 
 async function authed(req: NextRequest) {
   const session = await getSessionFromRequest(req);
@@ -58,7 +59,7 @@ async function POST_handler(req: NextRequest) {
   if (!/^https:\/\//.test(endpoint) || endpoint.length > 2000 || !p256dh || !auth) {
     return NextResponse.json({ error: "A browser push subscription is required." }, { status: 400 });
   }
-  const kinds = Array.isArray(body?.kinds) ? body.kinds.filter((k: unknown) => KINDS.has(String(k))) : ["orders", "studio"];
+  const kinds = Array.isArray(body?.kinds) ? body.kinds.filter((k: unknown) => KINDS.has(String(k))) : DEFAULT_KINDS;
   await a.pool.query(
     `INSERT INTO web_push_subscriptions (tenant_id, user_id, email, endpoint, p256dh, auth, user_agent, kinds)
      VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::text[])
@@ -74,7 +75,7 @@ async function POST_handler(req: NextRequest) {
       p256dh,
       auth,
       String(req.headers.get("user-agent") || "").slice(0, 300),
-      kinds.length ? kinds : ["orders", "studio"],
+      kinds,
     ],
   );
   return NextResponse.json({ ok: true });

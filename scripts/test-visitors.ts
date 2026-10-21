@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { cleanLabel, decodeEntities, describeDevice, shortName, visitorLabel } from "@/lib/server/visitors/rules";
 import { verifiedCustomer } from "@/lib/server/visitors/record";
+import { alertText, ordinal } from "@/lib/server/visitors/alerts";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -93,6 +94,28 @@ test("shield snippet: sends title / product / signed customer; reports cart adds
   assert.ok(shield.includes("_cs_vid"));
   assert.ok(shield.includes('"https://wms.shopcarbon.com/api/shield/event"'));
   assert.ok(shield.includes('if (cached === "b" || test) return;'), "blocked visitors send nothing more");
+});
+
+const base = { visitorId: "v1", visit: 1, label: null, country: "US", source: "instagram", device: "phone", pageTitle: "Eden Dress 2 Pieces | CARBON", path: "/products/eden" };
+test("alertText: new visitor", () => {
+  assert.deepEqual(alertText({ ...base, kind: "visitor_new" }), { title: "New visitor · United States · Instagram", body: "Looking at Eden Dress 2 Pieces · phone" });
+  assert.equal(alertText({ ...base, kind: "visitor_new", source: "direct", pageTitle: null, path: "/" }).body, "Looking at the home page · phone");
+});
+test("alertText: back, checkout, cart", () => {
+  assert.equal(alertText({ ...base, kind: "visitor_back", visit: 3, label: "Orlando VIP" }).title, "Orlando VIP is back · 3rd visit");
+  assert.equal(alertText({ ...base, kind: "visitor_back", visit: 2 }).title, "A visitor is back · 2nd visit");
+  assert.deepEqual(alertText({ ...base, kind: "visitor_checkout", label: "Maria L.", cartItems: ["Eden Dress", "Kyle Cargo Pants"] }), {
+    title: "Started checkout · Maria L.",
+    body: "2 items: Eden Dress, Kyle Cargo Pants",
+  });
+  assert.equal(alertText({ ...base, kind: "visitor_cart", product: "73 Shorts Set", variant: "STONE / L", price: 56.7 }).body, "73 Shorts Set (STONE / L) · $56.70");
+  assert.equal(ordinal(11), "11th");
+  assert.equal(ordinal(22), "22nd");
+});
+test("service worker: Carbon logo, kept until dismissed", () => {
+  const sw = readFileSync(path.join(process.cwd(), "public/sw.js"), "utf8");
+  assert.ok(sw.includes('icon: "/carbon-notify-icon.png"') && sw.includes('badge: "/carbon-notify-badge.png"'));
+  assert.ok(sw.includes("requireInteraction: true"));
 });
 
 console.log(`visitors: ${passed} tests passed`);

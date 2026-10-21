@@ -1,6 +1,6 @@
 import { withActivity } from "@/lib/server/activity-log";
 /**
- * POST /api/push/test { kind?: "orders" | "studio" } → sends a test alert to
+ * POST /api/push/test { kind?: "orders" | "studio" | "visitor" } → sends a test alert to
  * the signed-in user's own devices, so the phone and the computer (and their
  * sounds) can be checked without waiting for an order or a batch.
  */
@@ -24,6 +24,14 @@ async function POST_handler(req: NextRequest) {
   if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const studio = body?.kind === "studio";
+  if (body?.kind === "visitor") {
+    const r = await sendPush(
+      pool,
+      { kind: "test", title: "New visitor · United States · Instagram · test", body: "Looking at Eden Dress 2 Pieces · phone — tap to open Visitors", url: "/shopify/visitors", tag: `test-visitor-${Date.now()}` },
+      { userId: String(session.sub || "") || null },
+    );
+    return NextResponse.json({ ok: true, ...r, sound: null });
+  }
   const r = await sendPush(
     pool,
     studio

@@ -104,8 +104,20 @@ function keyBytes(base64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/* Which alerts this device gets — one switch each (owner 2026-10-21). */
+const ALERT_KINDS: { id: string; label: string; hint: string }[] = [
+  { id: "orders", label: "Shopify orders", hint: "Every paid order" },
+  { id: "studio", label: "Studio results", hint: "A night-batch run is ready" },
+  { id: "visitor_new", label: "New visitor", hint: "Someone new is on shopcarbon.com" },
+  { id: "visitor_back", label: "Visitor is back", hint: "A returning or nicknamed visitor starts a new visit" },
+  { id: "visitor_checkout", label: "Started checkout", hint: "A visitor went to checkout" },
+  { id: "visitor_cart", label: "Added to cart", hint: "A visitor added something to the cart" },
+];
+const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout"];
+
 export function AlertsControl() {
   const [state, setState] = useState<"loading" | "hidden" | "unsupported" | "off" | "on" | "blocked">("loading");
+  const [kinds, setKinds] = useState<string[]>(DEFAULT_KINDS);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [publicKey, setPublicKey] = useState("");
@@ -114,12 +126,14 @@ export function AlertsControl() {
     if (!supported()) return setState("unsupported");
     const r = await fetch("/api/push", { cache: "no-store" }).catch(() => null);
     if (!r || r.status === 401 || r.status === 403) return setState("hidden");
-    const j = (await r.json().catch(() => ({}))) as { publicKey?: string; devices?: { endpoint: string }[] };
+    const j = (await r.json().catch(() => ({}))) as { publicKey?: string; devices?: { endpoint: string; kinds?: string[] }[] };
     setPublicKey(j.publicKey || "");
     if (Notification.permission === "denied") return setState("blocked");
     const reg = await navigator.serviceWorker.getRegistration("/");
     const sub = await reg?.pushManager.getSubscription();
-    setState(sub && (j.devices || []).some((d) => d.endpoint === sub.endpoint) ? "on" : "off");
+    const mine = sub ? (j.devices || []).find((d) => d.endpoint === sub.endpoint) : undefined;
+    if (mine?.kinds) setKinds(mine.kinds);
+    setState(mine ? "on" : "off");
   }, []);
 
   useEffect(() => {
@@ -140,7 +154,7 @@ export function AlertsControl() {
       const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" });
       await navigator.serviceWorker.ready;
       const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }));
-      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: ["orders", "studio"] }) });
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds }) });
       if (!r.ok) throw new Error(`Could not turn alerts on (HTTP ${r.status})`);
       setState("on");
       setMsg("Alerts are on for this device. Send a test to check the sound.");
@@ -168,7 +182,25 @@ export function AlertsControl() {
     }
   };
 
-  const test = async (kind: Sound) => {
+  const toggle = async (id: string, on: boolean) => {
+    const next = on ? [...new Set([...kinds, id])] : kinds.filter((k) => k !== id);
+    setBusy(true);
+    setMsg("");
+    try {
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      const sub = await reg?.pushManager.getSubscription();
+      if (!sub) throw new Error("Alerts are not on for this device.");
+      const r = await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON(), kinds: next }) });
+      if (!r.ok) throw new Error(`Could not save (HTTP ${r.status})`);
+      setKinds(next);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const test = async (kind: Sound | "visitor") => {
     setBusy(true);
     setMsg("");
     audio();
@@ -186,7 +218,7 @@ export function AlertsControl() {
   return (
     <div className="mb-3 space-y-1">
       <div className="font-mono text-xs uppercase tracking-wide text-[var(--muted)]">
-        Alerts · {state === "on" ? "on (orders + Studio)" : state === "blocked" ? "blocked" : state === "unsupported" ? "not supported here" : "off"}
+        Alerts · {state === "on" ? "on" : state === "blocked" ? "blocked" : state === "unsupported" ? "not supported here" : "off"}
       </div>
       {state === "off" || state === "blocked" ? (
         <button type="button" className={btn} disabled={busy} onClick={turnOn}>
@@ -201,9 +233,32 @@ export function AlertsControl() {
           <button type="button" className={btn} disabled={busy} onClick={() => test("studio")}>
             Test Studio
           </button>
+          <button type="button" className={btn} disabled={busy} onClick={() => test("visitor")}>
+            Test visitor
+          </button>
           <button type="button" className={btn} disabled={busy} onClick={turnOff}>
             Turn off
           </button>
+        </div>
+      ) : null}
+      {state === "on" ? (
+        <div className="mt-2 flex flex-col gap-1.5">
+          {ALERT_KINDS.map((k) => (
+            <label key={k.id} className="flex cursor-pointer items-start gap-2 text-sm text-[var(--wms-fg)] max-md:min-h-11">
+              <input
+                id={`alert-kind-${k.id}`}
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+                checked={kinds.includes(k.id)}
+                disabled={busy}
+                onChange={(e) => void toggle(k.id, e.target.checked)}
+              />
+              <span>
+                {k.label}
+                <span className="block font-mono text-[0.68rem] text-[var(--muted)]">{k.hint}</span>
+              </span>
+            </label>
+          ))}
         </div>
       ) : null}
       {state === "unsupported" ? (

@@ -1,7 +1,7 @@
 /* CarbonWMS service worker — phone/computer alerts only (owner 2026-10-19).
  *
  * Shows the push sent by lib/server/web-push.ts (Shopify orders, Studio
- * night-batch results), tells every open WMS page to play its sound, and opens
+ * night-batch results, store visitors), tells every open WMS page to play its sound, and opens
  * the right page when the notification is tapped. No caching, no offline mode:
  * the WMS is always loaded from the network exactly as before.
  */
@@ -20,8 +20,15 @@ self.addEventListener("push", (event) => {
     body: data.body || "",
     tag: data.tag || undefined,
     renotify: Boolean(data.tag),
-    icon: "/carbon-box-icon.png",
-    badge: "/carbon-box-icon.png",
+    /* The Carbon hexagon (owner 2026-10-21): white on black for the picture,
+       a white outline for the status bar (Android draws badges as a silhouette). */
+    icon: "/carbon-notify-icon.png",
+    badge: "/carbon-notify-badge.png",
+    /* Stays until it is dismissed (computers hide alerts after a few seconds
+       otherwise; phones keep them in the notification list anyway). Each
+       alert has its own tag, so they stack instead of replacing each other. */
+    requireInteraction: true,
+    timestamp: Date.now(),
     vibrate: data.sound === "orders" ? [120, 60, 120, 60, 240] : [200, 100, 200],
     data: { url: data.url || "/", sound: data.sound || null },
   };
