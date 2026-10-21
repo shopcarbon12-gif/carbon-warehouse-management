@@ -159,6 +159,17 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
         when (val a = s.ai) {
             is AiState.Running -> Notice("AI is placing the seam points… ${((tick - a.startedAt) / 1000).coerceAtLeast(0)} s. You can lay out the next garment meanwhile.", Palette.ai)
             is AiState.Done -> Muted("AI placed ${a.placed} points in ${a.ms / 1000} s.${if (a.remarks.isNotBlank()) " " + a.remarks else ""}")
+            else -> {}
+        }
+        // The AI answered (or never ran) without some of photo 1's seam points: say so, and offer it again.
+        s.missingAi().takeIf { it.isNotEmpty() && s.ai !is AiState.Failed }?.let { miss ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Notice("The AI did not place: ${miss.joinToString { k -> s.profile.points.firstOrNull { it.key == k }?.label ?: k }}. These are the outline's guess — try the AI again or move them by hand.", Palette.warn)
+                Secondary("Try the AI again") { s.startAi(app) }
+            }
+        }
+        when (val a = s.ai) {
+            is AiState.Done, is AiState.Running -> {}
             is AiState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Notice("AI assist failed: ${a.message}. Drag the seam points onto the seams by hand, or try again.", Palette.warn)
                 Secondary("Try the AI again") { s.startAi(app) }

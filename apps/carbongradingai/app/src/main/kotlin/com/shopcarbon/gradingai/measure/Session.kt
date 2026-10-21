@@ -204,6 +204,11 @@ class MeasureSession(
         return got
     }
 
+    /** Photo 1's seam points the AI was due to place but did not (none while it is still working). */
+    fun missingAi(): List<String> =
+        if (ai is AiState.Running) emptyList()
+        else profile.aiKeys.filter { it !in removed && it !in crotchKeys && it in lines && it !in aiLines && lines[it]?.moved != true }
+
     fun cancelAi() { aiJob?.cancel(); crotch?.job?.cancel() }
 
     fun beginEdit() { undo.addLast(lines.toMap() to crotch?.lines?.toMap()); if (undo.size > 40) undo.removeFirst() }
@@ -240,11 +245,9 @@ class MeasureSession(
             for ((k, d) in c.spreadCm) if (k !in removed && d > 1.5) out += "AI unsure on photo 2: its two placements differ by ${Units.cm(d)} cm on ${label(k)}"
             if (c.ai !is AiState.Done && crotchKeys.any { it !in removed }) out += "photo 2 not placed by the AI (outline guess) — check ${crotchKeys.filter { it !in removed }.joinToString { label(it) }}"
         }
-        // Seam points the AI was asked for but never answered: the outline's guess was saved instead.
-        if (ai !is AiState.Done && ai !is AiState.Off) {
-            val missing = profile.aiKeys.filter { it !in removed && it !in crotchKeys && it in lines && it !in aiLines }
-            if (missing.isNotEmpty()) out += "not placed by the AI (outline guess): ${missing.joinToString { label(it) }}"
-        }
+        // Seam points the AI never placed — failed, off, or answered without them — so the
+        // outline's guess was saved (owner's Harry T-Shirt S, 2026-10-21: no warning at all).
+        missingAi().takeIf { it.isNotEmpty() }?.let { out += "not placed by the AI (outline guess): ${it.joinToString { k -> label(k) }}" }
         labelFlag?.let { out += it }
         return out
     }

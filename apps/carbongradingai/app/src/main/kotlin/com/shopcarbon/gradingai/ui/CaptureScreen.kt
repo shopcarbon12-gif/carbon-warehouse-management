@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -89,6 +91,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
     var readySince by remember { mutableLongStateOf(0L) }
     var fired by remember { mutableStateOf(false) }
     var installRequested by remember { mutableStateOf(false) }
+    /** The camera picture's place on screen (px): the frame box is drawn exactly there. */
+    var preview by remember { mutableStateOf<IntArray?>(null) }
 
     // Only ask for the camera where the app can measure (a supported phone, or test mode).
     LaunchedEffect(Unit) { if (!granted && (supported || app.prefs.testMode)) ask.launch(Manifest.permission.CAMERA) }
@@ -138,6 +142,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
             onFailure = { problem = it },
             // No fresh depth for the photo: say so and let auto-capture try again.
             onDepthTimeout = { problem = it; fired = false; readySince = 0L; cues.lost() },
+            onPreview = { preview = it },
         )
     }
     val owner = LocalLifecycleOwner.current
@@ -216,8 +221,16 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView({ camera.view }, Modifier.fillMaxSize())
-        // Frame guide: where the garment should sit.
-        Box(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 150.dp).border(2.dp, if (ready) Palette.accent else Color.White.copy(alpha = 0.5f), RoundedCornerShape(16.dp)))
+        // Frame guide: exactly the area the photo holds — keep the garment inside it.
+        val density = LocalDensity.current
+        preview?.let { r ->
+            with(density) {
+                Box(
+                    Modifier.offset(r[0].toDp(), r[1].toDp()).size(r[2].toDp(), r[3].toDp())
+                        .border(2.dp, if (ready) Palette.accent else Color.White.copy(alpha = 0.6f), RoundedCornerShape(4.dp)),
+                )
+            }
+        }
         // Readable from a metre away: the whole screen edge turns green when every check passes.
         if (allGreen && processing == null) Box(Modifier.fillMaxSize().border(14.dp, Palette.accent))
         Column(Modifier.fillMaxWidth().statusBarsPadding().background(Color.Black.copy(alpha = 0.55f)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

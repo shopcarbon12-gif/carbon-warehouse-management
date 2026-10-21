@@ -70,6 +70,8 @@ class ArCamera(
     private val onFailure: (String) -> Unit,
     /** No fresh depth frame came in time for a requested photo (the screen re-arms). */
     private val onDepthTimeout: (String) -> Unit = onFailure,
+    /** Where the camera picture sits on the view (left, top, width, height in px), so the screen can frame exactly what the photo holds. */
+    private val onPreview: (IntArray) -> Unit = {},
 ) : GLSurfaceView.Renderer {
     companion object {
         /** Depth may be at most this much older than the camera frame it is measured with. */
@@ -100,6 +102,12 @@ class ArCamera(
     var sensorOrientation = 90
         private set
     var imageSize: Pair<Int, Int> = 0 to 0
+    private var textureSize: Pair<Int, Int> = 0 to 0
+    /* The camera picture, fitted (not cropped) into the view: the whole field the
+       photo holds is on screen, with black bars where the shapes differ. Filling
+       the tall screen instead cut 15–40% off the sides, so a garment looked cut off
+       while the photo had room (owner, 2026-10-21: "hard to get the item in the frame"). */
+    private var fitX = 0; private var fitY = 0; private var fitW = 0; private var fitH = 0
         private set
 
     private val captureRequested = AtomicBoolean(false)
@@ -130,8 +138,15 @@ class ArCamera(
                     return "This phone has no depth sensor ARCore can use. CarbonGradingAI measures on the Galaxy Note10+, Note10+ 5G, S20+ and S20 Ultra."
                 }
                 val configs = if (tof) withTof else s.getSupportedCameraConfigs(back)
-                // The largest CPU image: every extra pixel is resolution on the garment's edges.
-                val best = configs.maxByOrNull { it.imageSize.width.toLong() * it.imageSize.height } ?: configs.first()
+                /* A config whose preview (GPU texture) has the photo's (CPU image's) shape
+                   first, so the preview shows the same field as the photo; then the
+                   largest CPU image: every extra pixel is resolution on the garment's edges. */
+                fun aspect(w: Int, h: Int) = w.toDouble() / h
+                val best = configs.maxWithOrNull(
+                    compareBy<CameraConfig> { kotlin.math.abs(aspect(it.textureSize.width, it.textureSize.height) - aspect(it.imageSize.width, it.imageSize.height)) < 0.02 }
+                        .thenBy { it.imageSize.width.toLong() * it.imageSize.height },
+                ) ?: configs.first()
+                textureSize = best.textureSize.width to best.textureSize.height
                 s.cameraConfig = best
                 imageSize = best.imageSize.width to best.imageSize.height
                 sensorOrientation = runCatching {
@@ -186,16 +201,31 @@ class ArCamera(
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        GLES20.glViewport(0, 0, width, height)
         viewW = width; viewH = height
+        fitPreview()
         geometryDirty = true
+    }
+
+    private fun fitPreview() {
+        val (tw, th) = textureSize
+        // Portrait phone, landscape sensor: on screen the picture is th wide × tw tall.
+        if (tw <= 0 || th <= 0 || viewW <= 0) { fitX = 0; fitY = 0; fitW = viewW; fitH = viewH }
+        else {
+            val portrait = th.toDouble() / tw
+            if (viewW / portrait <= viewH) { fitW = viewW; fitH = (viewW / portrait).toInt() } else { fitH = viewH; fitW = (viewH * portrait).toInt() }
+            fitX = (viewW - fitW) / 2; fitY = (viewH - fitH) / 2
+        }
+        val r = intArrayOf(fitX, fitY, fitW, fitH)
+        main.post { onPreview(r) }
     }
 
     override fun onDrawFrame(gl: GL10?) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         val s = session ?: return
         if (!textureSet) { s.setCameraTextureName(bg.textureId); textureSet = true }
-        if (geometryDirty && viewW > 0) { s.setDisplayGeometry(Surface.ROTATION_0, viewW, viewH); geometryDirty = false }
+        if (geometryDirty && viewW > 0) { fitPreview(); s.setDisplayGeometry(Surface.ROTATION_0, fitW, fitH); geometryDirty = false }
+        // GL's viewport origin is the bottom-left corner.
+        GLES20.glViewport(fitX, viewH - fitY - fitH, fitW, fitH)
         val frame = try { s.update() } catch (e: Exception) {
             main.post { onFailure("Camera stopped: ${e.message ?: e.javaClass.simpleName}") }
             return
