@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,8 +72,11 @@ class MainActivity : FragmentActivity() {
                         Screen.Queue -> QueueScreen(nav)
                         is Screen.Guide -> GuideScreen(nav, s.profileId)
                         is Screen.Item -> ItemScreen(nav, s.lookup, s.preSize)
-                        is Screen.Capture -> CaptureScreen(nav, s.target, s.crotchFor)
-                        is Screen.Result -> ResultScreen(nav, s.session)
+                        // Keyed by the screen itself: photo 1 → photo 2 replaces one Capture with another, and without
+                        // a key the second kept the first's state (still "processing", already fired, camera wired to
+                        // photo 1) so it never captured (owner, 2026-10-20).
+                        is Screen.Capture -> key(s) { CaptureScreen(nav, s.target, s.crotchFor) }
+                        is Screen.Result -> key(s) { ResultScreen(nav, s.session) }
                         is Screen.Saved -> SavedScreen(nav, s.session, s.result, s.queuedOffline)
                         is Screen.Web -> WebScreen(nav, s.title, s.path)
                         Screen.Settings -> SettingsScreen(nav) { nav.reset(Screen.Login) }

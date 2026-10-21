@@ -172,11 +172,15 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
     val range = cap?.distanceCm ?: 45f..120f
     val ideal = cap?.idealDistanceCm ?: 70f..110f
     val maxTilt = cap?.maxTiltDeg ?: 8f
+    /* The crotch photo needs only the waistband, the crotch and the inner hems:
+       with the legs spread the outer sides often run past the frame, and that is
+       fine for the rise and inseams (owner, 2026-10-20: "it says the item is cut"). */
+    val sidesOk = if (crotchFor != null) setOf("left", "right") else emptySet()
     val checks = listOf(
         Check("Surface", plane?.let { it.inlierFrac >= 0.45 }, plane?.let { "${(it.inlierFrac * 100).roundToInt()}%" } ?: "—"),
         Check("Distance", dist?.let { it.toFloat() in range }, dist?.let { "${it.roundToInt()} cm" } ?: "—"),
         Check("Level", plane?.let { it.tiltDeg <= maxTilt }, plane?.let { "${it.tiltDeg.roundToInt()}°" } ?: "—"),
-        Check("Coverage", st?.cutOff?.isEmpty(), when { st?.cutOff == null -> "—"; st.cutOff.isEmpty() -> "100%"; else -> "cut off" }),
+        Check("Coverage", st?.cutOff?.let { cut -> cut.none { it !in sidesOk } }, when { st?.cutOff == null -> "—"; st.cutOff.isEmpty() -> "100%"; st.cutOff.none { it !in sidesOk } -> "sides cut — OK"; else -> "cut off" }),
     )
     val allGreen = checks.all { it.ok == true } && st?.tracking == true
     val ready = allGreen && st.still
@@ -204,7 +208,7 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
         dist != null && dist > range.endInclusive -> "Move the phone down (${dist.roundToInt()} cm)"
         plane.tiltDeg > maxTilt -> "Hold the phone level over the garment"
         st.cutOff == null -> "Looking for the garment…"
-        st.cutOff.isNotEmpty() -> "The garment is cut off at the ${st.cutOff.joinToString(" and ")} — move up or centre it"
+        st.cutOff.any { it !in sidesOk } -> "The garment is cut off at the ${st.cutOff.joinToString(" and ")} — move up or centre it"
         !st.still -> "Hold still…"
         auto -> "Hold still… capturing"
         else -> "Ready — tap the shutter"
