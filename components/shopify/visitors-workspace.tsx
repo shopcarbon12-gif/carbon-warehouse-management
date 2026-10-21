@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useUrlParam } from "@/lib/use-url-param";
+import { decodeEntities } from "@/lib/server/visitors/rules";
 import type { VisitorDetail, VisitorEventRow, VisitorFilter, VisitorList, VisitorRow } from "@/lib/server/visitors/report";
 
 /**
@@ -75,7 +76,7 @@ function span(fromIso: string, toIso: string): string {
 }
 const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const pageName = (title: string | null, path: string | null) =>
-  (title ?? "").replace(/\s*[|–—-]\s*CARBON\s*$/i, "").trim() || path || "a page";
+  decodeEntities(title ?? "").replace(/\s*[|–—-]\s*CARBON\s*$/i, "").trim() || path || "a page";
 
 const card = "min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3";
 const btn =

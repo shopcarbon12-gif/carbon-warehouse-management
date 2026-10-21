@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { cleanLabel, describeDevice, shortName, visitorLabel } from "@/lib/server/visitors/rules";
+import { cleanLabel, decodeEntities, describeDevice, shortName, visitorLabel } from "@/lib/server/visitors/rules";
 import { verifiedCustomer } from "@/lib/server/visitors/record";
 
 let passed = 0;
@@ -19,6 +19,11 @@ function test(name: string, fn: () => void) {
     throw e;
   }
 }
+
+test("decodeEntities: page titles back to plain text", () => {
+  assert.equal(decodeEntities("Men&#39;s Clothing, Jeans &amp; Shoes | CARBON"), "Men's Clothing, Jeans & Shoes | CARBON");
+  assert.equal(decodeEntities("&quot;Eden&quot; &lt;3"), '"Eden" <3');
+});
 
 test("shortName: First L.", () => {
   assert.equal(shortName("Maria", "lopez"), "Maria L.");

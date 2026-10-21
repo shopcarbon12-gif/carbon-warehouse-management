@@ -2,6 +2,18 @@
  * Visitors — pure helpers (unit-tested in scripts/test-visitors.ts).
  */
 
+/** Liquid's page_title arrives HTML-escaped ("Men&#39;s", "&amp;") — back to plain text. */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
 /** "Maria Lopez" → "Maria L." (null when there is no first name). */
 export function shortName(first: string, last: string): string | null {
   const f = (first || "").trim();

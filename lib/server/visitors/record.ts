@@ -16,7 +16,7 @@
  */
 import crypto from "node:crypto";
 import type { Pool } from "pg";
-import { describeDevice, shortName } from "./rules";
+import { decodeEntities, describeDevice, shortName } from "./rules";
 
 const clip = (s: unknown, n: number) => (typeof s === "string" ? s.trim().slice(0, n) : "");
 export const VISIT_GAP_MINUTES = 30;
@@ -63,6 +63,7 @@ export type PageView = {
 export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
   try {
     const dev = describeDevice(v.ua);
+    v = { ...v, title: v.title ? decodeEntities(v.title) : null };
     const who = verifiedCustomer(v.customer);
     const r = await pool.query<{ visits: number }>(
       `INSERT INTO visitors
