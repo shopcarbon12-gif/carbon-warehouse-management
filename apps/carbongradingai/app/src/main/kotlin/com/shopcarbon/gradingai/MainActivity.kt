@@ -71,7 +71,7 @@ class MainActivity : FragmentActivity() {
                         Screen.Queue -> QueueScreen(nav)
                         is Screen.Guide -> GuideScreen(nav, s.profileId)
                         is Screen.Item -> ItemScreen(nav, s.lookup, s.preSize)
-                        is Screen.Capture -> CaptureScreen(nav, s.target)
+                        is Screen.Capture -> CaptureScreen(nav, s.target, s.crotchFor)
                         is Screen.Result -> ResultScreen(nav, s.session)
                         is Screen.Saved -> SavedScreen(nav, s.session, s.result, s.queuedOffline)
                         is Screen.Web -> WebScreen(nav, s.title, s.path)

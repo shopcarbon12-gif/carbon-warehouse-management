@@ -6,7 +6,7 @@ import { downloadStorageObject } from "@/lib/storageProvider";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** GET → the scan's squared-up photo (the picture its lines are drawn on). */
+/** GET → the scan's squared-up photo (the picture its lines are drawn on); ?which=crotch → the legs-spread photo. */
 export async function GET(req: Request, { params }: Ctx) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -14,8 +14,11 @@ export async function GET(req: Request, { params }: Ctx) {
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "Bad id" }, { status: 400 });
-  const r = await pool.query<{ photo_key: string | null }>(`SELECT photo_key FROM size_grading_scans WHERE id = $1::uuid`, [id]);
-  const key = r.rows[0]?.photo_key;
+  const crotch = new URL(req.url).searchParams.get("which") === "crotch";
+  const r = await pool.query<{ photo_key: string | null; crotch_photo_key: string | null }>(
+    `SELECT photo_key, crotch_photo_key FROM size_grading_scans WHERE id = $1::uuid`, [id],
+  );
+  const key = crotch ? r.rows[0]?.crotch_photo_key : r.rows[0]?.photo_key;
   if (!key) return NextResponse.json({ error: "No photo" }, { status: 404 });
   try {
     const obj = await downloadStorageObject(key);

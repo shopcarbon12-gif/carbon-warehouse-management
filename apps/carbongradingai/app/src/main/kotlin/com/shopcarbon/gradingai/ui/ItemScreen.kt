@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -113,25 +114,42 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
         }
         if (!item.measurable && item.profileId == null) Notice(item.profileWhy, Palette.bad)
 
-        Label("Size in hand")
-        if (fromCode.size > 1) Muted("This hang tag is shared by several sizes — pick the one in your hand.")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (l in labels) {
-                val measured = item.skusOfSize(l).any { it.lastMeasuredAt != null }
-                Pill(if (measured) "$l ✓" else l, if (l == size) Palette.accent else Palette.muted, filled = l == size) { size = l }
+        /* After a tag scan the size and the type are usually known: show them on
+           one line and keep the pickers closed (owner, 2026-10-20). */
+        var picking by remember { mutableStateOf(size == null || profile == null || fromCode.size > 1) }
+        if (!picking && size != null && profile != null) {
+            Card {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Size $size · ${profile.label}", style = MaterialTheme.typography.titleMedium, color = Palette.text)
+                        Muted("${item.skusOfSize(size!!).size} SKU(s): ${item.skusOfSize(size!!).mapNotNull { it.color }.distinct().joinToString()}" +
+                            if (profile.crotchKeys.isNotEmpty()) " · 2 photos" else "")
+                    }
+                    Pill("Change", Palette.accent) { picking = true }
+                }
             }
-        }
-        size?.let { s -> Muted("One reading covers ${item.skusOfSize(s).size} SKU(s): ${item.skusOfSize(s).mapNotNull { it.color }.distinct().joinToString()}") }
-
-        Label("Measure as")
-        for ((group, list) in cfg?.groupedProfiles().orEmpty()) {
-            Text(group, style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+        } else {
+            Label("Size in hand")
+            if (fromCode.size > 1) Muted("This hang tag is shared by several sizes — pick the one in your hand.")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (p in list) Pill(p.label, if (p.id == profileId) Palette.accent else Palette.muted, filled = p.id == profileId) { profileId = p.id }
+                for (l in labels) {
+                    val measured = item.skusOfSize(l).any { it.lastMeasuredAt != null }
+                    Pill(if (measured) "$l ✓" else l, if (l == size) Palette.accent else Palette.muted, filled = l == size) { size = l }
+                }
             }
+            size?.let { s -> Muted("One reading covers ${item.skusOfSize(s).size} SKU(s): ${item.skusOfSize(s).mapNotNull { it.color }.distinct().joinToString()}") }
+
+            Label("Measure as")
+            for ((group, list) in cfg?.groupedProfiles().orEmpty()) {
+                Text(group, style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (p in list) Pill(p.label, if (p.id == profileId) Palette.accent else Palette.muted, filled = p.id == profileId) { profileId = p.id }
+                }
+            }
+            if (item.profileId != null) Muted("Suggested — ${item.profileWhy}.")
+            profile?.let { p -> Muted("${p.points.size} points: ${p.points.joinToString { it.label }}") }
+            if (size != null && profile != null) Secondary("Done") { picking = false }
         }
-        if (item.profileId != null) Muted("Suggested — ${item.profileWhy}.")
-        profile?.let { p -> Muted("${p.points.size} points: ${p.points.joinToString { it.label }}") }
 
         Card {
             Label("Fabric & care")

@@ -32,6 +32,11 @@ data class Profile(
     val group: String,
     /** For a sleeved type: the type to offer when the photo shows no sleeves. */
     val sleeveless: String?,
+    /** How far below the top of the waistband the hip line sits (cm). */
+    val hipBelowTopCm: Double = 18.0,
+    /** Bottoms: the points taken from a second, legs-spread "crotch photo" (empty = no second photo). */
+    val crotchKeys: List<String> = emptyList(),
+    val crotchLay: String = "",
 )
 
 data class CaptureParams(
@@ -86,6 +91,9 @@ data class AppConfig(
                     aiKeys = p.optJSONArray("aiKeys").strings(),
                     group = p.optString("group", when (p.optString("family")) { "trousers", "shorts", "skirt" -> "bottoms"; "onepiece" -> "onepiece"; else -> "sleeves" }),
                     sleeveless = p.optStringOrNull("sleeveless"),
+                    hipBelowTopCm = p.optDouble("hipBelowTopCm", 18.0),
+                    crotchKeys = p.optJSONObject("crotchPhoto")?.optJSONArray("keys").strings(),
+                    crotchLay = p.optJSONObject("crotchPhoto")?.optString("lay").orEmpty(),
                     guide = p.optJSONObject("guide")?.let { g ->
                         val lines = mutableMapOf<String, List<Pair<Float, Float>>>()
                         g.optJSONObject("lines")?.let { l ->

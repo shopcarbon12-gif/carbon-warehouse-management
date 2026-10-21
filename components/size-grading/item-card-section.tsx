@@ -21,6 +21,14 @@
  * Which points appear comes from the product's own category: a pair of evening
  * pants offers Waist and Inseam, not Chest and Sleeve.
  *
+ * A third tab holds the product's factory size sheet for this size: the
+ * factory's target, typed from its sheet, never written to the item. The
+ * phone app flags a new scan that lands far from it.
+ *
+ * Left/right readings (inseamL, sleeveR…) are shown under their average, not
+ * as boxes of their own: the average is the number, the two sides are the
+ * check on how the garment lay.
+ *
  * Inches are shown by default because that is what the floor measures in, with
  * a one-click switch to centimetres. Centimetres are what is STORED, always, so
  * switching units can never round a saved value.
@@ -62,12 +70,13 @@ export function SizeGradingSection({
   /* Front and back are separate readings of the same garment, so the card
      carries both and the operator switches between them. Showing only the most
      recent would hide the front the moment the back was measured. */
-  const [side, setSide] = useState<"front" | "back">("front");
+  const [side, setSide] = useState<"front" | "back" | "factory">("front");
   const [sides, setSides] = useState<{ front: Measurement | null; back: Measurement | null }>({
     front: null,
     back: null,
   });
-  const measurement = sides[side];
+  const [factory, setFactory] = useState<{ size: string | null; pointsCm: Record<string, number> | null } | null>(null);
+  const measurement = side === "factory" ? sides.front : sides[side];
   /** Text, not numbers: a half-typed "5." must survive a keystroke. */
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -105,12 +114,17 @@ export function SizeGradingSection({
     setLoading(true);
     void (async () => {
       try {
-        const r = await fetch(`/api/inventory/size-grading?customSkuId=${customSkuId}`);
+        const [r, f] = await Promise.all([
+          fetch(`/api/inventory/size-grading?customSkuId=${customSkuId}`),
+          fetch(`/api/inventory/size-grading/factory?customSkuId=${customSkuId}`).catch(() => null),
+        ]);
         const j = (await r.json().catch(() => ({}))) as {
           front?: Measurement | null;
           back?: Measurement | null;
         };
+        const fj = f && f.ok ? ((await f.json().catch(() => null)) as { size: string | null; pointsCm: Record<string, number> | null } | null) : null;
         if (!alive) return;
+        setFactory(fj);
         setSides({ front: j.front ?? null, back: j.back ?? null });
         // Open on whichever side has a reading, front first.
         const start: "front" | "back" = j.front ? "front" : j.back ? "back" : "front";
@@ -139,21 +153,25 @@ export function SizeGradingSection({
   /* This side's points only — the back of a pair of jeans has no front pocket.
      Anything already stored that is not in the list is still shown, so a
      reading taken under an older list is never silently dropped. */
-  const sideKeys = pomsFor(type, side) as string[];
-  const keys: string[] = [...sideKeys, ...Object.keys(draft).filter((k) => !sideKeys.includes(k))];
+  const sideKeys = pomsFor(type, side === "factory" ? "front" : side) as string[];
+  const allKeys: string[] = [...sideKeys, ...Object.keys(draft).filter((k) => !sideKeys.includes(k))];
+  /* inseamL / inseamR sit under "Inseam" as one small line instead of two
+     boxes with code names (owner, 2026-10-20). */
+  const sidesOf = (k: string) => allKeys.filter((x) => x === `${k}L` || x === `${k}R`).sort();
+  const keys = allKeys.filter((k) => !(/[LR]$/.test(k) && allKeys.includes(k.slice(0, -1))));
 
   /* Switching side swaps which reading is being edited. Done here rather than
      in the click handler so an unsaved edit on one side cannot leak onto the
      other. */
   const showSide = useCallback(
-    (next: "front" | "back") => {
+    (next: "front" | "back" | "factory") => {
       setSide(next);
-      const m = sides[next];
-      setDraft(m ? Object.fromEntries(Object.entries(m.points_cm).map(([k, v]) => [k, String(v)])) : {});
+      const pts = next === "factory" ? factory?.pointsCm : sides[next]?.points_cm;
+      setDraft(pts ? Object.fromEntries(Object.entries(pts).map(([k, v]) => [k, String(v)])) : {});
       setMsg(null);
       setErr(null);
     },
-    [sides],
+    [sides, factory],
   );
 
   const save = useCallback(async () => {
@@ -167,6 +185,18 @@ export function SizeGradingSection({
         if (Number.isFinite(n) && n > 0) pointsCm[k] = Number(n.toFixed(2));
       }
       if (!Object.keys(pointsCm).length) throw new Error("Nothing to save — enter at least one measurement.");
+      if (side === "factory") {
+        const fr = await fetch("/api/inventory/size-grading/factory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ customSkuId, pointsCm }),
+        });
+        const fj = (await fr.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!fr.ok || !fj.ok) throw new Error(fj.error ?? "Could not save");
+        setFactory((prev) => ({ size: prev?.size ?? null, pointsCm }));
+        setMsg("Factory sheet saved — new scans are checked against it.");
+        return;
+      }
       const r = await fetch("/api/inventory/size-grading", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,14 +249,16 @@ export function SizeGradingSection({
     <div className="flex flex-col gap-2 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-mono text-[0.72rem] text-[var(--wms-muted)]">
-          {measurement
+          {side === "factory"
+            ? `Factory sheet${factory?.size ? ` · size ${factory.size}` : ""} — the factory's target, not written to the item`
+            : measurement
             ? `${GARMENT_LABELS[type]} · measured ${new Date(measurement.measured_at).toLocaleDateString()}`
             : fromCatalogue?.kind === "not-measurable"
               ? fromCatalogue.why
               : `${GARMENT_LABELS[type]} · not measured yet — type them in, or use Inventory → Size Grading.`}
         </p>
         <span className="inline-flex overflow-hidden rounded border border-[var(--wms-border)]">
-          {(["front", "back"] as const).map((v) => (
+          {(["front", "back", "factory"] as const).map((v) => (
             <button
               key={v}
               type="button"
@@ -238,7 +270,7 @@ export function SizeGradingSection({
               }`}
             >
               {v}
-              {sides[v] ? " ✓" : ""}
+              {(v === "factory" ? factory?.pointsCm : sides[v]) ? " ✓" : ""}
             </button>
           ))}
         </span>
@@ -265,13 +297,25 @@ export function SizeGradingSection({
         return (
           <label key={k} className="flex items-center justify-between gap-3 text-[0.85rem]">
             <span className="text-[var(--wms-muted)]">
-              {pomLabel(k, side)}
+              {pomLabel(k, side === "factory" ? "front" : side)}
               {/* A point the camera cannot read is marked, so a blank box is
                   understood as "nobody has typed this yet" rather than as the
                   app having failed to measure it. */}
               {POM_SOURCE[k as PomKey] === "manual" ? (
                 <span className="ml-1 font-mono text-[0.62rem] uppercase tracking-wide text-[var(--wms-muted)]/70">
                   by hand
+                </span>
+              ) : null}
+              {sidesOf(k).length ? (
+                <span className="block font-mono text-[0.68rem] text-[var(--wms-muted)]/80">
+                  {sidesOf(k)
+                    .map((x) => {
+                      const v = Number(draft[x]);
+                      const val = Number.isFinite(v) && v > 0 ? (unit === "cm" ? `${v.toFixed(1)} cm` : `${(v / 2.54).toFixed(1)}"`) : "—";
+                      const part = /^(sleeve|cuff)/.test(k) ? "sleeve" : "leg";
+                      return `${x.endsWith("L") ? "left" : "right"} ${part} ${val}`;
+                    })
+                    .join(" · ")}
                 </span>
               ) : null}
             </span>
@@ -310,7 +354,7 @@ export function SizeGradingSection({
             onClick={() => void save()}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Saving…" : "Save measurements"}
+            {saving ? "Saving…" : side === "factory" ? "Save factory sheet" : "Save measurements"}
           </button>
           {msg ? <span className="font-mono text-[0.72rem] text-[var(--wms-status-success-fg)]">{msg}</span> : null}
           {err ? <span className="font-mono text-[0.72rem] text-[var(--wms-status-danger-fg)]">{err}</span> : null}

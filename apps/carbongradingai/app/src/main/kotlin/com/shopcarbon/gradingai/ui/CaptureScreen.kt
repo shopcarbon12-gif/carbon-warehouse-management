@@ -66,9 +66,13 @@ private data class Check(val label: String, val ok: Boolean?, val value: String)
  * Size AI's capture, on the depth sensor: the table is found, the distance,
  * level and coverage are checked live, and the photo is taken by itself once
  * everything has been green and the phone still for a moment.
+ *
+ * Bottoms take two photos (owner, 2026-10-20): the normal one, then — with
+ * `crotchFor` set — the legs pulled apart so the crotch lies flat, for the
+ * rise and inseams only.
  */
 @Composable
-fun CaptureScreen(nav: Nav, target: MeasureTarget) {
+fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = null) {
     val ctx = LocalContext.current
     val activity = ctx as Activity
     val app = App.get(ctx)
@@ -109,9 +113,15 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
             try {
                 processing = "Finding the garment…"
                 val scan = Pipeline.process(ctx, b, target.profile, app.prefs.calibration)
-                val session = MeasureSession(target, scan, testPhone, app.prefs.skippedFor(target.lookup.matrixId))
+                if (crotchFor != null) {
+                    crotchFor.attachCrotch(app, scan)
+                    nav.replace(Screen.Result(crotchFor))
+                    return@launch
+                }
+                val twoPhotos = target.profile.crotchKeys.isNotEmpty()
+                val session = MeasureSession(target, scan, testPhone, app.prefs.skippedFor(target.lookup.matrixId), crotchPlanned = twoPhotos)
                 session.startAi(app)
-                nav.replace(Screen.Result(session))
+                nav.replace(if (twoPhotos) Screen.Capture(target, session) else Screen.Result(session))
             } catch (e: Exception) {
                 problem = e.message ?: "Could not measure that photo."
                 processing = null; fired = false; readySince = 0L
@@ -208,10 +218,13 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
         if (allGreen && processing == null) Box(Modifier.fillMaxSize().border(14.dp, Palette.accent))
         Column(Modifier.fillMaxWidth().statusBarsPadding().background(Color.Black.copy(alpha = 0.55f)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = { crotchFor?.cancelAi(); nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
                 Column(Modifier.weight(1f)) {
                     Text("${target.lookup.name} · ${target.sizeLabel}", style = MaterialTheme.typography.titleMedium, color = Color.White)
-                    Text(target.profile.label + if (testPhone) " · TEST MODE" else "", style = MaterialTheme.typography.bodySmall, color = if (testPhone) Palette.warn else Palette.muted)
+                    Text(
+                        (if (crotchFor != null) "Photo 2 of 2 · crotch" else if (target.profile.crotchKeys.isNotEmpty()) "Photo 1 of 2 · ${target.profile.label}" else target.profile.label) + if (testPhone) " · TEST MODE" else "",
+                        style = MaterialTheme.typography.bodySmall, color = if (testPhone) Palette.warn else if (crotchFor != null) Palette.accent else Palette.muted,
+                    )
                 }
                 Text("Auto", style = MaterialTheme.typography.bodySmall, color = Color.White)
                 Switch(auto, { auto = it; app.prefs.autoCapture = it })
@@ -225,7 +238,8 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
                     }
                 }
             }
-            Text(target.profile.lay, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+            if (crotchFor != null) Text(target.profile.crotchLay.ifBlank { "Pull the legs apart to the sides so the crotch lies flat." }, style = MaterialTheme.typography.bodyMedium, color = Palette.accent)
+            else Text(target.profile.lay, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
         }
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.55f)).navigationBarsPadding().padding(12.dp),
@@ -240,6 +254,12 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget) {
                     .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; camera.requestCapture() }),
             )
             if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 800) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
+            // The crotch photo can be skipped: the crotch is then placed on the first photo.
+            if (crotchFor != null && processing == null && crotchFor.crotch == null) Text(
+                "Skip — measure the crotch on the first photo",
+                color = Palette.muted, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.clickable { crotchFor.skipCrotch(app); nav.replace(Screen.Result(crotchFor)) }.padding(6.dp),
+            )
         }
     }
 }

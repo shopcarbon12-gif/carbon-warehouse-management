@@ -53,10 +53,11 @@ import com.shopcarbon.gradingai.App
 import com.shopcarbon.gradingai.measure.AiState
 import com.shopcarbon.gradingai.measure.MLine
 import com.shopcarbon.gradingai.measure.MeasureSession
+import com.shopcarbon.gradingai.measure.Photo
 import com.shopcarbon.gradingai.measure.Pt
 import com.shopcarbon.gradingai.measure.Units
-import com.shopcarbon.gradingai.measure.pointsCm
 import com.shopcarbon.gradingai.sync.ScanStore
+import java.io.File
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -84,16 +85,21 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
     var tick by remember { mutableLongStateOf(0L) }
     var picking by remember { mutableStateOf(false) }
     val limit = app.config?.capture?.pairLimitCm ?: 1f
-    LaunchedEffect(s.ai) { while (s.ai is AiState.Running) { tick = System.currentTimeMillis(); delay(500) } }
+    val crotch = s.crotch
+    LaunchedEffect(s.ai, crotch?.ai) { while (s.ai is AiState.Running || crotch?.ai is AiState.Running) { tick = System.currentTimeMillis(); delay(500) } }
     val cm = s.cm()
     // Every point's value, removed ones included, for the rows and the photo labels.
-    val allCm = pointsCm(s.profile, s.lines, s.scan.pxPerCm)
+    val allCm = s.allCm()
 
+    fun discardAll() { ScanStore.discard(ctx, s.scan.id); crotch?.let { ScanStore.discard(ctx, it.scan.id) } }
     fun save() {
         saving = true; err = null
         scope.launch {
             try {
+                // The crotch photo travels in the scan's own folder, so an offline save keeps both.
+                crotch?.let { c -> c.scan.photoFile.copyTo(File(s.scan.photoFile.parentFile, "crotch.jpg"), overwrite = true) }
                 val res = ScanStore.save(ctx, s.scan.id, s.meta(app))
+                crotch?.let { ScanStore.discard(ctx, it.scan.id) }
                 nav.replace(Screen.Saved(s, res, res == null))
             } catch (e: Exception) {
                 err = e.message ?: "Could not save"
@@ -108,11 +114,11 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
 
     Page(
         "${s.target.lookup.name} · ${s.target.sizeLabel}",
-        onBack = { s.cancelAi(); ScanStore.discard(ctx, s.scan.id); nav.back() },
+        onBack = { s.cancelAi(); discardAll(); nav.back() },
         bottom = {
             Row(Modifier.fillMaxWidth().background(Palette.surface).navigationBarsPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Secondary("Undo", Modifier.width(90.dp), enabled = s.canUndo) { s.undo() }
-                Secondary("Retake", Modifier.width(100.dp)) { s.cancelAi(); ScanStore.discard(ctx, s.scan.id); nav.replace(Screen.Capture(s.target)) }
+                Secondary("Retake", Modifier.width(100.dp)) { s.cancelAi(); discardAll(); nav.replace(Screen.Capture(s.target)) }
                 Primary(if (saving) "Saving…" else "Save to WMS", Modifier.weight(1f), enabled = !saving && cm.isNotEmpty()) { save() }
             }
         },
@@ -150,7 +156,26 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
             is AiState.Off -> Muted(a.why)
             AiState.Idle -> {}
         }
-        PhotoEditor(s, selected, units, allCm, onSelect = { selected = it })
+        PhotoEditor(s, Photo.MAIN, selected, units, allCm, onSelect = { selected = it })
+        if (crotch != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Crotch photo — front rise and inseam", style = MaterialTheme.typography.bodyMedium, color = Palette.text, modifier = Modifier.weight(1f))
+                Pill("Retake", Palette.muted) { crotch.job?.cancel(); ScanStore.discard(ctx, crotch.scan.id); nav.replace(Screen.Capture(s.target, s)) }
+            }
+            when (val a = crotch.ai) {
+                is AiState.Running -> Notice("AI is placing the crotch (twice, to check itself)… ${((tick - a.startedAt) / 1000).coerceAtLeast(0)} s.", Palette.ai)
+                is AiState.Done -> Muted("AI placed the crotch in ${a.ms / 1000} s." + (crotch.spreadCm.values.maxOrNull()?.let { " Its two placements agree within ${Units.cm(it)} cm." } ?: ""))
+                is AiState.Failed -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Notice("AI assist failed on the crotch photo: ${a.message}.", Palette.warn)
+                    Secondary("Try the AI again") { s.startCrotchAi(app) }
+                }
+                is AiState.Off -> Muted(a.why)
+                AiState.Idle -> {}
+            }
+            PhotoEditor(s, Photo.CROTCH, selected, units, allCm, onSelect = { selected = it })
+        } else if (s.crotchKeys.isNotEmpty()) {
+            Secondary("Take the crotch photo (legs spread)") { s.cancelAi(); nav.replace(Screen.Capture(s.target, s)) }
+        }
         Legend()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             for ((k, label) in listOf("cm" to "CM", "in" to "INCH", "both" to "BOTH")) Pill(label, if (units == k) Palette.accent else Palette.muted, filled = units == k) { units = k; app.prefs.units = k }
@@ -172,14 +197,14 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
                     .clickable { if (off) s.toggleRemoved(app, keys) else selected = pair.first().key }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Box(Modifier.size(26.dp).background((if (off) Palette.muted else sourceColor(s.lines[p.key])).copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(26.dp).background((if (off) Palette.muted else sourceColor(s.lines[p.key] ?: crotch?.lines?.get(p.key))).copy(alpha = 0.25f), CircleShape), contentAlignment = Alignment.Center) {
                     Text(p.letter, style = MaterialTheme.typography.labelMedium, color = if (off) Palette.muted else Palette.text)
                 }
                 Column(Modifier.weight(1f)) {
                     Text(if (pair.size == 2) p.label.removeSuffix(" L") + " L / R" else p.label, style = MaterialTheme.typography.bodyMedium, color = if (off) Palette.muted else Palette.text)
                     if (off) Text("left out — tap to bring it back", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
                     else {
-                        val tags = pair.mapNotNull { s.lines[it.key] }.map { if (it.moved) "moved" else if (it.source == "ai") "AI" else "" }.filter { it.isNotEmpty() }.distinct()
+                        val tags = pair.mapNotNull { s.lines[it.key] ?: crotch?.lines?.get(it.key) }.map { if (it.moved) "moved" else if (it.source == "ai") "AI" else "" }.filter { it.isNotEmpty() }.distinct()
                         if (tags.isNotEmpty() || mismatch) Text((tags + if (mismatch) listOf("L/R differ") else emptyList()).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = if (mismatch) Palette.warn else Palette.ai)
                     }
                 }
@@ -213,8 +238,9 @@ private fun Legend() = Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) 
  * 3×, on the side of the photo away from the finger.
  */
 @Composable
-fun PhotoEditor(s: MeasureSession, selected: String?, units: String, allCm: Map<String, Double>, onSelect: (String?) -> Unit) {
-    val bmp = remember(s.scan.photo) { s.scan.photo.asImageBitmap() }
+fun PhotoEditor(s: MeasureSession, which: Photo, selected: String?, units: String, allCm: Map<String, Double>, onSelect: (String?) -> Unit) {
+    val photo = if (which == Photo.CROTCH) s.crotch?.scan?.photo ?: return else s.scan.photo
+    val bmp = remember(photo) { photo.asImageBitmap() }
     val density = LocalDensity.current
     var drag by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var finger by remember { mutableStateOf<Pt?>(null) }
@@ -225,7 +251,7 @@ fun PhotoEditor(s: MeasureSession, selected: String?, units: String, allCm: Map<
         val scale = minOf(wPx / bmp.width, maxH / bmp.height)
         val hDp = with(density) { (bmp.height * scale).toDp() }
         val wDp = with(density) { (bmp.width * scale).toDp() }
-        val visible = s.kept()
+        val visible = if (which == Photo.CROTCH) s.keptCrotch() else s.kept()
         fun toPhoto(o: Offset) = Pt(o.x / scale, o.y / scale)
         fun nearestEnd(o: Offset, only: String?): Pair<String, Int>? {
             var best: Pair<String, Int>? = null; var bd = with(density) { 34.dp.toPx() }
@@ -248,8 +274,8 @@ fun PhotoEditor(s: MeasureSession, selected: String?, units: String, allCm: Map<
         }
         Canvas(
             Modifier.align(Alignment.TopCenter).width(wDp).height(hDp)
-                .pointerInput(s) { detectTapGestures { o -> onSelect(nearestLine(o)) } }
-                .pointerInput(s, selected) {
+                .pointerInput(s, which) { detectTapGestures { o -> onSelect(nearestLine(o)) } }
+                .pointerInput(s, selected, which) {
                     detectDragGestures(
                         onDragStart = { o ->
                             val h = nearestEnd(o, selected) ?: nearestEnd(o, null)
@@ -260,7 +286,7 @@ fun PhotoEditor(s: MeasureSession, selected: String?, units: String, allCm: Map<
                             change.consume()
                             val p = toPhoto(change.position)
                             val clamped = Pt(p.x.coerceIn(0f, bmp.width.toFloat()), p.y.coerceIn(0f, bmp.height.toFloat()))
-                            s.moveEnd(h.first, h.second, clamped)
+                            s.moveEnd(which, h.first, h.second, clamped)
                             finger = clamped
                         },
                         onDragEnd = { drag = null; finger = null },

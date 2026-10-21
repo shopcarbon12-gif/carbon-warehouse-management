@@ -63,6 +63,15 @@ export type GradingProfile = {
   group: "sleeves" | "sleeveless" | "bottoms" | "onepiece";
   /** For a sleeved type: the type to offer when the photo shows no sleeves. */
   sleeveless?: GradingProfileId;
+  /** How far below the top of the waistband the hip line sits (cm); the outline uses it. Default 18. */
+  hipBelowTopCm?: number;
+  /**
+   * Bottoms: a second photo with the legs spread apart so the crotch lies flat
+   * (owner, 2026-10-20). Only these points are taken from it — spreading the
+   * legs folds the side seams and twists the hems, so everything else stays
+   * on the first photo.
+   */
+  crotchPhoto?: { keys: GradingPointKey[]; lay: string };
   /** Guide picture (generated from the ChatGPT prompts), with line ends as fractions of its size. */
   guide?: { image: string; lines: Partial<Record<GradingPointKey, [[number, number], [number, number]]>> };
 };
@@ -91,6 +100,10 @@ const R = {
   outseam: (side: string) => `Outseam, leg ${side}: from the top of the waistband at the side to the hem, along the outside side seam.`,
   legOpening: (side: string) => `Leg opening, leg ${side}: straight across the hem of that leg, edge to edge, square to the leg.`,
   hipSkirtShorts: "Straight across, 18 cm (7\") below the top of the waistband, side edge to side edge.",
+  /* The factory's hip line (BASEN KH 16 CM on the size sheets): 16 cm below the
+     bottom of the waistband, which on a 4 cm denim band is 20 cm below its top
+     (owner, 2026-10-20: measure it the factory way so sheets can be compared). */
+  hipDenim: "Straight across, 20 cm (8\") below the top of the waistband — the factory's line, 16 cm below the bottom of a 4 cm waistband — side edge to side edge.",
   hipDress: "Straight across at the widest point below the waist, side edge to side edge.",
   lengthSkirt: "Centre length: from the top of the waistband at centre front straight down to the hem.",
   sideLength: "Side seam length: from the top of the waistband at the side, along the side seam, to the hem (the left side of the photo).",
@@ -127,6 +140,7 @@ const P = {
   legOpeningL: { key: "legOpeningL", letter: "F", label: "Leg opening L", rule: R.legOpening(LEFT), pairOf: "legOpening", side: "L" },
   legOpeningR: { key: "legOpeningR", letter: "F", label: "Leg opening R", rule: R.legOpening(RIGHT), pairOf: "legOpening", side: "R" },
   hipShorts: { key: "hip", letter: "B", label: "Hip", rule: R.hipSkirtShorts },
+  hipDenim: { key: "hip", letter: "B", label: "Hip", rule: R.hipDenim },
   hipDress: { key: "hip", letter: "K", label: "Hip", rule: R.hipDress },
   hipOnepiece: { key: "hip", letter: "K", label: "Hip", rule: R.hipOnepiece },
   lengthSkirt: { key: "length", letter: "D", label: "Centre length", rule: R.lengthSkirt },
@@ -144,7 +158,11 @@ const LAY = {
   skirt: "Front up, zip closed, flat and smooth, hem spread to its natural width. Waistband at the top of the screen.",
   dress: "Front up, zip or buttons closed, flat and smooth, sleeves out to the sides if it has them. Top at the top of the screen.",
   onepiece: "Front up, closed, flat and smooth, legs straight with a small gap, sleeves out if it has them. Top at the top of the screen.",
+  crotch: "Second photo, for the crotch only: keep it front up, then pull the legs apart to the sides so the crotch lies flat and its seams show. Waistband at the top of the screen.",
 };
+
+/** The points the crotch photo gives on bottoms (they all end at the crotch seam point). */
+const CROTCH = { keys: ["rise", "inseamL", "inseamR"] as GradingPointKey[], lay: LAY.crotch };
 
 export const GRADING_PROFILES: GradingProfile[] = [
   {
@@ -170,10 +188,14 @@ export const GRADING_PROFILES: GradingProfile[] = [
   {
     id: "trousers", label: "Trousers / jeans / leggings / joggers", family: "trousers", group: "bottoms", silhouette: "trousers", lay: LAY.trousers,
     points: [P.waistBottom, P.rise, P.thighL, P.thighR, P.kneeL, P.kneeR, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
+    crotchPhoto: CROTCH,
   },
   {
     id: "shorts", label: "Shorts / swim shorts", family: "shorts", group: "bottoms", silhouette: "shorts", lay: LAY.shorts,
-    points: [P.waistBottom, P.hipShorts, P.rise, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
+    /* Thigh added (owner, 2026-10-20: the WMS size card and the factory sheets have it). */
+    points: [P.waistBottom, P.hipDenim, P.rise, P.thighL, P.thighR, P.inseamL, P.inseamR, P.outseamL, P.outseamR, P.legOpeningL, P.legOpeningR],
+    hipBelowTopCm: 20,
+    crotchPhoto: CROTCH,
   },
   {
     id: "skirt", label: "Skirt", family: "skirt", group: "bottoms", silhouette: "skirt", lay: LAY.skirt,

@@ -7,7 +7,7 @@ import { listScans, saveScan, UUID_RE, type ScanMeta } from "@/lib/server/gradin
 import { PROFILE_BY_ID } from "@/lib/size-grading/grading-app-profiles";
 
 /**
- * POST (multipart: meta JSON + photo JPEG) — a measurement from CarbonGradingAI.
+ * POST (multipart: meta JSON + photo JPEG [+ crotchPhoto JPEG for bottoms]) — a measurement from CarbonGradingAI.
  *   Saved as a scan (photo in R2, copy to the owner's Dropbox folder) and as
  *   size_grading_measurements rows on every colour of the size and every
  *   product of its cut group. Returns where it was applied and the size check.
@@ -41,6 +41,17 @@ const Meta = z.object({
   aiCostUsd: z.number().finite().nullish(),
   capturedAt: z.string().max(40).nullish(),
   flags: z.array(z.string().max(200)).max(30).optional(),
+  crotch: z
+    .object({
+      pxPerCm: z.number().finite().positive(),
+      photoW: z.number().int().positive().optional(),
+      photoH: z.number().int().positive().optional(),
+      lines: z.record(z.string(), Line),
+      aiLines: z.record(z.string(), z.unknown()).nullish(),
+      outlineLines: z.record(z.string(), z.unknown()).nullish(),
+      depth: z.record(z.string(), z.unknown()).nullish(),
+    })
+    .nullish(),
 });
 
 async function POST_handler(req: Request) {
@@ -70,8 +81,10 @@ async function POST_handler(req: Request) {
   }
   if (!Object.keys(parsed.data.pointsCm).length) return NextResponse.json({ error: "No measurements to save." }, { status: 400 });
   const bytes = photo instanceof Blob && photo.size ? Buffer.from(await photo.arrayBuffer()) : null;
+  const crotch = form.get("crotchPhoto");
+  const crotchBytes = crotch instanceof Blob && crotch.size ? Buffer.from(await crotch.arrayBuffer()) : null;
   try {
-    const out = await saveScan(pool, session.sub ?? null, parsed.data as ScanMeta, bytes);
+    const out = await saveScan(pool, session.sub ?? null, parsed.data as ScanMeta, bytes, crotchBytes);
     return NextResponse.json(out);
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);

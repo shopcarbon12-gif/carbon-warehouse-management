@@ -29,12 +29,16 @@ class Prefs(ctx: Context) {
     var calibratedAt: Long
         get() = sp.getLong("calibratedAt", 0L)
         set(v) = sp.edit().putLong("calibratedAt", v).apply()
-    /** Last true width / height typed on the accuracy check (the same object is reused). */
+    /**
+     * Last true width / height typed on the accuracy check (the same object is reused).
+     * Default: a US Letter sheet, the owner's target (2026-10-20). The old 24 × 18
+     * default was never his object, so a stored 24 / 18 reads as Letter too.
+     */
     var checkW: String
-        get() = sp.getString("checkW", "24") ?: "24"
+        get() = (sp.getString("checkW", null)?.takeIf { it != "24" || sp.getString("checkH", null) != "18" }) ?: "21.59"
         set(v) = sp.edit().putString("checkW", v).apply()
     var checkH: String
-        get() = sp.getString("checkH", "18") ?: "18"
+        get() = (sp.getString("checkH", null)?.takeIf { it != "18" || sp.getString("checkW", null) != "24" }) ?: "27.94"
         set(v) = sp.edit().putString("checkH", v).apply()
 
     /**

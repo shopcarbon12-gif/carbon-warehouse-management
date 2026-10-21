@@ -17,7 +17,8 @@ import java.io.File
 import java.util.concurrent.TimeUnit
 
 /**
- * Saves are written to the phone first (files/scans/<id>/meta.json + photo.jpg)
+ * Saves are written to the phone first (files/scans/<id>/meta.json + photo.jpg,
+ * plus crotch.jpg for bottoms measured with a second, legs-spread photo)
  * and uploaded from there, so nothing measured is lost to a dropped Wi-Fi
  * connection. The scan id travels with it: the WMS recognises a retry of a
  * save that already landed and does not write it twice.
@@ -43,7 +44,7 @@ object ScanStore {
 
     suspend fun upload(ctx: Context, d: File): SaveResult {
         val meta = JSONObject(File(d, "meta.json").readText())
-        val res = App.get(ctx).api.saveScan(meta, File(d, "photo.jpg"))
+        val res = App.get(ctx).api.saveScan(meta, File(d, "photo.jpg"), File(d, "crotch.jpg").takeIf { it.exists() })
         d.deleteRecursively()
         return res
     }

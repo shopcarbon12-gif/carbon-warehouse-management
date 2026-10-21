@@ -12,7 +12,8 @@ sealed class Screen {
     data object Queue : Screen()
     data class Guide(val profileId: String? = null) : Screen()
     data class Item(val lookup: Lookup, val preSize: String? = null) : Screen()
-    data class Capture(val target: MeasureTarget) : Screen()
+    /** `crotchFor`: the second photo of a pair of bottoms, for that session's crotch points. */
+    data class Capture(val target: MeasureTarget, val crotchFor: MeasureSession? = null) : Screen()
     data class Result(val session: MeasureSession) : Screen()
     data class Saved(val session: MeasureSession, val result: SaveResult?, val queuedOffline: Boolean) : Screen()
     data class Web(val title: String, val path: String) : Screen()

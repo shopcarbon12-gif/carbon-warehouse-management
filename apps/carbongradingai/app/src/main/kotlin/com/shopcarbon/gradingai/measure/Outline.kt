@@ -232,8 +232,8 @@ object Outline {
         val out = LinkedHashMap<String, MLine>()
         val unsure = HashSet<String>()
         when (profile.family) {
-            "trousers", "shorts" -> legs(s, pxPerCm, keys, out, unsure)
-            "skirt" -> skirt(s, pxPerCm, out)
+            "trousers", "shorts" -> legs(s, pxPerCm, keys, out, unsure, profile.hipBelowTopCm)
+            "skirt" -> skirt(s, pxPerCm, out, profile.hipBelowTopCm)
             "onepiece" -> onepiece(s, pxPerCm, out, unsure)
             else -> upper(s, pxPerCm, keys, profile.family == "dress", out, unsure)
         }
@@ -453,12 +453,12 @@ object Outline {
         return line(baseX, bodyTop, x, topY)
     }
 
-    private fun skirt(s: Shape, pxPerCm: Double, out: MutableMap<String, MLine>) {
+    private fun skirt(s: Shape, pxPerCm: Double, out: MutableMap<String, MLine>, hipCm: Double) {
         val top = solidTop(s)
         val waistY = top + maxOf(1, (0.5 * pxPerCm).roundToInt())
         val waist = steady(s, waistY, 2, full = true) ?: return
         out["waist"] = hline(waist, waistY)
-        val hipY = minOf(s.bottom - 2, top + (18 * pxPerCm).roundToInt())
+        val hipY = minOf(s.bottom - 2, top + (hipCm * pxPerCm).roundToInt())
         steady(s, hipY, 2, full = true)?.let { out["hip"] = hline(it, hipY) }
         val hemY = s.bottom - maxOf(2, (s.h * 0.015).roundToInt())
         val hem = steady(s, hemY, 2, full = true)
@@ -498,13 +498,14 @@ object Outline {
 
     private class Leg(val inseam: MLine, val outseam: MLine?, val opening: MLine, val thigh: MLine?, val knee: MLine?)
 
-    private fun legs(s: Shape, pxPerCm: Double, keys: Set<String>, out: MutableMap<String, MLine>, unsure: MutableSet<String>) {
+    private fun legs(s: Shape, pxPerCm: Double, keys: Set<String>, out: MutableMap<String, MLine>, unsure: MutableSet<String>, hipCm: Double) {
         val top = solidTop(s)
         val waistY = top + maxOf(1, (0.5 * pxPerCm).roundToInt())
         val waist = steady(s, waistY, 2, full = true) ?: return
         out["waist"] = hline(waist, waistY)
         if ("hip" in keys) {
-            val hipY = minOf(s.bottom - 2, top + (18 * pxPerCm).roundToInt())
+            // The profile's hip line: 18 cm below the top, or the factory's 20 cm on denim shorts.
+            val hipY = minOf(s.bottom - 2, top + (hipCm * pxPerCm).roundToInt())
             steady(s, hipY, 2, full = true)?.let { out["hip"] = hline(it, hipY) }
         }
         var crotch = crotchY(s, top + (s.h * 0.15).roundToInt())

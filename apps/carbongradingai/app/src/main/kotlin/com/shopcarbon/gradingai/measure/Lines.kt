@@ -33,11 +33,18 @@ object Units {
 }
 
 /** Centimetres per point, plus each L/R pair's average under its plain key (as the WMS stores it). */
-fun pointsCm(profile: Profile, lines: Map<String, MLine>, pxPerCm: Double): Map<String, Double> {
+fun pointsCm(profile: Profile, lines: Map<String, MLine>, pxPerCm: Double): Map<String, Double> = pointsCm(profile, listOf(lines to pxPerCm))
+
+/**
+ * The same, from more than one photo: each photo's lines at that photo's own
+ * scale (the crotch photo of a pair of jeans is a different picture with its
+ * own depth reading). A later part wins for a point both have.
+ */
+fun pointsCm(profile: Profile, parts: List<Pair<Map<String, MLine>, Double>>): Map<String, Double> {
     val out = LinkedHashMap<String, Double>()
     for (p in profile.points) {
-        val l = lines[p.key] ?: continue
-        val v = l.lengthPx() / pxPerCm
+        val (l, ppc) = parts.lastOrNull { p.key in it.first }?.let { it.first[p.key]!! to it.second } ?: continue
+        val v = l.lengthPx() / ppc
         if (v > 0.3) out[p.key] = (v * 10).roundToInt() / 10.0
     }
     profile.points.filter { it.pairOf != null }.groupBy { it.pairOf!! }.forEach { (plain, pts) ->

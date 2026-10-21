@@ -52,7 +52,12 @@ import com.shopcarbon.gradingai.ar.LiveStatus
 import com.shopcarbon.gradingai.measure.Flat
 import com.shopcarbon.gradingai.measure.Pipeline
 import com.shopcarbon.gradingai.measure.appVersion
+import org.json.JSONArray
 import org.json.JSONObject
+import android.graphics.Bitmap
+import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.roundToInt
@@ -147,7 +152,7 @@ private fun CheckAccuracy(nav: Nav, f: Flat, readings: MutableList<Double>, onAg
     val img = remember(f) { f.photo.asImageBitmap() }
     val (mw, mh, md) = quadSizes(corners, f.pxPerCm)
     Page("Check accuracy", onBack = { nav.back() }) {
-        Muted("Drag the four corners onto the object's corners. Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away, tilt ${"%.1f".format(f.plane.tiltDeg)}°, depth ${"%.0f".format(f.depthAgeMs)} ms old.")
+        Muted("Drag the four corners onto the object's corners (or save now and set them on the WMS). Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away, tilt ${"%.1f".format(f.plane.tiltDeg)}°, depth ${"%.0f".format(f.depthAgeMs)} ms old.")
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val scale = with(density) { maxWidth.toPx() } / f.photo.width
             Canvas(
@@ -192,8 +197,17 @@ private fun CheckAccuracy(nav: Nav, f: Flat, readings: MutableList<Double>, onAg
                     app.prefs.checkW = trueW; app.prefs.checkH = trueH
                     val body = JSONObject().put("trueW", tw).put("trueH", th).put("measuredW", mw).put("measuredH", mh).put("measuredDiag", md)
                         .put("depth", f.depthJson(ctx)).put("appVersion", appVersion(ctx)).put("deviceModel", android.os.Build.MODEL ?: "")
+                        // The photo and corners go too, so the corners can be checked and moved on the desktop.
+                        .put("corners", JSONArray().apply { corners.forEach { put(JSONArray().put(it.x.toDouble()).put(it.y.toDouble())) } })
+                        .put("pxPerCm", f.pxPerCm).put("photoW", f.photo.width).put("photoH", f.photo.height)
                     scope.launch {
-                        try { app.api.saveAccuracyCheck(body); saved = true; msg = "Saved to the WMS (Size Grading › Scan review › Accuracy checks)." }
+                        try {
+                            val file = withContext(Dispatchers.IO) {
+                                File(ctx.cacheDir, "check.jpg").also { out -> out.outputStream().use { f.photo.compress(Bitmap.CompressFormat.JPEG, 90, it) } }
+                            }
+                            app.api.saveAccuracyCheck(body, file); saved = true
+                            msg = "Saved to the WMS (Size Grading › Scan review › Accuracy checks) — the corners can be moved there."
+                        }
                         catch (e: Exception) { msg = "Not saved: ${e.message}" }
                         finally { saving = false }
                     }

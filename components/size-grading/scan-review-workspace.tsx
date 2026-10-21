@@ -30,9 +30,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { Check, ExternalLink, Flag, ImageIcon, Loader2, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Check, ExternalLink, Flag, ImageIcon, Loader2, Move, RefreshCw, RotateCcw, Save, X } from "lucide-react";
 
-import type { GradingPoint } from "@/lib/size-grading/grading-app-profiles";
+import { withPairAverages, type GradingPoint, type GradingProfile } from "@/lib/size-grading/grading-app-profiles";
+import { LineEditor, polyLen, type EditLine } from "@/components/size-grading/line-editor";
 import { useUrlParam } from "@/lib/use-url-param";
 import { STORE_TZ } from "@/lib/orlando-time";
 import { staffLabel } from "@/lib/staff-name";
@@ -80,6 +81,9 @@ type ScanDetail = Omit<ScanRow, "has_photo" | "by_email"> & {
   view?: string | null;
   cut_group_id?: string | null;
   reviewed_at?: string | null;
+  adjusted_at?: string | null;
+  crotch?: { pxPerCm: number; photoW?: number; photoH?: number; lines: Record<string, Line>; depth?: Record<string, unknown> | null } | null;
+  crotch_photo_key?: string | null;
   profileDef: { id: string; label: string; family: string; points: GradingPoint[] } | null;
 };
 
@@ -147,7 +151,8 @@ const money = (v: unknown) => {
 };
 const cm1 = (v: number | null | undefined) => (typeof v === "number" ? v.toFixed(1) : "—");
 const in1 = (v: number | null | undefined) => (typeof v === "number" ? (v / 2.54).toFixed(1) : "—");
-const photoUrl = (id: string) => `/api/grading-app/scans/${id}/photo`;
+const photoUrl = (id: string, which: "main" | "crotch" = "main") =>
+  `/api/grading-app/scans/${id}/photo${which === "crotch" ? "?which=crotch" : ""}`;
 
 const plainBtn =
   "inline-flex items-center gap-1.5 rounded-md border border-[var(--wms-border)] px-3 py-1.5 text-sm text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40 max-md:min-h-11";
@@ -384,10 +389,66 @@ function ScanWindow({
   const scan = data?.scan ?? null;
   /** The point picked in the table — its line is drawn thicker on the photo. */
   const [selected, setSelected] = useState<string | null>(null);
+  /* Adjust lines: a copy of both photos' lines being dragged; null when not editing. */
+  const [draft, setDraft] = useState<{ main: Record<string, Line>; crotch: Record<string, Line> | null } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editErr, setEditErr] = useState<string | null>(null);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
 
   const changed = useCallback(async () => {
     await Promise.all([mutate(), onChanged()]);
   }, [mutate, onChanged]);
+
+  const startEdit = () => {
+    if (!scan) return;
+    setEditErr(null);
+    setEditMsg(null);
+    setDraft({
+      main: JSON.parse(JSON.stringify(scan.lines ?? {})),
+      crotch: scan.crotch?.lines ? JSON.parse(JSON.stringify(scan.crotch.lines)) : null,
+    });
+  };
+  const moveEnd = (which: "main" | "crotch") => (key: string, index: number, to: [number, number]) =>
+    setDraft((d) => {
+      if (!d) return d;
+      const set = which === "main" ? d.main : d.crotch;
+      const l = set?.[key];
+      if (!set || !l) return d;
+      const next = { ...set, [key]: { ...l, pts: l.pts.map((p, i) => (i === index ? to : p)), source: "manual" as const, moved: true } };
+      return which === "main" ? { ...d, main: next } : { ...d, crotch: next };
+    });
+  /* The numbers while dragging, worked out as the phone and the server do. */
+  const liveCm = useMemo(() => {
+    if (!draft || !scan?.profileDef) return null;
+    const known = new Set<string>(scan.profileDef.points.map((p) => p.key));
+    const cm: Record<string, number> = {};
+    const ppc = num(scan.px_per_cm) ?? 0;
+    if (ppc > 0) for (const [k, l] of Object.entries(draft.main)) if (known.has(k)) cm[k] = polyLen(l.pts) / ppc;
+    const cppc = num(scan.crotch?.pxPerCm) ?? 0;
+    if (draft.crotch && cppc > 0) for (const [k, l] of Object.entries(draft.crotch)) if (known.has(k)) cm[k] = polyLen(l.pts) / cppc;
+    return withPairAverages(scan.profileDef as unknown as GradingProfile, cm);
+  }, [draft, scan]);
+  const saveEdit = async () => {
+    if (!draft || !scan) return;
+    setSaving(true);
+    setEditErr(null);
+    try {
+      const res = await fetch(`/api/grading-app/scans/${scan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "adjust", lines: draft.main, crotchLines: draft.crotch }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; updated?: number };
+      if (!res.ok) throw new Error(j.error ?? "Could not save");
+      setDraft(null);
+      setEditMsg(`Saved — the new numbers are on ${j.updated ?? 0} item${j.updated === 1 ? "" : "s"}.`);
+      await changed();
+    } catch (e) {
+      setEditErr(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -460,10 +521,68 @@ function ScanWindow({
               </p>
             ) : (
               <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                <ScanPhoto scan={scan} selected={selected} onSelect={setSelected} />
+                <div className="flex min-w-0 flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {draft ? (
+                      <>
+                        <button type="button" className={plainBtn} onClick={() => void saveEdit()} disabled={saving}>
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save the new lines
+                        </button>
+                        <button type="button" className={plainBtn} onClick={() => setDraft(null)} disabled={saving}>
+                          <X className="h-4 w-4" /> Cancel
+                        </button>
+                        <span className="text-xs text-[var(--wms-muted)]">Drag any end. The numbers update as you go.</span>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className={plainBtn}
+                        onClick={startEdit}
+                        disabled={scan.status === "redo" || !Object.keys(scan.lines ?? {}).length}
+                        title={scan.status === "redo" ? "This scan was redone — measure the garment again." : "Move the measuring lines on the photo"}
+                      >
+                        <Move className="h-4 w-4" /> Adjust lines
+                      </button>
+                    )}
+                    {scan.adjusted_at && !draft ? (
+                      <span className="text-xs text-[var(--wms-muted)]">Lines adjusted on the WMS {when(scan.adjusted_at)}</span>
+                    ) : null}
+                  </div>
+                  {editErr ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{editErr}</p> : null}
+                  {editMsg ? <p className="text-sm text-[var(--wms-status-success-fg)]">{editMsg}</p> : null}
+                  <ScanPhoto
+                    scan={scan}
+                    which="main"
+                    lines={draft?.main ?? scan.lines ?? {}}
+                    selected={selected}
+                    onSelect={setSelected}
+                    editing={Boolean(draft)}
+                    onMove={moveEnd("main")}
+                  />
+                  {scan.crotch ? (
+                    <>
+                      <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Crotch photo (legs spread) — front rise and inseam</h3>
+                      <ScanPhoto
+                        scan={scan}
+                        which="crotch"
+                        lines={draft?.crotch ?? scan.crotch.lines ?? {}}
+                        selected={selected}
+                        onSelect={setSelected}
+                        editing={Boolean(draft)}
+                        onMove={moveEnd("crotch")}
+                      />
+                    </>
+                  ) : null}
+                </div>
                 <div className="flex min-w-0 flex-col gap-4">
                   <ReviewBox scan={scan} onChanged={changed} />
-                  <PointsTable scan={scan} selected={selected} onSelect={setSelected} />
+                  <PointsTable
+                    scan={scan}
+                    cmOverride={liveCm}
+                    linesOverride={draft ? { ...draft.main, ...(draft.crotch ?? {}) } : { ...(scan.lines ?? {}), ...(scan.crotch?.lines ?? {}) }}
+                    selected={selected}
+                    onSelect={setSelected}
+                  />
                   <FlagsList flags={scan.flags ?? []} />
                   <DepthFacts scan={scan} />
                 </div>
@@ -487,19 +606,24 @@ function pairIndex(scan: ScanDetail): Record<string, string> {
 
 function ScanPhoto({
   scan,
+  which,
+  lines: lineMap,
   selected,
   onSelect,
+  editing,
+  onMove,
 }: {
   scan: ScanDetail;
+  which: "main" | "crotch";
+  lines: Record<string, Line>;
   selected: string | null;
   onSelect: (key: string | null) => void;
+  editing: boolean;
+  onMove: (key: string, index: number, to: [number, number]) => void;
 }) {
-  const hasPhoto = scan.has_photo ?? Boolean(scan.photo_key);
-  /* The size the lines were placed in. The phone sends it; if an older scan
-     did not, the decoded photo's own size is the same picture. */
-  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const hasPhoto = which === "crotch" ? Boolean(scan.crotch_photo_key) : (scan.has_photo ?? Boolean(scan.photo_key));
   const [failed, setFailed] = useState(false);
-  const lines = useMemo(() => Object.entries(scan.lines ?? {}).filter(([, l]) => Array.isArray(l?.pts) && l.pts.length >= 2), [scan.lines]);
+  const lines = useMemo(() => Object.entries(lineMap).filter(([, l]) => Array.isArray(l?.pts) && l.pts.length >= 2), [lineMap]);
   const { letters, labels } = useMemo(() => {
     const letters: Record<string, string> = {};
     const labels: Record<string, string> = {};
@@ -520,92 +644,45 @@ function ScanPhoto({
     }
     return w && h ? { w: Math.ceil(w * 1.05), h: Math.ceil(h * 1.05) } : null;
   }, [lines]);
-  const W = num(scan.photo_w) ?? natural?.w ?? fromLines?.w ?? 0;
-  const H = num(scan.photo_h) ?? natural?.h ?? fromLines?.h ?? 0;
-  const S = Math.max(W, H) || 1;
+  const W = (which === "crotch" ? num(scan.crotch?.photoW) : num(scan.photo_w)) ?? fromLines?.w ?? 0;
+  const H = (which === "crotch" ? num(scan.crotch?.photoH) : num(scan.photo_h)) ?? fromLines?.h ?? 0;
   const present = new Set(lines.map(([, l]) => sourceKind(l)));
+  const src = photoUrl(scan.id, which);
 
-  const overlay =
-    W && H ? (
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-full"
-        aria-label="Measurement lines"
-      >
-        {lines.map(([key, l]) => {
-          const kind = sourceKind(l) ?? "outline";
-          const c = SOURCE_COLOR[kind];
-          const on = selected !== null && (selected === key || pairOf[key] === selected);
-          const pts = l.pts.map(([x, y]) => `${x},${y}`).join(" ");
-          const [fx, fy] = l.pts[0];
-          return (
-            <g key={key} className="cursor-pointer" onClick={() => onSelect(on ? null : (pairOf[key] ?? key))}>
-              <title>{`${labels[key] ?? key} — ${SOURCE_LABEL[kind].toLowerCase()}`}</title>
-              <polyline
-                points={pts}
-                fill="none"
-                stroke="#000"
-                strokeOpacity={0.6}
-                strokeWidth={on ? 8 : 5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-              <polyline
-                points={pts}
-                fill="none"
-                stroke={c}
-                strokeWidth={on ? 4.5 : 2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-              {l.pts.map(([x, y], i) => (
-                <circle key={i} cx={x} cy={y} r={S / 260} fill={c} stroke="#000" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-              ))}
-              <circle cx={fx} cy={fy} r={S / 55} fill={c} stroke="#000" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-              <text
-                x={fx}
-                y={fy}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={S / 42}
-                fontWeight={700}
-                fontFamily="ui-monospace, monospace"
-                fill="#000"
-              >
-                {letters[key] ?? key.charAt(0).toUpperCase()}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    ) : null;
+  const editLines: Record<string, EditLine> = {};
+  for (const [key, l] of lines) {
+    const kind = sourceKind(l) ?? "outline";
+    editLines[key] = { pts: l.pts, color: SOURCE_COLOR[kind], letter: letters[key] ?? key.charAt(0).toUpperCase(), title: `${labels[key] ?? key} — ${SOURCE_LABEL[kind].toLowerCase()}` };
+  }
+  /* Picking "Sleeve" in the table lights both halves. */
+  const sel = selected === null ? null : (lines.find(([k]) => k === selected || pairOf[k] === selected)?.[0] ?? selected);
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="min-w-0 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-1">
-        {hasPhoto && !failed ? (
-          <div className="relative">
-            {/* The scan's own photo — the picture the lines were drawn on. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={photoUrl(scan.id)}
+        {W && H ? (
+          <>
+            {hasPhoto && !failed ? (
+              // Preload to notice a missing photo; the editor draws the same picture.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={src} alt="" className="hidden" onError={() => setFailed(true)} />
+            ) : (
+              <p className="px-2 pt-1 text-xs text-[var(--wms-muted)]">
+                {failed ? "The photo could not be loaded — lines only." : "No photo was saved with this scan — lines only."}
+              </p>
+            )}
+            <LineEditor
+              src={hasPhoto && !failed ? src : null}
               alt={`Photo of ${scan.name ?? "the garment"}, size ${scan.size ?? ""}`}
-              className="block h-auto w-full rounded"
-              onLoad={(e) => setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
-              onError={() => setFailed(true)}
+              width={W}
+              height={H}
+              lines={editLines}
+              selected={sel}
+              onSelect={(k) => onSelect(k === null ? null : (pairOf[k] ?? k))}
+              editing={editing}
+              onMove={onMove}
             />
-            {overlay}
-          </div>
-        ) : W && H ? (
-          <div className="relative w-full" style={{ aspectRatio: `${W} / ${H}` }}>
-            <p className="absolute left-2 top-2 text-xs text-[var(--wms-muted)]">
-              {failed ? "The photo could not be loaded — lines only." : "No photo was saved with this scan — lines only."}
-            </p>
-            {overlay}
-          </div>
+          </>
         ) : (
           <p className="p-6 text-center text-sm text-[var(--wms-muted)]">No photo and no lines were saved with this scan.</p>
         )}
@@ -619,7 +696,7 @@ function ScanPhoto({
         ))}
         {hasPhoto ? (
           <a
-            href={photoUrl(scan.id)}
+            href={src}
             target="_blank"
             rel="noreferrer"
             className="ml-auto inline-flex items-center gap-1 text-[var(--wms-accent)] hover:underline max-md:min-h-11"
@@ -628,9 +705,11 @@ function ScanPhoto({
           </a>
         ) : null}
       </div>
-      <p className="text-xs text-[var(--wms-muted)]">
-        The letter sits at the start of each line. Tap a line, or a row in the table, to pick it out.
-      </p>
+      {which === "main" ? (
+        <p className="text-xs text-[var(--wms-muted)]">
+          The letter sits at the start of each line. Tap a line, or a row in the table, to pick it out.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -643,15 +722,20 @@ type TableRow =
 
 function PointsTable({
   scan,
+  cmOverride,
+  linesOverride,
   selected,
   onSelect,
 }: {
   scan: ScanDetail;
+  /** The numbers while lines are being adjusted. */
+  cmOverride?: Record<string, number> | null;
+  linesOverride?: Record<string, Line>;
   selected: string | null;
   onSelect: (key: string | null) => void;
 }) {
-  const cm = useMemo(() => scan.points_cm ?? {}, [scan.points_cm]);
-  const lines = useMemo(() => scan.lines ?? {}, [scan.lines]);
+  const cm = useMemo(() => cmOverride ?? scan.points_cm ?? {}, [cmOverride, scan.points_cm]);
+  const lines = useMemo(() => linesOverride ?? scan.lines ?? {}, [linesOverride, scan.lines]);
 
   /* The garment type's own order, which is the order of the letters on the
      guide picture. L/R points share one row so the two sides sit next to each

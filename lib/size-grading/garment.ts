@@ -123,10 +123,9 @@ export const POMS_FOR: Record<GarmentType, PomKey[]> = {
   /* Owner, 2026-10-12: waist, hip, thigh, leg opening, inseam, front rise
      (sketch A B C F G I). Order = guide/trousers-front.webp. */
   trousers: ["waist", "hip", "thigh", "legOpening", "inseam", "rise"],
-  shorts: [
-    "waist", "hip", "thigh", "legOpening", "inseam", "outseam", "rise",
-    "waistbandHeight", "frontPocketOpening", "backPocketWidth", "backPocketLength",
-  ],
+  /* Owner, 2026-10-20: the typed-in tech-pack boxes (waistband height, pocket
+     openings) are hidden for shorts — the shop does not show them. */
+  shorts: ["waist", "hip", "thigh", "legOpening", "inseam", "outseam", "rise"],
   dress: [
     "chest", "waist", "hip", "hem", "length", "shoulder", "armhole",
     "sleeve", "sleeveInseam", "bicep", "cuff", "neck", "neckDrop",

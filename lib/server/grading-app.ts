@@ -12,6 +12,7 @@ import {
   GRADING_PROFILES,
   PROFILE_BY_ID,
   pairMismatches,
+  withPairAverages,
   profileForProduct,
   sizeRank,
   type GradingProfile,
@@ -272,6 +273,18 @@ export type ScanMeta = {
   capturedAt?: string | null;
   /** Flags raised on the phone (test phone, label size mismatch, AI vs outline). */
   flags?: string[];
+  /** Bottoms: the legs-spread photo the crotch points were measured on (its own scale and lines). */
+  crotch?: CrotchMeta | null;
+};
+
+export type CrotchMeta = {
+  pxPerCm: number;
+  photoW?: number;
+  photoH?: number;
+  lines: Record<string, ScanLine>;
+  aiLines?: Record<string, unknown> | null;
+  outlineLines?: Record<string, unknown> | null;
+  depth?: Record<string, unknown> | null;
 };
 
 export type SizeCheckRow = {
@@ -311,7 +324,7 @@ async function previousResult(pool: Pool, id: string): Promise<SaveResult | null
   };
 }
 
-export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta, photo: Buffer | null): Promise<SaveResult> {
+export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta, photo: Buffer | null, crotchPhoto: Buffer | null = null): Promise<SaveResult> {
   /* The phone makes the scan id, so a save retried from its offline queue
      after the first attempt actually landed is recognised, not doubled. */
   const prior = await previousResult(pool, meta.id);
@@ -353,6 +366,8 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
   const flags = [...new Set([...(meta.flags ?? []), ...pairMismatches(profile, meta.pointsCm)])];
   const check = await sizeCheck(pool, picked.matrix_id, cut?.id ?? null, picked.size, meta.pointsCm, profile);
   for (const c of check) if (c.status === "flag") flags.push(`size check: ${c.label} ${c.fromSize}→${c.toSize} ${c.deltaCm > 0 ? "+" : ""}${c.deltaCm.toFixed(1)} cm`);
+  flags.push(...(await lastScanDiffs(pool, picked.matrix_id, picked.size, meta.id, meta.pointsCm, profile)));
+  flags.push(...(await factoryDiffs(pool, picked.matrix_id, picked.size, meta.pointsCm, profile)));
   const testPhone = flags.some((f) => f.startsWith("test phone"));
   const status = flags.length ? "flagged" : "saved";
 
@@ -363,6 +378,12 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
     photoKey = `grading-scans/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${meta.id}.jpg`;
     await uploadBytesToStorage({ path: photoKey, bytes: new Uint8Array(photo), contentType: "image/jpeg" });
   }
+  let crotchKey: string | null = null;
+  if (meta.crotch && crotchPhoto && crotchPhoto.length && isR2StorageConfigured()) {
+    const d = new Date();
+    crotchKey = `grading-scans/${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${meta.id}-crotch.jpg`;
+    await uploadBytesToStorage({ path: crotchKey, bytes: new Uint8Array(crotchPhoto), contentType: "image/jpeg" });
+  }
 
   const client = await pool.connect();
   try {
@@ -371,10 +392,10 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
       `INSERT INTO size_grading_scans
          (id, custom_sku_id, matrix_id, cut_group_id, profile, garment_type, view, size, points_cm, lines,
           ai_lines, outline_lines, px_per_cm, photo_w, photo_h, photo_key, depth, device, app_version,
-          ai_model, ai_cost_usd, status, flags, applied_to, captured_at, created_by)
+          ai_model, ai_cost_usd, status, flags, applied_to, captured_at, created_by, crotch, crotch_photo_key)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb,
                $11::jsonb, $12::jsonb, $13, $14, $15, $16, $17::jsonb, $18::jsonb, $19,
-               $20, $21, $22, $23::jsonb, $24, $25, $26)`,
+               $20, $21, $22, $23::jsonb, $24, $25, $26, $27::jsonb, $28)`,
       [
         meta.id, picked.id, picked.matrix_id, cut?.id ?? null, profile.id, profile.family, meta.view ?? "front",
         picked.size, JSON.stringify(meta.pointsCm), JSON.stringify(meta.lines),
@@ -383,6 +404,7 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
         meta.depth ? JSON.stringify(meta.depth) : null, meta.device ? JSON.stringify(meta.device) : null,
         meta.appVersion ?? null, meta.aiModel ?? null, meta.aiCostUsd ?? null, status, JSON.stringify(flags),
         testPhone ? 0 : targets.length, meta.capturedAt ?? null, userId,
+        meta.crotch ? JSON.stringify(meta.crotch) : null, crotchKey,
       ],
     );
     /* A phone without a depth sensor (test mode) never writes the item's
@@ -404,7 +426,7 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
   }
 
   const dropboxOn = isDropboxConfigured() && Boolean(photo?.length);
-  if (dropboxOn) void copyToDropbox(pool, meta.id, photo!).then(() => retryDropbox(pool)).catch(() => {});
+  if (dropboxOn) void copyToDropbox(pool, meta.id, photo!, crotchKey ? crotchPhoto : null).then(() => retryDropbox(pool)).catch(() => {});
 
   const groupMatrices = new Set(groupRows.map((r) => r.matrix_id));
   return {
@@ -427,7 +449,7 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
 
 /* ───────────────────────────── Dropbox copy ───────────────────────────── */
 
-async function copyToDropbox(pool: Pool, scanId: string, photo: Buffer): Promise<void> {
+async function copyToDropbox(pool: Pool, scanId: string, photo: Buffer, crotchPhoto: Buffer | null = null): Promise<void> {
   const r = await pool.query<{
     name: string | null; upc: string | null; size: string | null; color: string | null; created_at: Date;
     points_cm: Record<string, number>; profile: string; lines: unknown; px_per_cm: string; depth: unknown; flags: unknown;
@@ -451,6 +473,7 @@ async function copyToDropbox(pool: Pool, scanId: string, photo: Buffer): Promise
   const base = dropboxSafe(`${s.size ?? "nosize"} ${s.color ?? ""} ${when} ${scanId.slice(0, 8)}`).replace(/ /g, "_");
   try {
     const path = await dropboxUpload(`${folder}/${base}.jpg`, photo);
+    if (crotchPhoto?.length) await dropboxUpload(`${folder}/${base}_crotch.jpg`, crotchPhoto);
     const sidecar = {
       scanId, product: s.name, upc: s.upc, size: s.size, colour: s.color, profile: s.profile,
       pxPerCm: Number(s.px_per_cm), measurementsCm: s.points_cm, lines: s.lines, depth: s.depth, flags: s.flags,
@@ -544,6 +567,120 @@ export async function sizeCheck(
     if (next) judge(pointsCm[key], next.cm[key], size, next.size);
   }
   return out;
+}
+
+/**
+ * The same size measured before: a plain point that moved more than 2 cm
+ * since the last scan that still stands is a mis-placed point until shown
+ * otherwise (owner, 2026-10-20: two scans a minute apart, rise 26.4 vs 20.6).
+ */
+async function lastScanDiffs(
+  pool: Pool, matrixId: string, size: string | null, scanId: string, pointsCm: Record<string, number>, profile: GradingProfile,
+): Promise<string[]> {
+  if (!size) return [];
+  const r = await pool.query<{ points_cm: Record<string, number> }>(
+    `SELECT points_cm FROM size_grading_scans
+      WHERE matrix_id = $1::uuid AND upper(trim(size)) = $2 AND id <> $3::uuid AND status <> 'redo' AND view = 'front'
+        AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(flags) f WHERE f LIKE 'test phone%')
+      ORDER BY created_at DESC LIMIT 1`,
+    [matrixId, normSize(size), scanId],
+  );
+  const prev = r.rows[0]?.points_cm;
+  if (!prev) return [];
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(pointsCm)) {
+    if (!PLAIN_KEYS.has(k) || typeof prev[k] !== "number") continue;
+    if (Math.abs(v - prev[k]) > 2) out.push(`differs from the last scan of this size: ${labelFor(profile, k)} ${prev[k].toFixed(1)} → ${v.toFixed(1)} cm`);
+  }
+  return out;
+}
+
+/* ─────────────────────────── factory size sheet ─────────────────────────── */
+
+/**
+ * How far a reading may sit from the factory sheet before it is flagged. A
+ * sheet is a target with its own tolerance, and the waist is measured
+ * differently there (along the curved top edge, not straight across: owner's
+ * tape 39.5 along vs 38.4 across, sheet 39.4) — so it gets more room.
+ */
+const FACTORY_TOLERANCE_CM: Record<string, number> = { waist: 3.5 };
+
+export async function factorySpec(pool: Pool, matrixId: string, size: string | null): Promise<Record<string, number> | null> {
+  if (!size) return null;
+  const r = await pool.query<{ points_cm: Record<string, number> }>(
+    `SELECT points_cm FROM size_grading_factory_specs WHERE matrix_id = $1::uuid AND upper(trim(size)) = $2`,
+    [matrixId, normSize(size)],
+  ).catch(() => ({ rows: [] as { points_cm: Record<string, number> }[] }));
+  return r.rows[0]?.points_cm ?? null;
+}
+
+async function factoryDiffs(pool: Pool, matrixId: string, size: string | null, pointsCm: Record<string, number>, profile: GradingProfile): Promise<string[]> {
+  const spec = await factorySpec(pool, matrixId, size);
+  if (!spec) return [];
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(pointsCm)) {
+    if (!PLAIN_KEYS.has(k) || typeof spec[k] !== "number") continue;
+    if (Math.abs(v - spec[k]) > (FACTORY_TOLERANCE_CM[k] ?? 2)) out.push(`far from the factory sheet: ${labelFor(profile, k)} ${v.toFixed(1)} cm vs ${spec[k].toFixed(1)} cm`);
+  }
+  return out;
+}
+
+/* ───────────────────────────── adjust on the WMS ───────────────────────────── */
+
+const lineLen = (l: ScanLine) => l.pts.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - l.pts[i][0], p[1] - l.pts[i][1]), 0);
+
+/**
+ * Lines moved on the desktop (Scan review › Adjust lines). The numbers are
+ * worked out exactly as the phone does — line length over the photo's own
+ * scale, L/R pairs averaged — and replace the scan's readings on every item it
+ * was written to. The scale never changes: it came from the depth sensor with
+ * the photo.
+ */
+export async function adjustScan(
+  pool: Pool, id: string, lines: Record<string, ScanLine>, crotchLines: Record<string, ScanLine> | null, userId: string | null,
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cur = await client.query<{ status: string; profile: string; px_per_cm: string; lines: Record<string, ScanLine>; crotch: CrotchMeta | null; flags: string[] }>(
+      `SELECT status, profile, px_per_cm, lines, crotch, flags FROM size_grading_scans WHERE id = $1::uuid FOR UPDATE`, [id],
+    );
+    const s = cur.rows[0];
+    if (!s) { await client.query("ROLLBACK"); return null; }
+    if (s.status === "redo") { await client.query("ROLLBACK"); return { refused: true as const }; }
+    const profile = PROFILE_BY_ID[s.profile as GradingProfileId];
+    if (!profile) throw new Error(`Unknown garment type "${s.profile}"`);
+    const known = new Set<string>(profile.points.map((p) => p.key));
+    const ppc = Number(s.px_per_cm);
+    // Only the points the scan already has: the editor moves lines, it does not add or drop them.
+    const mainOut: Record<string, ScanLine> = {};
+    for (const [k, l] of Object.entries(s.lines ?? {})) mainOut[k] = lines[k] && known.has(k) ? { ...lines[k], source: "manual", moved: true } : l;
+    let crotch = s.crotch;
+    if (crotch && crotchLines) {
+      const c: Record<string, ScanLine> = {};
+      for (const [k, l] of Object.entries(crotch.lines ?? {})) c[k] = crotchLines[k] ? { ...crotchLines[k], source: "manual", moved: true } : l;
+      crotch = { ...crotch, lines: c };
+    }
+    const cm: Record<string, number> = {};
+    for (const [k, l] of Object.entries(mainOut)) if (known.has(k)) cm[k] = lineLen(l) / ppc;
+    if (crotch) for (const [k, l] of Object.entries(crotch.lines ?? {})) if (known.has(k)) cm[k] = lineLen(l) / Number(crotch.pxPerCm);
+    const pointsCm = withPairAverages(profile, cm);
+    const flags = [...new Set([...(s.flags ?? []).filter((f) => !/L\/R differ|left and right differ/.test(f)), ...pairMismatches(profile, pointsCm), "lines adjusted on the WMS"])];
+    await client.query(
+      `UPDATE size_grading_scans
+          SET lines = $2::jsonb, crotch = $3::jsonb, points_cm = $4::jsonb, flags = $5::jsonb, adjusted_at = now(), adjusted_by = $6
+        WHERE id = $1::uuid`,
+      [id, JSON.stringify(mainOut), crotch ? JSON.stringify(crotch) : null, JSON.stringify(pointsCm), JSON.stringify(flags), userId],
+    );
+    const upd = await client.query(`UPDATE size_grading_measurements SET points_cm = $2::jsonb WHERE scan_id = $1::uuid`, [id, JSON.stringify(pointsCm)]);
+    await client.query("COMMIT");
+    return { pointsCm, flags, updated: upd.rowCount ?? 0 };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 /* ─────────────────────────────── queue ─────────────────────────────── */

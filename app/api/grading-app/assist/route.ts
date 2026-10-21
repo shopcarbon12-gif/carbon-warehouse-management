@@ -11,7 +11,12 @@ import { PROFILE_BY_ID, type GradingProfileId } from "@/lib/size-grading/grading
  * start, straps). The same close-up agent as the desktop Size Grading page
  * places them; lines come back in the photo's pixels.
  *
- * multipart: photo (JPEG), meta {"profile":"tee","pxPerCm":15.8,"keys":["shoulder","sleeveL"]}
+ * multipart: photo (JPEG), meta {"profile":"tee","pxPerCm":15.8,"keys":["shoulder","sleeveL"],"repeat":2}
+ *
+ * repeat 2 (the crotch photo): two independent placements run side by side.
+ * When they agree the ends are averaged; `spreadCm` says how far apart each
+ * point's ends landed, so the phone can flag a crotch the AI is unsure of
+ * (owner, 2026-10-20: scan 1 put the crotch 5.6 cm too high).
  */
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -36,7 +41,7 @@ async function POST_handler(req: Request) {
     return NextResponse.json({ error: "photo and meta are required." }, { status: 400 });
   }
   if (photo.size > MAX_PHOTO) return NextResponse.json({ error: "Photo too large." }, { status: 413 });
-  let meta: { profile?: string; pxPerCm?: number; keys?: string[] };
+  let meta: { profile?: string; pxPerCm?: number; keys?: string[]; repeat?: number };
   try {
     meta = JSON.parse(metaRaw);
   } catch {
@@ -51,10 +56,21 @@ async function POST_handler(req: Request) {
   if (!points.length) return NextResponse.json({ error: "No points to place." }, { status: 400 });
 
   try {
-    const result = await measureWithAgent(
-      { image: Buffer.from(await photo.arrayBuffer()), pxPerCm, type: profile.family, view: "front", keys: [], points, scale: "depth" },
+    const image = Buffer.from(await photo.arrayBuffer());
+    const run = () => measureWithAgent(
+      { image, pxPerCm, type: profile.family, view: "front", keys: [], points, scale: "depth" },
       { provider: cfg.provider, model: cfg.model, maxRounds: cfg.maxRounds, thinkingBudget: cfg.thinkingBudget, effort: cfg.effort, deadlineMs: 140_000 },
     );
+    if (meta.repeat === 2) {
+      const [a, b] = await Promise.all([run(), run().catch(() => null)]);
+      const { lines, spreadCm } = mergeRuns(a.lines as Lines, (b?.lines ?? {}) as Lines, pxPerCm);
+      const cost = (Number.isFinite(a.costUsd) ? a.costUsd : 0) + (b && Number.isFinite(b.costUsd) ? b.costUsd : 0);
+      return NextResponse.json({
+        lines, cm: a.cm, skipped: a.skipped, remarks: a.remarks, model: a.model, costUsd: cost || null,
+        ms: Math.max(a.ms, b?.ms ?? 0), rounds: a.rounds, zooms: a.zooms, spreadCm, runs: b ? 2 : 1,
+      });
+    }
+    const result = await run();
     return NextResponse.json({
       lines: result.lines, cm: result.cm, skipped: result.skipped, remarks: result.remarks,
       model: result.model, costUsd: Number.isFinite(result.costUsd) ? result.costUsd : null, ms: result.ms,
@@ -65,6 +81,27 @@ async function POST_handler(req: Request) {
     console.error("[grading-app/assist]", reason);
     return NextResponse.json({ error: `AI assist failed — ${reason}` }, { status: 502 });
   }
+}
+
+type XY = { x: number; y: number };
+type Lines = Record<string, { a: XY; b: XY }>;
+
+/** Two placements of the same points: averaged ends, and how far apart the two runs put each point (cm). */
+function mergeRuns(a: Lines, b: Lines, pxPerCm: number): { lines: Lines; spreadCm: Record<string, number> } {
+  const lines: Lines = {};
+  const spreadCm: Record<string, number> = {};
+  const d = (p: XY, q: XY) => Math.hypot(p.x - q.x, p.y - q.y);
+  const mid = (p: XY, q: XY) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+  for (const [k, la] of Object.entries(a)) {
+    const lb = b[k];
+    if (!lb) { lines[k] = la; continue; }
+    // The second run may have drawn the line the other way round.
+    const flip = d(la.a, lb.b) + d(la.b, lb.a) < d(la.a, lb.a) + d(la.b, lb.b);
+    const ob = flip ? { a: lb.b, b: lb.a } : lb;
+    spreadCm[k] = Math.round((Math.max(d(la.a, ob.a), d(la.b, ob.b)) / pxPerCm) * 10) / 10;
+    lines[k] = { a: mid(la.a, ob.a), b: mid(la.b, ob.b) };
+  }
+  return { lines, spreadCm };
 }
 
 export const POST = withActivity("grading-app/assist", POST_handler);
