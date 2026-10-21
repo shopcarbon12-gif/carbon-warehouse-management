@@ -13,6 +13,8 @@ import { NextResponse, after } from "next/server";
 import { getPool } from "@/lib/db";
 import { extractPublicIp } from "@/lib/server/request-public-ip";
 import { deliverWelcomeEmail, runWelcomeSignup } from "@/lib/server/welcome/signup";
+import { linkVisitorSignup } from "@/lib/server/visitors/record";
+import { formOf } from "@/lib/server/welcome/rules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +79,12 @@ async function POST_handler(req: Request) {
     const kind = answer.status === "created" ? "first" : "resend";
     const id = answer.id;
     after(() => deliverWelcomeEmail(pool, id, kind));
+  }
+  // Shopify → Visitors: this visitor (Carbon Shield's cs_vid) now has an email.
+  if (answer.ok && typeof body.v === "string" && body.v) {
+    const vid = body.v.slice(0, 64);
+    const email = answer.email;
+    after(() => linkVisitorSignup(pool, vid, email, formOf(body.f)));
   }
   const shown: Record<string, unknown> = { ...answer };
   delete shown.id; // the row id stays on the server

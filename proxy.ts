@@ -32,6 +32,8 @@ function isPublicPath(pathname: string): boolean {
   /* Carbon Shield: the theme script on shopcarbon.com asks for a verdict on
      every page view — shoppers have no WMS session. */
   if (pathname === "/api/shield/check") return true;
+  /* Shopify → Visitors: cart adds / checkout / pings from the same theme script. */
+  if (pathname === "/api/shield/event") return true;
   /* Email popup on shopcarbon.com (signup from a shopper's browser) and the
      unsubscribe link in its welcome email — no WMS session; the unsubscribe
      link carries a random per-signup token. */

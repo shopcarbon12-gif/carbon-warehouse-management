@@ -53,6 +53,7 @@ const SKIP_ROUTES = new Set<string>([
   "shopify/metafields/suggest",
   "mobile/locate-sessions", // telemetry, one row per Locate use — not a change
   "shield/check", // Carbon Shield: one call per storefront page view — not a change
+  "shield/event", // Shopify → Visitors: shoppers' cart adds / pings — recorded in visitor_events
   // Email popup: shoppers' own signups / unsubscribes, recorded in welcome_signups (Shopify → Email Popup)
   "storefront/welcome-signup",
   "storefront/welcome-unsubscribe",

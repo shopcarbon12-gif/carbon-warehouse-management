@@ -6,6 +6,7 @@
  */
 import type { Pool } from "pg";
 import { refreshIpDbIfStale } from "./ipdb";
+import { pruneVisitors } from "@/lib/server/visitors/record";
 
 export async function rollupShieldDaily(pool: Pool): Promise<void> {
   /* Whole days only (yesterday 00:00 ET onward), so a day is never
@@ -47,6 +48,8 @@ export async function maybeRunShieldMaintenance(pool: Pool): Promise<void> {
     await rollupShieldDaily(pool);
     const pruned = await pruneShieldEvents(pool);
     if (pruned) console.log(`[worker] shield: pruned ${pruned} raw rows older than 7 days`);
+    const v = await pruneVisitors(pool);
+    if (v.events || v.visitors) console.log(`[worker] visitors: pruned ${v.events} events, ${v.visitors} visitors older than 90 days`);
   } catch (e) {
     console.error("[worker] shield rollup/prune failed", e);
   }

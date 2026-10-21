@@ -30,6 +30,21 @@ function env(key) {
   }
   return "";
 }
+/** First NON-EMPTY value across the env files (the Coolify mirror may hold an empty line). */
+function envAny(key) {
+  for (const f of [".env.coolify.local", ".env.local", ".env.agent-secrets"]) {
+    const p = path.join(ROOT, f);
+    if (!existsSync(p)) continue;
+    const m = readFileSync(p, "utf8").match(new RegExp(`^${key}=(.*)$`, "m"));
+    const v = m ? m[1].trim().replace(/^['"]|['"]$/g, "") : "";
+    if (v) return v;
+  }
+  return "";
+}
+/* Shopify → Visitors: the snippet signs a logged-in shopper's id with the
+   wishlist's secret (the WMS checks it). The repo copy keeps the placeholder. */
+const SECRET_PLACEHOLDER = "__CARBON_WISHLIST_SECRET__";
+const SECRET = envAny("CARBON_WISHLIST_SECRET");
 const SHOP = env("SHOPIFY_SHOP_DOMAIN");
 const TOKEN = env("SHOPIFY_ADMIN_ACCESS_TOKEN");
 
@@ -74,7 +89,14 @@ console.log(
 );
 
 const upserts = [];
-if (!REMOVE) upserts.push({ filename: SNIPPET, body: { type: "TEXT", value: readFileSync(path.join(ROOT, "theme", SNIPPET), "utf8") } });
+if (!REMOVE) {
+  let snippet = readFileSync(path.join(ROOT, "theme", SNIPPET), "utf8");
+  if (snippet.includes(SECRET_PLACEHOLDER)) {
+    if (!/^[a-f0-9]{32,}$/i.test(SECRET)) throw new Error("CARBON_WISHLIST_SECRET is missing — not uploading a snippet with the placeholder");
+    snippet = snippet.split(SECRET_PLACEHOLDER).join(SECRET);
+  }
+  upserts.push({ filename: SNIPPET, body: { type: "TEXT", value: snippet } });
+}
 if (layoutChanged) upserts.push({ filename: "layout/theme.liquid", body: { type: "TEXT", value: nextLayout } });
 
 if (!WRITE) {

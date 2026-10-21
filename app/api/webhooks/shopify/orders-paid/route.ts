@@ -5,6 +5,7 @@ import { notifyShopifyOrder } from "@/lib/server/web-push";
 import { verifyShopifyWebhookHmac } from "@/lib/shopify-webhook";
 import { ORDER_HOLD_STATUS } from "@/lib/server/order-hold-status";
 import { markWelcomeCodesUsed } from "@/lib/server/welcome/signup";
+import { linkVisitorOrder, type PaidOrder } from "@/lib/server/visitors/record";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +80,10 @@ async function POST_handler(req: Request) {
       console.error("[orders-paid] welcome code", e),
     );
   }
+
+  /* Shopify → Visitors: credit the order to the visitor who placed it (cart
+     attribute _cs_vid, else their known email). Idempotent per order. */
+  await linkVisitorOrder(pool, order as PaidOrder);
 
   // Idempotency: claim the order id. If already processed, ack and stop.
   const claim = await pool.query(

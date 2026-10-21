@@ -9,6 +9,7 @@
 import type { Pool } from "pg";
 import { getIpDb, ipv4ToInt, lookupIp } from "./ipdb";
 import { decide, type ShieldRule, type ShieldSettings } from "./verdict";
+import { recordPageView, type SignedCustomer } from "@/lib/server/visitors/record";
 
 export const SHIELD_DEFAULTS: ShieldSettings = {
   mode: "monitor",
@@ -101,6 +102,12 @@ export type CheckBody = {
   ad?: string;
   /** utm_source. */
   utm?: string;
+  /** Page title (Liquid page_title) — for Shopify → Visitors. */
+  t?: string;
+  /** Product handle on a product page. */
+  h?: string;
+  /** Logged-in customer, signed by Liquid (lib/server/visitors/record.ts). */
+  c?: SignedCustomer;
 };
 
 export type CheckAnswer = {
@@ -197,6 +204,24 @@ export async function runShieldCheck(
         ],
       )
       .catch((e: unknown) => console.warn("[shield] log write failed:", e instanceof Error ? e.message : e));
+  }
+
+  // Shopify → Visitors: real people only (never bots, crawlers or floods).
+  if (visitorId && verdict.would === "allow" && !verdict.goodBot && !flood) {
+    void recordPageView(pool, {
+      visitorId,
+      ip: ipInt !== null ? ip : null,
+      ua,
+      country: info.country,
+      asn: info.asn,
+      network: info.org,
+      source: sourceOf(body),
+      ad: clip(body.ad, 16) || null,
+      path: clip(body.p, 300) || null,
+      title: clip(body.t, 200) || null,
+      product: clip(body.h, 200) || null,
+      customer: body.c,
+    });
   }
 
   return {

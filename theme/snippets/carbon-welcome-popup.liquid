@@ -123,12 +123,14 @@
     var FONT_HEAD_WEIGHT = {{ settings.heading_font.weight | default: 600 | json }};
 
     // ── Shared: the signup call, what to say about the answer, the cart, copy ─
+    /* Carbon Shield's visitor id, so Shopify → Visitors learns this visitor's email. */
+    function visitorId() { var m = d.cookie.match(/(?:^|; )cs_vid=([^;]*)/); return m ? decodeURIComponent(m[1]) : ""; }
     function postSignup(email, honeypot, openMs, form) {
       return fetch(API, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         credentials: "omit",
-        body: JSON.stringify({ email: email, hp: honeypot || "", t: openMs, p: loc.pathname, l: LOCALE, f: form })
+        body: JSON.stringify({ email: email, hp: honeypot || "", t: openMs, p: loc.pathname, l: LOCALE, f: form, v: visitorId() })
       }).then(function (r) { return r.json(); });
     }
 

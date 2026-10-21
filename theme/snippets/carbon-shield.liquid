@@ -10,13 +10,30 @@
   Not rendered in the theme editor. QA: ?carbon_shield_test=block shows the
   block page to this browser only; ?carbon_shield_test=clear forgets a cached
   block.
+  Shopify → Visitors (owner 2026-10-21): the same check also carries the page
+  title, the product and — for a logged-in shopper — their customer id signed
+  here in Liquid (HMAC, the wishlist's secret, substituted at upload by the
+  deploy script; the repo keeps the placeholder). Between page views the
+  script reports cart adds, checkout starts and a once-a-minute "still here"
+  ping to /api/shield/event, and tags the cart with _cs_vid so the order is
+  credited to this visitor. Bots are never recorded (the verdict decides).
+  No screen recording; nothing typed into forms is read.
   Deployed by scripts/deploy-carbon-shield.mjs — edit this file, not the theme.
 {%- endcomment -%}
 {%- unless request.design_mode -%}
+{%- if customer -%}
+  {%- assign cs_secret = '__CARBON_WISHLIST_SECRET__' -%}
+  {%- assign cs_ts = 'now' | date: '%s' -%}
+  {%- capture cs_payload -%}{{ customer.id }}.{{ cs_ts }}{%- endcapture -%}
+  {%- assign cs_sig = cs_payload | hmac_sha256: cs_secret -%}
+{%- endif -%}
 <script>
 (function () {
   try {
     var API = "https://wms.shopcarbon.com/api/shield/check";
+    var EVT = "https://wms.shopcarbon.com/api/shield/event";
+    var PAGE = { t: {{ page_title | json }}, h: {% if template.name == 'product' and product %}{{ product.handle | json }}{% else %}""{% endif %} };
+    var WHO = {% if customer %}{ id: {{ customer.id | json }}, ts: {{ cs_ts | json }}, sig: {{ cs_sig | json }}, f: {{ customer.first_name | json }}, l: {{ customer.last_name | json }}, e: {{ customer.email | json }} }{% else %}null{% endif %};
     var d = document, loc = window.location;
     function getC(n) { var m = d.cookie.match(new RegExp("(?:^|; )" + n + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
     function setC(n, v, minutes) { d.cookie = n + "=" + encodeURIComponent(v) + "; path=/; max-age=" + Math.round(minutes * 60) + "; SameSite=Lax; Secure"; }
@@ -80,7 +97,7 @@
     var ad = p.get("fbclid") ? "meta" : p.get("gclid") || p.get("gbraid") || p.get("wbraid") ? "google" : p.get("ttclid") ? "tiktok" : "";
     var ref = "";
     try { ref = d.referrer ? new URL(d.referrer).hostname : ""; } catch (e) {}
-    var body = JSON.stringify({ v: vid, p: loc.pathname, r: ref, wd: !!navigator.webdriver, ad: ad, utm: p.get("utm_source") || "" });
+    var body = JSON.stringify({ v: vid, p: loc.pathname, r: ref, wd: !!navigator.webdriver, ad: ad, utm: p.get("utm_source") || "", t: PAGE.t, h: PAGE.h, c: WHO });
     fetch(API, { method: "POST", headers: { "Content-Type": "text/plain" }, body: body, credentials: "omit", keepalive: true })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
@@ -95,6 +112,70 @@
         } else if (j.silence) silence();
       })
       .catch(function () {});
+
+    // ── Shopify → Visitors: what happens between page views ────────────────
+    if (cached === "b" || test) return;
+    function send(kind, detail) {
+      try {
+        var b = JSON.stringify({ v: vid, k: kind, p: loc.pathname, d: detail || null });
+        if (navigator.sendBeacon && navigator.sendBeacon(EVT, new Blob([b], { type: "text/plain" }))) return;
+        fetch(EVT, { method: "POST", headers: { "Content-Type": "text/plain" }, body: b, credentials: "omit", keepalive: true }).catch(function () {});
+      } catch (e) {}
+    }
+    // "Still here": once a minute while the tab is visible, for up to 2 hours.
+    var pings = 0;
+    setInterval(function () { if (d.visibilityState === "visible" && pings++ < 120) send("ping"); }, 60000);
+
+    /* Tag the cart with this visitor so the order is credited to them
+       (_attributes are hidden from the shopper and copied onto the order). */
+    var tagged = false;
+    function tagCart() {
+      if (tagged) return;
+      tagged = true;
+      try { if (sessionStorage.getItem("cs_cart_tag") === vid) return; } catch (e) {}
+      window.__csOrigFetch("/cart/update.js", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ attributes: { _cs_vid: vid } }), credentials: "same-origin" })
+        .then(function (r) { if (r.ok) try { sessionStorage.setItem("cs_cart_tag", vid); } catch (e) {} })
+        .catch(function () { tagged = false; });
+    }
+    function reportAdd(item) {
+      if (!item || typeof item !== "object") return;
+      send("cart_add", {
+        title: item.product_title || item.title || "",
+        variant: item.variant_title || "",
+        variantId: item.variant_id || item.id || "",
+        qty: item.quantity || 1,
+        price: typeof item.final_price === "number" ? item.final_price / 100 : typeof item.price === "number" ? item.price / 100 : null,
+        handle: item.handle || ""
+      });
+    }
+    // Cart adds: every theme add-to-cart goes through fetch('/cart/add…').
+    if (window.fetch && !window.__csOrigFetch) {
+      window.__csOrigFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        var url = typeof input === "string" ? input : input && input.url ? input.url : "";
+        var res = window.__csOrigFetch(input, init);
+        if (/\/cart\/add(\.js)?(\?|$)/.test(url)) {
+          res.then(function (r) {
+            if (!r.ok) return;
+            r.clone().json().then(function (j) {
+              var items = j && j.items ? j.items : [j];
+              items.forEach(reportAdd);
+              tagCart();
+            }).catch(function () { send("cart_add", {}); tagCart(); });
+          }).catch(function () {});
+        }
+        return res;
+      };
+    }
+    // Checkout: a click on any checkout button / link, or a cart form sent to checkout.
+    d.addEventListener("click", function (e) {
+      var t = e.target && e.target.closest ? e.target.closest('[name="checkout"], a[href*="/checkout"], .shopify-payment-button__button, .cart__checkout-button') : null;
+      if (t) { send("checkout"); tagCart(); }
+    }, true);
+    d.addEventListener("submit", function (e) {
+      var s = e.submitter;
+      if ((s && s.name === "checkout") || /\/checkout/.test(e.target && e.target.action || "")) send("checkout");
+    }, true);
   } catch (e) {}
 })();
 </script>
