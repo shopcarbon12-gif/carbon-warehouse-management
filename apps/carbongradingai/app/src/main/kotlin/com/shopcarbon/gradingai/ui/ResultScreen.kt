@@ -81,12 +81,17 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
     var units by remember { mutableStateOf(app.prefs.units) }
     var selected by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    /* Save pressed while the AI is still placing points: it waits and saves by
+       itself when the AI answers (owner, 2026-10-21: sizes 32, 33 and 36 were
+       saved before the crotch came back and kept the outline's guess). */
+    var saveWhenReady by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableLongStateOf(0L) }
     var picking by remember { mutableStateOf(false) }
     val limit = app.config?.capture?.pairLimitCm ?: 1f
     val crotch = s.crotch
     LaunchedEffect(s.ai, crotch?.ai) { while (s.ai is AiState.Running || crotch?.ai is AiState.Running) { tick = System.currentTimeMillis(); delay(500) } }
+    val aiBusy = s.ai is AiState.Running || crotch?.ai is AiState.Running
     val cm = s.cm()
     // Every point's value, removed ones included, for the rows and the photo labels.
     val allCm = s.allCm()
@@ -112,6 +117,8 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
         nav.replace(Screen.Result(s.switchTo(app, p)))
     }
 
+    LaunchedEffect(saveWhenReady, aiBusy) { if (saveWhenReady && !aiBusy && !saving) { saveWhenReady = false; save() } }
+
     Page(
         "${s.target.lookup.name} · ${s.target.sizeLabel}",
         onBack = { s.cancelAi(); discardAll(); nav.back() },
@@ -119,7 +126,10 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
             Row(Modifier.fillMaxWidth().background(Palette.surface).navigationBarsPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Secondary("Undo", Modifier.width(90.dp), enabled = s.canUndo) { s.undo() }
                 Secondary("Retake", Modifier.width(100.dp)) { s.cancelAi(); discardAll(); nav.replace(Screen.Capture(s.target)) }
-                Primary(if (saving) "Saving…" else "Save to WMS", Modifier.weight(1f), enabled = !saving && cm.isNotEmpty()) { save() }
+                Primary(
+                    when { saving -> "Saving…"; saveWhenReady && aiBusy -> "Waiting for AI… saves itself"; else -> "Save to WMS" },
+                    Modifier.weight(1f), enabled = !saving && !saveWhenReady && cm.isNotEmpty(),
+                ) { if (aiBusy) saveWhenReady = true else save() }
             }
         },
     ) {

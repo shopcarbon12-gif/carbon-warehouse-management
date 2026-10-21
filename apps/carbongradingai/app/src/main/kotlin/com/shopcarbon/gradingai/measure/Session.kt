@@ -237,6 +237,12 @@ class MeasureSession(
         }
         crotch?.let { c ->
             for ((k, d) in c.spreadCm) if (k !in removed && d > 1.5) out += "AI unsure of the crotch: its two placements differ by ${Units.cm(d)} cm on ${label(k)}"
+            if (c.ai !is AiState.Done && crotchKeys.any { it !in removed }) out += "crotch not placed by the AI (outline guess) — check the front rise and inseam"
+        }
+        // Seam points the AI was asked for but never answered: the outline's guess was saved instead.
+        if (ai !is AiState.Done && ai !is AiState.Off) {
+            val missing = profile.aiKeys.filter { it !in removed && it !in crotchKeys && it in lines && it !in aiLines }
+            if (missing.isNotEmpty()) out += "not placed by the AI (outline guess): ${missing.joinToString { label(it) }}"
         }
         labelFlag?.let { out += it }
         return out
