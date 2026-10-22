@@ -46,10 +46,13 @@ export async function GET(req: Request) {
       // small items (tees, shorts) be shot closer — the owner could not read the
       // screen held at 110 cm (2026-10-20). Hold 0.8 s (was 1.2 s).
       // 150 cm (owner, 2026-10-21): an XXL tee with its sleeves out did not fit the frame at 120.
-      distanceCm: [45, 150],
+      // 200 cm (owner, 2026-10-22): oversized L/XL tees need ~150+ cm — too high over a table,
+      // so big items go on the floor and are shot from standing height. Hold 0.5 s (was 0.8 s):
+      // "we are not robots".
+      distanceCm: [45, 200],
       idealDistanceCm: [55, 130],
       maxTiltDeg: 8,
-      holdStillMs: 800,
+      holdStillMs: 500,
       pairLimitCm: 1,
     },
     devices: {

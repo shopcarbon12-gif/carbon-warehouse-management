@@ -351,15 +351,19 @@ class ArCamera(
         while (poses.isNotEmpty() && now - poses.first().first > 1500) poses.removeFirst()
     }
 
-    /** Still = over the last 0.6 s the phone moved under 8 mm and turned under 1.2°. */
+    /**
+     * Still = over the last 0.5 s the phone moved under 2 cm and turned under 2.5°.
+     * Normal hand shake passes (owner, 2026-10-22: "we are not robots") — the photo
+     * and its depth come from one frame, so a small sway does not blur the scale.
+     */
     private fun isStill(now: Long): Boolean {
-        val recent = poses.filter { now - it.first <= 600 }
-        if (recent.size < 8) return false
+        val recent = poses.filter { now - it.first <= 500 }
+        if (recent.size < 6) return false
         val a = recent.first(); val b = recent.last()
         val dx = a.second[0] - b.second[0]; val dy = a.second[1] - b.second[1]; val dz = a.second[2] - b.second[2]
         val moved = sqrt(dx * dx + dy * dy + dz * dz)
         val dot = (a.third[0] * b.third[0] + a.third[1] * b.third[1] + a.third[2] * b.third[2] + a.third[3] * b.third[3]).coerceIn(-1f, 1f)
         val turnedDeg = Math.toDegrees(2.0 * acos(kotlin.math.abs(dot).toDouble()))
-        return moved < 0.008f && turnedDeg < 1.2
+        return moved < 0.02f && turnedDeg < 2.5
     }
 }

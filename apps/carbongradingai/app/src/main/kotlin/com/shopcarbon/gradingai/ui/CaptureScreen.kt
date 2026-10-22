@@ -212,6 +212,10 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
         plane == null -> if (st.tof) "Looking for the table…" else "Move the phone slowly — depth from motion needs a moment"
         dist != null && dist < range.start -> "Move the phone up (${dist.roundToInt()} cm — aim for ${ideal.start.roundToInt()}–${ideal.endInclusive.roundToInt()})"
         dist != null && dist > range.endInclusive -> "Move the phone down (${dist.roundToInt()} cm)"
+        // Big items (oversized L/XL): above ~140 cm over a table the floor comes into view. On the floor it fits from standing height.
+        dist != null && dist > 140 && (plane.inlierFrac < 0.45 || st.cutOff?.any { it !in sidesOk } == true) ->
+            "Too big for the table — lay it on the floor and shoot from standing height"
+        plane.inlierFrac < 0.45 -> "Keep the whole view on the table or floor"
         plane.tiltDeg > maxTilt -> "Hold the phone level over the garment"
         st.cutOff == null -> "Looking for the garment…"
         st.cutOff.any { it !in sidesOk } -> "The garment is cut off at the ${st.cutOff.joinToString(" and ")} — move up or centre it"
