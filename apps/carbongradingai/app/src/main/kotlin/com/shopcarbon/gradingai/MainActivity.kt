@@ -28,6 +28,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.shopcarbon.gradingai.auth.Biometric
 import com.shopcarbon.gradingai.ui.AppLogo
+import com.shopcarbon.gradingai.ui.BulkStudioScreen
 import com.shopcarbon.gradingai.ui.CaptureScreen
 import com.shopcarbon.gradingai.ui.CatalogScreen
 import com.shopcarbon.gradingai.ui.EditSavedScreen
@@ -92,7 +93,8 @@ class MainActivity : FragmentActivity() {
                     when (val s = nav.top) {
                         Screen.Login -> LoginScreen { nav.reset(Screen.Home) }
                         Screen.Home -> HomeScreen(nav)
-                        Screen.Catalog -> CatalogScreen(nav)
+                        is Screen.Catalog -> CatalogScreen(nav, s.focus)
+                        Screen.Studio -> BulkStudioScreen(nav)
                         is Screen.Product -> ProductScreen(nav, s.lookup)
                         Screen.Queue -> QueueScreen(nav)
                         Screen.ToCheck -> ToCheckScreen(nav)
@@ -140,7 +142,7 @@ class MainActivity : FragmentActivity() {
         lastUpdateCheck = now
         lifecycleScope.launch {
             runCatching { app.config = app.api.config() }
-            val idle = when (nav?.top) { Screen.Home, Screen.Catalog, Screen.Queue, Screen.ToCheck, Screen.Settings, is Screen.Guide, is Screen.Product, Screen.Login, null -> true; else -> false }
+            val idle = when (nav?.top) { Screen.Home, is Screen.Catalog, Screen.Studio, Screen.Queue, Screen.ToCheck, Screen.Settings, is Screen.Guide, is Screen.Product, Screen.Login, null -> true; else -> false }
             if (idle) Updater.run(this@MainActivity, app.config?.app)
         }
     }

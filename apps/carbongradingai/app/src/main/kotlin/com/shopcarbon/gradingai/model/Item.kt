@@ -15,6 +15,20 @@ data class SizeRow(
     val lastSource: String? = null,
     /** The Shopify size guide's numbers for this size (flat cm) — the result screen compares against them. */
     val guideCm: Map<String, Double> = emptyMap(),
+    /** On hand at this location (live tags, or the manual count). */
+    val onHand: Int? = null,
+)
+
+/** Where a size's numbers came from: the reading, and the scan photo behind it (maybe another product's). */
+data class SizeOrigin(
+    val source: String,
+    val measuredAt: String,
+    val pointsCm: Map<String, Double>,
+    val note: String?,
+    val scanId: String?,
+    val scanProduct: String?,
+    val scanSize: String?,
+    val scanHasPhoto: Boolean,
 )
 
 enum class SizeStatus { Scanned, Guide, NotMeasured }
@@ -40,7 +54,12 @@ data class Lookup(
     val picked: String?,
     val candidates: List<String>,
     val lastProfile: String? = null,
+    /** Per size label: where its numbers came from. */
+    val origins: Map<String, SizeOrigin> = emptyMap(),
 ) {
+    /** On hand for a size, every colour together (null when CarbonWMS did not say). */
+    fun onHand(label: String): Int? = skusOfSize(label).mapNotNull { it.onHand }.takeIf { it.isNotEmpty() }?.sum()
+
     /** Sizes by label, every colour of one size together (one reading covers them all). */
     fun sizeLabels(): List<String> = sizes.mapNotNull { it.size?.trim()?.uppercase() }.distinct()
 
@@ -88,11 +107,23 @@ data class Lookup(
                         it.getString("customSkuId"), it.optString("sku"), it.optStringOrNull("size"), it.optStringOrNull("color"), it.optStringOrNull("upc"),
                         it.optStringOrNull("lastMeasuredAt"), it.optStringOrNull("image"), it.optStringOrNull("lastSource"),
                         g?.keys()?.asSequence()?.associateWith { k -> g.optDouble(k) }?.filterValues { v -> !v.isNaN() } ?: emptyMap(),
+                        if (it.isNull("onHand")) null else it.optInt("onHand"),
                     )
                 },
                 picked = j.optStringOrNull("picked"),
                 candidates = j.optJSONArray("candidates").strings(),
                 lastProfile = j.optStringOrNull("lastProfile"),
+                origins = j.optJSONObject("origins")?.let { o ->
+                    o.keys().asSequence().mapNotNull { k ->
+                        val x = o.optJSONObject(k) ?: return@mapNotNull null
+                        val pc = x.optJSONObject("pointsCm")
+                        k to SizeOrigin(
+                            x.optString("source"), x.optString("measuredAt"),
+                            pc?.keys()?.asSequence()?.associateWith { pk -> pc.optDouble(pk) }?.filterValues { v -> !v.isNaN() } ?: emptyMap(),
+                            x.optStringOrNull("note"), x.optStringOrNull("scanId"), x.optStringOrNull("scanProduct"), x.optStringOrNull("scanSize"), x.optBoolean("scanHasPhoto"),
+                        )
+                    }.toMap()
+                } ?: emptyMap(),
             )
         }
     }
@@ -172,14 +203,17 @@ data class SaveResult(
 }
 
 /** GET /api/grading-app/catalog — one product on the Catalog tab. */
-data class CatalogRow(val matrixId: String, val name: String, val upc: String?, val vendor: String?, val image: String?, val colours: Int, val sizes: List<Pair<String, Boolean>>) {
-    val measured get() = sizes.count { it.second }
+data class CatalogSize(val size: String, val measured: Boolean, val onHand: Int?)
+
+data class CatalogRow(val matrixId: String, val name: String, val upc: String?, val vendor: String?, val image: String?, val colours: Int, val sizes: List<CatalogSize>) {
+    val measured get() = sizes.count { it.measured }
+    val onHand get() = sizes.mapNotNull { it.onHand }.takeIf { it.isNotEmpty() }?.sum()
 
     companion object {
         fun parseList(j: JSONObject): List<CatalogRow> = j.optJSONArray("rows").objects().map {
             CatalogRow(
                 it.getString("matrixId"), it.optString("name", "Item"), it.optStringOrNull("upc"), it.optStringOrNull("vendor"), it.optStringOrNull("image"), it.optInt("colours"),
-                it.optJSONArray("sizes").objects().map { z -> z.optString("size") to z.optBoolean("measured") },
+                it.optJSONArray("sizes").objects().map { z -> CatalogSize(z.optString("size"), z.optBoolean("measured"), if (z.isNull("onHand")) null else z.optInt("onHand")) },
             )
         }
     }

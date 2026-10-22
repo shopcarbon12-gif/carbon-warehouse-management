@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,7 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
@@ -65,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.shopcarbon.gradingai.App
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -91,6 +93,8 @@ fun Page(
     eyebrow: String? = null,
     /** false: the title sits small and centred in the top bar (detail screens). */
     largeTitle: Boolean = true,
+    /** Replaces the large title (Home: the Carbon mark + "CarbonGradingAI"). */
+    header: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(Modifier.fillMaxSize().background(Palette.ground)) {
@@ -99,8 +103,9 @@ fun Page(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) GlassCircle(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack) else Spacer(Modifier.width(4.dp))
-            Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-                if (!largeTitle) Text(title, style = MaterialTheme.typography.titleMedium, color = Palette.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Box(Modifier.weight(1f).padding(horizontal = if (header != null) 0.dp else 8.dp), contentAlignment = if (header != null) Alignment.CenterStart else Alignment.Center) {
+                if (header != null) header()
+                else if (!largeTitle) Text(title, style = MaterialTheme.typography.titleMedium, color = Palette.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
         }
@@ -108,24 +113,34 @@ fun Page(
             SelectionContainer {
                 Column(
                     (if (scroll) Modifier.verticalScroll(rememberScrollState()) else Modifier).fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = if (tabs != null) 128.dp else 16.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    if (largeTitle) Column {
+                    if (largeTitle && header == null) Column {
                         eyebrow?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Palette.muted) }
                         Text(title, style = MaterialTheme.typography.headlineLarge, color = Palette.text, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     content()
                 }
             }
-            if (tabs != null) Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) { tabs() }
         }
+        /* The bottom row is frozen (owner, 2026-10-22): docked on the ground, nothing scrolls behind it. */
+        if (tabs != null) Box(Modifier.fillMaxWidth().background(Palette.ground).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) { tabs() }
         bottom?.let {
             Column(Modifier.fillMaxWidth().background(Palette.surface)) {
                 HorizontalDivider(color = Palette.line)
                 Box(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)) { it() }
             }
         }
+    }
+}
+
+/** The Carbon mark and "CarbonGradingAI" in the logo's typeface (Home). */
+@Composable
+fun BrandTitle() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Image(androidx.compose.ui.res.painterResource(com.shopcarbon.gradingai.R.drawable.carbon_mark), "Carbon", Modifier.size(38.dp))
+        Text("CarbonGradingAI", fontFamily = Brand, fontSize = 30.sp, color = Palette.text, maxLines = 1)
     }
 }
 
@@ -146,7 +161,7 @@ fun GlassCircle(icon: ImageVector, label: String, onClick: () -> Unit, tint: Col
 enum class Tab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Filled.Home),
     Catalog("Catalog", Icons.Filled.GridView),
-    Queue("Queue", Icons.AutoMirrored.Filled.ViewList),
+    Studio("Bulk Studio", Icons.Filled.AutoAwesome),
     Guide("Guide", Icons.AutoMirrored.Filled.MenuBook),
 }
 
@@ -331,7 +346,11 @@ private val imageCache = LruCache<String, Bitmap>(60)
 private val imageHttp = OkHttpClient()
 
 @Composable
-fun NetImage(url: String?, modifier: Modifier, crop: Boolean = false, maxPx: Int = 1400, corner: Dp = 12.dp, background: Color = Palette.raised) {
+fun NetImage(
+    url: String?, modifier: Modifier, crop: Boolean = false, maxPx: Int = 1400, corner: Dp = 12.dp, background: Color = Palette.raised,
+    /** The frame takes the picture's own shape once it loads (no bars at the sides); this ratio until then. */
+    fitAspect: Float? = null,
+) {
     val ctx = LocalContext.current
     var bmp by remember(url) { mutableStateOf(url?.let { imageCache.get(it) }) }
     LaunchedEffect(url) {
@@ -353,9 +372,10 @@ fun NetImage(url: String?, modifier: Modifier, crop: Boolean = false, maxPx: Int
             }.getOrNull()?.also { imageCache.put(url, it) }
         }
     }
-    Box(modifier.clip(RoundedCornerShape(corner)).background(background), contentAlignment = Alignment.Center) {
-        val b = bmp
-        if (b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = if (crop) ContentScale.Crop else ContentScale.Fit)
+    val b = bmp
+    val shaped = if (fitAspect != null) modifier.aspectRatio(b?.let { it.width.toFloat() / it.height } ?: fitAspect) else modifier
+    Box(shaped.clip(RoundedCornerShape(corner)).background(background), contentAlignment = Alignment.Center) {
+        if (b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = if (crop || fitAspect != null) ContentScale.Crop else ContentScale.Fit)
     }
 }
 

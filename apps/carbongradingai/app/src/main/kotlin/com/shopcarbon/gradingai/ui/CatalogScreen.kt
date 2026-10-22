@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +59,7 @@ private var lastFilter = "all"
  * blue measured, hollow not yet.
  */
 @Composable
-fun CatalogScreen(nav: Nav) {
+fun CatalogScreen(nav: Nav, focus: Boolean = false) {
     val app = App.get(LocalContext.current)
     val scope = rememberCoroutineScope()
     var q by remember { mutableStateOf(lastQuery) }
@@ -72,6 +73,13 @@ fun CatalogScreen(nav: Nav) {
         runCatching { rows = app.api.catalog(q.trim(), filter); err = null }.onFailure { err = it.message }
     }
     val scan = rememberTagScanner({ err = it }) { code -> openCode(nav, app, scope, code, { busy = it }) { err = it } }
+    val focuser = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    // Opened from Home's search box: focus the field once the screen has laid out, and raise the keyboard.
+    LaunchedEffect(focus) {
+        if (!focus) return@LaunchedEffect
+        repeat(5) { delay(120); if (runCatching { focuser.requestFocus() }.isSuccess) { keyboard?.show(); return@LaunchedEffect } }
+    }
 
     Page("Catalog", tabs = { BottomTabs(Tab.Catalog) { onTab(nav, it) } }) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -84,7 +92,7 @@ fun CatalogScreen(nav: Nav) {
                     if (q.isEmpty()) Text("Search", style = MaterialTheme.typography.bodyLarge, color = Palette.muted)
                     BasicTextField(
                         q, { q = it }, singleLine = true, textStyle = MaterialTheme.typography.bodyLarge.copy(color = Palette.text),
-                        cursorBrush = SolidColor(Palette.accent), modifier = Modifier.fillMaxWidth(),
+                        cursorBrush = SolidColor(Palette.accent), modifier = Modifier.fillMaxWidth().focusRequester(focuser),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = {}),
                     )
                 }
@@ -110,8 +118,8 @@ fun CatalogScreen(nav: Nav) {
                         leading = { NetImage(r.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
                         trailing = {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { r.sizes.take(10).forEach { (_, m) -> Dot(Palette.accent, hollow = !m, size = 8.dp) } }
-                                Text("${r.measured} of ${r.sizes.size}", style = MaterialTheme.typography.labelSmall, color = Palette.muted)
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { r.sizes.take(10).forEach { z -> Dot(Palette.accent, hollow = !z.measured, size = 8.dp) } }
+                                Text("${r.measured} of ${r.sizes.size}" + (r.onHand?.let { " · $it on hand" } ?: ""), style = MaterialTheme.typography.labelSmall, color = Palette.muted)
                             }
                         },
                         onClick = { openProduct(nav, app, scope, r.matrixId) { err = it } },
@@ -131,9 +139,13 @@ fun openProduct(nav: Nav, app: App, scope: kotlinx.coroutines.CoroutineScope, ma
 fun ProductScreen(nav: Nav, item: Lookup) {
     val app = App.get(LocalContext.current)
     var tab by remember { mutableStateOf("sizes") }
+    var open by remember { mutableStateOf<String?>(null) }
     val profile = app.config?.profile(item.profileId)
     Page(item.name, onBack = { nav.back() }, largeTitle = false) {
-        NetImage(item.image, Modifier.fillMaxWidth().aspectRatio(1.25f), maxPx = 900, corner = 20.dp, background = Color.White)
+        // The photo's own shape, so there are no white bars beside it.
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            NetImage(item.image, Modifier.fillMaxWidth(0.62f), maxPx = 900, corner = 20.dp, fitAspect = 0.75f)
+        }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(item.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
             val nc = item.colours().size
@@ -150,29 +162,34 @@ fun ProductScreen(nav: Nav, item: Lookup) {
         }
         if (tab == "sizes") {
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp)) {
-                for ((c, hollow, t) in listOf(Triple(Palette.ok, false, "Scanned"), Triple(Palette.accent, false, "Size guide"), Triple(Palette.muted, true, "Not measured"))) {
+                for ((c, hollow, t) in listOf(Triple(Palette.ok, false, "Scanned"), Triple(Palette.accent, false, "Size guide / chart"), Triple(Palette.muted, true, "Not measured"))) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) { Dot(c, hollow = hollow, size = 8.dp); Muted(t) }
                 }
             }
-            Group {
+            Group(footer = "Tap a size to see its measurements and the photo they came from.") {
                 item.sizeLabels().forEachIndexed { i, s ->
                     val st = item.statusOf(s)
                     val last = item.skusOfSize(s).mapNotNull { it.lastMeasuredAt }.maxOrNull()
+                    val stock = item.onHand(s)
                     ListRow(
                         s,
+                        subtitle = when (st) {
+                            SizeStatus.Scanned -> "Scanned ${ago(last)}"
+                            SizeStatus.Guide -> if (item.origins[s]?.source == "graded") "Graded chart" else "Size guide"
+                            SizeStatus.NotMeasured -> "Not measured"
+                        } +
+                            (stock?.let { " · $it on hand" } ?: ""),
                         divider = i > 0,
+                        leading = { Dot(if (st == SizeStatus.Scanned) Palette.ok else Palette.accent, hollow = st == SizeStatus.NotMeasured) },
                         trailing = {
-                            Text(
-                                when (st) { SizeStatus.Scanned -> "Scanned ${ago(last)}"; SizeStatus.Guide -> "Size guide"; SizeStatus.NotMeasured -> "Not measured" },
-                                style = MaterialTheme.typography.bodySmall, color = if (st == SizeStatus.Guide) Palette.accent else Palette.muted,
-                            )
-                            Dot(if (st == SizeStatus.Scanned) Palette.ok else Palette.accent, hollow = st == SizeStatus.NotMeasured)
                             Text(
                                 "Measure", style = MaterialTheme.typography.labelMedium, color = Color.White,
                                 modifier = Modifier.background(Palette.accent, RoundedCornerShape(50)).clickable { nav.go(Screen.Item(item, s)) }.padding(horizontal = 12.dp, vertical = 6.dp),
                             )
                         },
+                        onClick = { open = if (open == s) null else s },
                     )
+                    if (open == s) SizeOriginPanel(nav, item, s)
                 }
             }
         } else {
@@ -187,5 +204,41 @@ fun ProductScreen(nav: Nav, item: Lookup) {
             }
         }
         item.cutGroup?.let { Muted("Cut group: ${it.name} · ${it.products} products — one reading covers them all.") }
+    }
+}
+
+/**
+ * One size, opened: the numbers the item shows now and where they came from —
+ * the scan's photo and lines (maybe another product's: a cut group, or the
+ * product a chart was graded from), or the Shopify size guide.
+ */
+@Composable
+private fun SizeOriginPanel(nav: Nav, item: Lookup, size: String) {
+    val app = App.get(LocalContext.current)
+    val o = item.origins[size]
+    val profile = app.config?.profile(item.profileId)
+    Column(Modifier.fillMaxWidth().background(Palette.ground).padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (o == null) { Muted("Nothing measured for $size yet."); return@Column }
+        val from = when (o.source) {
+            "app" -> if (o.scanProduct != null && !o.scanProduct.equals(item.name, true)) "Scanned on ${o.scanProduct} · ${o.scanSize ?: size} (same cut)" else "Scanned with the app"
+            "graded" -> "Graded chart" + (o.scanProduct?.let { " from $it · ${o.scanSize ?: size}" } ?: "")
+            "guide" -> "From the Shopify size guide — no photo"
+            else -> "Measured on CarbonWMS"
+        }
+        Text(from, style = MaterialTheme.typography.bodyMedium, color = Palette.text, fontWeight = FontWeight.Medium)
+        Muted(ago(o.measuredAt))
+        if (o.scanId != null && o.scanHasPhoto) {
+            NetImage("/api/grading-app/scans/${o.scanId}/photo", Modifier.fillMaxWidth(0.7f), maxPx = 900, corner = 14.dp, fitAspect = 0.75f)
+            Secondary("See the photo with its lines") { nav.go(Screen.EditSaved(o.scanId)) }
+        }
+        val labels = profile?.points?.associate { it.key to it.label } ?: emptyMap()
+        val pairs = profile?.points?.mapNotNull { it.pairOf }?.toSet() ?: emptySet()
+        // One row per measurement: pairs (inseam L/R…) by their average.
+        val rows = o.pointsCm.filterKeys { k -> pairs.none { p -> k == p + "L" || k == p + "R" } }
+        Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            for ((k, v) in rows.toList().sortedBy { (k, _) -> profile?.points?.indexOfFirst { it.key == k || it.pairOf == k }?.takeIf { it >= 0 } ?: 99 }) {
+                KeyValue((labels[k] ?: labels[k + "L"]?.replace(Regex("""[,\s]*(leg |sleeve )?\b[LR]$"""), "") ?: k), com.shopcarbon.gradingai.measure.Units.show(v, app.prefs.units))
+            }
+        }
     }
 }

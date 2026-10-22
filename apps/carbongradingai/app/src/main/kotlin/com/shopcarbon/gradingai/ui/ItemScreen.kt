@@ -123,7 +123,7 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
         },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            NetImage(photo, Modifier.width(92.dp).aspectRatio(0.8f), crop = true, maxPx = 600, corner = 16.dp)
+            NetImage(photo, Modifier.width(92.dp), maxPx = 600, corner = 16.dp, fitAspect = 0.75f)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
                 Muted(listOfNotNull(size?.let { "Size $it" }, profile?.label, "${item.colours().size} colour${if (item.colours().size == 1) "" else "s"}").joinToString(" · "))

@@ -64,6 +64,9 @@ private val type = Typography(
     labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.3.sp),
 )
 
+/** The Carbon logo's typeface (Neuzeit Grotesk), for the app's name. */
+val Brand = FontFamily(androidx.compose.ui.text.font.Font(com.shopcarbon.gradingai.R.font.neuzeit_grotesk))
+
 /** Numbers that line up (measurements). */
 val Mono = FontFamily.Monospace
 

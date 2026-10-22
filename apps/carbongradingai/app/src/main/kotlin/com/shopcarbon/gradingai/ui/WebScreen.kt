@@ -52,18 +52,9 @@ import com.shopcarbon.gradingai.BuildConfig
  * dvh — the WMS's product window on phones — collapses to one pixel and the
  * screen just looks dimmed (seen on the S25, 2026-10-13).
  */
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebScreen(nav: Nav, title: String, path: String) {
-    val app = App.get(LocalContext.current)
-    var progress by remember { mutableIntStateOf(0) }
     var view by remember { mutableStateOf<WebView?>(null) }
-    var pending by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
-    // Studio's Upload buttons: the phone's picker for the page's <input type="file">.
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
-        pending?.onReceiveValue(uris.toTypedArray())
-        pending = null
-    }
     BackHandler { val v = view; if (v != null && v.canGoBack()) v.goBack() else nav.back() }
     Column(Modifier.fillMaxSize().background(Palette.ground)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -71,8 +62,48 @@ fun WebScreen(nav: Nav, title: String, path: String) {
             Text(title, style = MaterialTheme.typography.titleLarge, color = Palette.text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
         }
+        WmsWebView(path, Modifier.weight(1f).fillMaxWidth().navigationBarsPadding()) { view = it }
+    }
+}
+
+/**
+ * Bulk Studio tab (owner, 2026-10-22): CarbonWMS's own Bulk Studio — the same
+ * settings, models and prompts as the desktop, and it only ever sends to the
+ * OpenAI batch. CarbonWMS shows it without its menus inside the app (it sees
+ * "CarbonGradingAI" in the user agent); the app's tab bar stays docked below.
+ */
+@Composable
+fun BulkStudioScreen(nav: Nav) {
+    var view by remember { mutableStateOf<WebView?>(null) }
+    BackHandler { val v = view; if (v != null && v.canGoBack()) v.goBack() else nav.home() }
+    Column(Modifier.fillMaxSize().background(Palette.ground)) {
+        // The page carries its own "Bulk Studio" heading.
+        WmsWebView("/inventory/bulk-studio", Modifier.weight(1f).fillMaxWidth().statusBarsPadding()) { view = it }
+        Box(Modifier.fillMaxWidth().background(Palette.ground).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
+            BottomTabs(Tab.Studio) { onTab(nav, it) }
+        }
+    }
+}
+
+/**
+ * A CarbonWMS page on the app's session. The WebView must fill its space
+ * (MATCH_PARENT): with Android's default WRAP_CONTENT the page's viewport
+ * height is 0, so anything sized in dvh collapses (seen on the S25, 2026-10-13).
+ * File inputs (Studio's Upload) open the phone's picker.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+fun WmsWebView(path: String, modifier: Modifier, onView: (WebView) -> Unit = {}) {
+    val app = App.get(LocalContext.current)
+    var progress by remember { mutableIntStateOf(0) }
+    var pending by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        pending?.onReceiveValue(uris.toTypedArray())
+        pending = null
+    }
+    Column(modifier) {
         if (progress in 1..99) LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
-        Box(Modifier.weight(1f).fillMaxWidth().navigationBarsPadding()) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView({ ctx ->
                 app.api.syncWebCookie()
                 WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
@@ -93,7 +124,7 @@ fun WebScreen(nav: Nav, title: String, path: String) {
                         }
                     }
                     loadUrl(app.prefs.origin + path)
-                    view = this
+                    onView(this)
                 }
             }, Modifier.fillMaxSize())
         }

@@ -1,7 +1,12 @@
 package com.shopcarbon.gradingai.ui
 
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -97,11 +102,19 @@ fun HomeScreen(nav: Nav) {
     val scan = rememberTagScanner({ err = it }) { code -> openCode(nav, app, scope, code, { busy = it }) { err = it } }
 
     Page(
-        "Grading",
-        eyebrow = "CARBON",
+        "CarbonGradingAI",
+        header = { BrandTitle() },
         actions = { GlassCircle(Icons.Filled.Settings, "Settings", { nav.go(Screen.Settings) }) },
         tabs = { BottomTabs(Tab.Home) { onTab(nav, it) } },
     ) {
+        // Search from Home: opens the Catalog with the keyboard up (name, UPC, custom SKU, vendor, colour).
+        Row(
+            Modifier.fillMaxWidth().height(48.dp).background(Palette.surface, RoundedCornerShape(14.dp)).clickable { nav.go(Screen.Catalog(focus = true)) }.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.Filled.Search, null, tint = Palette.muted, modifier = Modifier.size(22.dp))
+            Text("Search name, UPC, custom SKU…", style = MaterialTheme.typography.bodyLarge, color = Palette.muted, modifier = Modifier.weight(1f))
+        }
         com.shopcarbon.gradingai.update.Updater.note.value?.let { Notice(it, Palette.accent) }
         if (!phoneSupported(app)) {
             Notice(
@@ -130,7 +143,10 @@ fun HomeScreen(nav: Nav) {
         err?.let { if (queue != null) Notice(it, Palette.bad) }
         queue?.let { q ->
             if (q.entries.isNotEmpty()) {
-                Section("Measure next")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { Section("Measure next") }
+                    Text("See all", style = MaterialTheme.typography.bodyMedium, color = Palette.accent, modifier = Modifier.clickable { nav.go(Screen.Queue) }.padding(6.dp))
+                }
                 // One card per product (its sizes follow on the Queue tab), with the product's photo from CarbonWMS.
                 val cards = q.entries.distinctBy { it.matrixId }.take(10)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -148,7 +164,6 @@ fun HomeScreen(nav: Nav) {
                     onClick = { nav.go(Screen.ToCheck) },
                 )
             }
-            Text("Synced from CarbonWMS", style = MaterialTheme.typography.bodySmall, color = Palette.muted, modifier = Modifier.fillMaxWidth().padding(top = 2.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
 }
@@ -172,8 +187,8 @@ fun openEntry(nav: Nav, app: App, scope: kotlinx.coroutines.CoroutineScope, matr
 fun onTab(nav: Nav, t: Tab) {
     when (t) {
         Tab.Home -> nav.home()
-        Tab.Catalog -> { nav.home(); nav.go(Screen.Catalog) }
-        Tab.Queue -> { nav.home(); nav.go(Screen.Queue) }
+        Tab.Catalog -> { nav.home(); nav.go(Screen.Catalog()) }
+        Tab.Studio -> { nav.home(); nav.go(Screen.Studio) }
         Tab.Guide -> { nav.home(); nav.go(Screen.Guide(null)) }
     }
 }
@@ -185,7 +200,7 @@ fun QueueScreen(nav: Nav) {
     var queue by remember { mutableStateOf<Queue?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { runCatching { queue = app.api.queue() }.onFailure { err = it.message } }
-    Page("Queue", tabs = { BottomTabs(Tab.Queue) { onTab(nav, it) } }) {
+    Page("Queue", onBack = { nav.back() }) {
         Muted("Cut groups first — one garment covers the whole cut.")
         err?.let { Notice(it, Palette.bad) }
         val q = queue ?: run { Muted("Loading…"); return@Page }
