@@ -35,9 +35,10 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
-      /* Open WMS pages play the alert's own sound (cash register / chime). */
+      /* Open WMS pages play the alert's own sound (cash register / chime / doorbell)
+         and show it as a card in the corner — Windows can hide the banner itself. */
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) =>
-        list.forEach((c) => c.postMessage({ type: "wms-alert", sound: data.sound || null, title, body: options.body })),
+        list.forEach((c) => c.postMessage({ type: "wms-alert", sound: data.sound || null, title, body: options.body, url: data.url || "/", tag: data.tag || null })),
       ),
     ]),
   );

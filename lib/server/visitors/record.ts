@@ -18,6 +18,7 @@ import crypto from "node:crypto";
 import type { Pool } from "pg";
 import { decodeEntities, describeDevice, shortName, visitorLabel } from "./rules";
 import { notifyVisitor } from "./alerts";
+import { ipCity } from "./geo";
 
 const clip = (s: unknown, n: number) => (typeof s === "string" ? s.trim().slice(0, n) : "");
 export const VISIT_GAP_MINUTES = 30;
@@ -68,8 +69,8 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
     const who = verifiedCustomer(v.customer);
     // Before the write: is this someone new, or the start of a new visit? (for the alerts)
     const prev = (
-      await pool.query<{ fresh_visit: boolean; nickname: string | null; customer_name: string | null; email: string | null }>(
-        `SELECT last_seen < now() - make_interval(mins => ${VISIT_GAP_MINUTES}) AS fresh_visit, nickname, customer_name, email
+      await pool.query<{ fresh_visit: boolean; nickname: string | null; customer_name: string | null; email: string | null; ip: string | null; city: string | null }>(
+        `SELECT last_seen < now() - make_interval(mins => ${VISIT_GAP_MINUTES}) AS fresh_visit, nickname, customer_name, email, ip, city
            FROM visitors WHERE visitor_id = $1`,
         [v.visitorId],
       )
@@ -114,6 +115,12 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
        VALUES ($1, $2, 'view', $3, $4, $5, $6)`,
       [v.visitorId, r.rows[0]?.visits ?? 1, v.path, v.title, v.source, v.product ? { product: v.product } : null],
     );
+    /* City for a new visitor, a new visit, or a new IP — before the alert, so it can say where. */
+    let geo: Awaited<ReturnType<typeof ipCity>> = null;
+    if (!prev || prev.fresh_visit || prev.ip !== v.ip || !prev.city) {
+      geo = await ipCity(pool, v.ip);
+      if (geo) await pool.query(`UPDATE visitors SET city = $2, region = $3, region_code = $4 WHERE visitor_id = $1`, [v.visitorId, geo.city, geo.region, geo.regionCode]);
+    }
     if (!prev || prev.fresh_visit) {
       const label = prev
         ? visitorLabel({ visitor_id: v.visitorId, nickname: prev.nickname, customer_name: who?.name ?? prev.customer_name, email: who?.email ?? prev.email })
@@ -124,6 +131,9 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
         visit: r.rows[0]?.visits ?? 1,
         label: label && !label.startsWith("Visitor ") ? label : null,
         country: v.country,
+        city: geo?.city ?? prev?.city ?? null,
+        regionCode: geo?.regionCode ?? null,
+        region: geo?.region ?? null,
         source: v.source,
         device: dev.device,
         pageTitle: v.title,
@@ -154,6 +164,9 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
     customer_name: string | null;
     email: string | null;
     country: string | null;
+    city: string | null;
+    region: string | null;
+    region_code: string | null;
     last_source: string | null;
     device: string | null;
     last_title: string | null;
@@ -161,7 +174,7 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
   }>(
     `UPDATE visitors SET last_seen = now()${counter}
       WHERE visitor_id = $1 AND last_seen > now() - interval '6 hours'
-      RETURNING visits, nickname, customer_name, email, country, last_source, device, last_title, last_path`,
+      RETURNING visits, nickname, customer_name, email, country, city, region, region_code, last_source, device, last_title, last_path`,
     [ev.visitorId],
   );
   if (!r.rowCount) return false;
@@ -177,6 +190,9 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
       visit: row.visits,
       label: label.startsWith("Visitor ") ? null : label,
       country: row.country,
+      city: row.city,
+      regionCode: row.region_code,
+      region: row.region,
       source: row.last_source,
       device: row.device,
       pageTitle: row.last_title,

@@ -14,6 +14,7 @@
  * Never throws.
  */
 import type { Pool } from "pg";
+import { placeWords } from "./geo";
 import { sendPush, type PushKind } from "@/lib/server/web-push";
 import { decodeEntities } from "./rules";
 
@@ -69,6 +70,10 @@ export type AlertInput = {
   /** Nickname, name or email — null for an unknown visitor. */
   label: string | null;
   country: string | null;
+  /** From the IP (lib/server/visitors/geo.ts) — city level at best. */
+  city?: string | null;
+  regionCode?: string | null;
+  region?: string | null;
   source: string | null;
   device: string | null;
   pageTitle: string | null;
@@ -83,7 +88,8 @@ export type AlertInput = {
 /** Title + body of one alert (pure; unit-tested). */
 export function alertText(a: AlertInput): { title: string; body: string } {
   const who = a.label || "A visitor";
-  const where = countryWords(a.country);
+  const where = placeWords(a.city ?? null, a.regionCode ?? null, a.region ?? null, countryWords(a.country), a.country) ?? countryWords(a.country);
+  const visitNo = a.visit > 1 ? `${ordinal(a.visit)} visit` : null;
   const from = sourceWords(a.source);
   const page = pageWords(a.pageTitle, a.path);
   const money = typeof a.price === "number" ? ` · $${a.price.toFixed(2)}` : "";
@@ -96,19 +102,22 @@ export function alertText(a: AlertInput): { title: string; body: string } {
     case "visitor_back":
       return {
         title: `${a.label ? `${a.label} is` : "A visitor is"} back · ${ordinal(a.visit)} visit`,
-        body: [`Looking at ${page}`, from, where].filter(Boolean).join(" · "),
+        body: [`Looking at ${page}`, where, from, a.device].filter(Boolean).join(" · "),
       };
     case "visitor_checkout": {
       const items = a.cartItems ?? [];
       return {
         title: `Started checkout · ${who}`,
-        body: items.length ? `${items.length} item${items.length === 1 ? "" : "s"}: ${items.slice(0, 3).join(", ")}${items.length > 3 ? "…" : ""}` : [where, from].filter(Boolean).join(" · ") || "Tap to see their visit",
+        body: [
+          items.length ? `${items.length} item${items.length === 1 ? "" : "s"}: ${items.slice(0, 3).join(", ")}${items.length > 3 ? "…" : ""}` : null,
+          where, from, visitNo,
+        ].filter(Boolean).join(" · ") || "Tap to see their visit",
       };
     }
     case "visitor_cart":
       return {
         title: `Added to cart · ${who}`,
-        body: `${a.product || "A product"}${a.variant ? ` (${a.variant})` : ""}${money}`,
+        body: [`${a.product || "A product"}${a.variant ? ` (${a.variant})` : ""}${money}`, where].filter(Boolean).join(" · "),
       };
   }
 }
@@ -129,7 +138,8 @@ export async function notifyVisitor(pool: Pool, a: AlertInput): Promise<void> {
       body,
       url: `/shopify/visitors?visitor=${encodeURIComponent(a.visitorId)}`,
       tag: `${a.kind}-${a.visitorId}-${a.visit}`,
-      sound: a.kind === "visitor_checkout" ? "studio" : undefined,
+      // Visitors have their own sounds — not the order ka-ching or the Studio chime (owner, 2026-10-21).
+      sound: a.kind === "visitor_checkout" ? "checkout" : "visitor",
     });
   } catch (e) {
     console.warn("[visitors] alert skipped:", e instanceof Error ? e.message : e);

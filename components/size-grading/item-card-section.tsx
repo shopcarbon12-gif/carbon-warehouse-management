@@ -14,9 +14,8 @@
  * photo reading and the operator's correction are both kept, and the card shows
  * the most recent of each side.
  *
- * Front and back are held separately. Some points only exist on one side — a
- * back rise is not a front rise — and where both exist the pair is a free
- * cross-check on whether the garment was lying flat.
+ * Only the front is shown: back measurements are not used (owner, 2026-10-21).
+ * Any back reading already stored stays in the database, untouched.
  *
  * Which points appear comes from the product's own category: a pair of evening
  * pants offers Waist and Inseam, not Chest and Sleeve.
@@ -127,7 +126,7 @@ export function SizeGradingSection({
         setFactory(fj);
         setSides({ front: j.front ?? null, back: j.back ?? null });
         // Open on whichever side has a reading, front first.
-        const start: "front" | "back" = j.front ? "front" : j.back ? "back" : "front";
+        const start = "front" as const;
         setSide(start);
         const m = (start === "front" ? j.front : j.back) ?? null;
         setDraft(
@@ -258,7 +257,8 @@ export function SizeGradingSection({
               : `${GARMENT_LABELS[type]} · not measured yet — type them in, or use Inventory → Size Grading.`}
         </p>
         <span className="inline-flex overflow-hidden rounded border border-[var(--wms-border)]">
-          {(["front", "back", "factory"] as const).map((v) => (
+          {/* No Back tab: back measurements are not used (owner, 2026-10-21). */}
+          {(["front", "factory"] as const).map((v) => (
             <button
               key={v}
               type="button"

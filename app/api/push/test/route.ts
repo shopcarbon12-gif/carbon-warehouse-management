@@ -27,10 +27,10 @@ async function POST_handler(req: NextRequest) {
   if (body?.kind === "visitor") {
     const r = await sendPush(
       pool,
-      { kind: "test", title: "New visitor · United States · Instagram · test", body: "Looking at Eden Dress 2 Pieces · phone — tap to open Visitors", url: "/shopify/visitors", tag: `test-visitor-${Date.now()}` },
+      { kind: "test", title: "New visitor · Lockhart, FL · Instagram ad · test", body: "Looking at Eden Dress 2 Pieces · iPhone — tap to open Visitors", url: "/shopify/visitors", tag: `test-visitor-${Date.now()}`, sound: "visitor" },
       { userId: String(session.sub || "") || null },
     );
-    return NextResponse.json({ ok: true, ...r, sound: null });
+    return NextResponse.json({ ok: true, ...r, sound: "visitor" });
   }
   const r = await sendPush(
     pool,

@@ -21,6 +21,9 @@ export type VisitorRow = {
   visits: number;
   pageViews: number;
   country: string | null;
+  city: string | null;
+  region: string | null;
+  region_code: string | null;
   network: string | null;
   device: string | null;
   os: string | null;
@@ -48,6 +51,9 @@ type DbRow = {
   visits: number;
   page_views: number;
   country: string | null;
+  city: string | null;
+  region: string | null;
+  region_code: string | null;
   network: string | null;
   device: string | null;
   os: string | null;
@@ -78,6 +84,9 @@ function toRow(r: DbRow): VisitorRow {
     visits: r.visits,
     pageViews: r.page_views,
     country: r.country,
+    city: r.city ?? null,
+    region: r.region ?? null,
+    region_code: r.region_code ?? null,
     network: r.network,
     device: r.device,
     os: r.os,
@@ -126,7 +135,7 @@ export async function listVisitors(
     vals.push(`%${q.replace(/[%_\\]/g, (c) => "\\" + c)}%`);
     const p = `$${vals.length}`;
     where.push(
-      `(v.nickname ILIKE ${p} OR v.note ILIKE ${p} OR v.customer_name ILIKE ${p} OR v.email ILIKE ${p} OR v.country ILIKE ${p}
+      `(v.nickname ILIKE ${p} OR v.note ILIKE ${p} OR v.customer_name ILIKE ${p} OR v.email ILIKE ${p} OR v.country ILIKE ${p} OR v.city ILIKE ${p} OR v.region ILIKE ${p}
         OR v.network ILIKE ${p} OR v.visitor_id ILIKE ${p}
         OR EXISTS (SELECT 1 FROM visitor_events e WHERE e.visitor_id = v.visitor_id AND (e.title ILIKE ${p} OR e.path ILIKE ${p})))`,
     );

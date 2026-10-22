@@ -106,11 +106,17 @@ test("alertText: back, checkout, cart", () => {
   assert.equal(alertText({ ...base, kind: "visitor_back", visit: 2 }).title, "A visitor is back · 2nd visit");
   assert.deepEqual(alertText({ ...base, kind: "visitor_checkout", label: "Maria L.", cartItems: ["Eden Dress", "Kyle Cargo Pants"] }), {
     title: "Started checkout · Maria L.",
-    body: "2 items: Eden Dress, Kyle Cargo Pants",
+    body: "2 items: Eden Dress, Kyle Cargo Pants · United States · Instagram",
   });
-  assert.equal(alertText({ ...base, kind: "visitor_cart", product: "73 Shorts Set", variant: "STONE / L", price: 56.7 }).body, "73 Shorts Set (STONE / L) · $56.70");
+  assert.equal(alertText({ ...base, kind: "visitor_cart", product: "73 Shorts Set", variant: "STONE / L", price: 56.7 }).body, "73 Shorts Set (STONE / L) · $56.70 · United States");
   assert.equal(ordinal(11), "11th");
   assert.equal(ordinal(22), "22nd");
+});
+test("alertText: city when the IP gives one (never a street)", () => {
+  assert.equal(alertText({ ...base, kind: "visitor_new", city: "Lockhart", regionCode: "FL", region: "Florida" }).title, "New visitor · Lockhart, FL · Instagram");
+  assert.equal(alertText({ ...base, kind: "visitor_new", country: "IL", city: "Haifa", regionCode: "HA", region: "Haifa" }).title, "New visitor · Haifa, Israel · Instagram");
+  assert.equal(alertText({ ...base, kind: "visitor_back", visit: 2, city: "Toronto", regionCode: "ON", country: "CA" }).body, "Looking at Eden Dress 2 Pieces · Toronto, ON · Instagram · phone");
+  assert.equal(alertText({ ...base, kind: "visitor_new", city: null }).title, "New visitor · United States · Instagram");
 });
 test("service worker: Carbon logo, kept until dismissed", () => {
   const sw = readFileSync(path.join(process.cwd(), "public/sw.js"), "utf8");

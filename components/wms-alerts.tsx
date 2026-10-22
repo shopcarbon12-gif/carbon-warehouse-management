@@ -6,15 +6,21 @@
  *
  * - <AlertSoundListener/> sits in the shell: it registers /sw.js and plays a
  *   sound when the service worker reports an alert — a cash-register "ka-ching"
- *   for orders, a three-note chime for Studio. The sounds are synthesised, so
+ *   for orders, a three-note chime for Studio, a "ding-dong" doorbell for a
+ *   store visitor and a three-note doorbell for a checkout (owner 2026-10-21:
+ *   visitors must not sound like orders). It also shows the alert as a card in
+ *   the corner until it is closed: Windows often keeps the notification banner
+ *   hidden and only the sound got through. The sounds are synthesised, so
  *   there are no audio files; browsers only let a page play sound after the
  *   user has touched it once, so the audio is unlocked on the first tap/click.
  * - <AlertsControl/> sits in the sidebar footer: turn alerts on/off on this
  *   device and send a test. Hidden for users who are not admins (403).
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { X } from "lucide-react";
 
-type Sound = "orders" | "studio";
+type Sound = "orders" | "studio" | "visitor" | "checkout";
 
 let ctx: AudioContext | null = null;
 function audio(): AudioContext | null {
@@ -64,23 +70,48 @@ function chime(a: AudioContext) {
   [1046.5, 1318.5, 1568].forEach((fr, i) => tone(a, fr, t + i * 0.16, 0.9, 0.22, "sine"));
 }
 
+/** A doorbell: two warm notes, high then low (E5 · C5) — a visitor walked in. */
+function doorbell(a: AudioContext, notes: number[] = [659.3, 523.3]) {
+  const t = a.currentTime + 0.02;
+  notes.forEach((fr, i) => {
+    tone(a, fr, t + i * 0.42, 1.3, 0.28, "sine");
+    tone(a, fr * 2, t + i * 0.42, 0.6, 0.05, "sine");
+  });
+}
+
 export function playAlertSound(sound: Sound | null | undefined) {
   const a = audio();
   if (!a) return;
   if (sound === "studio") chime(a);
+  else if (sound === "visitor") doorbell(a);
+  else if (sound === "checkout") doorbell(a, [659.3, 523.3, 784]);
   else kaChing(a);
 }
+
+type AlertCard = { id: string; title: string; body: string; url: string; sound: Sound | null; at: number };
 
 function supported() {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
 export function AlertSoundListener() {
+  const [cards, setCards] = useState<AlertCard[]>([]);
   useEffect(() => {
     if (!supported()) return;
     void navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
     const onMsg = (e: MessageEvent) => {
-      if (e.data?.type === "wms-alert") playAlertSound(e.data.sound);
+      if (e.data?.type !== "wms-alert") return;
+      playAlertSound(e.data.sound);
+      const card: AlertCard = {
+        id: String(e.data.tag || Date.now() + Math.random()),
+        title: String(e.data.title || "CarbonWMS"),
+        body: String(e.data.body || ""),
+        url: String(e.data.url || "/"),
+        sound: e.data.sound ?? null,
+        at: Date.now(),
+      };
+      // Newest on top, the same alert never twice, at most five at a time.
+      setCards((cs) => [card, ...cs.filter((c) => c.id !== card.id)].slice(0, 5));
     };
     navigator.serviceWorker.addEventListener("message", onMsg);
     /* Unlock audio on the first touch so a later alert can sound. */
@@ -93,7 +124,50 @@ export function AlertSoundListener() {
       window.removeEventListener("keydown", unlock);
     };
   }, []);
-  return null;
+  if (!cards.length) return null;
+  const close = (id: string) => setCards((cs) => cs.filter((c) => c.id !== id));
+  return (
+    <div
+      className="fixed bottom-4 right-4 z-[130] flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2 pb-[env(safe-area-inset-bottom)]"
+      role="region"
+      aria-label="Alerts"
+    >
+      {cards.map((c) => (
+        <div
+          key={c.id}
+          role="status"
+          className={`rounded-lg border bg-[var(--wms-surface)] p-3 shadow-2xl ${
+            c.sound === "visitor" || c.sound === "checkout" ? "border-[var(--wms-accent)]" : "border-[var(--wms-border)]"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-[var(--wms-fg)]">{c.title}</p>
+              {c.body ? <p className="mt-0.5 text-xs text-[var(--wms-muted)]">{c.body}</p> : null}
+              <p className="mt-1 font-mono text-[0.65rem] text-[var(--wms-muted)]">
+                {new Date(c.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => close(c.id)}
+              className="rounded p-1 text-[var(--wms-muted)] hover:text-[var(--wms-fg)] max-md:flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
+              aria-label="Close alert"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <Link
+            href={c.url}
+            onClick={() => close(c.id)}
+            className="mt-2 inline-block font-mono text-xs text-[var(--wms-accent)] hover:underline max-md:py-2"
+          >
+            Open →
+          </Link>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function keyBytes(base64: string): Uint8Array<ArrayBuffer> {

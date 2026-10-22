@@ -57,6 +57,16 @@ function countryName(code: string | null): string {
     return code;
   }
 }
+/** City and state from the IP (city level at best — never a street), then the country. */
+function placeName(v: { city?: string | null; region_code?: string | null; country: string | null }): string {
+  if (!v.city) return countryName(v.country);
+  if ((v.country === "US" || v.country === "CA") && v.region_code) return `${v.city}, ${v.region_code}`;
+  return `${v.city}, ${countryName(v.country)}`;
+}
+function mapLink(v: { city?: string | null; region?: string | null; country: string | null }): string | null {
+  if (!v.city) return null;
+  return `https://www.openstreetmap.org/search?query=${encodeURIComponent([v.city, v.region, countryName(v.country)].filter(Boolean).join(", "))}`;
+}
 function when(iso: string): string {
   return new Date(iso).toLocaleString("en-US", { timeZone: ET, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
@@ -179,7 +189,7 @@ export function VisitorsWorkspace() {
           id="visitors-search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search nickname, name, email, product, country…"
+          placeholder="Search nickname, name, email, product, city, country…"
           className={`${field} w-72 max-md:w-full`}
         />
       </div>
@@ -244,7 +254,7 @@ function VisitorItem({ v, active, onOpen }: { v: VisitorRow; active: boolean; on
           <span className="ml-auto shrink-0 font-mono text-[0.68rem] text-[var(--wms-muted)]">{v.live ? "now" : ago(v.lastSeen)}</span>
         </span>
         <span className="truncate font-mono text-[0.7rem] text-[var(--wms-muted)]">
-          {countryName(v.country)} · {v.device ?? "?"}
+          {placeName(v)} · {v.device ?? "?"}
           {v.browser ? ` · ${v.browser}` : ""} · {source(v.firstSource)} · {v.pageViews} page{v.pageViews === 1 ? "" : "s"}
         </span>
         <span className="truncate text-[0.78rem] text-[var(--wms-fg)]">
@@ -387,7 +397,22 @@ function Facts({ d }: { d: VisitorDetail }) {
     ["Visits", `${v.visits} visit${v.visits === 1 ? "" : "s"} · ${v.pageViews} page${v.pageViews === 1 ? "" : "s"}`],
     ["Shopping", `${v.cartAdds} added to cart · ${v.checkouts} checkout${v.checkouts === 1 ? "" : "s"} · ${v.orders} order${v.orders === 1 ? "" : "s"}${v.orders ? ` (${money(v.revenue)})` : ""}`],
     ["Device", [v.device, v.os, v.browser].filter(Boolean).join(" · ") || "—"],
-    ["Where", `${countryName(v.country)}${v.network ? ` · ${v.network}` : ""}`],
+    [
+      "Where",
+      <>
+        {placeName(v)}
+        {v.city ? ` (${countryName(v.country)}, from the IP — the city area, not a street)` : ""}
+        {v.network ? ` · ${v.network}` : ""}
+        {mapLink(v) ? (
+          <>
+            {" · "}
+            <a href={mapLink(v)!} target="_blank" rel="noreferrer" className="text-[var(--wms-accent)] hover:underline">
+              map
+            </a>
+          </>
+        ) : null}
+      </>,
+    ],
     ["IP address", v.ip ?? "—"],
   ];
   return (
