@@ -45,6 +45,8 @@ data class Profile(
     val secondTitle: String = "crotch",
     /** Frame edges the garment may run past on the second photo (only the body is measured there). */
     val secondSidesOk: Set<String> = setOf("left", "right"),
+    /** Points the AI may place on either photo, from the AI switch (null: an older CarbonWMS — no limit). */
+    val aiAllowed: Set<String>? = null,
 )
 
 data class CaptureParams(
@@ -97,6 +99,7 @@ data class AppConfig(
                     },
                     lay = p.optString("lay"),
                     aiKeys = p.optJSONArray("aiKeys").strings(),
+                    aiAllowed = p.optJSONArray("aiAllowed")?.strings()?.toSet(),
                     group = p.optString("group", when (p.optString("family")) { "trousers", "shorts", "skirt" -> "bottoms"; "onepiece" -> "onepiece"; else -> "sleeves" }),
                     sleeveless = p.optStringOrNull("sleeveless"),
                     hipBelowTopCm = p.optDouble("hipBelowTopCm", 18.0),

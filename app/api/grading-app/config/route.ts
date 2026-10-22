@@ -7,6 +7,7 @@ import guideLines from "@/lib/size-grading/grading-app-guide-lines.json";
 import { PLAUSIBLE } from "@/lib/size-grading/pom-definitions";
 import { latestRelease } from "@/lib/server/grading-app";
 import { gradingAppAgentConfig } from "@/lib/server/size-grading-agent";
+import { AI_AREAS, AI_AREA_LABEL, DEFAULT_AI, allowedKeys, areaCosts, areaOf, getAiSettings } from "@/lib/server/grading-app-ai";
 import { isDropboxConfigured } from "@/lib/server/dropbox-upload";
 import { toAbsolutePublicUrl } from "@/lib/server/resolve-public-origin";
 
@@ -24,23 +25,38 @@ export async function GET(req: Request) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const pool = getPool();
-  const ai = gradingAppAgentConfig();
+  const model = gradingAppAgentConfig();
   const rel = pool ? await latestRelease(pool) : null;
-  const scope = (process.env.GRADING_APP_AI_SCOPE || "hard").trim() === "all" ? "all" : "hard";
+  // The owner's switch in the app's Settings: AI on/off and which areas it places.
+  const settings = pool ? await getAiSettings(pool, session.tid) : DEFAULT_AI;
+  const ai = model && settings.enabled ? model : null;
+  const scope = settings.areas.other ? "all" : "hard";
+  const costs = pool ? await areaCosts(pool, model?.model ?? null) : null;
   return NextResponse.json({
     version: 1,
     user: { email: session.email, role: session.role },
-    profiles: GRADING_PROFILES.map((p) => ({
+    profiles: GRADING_PROFILES.map((p) => {
+      const allowed = new Set(allowedKeys(p, settings));
+      const hard = new Set<string>(hardKeys(p));
+      return {
       ...p,
-      aiKeys: scope === "all" ? p.points.map((x) => x.key) : hardKeys(p),
+      // Photo 1: the seam points and, with "everything else" on, the rest; the sleeves-up / crotch photo takes its own.
+      aiKeys: p.points.map((x) => x.key).filter((k) => allowed.has(k) && (hard.has(k) || areaOf(p, k) === "other")),
+      aiAllowed: [...allowed],
       guide: {
         image: GUIDE_MAIN[p.id],
         lines: (guideLines as unknown as Record<string, Record<string, [[number, number], [number, number]]>>)[p.id] ?? {},
         examples: GUIDE_EXAMPLES[p.id] ?? [],
       },
-    })),
+      };
+    }),
     plausible: PLAUSIBLE,
-    ai: ai ? { enabled: true, model: ai.model, scope } : { enabled: false, model: null, scope },
+    ai: {
+      ...(ai ? { enabled: true, model: ai.model, scope } : { enabled: false, model: null, scope }),
+      // The switch as set, the model the server would use, and each area's cost per size.
+      settings, available: model != null, serverModel: model?.model ?? null,
+      areas: AI_AREAS.map((a) => ({ id: a, label: AI_AREA_LABEL[a], on: settings.areas[a], ...(costs?.[a] ?? { usd: null, calls: 0, estimate: false }) })),
+    },
     capture: {
       // Working distance. 45 cm lets
       // small items (tees, shorts) be shot closer — the owner could not read the

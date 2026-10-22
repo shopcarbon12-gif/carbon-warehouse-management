@@ -86,6 +86,9 @@ class MeasureSession(
     private var undoCount by mutableStateOf(0)
     val canUndo get() = undoCount > 0
 
+    /** The AI switch (Settings → AI) lets the AI place this point. */
+    private fun aiMay(k: String) = profile.aiAllowed?.contains(k) ?: true
+
     /** The crotch points this type takes from the second photo. */
     val crotchKeys: Set<String> get() = profile.crotchKeys.filter { k -> profile.points.any { it.key == k } }.toSet()
 
@@ -123,9 +126,9 @@ class MeasureSession(
         // The seam points, plus anything the outline was unsure of on this photo — not the ones left out,
         // and not the crotch points when the crotch photo gives them.
         val skip = if (crotchPlanned || crotch != null) crotchKeys else emptySet()
-        val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } && k !in removed && k !in skip }
-        if (cfg?.aiEnabled != true) { ai = AiState.Off("AI assist is off on CarbonWMS — place the seam points by hand."); return }
-        if (keys.isEmpty()) { ai = AiState.Off("This garment has no seam points for the AI."); return }
+        val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } && k !in removed && k !in skip && aiMay(k) }
+        if (cfg?.aiEnabled != true) { ai = AiState.Off("The AI is off (Settings → AI) — the outline placed the points; fix them here or later on CarbonWMS."); return }
+        if (keys.isEmpty()) { ai = AiState.Off(if (profile.aiAllowed != null) "The AI is off for this photo's points (Settings → AI) — the outline placed them." else "This garment has no seam points for the AI."); return }
         ai = AiState.Running(System.currentTimeMillis())
         aiJob = app.scope.launch {
             try {
@@ -167,7 +170,7 @@ class MeasureSession(
     /** No crotch photo after all: the crotch points are placed on the main photo. */
     fun skipCrotch(app: App) {
         crotchPlanned = false
-        val keys = crotchKeys.filter { it !in removed }
+        val keys = crotchKeys.filter { it !in removed && aiMay(it) }
         if (keys.isEmpty() || app.config?.aiEnabled != true) return
         app.scope.launch {
             try {
@@ -181,9 +184,9 @@ class MeasureSession(
     fun startCrotchAi(app: App) { crotch?.let { startCrotchAi(app, it) } }
 
     private fun startCrotchAi(app: App, part: CrotchPart) {
-        val keys = crotchKeys.filter { it !in removed }
-        if (app.config?.aiEnabled != true) { part.ai = AiState.Off("AI assist is off on CarbonWMS — place the crotch by hand."); return }
-        if (keys.isEmpty()) { part.ai = AiState.Off("No crotch points to place."); return }
+        val keys = crotchKeys.filter { it !in removed && aiMay(it) }
+        if (app.config?.aiEnabled != true) { part.ai = AiState.Off("The AI is off (Settings → AI) — the outline placed the points; fix them here or later on CarbonWMS."); return }
+        if (keys.isEmpty()) { part.ai = AiState.Off(if (crotchKeys.any { it !in removed }) "The AI is off for this photo's points (Settings → AI) — the outline placed them." else "No points to place."); return }
         part.ai = AiState.Running(System.currentTimeMillis())
         part.job = app.scope.launch {
             try {
@@ -218,8 +221,8 @@ class MeasureSession(
 
     /** Photo 1's seam points the AI was due to place but did not (none while it is still working). */
     fun missingAi(): List<String> =
-        if (ai is AiState.Running) emptyList()
-        else profile.aiKeys.filter { it !in removed && it !in crotchKeys && it in lines && it !in aiLines && lines[it]?.moved != true }
+        if (ai is AiState.Running || ai is AiState.Off) emptyList()
+        else profile.aiKeys.filter { it !in removed && it !in crotchKeys && aiMay(it) && it in lines && it !in aiLines && lines[it]?.moved != true }
 
     fun cancelAi() { aiJob?.cancel(); crotch?.job?.cancel() }
 

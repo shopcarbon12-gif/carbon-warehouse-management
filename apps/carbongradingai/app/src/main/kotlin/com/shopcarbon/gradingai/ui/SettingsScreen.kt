@@ -50,7 +50,8 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
             Toggle(if (canFinger) "Unlock with fingerprint" else "Fingerprint not set up on this phone", finger, divider = true, enabled = canFinger) { finger = it; app.prefs.biometricLock = it }
             ListRow("Sign out", divider = true, titleColor = Palette.bad) { app.vault.clear(); onSignOut() }
         }
-        Group(header = "Camera", footer = "Test mode: phones without a depth sensor — ARCore's depth-from-motion; scans go to review only, never to the item.") {
+        AiSwitch(app) { msg = it }
+        Group(header = "Camera", footer ="Test mode: phones without a depth sensor — ARCore's depth-from-motion; scans go to review only, never to the item.") {
             Toggle("Capture by itself when all green", auto, divider = false) { auto = it; app.prefs.autoCapture = it }
             ListRow("Depth sensor and accuracy check", divider = true, chevron = true) { nav.go(Screen.Probe) }
             Toggle("Test mode", testMode, divider = true) { testMode = it; app.prefs.testMode = it }
@@ -91,3 +92,73 @@ fun SettingsScreen(nav: Nav, onSignOut: () -> Unit) {
         msg?.let { Notice(it, Palette.accent) }
     }
 }
+
+/** One area of the AI switch, as CarbonWMS reports it. */
+private data class AiArea(val id: String, val label: String, val on: Boolean, val usd: Double?, val calls: Int, val estimate: Boolean, val model: String?)
+
+/**
+ * The AI switch (owner, 2026-10-22): on/off and which areas the AI places, with
+ * what each area costs per size. Kept on CarbonWMS, so every phone follows it;
+ * areas that are off are measured from the outline and can be fixed later on
+ * the saved photo.
+ */
+@Composable
+private fun AiSwitch(app: App, say: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var enabled by remember { mutableStateOf<Boolean?>(null) }
+    var model by remember { mutableStateOf<String?>(null) }
+    var areas by remember { mutableStateOf<List<AiArea>>(emptyList()) }
+    var busy by remember { mutableStateOf(false) }
+    fun read(j: org.json.JSONObject) {
+        enabled = j.optJSONObject("settings")?.optBoolean("enabled", true) ?: true
+        model = j.optString("model").takeIf { it.isNotBlank() && it != "null" }
+        val arr = j.optJSONArray("areas") ?: org.json.JSONArray()
+        areas = (0 until arr.length()).map { i ->
+            val a = arr.getJSONObject(i)
+            AiArea(a.getString("id"), a.optString("label"), a.optBoolean("on"), if (a.isNull("usd")) null else a.optDouble("usd"), a.optInt("calls"), a.optBoolean("estimate"), a.optString("model").takeIf { it.isNotBlank() && it != "null" })
+        }
+    }
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        runCatching { read(app.api.aiSettings()) }.onFailure { say("Could not read the AI switch: ${it.message}") }
+    }
+    fun save(on: Boolean, next: List<AiArea>) {
+        val before = enabled to areas
+        enabled = on; areas = next; busy = true
+        scope.launch {
+            try {
+                read(app.api.saveAiSettings(on, next.associate { it.id to it.on }))
+                // The scan screens read the switch from the config.
+                runCatching { app.config = app.api.config() }
+            } catch (e: Exception) {
+                enabled = before.first; areas = before.second
+                say(e.message ?: "Could not save the AI switch")
+            } finally { busy = false }
+        }
+    }
+    fun cents(usd: Double?) = usd?.let { if (it * 100 < 0.95) "%.1f¢".format(it * 100) else "${(it * 100).roundToIntSafe()}¢" }
+    val on = enabled
+    val perSize = { ids: List<String> -> areas.filter { it.on && it.id in ids }.mapNotNull { it.usd }.sum() }
+    Group(
+        header = "AI",
+        footer = if (on == null) null else buildString {
+            append("Cost per size${model?.let { " with $it" } ?: ""}, from the last 30 days of scans; ≈ is an estimate until scans come in. ")
+            if (on) append("With these areas: a T-shirt size ≈ ${cents(perSize(listOf("sleeves", "chest", "other")))}, a jeans size ≈ ${cents(perSize(listOf("crotch", "other")))}. ")
+            append("Areas that are off are measured from the outline — fix them on the scan or later on CarbonWMS.")
+        },
+    ) {
+        if (on == null) { ListRow("Loading…"); return@Group }
+        ListRow("AI assist", subtitle = if (on) "Places the points you choose below" else "Off — no AI cost", trailing = {
+            Switch(on, { save(it, areas) }, enabled = !busy, colors = SwitchDefaults.colors(checkedTrackColor = Palette.ok, checkedThumbColor = Color.White))
+        })
+        for (a in areas) {
+            val cost = (cents(a.usd)?.let { c -> if (a.estimate || a.calls == 0) "≈ $c a size" else "$c a size · ${a.calls} scan${if (a.calls == 1) "" else "s"}" } ?: "no price yet") +
+                (a.model?.takeIf { it != model }?.let { " · $it" } ?: "")
+            ListRow(a.label, subtitle = cost, divider = true, trailing = {
+                Switch(a.on, { v -> save(on, areas.map { if (it.id == a.id) it.copy(on = v) else it }) }, enabled = on && !busy,
+                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.ok, checkedThumbColor = Color.White))
+            })
+        }
+    }
+}
+
+private fun Double.roundToIntSafe(): Int = kotlin.math.round(this).toInt()

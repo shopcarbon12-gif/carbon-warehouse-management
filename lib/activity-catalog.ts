@@ -60,6 +60,7 @@ const ROUTES: Record<string, Entry> = {
   "inventory/size-grading/ai-read": { module: "Catalog", label: "Measured garment from photo" },
   "inventory/size-grading/ai-measure": { module: "Catalog", label: "AI measured garment from photo" },
   "grading-app/assist": { module: "Catalog", label: "CarbonGradingAI: AI placed points" },
+  "grading-app/ai-settings": { module: "Catalog", label: "CarbonGradingAI: changed the AI switch" },
   "grading-app/scans": { module: "Catalog", label: "CarbonGradingAI: saved measurement" },
   "grading-app/scans/[id]": { module: "Catalog", label: "Reviewed a CarbonGradingAI scan" },
   "grading-app/cut-groups": { module: "Catalog", label: "Created a cut group" },

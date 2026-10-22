@@ -95,6 +95,15 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
         call { Request.Builder().url("$origin/api/grading-app/copy").delete(body) }
     }
 
+    /** The AI switch (Settings → AI): on/off, its areas and each area's cost per size. */
+    suspend fun aiSettings(): JSONObject = getJson("/api/grading-app/ai-settings")
+
+    suspend fun saveAiSettings(enabled: Boolean, areas: Map<String, Boolean>): JSONObject = withContext(Dispatchers.IO) {
+        val a = JSONObject(); for ((k, v) in areas) a.put(k, v)
+        val body = JSONObject().put("enabled", enabled).put("areas", a).toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/ai-settings").put(body) }
+    }
+
     /** One saved scan with its lines (to edit it). */
     suspend fun scan(id: String): JSONObject = getJson("/api/grading-app/scans/${enc(id)}").let { it.optJSONObject("scan") ?: it }
 

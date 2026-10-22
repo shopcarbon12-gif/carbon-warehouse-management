@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { gradingAppAgentConfig, measureWithAgent } from "@/lib/server/size-grading-agent";
 import { PROFILE_BY_ID, type GradingProfileId } from "@/lib/size-grading/grading-app-profiles";
+import { getPool } from "@/lib/db";
+import { DEFAULT_AI, allowedKeys, getAiSettings, logAiCall, modelForKeys } from "@/lib/server/grading-app-ai";
 
 /**
  * CarbonGradingAI's AI assist. The phone sends its squared-up photo (scale
@@ -53,14 +55,29 @@ async function POST_handler(req: Request) {
   if (!profile) return NextResponse.json({ error: "Unknown garment type." }, { status: 400 });
   if (!Number.isFinite(pxPerCm) || pxPerCm <= 0) return NextResponse.json({ error: "pxPerCm required." }, { status: 400 });
   const want = new Set(meta.keys?.length ? meta.keys : profile.points.filter((p) => p.hard).map((p) => p.key));
-  const points = profile.points.filter((p) => want.has(p.key)).map((p) => ({ key: p.key, label: p.label, rule: p.rule }));
-  if (!points.length) return NextResponse.json({ error: "No points to place." }, { status: 400 });
+  if (!profile.points.some((p) => want.has(p.key))) return NextResponse.json({ error: "No points to place." }, { status: 400 });
+  // The owner's AI switch: points of an area that is off stay with the outline (and cost nothing).
+  const pool = getPool();
+  const allowed = new Set(allowedKeys(profile, pool ? await getAiSettings(pool, session.tid) : DEFAULT_AI));
+  const points = profile.points.filter((p) => want.has(p.key) && allowed.has(p.key)).map((p) => ({ key: p.key, label: p.label, rule: p.rule }));
+  if (!points.length) {
+    return NextResponse.json({
+      lines: {}, cm: {}, skipped: [...want], remarks: "The AI is off for these points in Settings — the outline placed them.",
+      model: cfg.model, costUsd: 0, ms: 0, rounds: 0, zooms: 0, off: true,
+    });
+  }
+  // The crotch runs on its own model (see crotchModel); everything else on the app's model.
+  const model = modelForKeys(profile, points.map((p) => p.key), cfg.model);
+  const provider = model.startsWith("claude") ? "claude" : "openai";
+  const log = (runs: number, costUsd: number | null, ms: number | null) => {
+    if (pool) void logAiCall(pool, { tenantId: session.tid, model, profile, keys: points.map((p) => p.key), runs, costUsd, ms });
+  };
 
   try {
     const image = Buffer.from(await photo.arrayBuffer());
     const run = () => measureWithAgent(
       { image, pxPerCm, type: profile.family, view: "front", keys: [], points, scale: "depth" },
-      { provider: cfg.provider, model: cfg.model, maxRounds: cfg.maxRounds, thinkingBudget: cfg.thinkingBudget, effort: cfg.effort, deadlineMs: 140_000 },
+      { provider, model, maxRounds: cfg.maxRounds, thinkingBudget: cfg.thinkingBudget, effort: cfg.effort, deadlineMs: 140_000 },
     );
     if (meta.repeat === 2) {
       const [a, b] = await Promise.all([run(), run().catch(() => null)]);
@@ -80,12 +97,14 @@ async function POST_handler(req: Request) {
         }
       }
       const cost = runs.reduce((s, r) => s + (Number.isFinite(r.costUsd) ? r.costUsd : 0), 0);
+      log(runs.length, cost || null, Math.max(...runs.map((r) => r.ms)));
       return NextResponse.json({
         lines: pick.lines, cm: a.cm, skipped: a.skipped, remarks: a.remarks, model: a.model, costUsd: cost || null,
         ms: Math.max(...runs.map((r) => r.ms)), rounds: a.rounds, zooms: a.zooms, spreadCm: pick.spreadCm, runs: runs.length,
       });
     }
     const result = await run();
+    log(1, Number.isFinite(result.costUsd) ? result.costUsd : null, result.ms);
     return NextResponse.json({
       lines: result.lines, cm: result.cm, skipped: result.skipped, remarks: result.remarks,
       model: result.model, costUsd: Number.isFinite(result.costUsd) ? result.costUsd : null, ms: result.ms,
