@@ -41,6 +41,8 @@ const Meta = z.object({
   aiCostUsd: z.number().finite().nullish(),
   capturedAt: z.string().max(40).nullish(),
   flags: z.array(z.string().max(200)).max(30).optional(),
+  /** Re-scan: the scan this one replaces. */
+  replaces: z.string().regex(UUID_RE).nullish(),
   crotch: z
     .object({
       pxPerCm: z.number().finite().positive(),

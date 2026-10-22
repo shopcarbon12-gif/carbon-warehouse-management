@@ -49,6 +49,10 @@ export type SizeRow = {
   color: string | null;
   upc: string | null;
   lastMeasuredAt: string | null;
+  /** Where the newest reading came from: "app" (a scan), "guide" (the Shopify size guide), "graded", "web". */
+  lastSource: string | null;
+  /** The Shopify size guide's numbers for this size (flat cm), when it has a row — the phone compares against them. */
+  guideCm: Record<string, number> | null;
   /** This colour's current photo on Shopify (live), when it has one. */
   image?: string | null;
 };
@@ -104,16 +108,22 @@ export async function cutGroupFor(pool: Pool, matrixId: string): Promise<CutGrou
 async function sizesOf(pool: Pool, matrixId: string): Promise<SizeRow[]> {
   const r = await pool.query<{
     id: string; sku: string; size: string | null; color_code: string | null; upc: string | null; last: string | null;
+    last_source: string | null; guide: Record<string, number> | null;
   }>(
     `SELECT cs.id, cs.sku, cs.size, cs.color_code, cs.upc,
-            (SELECT max(measured_at) FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id) AS last
+            (SELECT max(measured_at) FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id) AS last,
+            (SELECT g.source FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id ORDER BY g.measured_at DESC LIMIT 1) AS last_source,
+            (SELECT g.points_cm FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id AND g.source = 'guide' ORDER BY g.measured_at DESC LIMIT 1) AS guide
        FROM custom_skus cs
       WHERE cs.matrix_id = $1::uuid AND cs.archived = false
       ORDER BY cs.sort_order NULLS LAST, cs.size, cs.sku`,
     [matrixId],
   );
   return r.rows
-    .map((s) => ({ customSkuId: s.id, sku: s.sku, size: s.size, color: s.color_code, upc: s.upc, lastMeasuredAt: s.last }))
+    .map((s) => ({
+      customSkuId: s.id, sku: s.sku, size: s.size, color: s.color_code, upc: s.upc, lastMeasuredAt: s.last,
+      lastSource: s.last_source, guideCm: s.guide,
+    }))
     .sort((a, b) => sizeRank(a.size) - sizeRank(b.size) || String(a.color).localeCompare(String(b.color)));
 }
 
@@ -275,6 +285,8 @@ export type ScanMeta = {
   flags?: string[];
   /** Bottoms: the legs-spread photo the crotch points were measured on (its own scale and lines). */
   crotch?: CrotchMeta | null;
+  /** "Re-scan" on the phone: the scan this one replaces — retired (redo) once this one is saved. */
+  replaces?: string | null;
 };
 
 export type CrotchMeta = {
@@ -416,6 +428,17 @@ export async function saveScan(pool: Pool, userId: string | null, meta: ScanMeta
          SELECT unnest($1::uuid[]), $2, $3::jsonb, $4, false, $5, $6, $7, 'app', $8::uuid`,
         [targets, profile.family, JSON.stringify(meta.pointsCm), meta.pxPerCm, userId, `CarbonGradingAI · ${profile.label}`, meta.view ?? "front", meta.id],
       );
+    }
+    /* Re-scan (owner, 2026-10-22): the new scan replaces the one it was taken
+       for — that one is retired as "redo" and its readings removed, so the item
+       shows only the new numbers and the review list does not keep both. */
+    if (meta.replaces && UUID_RE.test(meta.replaces) && meta.replaces !== meta.id) {
+      await client.query(
+        `UPDATE size_grading_scans SET status = 'redo', review_note = 'replaced by a re-scan', reviewed_at = now(), reviewed_by = $2
+          WHERE id = $1::uuid AND status <> 'redo'`,
+        [meta.replaces, userId],
+      );
+      await client.query(`DELETE FROM size_grading_measurements WHERE scan_id = $1::uuid`, [meta.replaces]);
     }
     await client.query("COMMIT");
   } catch (e) {
@@ -702,12 +725,14 @@ export type QueueEntry = {
   /** A product to pick off the rail for it. */
   matrixId: string;
   sampleSku: string | null;
+  /** The product's photo (the CarbonWMS copy of its Shopify picture). */
+  image: string | null;
 };
 
 export type QueueResult = {
   progress: { measured: number; total: number };
   entries: QueueEntry[];
-  needsCheck: { scanId: string; name: string | null; size: string | null; flags: string[]; createdAt: string }[];
+  needsCheck: { scanId: string; matrixId: string; name: string | null; size: string | null; flags: string[]; createdAt: string; photo: string | null }[];
   groups: number;
 };
 
@@ -720,8 +745,9 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
   const rows = await pool.query<{
     matrix_id: string; name: string | null; category: string | null; subcategory_1: string | null;
     size: string; measured: boolean; sku: string; skus: number; cut_group_id: string | null; group_name: string | null; group_profile: string | null;
+    image: string | null;
   }>(
-    `SELECT m.id AS matrix_id, m.description AS name, m.category, m.subcategory_1,
+    `SELECT m.id AS matrix_id, m.description AS name, m.category, m.subcategory_1, m.shopify_featured_image_url AS image,
             upper(trim(cs.size)) AS size,
             bool_or(EXISTS (SELECT 1 FROM size_grading_measurements g WHERE g.custom_sku_id = cs.id)) AS measured,
             min(cs.sku) AS sku, count(*)::int AS skus,
@@ -731,10 +757,10 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
        LEFT JOIN size_grading_cut_group_members mm ON mm.matrix_id = m.id
        LEFT JOIN size_grading_cut_groups cg ON cg.id = mm.cut_group_id
       WHERE m.shopify_product_id IS NOT NULL
-      GROUP BY m.id, m.description, m.category, m.subcategory_1, upper(trim(cs.size)), mm.cut_group_id, cg.name, cg.profile`,
+      GROUP BY m.id, m.description, m.category, m.subcategory_1, m.shopify_featured_image_url, upper(trim(cs.size)), mm.cut_group_id, cg.name, cg.profile`,
   );
   let measured = 0, total = 0;
-  const groups = new Map<string, { name: string; profile: string | null; sizes: Map<string, { measured: boolean; matrices: Set<string>; sample: { matrixId: string; sku: string } }> }>();
+  const groups = new Map<string, { name: string; profile: string | null; sizes: Map<string, { measured: boolean; matrices: Set<string>; sample: { matrixId: string; sku: string; image: string | null } }> }>();
   const loose: (QueueEntry & { skus: number })[] = [];
   const looseCount = new Map<string, number>();
   for (const r of rows.rows) {
@@ -744,7 +770,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
     if (r.measured) measured++;
     if (r.cut_group_id) {
       const g = groups.get(r.cut_group_id) ?? { name: r.group_name ?? "Cut", profile: r.group_profile, sizes: new Map() };
-      const s = g.sizes.get(r.size) ?? { measured: false, matrices: new Set<string>(), sample: { matrixId: r.matrix_id, sku: r.sku } };
+      const s = g.sizes.get(r.size) ?? { measured: false, matrices: new Set<string>(), sample: { matrixId: r.matrix_id, sku: r.sku, image: r.image } };
       s.measured = s.measured || r.measured;
       s.matrices.add(r.matrix_id);
       g.sizes.set(r.size, s);
@@ -753,7 +779,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
       looseCount.set(r.matrix_id, (looseCount.get(r.matrix_id) ?? 0) + 1);
       loose.push({
         kind: "product", cutGroupId: null, name: r.name ?? "Item", size: r.size, products: 1,
-        profile: guess.kind === "profile" ? guess.profile : null, matrixId: r.matrix_id, sampleSku: r.sku, skus: r.skus,
+        profile: guess.kind === "profile" ? guess.profile : null, matrixId: r.matrix_id, sampleSku: r.sku, skus: r.skus, image: r.image,
       });
     }
   }
@@ -765,7 +791,7 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
       if (s.measured) continue;
       cutEntries.push({
         kind: "cut", cutGroupId: id, name: g.name, size, products: s.matrices.size,
-        profile: (g.profile as GradingProfileId) ?? null, matrixId: s.sample.matrixId, sampleSku: s.sample.sku,
+        profile: (g.profile as GradingProfileId) ?? null, matrixId: s.sample.matrixId, sampleSku: s.sample.sku, image: s.sample.image,
       });
     }
   }
@@ -776,17 +802,86 @@ export async function buildQueue(pool: Pool, limit = 60): Promise<QueueResult> {
   for (const e of loose) productSkus.set(e.matrixId, (productSkus.get(e.matrixId) ?? 0) + e.skus);
   loose.sort((a, b) => (productSkus.get(b.matrixId)! - productSkus.get(a.matrixId)!) || a.name.localeCompare(b.name) || sizeRank(a.size) - sizeRank(b.size));
 
-  const flagged = await pool.query<{ id: string; name: string | null; size: string | null; flags: string[]; created_at: string }>(
-    `SELECT s.id, m.description AS name, s.size, s.flags, s.created_at
+  const flagged = await pool.query<{ id: string; matrix_id: string; name: string | null; size: string | null; flags: string[]; created_at: string; has_photo: boolean }>(
+    `SELECT s.id, s.matrix_id, m.description AS name, s.size, s.flags, s.created_at, (s.photo_key IS NOT NULL) AS has_photo
        FROM size_grading_scans s JOIN matrices m ON m.id = s.matrix_id
       WHERE s.status = 'flagged' ORDER BY s.created_at DESC LIMIT 20`,
   );
   return {
     progress: { measured, total },
-    entries: [...cutEntries, ...loose.map((e): QueueEntry => ({ kind: e.kind, cutGroupId: e.cutGroupId, name: e.name, size: e.size, products: e.products, profile: e.profile, matrixId: e.matrixId, sampleSku: e.sampleSku }))].slice(0, limit),
-    needsCheck: flagged.rows.map((f) => ({ scanId: f.id, name: f.name, size: f.size, flags: f.flags ?? [], createdAt: f.created_at })),
+    entries: [...cutEntries, ...loose.map((e): QueueEntry => ({ kind: e.kind, cutGroupId: e.cutGroupId, name: e.name, size: e.size, products: e.products, profile: e.profile, matrixId: e.matrixId, sampleSku: e.sampleSku, image: e.image }))].slice(0, limit),
+    needsCheck: flagged.rows.map((f) => ({
+      scanId: f.id, matrixId: f.matrix_id, name: f.name, size: f.size, flags: f.flags ?? [], createdAt: f.created_at,
+      photo: f.has_photo ? `/api/grading-app/scans/${f.id}/photo` : null,
+    })),
     groups: groups.size,
   };
+}
+
+/* ───────────────────────────── catalog ───────────────────────────── */
+
+export const CATALOG_FILTERS = ["all", "unmeasured", "jeans", "tshirts", "shorts"] as const;
+export type CatalogFilter = (typeof CATALOG_FILTERS)[number];
+
+const CATALOG_FILTER_SQL: Record<CatalogFilter, string> = {
+  all: "TRUE",
+  unmeasured: "TRUE", // decided after counting (some size not measured)
+  jeans: "(m.category ILIKE '%jean%' OR m.subcategory_1 ILIKE '%jean%' OR m.description ILIKE '%jean%')",
+  tshirts: "(m.category ILIKE '%t-shirt%' OR m.subcategory_1 ILIKE '%t-shirt%' OR m.description ILIKE '%t-shirt%' OR m.subcategory_1 ILIKE '%tee%')",
+  shorts: "(m.category ILIKE '%short%' OR m.subcategory_1 ILIKE '%short%' OR m.description ILIKE '%short%')",
+};
+
+export type CatalogRow = {
+  matrixId: string;
+  name: string;
+  upc: string | null;
+  vendor: string | null;
+  image: string | null;
+  colours: number;
+  /** Every size in wearing order, with whether it is measured (any reading). */
+  sizes: { size: string; measured: boolean }[];
+};
+
+/**
+ * The app's Catalog tab (owner, 2026-10-22: "search name, UPC, custom SKU
+ * etc. like in CarbonWMS"): the same fields the CarbonWMS catalog search
+ * matches — name, product UPC, custom SKU, SKU UPC, vendor, colour. Only
+ * products with live (not archived) sized SKUs: CarbonWMS is the source of truth.
+ */
+export async function searchCatalog(pool: Pool, q: string, filter: CatalogFilter, limit = 50): Promise<CatalogRow[]> {
+  const term = q.trim().slice(0, 80);
+  const args: unknown[] = [];
+  let match = "TRUE";
+  let rank = "m.description";
+  if (term) {
+    args.push(`%${term.replace(/[%_\\]/g, (c) => "\\" + c)}%`, term.toUpperCase());
+    match = `(m.description ILIKE $1 OR m.upc ILIKE $1 OR m.vendor ILIKE $1
+              OR EXISTS (SELECT 1 FROM custom_skus x WHERE x.matrix_id = m.id AND x.archived = false
+                          AND (x.sku ILIKE $1 OR x.upc ILIKE $1 OR x.color_code ILIKE $1)))`;
+    // An exact code (a scanned or typed SKU / UPC) first, then names that start with the words.
+    rank = `(m.upc = $2 OR EXISTS (SELECT 1 FROM custom_skus x WHERE x.matrix_id = m.id AND (upper(x.sku) = $2 OR x.upc = $2))) DESC,
+            (m.description ILIKE $2 || '%') DESC, m.description`;
+  }
+  const r = await pool.query<{ id: string; name: string | null; upc: string | null; vendor: string | null; image: string | null; colours: number; sizes: { size: string; measured: boolean }[] }>(
+    `SELECT m.id, m.description AS name, m.upc, m.vendor, m.shopify_featured_image_url AS image,
+            count(DISTINCT cs.color_code)::int AS colours,
+            json_agg(DISTINCT jsonb_build_object('size', upper(trim(cs.size)),
+              'measured', EXISTS (SELECT 1 FROM size_grading_measurements g
+                                   JOIN custom_skus y ON y.id = g.custom_sku_id
+                                  WHERE y.matrix_id = m.id AND y.archived = false AND upper(trim(y.size)) = upper(trim(cs.size))))) AS sizes
+       FROM matrices m
+       JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = false AND cs.size IS NOT NULL AND trim(cs.size) <> ''
+      WHERE ${match} AND ${CATALOG_FILTER_SQL[filter]}
+      GROUP BY m.id
+      ORDER BY ${rank}
+      LIMIT ${filter === "unmeasured" ? 400 : Math.max(1, Math.min(100, limit))}`,
+    args,
+  );
+  const rows = r.rows.map((x) => ({
+    matrixId: x.id, name: x.name ?? "Item", upc: x.upc, vendor: x.vendor, image: x.image, colours: x.colours,
+    sizes: [...x.sizes].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)),
+  }));
+  return (filter === "unmeasured" ? rows.filter((x) => x.sizes.some((z) => !z.measured)) : rows).slice(0, Math.max(1, Math.min(100, limit)));
 }
 
 /* ───────────────────────────── cut groups ───────────────────────────── */
