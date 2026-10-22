@@ -39,6 +39,9 @@ function isPublicPath(pathname: string): boolean {
      link carries a random per-signup token. */
   if (pathname === "/api/storefront/welcome-signup") return true;
   if (pathname === "/api/storefront/welcome-unsubscribe") return true;
+  /* Meta catalog close-up feed and its square pictures: Meta's crawler fetches
+     them with no session; they hold only photos already public on the store. */
+  if (pathname === "/api/storefront/meta-feed" || pathname === "/api/storefront/meta-feed/image") return true;
   if (pathname.startsWith("/api/handheld")) return true;
   /* Handheld edge firehose (API key + device registry; no browser session). */
   if (pathname === "/api/edge/ingest") return true;

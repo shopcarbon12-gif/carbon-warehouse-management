@@ -11,6 +11,7 @@ import { executeShopifyAdsSync } from "@/lib/server/shopify-ads-sync";
 import { signSession } from "@/lib/auth";
 import { nightlySendDue } from "@/lib/server/studio-batch";
 import { maybeRunShieldMaintenance } from "@/lib/server/shield/maintenance";
+import { maybeRunMetaFeed } from "@/lib/server/meta-feed";
 
 loadEnvConfig(process.cwd());
 
@@ -291,6 +292,7 @@ async function main() {
       await maybeEnqueueInventoryAutoSync(pool);
       await maybeRunStudioBatch(pool);
       await maybeRunShieldMaintenance(pool);
+      await maybeRunMetaFeed(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

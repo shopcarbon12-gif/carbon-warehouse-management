@@ -14,25 +14,14 @@ import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
+import { classifyPhotoViews, photoKey, type PhotoView } from "@/lib/server/photo-views";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const LABELS = ["full-front", "front-close", "side", "detail", "seated", "back-close", "back", "other"] as const;
-type View = (typeof LABELS)[number];
+type View = PhotoView;
 const cache = new Map<string, View>();
-const key = (u: string) => u.split("?")[0];
-
-const PROMPT = `Each photo is from a clothing store's product gallery. For each, give ONE label for the view it shows of the product:
-- "full-front": FULL LENGTH facing the camera — the head AND the feet/shoes are both in the photo (or the whole garment laid flat)
-- "front-close": the front, but cut off above the feet — waist up, torso, mid-thigh up, waist to knee, chest
-- "side": FULL LENGTH (head and feet both in the photo) turned to the side or three-quarter
-- "detail": a close-up of a label, fabric, neckline, hardware, print or stitching
-- "seated": a person sitting
-- "back-close": a back crop or over-the-shoulder back view (not full length)
-- "back": the full-length back
-- "other": anything else
-JSON only: {"labels": ["...", ...]} in the same order as the photos.`;
+const key = photoKey;
 
 async function POST_handler(req: Request) {
   const session = await getSessionFromRequest(req);
@@ -47,26 +36,7 @@ async function POST_handler(req: Request) {
   if (!apiKey) return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
   const client = new OpenAI({ apiKey });
   const todo = urls.filter((u) => !cache.has(key(u)));
-  const batches: string[][] = [];
-  for (let i = 0; i < todo.length; i += 8) batches.push(todo.slice(i, i + 8));
-  await Promise.all(
-    batches.map(async (batch) => {
-      try {
-        const sized = batch.map((u) => (/cdn\.shopify\.com/.test(u) ? `${key(u)}?width=512` : u));
-        const c = await client.chat.completions.create({
-          model: (process.env.ITEM_SPEC_MODEL || "gpt-4o").trim() || "gpt-4o",
-          temperature: 0,
-          max_tokens: 200,
-          response_format: { type: "json_object" },
-          messages: [{ role: "user", content: [{ type: "text", text: PROMPT }, ...sized.map((u) => ({ type: "image_url" as const, image_url: { url: u, detail: "low" as const } }))] }],
-        });
-        const labels = (JSON.parse(c.choices?.[0]?.message?.content || "{}") as { labels?: unknown[] }).labels ?? [];
-        batch.forEach((u, i) => cache.set(key(u), (LABELS as readonly string[]).includes(String(labels[i])) ? (labels[i] as View) : "other"));
-      } catch {
-        /* left unclassified — keeps its place */
-      }
-    }),
-  );
+  for (const [k, v] of await classifyPhotoViews(client, todo)) cache.set(k, v);
   return NextResponse.json({ views: urls.map((u) => cache.get(key(u)) ?? "other") });
 }
 
