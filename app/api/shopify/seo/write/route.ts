@@ -1,5 +1,6 @@
 import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
+import { SEARCH_TAG_VOCAB } from "@/lib/shopify/search-tags";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
@@ -96,7 +97,22 @@ async function POST_handler(req: Request) {
   if (typeof fields.productType === "string") input.productType = fields.productType.trim();
   if (typeof fields.vendor === "string") input.vendor = fields.vendor.trim();
   if (Array.isArray(fields.tags)) {
-    input.tags = fields.tags.map((t) => String(t || "").trim()).filter(Boolean);
+    const next = fields.tags.map((t) => String(t || "").trim()).filter(Boolean);
+    /* The storefront search tags (lib/shopify/search-tags.ts) are not part of
+       the SEO copy: keep the ones the product already has, so an SEO rewrite
+       never takes "men", "black" or "baggy" back off a product. */
+    try {
+      const cur = await runShopifyGraphql<{ product?: { tags?: string[] } | null }>({
+        shop, token, apiVersion,
+        query: `query($id: ID!) { product(id: $id) { tags } }`,
+        variables: { id: input.id },
+      });
+      const lower = new Set(next.map((t) => t.toLowerCase()));
+      for (const t of cur.data?.product?.tags ?? []) if (SEARCH_TAG_VOCAB.has(t.toLowerCase()) && !lower.has(t.toLowerCase())) next.push(t);
+    } catch {
+      /* Reading the current tags failed: write the SEO tags as given. */
+    }
+    input.tags = next;
   }
 
   const updatedFields: string[] = [];
