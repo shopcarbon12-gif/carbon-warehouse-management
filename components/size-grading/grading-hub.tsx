@@ -8,7 +8,7 @@
  *  - progress over the catalogue (one reading per product size),
  *  - scans the app flagged, waiting for a check (→ Scan review),
  *  - what to measure next — cut groups first, then single products,
- *  - an item lookup showing what is saved for each size.
+ *  - an item lookup showing what is saved for each size (first: it is what the page is opened for).
  * The old in-browser photo measuring (camera, tap the target's corners,
  * sample size chart) is gone: the app does all of that now.
  */
@@ -54,6 +54,30 @@ export function GradingHub() {
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
+      {/* One item */}
+      <section className={card} aria-labelledby="sg-item">
+        <h2 id="sg-item" className="text-sm font-semibold text-[var(--wms-fg)]">Look up an item</h2>
+        <p className="mt-1 mb-3 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+          What is saved for each size — the app&apos;s measurements and the factory sheet. Lines are moved in Scan review.
+        </p>
+        <ItemPicker
+          item={item}
+          size={size}
+          onPick={(i) => {
+            setItem(i);
+            setSize(null);
+          }}
+          onPickSize={setSize}
+        />
+        {item && size ? (
+          <div className="mt-3">
+            <SizeGradingSection key={size.customSkuId} customSkuId={size.customSkuId} editable category={item.category} subcategory={item.subcategory} />
+          </div>
+        ) : item ? (
+          <p className="mt-3 font-mono text-xs text-[var(--wms-muted)]">Pick a size.</p>
+        ) : null}
+      </section>
+
       <div className="grid min-w-0 gap-4 md:grid-cols-3">
         {/* The app */}
         <section className={card} aria-labelledby="sg-app">
@@ -63,7 +87,6 @@ export function GradingHub() {
           {rel.data?.release ? (
             <>
               <p className="mt-2 text-2xl font-semibold tabular-nums text-[var(--wms-fg)]">v{rel.data.release.version}</p>
-              {rel.data.release.notes ? <p className="mt-1 text-xs text-[var(--wms-muted)]">{rel.data.release.notes}</p> : null}
               <a href={rel.data.release.downloadUrl} className={`${link} mt-3 inline-flex items-center gap-1.5`}>
                 <Download className="h-3.5 w-3.5" aria-hidden /> Download the APK
               </a>
@@ -71,10 +94,7 @@ export function GradingHub() {
           ) : (
             <p className="mt-2 font-mono text-xs text-[var(--wms-muted)]">{rel.error ? rel.error.message : rel.isLoading ? "Loading…" : "No release yet."}</p>
           )}
-          <p className="mt-3 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-            Depth-camera Samsungs only. The app updates itself; its garment types, guides and AI come from the WMS.
-          </p>
-          <a href="/inventory/size-grading/target" target="_blank" rel="noreferrer" className={`${link} mt-1 inline-block`}>
+          <a href="/inventory/size-grading/target" target="_blank" rel="noreferrer" className={`${link} mt-2 inline-block`}>
             Print the accuracy-check target (18×24 cm)
           </a>
         </section>
@@ -92,9 +112,6 @@ export function GradingHub() {
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--wms-surface-elevated)]" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
                 <div className="h-full rounded-full bg-[var(--wms-accent)]" style={{ width: `${pct}%` }} />
               </div>
-              <p className="mt-3 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-                One reading per product size covers all its colours — and every product in its cut group.
-              </p>
             </>
           ) : (
             <p className="mt-2 font-mono text-xs text-[var(--wms-muted)]">{queue.error ? queue.error.message : "Loading…"}</p>
@@ -162,9 +179,6 @@ export function GradingHub() {
         <h2 id="sg-next" className="flex items-center gap-2 text-sm font-semibold text-[var(--wms-fg)]">
           <Layers className="h-4 w-4 text-[var(--wms-accent)]" aria-hidden /> Measure next
         </h2>
-        <p className="mt-1 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-          Cut groups first (one garment covers every product in the cut), then the products with the most colours. The app shows the same list.
-        </p>
         {q ? (
           entries.length ? (
             <>
@@ -215,29 +229,6 @@ export function GradingHub() {
         )}
       </section>
 
-      {/* One item */}
-      <section className={card} aria-labelledby="sg-item">
-        <h2 id="sg-item" className="text-sm font-semibold text-[var(--wms-fg)]">Look up an item</h2>
-        <p className="mt-1 mb-3 font-mono text-[0.68rem] text-[var(--wms-muted)]">
-          What is saved for each size — the app&apos;s measurements and the factory sheet. Lines are moved in Scan review.
-        </p>
-        <ItemPicker
-          item={item}
-          size={size}
-          onPick={(i) => {
-            setItem(i);
-            setSize(null);
-          }}
-          onPickSize={setSize}
-        />
-        {item && size ? (
-          <div className="mt-3">
-            <SizeGradingSection key={size.customSkuId} customSkuId={size.customSkuId} editable category={item.category} subcategory={item.subcategory} />
-          </div>
-        ) : item ? (
-          <p className="mt-3 font-mono text-xs text-[var(--wms-muted)]">Pick a size.</p>
-        ) : null}
-      </section>
     </div>
   );
 }
