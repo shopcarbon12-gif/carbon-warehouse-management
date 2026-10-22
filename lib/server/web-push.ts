@@ -163,7 +163,8 @@ export async function notifyStudioBatchResults(pool: Pool, batchId: string, tena
           body: ready
             ? `${ready} of ${r.panel_count} picture${r.panel_count === 1 ? "" : "s"} ready${failed ? ` · ${failed} failed` : ""} — tap to review`
             : `The run finished but no pictures were made${failed ? ` (${failed} failed)` : ""}`,
-          url: `/inventory/catalog?matrix=${r.matrix_id}&mtab=studio`,
+          // Bulk Studio › Upload lists every run that came back, ready to review and publish (owner 2026-10-22).
+          url: "/inventory/bulk-studio?tab=upload",
           tag: `studio-${batchId}-${r.matrix_id}-${(r.item_colour || "").replace(/\s+/g, "")}`,
           sound: "studio",
         },

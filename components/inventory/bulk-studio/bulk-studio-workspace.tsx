@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import { BulkUploadTab } from "@/components/inventory/bulk-studio/bulk-upload-tab";
 import {
   CarbonStudioTab,
@@ -86,7 +87,10 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
     const t = window.setInterval(check, 60_000);
     return () => window.clearInterval(t);
   }, [buildId]);
-  const [tab, setTab] = useState<"studio" | "upload">("studio");
+  /* In the URL, so a Studio result alert can open straight on Upload (?tab=upload). */
+  const [tabParam, setTabParam] = useUrlParam("tab");
+  const tab: "studio" | "upload" = tabParam === "upload" ? "upload" : "studio";
+  const setTab = (t: "studio" | "upload") => setTabParam(t === "upload" ? "upload" : null);
   const [items, setItems] = useState<Item[]>([{ key: "init", matrixId: null }]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {

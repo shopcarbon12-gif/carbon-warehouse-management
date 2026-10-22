@@ -35,7 +35,7 @@ async function POST_handler(req: NextRequest) {
   const r = await sendPush(
     pool,
     studio
-      ? { kind: "test", title: "Studio · test alert", body: "This is how a finished night-batch run will look — tap to open the catalog", url: "/inventory/catalog", tag: "test-studio", sound: "studio" }
+      ? { kind: "test", title: "Studio · test alert", body: "This is how a finished night-batch run will look — tap to open Bulk Studio › Upload", url: "/inventory/bulk-studio?tab=upload", tag: "test-studio", sound: "studio" }
       : { kind: "test", title: "New Shopify order · test alert", body: "This is how a paid Shopify order will look — tap to open Sales", url: "/shopify/sales", tag: "test-orders", sound: "orders" },
     { userId: String(session.sub || "") || null },
   );
