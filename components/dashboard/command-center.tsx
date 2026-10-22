@@ -605,7 +605,6 @@ export function CommandCenter() {
           {[
             { href: "/inventory/catalog", label: "Catalog" },
             { href: "/shopify/sales", label: "Orders" },
-            { href: "/integrations", label: "Integrations" },
             { href: "/tags-labels/print", label: "Print tags" },
             { href: "/tags-labels/bulk-status", label: "Bulk status" },
             { href: "/rfid/hardware-config", label: "Hardware config" },
