@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { cleanLabel, decodeEntities, describeDevice, shortName, visitorLabel } from "@/lib/server/visitors/rules";
+import { cleanLabel, decodeEntities, describeDevice, shortName, visitorAlertTag, visitorLabel, visitorOfTag } from "@/lib/server/visitors/rules";
 import { verifiedCustomer } from "@/lib/server/visitors/record";
 import { alertText, ordinal } from "@/lib/server/visitors/alerts";
 
@@ -94,6 +94,14 @@ test("shield snippet: sends title / product / signed customer; reports cart adds
   assert.ok(shield.includes("_cs_vid"));
   assert.ok(shield.includes('"https://wms.shopcarbon.com/api/shield/event"'));
   assert.ok(shield.includes('if (cached === "b" || test) return;'), "blocked visitors send nothing more");
+  assert.ok(/setTimeout\(function \(\) \{ if \(d\.visibilityState === "visible"\) send\("ping"\); \}, 20000\)/.test(shield), "a ping at 20 s releases the held alert");
+});
+test("visitor alert tags: the cards find the visitor to close when they leave", () => {
+  const id = "3f2a9c1e-77b0-4d1e-9a61-0c5b8f0e2d41";
+  for (const k of ["visitor_new", "visitor_back", "visitor_checkout", "visitor_cart"]) assert.equal(visitorOfTag(visitorAlertTag(k, id, 12)), id);
+  assert.equal(visitorOfTag("order-1234"), null);
+  assert.equal(visitorOfTag("studio-batch-9"), null);
+  assert.equal(visitorOfTag(null), null);
 });
 
 const base = { visitorId: "v1", visit: 1, label: null, country: "US", source: "instagram", device: "phone", pageTitle: "Eden Dress 2 Pieces | CARBON", path: "/products/eden" };

@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
+import { visitorOfTag } from "@/lib/server/visitors/rules";
 
 type Sound = "orders" | "studio" | "visitor" | "checkout";
 
@@ -124,6 +125,32 @@ export function AlertSoundListener() {
       window.removeEventListener("keydown", unlock);
     };
   }, []);
+  /* A visitor's alert goes away once they leave the store (owner 2026-10-22) — the corner card and the
+     system notification. Asked every 30 s while one is showing; "left" = no page or ping for 3 minutes. */
+  const visitorCardIds = cards.map((c) => c.id).filter((id) => visitorOfTag(id)).join("|");
+  useEffect(() => {
+    if (!supported()) return;
+    let stop = false;
+    const sweep = async () => {
+      const reg = await navigator.serviceWorker.getRegistration("/").catch(() => undefined);
+      const notes = ((await reg?.getNotifications().catch(() => [])) ?? []).filter((n) => visitorOfTag(n.tag));
+      const tags = [...new Set([...visitorCardIds.split("|").filter(Boolean), ...notes.map((n) => n.tag)])];
+      const ids = [...new Set(tags.map((t) => visitorOfTag(t)!))];
+      if (!ids.length || stop) return;
+      const r = await fetch(`/api/shopify/visitors/live?ids=${encodeURIComponent(ids.join(","))}`, { cache: "no-store" }).catch(() => null);
+      if (!r?.ok || stop) return;
+      const live = new Set(((await r.json().catch(() => ({}))) as { live?: string[] }).live ?? []);
+      const gone = (t: string) => !live.has(visitorOfTag(t)!);
+      notes.filter((n) => gone(n.tag)).forEach((n) => n.close());
+      setCards((cs) => cs.filter((c) => !visitorOfTag(c.id) || !gone(c.id)));
+    };
+    void sweep();
+    const t = setInterval(() => void sweep(), 30_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [visitorCardIds]);
   if (!cards.length) return null;
   const close = (id: string) => setCards((cs) => cs.filter((c) => c.id !== id));
   return (

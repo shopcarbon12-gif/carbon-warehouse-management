@@ -123,7 +123,9 @@
       } catch (e) {}
     }
     // "Still here": once a minute while the tab is visible, for up to 2 hours.
+    // Plus one at 20 s: the WMS holds the "New visitor" alert until someone stays that long.
     var pings = 0;
+    setTimeout(function () { if (d.visibilityState === "visible") send("ping"); }, 20000);
     setInterval(function () { if (d.visibilityState === "visible" && pings++ < 120) send("ping"); }, 60000);
 
     /* Tag the cart with this visitor so the order is credited to them

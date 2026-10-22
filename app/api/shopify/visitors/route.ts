@@ -1,6 +1,7 @@
 /**
  * GET /api/shopify/visitors — Shopify → Visitors list: everyone recorded, or
- * only who is on the store now (?view=live); ?filter=, ?q=, ?offset=. Admin only.
+ * only who is on the store now (?view=live); ?filter=, ?q=, ?offset=,
+ * ?bots=1 to include likely bots. Admin only.
  */
 import { NextResponse } from "next/server";
 import { welcomeAdminGuard } from "@/lib/server/welcome/guard";
@@ -22,6 +23,7 @@ export async function GET(req: Request) {
       q: (u.searchParams.get("q") ?? "").slice(0, 100),
       offset,
       limit: 100,
+      bots: u.searchParams.get("bots") === "1",
     });
     return NextResponse.json(list, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {

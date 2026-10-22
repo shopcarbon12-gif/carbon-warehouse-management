@@ -8,6 +8,25 @@ import { visitorLabel } from "./rules";
 /** "On the site now" = a page view or a still-here ping in the last 3 minutes. */
 export const LIVE_MINUTES = 3;
 
+/**
+ * "Likely bot" (owner 2026-10-22): a residential-proxy scraper gets past the
+ * Shield as a real-looking Chrome, one page per IP. The pattern it leaves —
+ * one visit, one page, gone in under 10 seconds, typed-in (no referrer, no
+ * ad), landing deep on a product or translated page, and nothing else: no
+ * cart, no name, no note. Decided only once 45 s have passed without the
+ * theme's 20-second ping, so someone still reading is never called a bot.
+ * Left out of the counts and the list unless "Show likely bots" is on.
+ */
+export function likelyBotSql(v = "v"): string {
+  return `(${v}.visits = 1 AND ${v}.page_views = 1
+    AND ${v}.last_seen - ${v}.first_seen < interval '10 seconds'
+    AND ${v}.last_seen < now() - interval '45 seconds'
+    AND COALESCE(${v}.first_source, 'direct') IN ('direct', 'internal') AND ${v}.first_ad IS NULL
+    AND (${v}.landing_path LIKE '/products/%' OR ${v}.landing_path ~* '^/[a-z]{2}(-[a-z]{2})?/')
+    AND ${v}.cart_adds = 0 AND ${v}.checkouts = 0 AND ${v}.orders = 0
+    AND ${v}.nickname IS NULL AND ${v}.note IS NULL AND ${v}.customer_id IS NULL AND ${v}.email IS NULL)`;
+}
+
 export type VisitorRow = {
   visitorId: string;
   label: string;
@@ -18,6 +37,7 @@ export type VisitorRow = {
   firstSeen: string;
   lastSeen: string;
   live: boolean;
+  likelyBot: boolean;
   visits: number;
   pageViews: number;
   country: string | null;
@@ -68,6 +88,7 @@ type DbRow = {
   checkouts: number;
   orders: number;
   revenue: string;
+  likely_bot?: boolean;
 };
 
 function toRow(r: DbRow): VisitorRow {
@@ -81,6 +102,7 @@ function toRow(r: DbRow): VisitorRow {
     firstSeen: r.first_seen.toISOString(),
     lastSeen: r.last_seen.toISOString(),
     live: Date.now() - r.last_seen.getTime() < LIVE_MINUTES * 60_000,
+    likelyBot: Boolean(r.likely_bot),
     visits: r.visits,
     pageViews: r.page_views,
     country: r.country,
@@ -120,14 +142,18 @@ export type VisitorList = {
   rows: VisitorRow[];
   total: number;
   liveNow: number;
+  /** Likely bots today — hidden unless asked for. */
+  botsToday: number;
   today: { visitors: number; pageViews: number; cartAdds: number; checkouts: number; orders: number };
 };
 
 export async function listVisitors(
   pool: Pool,
-  opts: { live: boolean; filter: VisitorFilter; q: string; offset: number; limit: number },
+  opts: { live: boolean; filter: VisitorFilter; q: string; offset: number; limit: number; bots?: boolean },
 ): Promise<VisitorList> {
+  const bot = likelyBotSql("v");
   const where: string[] = [FILTER_SQL[opts.filter]];
+  if (!opts.bots) where.push(`NOT ${bot}`);
   const vals: unknown[] = [];
   if (opts.live) where.push(`v.last_seen > now() - make_interval(mins => ${LIVE_MINUTES})`);
   const q = opts.q.trim();
@@ -141,28 +167,33 @@ export async function listVisitors(
     );
   }
   const cond = where.join(" AND ");
-  const [rows, total, live, today] = await Promise.all([
+  const sinceMidnightEt = `(date_trunc('day', now() AT TIME ZONE 'America/New_York') AT TIME ZONE 'America/New_York')`;
+  const [rows, total, live, today, bots] = await Promise.all([
     pool.query<DbRow>(
-      `SELECT v.* FROM visitors v WHERE ${cond} ORDER BY v.last_seen DESC LIMIT ${opts.limit} OFFSET ${opts.offset}`,
+      `SELECT v.*, ${bot} AS likely_bot FROM visitors v WHERE ${cond} ORDER BY v.last_seen DESC LIMIT ${opts.limit} OFFSET ${opts.offset}`,
       vals,
     ),
     pool.query<{ n: string }>(`SELECT count(*) AS n FROM visitors v WHERE ${cond}`, vals),
-    pool.query<{ n: string }>(`SELECT count(*) AS n FROM visitors WHERE last_seen > now() - make_interval(mins => ${LIVE_MINUTES})`),
-    pool.query<Record<string, string>>(
-      `SELECT count(DISTINCT visitor_id) AS visitors,
-              count(*) FILTER (WHERE kind = 'view') AS views,
-              count(*) FILTER (WHERE kind = 'cart_add') AS cart,
-              count(*) FILTER (WHERE kind = 'checkout') AS checkouts,
-              count(*) FILTER (WHERE kind = 'order') AS orders
-         FROM visitor_events
-        WHERE at >= (date_trunc('day', now() AT TIME ZONE 'America/New_York') AT TIME ZONE 'America/New_York')`,
+    pool.query<{ n: string }>(
+      `SELECT count(*) AS n FROM visitors v WHERE v.last_seen > now() - make_interval(mins => ${LIVE_MINUTES}) AND NOT ${bot}`,
     ),
+    pool.query<Record<string, string>>(
+      `SELECT count(DISTINCT e.visitor_id) AS visitors,
+              count(*) FILTER (WHERE e.kind = 'view') AS views,
+              count(*) FILTER (WHERE e.kind = 'cart_add') AS cart,
+              count(*) FILTER (WHERE e.kind = 'checkout') AS checkouts,
+              count(*) FILTER (WHERE e.kind = 'order') AS orders
+         FROM visitor_events e JOIN visitors v ON v.visitor_id = e.visitor_id
+        WHERE e.at >= ${sinceMidnightEt} AND NOT ${bot}`,
+    ),
+    pool.query<{ n: string }>(`SELECT count(*) AS n FROM visitors v WHERE v.first_seen >= ${sinceMidnightEt} AND ${bot}`),
   ]);
   const t = today.rows[0] ?? {};
   return {
     rows: rows.rows.map(toRow),
     total: Number(total.rows[0]?.n ?? 0),
     liveNow: Number(live.rows[0]?.n ?? 0),
+    botsToday: Number(bots.rows[0]?.n ?? 0),
     today: {
       visitors: Number(t.visitors ?? 0),
       pageViews: Number(t.views ?? 0),
@@ -192,7 +223,7 @@ export type VisitorDetail = {
 
 export async function getVisitor(pool: Pool, visitorId: string): Promise<VisitorDetail | null> {
   const v = await pool.query<DbRow & { ip: string | null; labelled_at: Date | null; labelled_by_email: string | null; customer_id: string | null }>(
-    `SELECT * FROM visitors WHERE visitor_id = $1`,
+    `SELECT *, ${likelyBotSql("visitors")} AS likely_bot FROM visitors WHERE visitor_id = $1`,
     [visitorId],
   );
   const row = v.rows[0];
@@ -221,4 +252,14 @@ export async function getVisitor(pool: Pool, visitorId: string): Promise<Visitor
     events: events.rows.map((e) => ({ ...e, at: e.at.toISOString() })),
     otherDevices: others.rows.map((o) => ({ visitorId: o.visitor_id, label: visitorLabel(o), device: o.device, lastSeen: o.last_seen.toISOString() })),
   };
+}
+
+/** Which of these visitors are still on the site — the WMS closes the alert of anyone who left. */
+export async function stillLive(pool: Pool, ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const r = await pool.query<{ visitor_id: string }>(
+    `SELECT visitor_id FROM visitors WHERE visitor_id = ANY($1::text[]) AND last_seen > now() - make_interval(mins => ${LIVE_MINUTES})`,
+    [ids],
+  );
+  return r.rows.map((x) => x.visitor_id);
 }

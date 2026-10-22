@@ -85,3 +85,13 @@ export function cleanLabel(raw: unknown, max: number): string | null {
   const s = raw.replace(/\s+/g, " ").trim().slice(0, max);
   return s || null;
 }
+
+/** A visitor alert's tag: one per visitor, visit and kind (the WMS closes it when they leave). */
+export function visitorAlertTag(kind: string, visitorId: string, visit: number): string {
+  return `${kind}-${visitorId}-${visit}`;
+}
+
+/** The visitor a visitor alert's tag belongs to, or null for any other alert. */
+export function visitorOfTag(tag: string | null | undefined): string | null {
+  return /^visitor_[a-z]+-(.+)-\d+$/.exec(tag ?? "")?.[1] ?? null;
+}

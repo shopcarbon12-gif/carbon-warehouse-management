@@ -16,7 +16,7 @@
 import type { Pool } from "pg";
 import { placeWords } from "./geo";
 import { sendPush, type PushKind } from "@/lib/server/web-push";
-import { decodeEntities } from "./rules";
+import { decodeEntities, visitorAlertTag } from "./rules";
 
 export type VisitorAlertKind = "visitor_new" | "visitor_back" | "visitor_checkout" | "visitor_cart";
 export const MAX_VISITOR_ALERTS_PER_HOUR = 60;
@@ -137,7 +137,7 @@ export async function notifyVisitor(pool: Pool, a: AlertInput): Promise<void> {
       title,
       body,
       url: `/shopify/visitors?visitor=${encodeURIComponent(a.visitorId)}`,
-      tag: `${a.kind}-${a.visitorId}-${a.visit}`,
+      tag: visitorAlertTag(a.kind, a.visitorId, a.visit),
       // Visitors have their own sounds — not the order ka-ching or the Studio chime (owner, 2026-10-21).
       sound: a.kind === "visitor_checkout" ? "checkout" : "visitor",
     });

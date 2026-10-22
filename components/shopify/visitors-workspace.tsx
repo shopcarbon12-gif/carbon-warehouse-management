@@ -97,6 +97,7 @@ const field =
 export function VisitorsWorkspace() {
   const [view, setView] = useState<"live" | "all">("live");
   const [filter, setFilter] = useState<VisitorFilter>("all");
+  const [bots, setBots] = useState(false);
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useUrlParam("visitor");
@@ -106,7 +107,7 @@ export function VisitorsWorkspace() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const url = `/api/shopify/visitors?view=${view}&filter=${filter}&q=${encodeURIComponent(query)}`;
+  const url = `/api/shopify/visitors?view=${view}&filter=${filter}&q=${encodeURIComponent(query)}${bots ? "&bots=1" : ""}`;
   const { data, error, isLoading } = useSWR<VisitorList>(url, fetcher, {
     refreshInterval: view === "live" ? 15_000 : 60_000,
     revalidateOnFocus: false,
@@ -120,7 +121,8 @@ export function VisitorsWorkspace() {
         <p className="max-w-3xl font-mono text-xs text-[var(--wms-muted)]">
           Who is on shopcarbon.com right now, and everything each visitor did — pages, cart, checkout, email signups, orders — kept 90
           days after they leave. Real people only: bots are left out. Give anyone a nickname; names appear when a shopper logs in, signs
-          up for emails or orders.
+          up for emails or orders. One-page visits gone in seconds, typed straight onto a product page, are counted as likely bots and left
+          out (tick Show likely bots to see them).
         </p>
       </div>
 
@@ -192,6 +194,16 @@ export function VisitorsWorkspace() {
           placeholder="Search nickname, name, email, product, city, country…"
           className={`${field} w-72 max-md:w-full`}
         />
+        <label className="flex cursor-pointer items-center gap-2 font-mono text-[0.72rem] text-[var(--wms-muted)] max-md:min-h-11">
+          <input
+            id="visitors-show-bots"
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--wms-accent)] max-md:h-5 max-md:w-5"
+            checked={bots}
+            onChange={(e) => setBots(e.target.checked)}
+          />
+          Show likely bots{data?.botsToday ? ` (${data.botsToday} today)` : ""}
+        </label>
       </div>
 
       <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)]">
@@ -251,6 +263,7 @@ function VisitorItem({ v, active, onOpen }: { v: VisitorRow; active: boolean; on
           {v.orders ? <Badge tone="good">{v.orders === 1 ? "Ordered" : `${v.orders} orders`} · {money(v.revenue)}</Badge> : null}
           {!v.orders && v.cartAdds ? <Badge tone="warn">Cart · no order</Badge> : null}
           {v.visits > 1 ? <Badge>{v.visits} visits</Badge> : null}
+          {v.likelyBot ? <Badge tone="warn">Likely bot</Badge> : null}
           <span className="ml-auto shrink-0 font-mono text-[0.68rem] text-[var(--wms-muted)]">{v.live ? "now" : ago(v.lastSeen)}</span>
         </span>
         <span className="truncate font-mono text-[0.7rem] text-[var(--wms-muted)]">
@@ -391,7 +404,7 @@ function Facts({ d }: { d: VisitorDetail }) {
   const rows: [string, React.ReactNode][] = [
     ["Name", v.customerName ?? "—"],
     ["Email", v.email ?? "—"],
-    ["Status", v.live ? <span className="text-[var(--wms-status-success-fg)]">On the site now</span> : `Last seen ${when(v.lastSeen)} (${ago(v.lastSeen)})`],
+    ["Status", v.live ? <span className="text-[var(--wms-status-success-fg)]">On the site now</span> : `Last seen ${when(v.lastSeen)} (${ago(v.lastSeen)})${v.likelyBot ? " · likely bot (one page, gone in seconds)" : ""}`],
     ["First visit", `${when(v.firstSeen)} · from ${source(v.firstSource)}`],
     ["Landed on", v.landingPath ?? "—"],
     ["Visits", `${v.visits} visit${v.visits === 1 ? "" : "s"} · ${v.pageViews} page${v.pageViews === 1 ? "" : "s"}`],

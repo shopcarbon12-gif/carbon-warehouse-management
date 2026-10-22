@@ -122,23 +122,13 @@ export async function recordPageView(pool: Pool, v: PageView): Promise<void> {
       if (geo) await pool.query(`UPDATE visitors SET city = $2, region = $3, region_code = $4 WHERE visitor_id = $1`, [v.visitorId, geo.city, geo.region, geo.regionCode]);
     }
     if (!prev || prev.fresh_visit) {
-      const label = prev
-        ? visitorLabel({ visitor_id: v.visitorId, nickname: prev.nickname, customer_name: who?.name ?? prev.customer_name, email: who?.email ?? prev.email })
-        : who?.name ?? null;
-      void notifyVisitor(pool, {
-        kind: prev ? "visitor_back" : "visitor_new",
-        visitorId: v.visitorId,
-        visit: r.rows[0]?.visits ?? 1,
-        label: label && !label.startsWith("Visitor ") ? label : null,
-        country: v.country,
-        city: geo?.city ?? prev?.city ?? null,
-        regionCode: geo?.regionCode ?? null,
-        region: geo?.region ?? null,
-        source: v.source,
-        device: dev.device,
-        pageTitle: v.title,
-        path: v.path,
-      });
+      // Held until they stay 20 s or open a second page (releaseHeldAlert) — one-page bots never ring.
+      await pool.query(`UPDATE visitors SET pending_alert = $2, visit_started_at = now() WHERE visitor_id = $1`, [
+        v.visitorId,
+        prev ? "visitor_back" : "visitor_new",
+      ]);
+    } else {
+      await releaseHeldAlert(pool, v.visitorId, true);
     }
   } catch (e) {
     console.warn("[visitors] page view not recorded:", e instanceof Error ? e.message : e);
@@ -178,6 +168,8 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
     [ev.visitorId],
   );
   if (!r.rowCount) return false;
+  // A ping at 20 s (or any cart / checkout) means they stayed: send the held "New visitor" alert first.
+  await releaseHeldAlert(pool, ev.visitorId, ev.kind !== "ping");
   if (ev.kind !== "ping") {
     await pool.query(
       `INSERT INTO visitor_events (visitor_id, visit, kind, path, title, detail) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -216,6 +208,62 @@ export async function recordVisitorEvent(pool: Pool, ev: VisitorEvent): Promise<
     }
   }
   return true;
+}
+
+/**
+ * The theme pings 20 s after a page loads; the server takes 15 s as "stayed"
+ * so a ping that lands a moment early still counts.
+ */
+export const HOLD_SECONDS = 15;
+
+/**
+ * Send the visit's held "New visitor" / "is back" alert — now (a second page,
+ * a cart add, a checkout) or once the visit is HOLD_SECONDS old (a ping).
+ * Claimed atomically, so it goes out once. Never throws.
+ */
+export async function releaseHeldAlert(pool: Pool, visitorId: string, now: boolean): Promise<void> {
+  try {
+    const r = await pool.query<{
+      pending_alert: "visitor_new" | "visitor_back";
+      visits: number;
+      nickname: string | null;
+      customer_name: string | null;
+      email: string | null;
+      country: string | null;
+      city: string | null;
+      region: string | null;
+      region_code: string | null;
+      last_source: string | null;
+      device: string | null;
+      last_title: string | null;
+      last_path: string | null;
+    }>(
+      `UPDATE visitors SET pending_alert = NULL
+        WHERE visitor_id = $1 AND pending_alert IS NOT NULL
+          ${now ? "" : `AND visit_started_at <= now() - make_interval(secs => ${HOLD_SECONDS})`}
+        RETURNING pending_alert, visits, nickname, customer_name, email, country, city, region, region_code, last_source, device, last_title, last_path`,
+      [visitorId],
+    );
+    const row = r.rows[0];
+    if (!row) return;
+    const label = visitorLabel({ visitor_id: visitorId, ...row });
+    await notifyVisitor(pool, {
+      kind: row.pending_alert,
+      visitorId,
+      visit: row.visits,
+      label: label.startsWith("Visitor ") ? null : label,
+      country: row.country,
+      city: row.city,
+      regionCode: row.region_code,
+      region: row.region,
+      source: row.last_source,
+      device: row.device,
+      pageTitle: row.last_title,
+      path: row.last_path,
+    });
+  } catch (e) {
+    console.warn("[visitors] held alert skipped:", e instanceof Error ? e.message : e);
+  }
 }
 
 /** Email popup / footer signup: the visitor now has an email. Never throws. */
