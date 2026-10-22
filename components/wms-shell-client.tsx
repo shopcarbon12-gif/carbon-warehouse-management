@@ -65,6 +65,7 @@ export function WmsShellClient({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(PIN_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time read of the saved pin after hydration (localStorage is client-only)
       if (raw === "0") setPinned(false);
       else if (raw === "1") setPinned(true);
     } catch {
