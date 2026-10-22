@@ -24,15 +24,18 @@ export async function GET(req: Request) {
   if (!pool) return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   const r = await pool.query<{ at: string | null; counted: number; gone: number; added: number; now: number }>(
     `WITH c AS (
-       SELECT scanned_epcs, at FROM (
-         SELECT scanned_epcs, coalesce(completed_at, started_at) AS at
+       -- Newest by when it took effect; shown with the day it was scanned
+       -- (a pushed count's first file), not the day it was pushed.
+       SELECT scanned_epcs, scanned_at AS at FROM (
+         SELECT scanned_epcs, coalesce(completed_at, started_at) AS took_effect, started_at AS scanned_at
            FROM cycle_count_sessions
           WHERE tenant_id = $1::uuid AND location_id = $2::uuid AND status = 'committed'
          UNION ALL
-         SELECT scanned_epcs, created_at AS at
-           FROM count_pushes
-          WHERE tenant_id = $1::uuid AND location_id = $2::uuid AND scanned_epcs IS NOT NULL
-       ) x ORDER BY at DESC LIMIT 1
+         SELECT p.scanned_epcs, p.created_at,
+                coalesce((SELECT min(r.uploaded_at) FROM inventory_reports r WHERE r.id = ANY(p.report_ids)), p.created_at)
+           FROM count_pushes p
+          WHERE p.tenant_id = $1::uuid AND p.location_id = $2::uuid AND p.scanned_epcs IS NOT NULL
+       ) x ORDER BY took_effect DESC LIMIT 1
      ),
      s AS (SELECT DISTINCT upper(e) AS epc FROM c, jsonb_array_elements_text(c.scanned_epcs) AS e),
      live AS (SELECT DISTINCT upper(epc) AS epc FROM items WHERE location_id = $2::uuid AND status = 'in-stock')
