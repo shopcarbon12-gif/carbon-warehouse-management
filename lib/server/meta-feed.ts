@@ -36,22 +36,34 @@ async function activeProducts(): Promise<RawProduct[]> {
   const out: RawProduct[] = [];
   let after: string | null = null;
   for (let page = 0; page < 500; page++) {
-    const res = (await runShopifyGraphql({
-      shop: ctx.shop,
-      token: ctx.token,
-      apiVersion: ctx.apiVersion,
-      query: `query($after: String) {
-        products(first: 8, after: $after, query: "status:active") {
-          pageInfo { hasNextPage endCursor }
-          nodes { id
-            media(first: 40) { nodes { ... on MediaImage { image { url } } } }
-            variants(first: 60) { nodes { id image { url } } } }
-        }
-      }`,
-      variables: { after },
-    })) as { data?: { products: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: RawProduct[] } } | null };
-    const conn = res.data?.products;
-    if (!conn) throw new Error("Could not read products from Shopify");
+    let conn: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: RawProduct[] } | undefined;
+    let why = "";
+    for (let attempt = 0; attempt < 3 && !conn; attempt++) {
+      const res = (await runShopifyGraphql({
+        shop: ctx.shop,
+        token: ctx.token,
+        apiVersion: ctx.apiVersion,
+        query: `query($after: String) {
+          products(first: 8, after: $after, query: "status:active") {
+            pageInfo { hasNextPage endCursor }
+            nodes { id
+              media(first: 40) { nodes { ... on MediaImage { image { url } } } }
+              variants(first: 60) { nodes { id image { url } } } }
+          }
+        }`,
+        variables: { after },
+      })) as {
+        status: number;
+        errors?: unknown;
+        data?: { products: { pageInfo: { hasNextPage: boolean; endCursor: string }; nodes: RawProduct[] } } | null;
+      };
+      conn = res.data?.products;
+      if (!conn) {
+        why = `HTTP ${res.status} ${JSON.stringify(res.errors ?? null).slice(0, 300)}`;
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+      }
+    }
+    if (!conn) throw new Error(`Could not read products from Shopify (page ${page + 1}): ${why}`);
     out.push(...conn.nodes);
     if (!conn.pageInfo.hasNextPage) break;
     after = conn.pageInfo.endCursor;
