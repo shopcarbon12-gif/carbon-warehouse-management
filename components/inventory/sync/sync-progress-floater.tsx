@@ -121,7 +121,7 @@ export function SyncProgressFloater() {
           <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
         )}
         <p className="flex-1 font-mono text-[0.65rem] uppercase tracking-wider text-[var(--wms-fg)]">
-          Lightspeed sync
+          Catalog sync
         </p>
         <button
           type="button"

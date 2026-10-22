@@ -9,8 +9,7 @@ export default async function ProductCatalogPage() {
   const session = await getSession();
   if (!session) return null;
 
-  const canTriggerLightspeedSync = session.role?.trim().toLowerCase() === "admin";
-  const canManageCatalog = canTriggerLightspeedSync;
+  const canManageCatalog = session.role?.trim().toLowerCase() === "admin";
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
@@ -18,7 +17,7 @@ export default async function ProductCatalogPage() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Inventory catalog</h1>
           <p className="mt-1 font-mono text-xs text-[var(--wms-muted)]">
-            Lightspeed item lines (SKU, color, size, retail price, bin) with active EPCs from RFID scans.
+            Catalog item lines (SKU, color, size, retail price, bin) with active EPCs from RFID scans.
           </p>
         </div>
         <CatalogHeaderStats />
@@ -30,10 +29,7 @@ export default async function ProductCatalogPage() {
         </Link>
       </div>
 
-      <CatalogWorkspace
-        canTriggerLightspeedSync={canTriggerLightspeedSync}
-        canManageCatalog={canManageCatalog}
-      />
+      <CatalogWorkspace canManageCatalog={canManageCatalog} />
     </div>
   );
 }

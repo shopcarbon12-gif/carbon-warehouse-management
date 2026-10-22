@@ -7,10 +7,11 @@ export const dynamic = "force-dynamic";
 export default async function IntegrationsPage() {
   const session = await getSession();
   if (!session) return null;
-  const rows = await withDb(
-    (sql) => listIntegrations(sql, session.tid, session.lid),
-    [],
-  );
+  // Lightspeed is retired: its integration row (and data) stay in the DB, but
+  // it is not shown in the WMS.
+  const rows = (
+    await withDb((sql) => listIntegrations(sql, session.tid, session.lid), [])
+  ).filter((r) => r.provider.trim().toLowerCase() !== "lightspeed");
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -36,7 +37,7 @@ export default async function IntegrationsPage() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center font-mono text-[var(--muted)]">
-                  No integration rows — connect Lightspeed or seed data.
+                  No integration rows.
                 </td>
               </tr>
             ) : (

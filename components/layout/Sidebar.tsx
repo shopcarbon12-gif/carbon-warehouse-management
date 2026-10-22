@@ -10,7 +10,6 @@ import {
   Activity,
   AlertTriangle,
   ArrowRightLeft,
-  Banknote,
   ChevronDown,
   ClipboardList,
   Cpu,
@@ -28,7 +27,6 @@ import {
   PinOff,
   Printer,
   Radio,
-  RefreshCw,
   Route,
   Router,
   ScanLine,
@@ -161,7 +159,6 @@ const sections: NavSection[] = [
     label: "Reports",
     isActiveSection: (p) => p.startsWith("/reports/"),
     items: [
-      { href: "/reports/inventory-compare", label: "POS compare", icon: Banknote },
       { href: "/reports/count-sessions", label: "Count sessions", icon: ClipboardList },
       { href: "/reports/unknown-tags", label: "New Unknown tags", icon: BadgeAlert },
       { href: "/reports/transfers/out", label: "Transfer out (report)", icon: ArrowRightLeft },
@@ -195,8 +192,6 @@ const sections: NavSection[] = [
     label: "Integrations",
     isActiveSection: (p) => p.startsWith("/integrations"),
     items: [
-      { href: "/integrations/sync", label: "Lightspeed Sync", icon: RefreshCw },
-      { href: "/integrations/lightspeed-sales", label: "LS Sales", icon: Banknote },
       { href: "/integrations/shopify", label: "Shopify", icon: ImageIcon },
     ],
   },

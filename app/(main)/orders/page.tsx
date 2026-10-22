@@ -12,14 +12,11 @@ export default async function OrdersPage() {
     <div className="mx-auto w-full max-w-6xl">
       <h1 className="text-xl font-semibold text-[var(--foreground)]">Orders & Fulfillment</h1>
       <p className="mt-2 max-w-2xl font-mono text-sm text-[var(--muted)]">
-        {WAREHOUSE.name} — pull from Lightspeed and internal sources; pick by zone, pack, ship.
+        {WAREHOUSE.name} — internal sources; pick by zone, pack, ship.
       </p>
       <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-[var(--muted)]">
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations">
           Integrations
-        </Link>
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations/sync">
-          Inventory sync
         </Link>
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/dashboard">
           Dashboard
@@ -41,7 +38,7 @@ export default async function OrdersPage() {
             {orders.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center font-mono text-[var(--muted)]">
-                  No orders — connect database or sync from Lightspeed.
+                  No orders.
                 </td>
               </tr>
             ) : (
@@ -53,7 +50,10 @@ export default async function OrdersPage() {
                   <td className="px-4 py-2.5 font-mono text-[var(--accent)]">
                     {o.external_ref ?? `#${o.id}`}
                   </td>
-                  <td className="px-4 py-2.5 capitalize text-[var(--foreground)]">{o.source}</td>
+                  <td className="px-4 py-2.5 capitalize text-[var(--foreground)]">
+                    {/* Lightspeed is retired — old rows keep their source in the DB, shown neutrally. */}
+                    {o.source.trim().toLowerCase() === "lightspeed" ? "POS" : o.source}
+                  </td>
                   <td className="px-4 py-2.5 font-mono text-xs text-[var(--foreground)]">
                     {o.status.replace(/_/g, " ")}
                   </td>

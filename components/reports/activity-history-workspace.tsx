@@ -148,7 +148,8 @@ export function ActivityHistoryWorkspace() {
             <span className={labelCls}>Module</span>
             <select id="activity-module" value={module ?? ""} onChange={(e) => setModule(e.target.value || null)} className={fieldCls}>
               <option value="">All modules</option>
-              {ACTIVITY_MODULES.map((m) => (
+              {/* "Lightspeed" (retired) stays a module in the history data, just not offered as a filter. */}
+              {ACTIVITY_MODULES.filter((m) => m !== "Lightspeed").map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>

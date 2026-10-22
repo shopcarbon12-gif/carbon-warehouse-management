@@ -27,6 +27,12 @@ const fetcher = async (url: string) => {
   return res.json();
 };
 
+/**
+ * Retired Lightspeed sections: kept in APP_PERMISSION_PAGES (so hydrate/save
+ * keep every role's stored value untouched) but not shown in the role editor.
+ */
+const HIDDEN_PERMISSION_SECTIONS = new Set(["inventory.sync", "infrastructure.ls_sales"]);
+
 function hydratePermissions(raw: unknown): PermissionsMap {
   const stored = (raw && typeof raw === "object" ? raw : {}) as PermissionsMap;
   const out: PermissionsMap = {};
@@ -796,7 +802,9 @@ function RolePermissionsModal({
                 {page.label}
               </div>
               <div className="mt-2 space-y-2">
-                {page.sections.map((sec) => {
+                {page.sections
+                  .filter((sec) => !HIDDEN_PERMISSION_SECTIONS.has(`${page.id}.${sec.id}`))
+                  .map((sec) => {
                   const modeCur = perm[page.id]?.[sec.id] ?? "view";
                   return (
                     <div

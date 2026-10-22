@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUrlFlag, useUrlParam } from "@/lib/use-url-param";
 import useSWR from "swr";
@@ -17,8 +16,6 @@ import { CatalogMatrixModal } from "@/components/inventory/catalog/catalog-matri
 import { CatalogImageLightbox } from "@/components/inventory/catalog/catalog-image-lightbox";
 import { CatalogBinMoveDialog } from "@/components/inventory/catalog/catalog-bin-move-dialog";
 import { StoreZoneIcon } from "@/components/inventory/catalog/store-zone-icon";
-import { SyncPreviewModal } from "@/components/inventory/sync/sync-preview-modal";
-import { startSyncJobTracking } from "@/components/inventory/sync/sync-progress-floater";
 import {
   ResizeHandle,
   ThickScrollbars,
@@ -134,7 +131,7 @@ function exportLightspeedCatalogCsv(rows: CatalogGridRow[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `lightspeed-catalog-${orlandoDate()}.csv`;
+  a.download = `catalog-${orlandoDate()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -193,10 +190,8 @@ function useColResize(tableRef: React.RefObject<HTMLTableElement | null>) {
 }
 
 export function CatalogWorkspace({
-  canTriggerLightspeedSync = false,
   canManageCatalog = false,
 }: {
-  canTriggerLightspeedSync?: boolean;
   canManageCatalog?: boolean;
 }) {
   const [page, setPage] = useState(1);
@@ -204,10 +199,8 @@ export function CatalogWorkspace({
   const [debounced, setDebounced] = useState("");
   const [sortBy, setSortBy] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [syncBusy, setSyncBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [syncPreviewOpen, setSyncPreviewOpen] = useState(false);
-  const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "lightspeed" | "more">(null);
+  const [catalogMenuOpen, setCatalogMenuOpen] = useState<null | "more">(null);
   const [newItemOpen, setNewItemOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   // Popup windows without a dedicated URL live in query params so a browser
@@ -462,30 +455,6 @@ export function CatalogWorkspace({
     }
   }, [importCsvText, mutate]);
 
-  const triggerLightspeedSync = useCallback(async () => {
-    setSyncBusy(true);
-    setSyncMsg(null);
-    try {
-      const res = await fetch("/api/inventory/sync/trigger", { method: "POST" });
-      const j = (await res.json()) as {
-        error?: string;
-        message?: string;
-        records_updated?: number;
-        source?: string;
-      };
-      if (!res.ok) throw new Error(j.error ?? "Sync failed");
-      const parts = [j.message ?? "Sync finished."];
-      if (typeof j.records_updated === "number") parts.push(`${j.records_updated} row(s) updated.`);
-      if (j.source) parts.push(`Source: ${j.source}.`);
-      setSyncMsg(parts.join(" "));
-      await mutate();
-    } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : "Sync failed");
-    } finally {
-      setSyncBusy(false);
-    }
-  }, [mutate]);
-
   useEffect(() => {
     if (!catalogMenuOpen) return;
     const onDoc = (e: MouseEvent) => {
@@ -690,54 +659,6 @@ export function CatalogWorkspace({
               MANUAL ITEMS{manualOnly ? ": ON" : ""}
             </button>
 
-            <div className="relative max-md:hidden">
-              <button
-                type="button"
-                onClick={() =>
-                  setCatalogMenuOpen((m) => (m === "lightspeed" ? null : "lightspeed"))
-                }
-                className="inline-flex items-center gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 font-mono text-xs font-medium text-[var(--wms-fg)] hover:bg-[var(--wms-border)]"
-              >
-                Lightspeed
-                <ChevronDown className="h-3.5 w-3.5 opacity-70" aria-hidden />
-              </button>
-              {catalogMenuOpen === "lightspeed" ? (
-                <div
-                  className="absolute right-0 z-20 mt-1 w-52 max-w-[calc(100vw-2rem)] rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] py-1 shadow-xl"
-                  role="menu"
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={syncBusy || !canTriggerLightspeedSync}
-                    onClick={() => {
-                      setCatalogMenuOpen(null);
-                      setSyncPreviewOpen(true);
-                    }}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs font-medium text-[var(--wms-accent)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_10%,var(--wms-surface-elevated))] disabled:opacity-50"
-                  >
-                    {syncBusy ? "Syncing…" : "Sync Lightspeed"}
-                  </button>
-                  <Link
-                    href="/integrations/sync"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
-                  >
-                    Open Lightspeed sync workspace
-                  </Link>
-                  <Link
-                    href="/integrations/sync"
-                    role="menuitem"
-                    onClick={() => setCatalogMenuOpen(null)}
-                    className="block w-full px-3 py-2 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
-                  >
-                    Job queue &amp; history
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-
             <div className="relative">
               <button
                 type="button"
@@ -844,26 +765,6 @@ export function CatalogWorkspace({
                         {opt.label}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      disabled={syncBusy || !canTriggerLightspeedSync}
-                      onClick={() => {
-                        setCatalogMenuOpen(null);
-                        setSyncPreviewOpen(true);
-                      }}
-                      className="block w-full px-3 py-3 text-left font-mono text-xs font-medium text-[var(--wms-accent)] hover:bg-[color-mix(in_srgb,var(--wms-accent)_10%,var(--wms-surface-elevated))] disabled:opacity-50"
-                    >
-                      {syncBusy ? "Syncing…" : "Sync Lightspeed"}
-                    </button>
-                    <Link
-                      href="/integrations/sync"
-                      role="menuitem"
-                      onClick={() => setCatalogMenuOpen(null)}
-                      className="block w-full px-3 py-3 text-left font-mono text-xs text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)]"
-                    >
-                      Lightspeed sync workspace
-                    </Link>
                   </div>
                 </div>
               ) : null}
@@ -881,14 +782,6 @@ export function CatalogWorkspace({
               {syncMsg}
             </p>
           ) : null}
-          {!canTriggerLightspeedSync ? (
-            <p className="font-mono text-[0.6rem] max-md:text-xs text-[var(--wms-muted)]">
-              Full sync API may require admin.{" "}
-              <Link href="/integrations/sync" className="text-teal-500 hover:underline">
-                Lightspeed sync
-              </Link>
-            </p>
-          ) : null}
       </div>
 
       {error ? (
@@ -900,31 +793,14 @@ export function CatalogWorkspace({
       {showCatalogEmpty ? (
         <div className="rounded-xl border border-[var(--wms-border)]/90 bg-gradient-to-b from-[var(--wms-surface)] to-[var(--wms-surface-elevated)] px-8 py-16 text-center">
           <p className="font-mono text-[0.65rem] max-md:text-xs uppercase tracking-[0.25em] text-teal-500/80">
-            Lightspeed catalog
+            Catalog
           </p>
           <h2 className="mt-3 text-lg font-semibold tracking-tight text-[var(--wms-fg)]">
-            No synchronized catalog yet
+            No catalog items yet
           </h2>
           <p className="mx-auto mt-2 max-w-md font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
-            Run Sync Lightspeed (admins) or open the sync dashboard to pull item matrices from Lightspeed. Quantities show total on-hand when the POS API returns stock data (R-Series qoh / shops; X-Series when inventory fields are present). Active EPC counts reflect in-stock RFID tags at your active location.
+            Add items with New or Import. Active EPC counts reflect in-stock RFID tags at your active location.
           </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            {canTriggerLightspeedSync ? (
-              <button
-                type="button"
-                onClick={() => void triggerLightspeedSync()}
-                className="inline-flex items-center justify-center rounded-lg border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)] px-6 py-3 font-mono text-sm font-semibold text-[var(--wms-accent-fg)] shadow-sm transition-opacity hover:opacity-90"
-              >
-                Sync Lightspeed
-              </button>
-            ) : null}
-            <Link
-              href="/integrations/sync"
-              className="inline-flex items-center justify-center rounded-lg border border-[var(--wms-border)]/50 bg-[var(--wms-surface-elevated)]/40 px-6 py-3 font-mono text-sm font-medium text-[var(--wms-fg)] transition-colors hover:bg-[var(--wms-surface-elevated)]/50"
-            >
-              Sync dashboard
-            </Link>
-          </div>
         </div>
       ) : (
         <>
@@ -1028,7 +904,7 @@ export function CatalogWorkspace({
                     <tr
                       key={r.custom_sku_id}
                       className={`hover:bg-[var(--wms-surface-elevated)]/50 ${archivedRowCls}`}
-                      title={isArchived ? "Archived in Lightspeed" : undefined}
+                      title={isArchived ? "Archived" : undefined}
                     >
                       <td className="hidden overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 tabular-nums text-teal-400/85">
                         {r.sku_ls_system_id ?? "—"}
@@ -1217,7 +1093,7 @@ export function CatalogWorkspace({
                       <button
                         type="button"
                         onClick={() => setDetailsSkuId(r.custom_sku_id)}
-                        title={isArchived ? "Archived in Lightspeed" : "View item details"}
+                        title={isArchived ? "Archived" : "View item details"}
                         className="flex min-h-11 w-full items-center gap-3 p-3 text-left active:opacity-80"
                       >
                         {r.shopify_image_url ? (
@@ -1319,7 +1195,7 @@ export function CatalogWorkspace({
             <div className="my-4 w-full max-w-lg rounded-xl border border-[var(--wms-border)] bg-[var(--wms-surface)] p-6 shadow-2xl">
               <h3 className="text-sm font-semibold text-[var(--wms-fg)]">New catalog item</h3>
               <p className="mt-2 font-mono text-xs leading-relaxed text-[var(--wms-muted)]">
-                Creates or updates a matrix by UPC and adds a custom SKU (synthetic negative Lightspeed id).
+                Creates or updates a matrix by UPC and adds a custom SKU (synthetic negative system id).
                 No EPCs until you encode tags.
               </p>
               <div className="mt-4 grid gap-3 font-mono text-xs">
@@ -1566,17 +1442,6 @@ export function CatalogWorkspace({
         />
       ) : null}
 
-      <SyncPreviewModal
-        open={syncPreviewOpen}
-        onClose={() => setSyncPreviewOpen(false)}
-        onConfirmed={(jobId) => {
-          startSyncJobTracking(jobId);
-          setSyncMsg(null);
-          // Catalog list refreshes when job completes; the floater handles user-facing feedback.
-          // We trigger an immediate first refresh in case the apply finishes quickly.
-          void mutate();
-        }}
-      />
     </div>
   );
 }

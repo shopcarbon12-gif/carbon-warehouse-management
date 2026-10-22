@@ -5,7 +5,7 @@ export default function RfidPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="text-xl font-semibold text-[var(--foreground)]">RFID workflows</h1>
       <p className="mt-1 font-mono text-sm text-[var(--muted)]">
-        Deep encode and LS PO flows can use the external Carbon WMS legacy encode portal; this app links operators
+        Deep encode flows can use the external Carbon WMS legacy encode portal; this app links operators
         back to inventory and exceptions.
       </p>
       <ul className="mt-6 list-inside list-disc space-y-2 font-mono text-sm text-[var(--foreground)]">

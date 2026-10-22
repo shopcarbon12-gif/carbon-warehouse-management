@@ -170,7 +170,7 @@ function fnv1a64(input: string): bigint {
 export function deriveItemNumber(systemId: string, bits = 40): bigint {
   const normalized = String(systemId || "").trim();
   if (!normalized) {
-    throw new Error("Lightspeed System ID is required.");
+    throw new Error("System ID is required.");
   }
   if (/^\d+$/.test(normalized)) {
     return BigInt(normalized) & mask(bits);

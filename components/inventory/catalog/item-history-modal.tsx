@@ -58,7 +58,7 @@ function formatDate(iso: string | null): string {
 
 function sourceLabel(s: string): string {
   switch (s) {
-    case "lightspeed_sync":  return "Lightspeed sync";
+    case "lightspeed_sync":  return "Catalog sync";
     case "cycle_count":      return "Cycle count";
     case "manual_override":  return "Manual override";
     case "pos_sold":         return "POS — sold";

@@ -134,7 +134,6 @@ export function LocationsSettingsWorkspace() {
             <tr className="border-b border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/80 font-mono uppercase tracking-wide">
               <th className="px-3 py-3 max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-[var(--wms-surface-elevated)] max-md:shadow-[inset_-1px_0_0_var(--wms-border)]">Location name</th>
               <th className="px-3 py-3">Code</th>
-              <th className="px-3 py-3 max-md:hidden">Lightspeed shop ID</th>
               <th className="px-3 py-3">POS email</th>
               <th className="px-3 py-3 max-md:hidden">POS password</th>
               <th className="px-3 py-3">Status</th>
@@ -145,7 +144,7 @@ export function LocationsSettingsWorkspace() {
           <tbody className="divide-y divide-[var(--wms-border)]/90">
             {!locations ? (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-[var(--wms-muted)]">
+                <td colSpan={7} className="px-3 py-8 text-center text-[var(--wms-muted)]">
                   Loading…
                 </td>
               </tr>
@@ -157,9 +156,6 @@ export function LocationsSettingsWorkspace() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-[var(--wms-muted)]">
                     {row.code}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs font-medium text-[var(--wms-accent)] max-md:hidden">
-                    {row.lightspeed_shop_id ?? "—"}
                   </td>
                   <td className="px-3 py-2.5 font-mono text-[0.65rem] text-[var(--wms-muted)] break-all">
                     {row.email ?? "—"}
@@ -219,11 +215,6 @@ export function LocationsSettingsWorkspace() {
         </table>
       </div>
 
-      <p className="font-mono text-[0.6rem] text-[var(--wms-muted)]">
-        Lightspeed shop ID maps to the numeric shop identifier in your Lightspeed admin URLs (R-Series /
-        Retail). Use it to target inventory sync per shop.
-      </p>
-
       {modal ? (
         <LocationFormModal
           mode={modal.mode}
@@ -255,6 +246,8 @@ function LocationFormModal({
 }) {
   const [code, setCode] = useState(row?.code ?? "");
   const [name, setName] = useState(row?.name ?? "");
+  // Retired Lightspeed shop id: no longer shown, but the saved value is sent back
+  // unchanged on save so the stored data is never altered.
   const [shopId, setShopId] = useState(row?.lightspeed_shop_id != null ? String(row.lightspeed_shop_id) : "");
   const [isActive, setIsActive] = useState(row?.is_active ?? true);
   const [userIds, setUserIds] = useState<Set<string>>(() => new Set(row?.users.map((u) => u.id) ?? []));
@@ -290,7 +283,7 @@ function LocationFormModal({
     }
     const shopNum = shopId.trim() === "" ? null : Number.parseInt(shopId.trim(), 10);
     if (shopId.trim() !== "" && (!Number.isFinite(shopNum) || shopNum! < 1)) {
-      setErr("Lightspeed shop ID must be a positive integer or empty");
+      setErr("Shop ID must be a positive integer or empty");
       return;
     }
     const emailTrim = email.trim();
@@ -351,10 +344,6 @@ function LocationFormModal({
         <h3 className="text-sm font-semibold text-[var(--wms-fg)]">
           {mode === "add" ? "Add location" : "Edit location"}
         </h3>
-        <p className="mt-1 font-mono text-[0.6rem] leading-relaxed text-[var(--wms-muted)]">
-          Lightspeed shop ID: use the numeric id from your Lightspeed URL when viewing a shop / register
-          context (varies by product). Leave empty if this site is not mapped to a single LS shop.
-        </p>
         <div className="mt-4 space-y-3 font-mono text-xs">
           <label className="block text-[var(--wms-muted)]">
             Short code
@@ -372,16 +361,6 @@ function LocationFormModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
-            />
-          </label>
-          <label className="block text-[var(--wms-muted)]">
-            Lightspeed shop ID (optional)
-            <input
-              value={shopId}
-              onChange={(e) => setShopId(e.target.value)}
-              inputMode="numeric"
-              className="mt-1 w-full rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-2 text-[var(--wms-fg)]"
-              placeholder="e.g. 1"
             />
           </label>
           <label className="block text-[var(--wms-muted)]">

@@ -155,7 +155,7 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                   colSpan={6}
                   className="px-4 py-10 text-center font-mono text-sm text-[var(--wms-muted)]"
                 >
-                  No matrices in catalog. Seed data or import from Lightspeed.
+                  No matrices in catalog.
                 </td>
               </tr>
             ) : (
@@ -224,7 +224,7 @@ export function CatalogMatrix({ initialMatrices }: { initialMatrices: CatalogMat
                                     <th className="px-2 py-2">Custom SKU</th>
                                     <th className="px-2 py-2">Color</th>
                                     <th className="px-2 py-2">Size</th>
-                                    <th className="px-2 py-2 font-mono">LS ID</th>
+                                    <th className="px-2 py-2 font-mono">System ID</th>
                                     <th className="w-24 py-2 text-right">EPCs</th>
                                   </tr>
                                 </thead>

@@ -11,11 +11,6 @@ export default function ComparePage() {
         Persists a compare run and opens exceptions for line deltas (sample payload below).
       </p>
       <p className="mt-2 font-mono text-xs text-[var(--muted)]">
-        Full POS compare workspace:{" "}
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/reports/inventory-compare">
-          Reports → POS compare
-        </Link>
-        {" · "}
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/rfid/exceptions">
           Operations exceptions
         </Link>

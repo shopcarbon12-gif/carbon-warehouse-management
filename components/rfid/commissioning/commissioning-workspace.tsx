@@ -309,7 +309,7 @@ export function CommissioningWorkspace() {
     if (!selected) return;
     const ls = Number(selected.ls_system_id);
     if (!Number.isFinite(ls)) {
-      setError("Invalid Lightspeed system ID for ZPL.");
+      setError("Invalid system ID for ZPL.");
       return;
     }
     setError(null);
@@ -387,7 +387,7 @@ export function CommissioningWorkspace() {
                     <span className="text-[var(--wms-muted)]"> · </span>
                     <span className="text-[var(--wms-muted)]">UPC {m.upc}</span>
                     <br />
-                    <span className="text-[var(--wms-muted)]">LS {m.ls_system_id}</span>
+                    <span className="text-[var(--wms-muted)]">ID {m.ls_system_id}</span>
                     <span className="text-[var(--wms-muted)]"> — </span>
                     <span className="item-name text-[var(--wms-fg)]">{m.description}</span>
                   </button>

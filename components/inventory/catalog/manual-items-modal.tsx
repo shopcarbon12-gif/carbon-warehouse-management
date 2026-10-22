@@ -219,7 +219,7 @@ export function ManualItemsModal({
                   Manual Items {data ? `(${data.count})` : ""}
                 </h2>
                 <p className="mt-0.5 text-xs text-[var(--wms-muted)]">
-                  Non-RFID UPCs. Qty comes from Lightspeed on-hand + cycle count adjustments. Adding a UPC marks every SKU under it as manual in the catalog.
+                  Non-RFID UPCs. Qty comes from on-hand + cycle count adjustments. Adding a UPC marks every SKU under it as manual in the catalog.
                 </p>
               </div>
             </div>
