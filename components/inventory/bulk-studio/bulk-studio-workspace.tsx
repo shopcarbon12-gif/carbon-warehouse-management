@@ -5,6 +5,8 @@ import useSWR from "swr";
 import { useUrlParam } from "@/lib/use-url-param";
 import { BulkUploadTab } from "@/components/inventory/bulk-studio/bulk-upload-tab";
 import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
+import { MultiShotCamera, isPhoneScreen } from "@/components/inventory/studio/multi-shot-camera";
+import { BarcodeScanButton } from "@/components/inventory/catalog/barcode-scan-button";
 import type { BatchItemSummary, StopBatchResult, StopItemResult } from "@/lib/server/studio-batch";
 import {
   CarbonStudioTab,
@@ -773,6 +775,9 @@ function BulkItemCard({
   /* Stable, so the Studio hooks below do not change on every render. */
   const onIngest = useCallback((entries: { file?: File; url?: string }[]) => void ingest(key, entries), [ingest, key]);
   const [phone, setPhone] = useState<{ sessionId: string; qr: string; scanUrl: string } | null>(null);
+  /* On a phone the Phone camera button opens the camera here (shoot until Done);
+     the photos go through the same sorting as an upload (owner, 2026-10-22). */
+  const [camera, setCamera] = useState(false);
   const [phoneErr, setPhoneErr] = useState("");
   const phoneSeen = useRef<Set<string>>(new Set());
   const startPhone = async () => {
@@ -853,6 +858,16 @@ function BulkItemCard({
   }
 
   return (
+    <>
+    {camera ? (
+      <MultiShotCamera
+        onClose={() => setCamera(false)}
+        onDone={(files) => {
+          setCamera(false);
+          if (files.length) onIngest(files.map((file) => ({ file })));
+        }}
+      />
+    ) : null}
     <section
       id={`bulk-item-${item.key}`}
       className="scroll-mt-40 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)]"
@@ -939,7 +954,12 @@ function BulkItemCard({
         </div>
       ) : null}
       {!item.matrixId ? (
-        <DraftForm draft={draft ?? { files: [] }} update={(d) => setDraft(key, d)} onIngest={onIngest} onPhone={() => void startPhone()} />
+        <DraftForm
+          draft={draft ?? { files: [] }}
+          update={(d) => setDraft(key, d)}
+          onIngest={onIngest}
+          onPhone={() => (isPhoneScreen() ? setCamera(true) : void startPhone())}
+        />
       ) : null}
 
       {item.matrixId && m ? (
@@ -965,6 +985,7 @@ function BulkItemCard({
         )
       ) : null}
     </section>
+    </>
   );
 }
 
@@ -1034,8 +1055,8 @@ function ProductPicker({
   };
   /* Enter in the scan box: look the code up now. A barcode or UPC that names
      one product opens it; several (or a name) show the list to pick from. */
-  const submit = async () => {
-    const term = q.trim();
+  const submit = async (scanned?: string) => {
+    const term = (scanned ?? q).trim();
     if (!term) return;
     if (cursor >= 0 && shown[cursor]) return choose(shown[cursor]);
     setLoading(true);
@@ -1059,6 +1080,21 @@ function ProductPicker({
   };
   return (
     <div className={`relative ${scan ? "w-full" : "max-w-md"}`}>
+      {/* Phones: a camera scan button on the left of the hang-tag box (owner,
+          2026-10-22) — the app's native scanner inside CarbonGradingAI, the
+          browser's camera elsewhere. Hidden on a computer (a USB scanner types). */}
+      <div className={scan ? "flex items-center gap-2" : undefined}>
+      {scan ? (
+        <span className="shrink-0 md:hidden">
+          <BarcodeScanButton
+            title="Scan the hang tag with the camera"
+            onScan={(code) => {
+              setQ(code);
+              void submit(code);
+            }}
+          />
+        </span>
+      ) : null}
       <input
         ref={inputRef}
         type="search"
@@ -1098,6 +1134,7 @@ function ProductPicker({
             : "w-full rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-2 py-1.5 font-mono text-sm text-[var(--wms-fg)] max-md:min-h-11 max-md:text-base"
         }
       />
+      </div>
       {scan && note ? <p className="mt-1 font-mono text-[0.72rem] text-[var(--wms-muted)]">{note}</p> : null}
       {open && q.trim() ? (
         <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] shadow-lg">

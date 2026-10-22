@@ -5,6 +5,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type React
 import { orderStudioGallery } from "@/lib/studio/gallery-order";
 import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
+import { MultiShotCamera, isPhoneScreen } from "@/components/inventory/studio/multi-shot-camera";
 import { parseSpecBackState, specListsBackDesign, specRiskReport, studioRefViewKey, type SpecIssue } from "@/lib/studio-item-spec";
 import {
   accessoryPanelLabel,
@@ -834,6 +835,8 @@ export function CarbonStudioTab({
      can decode, so only refs that still carry their upload preview qualify —
      the stored R2 URL is private and would not load. */
   const [cropping, setCropping] = useState<{ ref: ItemRef; src: string } | null>(null);
+  /** The in-page phone camera is open, shooting into this box (phones only). */
+  const [shootInto, setShootInto] = useState<RefView | null>(null);
   const [cropBusy, setCropBusy] = useState(false);
   const [cropErr, setCropErr] = useState<string | null>(null);
   const [dragOverView, setDragOverView] = useState<RefView | null>(null);
@@ -3805,13 +3808,27 @@ export function CarbonStudioTab({
                       selectView(zone.view);
                       handoffTargetRef.current = "refs";
                       setLabelPhoneOpen(false);
-                      void startPhoneCamera();
+                      // On a phone: the camera here, shoot until Done (owner, 2026-10-22). Computer: the QR hand-off.
+                      if (isPhoneScreen()) setShootInto(zone.view);
+                      else void startPhoneCamera();
                     }}
                     title={`Phone camera (QR) — photos land in ${zone.title}`}
                     className="rounded-md border border-dashed border-[var(--wms-border)] px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50"
                   >
                     📱 Phone camera
                   </button>
+                  {shootInto === zone.view ? (
+                    <MultiShotCamera
+                      onClose={() => setShootInto(null)}
+                      onDone={(files) => {
+                        setShootInto(null);
+                        if (!files.length) return;
+                        // Bulk Studio sorts them into items at each hang tag; the Studio tab puts them in this box.
+                        if (bulkIngestRef.current) bulkIngestRef.current(files.map((file) => ({ file })));
+                        else void uploadItems(files, zone.view);
+                      }}
+                    />
+                  ) : null}
                   </>
                   ) : null}
                   {zone.view === "general" && catalogPhotosLeft.length ? (
