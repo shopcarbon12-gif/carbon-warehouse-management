@@ -169,13 +169,13 @@ export function GradingHub() {
           entries.length ? (
             <>
               <div className="mt-2 overflow-x-auto">
-                <table className="w-full min-w-[32rem] text-left text-sm">
+                <table className="w-full min-w-[32rem] text-left max-md:min-w-0 text-sm">
                   <thead>
                     <tr className={label}>
                       <th className="py-1.5 pr-3 font-normal">Item</th>
                       <th className="py-1.5 pr-3 font-normal">Size</th>
-                      <th className="py-1.5 pr-3 font-normal">Covers</th>
-                      <th className="py-1.5 font-normal">Take off the rail</th>
+                      <th className="py-1.5 pr-3 font-normal max-md:hidden">Covers</th>
+                      <th className="py-1.5 font-normal"><span className="max-md:hidden">Take off the rail</span><span className="md:hidden">SKU</span></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--wms-border)]">
@@ -192,7 +192,7 @@ export function GradingHub() {
                           )}
                         </td>
                         <td className="py-2 pr-3 font-mono tabular-nums text-[var(--wms-fg)]">{e.size}</td>
-                        <td className="py-2 pr-3 font-mono text-xs text-[var(--wms-muted)]">
+                        <td className="py-2 pr-3 font-mono text-xs text-[var(--wms-muted)] max-md:hidden">
                           {e.products} product{e.products === 1 ? "" : "s"}
                         </td>
                         <td className="py-2 font-mono text-xs text-[var(--wms-muted)]">{e.sampleSku ?? "—"}</td>
