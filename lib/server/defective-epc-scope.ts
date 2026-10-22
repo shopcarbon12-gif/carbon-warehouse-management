@@ -42,14 +42,24 @@
  */
 export const DEFECTIVE_SCOPE_CTE = `
   latest_count AS (
-    -- Committed only. A cancelled or still-running session must not reset the
-    -- tile — a count is not authoritative until it is committed.
-    SELECT scanned_epcs
-      FROM cycle_count_sessions
-     WHERE tenant_id = $1::uuid
-       AND location_id = $2::uuid
-       AND status = 'committed'
-     ORDER BY completed_at DESC NULLS LAST, started_at DESC
+    -- The newest count that took effect: a committed cycle count session, or
+    -- a count pushed from Reports → Counts (Combine & review). A cancelled or
+    -- still-running session must not reset the tile — a count is not
+    -- authoritative until it is committed or pushed.
+    SELECT scanned_epcs FROM (
+      SELECT scanned_epcs, coalesce(completed_at, started_at) AS at
+        FROM cycle_count_sessions
+       WHERE tenant_id = $1::uuid
+         AND location_id = $2::uuid
+         AND status = 'committed'
+      UNION ALL
+      SELECT scanned_epcs, created_at AS at
+        FROM count_pushes
+       WHERE tenant_id = $1::uuid
+         AND location_id = $2::uuid
+         AND scanned_epcs IS NOT NULL
+    ) c
+     ORDER BY at DESC
      LIMIT 1
   ),
   latest_scanned AS (

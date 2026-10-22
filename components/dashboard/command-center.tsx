@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  ClipboardCheck,
   Cpu,
   Link2,
   Printer,
@@ -63,51 +64,59 @@ async function postLookup(epcs: string[]): Promise<LookupRow[]> {
 }
 
 /**
- * Read-only "Last Scan" pill. Fetches the most recently-completed live-scan
- * session from /api/dashboard/last-live-scan (backed by the persisted
- * live_scan_sessions table). Replaces the in-place Live Scan control on the
- * dashboard — that's moved to Hardware Config (2026-05-12).
+ * "Last count" pill (owner 2026-10-22): the newest count that took effect here
+ * (a committed cycle count or a count pushed from Reports → Counts), minus the
+ * counted tags that are no longer live, plus live tags the count did not have —
+ * which is live stock now. The live-scan total it replaced counted only what
+ * the fixed readers happened to see in one session.
  */
-function LastScanPill() {
+function LastCountPill() {
   const [data, setData] = useState<{
-    started_at: string;
-    ended_at: string;
-    unique_epc_count: number;
+    at: string;
+    counted: number;
+    gone: number;
+    added: number;
+    now: number;
   } | null>(null);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
       try {
-        const res = await fetch("/api/dashboard/last-live-scan");
+        const res = await fetch("/api/dashboard/last-count");
         if (!res.ok) return;
-        const j = (await res.json()) as { last_scan: typeof data | null };
+        const j = (await res.json()) as { last_count: typeof data | null };
         if (cancelled) return;
-        setData(j.last_scan ?? null);
+        setData(j.last_count ?? null);
+        setLoaded(true);
       } catch {
         /* transient */
       }
     };
     void tick();
-    const id = setInterval(tick, 5_000);
+    const id = setInterval(tick, 60_000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
   }, []);
-  const hint = data
-    ? new Date(data.ended_at).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "(no scans yet)";
+  const day = data
+    ? new Date(data.at).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    : null;
+  const f = (n: number) => n.toLocaleString();
   return (
     <PulsePill
-      label="Last scan"
-      count={data?.unique_epc_count ?? 0}
-      Icon={Radio}
-      hint={data ? undefined : hint}
+      label={day ? `Last count · ${day}` : "Last count"}
+      count={data?.now ?? 0}
+      Icon={ClipboardCheck}
+      hint={data || !loaded ? undefined : "(no count yet)"}
+      sub={data ? `${f(data.counted)} counted · −${f(data.gone)} · +${f(data.added)}` : undefined}
+      title={
+        data
+          ? `${f(data.counted)} tags in the ${day} count, ${f(data.gone)} of them no longer live here, ` +
+            `${f(data.added)} live tags the count did not have (new tags or missed) = ${f(data.now)} live now`
+          : undefined
+      }
     />
   );
 }
@@ -120,6 +129,8 @@ function PulsePill({
   dim,
   onClick,
   hint,
+  sub,
+  title,
 }: {
   label: string;
   count: number;
@@ -130,6 +141,10 @@ function PulsePill({
   onClick?: () => void;
   /** Replaces the count when set (e.g. "(click to run)" in IDLE state). */
   hint?: string;
+  /** A small line under the count. */
+  sub?: string;
+  /** Hover text. */
+  title?: string;
 }) {
   const live = (active ?? count > 0) && !dim;
   const animated = useCountUp(count);
@@ -138,6 +153,7 @@ function PulsePill({
     <Cmp
       type={onClick ? "button" : undefined}
       onClick={onClick}
+      title={title}
       className={`flex min-w-[7.25rem] flex-1 items-center gap-2 rounded-lg border px-3 py-3.5 font-mono text-base sm:min-w-[8rem] ${
         onClick ? "cursor-pointer text-left transition-colors hover:brightness-110" : ""
       } ${
@@ -180,6 +196,9 @@ function PulsePill({
             {animated}
           </div>
         )}
+        {sub ? (
+          <div className="tabular-nums text-[0.65rem] font-medium text-[var(--wms-muted)] max-md:text-xs">{sub}</div>
+        ) : null}
       </div>
     </Cmp>
   );
@@ -258,6 +277,18 @@ export function CommandCenter() {
     // /api/dashboard/command is a roll-up SELECT; cheap to call.
     { refreshInterval: 3_000, revalidateOnFocus: true },
   );
+
+  // The KPIs refresh every 3 s and a refresh takes well under a second, so
+  // "Syncing…" shows only when one is still running after a second.
+  const [slowSync, setSlowSync] = useState(false);
+  useEffect(() => {
+    if (!isValidating || isLoading) return;
+    const t = setTimeout(() => setSlowSync(true), 1_000);
+    return () => {
+      clearTimeout(t);
+      setSlowSync(false);
+    };
+  }, [isValidating, isLoading]);
 
   const kpis: Kpis =
     data?.kpis ?? {
@@ -559,15 +590,9 @@ export function CommandCenter() {
             <h1 className="mt-1 text-2xl font-semibold tracking-tight text-[var(--wms-fg)]">
               Operations overview
             </h1>
-            <p className="mt-1 max-w-xl font-mono text-sm text-[var(--wms-muted)]">
-              KPIs refresh every 3s. Live scan opens an SSE listener against every reader
-              and antenna at this location.
-            </p>
           </div>
           <div className="font-mono text-sm text-[var(--wms-muted)]">
-            {isValidating && !isLoading ? (
-              <span className="text-[var(--wms-accent)]">Syncing…</span>
-            ) : null}
+            {slowSync ? <span className="text-[var(--wms-accent)]">Syncing…</span> : null}
             {error ? <span className="text-red-500/90">KPI load error</span> : null}
           </div>
         </div>
@@ -575,6 +600,31 @@ export function CommandCenter() {
 
       {/* Only when Shopify has orders waiting — renders nothing at zero. */}
       <NewOrdersNotice />
+
+      {/* Shortcuts — the pages people jump to most from the dashboard */}
+      <section aria-label="Shortcuts">
+        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
+          <Link2 className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
+          Shortcuts
+        </h2>
+        <div className="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
+          {[
+            { href: "/inventory/catalog", label: "Catalog" },
+            { href: "/shopify/sales", label: "Orders" },
+            { href: "/integrations", label: "Integrations" },
+            { href: "/tags-labels/print", label: "Print tags" },
+            { href: "/tags-labels/bulk-status", label: "Bulk status" },
+            { href: "/rfid/hardware-config", label: "Hardware config" },
+          ].map((l, i) => (
+            <span key={l.href} className="inline-flex items-center gap-2">
+              {i > 0 ? <span aria-hidden>·</span> : null}
+              <Link className="text-[var(--wms-accent)] hover:underline max-md:inline-block max-md:py-2" href={l.href}>
+                {l.label}
+              </Link>
+            </span>
+          ))}
+        </div>
+      </section>
 
       {/* Top: KPI cards */}
       <section aria-label="Key metrics">
@@ -611,31 +661,6 @@ export function CommandCenter() {
         )}
       </section>
 
-      {/* Shortcuts — the pages people jump to most from the dashboard */}
-      <section aria-label="Shortcuts">
-        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
-          <Link2 className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
-          Shortcuts
-        </h2>
-        <div className="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
-          {[
-            { href: "/inventory/catalog", label: "Catalog" },
-            { href: "/shopify/sales", label: "Orders" },
-            { href: "/integrations", label: "Integrations" },
-            { href: "/tags-labels/print", label: "Print tags" },
-            { href: "/tags-labels/bulk-status", label: "Bulk status" },
-            { href: "/rfid/hardware-config", label: "Hardware config" },
-          ].map((l, i) => (
-            <span key={l.href} className="inline-flex items-center gap-2">
-              {i > 0 ? <span aria-hidden>·</span> : null}
-              <Link className="text-[var(--wms-accent)] hover:underline max-md:inline-block max-md:py-2" href={l.href}>
-                {l.label}
-              </Link>
-            </span>
-          ))}
-        </div>
-      </section>
-
       {/* Middle: hardware pulse */}
       <section aria-label="Hardware pulse">
         <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
@@ -643,14 +668,8 @@ export function CommandCenter() {
           Hardware pulse
         </h2>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <LastScanPill />
-          {/*
-            Live Scan moved to Hardware Config (2026-05-12) — the Start/Stop
-            control + counter + per-antenna detail now live at the top of
-            /hardware-config. Dashboard shows the LAST completed session's
-            unique-EPC total, sourced from the persisted live_scan_sessions
-            table so it survives server restarts.
-          */}
+          <LastCountPill />
+          {/* Live Scan lives in Hardware Config (2026-05-12). */}
           <PulsePill label="Readers" count={kpis.hardware.readers} Icon={Radio} />
           <PulsePill label="Antennas" count={kpis.hardware.antennas} Icon={Wifi} />
           <PulsePill label="Printers" count={kpis.hardware.printers} Icon={Printer} />

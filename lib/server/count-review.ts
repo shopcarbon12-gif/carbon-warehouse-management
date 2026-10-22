@@ -533,9 +533,18 @@ export async function pushCount(pool: Pool, a: PushArgs): Promise<PushResult> {
       manualUnitsZeroed,
     };
     await client.query(
-      `INSERT INTO count_pushes (id, tenant_id, location_id, pushed_by, mode, report_ids, summary)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid[], $7::jsonb)`,
-      [pushId, a.tenantId, a.locationId, a.userId, a.mode, a.reportIds, JSON.stringify({ ...result, files: rv.perFile })],
+      `INSERT INTO count_pushes (id, tenant_id, location_id, pushed_by, mode, report_ids, summary, scanned_epcs)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::uuid[], $7::jsonb, $8::jsonb)`,
+      [
+        pushId,
+        a.tenantId,
+        a.locationId,
+        a.userId,
+        a.mode,
+        a.reportIds,
+        JSON.stringify({ ...result, files: rv.perFile }),
+        JSON.stringify([...rv.scannedSet.keys()]),
+      ],
     );
     await client.query(
       `UPDATE inventory_reports SET pushed_at = now(), pushed_by = $3::uuid, push_id = $4::uuid

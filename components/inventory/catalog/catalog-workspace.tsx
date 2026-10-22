@@ -157,7 +157,7 @@ type SortKey =
   | "color" | "size" | "default_cost" | "retail_price" | "bin"
   | "qty_epc" | "category" | "subcategory_1";
 
-const COL_COUNT = 14;
+const COL_COUNT = 15;
 
 /**
  * Default column widths — same order as the header config below
@@ -181,7 +181,8 @@ const DEFAULT_COL_WIDTHS: (number | null)[] = [
   80,   // bin
   90,   // qty (epc) — centered numerals
   90,   // rfid (fits 78px badge + table padding)
-  80,   // channels (Shopify linked/not-linked logo + STORE zone icon)
+  80,   // channels (Shopify linked/not-linked logo)
+  70,   // store (STORE zone icon)
   110,  // category
   120,  // subcategory 1
 ];
@@ -960,9 +961,10 @@ export function CatalogWorkspace({
                       { key: "qty_epc", label: "Qty (EPC)", align: "center" },
                       { key: "rfid", label: "RFID", sortable: false },
                       { key: "shopify", label: "Channels", sortable: false, align: "center" },
+                      { key: "store", label: "Store", sortable: false, align: "center" },
                       { key: "category", label: "Category" },
                       { key: "subcategory_1", label: "Subcategory 1" },
-                    ] as { key: SortKey | "rfid" | "shopify"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
+                    ] as { key: SortKey | "rfid" | "shopify" | "store"; label: string; cls?: string; align?: string; sortable?: boolean; hidden?: boolean; noClip?: boolean }[]
                   ).map(({ key, label, cls, align, sortable, hidden, noClip }, colIdx) => {
                     const isSortable = sortable !== false;
                     const active = isSortable && sortBy === key;
@@ -1006,13 +1008,13 @@ export function CatalogWorkspace({
               <tbody className="divide-y divide-[var(--wms-border)]/80 font-mono text-[var(--wms-fg)]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={14} className="px-4 py-10 text-center text-[var(--wms-muted)]">
+                    <td colSpan={15} className="px-4 py-10 text-center text-[var(--wms-muted)]">
                       Loading catalog…
                     </td>
                   </tr>
                 ) : showNoMatches ? (
                   <tr>
-                    <td colSpan={14} className="px-4 py-14 text-center text-[var(--wms-muted)]">
+                    <td colSpan={15} className="px-4 py-14 text-center text-[var(--wms-muted)]">
                       <p className="font-mono text-sm text-[var(--wms-muted)]">No rows match your search.</p>
                     </td>
                   </tr>
@@ -1154,8 +1156,8 @@ export function CatalogWorkspace({
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-center">
-                        {/* Channels: Shopify mark, plus a store icon when tags are in the STORE zone. */}
-                        <span className="inline-flex items-center justify-center gap-1.5 align-middle">
+                        {/* Channels: the Shopify mark, always in the same place. */}
+                        <span className="inline-flex items-center justify-center align-middle">
                           <span
                             className="inline-block h-5 w-5 align-middle"
                             style={{
@@ -1174,8 +1176,11 @@ export function CatalogWorkspace({
                             aria-label={r.shopify_linked ? "Linked to Shopify" : "Not linked to Shopify"}
                             role="img"
                           />
-                          {r.store_zone_count > 0 ? <StoreZoneIcon title={storeZoneTitle(r)} /> : null}
                         </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-center">
+                        {/* Store: a store icon when tags are in the STORE zone. */}
+                        {r.store_zone_count > 0 ? <StoreZoneIcon title={storeZoneTitle(r)} /> : null}
                       </td>
                       <td className="overflow-hidden text-ellipsis whitespace-nowrap px-2 py-1.5 text-[var(--wms-muted)]" title={r.category ?? undefined}>
                         {r.category?.trim() || "—"}
