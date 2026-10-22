@@ -8,7 +8,6 @@ import {
   Activity,
   ClipboardCheck,
   Cpu,
-  Link2,
   Printer,
   Radio,
   Smartphone,
@@ -106,11 +105,10 @@ function LastCountPill() {
   const f = (n: number) => n.toLocaleString();
   return (
     <PulsePill
-      label={day ? `Last count · ${day}` : "Last count"}
+      label="Last count"
       count={data?.now ?? 0}
       Icon={ClipboardCheck}
       hint={data || !loaded ? undefined : "(no count yet)"}
-      sub={data ? `${f(data.counted)} counted · −${f(data.gone)} · +${f(data.added)}` : undefined}
       title={
         data
           ? `${f(data.counted)} tags in the ${day} count, ${f(data.gone)} of them no longer live here, ` +
@@ -603,10 +601,6 @@ export function CommandCenter() {
 
       {/* Shortcuts — the pages people jump to most from the dashboard */}
       <section aria-label="Shortcuts">
-        <h2 className="mb-3 flex items-center gap-2 border-b border-[var(--wms-border)] pb-2 font-mono text-base font-semibold uppercase tracking-[0.1em] text-[var(--wms-fg)]">
-          <Link2 className="h-5 w-5 text-[var(--wms-accent)]" strokeWidth={2} />
-          Shortcuts
-        </h2>
         <div className="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
           {[
             { href: "/inventory/catalog", label: "Catalog" },
