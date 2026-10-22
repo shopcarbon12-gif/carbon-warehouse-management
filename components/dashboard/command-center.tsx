@@ -604,6 +604,7 @@ export function CommandCenter() {
         <div className="flex flex-wrap gap-x-2 gap-y-1 rounded-xl border border-[var(--wms-border)] bg-[color-mix(in_srgb,var(--wms-muted)_12%,var(--wms-surface-elevated))] px-4 py-3.5 font-mono text-base text-[var(--wms-fg)] dark:text-[var(--wms-muted)]">
           {[
             { href: "/inventory/catalog", label: "Catalog" },
+            { href: "/inventory/bulk-studio", label: "Bulk Studio" },
             { href: "/shopify/sales", label: "Orders" },
             { href: "/tags-labels/print", label: "Print tags" },
             { href: "/tags-labels/bulk-status", label: "Bulk status" },
