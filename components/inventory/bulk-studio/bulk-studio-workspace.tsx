@@ -874,7 +874,7 @@ function BulkItemCard({
       aria-label={`Item ${index + 1}`}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
-        <span className="font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-fg)]">Item {index + 1}:</span>
+        <span className="font-mono text-[0.78rem] font-bold uppercase tracking-wide text-[var(--wms-fg)] max-md:w-full">Item {index + 1}:</span>
         {item.matrixId ? (
           /* Scanned: the field gives way to the product, with its ✕ beside it. */
           <div className="flex min-w-0 items-center gap-3">
@@ -896,7 +896,8 @@ function BulkItemCard({
           </div>
         ) : (
           <>
-            <div className="w-full max-w-md">
+            {/* Phones: scan icon, hang-tag box and ✕ on one row (owner, 2026-10-22). */}
+            <div className="w-full max-w-md max-md:w-auto max-md:min-w-0 max-md:flex-1">
               <ProductPicker scan autoFocus={focus} takenIds={[]} onPick={onScan} placeholder="scan the hang tag…" />
             </div>
             <button
@@ -910,7 +911,7 @@ function BulkItemCard({
           </button>
           </>
         )}
-        <div className="flex-1" />
+        <div className="flex-1 max-md:hidden" />
         {item.matrixId && status && !status.busy && !status.batchOpen && !status.batchReady && status.sendProblems.length ? (
           <span className="max-w-[28rem] truncate font-mono text-[0.68rem] text-[var(--wms-status-warning-fg)]" title={status.sendProblems.join("\n")}>
             {status.error || status.sendProblems[0]}
