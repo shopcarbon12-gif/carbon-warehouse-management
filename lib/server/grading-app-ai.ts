@@ -17,6 +17,11 @@ export const AI_AREA_LABEL: Record<AiArea, string> = {
   other: "Everything else (length, hem, openings…)",
 };
 
+/** CarbonGradingAI's AI goes through OpenAI's batch (lib/server/grading-app-batch.ts) unless GRADING_APP_AI_BATCH=0. */
+export function gradingAiBatchOn(): boolean {
+  return (process.env.GRADING_APP_AI_BATCH ?? "1").trim() !== "0";
+}
+
 export type AiSettings = { enabled: boolean; areas: Record<AiArea, boolean> };
 
 /** Before the switch existed: the seam points (sleeves, crotch) and the sleeves-up photo's chest. */
@@ -126,7 +131,8 @@ export async function areaCosts(pool: Pool, mainModel: string | null): Promise<R
   }
   for (const a of AI_AREAS) {
     const m = out[a].model; const est = m ? ESTIMATE_USD[m]?.[a] : undefined;
-    if (!out[a].calls && est != null) out[a] = { ...out[a], usd: est, estimate: true };
+    // The estimates are live prices; the batch is half.
+    if (!out[a].calls && est != null) out[a] = { ...out[a], usd: est * (gradingAiBatchOn() ? 0.5 : 1), estimate: true };
   }
   return out;
 }

@@ -5,6 +5,7 @@ import { gradingAppAgentConfig, measureWithAgent } from "@/lib/server/size-gradi
 import { PROFILE_BY_ID, type GradingProfileId } from "@/lib/size-grading/grading-app-profiles";
 import { getPool } from "@/lib/db";
 import { DEFAULT_AI, allowedKeys, getAiSettings, logAiCall, modelForKeys } from "@/lib/server/grading-app-ai";
+import { gradingAiBatchOn } from "@/lib/server/grading-app-batch";
 
 /**
  * CarbonGradingAI's AI assist. The phone sends its squared-up photo (scale
@@ -56,6 +57,14 @@ async function POST_handler(req: Request) {
   if (!Number.isFinite(pxPerCm) || pxPerCm <= 0) return NextResponse.json({ error: "pxPerCm required." }, { status: 400 });
   const want = new Set(meta.keys?.length ? meta.keys : profile.points.filter((p) => p.hard).map((p) => p.key));
   if (!profile.points.some((p) => want.has(p.key))) return NextResponse.json({ error: "No points to place." }, { status: 400 });
+  /* Batch mode (default): no live AI from any app version — the scan's save
+     sends its photos to OpenAI's batch and the AI's points arrive on the scan. */
+  if (gradingAiBatchOn()) {
+    return NextResponse.json({
+      lines: {}, cm: {}, skipped: [...want], remarks: "The AI places these points after you save (OpenAI batch, half price).",
+      model: cfg.model, costUsd: 0, ms: 0, rounds: 0, zooms: 0, off: true, batch: true,
+    });
+  }
   // The owner's AI switch: points of an area that is off stay with the outline (and cost nothing).
   const pool = getPool();
   const allowed = new Set(allowedKeys(profile, pool ? await getAiSettings(pool, session.tid) : DEFAULT_AI));

@@ -7,7 +7,7 @@ import guideLines from "@/lib/size-grading/grading-app-guide-lines.json";
 import { PLAUSIBLE } from "@/lib/size-grading/pom-definitions";
 import { latestRelease } from "@/lib/server/grading-app";
 import { gradingAppAgentConfig } from "@/lib/server/size-grading-agent";
-import { AI_AREAS, AI_AREA_LABEL, DEFAULT_AI, allowedKeys, areaCosts, areaOf, getAiSettings } from "@/lib/server/grading-app-ai";
+import { AI_AREAS, AI_AREA_LABEL, DEFAULT_AI, allowedKeys, areaCosts, areaOf, getAiSettings, gradingAiBatchOn } from "@/lib/server/grading-app-ai";
 import { isDropboxConfigured } from "@/lib/server/dropbox-upload";
 import { toAbsolutePublicUrl } from "@/lib/server/resolve-public-origin";
 
@@ -55,6 +55,8 @@ export async function GET(req: Request) {
       ...(ai ? { enabled: true, model: ai.model, scope } : { enabled: false, model: null, scope }),
       // The switch as set, the model the server would use, and each area's cost per size.
       settings, available: model != null, serverModel: model?.model ?? null,
+      // The AI runs after the save, through OpenAI's batch: the phone does not wait for it.
+      batch: gradingAiBatchOn(),
       areas: AI_AREAS.map((a) => ({ id: a, label: AI_AREA_LABEL[a], on: settings.areas[a], ...(costs?.[a] ?? { usd: null, calls: 0, estimate: false }) })),
     },
     capture: {

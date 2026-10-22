@@ -1,10 +1,11 @@
 import { withActivity } from "@/lib/server/activity-log";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { listScans, saveScan, UUID_RE, type ScanMeta } from "@/lib/server/grading-app";
 import { PROFILE_BY_ID } from "@/lib/size-grading/grading-app-profiles";
+import { enqueueScanAi, gradingAiBatchOn, gradingAiTick } from "@/lib/server/grading-app-batch";
 
 /**
  * POST (multipart: meta JSON + photo JPEG [+ crotchPhoto JPEG for bottoms]) — a measurement from CarbonGradingAI.
@@ -87,6 +88,17 @@ async function POST_handler(req: Request) {
   const crotchBytes = crotch instanceof Blob && crotch.size ? Buffer.from(await crotch.arrayBuffer()) : null;
   try {
     const out = await saveScan(pool, session.sub ?? null, parsed.data as ScanMeta, bytes, crotchBytes);
+    /* The AI goes through OpenAI's batch, sent right now (not at night): the
+       phone saved the outline's points; the AI's replace them when it answers. */
+    if (gradingAiBatchOn()) {
+      after(async () => {
+        try {
+          if (await enqueueScanAi(pool, session.tid, out.scanId, session.sub ?? null)) await gradingAiTick(pool);
+        } catch (e) {
+          console.error("[grading-app/scans] AI batch send failed:", e instanceof Error ? e.message : e);
+        }
+      });
+    }
     return NextResponse.json(out);
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);

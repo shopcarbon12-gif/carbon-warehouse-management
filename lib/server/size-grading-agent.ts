@@ -60,6 +60,12 @@ export type AgentOptions = {
   thinkingBudget?: number;
   deadlineMs?: number;
   log?: (m: string) => void;
+  /**
+   * Batch mode (CarbonGradingAI): replaces the live provider. The agent is
+   * replayed with the answers it already has; when it needs a new one, the
+   * turn throws {@link NeedRound} with the request to send. No time limit.
+   */
+  turns?: Turn;
 };
 
 export type AgentResult = {
@@ -264,8 +270,75 @@ Every requested point appears in "lines" or "skipped". Coordinates may have one 
 /* Providers.                                                           */
 /* ------------------------------------------------------------------ */
 
-type Part = { kind: "text"; text: string } | { kind: "image"; b64: string };
-type Turn = { send: (parts: Part[]) => Promise<string> };
+export type Part = { kind: "text"; text: string } | { kind: "image"; b64: string };
+export type Turn = { send: (parts: Part[]) => Promise<string> };
+
+/** One OpenAI Responses request body for a round: the same request the live provider sends. */
+export function openAiRequest(model: string, effort: AgentOptions["effort"], parts: Part[], previous?: string) {
+  return {
+    model,
+    ...(/^(gpt-5|gpt-6|o\d)/.test(model) ? { reasoning: { effort: effort ?? "low" } } : {}),
+    text: { format: { type: "json_object" as const } },
+    ...(previous ? { previous_response_id: previous } : {}),
+    store: true,
+    input: [
+      {
+        role: "user" as const,
+        content: parts.map((p) =>
+          p.kind === "text"
+            ? { type: "input_text" as const, text: p.text }
+            : { type: "input_image" as const, image_url: `data:image/jpeg;base64,${p.b64}`, detail: "high" as const },
+        ),
+      },
+    ],
+  };
+}
+
+/**
+ * Thrown by a batch turn: the agent needs round `round` answered before it can
+ * go on. `parts` is what that round sends; `history` the earlier rounds with
+ * their answers (to send the whole conversation when a round cannot point at
+ * the previous answer).
+ */
+export class NeedRound extends Error {
+  constructor(readonly round: number, readonly parts: Part[], readonly history: { parts: Part[]; answer: string }[]) {
+    super(`round ${round} needs an answer`);
+  }
+}
+
+/**
+ * A turn that plays back the answers a batch job already has, in order, and
+ * throws {@link NeedRound} at the first round without one. The agent's loop is
+ * deterministic given its answers, so replaying it rebuilds the same close-ups.
+ */
+export function replayTurns(answers: string[]): Turn {
+  const history: { parts: Part[]; answer: string }[] = [];
+  return {
+    async send(parts) {
+      const i = history.length;
+      if (i < answers.length) { history.push({ parts, answer: answers[i] }); return answers[i]; }
+      throw new NeedRound(i, parts, history);
+    },
+  };
+}
+
+/** The whole conversation as one request: every earlier round and its answer, then this round. */
+export function openAiFullRequest(model: string, effort: AgentOptions["effort"], parts: Part[], history: { parts: Part[]; answer: string }[]) {
+  const one = openAiRequest(model, effort, parts);
+  const user = (ps: Part[]) => openAiRequest(model, effort, ps).input[0];
+  return {
+    ...one,
+    input: [
+      ...history.flatMap((h) => [user(h.parts), { role: "assistant" as const, content: [{ type: "output_text" as const, text: h.answer }] }]),
+      one.input[0],
+    ],
+  };
+}
+
+/** USD for a usage at a model's price (NaN for an unknown model); `batch` = OpenAI's half price. */
+export function usageCost(model: string, usage: AgentResult["usage"], batch = false): number {
+  return costOf(model, usage) * (batch ? 0.5 : 1);
+}
 
 function parseJson(text: string): Record<string, unknown> | null {
   const s = text.indexOf("{"), e = text.lastIndexOf("}");
@@ -335,26 +408,7 @@ function openAiTurns(model: string, usage: AgentResult["usage"], effort: AgentOp
   let previous: string | undefined;
   return {
     async send(parts) {
-      const res = await client.responses.create(
-        {
-          model,
-          ...(/^(gpt-5|gpt-6|o\d)/.test(model) ? { reasoning: { effort: effort ?? "low" } } : {}),
-          text: { format: { type: "json_object" } },
-          ...(previous ? { previous_response_id: previous } : {}),
-          store: true,
-          input: [
-            {
-              role: "user",
-              content: parts.map((p) =>
-                p.kind === "text"
-                  ? { type: "input_text" as const, text: p.text }
-                  : { type: "input_image" as const, image_url: `data:image/jpeg;base64,${p.b64}`, detail: "high" as const },
-              ),
-            },
-          ],
-        },
-        { signal },
-      );
+      const res = await client.responses.create(openAiRequest(model, effort, parts, previous), { signal });
       previous = res.id;
       const cached = res.usage?.input_tokens_details?.cached_tokens ?? 0;
       usage.input += (res.usage?.input_tokens ?? 0) - cached;
@@ -390,14 +444,16 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
   const ovPxPerCm = inp.pxPerCm / f;
   const maxRounds = opts.maxRounds ?? 5;
   const maxZooms = opts.maxZooms ?? 32;
-  const deadline = started + (opts.deadlineMs ?? 150_000);
+  // Batch mode has no clock: a round waits as long as OpenAI's batch takes.
+  const deadline = opts.turns ? Number.POSITIVE_INFINITY : started + (opts.deadlineMs ?? 150_000);
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), Math.max(10_000, deadline - Date.now() + 30_000));
+  const timer = opts.turns ? null : setTimeout(() => ac.abort(), Math.max(10_000, deadline - Date.now() + 30_000));
   const turns =
-    opts.provider === "claude"
+    opts.turns ??
+    (opts.provider === "claude"
       ? claudeTurns(opts.model, usage, opts.thinkingBudget ?? 0, ac.signal)
-      : openAiTurns(opts.model, usage, opts.effort, ac.signal);
+      : openAiTurns(opts.model, usage, opts.effort, ac.signal));
   try {
     const ov = await overview(small, w, h);
     let parts: Part[] = [
@@ -498,7 +554,7 @@ export async function measureWithAgent(inp: AgentInput, opts: AgentOptions): Pro
       });
     }
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 

@@ -63,6 +63,8 @@ data class AppConfig(
     val profiles: List<Profile>,
     val aiEnabled: Boolean,
     val aiModel: String?,
+    /** The AI runs on CarbonWMS after the save, through OpenAI's batch — the phone does not call it. */
+    val aiBatch: Boolean = false,
     val capture: CaptureParams,
     val supportedModels: List<String>,
     val modelNames: Map<String, String>,
@@ -132,6 +134,7 @@ data class AppConfig(
                 profiles = profiles,
                 aiEnabled = ai.optBoolean("enabled"),
                 aiModel = ai.optStringOrNull("model"),
+                aiBatch = ai.optBoolean("batch"),
                 capture = CaptureParams(
                     distanceCm = range("distanceCm", 45f, 120f),
                     idealDistanceCm = range("idealDistanceCm", 70f, 110f),

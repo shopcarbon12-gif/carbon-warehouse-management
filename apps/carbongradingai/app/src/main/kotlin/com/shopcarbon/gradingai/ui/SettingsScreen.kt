@@ -107,11 +107,13 @@ private fun AiSwitch(app: App, say: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf<Boolean?>(null) }
     var model by remember { mutableStateOf<String?>(null) }
+    var batch by remember { mutableStateOf(false) }
     var areas by remember { mutableStateOf<List<AiArea>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
     fun read(j: org.json.JSONObject) {
         enabled = j.optJSONObject("settings")?.optBoolean("enabled", true) ?: true
         model = j.optString("model").takeIf { it.isNotBlank() && it != "null" }
+        batch = j.optBoolean("batch")
         val arr = j.optJSONArray("areas") ?: org.json.JSONArray()
         areas = (0 until arr.length()).map { i ->
             val a = arr.getJSONObject(i)
@@ -141,13 +143,14 @@ private fun AiSwitch(app: App, say: (String) -> Unit) {
     Group(
         header = "AI",
         footer = if (on == null) null else buildString {
+            if (batch) append("Runs through OpenAI's batch (half price), sent the moment a scan is saved — the AI's points arrive on the scan a few minutes later. ")
             append("Cost per size${model?.let { " with $it" } ?: ""}, from the last 30 days of scans; ≈ is an estimate until scans come in. ")
             if (on) append("With these areas: a T-shirt size ≈ ${cents(perSize(listOf("sleeves", "chest", "other")))}, a jeans size ≈ ${cents(perSize(listOf("crotch", "other")))}. ")
             append("Areas that are off are measured from the outline — fix them on the scan or later on CarbonWMS.")
         },
     ) {
         if (on == null) { ListRow("Loading…"); return@Group }
-        ListRow("AI assist", subtitle = if (on) "Places the points you choose below" else "Off — no AI cost", trailing = {
+        ListRow("AI assist", subtitle = if (!on) "Off — no AI cost" else if (batch) "Places the points below after you save (batch)" else "Places the points you choose below", trailing = {
             Switch(on, { save(it, areas) }, enabled = !busy, colors = SwitchDefaults.colors(checkedTrackColor = Palette.ok, checkedThumbColor = Color.White))
         })
         for (a in areas) {

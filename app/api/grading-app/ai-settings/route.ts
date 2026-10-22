@@ -4,7 +4,7 @@ import { z } from "zod";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { gradingAppAgentConfig } from "@/lib/server/size-grading-agent";
-import { AI_AREAS, AI_AREA_LABEL, areaCosts, getAiSettings, saveAiSettings, type AiSettings } from "@/lib/server/grading-app-ai";
+import { AI_AREAS, AI_AREA_LABEL, areaCosts, getAiSettings, gradingAiBatchOn, saveAiSettings, type AiSettings } from "@/lib/server/grading-app-ai";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,7 @@ async function view(pool: NonNullable<ReturnType<typeof getPool>>, tenantId: str
   return {
     settings,
     model: model?.model ?? null,
+    batch: gradingAiBatchOn(),
     areas: AI_AREAS.map((a) => ({ id: a, label: AI_AREA_LABEL[a], on: settings.areas[a], ...costs[a] })),
   };
 }

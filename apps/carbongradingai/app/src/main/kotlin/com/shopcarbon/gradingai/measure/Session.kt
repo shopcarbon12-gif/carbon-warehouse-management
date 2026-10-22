@@ -86,6 +86,11 @@ class MeasureSession(
     private var undoCount by mutableStateOf(0)
     val canUndo get() = undoCount > 0
 
+    private companion object {
+        /** Owner, 2026-10-22: every AI placement goes through OpenAI's batch, sent when the scan is saved. */
+        const val BATCH_NOTE = "The AI places these points after you save — CarbonWMS sends the photo to OpenAI's batch (half price) right away and updates the scan when it answers. Save now with these points."
+    }
+
     /** The AI switch (Settings → AI) lets the AI place this point. */
     private fun aiMay(k: String) = profile.aiAllowed?.contains(k) ?: true
 
@@ -129,6 +134,7 @@ class MeasureSession(
         val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } && k !in removed && k !in skip && aiMay(k) }
         if (cfg?.aiEnabled != true) { ai = AiState.Off("The AI is off (Settings → AI) — the outline placed the points; fix them here or later on CarbonWMS."); return }
         if (keys.isEmpty()) { ai = AiState.Off(if (profile.aiAllowed != null) "The AI is off for this photo's points (Settings → AI) — the outline placed them." else "This garment has no seam points for the AI."); return }
+        if (cfg.aiBatch) { ai = AiState.Off(BATCH_NOTE); return }
         ai = AiState.Running(System.currentTimeMillis())
         aiJob = app.scope.launch {
             try {
@@ -171,7 +177,7 @@ class MeasureSession(
     fun skipCrotch(app: App) {
         crotchPlanned = false
         val keys = crotchKeys.filter { it !in removed && aiMay(it) }
-        if (keys.isEmpty() || app.config?.aiEnabled != true) return
+        if (keys.isEmpty() || app.config?.aiEnabled != true || app.config?.aiBatch == true) return
         app.scope.launch {
             try {
                 val res = app.api.assist(scan.photoFile, profile.id, scan.pxPerCm, keys)
@@ -187,6 +193,7 @@ class MeasureSession(
         val keys = crotchKeys.filter { it !in removed && aiMay(it) }
         if (app.config?.aiEnabled != true) { part.ai = AiState.Off("The AI is off (Settings → AI) — the outline placed the points; fix them here or later on CarbonWMS."); return }
         if (keys.isEmpty()) { part.ai = AiState.Off(if (crotchKeys.any { it !in removed }) "The AI is off for this photo's points (Settings → AI) — the outline placed them." else "No points to place."); return }
+        if (app.config?.aiBatch == true) { part.ai = AiState.Off(BATCH_NOTE); return }
         part.ai = AiState.Running(System.currentTimeMillis())
         part.job = app.scope.launch {
             try {

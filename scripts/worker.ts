@@ -225,6 +225,45 @@ async function maybeRunStudioBatch(pool: Pool): Promise<void> {
   }
 }
 
+const GRADING_AI_TICK_MS = 60 * 1000;
+let lastGradingAiTickAt: Date | null = null;
+
+/**
+ * CarbonGradingAI's AI batch (lib/server/grading-app-batch.ts): every minute
+ * while a scan's AI jobs are open, ask the web app (which holds the OpenAI
+ * key) to store answers and send the next rounds — as the person who saved
+ * the scan.
+ */
+async function maybeRunGradingAi(pool: Pool): Promise<void> {
+  const now = new Date();
+  if (lastGradingAiTickAt && now.getTime() - lastGradingAiTickAt.getTime() < GRADING_AI_TICK_MS) return;
+  lastGradingAiTickAt = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
+  try {
+    const r = await pool.query<{ tenant_id: string; user_id: string; email: string; role: string; location_id: string | null }>(
+      `SELECT j.tenant_id::text, u.id::text AS user_id, u.email, m.role,
+              (SELECT l.id::text FROM locations l WHERE l.tenant_id = j.tenant_id ORDER BY l.created_at LIMIT 1) AS location_id
+         FROM grading_ai_jobs j
+         JOIN users u ON u.id = j.created_by
+         JOIN memberships m ON m.user_id = u.id AND m.tenant_id = j.tenant_id
+        WHERE j.status IN ('waiting', 'sent')
+        ORDER BY j.created_at DESC LIMIT 1`,
+    ).catch(() => null);
+    const t = r?.rows[0];
+    if (!t || !t.location_id) return;
+    const token = await signSession({ sub: t.user_id, email: t.email, tid: t.tenant_id, lid: t.location_id, role: t.role });
+    const res = await fetch(`${base}/api/grading-app/ai-batch/tick`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status !== 202) console.error(`[worker] grading AI tick → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  } catch (e) {
+    console.error("[worker] grading AI tick failed", e);
+  }
+}
+
 async function processStub(pool: Pool, job: JobRow): Promise<void> {
   if (CATALOG_SYNC_JOB_TYPES.has(job.job_type)) {
     // WMS is the catalog source of truth — Lightspeed pull retired as a source.
@@ -297,6 +336,7 @@ async function main() {
       await runReportRetentionCleanup(pool);
       await maybeEnqueueInventoryAutoSync(pool);
       await maybeRunStudioBatch(pool);
+      await maybeRunGradingAi(pool);
       await maybeRunShieldMaintenance(pool);
       await maybeRunMetaFeed(pool);
       const job = await claimJob(pool);
