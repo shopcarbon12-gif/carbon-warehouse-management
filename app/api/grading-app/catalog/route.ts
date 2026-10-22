@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const filter: CatalogFilter = (CATALOG_FILTERS as readonly string[]).includes(f) ? (f as CatalogFilter) : "all";
   const limit = Number(sp.get("limit") || 50);
   try {
-    const rows = await searchCatalog(pool, sp.get("q") ?? "", filter, Number.isFinite(limit) ? limit : 50);
+    const rows = await searchCatalog(pool, sp.get("q") ?? "", filter, Number.isFinite(limit) ? limit : 50, session.lid ?? null);
     return NextResponse.json({ rows }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Could not search" }, { status: 500 });

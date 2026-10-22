@@ -60,18 +60,19 @@ function applyDom(combo: ThemeCombo) {
   }
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children, forceColor }: { children: React.ReactNode; /** Inside the CarbonGradingAI app: always this colour mode. */ forceColor?: ThemeColorMode }) {
   const [colorMode, setColorMode] = useState<ThemeColorMode>("dark");
   const [fontScale, setFontScale] = useState<ThemeFontScale>("comfortable");
 
   useLayoutEffect(() => {
-    const s = readStored();
+    const stored = readStored();
+    const s = forceColor ? { ...stored, color: forceColor } : stored;
     /* One-time read from localStorage on client; avoids SSR/localStorage mismatch flash. */
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional hydration from localStorage
     setColorMode(s.color);
     setFontScale(s.font);
     applyDom(s);
-  }, []);
+  }, [forceColor]);
 
   const setTheme = useCallback((combo: ThemeCombo) => {
     setColorMode(combo.color);

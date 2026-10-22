@@ -32,10 +32,12 @@ function pageTitle(pathname: string): string {
 export function WmsShellClient({
   activeLocationId,
   banner,
+  embedded = false,
   children,
 }: {
   activeLocationId: string;
   banner?: React.ReactNode;
+  embedded?: boolean;
   children: React.ReactNode;
 }) {
   // Pin = "keep sidebar open like the POS menu pin." Persists across
@@ -88,6 +90,16 @@ export function WmsShellClient({
   const onOpenChange = useCallback((next: boolean) => {
     setOpen(next);
   }, []);
+
+  /* Inside the CarbonGradingAI app (its WebView says so in the user agent):
+     only the page, in the light theme — the app has its own bars (owner, 2026-10-22). */
+  if (embedded) {
+    return (
+      <ThemeProvider forceColor="light">
+        <main className="flex min-h-full flex-1 flex-col bg-[var(--wms-bg)] p-3">{children}</main>
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider>

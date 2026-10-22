@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const code = (sp.get("code") ?? "").trim();
   if (matrixId && !UUID_RE.test(matrixId)) return NextResponse.json({ error: "matrixId must be a uuid" }, { status: 400 });
   if (!matrixId && !code) return NextResponse.json({ error: "code or matrixId required" }, { status: 400 });
-  const found = matrixId ? await describeMatrix(pool, matrixId) : await lookupCode(pool, code);
+  const found = matrixId ? await describeMatrix(pool, matrixId, null, [], session.lid ?? null) : await lookupCode(pool, code, session.lid ?? null);
   if (!found) return NextResponse.json({ error: `Nothing in the WMS matches "${code || matrixId}".` }, { status: 404 });
   return NextResponse.json(found);
 }
