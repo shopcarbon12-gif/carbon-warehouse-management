@@ -12,8 +12,14 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function clientIp(req: Request): string {
+  // Use the LAST X-Forwarded-For entry — the one our own proxy (Traefik) appends
+  // from the real TCP peer — not the first, which the client can spoof to rotate
+  // past the throttle. Falls back to X-Real-Ip (also proxy-set).
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]?.trim() || "unknown";
+  if (xff) {
+    const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
   return req.headers.get("x-real-ip")?.trim() || "unknown";
 }
 

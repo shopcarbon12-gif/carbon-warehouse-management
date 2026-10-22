@@ -2,6 +2,8 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
+import { requireSessionScopes } from "@/lib/server/api-require-scopes";
+import { SCOPES } from "@/lib/auth/roles";
 import {
   getInfrastructureSettings,
   updateInfrastructureSettings,
@@ -44,6 +46,12 @@ async function POST_handler(req: Request) {
   if (!pool) {
     return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
   }
+
+  // Writing tenant-wide integration settings (Lightspeed endpoint, RFID bit
+  // layout, printers) is an admin action — a member/warehouse_ops/handheld user
+  // must not be able to repoint the Lightspeed token refresh or corrupt EPCs.
+  const denied = await requireSessionScopes(pool, session, [SCOPES.ADMIN]);
+  if (denied) return denied;
 
   const client = await pool.connect();
   try {

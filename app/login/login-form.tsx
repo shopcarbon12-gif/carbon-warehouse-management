@@ -2,11 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { safeInternalPath } from "@/lib/safe-redirect";
 
 export function LoginForm({ nextPath }: { nextPath?: string }) {
   const router = useRouter();
-  const next =
-    nextPath && nextPath.startsWith("/") ? nextPath : "/dashboard";
+  const next = safeInternalPath(nextPath);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function LoginForm({ nextPath }: { nextPath?: string }) {
         setPending(false);
         return;
       }
-      router.push(next.startsWith("/") ? next : "/dashboard");
+      router.push(next);
     } catch {
       setError("Network error");
       setPending(false);

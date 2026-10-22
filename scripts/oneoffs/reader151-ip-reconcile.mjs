@@ -4,13 +4,19 @@ const READER_ID = 'b25dd931-411c-4421-80e7-cf0c16514c26';
 const mode = process.argv[2] || 'show';            // 'show' | 'update'
 const newIp = process.argv[3] || '192.168.1.15';
 
-const client = new pg.Client({
-  host: process.env.PGHOST || '127.0.0.1',
-  port: Number(process.env.PGPORT || 15432),
-  user: 'postgres',
-  password: '3H5ouoNVVMvUyFweIwpH50KiJwfkFLin6wJjyMg49RIEv6UTKJZqo1QFYSpez6g1',
-  database: 'postgres', ssl: false,
-});
+// Credentials come from the environment — never hardcode the DB password.
+// Set PGPASSWORD (or DATABASE_URL) before running this one-off, e.g.
+//   PGPASSWORD=... node scripts/oneoffs/reader151-ip-reconcile.mjs
+const client = process.env.DATABASE_URL
+  ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: false })
+  : new pg.Client({
+      host: process.env.PGHOST || '127.0.0.1',
+      port: Number(process.env.PGPORT || 15432),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || '',
+      database: process.env.PGDATABASE || 'postgres',
+      ssl: false,
+    });
 
 await client.connect();
 if (mode === 'cols') {

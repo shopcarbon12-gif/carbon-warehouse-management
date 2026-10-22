@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { DevLocalDbBanner } from "@/components/dev-local-db-banner";
 import { getSession } from "@/lib/get-session";
+import { safeInternalPath } from "@/lib/safe-redirect";
 import { LoginForm } from "./login-form";
 
 export default async function LoginPage({
@@ -12,7 +13,7 @@ export default async function LoginPage({
   const session = await getSession();
   const sp = await searchParams;
   if (session) {
-    redirect(sp.next?.startsWith("/") ? sp.next : "/dashboard");
+    redirect(safeInternalPath(sp.next));
   }
 
   return (
