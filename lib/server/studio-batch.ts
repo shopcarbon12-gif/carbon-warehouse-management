@@ -34,6 +34,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const RUN_TAG_RE = /^[a-z0-9]{4,24}$/;
 /** OpenAI states, plus our own "processed" once the results are stored. */
 export const OPEN_BATCH_STATUSES = ["submitted", "validating", "in_progress", "finalizing"] as const;
+/** What a check (poll) looks at: the open batches, one being cancelled, and one finished but not stored yet. */
+const POLL_BATCH_STATUSES = [...OPEN_BATCH_STATUSES, "cancelling", "completed"] as const;
+/** An item still on its way: nothing back from OpenAI yet. "Stop generating" works on these. */
+export const LIVE_ITEM_STATUSES = ["queued", "preparing", "submitted"] as const;
 const TERMINAL_OPENAI = new Set(["completed", "failed", "expired", "cancelled"]);
 const MAX_PANELS = 8;
 /** One panel body is ~10–25 KB (prompt + spec + look sheet); refuse anything absurd. */
@@ -281,6 +285,265 @@ export async function cancelBatchItem(pool: Pool, tenantId: string, id: string):
   return (r.rowCount ?? 0) > 0;
 }
 
+/* ── Stop generating (owner, 2026-10-22) ───────────────────────────────────
+   "■ Stop generating" next to "Add to tonight's batch", and Bulk Studio's
+   per-item stop and "Cancel pending batch". Works at every stage:
+     queued     → cancelled; nothing was sent, nothing is charged.
+     preparing  → cancelled; the send in progress re-checks before it builds
+                  the file and leaves it out (and cancels the OpenAI batch it
+                  just created if every run in it was stopped).
+     submitted  → cancelled; when no other live run shares that OpenAI batch,
+                  OpenAI is told to cancel it. OpenAI cannot drop one request
+                  out of a batch, so otherwise it finishes the batch for the
+                  other products and this run's pictures are thrown away when
+                  it comes back. Requests OpenAI already finished are billed.
+   A cancelled run is never brought back: every later write is guarded. */
+
+/** Only the part of the OpenAI client a stop needs (a test passes a fake). */
+export type BatchCanceller = { batches: { cancel: (id: string) => PromiseLike<{ status?: string }> } };
+
+export type StopOutcome =
+  | "removed" //          was queued — nothing sent, nothing charged
+  | "left_out" //         was being sent — left out of the batch before it went
+  | "openai_cancelled" // the whole OpenAI batch was cancelled
+  | "discarded" //        OpenAI finishes the batch for others; this run's pictures are thrown away
+  | "not_running" //      already back / failed / cancelled — nothing to stop
+  | "not_found";
+
+export type StopItemResult = {
+  id: string;
+  matrixId: string | null;
+  productName: string | null;
+  modelName: string | null;
+  itemColour: string | null;
+  was: string | null;
+  outcome: StopOutcome;
+  message: string;
+  openaiBatchId?: string | null;
+  openaiError?: string | null;
+};
+
+export type StopBatchResult = {
+  /** studio_batches.id */
+  id: string;
+  openaiBatchId: string;
+  cancelled: boolean;
+  status: string | null;
+  error: string | null;
+};
+
+const stoppedNote = (who: string | null) => `Stopped${who ? ` by ${who}` : ""} — nothing more is made for this run.`;
+
+/**
+ * OpenAI is told to cancel a sent batch only when no run in it is still live,
+ * so one product's stop never kills another product's renders.
+ * Returns null when nothing was asked of OpenAI (not sent yet, already done).
+ */
+async function cancelOpenAiBatchIfUnused(
+  pool: Pool,
+  openai: BatchCanceller | null,
+  batchId: string,
+  opts: { force?: boolean } = {},
+): Promise<(StopBatchResult & { otherLive: number }) | null> {
+  const b = await pool.query<{ openai_batch_id: string | null; status: string; live: number }>(
+    `SELECT b.openai_batch_id, b.status,
+            (SELECT count(*) FROM studio_batch_items i
+              WHERE i.batch_id = b.id AND i.status IN ('preparing', 'submitted'))::int AS live
+       FROM studio_batches b WHERE b.id = $1::uuid`,
+    [batchId],
+  );
+  const row = b.rows[0];
+  if (!row?.openai_batch_id || !(OPEN_BATCH_STATUSES as readonly string[]).includes(row.status)) return null;
+  const base = { id: batchId, openaiBatchId: row.openai_batch_id, otherLive: row.live };
+  if (row.live > 0 && !opts.force) return { ...base, cancelled: false, status: row.status, error: null };
+  if (!openai) return { ...base, cancelled: false, status: row.status, error: "OPENAI_API_KEY is not set on the server." };
+  try {
+    const ob = await openai.batches.cancel(row.openai_batch_id);
+    const status = String(ob?.status || "cancelling");
+    await pool.query(
+      `UPDATE studio_batches SET status = $2, error = 'Stopped by hand — OpenAI was asked to cancel it.'
+        WHERE id = $1::uuid AND status = ANY($3::text[])`,
+      [batchId, status, [...OPEN_BATCH_STATUSES]],
+    );
+    return { ...base, cancelled: true, status, error: null };
+  } catch (e) {
+    /* Usually: it finished a moment ago. The next check stores it and throws
+       the stopped runs' pictures away. */
+    return { ...base, cancelled: false, status: row.status, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Pure: the sentence the Studio shows for one stopped run. */
+export function stopMessage(was: string | null, outcome: StopOutcome, otherLive = 0, openaiError: string | null = null): string {
+  switch (outcome) {
+    case "removed":
+      return "Removed from tonight's batch — nothing was sent, nothing is charged.";
+    case "left_out":
+      return "Stopped while the batch was being sent — it is left out of it, nothing is charged for it.";
+    case "openai_cancelled":
+      return "Stopped — OpenAI was told to cancel the batch. Panels it had already finished are still billed (half price); their pictures are thrown away.";
+    case "discarded":
+      return openaiError
+        ? `Stopped here, but OpenAI could not be told to cancel (${openaiError}). Its pictures are thrown away when the batch comes back; panels OpenAI finishes are still billed.`
+        : `Stopped here — its pictures are thrown away when the batch comes back. OpenAI cannot take one run out of a batch, so it keeps rendering ${
+            otherLive ? `the other ${otherLive} run${otherLive === 1 ? "" : "s"} in it` : "the batch"
+          } and this run's panels are still billed (half price).`;
+    case "not_running":
+      return was === "cancelled" ? "Already stopped." : `Nothing to stop — this run is ${was ?? "done"}.`;
+    default:
+      return "This run was not found.";
+  }
+}
+
+type StopRow = {
+  id: string;
+  was: string;
+  batch_id: string | null;
+  matrix_id: string;
+  product_name: string | null;
+  model_name: string | null;
+  item_colour: string | null;
+};
+
+/** Mark live runs cancelled and return what each one was. One statement, so nothing slips between read and write. */
+async function markStopped(pool: Pool, tenantId: string, ids: string[] | null, who: string | null): Promise<StopRow[]> {
+  const r = await pool.query<StopRow>(
+    `WITH prev AS (
+       SELECT i.id, i.status FROM studio_batch_items i
+        WHERE i.tenant_id = $1::uuid AND i.status = ANY($2::text[])
+          AND ($3::uuid[] IS NULL OR i.id = ANY($3::uuid[]))
+        FOR UPDATE
+     )
+     UPDATE studio_batch_items i
+        SET status = 'cancelled', error = $4, updated_at = now()
+       FROM prev, matrices m
+      WHERE i.id = prev.id AND m.id = i.matrix_id
+     RETURNING i.id::text, prev.status AS was, i.batch_id::text, i.matrix_id::text,
+               m.description AS product_name, i.model_name, i.item_colour`,
+    [tenantId, [...LIVE_ITEM_STATUSES], ids, stoppedNote(who)],
+  );
+  return r.rows;
+}
+
+/** "■ Stop generating" for one product run, whatever stage it is at. */
+export async function stopBatchItem(
+  pool: Pool,
+  openai: BatchCanceller | null,
+  tenantId: string,
+  id: string,
+  who: string | null = null,
+): Promise<StopItemResult> {
+  const [row] = await markStopped(pool, tenantId, [id], who);
+  if (!row) {
+    const cur = await pool.query<{ status: string; matrix_id: string; product_name: string | null; model_name: string | null; item_colour: string | null }>(
+      `SELECT i.status, i.matrix_id::text, m.description AS product_name, i.model_name, i.item_colour
+         FROM studio_batch_items i JOIN matrices m ON m.id = i.matrix_id
+        WHERE i.id = $1::uuid AND i.tenant_id = $2::uuid`,
+      [id, tenantId],
+    );
+    const c = cur.rows[0];
+    const outcome: StopOutcome = c ? "not_running" : "not_found";
+    return {
+      id,
+      matrixId: c?.matrix_id ?? null,
+      productName: c?.product_name ?? null,
+      modelName: c?.model_name ?? null,
+      itemColour: c?.item_colour ?? null,
+      was: c?.status ?? null,
+      outcome,
+      message: stopMessage(c?.status ?? null, outcome),
+    };
+  }
+  return describeStopped(row, row.batch_id ? await cancelOpenAiBatchIfUnused(pool, openai, row.batch_id) : null);
+}
+
+function describeStopped(row: StopRow, b: (StopBatchResult & { otherLive: number }) | null): StopItemResult {
+  let outcome: StopOutcome;
+  if (row.was === "queued") outcome = "removed";
+  else if (b?.cancelled) outcome = "openai_cancelled";
+  else if (b) outcome = "discarded";
+  else if (row.was === "preparing") outcome = "left_out";
+  else outcome = "discarded"; // submitted, batch already finished at OpenAI — billed, thrown away on store
+  const finishedAlready = outcome === "discarded" && !b;
+  return {
+    id: row.id,
+    matrixId: row.matrix_id,
+    productName: row.product_name,
+    modelName: row.model_name,
+    itemColour: row.item_colour,
+    was: row.was,
+    outcome,
+    message: finishedAlready
+      ? "Stopped, but OpenAI had already finished this batch — it is billed; its pictures are thrown away instead of saved."
+      : stopMessage(row.was, outcome, b?.otherLive ?? 0, b?.error ?? null),
+    openaiBatchId: b?.openaiBatchId ?? null,
+    openaiError: b?.error ?? null,
+  };
+}
+
+/**
+ * "Cancel pending batch": every queued run, every run being sent, and every
+ * batch out with OpenAI (OPEN_BATCH_STATUSES) for this tenant.
+ */
+export async function stopAllBatches(
+  pool: Pool,
+  openai: BatchCanceller | null,
+  tenantId: string,
+  who: string | null = null,
+): Promise<{ items: StopItemResult[]; batches: StopBatchResult[] }> {
+  const rows = await markStopped(pool, tenantId, null, who);
+  const open = await pool.query<{ id: string }>(
+    `SELECT id::text FROM studio_batches
+      WHERE tenant_id = $1::uuid AND openai_batch_id IS NOT NULL AND status = ANY($2::text[])`,
+    [tenantId, [...OPEN_BATCH_STATUSES]],
+  );
+  const byBatch = new Map<string, StopBatchResult & { otherLive: number }>();
+  for (const b of open.rows) {
+    /* force: every run of the tenant was just stopped, so a run still "live"
+       here is one the send is writing this second — it is cancelled too. */
+    const r = await cancelOpenAiBatchIfUnused(pool, openai, b.id, { force: true });
+    if (r) byBatch.set(b.id, r);
+  }
+  if (byBatch.size) {
+    await pool.query(
+      `UPDATE studio_batch_items SET status = 'cancelled', error = $2, updated_at = now()
+        WHERE batch_id = ANY($1::uuid[]) AND status = ANY($3::text[])`,
+      [[...byBatch.keys()], stoppedNote(who), [...LIVE_ITEM_STATUSES]],
+    );
+  }
+  return {
+    items: rows.map((row) => describeStopped(row, row.batch_id ? (byBatch.get(row.batch_id) ?? null) : null)),
+    batches: [...byBatch.values()].map((b) => ({ id: b.id, openaiBatchId: b.openaiBatchId, cancelled: b.cancelled, status: b.status, error: b.error })),
+  };
+}
+
+/** What "Cancel pending batch" would stop — for its confirm line. */
+export async function pendingBatchSummary(
+  pool: Pool,
+  tenantId: string,
+): Promise<{ runs: number; products: number; queued: number; sending: number; withOpenAi: number; openBatches: number }> {
+  const r = await pool.query<{ runs: number; products: number; queued: number; sending: number; with_openai: number; open_batches: number }>(
+    `SELECT count(*)::int AS runs,
+            count(DISTINCT matrix_id)::int AS products,
+            count(*) FILTER (WHERE status = 'queued')::int AS queued,
+            count(*) FILTER (WHERE status = 'preparing')::int AS sending,
+            count(*) FILTER (WHERE status = 'submitted')::int AS with_openai,
+            (SELECT count(*) FROM studio_batches b
+              WHERE b.tenant_id = $1::uuid AND b.openai_batch_id IS NOT NULL AND b.status = ANY($3::text[]))::int AS open_batches
+       FROM studio_batch_items WHERE tenant_id = $1::uuid AND status = ANY($2::text[])`,
+    [tenantId, [...LIVE_ITEM_STATUSES], [...OPEN_BATCH_STATUSES]],
+  );
+  const x = r.rows[0];
+  return {
+    runs: x?.runs ?? 0,
+    products: x?.products ?? 0,
+    queued: x?.queued ?? 0,
+    sending: x?.sending ?? 0,
+    withOpenAi: x?.with_openai ?? 0,
+    openBatches: x?.open_batches ?? 0,
+  };
+}
+
 export async function markBatchItemLoaded(pool: Pool, tenantId: string, id: string): Promise<boolean> {
   const r = await pool.query(
     `UPDATE studio_batch_items SET status = 'loaded', updated_at = now()
@@ -439,13 +702,25 @@ export async function submitQueuedBatch(
   ]);
 
   const uploaded = new Map<string, string>(); // sha → OpenAI file id
-  const lines: string[] = [];
+  let lines: { itemId: string; line: string }[] = [];
   const results = new Map<string, Record<string, PanelResult>>();
   let imageModel: string | null = null;
   let inputFileId: string | null = null;
   let failedPanels = 0;
+  /* "Stop generating" may cancel a run while this send is building it. */
+  const stillPreparing = async (ids: string[]): Promise<Set<string>> => {
+    const r = await pool.query<{ id: string }>(
+      `SELECT id::text FROM studio_batch_items WHERE id = ANY($1::uuid[]) AND status = 'preparing'`,
+      [ids],
+    );
+    return new Set(r.rows.map((x) => x.id));
+  };
   try {
     for (const item of items) {
+      if (!(await stillPreparing([item.id])).has(item.id)) {
+        log(`batch ${batchId}: run ${item.id} was stopped — left out`);
+        continue;
+      }
       const res: Record<string, PanelResult> = {};
       for (const p of item.panels) {
         const actor: BatchActor = {
@@ -479,8 +754,9 @@ export async function submitQueuedBatch(
           ids.push(id);
         }
         imageModel ??= prep.prepared.model;
-        lines.push(
-          JSON.stringify({
+        lines.push({
+          itemId: item.id,
+          line: JSON.stringify({
             custom_id: customId(item.id, p.panel),
             method: "POST",
             url: "/v1/images/edits",
@@ -494,28 +770,42 @@ export async function submitQueuedBatch(
               n: 1,
             },
           }),
-        );
+        });
         res[String(p.panel)] = { meta: { ...prep.meta, imageModel: prep.prepared.model } };
       }
       results.set(item.id, res);
     }
+    /* Last look before anything is sent: a run stopped while the others were
+       being built is left out of the file. */
+    const live = await stillPreparing(items.map((i) => i.id));
+    const stopped = items.filter((i) => !live.has(i.id)).length;
+    lines = lines.filter((l) => live.has(l.itemId));
     if (!lines.length) {
       /* Nothing to send: every panel was refused while being built (no Back
-         photo for a back pose, a photo that cannot be downloaded…). Retrying
-         tomorrow would refuse them again, so each run fails with its reasons. */
-      await pool.query(`UPDATE studio_batches SET status = 'failed', error = 'No panel could be prepared.' WHERE id = $1::uuid`, [batchId]);
+         photo for a back pose, a photo that cannot be downloaded…), or every
+         run was stopped. Retrying tomorrow would refuse them again, so each
+         run fails with its reasons; a stopped run stays cancelled. */
+      const allStopped = stopped === items.length;
+      await pool.query(`UPDATE studio_batches SET status = $2, error = $3 WHERE id = $1::uuid`, [
+        batchId,
+        allStopped ? "cancelled" : "failed",
+        allStopped ? "Every run was stopped before it was sent." : "No panel could be prepared.",
+      ]);
       for (const item of items) {
         await pool.query(
-          `UPDATE studio_batch_items SET status = 'failed', results = $2::jsonb, error = $3, updated_at = now() WHERE id = $1::uuid`,
+          `UPDATE studio_batch_items SET status = 'failed', results = $2::jsonb, error = $3, updated_at = now()
+            WHERE id = $1::uuid AND status = 'preparing'`,
           [item.id, JSON.stringify(results.get(item.id) ?? {}), "No panel of this run could be prepared."],
         );
       }
       await deleteOpenAiFiles(opts.openai, [...uploaded.values()]);
-      log(`batch ${batchId}: none of ${items.length} product run(s) could be prepared — nothing sent`);
+      log(`batch ${batchId}: nothing sent (${items.length} run(s), ${stopped} stopped)`);
       return { batchId: null, items: items.length, requests: 0, failedPanels };
     }
     const input = await opts.openai.files.create({
-      file: await toFile(Buffer.from(lines.join("\n") + "\n"), `studio-batch-${batchId}.jsonl`, { type: "application/jsonl" }),
+      file: await toFile(Buffer.from(lines.map((l) => l.line).join("\n") + "\n"), `studio-batch-${batchId}.jsonl`, {
+        type: "application/jsonl",
+      }),
       purpose: "batch",
     });
     inputFileId = input.id;
@@ -534,20 +824,33 @@ export async function submitQueuedBatch(
     );
     for (const item of items) {
       const res = results.get(item.id) ?? {};
-      const anySent = Object.values(res).some((r) => r.meta);
+      const anySent = live.has(item.id) && Object.values(res).some((r) => r.meta);
+      // `status = 'preparing'`: a run stopped this second stays cancelled.
       await pool.query(
-        `UPDATE studio_batch_items SET status = $2, results = $3::jsonb, error = $4, updated_at = now() WHERE id = $1::uuid`,
+        `UPDATE studio_batch_items SET status = $2, results = $3::jsonb, error = $4, updated_at = now()
+          WHERE id = $1::uuid AND status = 'preparing'`,
         [item.id, anySent ? "submitted" : "failed", JSON.stringify(res), anySent ? null : "No panel of this run could be prepared."],
       );
     }
-    log(`batch ${batchId} → OpenAI ${batch.id}: ${lines.length} panels from ${items.length} product run(s)`);
+    /* Every run was stopped between the last look and now: OpenAI cancels the
+       batch it was just given (nothing in it is wanted any more). */
+    const stillSent = await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM studio_batch_items WHERE batch_id = $1::uuid AND status = 'submitted'`,
+      [batchId],
+    );
+    if (!stillSent.rows[0]?.n) {
+      const c = await cancelOpenAiBatchIfUnused(pool, opts.openai, batchId);
+      log(`batch ${batchId}: every run was stopped while sending — OpenAI cancel ${c?.cancelled ? "asked" : `not possible (${c?.error ?? "?"})`}`);
+    }
+    log(`batch ${batchId} → OpenAI ${batch.id}: ${lines.length} panels from ${live.size} product run(s)`);
     return { batchId, items: items.length, requests: lines.length, failedPanels };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log(`batch ${batchId} could not be sent: ${msg}`);
     await pool.query(`UPDATE studio_batches SET status = 'failed', error = $2 WHERE id = $1::uuid`, [batchId, msg]);
     await pool.query(
-      `UPDATE studio_batch_items SET status = 'queued', batch_id = NULL, error = $2, updated_at = now() WHERE id = ANY($1::uuid[])`,
+      `UPDATE studio_batch_items SET status = 'queued', batch_id = NULL, error = $2, updated_at = now()
+        WHERE id = ANY($1::uuid[]) AND status = 'preparing'`,
       [items.map((i) => i.id), `The last send to OpenAI failed, so it goes again with the next one: ${msg}`],
     );
     await deleteOpenAiFiles(opts.openai, [...uploaded.values(), inputFileId]);
@@ -580,6 +883,7 @@ async function forEachJsonLine(openai: OpenAI, fileId: string, fn: (row: Record<
 
 type ItemRow = {
   id: string;
+  status: string;
   tenant_id: string;
   location_id: string | null;
   matrix_id: string;
@@ -654,7 +958,7 @@ async function processFinishedBatch(
   store: StoreImageFn,
 ) {
   const rows = await pool.query<ItemRow>(
-    `SELECT i.id::text, i.tenant_id::text, i.location_id::text, i.matrix_id::text, i.run_tag, i.panels, i.results,
+    `SELECT i.id::text, i.status, i.tenant_id::text, i.location_id::text, i.matrix_id::text, i.run_tag, i.panels, i.results,
             i.model_name, i.model_gender, i.item_type, i.item_colour,
             m.description AS product_name, m.upc AS product_upc,
             to_char(i.added_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD') AS et_date,
@@ -671,14 +975,18 @@ async function processFinishedBatch(
   );
   const root = studioBatchDropboxRoot();
   const items = new Map(rows.rows.map((r) => [r.id, { ...r, results: { ...(r.results ?? {}) } }]));
+  /* Stopped runs ("Stop generating"): their pictures are thrown away — never
+     saved, never shown — but a render OpenAI finished is still billed, so it
+     is logged (outcome "aborted") for the cost sums. */
+  const stopped = new Set(rows.rows.filter((r) => r.status === "cancelled").map((r) => r.id));
   /* Written only once the whole batch is saved: a save that fails half-way is
      retried from the start, and must not log the same render twice. */
   const logs: Parameters<typeof recordStudioGeneration>[0][] = [];
-  const record = async (itemId: string, panel: number, outcome: "ok" | "failed" | "blocked", extra: Partial<PanelResult>) => {
+  const record = async (itemId: string, panel: number, outcome: "ok" | "failed" | "blocked" | "aborted", extra: Partial<PanelResult>) => {
     const item = items.get(itemId);
     if (!item) return;
     const prev = item.results[String(panel)] ?? {};
-    item.results[String(panel)] = { ...prev, ...extra };
+    if (!stopped.has(itemId)) item.results[String(panel)] = { ...prev, ...extra };
     const body = item.panels.find((p) => p.panel === panel)?.body;
     const meta = (prev.meta ?? {}) as Record<string, unknown>;
     logs.push({
@@ -719,6 +1027,13 @@ async function processFinishedBatch(
     if (!item) return;
     const response = row.response as { status_code?: number; body?: Record<string, unknown> } | null;
     const b64 = (response?.body?.data as { b64_json?: string }[] | undefined)?.[0]?.b64_json;
+    if (stopped.has(id.itemId)) {
+      if (response?.status_code === 200 && b64) {
+        const usage = (response.body?.usage as Record<string, unknown> | undefined) ?? null;
+        await record(id.itemId, id.panel, "aborted", { usage, error: "Stopped by hand — rendered by OpenAI (billed), picture thrown away." });
+      }
+      return;
+    }
     if (response?.status_code === 200 && b64) {
       const folder = batchRunFolder({
         root,
@@ -743,6 +1058,7 @@ async function processFinishedBatch(
   if (batch.error_file_id) await forEachJsonLine(openai, batch.error_file_id, handle);
 
   for (const item of items.values()) {
+    if (stopped.has(item.id)) continue;
     for (const p of item.panels) {
       const r = item.results[String(p.panel)];
       if (r && !r.path && !r.error) {
@@ -758,13 +1074,18 @@ async function processFinishedBatch(
       }
     }
     const anyOk = Object.values(item.results).some((r) => r?.path);
+    // `status <> 'cancelled'`: a run stopped while this was saving stays stopped.
     await pool.query(
-      `UPDATE studio_batch_items SET status = $2, results = $3::jsonb, error = $4, updated_at = now() WHERE id = $1::uuid`,
+      `UPDATE studio_batch_items SET status = $2, results = $3::jsonb, error = $4, updated_at = now()
+        WHERE id = $1::uuid AND status <> 'cancelled'`,
       [item.id, anyOk ? "ready" : "failed", JSON.stringify(item.results), anyOk ? null : "No panel of this run was rendered."],
     );
   }
   for (const entry of logs) void recordStudioGeneration(entry);
-  log(`batch ${batch.id} stored: ${[...items.values()].filter((i) => Object.values(i.results).some((r) => r?.path)).length}/${items.size} product run(s) have images`);
+  log(
+    `batch ${batch.id} stored: ${[...items.values()].filter((i) => Object.values(i.results).some((r) => r?.path)).length}/${items.size - stopped.size} product run(s) have images` +
+      (stopped.size ? ` (${stopped.size} stopped run(s) thrown away)` : ""),
+  );
 }
 
 /** Check every open batch with OpenAI; store the ones that finished. */
@@ -773,7 +1094,7 @@ export async function pollStudioBatches(
   opts: { openai: OpenAI; tenantId?: string; log?: (m: string) => void; store?: StoreImageFn },
 ): Promise<{ checked: number; processed: number }> {
   const log = opts.log ?? ((m: string) => console.log(`[studio-batch] ${m}`));
-  const params: unknown[] = [[...OPEN_BATCH_STATUSES, "completed"]];
+  const params: unknown[] = [[...POLL_BATCH_STATUSES]];
   let where = "status = ANY($1::text[]) AND openai_batch_id IS NOT NULL";
   if (opts.tenantId) {
     params.push(opts.tenantId);
@@ -812,7 +1133,7 @@ async function pollOne(
     `UPDATE studio_batches
         SET status = $2, output_file_id = $3, error_file_id = $4, last_polled_at = now(),
             completed_at = COALESCE(completed_at, CASE WHEN $5 THEN now() END),
-            error = $6
+            error = COALESCE($6, error)
       WHERE id = $1::uuid`,
     [
       b.id,

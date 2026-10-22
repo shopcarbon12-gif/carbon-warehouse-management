@@ -28,6 +28,9 @@ import {
   nightlySendDue,
   parseCustomId,
   pollStudioBatches,
+  stopAllBatches,
+  stopBatchItem,
+  stopMessage,
   submitQueuedBatch,
   validateEnqueue,
   type PrepareFn,
@@ -103,6 +106,16 @@ test("nightly window: 1:00–5:59 AM Eastern, once, only with something queued",
   assert.equal(nightlySendDue(1, false, 0), false);
 });
 
+test("stop messages say plainly what it costs", () => {
+  assert.match(stopMessage("queued", "removed"), /nothing is charged/);
+  assert.match(stopMessage("preparing", "left_out"), /left out/);
+  assert.match(stopMessage("submitted", "openai_cancelled"), /cancel the batch.*still billed/);
+  assert.match(stopMessage("submitted", "discarded", 2), /other 2 runs.*still billed/);
+  assert.match(stopMessage("submitted", "discarded", 1, "boom"), /could not be told to cancel \(boom\)/);
+  assert.equal(stopMessage("cancelled", "not_running"), "Already stopped.");
+  assert.match(stopMessage("ready", "not_running"), /this run is ready/);
+});
+
 /* ── queue → send → store, against a real Postgres ───────────────────────── */
 
 const dbUrl = process.env.DATABASE_URL?.trim();
@@ -114,6 +127,7 @@ function fakeOpenAi(output: (lines: Record<string, unknown>[]) => { out: string;
   let sent: Record<string, unknown>[] = [];
   let n = 0;
   const files = new Map<string, string>();
+  const cancelledIds: string[] = [];
   const client = {
     files: {
       create: async ({ file, purpose }: { file: File; purpose: string }) => {
@@ -135,11 +149,15 @@ function fakeOpenAi(output: (lines: Record<string, unknown>[]) => { out: string;
         const { out, err } = output(sent);
         files.set("file-out", out);
         files.set("file-err", err);
-        return { id: "batch_test_1", status: "completed", output_file_id: "file-out", error_file_id: "file-err" };
+        return { id: "batch_test_1", status: cancelledIds.length ? "cancelled" : "completed", output_file_id: "file-out", error_file_id: "file-err" };
+      },
+      cancel: async (id: string) => {
+        cancelledIds.push(id);
+        return { id, status: "cancelling" };
       },
     },
   };
-  return { client: client as unknown as OpenAI, uploads, deleted, sent: () => sent };
+  return { client: client as unknown as OpenAI, uploads, deleted, sent: () => sent, cancelled: cancelledIds };
 }
 
 test("queue → send → store (needs DATABASE_URL)", { skip: !dbUrl }, async () => {
@@ -235,6 +253,105 @@ test("queue → send → store (needs DATABASE_URL)", { skip: !dbUrl }, async ()
     const rows = await listBatchItems(pool, tenantId, { matrixId });
     assert.equal(rows.find((r) => r.runTag === "mgu2abcd")?.status, "failed");
   } finally {
+    await pool.query(`DELETE FROM studio_batches WHERE tenant_id = $1::uuid`, [tenantId]);
+    await pool.query(`DELETE FROM matrices WHERE id = $1::uuid`, [matrixId]);
+    await pool.end();
+  }
+});
+
+/* ── Stop generating, at every stage (needs DATABASE_URL) ───────────────── */
+
+test("stop generating: queued, being sent, with OpenAI alone / shared, cancel all (needs DATABASE_URL)", { skip: !dbUrl }, async () => {
+  const pool = new Pool({ connectionString: dbUrl, max: 3 });
+  const tenantId = randomUUID();
+  const session = { sub: randomUUID(), email: "test@example.com", tid: tenantId, lid: randomUUID(), role: "admin" };
+  const m = await pool.query<{ id: string }>(`INSERT INTO matrices (description, upc) VALUES ('studio-stop test', '9990002') RETURNING id::text`);
+  const matrixId = m.rows[0].id;
+  const okPrepare: PrepareFn = async (b) => ({
+    prepared: { model: "gpt-image-2.5-sunburst", prompt: String(b.prompt), size: "1536x1024", quality: "high", moderation: "low", images: [{ name: "r.png", type: "image/png", b64: PNG_1x1 }] },
+    meta: {},
+  });
+  const queue = async (runTag: string, colour = "BLACK") => {
+    const v = validateEnqueue(input([{ panel: 1, body: { ...body(1), matrixId } }, { panel: 2, body: { ...body(2), matrixId } }], { matrixId, runTag, itemColour: colour }));
+    assert.ok(v.ok);
+    return (await enqueueBatchItem(pool, session, v.value)).id;
+  };
+  const status = async (id: string) =>
+    (await pool.query<{ status: string }>(`SELECT status FROM studio_batch_items WHERE id = $1::uuid`, [id])).rows[0]?.status;
+  const allOk = (lines: Record<string, unknown>[]) => ({
+    out: lines.map((l) => JSON.stringify({ custom_id: l.custom_id, response: { status_code: 200, body: { data: [{ b64_json: PNG_1x1 }], usage: { output_tokens: 1 } } } })).join("\n") + "\n",
+    err: "",
+  });
+  try {
+    /* 1. Queued → removed, nothing sent. */
+    const q1 = await queue("stopqaaa");
+    const r1 = await stopBatchItem(pool, null, tenantId, q1, "x@example.com");
+    assert.equal(r1.outcome, "removed");
+    assert.equal(await status(q1), "cancelled");
+    assert.equal((await stopBatchItem(pool, null, tenantId, q1)).outcome, "not_running");
+    assert.equal((await stopBatchItem(pool, null, tenantId, randomUUID())).outcome, "not_found");
+    // A cancelled run is never sent.
+    const ai0 = fakeOpenAi(allOk);
+    const none = await submitQueuedBatch(pool, { tenantId, trigger: "manual", prepare: okPrepare, openai: ai0.client, log: () => {} });
+    assert.equal(none.items, 0);
+
+    /* 2. Stopped while being sent: one of two runs is left out of the file. */
+    const a = await queue("stopqbbb", "RED");
+    const b = await queue("stopqccc", "BLUE");
+    const ai2 = fakeOpenAi(allOk);
+    let stoppedDuringSend: Awaited<ReturnType<typeof stopBatchItem>> | null = null;
+    const stoppingPrepare: PrepareFn = async (pb, actor) => {
+      if (!stoppedDuringSend) stoppedDuringSend = await stopBatchItem(pool, ai2.client, tenantId, b);
+      return okPrepare(pb, actor);
+    };
+    const sent2 = await submitQueuedBatch(pool, { tenantId, trigger: "manual", prepare: stoppingPrepare, openai: ai2.client, log: () => {} });
+    assert.equal(stoppedDuringSend!.outcome, "left_out");
+    assert.equal(sent2.requests, 2, "only run A's two panels");
+    assert.ok(ai2.sent().every((l) => String(l.custom_id).startsWith(a)));
+    assert.equal(await status(a), "submitted");
+    assert.equal(await status(b), "cancelled", "not resurrected by the send");
+
+    /* 3. With OpenAI, alone in its batch → OpenAI cancels the batch; the poll stores nothing for it. */
+    const r3 = await stopBatchItem(pool, ai2.client, tenantId, a);
+    assert.equal(r3.outcome, "openai_cancelled");
+    assert.deepEqual(ai2.cancelled, ["batch_test_1"]);
+    const stored3: string[] = [];
+    const p3 = await pollStudioBatches(pool, { openai: ai2.client, tenantId, log: () => {}, store: async (path) => (stored3.push(path), { path }) });
+    assert.equal(p3.processed, 1, "the cancelled batch is still checked and cleaned up");
+    assert.deepEqual(stored3, [], "a stopped run's partial outputs are thrown away");
+    assert.equal(await status(a), "cancelled");
+    assert.ok(ai2.deleted.includes("file-out"));
+
+    /* 4. With OpenAI, sharing the batch with another run → no OpenAI cancel; only the other run is stored. */
+    const c = await queue("stopqddd", "GREEN");
+    const d = await queue("stopqeee", "WHITE");
+    const ai4 = fakeOpenAi(allOk);
+    await submitQueuedBatch(pool, { tenantId, trigger: "manual", prepare: okPrepare, openai: ai4.client, log: () => {} });
+    const r4 = await stopBatchItem(pool, ai4.client, tenantId, c);
+    assert.equal(r4.outcome, "discarded");
+    assert.match(r4.message, /other 1 run in it/);
+    assert.deepEqual(ai4.cancelled, []);
+    const stored4: string[] = [];
+    await pollStudioBatches(pool, { openai: ai4.client, tenantId, log: () => {}, store: async (path) => (stored4.push(path), { path }) });
+    assert.equal(stored4.length, 2);
+    assert.ok(stored4.every((p) => p.includes("WHITE")), "only the run that was not stopped");
+    assert.equal(await status(c), "cancelled");
+    assert.equal(await status(d), "ready");
+
+    /* 5. Cancel the whole pending batch: queued runs + every open OpenAI batch. */
+    const e1 = await queue("stopqfff", "PINK");
+    const ai5 = fakeOpenAi(allOk);
+    await submitQueuedBatch(pool, { tenantId, trigger: "manual", prepare: okPrepare, openai: ai5.client, log: () => {} });
+    const e2 = await queue("stopqggg", "GREY");
+    const all = await stopAllBatches(pool, ai5.client, tenantId, "x@example.com");
+    assert.deepEqual(all.items.map((i) => i.outcome).sort(), ["openai_cancelled", "removed"]);
+    assert.equal(all.batches.length, 1);
+    assert.equal(all.batches[0].cancelled, true);
+    assert.deepEqual(ai5.cancelled, ["batch_test_1"]);
+    assert.equal(await status(e1), "cancelled");
+    assert.equal(await status(e2), "cancelled");
+  } finally {
+    await pool.query(`DELETE FROM studio_batch_items WHERE tenant_id = $1::uuid`, [tenantId]);
     await pool.query(`DELETE FROM studio_batches WHERE tenant_id = $1::uuid`, [tenantId]);
     await pool.query(`DELETE FROM matrices WHERE id = $1::uuid`, [matrixId]);
     await pool.end();

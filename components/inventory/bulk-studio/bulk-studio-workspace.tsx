@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import useSWR from "swr";
 import { useUrlParam } from "@/lib/use-url-param";
 import { BulkUploadTab } from "@/components/inventory/bulk-studio/bulk-upload-tab";
+import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
+import type { BatchItemSummary, StopBatchResult, StopItemResult } from "@/lib/server/studio-batch";
 import {
   CarbonStudioTab,
   type BulkStudioApi,
@@ -41,6 +43,8 @@ type SearchRow = { matrix_id: string; upc: string | null; name: string; vendor: 
 /** fresh: scanned / tag-added this session — opens with empty photo boxes once. */
 type Item = { key: string; matrixId: string | null; fresh?: boolean };
 type DraftUpdate = BulkStudioDraft | null | ((prev: BulkStudioDraft) => BulkStudioDraft | null);
+type PendingSummary = { runs: number; products: number; queued: number; sending: number; withOpenAi: number; openBatches: number };
+const LIVE_BATCH = new Set(["queued", "preparing", "submitted"]);
 
 const STORE_KEY = "wms_bulk_studio_items_v1";
 const PANELS_PER_ITEM = 4;
@@ -139,6 +143,71 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
   const analysisPassed =
     picked.length > 0 && picked.every((i) => st(i)?.spec === "ready" && !(st(i)?.analyzeProblems.length));
   const openTotal = picked.reduce((n, i) => n + (st(i)?.batchOpen ?? 0), 0);
+
+  /* Stop generating (owner 2026-10-22): every product's batch runs, so each
+     item can stop its own and the bar can cancel the whole pending batch. */
+  const { data: runsData, mutate: mutateRuns } = useSWR<{ items?: BatchItemSummary[] }>(canManage ? "/api/studio/batch" : null, fetcher, {
+    revalidateOnFocus: false,
+    refreshInterval: (d) => ((d?.items ?? []).some((b) => LIVE_BATCH.has(b.status)) || openTotal ? 60_000 : 0),
+  });
+  const allRuns = useMemo(() => runsData?.items ?? [], [runsData]);
+  const runsByMatrix = useMemo(() => {
+    const m = new Map<string, BatchItemSummary[]>();
+    for (const b of allRuns) m.set(b.matrixId, [...(m.get(b.matrixId) ?? []), b]);
+    return m;
+  }, [allRuns]);
+  const anyLive = openTotal > 0 || allRuns.some((b) => LIVE_BATCH.has(b.status));
+  const afterStop = useCallback(() => {
+    void mutateRuns();
+    for (const api of apis.current.values()) void api.refreshBatch();
+  }, [mutateRuns]);
+  const [cancelAsk, setCancelAsk] = useState<PendingSummary | "loading" | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const askCancelAll = useCallback(async () => {
+    setCancelAsk("loading");
+    try {
+      const r = await fetch("/api/studio/batch/stop-all", { cache: "no-store" });
+      const j = (await r.json().catch(() => ({}))) as { pending?: PendingSummary; error?: string };
+      if (!r.ok || !j.pending) throw new Error(j.error || `HTTP ${r.status}`);
+      if (!j.pending.runs && !j.pending.openBatches) {
+        setCancelAsk(null);
+        setBarMsg({ text: "Nothing is pending — no run is waiting or with OpenAI.", tone: "info" });
+        afterStop();
+        return;
+      }
+      setCancelAsk(j.pending);
+    } catch (e) {
+      setCancelAsk(null);
+      setBarMsg({ text: `Could not read the batch (${e instanceof Error ? e.message : "error"}).`, tone: "err" });
+    }
+  }, [afterStop]);
+  const cancelAll = useCallback(async () => {
+    setCancelAsk(null);
+    setCancelling(true);
+    try {
+      const r = await fetch("/api/studio/batch/stop-all", { method: "POST" });
+      const j = (await r.json().catch(() => ({}))) as { items?: StopItemResult[]; batches?: StopBatchResult[]; error?: string };
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      const its = j.items ?? [];
+      const bs = j.batches ?? [];
+      const free = its.filter((i) => i.outcome === "removed" || i.outcome === "left_out").length;
+      const failedCancel = bs.filter((b) => !b.cancelled);
+      const parts = [
+        `Stopped ${its.length} run${its.length === 1 ? "" : "s"}`,
+        free ? `${free} had not been sent (nothing charged)` : "",
+        bs.length
+          ? `OpenAI was told to cancel ${bs.length - failedCancel.length} of ${bs.length} batch${bs.length === 1 ? "" : "es"} — panels it had already finished are still billed (half price) and their pictures are thrown away`
+          : "",
+        failedCancel.length ? `could not cancel at OpenAI: ${failedCancel.map((b) => b.error || b.status).join("; ")} — those pictures are thrown away when they come back` : "",
+      ].filter(Boolean);
+      setBarMsg({ text: `${parts.join(". ")}.`, tone: failedCancel.length ? "warn" : "ok" });
+    } catch (e) {
+      setBarMsg({ text: `Could not cancel the batch (${e instanceof Error ? e.message : "error"}).`, tone: "err" });
+    } finally {
+      setCancelling(false);
+      afterStop();
+    }
+  }, [afterStop]);
 
   const analyzeAll = useCallback(async () => {
     const list = analyzable;
@@ -535,7 +604,48 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
                   Check now
                 </button>
               ) : null}
+              {anyLive ? (
+                <button
+                  type="button"
+                  disabled={!canManage || cancelling || cancelAsk !== null}
+                  onClick={() => void askCancelAll()}
+                  title="Stop every run waiting for the batch or with OpenAI — for every product, not only this page"
+                  className={`${btn} border-[var(--wms-status-danger-fg)]/70 bg-[var(--wms-status-danger-fg)]/10 text-[var(--wms-status-danger-fg)] hover:bg-[var(--wms-status-danger-fg)]/20`}
+                >
+                  {cancelling ? "Cancelling…" : cancelAsk === "loading" ? "Checking…" : "■ Cancel pending batch"}
+                </button>
+              ) : null}
             </div>
+            {cancelAsk && cancelAsk !== "loading" ? (
+              <div className="basis-full rounded-md border border-[var(--wms-status-danger-fg)]/50 bg-[var(--wms-status-danger-fg)]/10 p-3 font-mono text-[0.74rem] text-[var(--wms-fg)]">
+                <p>
+                  Stop {cancelAsk.runs} run{cancelAsk.runs === 1 ? "" : "s"} of {cancelAsk.products} product{cancelAsk.products === 1 ? "" : "s"} — every
+                  product in the batch, not only the ones on this page:
+                </p>
+                <ul className="mt-1 list-disc pl-5 text-[var(--wms-muted)]">
+                  {cancelAsk.queued ? <li>{cancelAsk.queued} waiting for the send — removed, nothing is charged.</li> : null}
+                  {cancelAsk.sending ? <li>{cancelAsk.sending} being sent right now — left out of the send.</li> : null}
+                  {cancelAsk.withOpenAi || cancelAsk.openBatches ? (
+                    <li>
+                      {cancelAsk.withOpenAi} with OpenAI in {cancelAsk.openBatches} batch{cancelAsk.openBatches === 1 ? "" : "es"} — OpenAI is told to cancel; panels it
+                      has already finished are still billed (half price) and their pictures are thrown away.
+                    </li>
+                  ) : null}
+                </ul>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void cancelAll()}
+                    className={`${btn} border-[var(--wms-status-danger-fg)]/70 bg-[var(--wms-status-danger-fg)]/10 text-[var(--wms-status-danger-fg)]`}
+                  >
+                    Yes, cancel the pending batch
+                  </button>
+                  <button type="button" onClick={() => setCancelAsk(null)} className={`${btn} border-[var(--wms-border)] text-[var(--wms-muted)]`}>
+                    No
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {confirmSend ? (
               <div className="basis-full rounded-md border border-[var(--wms-accent)]/50 bg-[var(--wms-accent)]/10 p-3 font-mono text-[0.74rem] text-[var(--wms-fg)]">
                 <p>
@@ -598,6 +708,8 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
               onRemove={() => removeItem(it.key)}
               register={register}
               report={report}
+              batchRuns={it.matrixId ? (runsByMatrix.get(it.matrixId) ?? []) : []}
+              onBatchStopped={afterStop}
             />
           ))}
 
@@ -630,6 +742,8 @@ function BulkItemCard({
   onRemove,
   register,
   report,
+  batchRuns,
+  onBatchStopped,
 }: {
   index: number;
   item: Item;
@@ -646,6 +760,9 @@ function BulkItemCard({
   onRemove: () => void;
   register: (key: string, api: BulkStudioApi | null) => void;
   report: (key: string, s: BulkStudioStatus) => void;
+  /** This product's night-batch runs (for "■ Stop generating"). */
+  batchRuns: BatchItemSummary[];
+  onBatchStopped: () => void;
 }) {
   const { data, error, isLoading } = useSWR<MatrixDetail>(
     item.matrixId ? `/api/inventory/catalog/matrices/${item.matrixId}` : null,
@@ -793,6 +910,7 @@ function BulkItemCard({
           </span>
         ) : null}
         {status?.clockText ? <span className="font-mono text-[0.72rem] tabular-nums text-[var(--wms-muted)]">⏱ {status.clockText}</span> : null}
+        {item.matrixId && canManage ? <BatchStopButton items={batchRuns} onStopped={onBatchStopped} /> : null}
       </div>
 
       {phone || phoneErr ? (

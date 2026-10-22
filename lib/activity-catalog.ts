@@ -79,6 +79,8 @@ const ROUTES: Record<string, Entry> = {
   "push/test": { module: "Settings", label: "Sent a test alert" },
   "studio/batch/[id]": { module: "Studio", label: { PATCH: "Loaded / published night-batch results", DELETE: "Removed a run from the night batch" } },
   "studio/batch/run": { module: "Studio", label: "Sent the Studio night batch" },
+  "studio/batch/[id]/stop": { module: "Studio", label: "Stopped a night-batch run (Stop generating)" },
+  "studio/batch/stop-all": { module: "Studio", label: "Cancelled the pending night batch" },
   "studio/color-run": { module: "Studio", label: { PUT: "Saved colourway run", DELETE: "Deleted colourway run", POST: "Started colourway run" } },
   "studio/labels": { module: "Studio", label: "Added a jeans label" },
   "studio/labels/[id]": { module: "Studio", label: "Removed a jeans label" },

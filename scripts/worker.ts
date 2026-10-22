@@ -167,12 +167,18 @@ async function maybeRunStudioBatch(pool: Pool): Promise<void> {
     }>(
       `WITH t AS (
          SELECT DISTINCT tenant_id FROM studio_batch_items WHERE status IN ('queued', 'submitted')
+         -- A batch whose every run was stopped still needs its checks (OpenAI's
+         -- cancel finishes later; then its files are deleted).
+         UNION
+         SELECT DISTINCT tenant_id FROM studio_batches
+          WHERE openai_batch_id IS NOT NULL
+            AND status IN ('submitted', 'validating', 'in_progress', 'finalizing', 'cancelling', 'completed')
        ), today AS (SELECT (now() AT TIME ZONE 'America/New_York')::date AS d)
        SELECT t.tenant_id::text,
               (SELECT count(*) FROM studio_batch_items i WHERE i.tenant_id = t.tenant_id AND i.status = 'queued')::int AS queued,
               EXISTS (SELECT 1 FROM studio_batches b
                        WHERE b.tenant_id = t.tenant_id AND b.openai_batch_id IS NOT NULL
-                         AND b.status IN ('submitted', 'validating', 'in_progress', 'finalizing', 'completed')) AS has_open,
+                         AND b.status IN ('submitted', 'validating', 'in_progress', 'finalizing', 'cancelling', 'completed')) AS has_open,
               (SELECT count(*) FROM studio_batches b, today
                 WHERE b.tenant_id = t.tenant_id AND b.trigger = 'nightly' AND b.status <> 'failed'
                   AND (b.created_at AT TIME ZONE 'America/New_York')::date = today.d)::int AS sent_tonight,

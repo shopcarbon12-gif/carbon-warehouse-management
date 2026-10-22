@@ -2,6 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { splitPanelToThreeByFour } from "@/lib/panelGeneration";
+import {
+  arrange,
+  blockColourAt,
+  classifyViews,
+  galleryColourOrder,
+  liveColours,
+  mainPictureColours,
+  picKey,
+  poseRank,
+  poseView,
+  whichColour,
+  type GalleryCard,
+} from "@/lib/studio/gallery-order";
 
 /**
  * Bulk Studio › Upload (owner, 2026-10-20).
@@ -35,21 +48,7 @@ type Run = {
   ready: number[];
 };
 type Variant = { color: string | null; shopify_variant_id?: string | null; shopify_image_url?: string | null; archived?: boolean };
-type Card = {
-  key: string;
-  kind: "existing" | "new";
-  mediaId?: string;
-  /** JPEG base64 (no data: prefix) for new pictures. */
-  b64?: string;
-  src: string;
-  alt: string;
-  /** The colour this picture is the ★ main picture for ("" = none). */
-  color: string;
-  selected: boolean;
-  label: string;
-  /** Current Shopify pictures: the view it shows (for the order). */
-  view?: string;
-};
+type Card = GalleryCard;
 type Row = {
   matrixId: string;
   name: string;
@@ -66,16 +65,6 @@ type Row = {
   state: "loading" | "ready" | "publishing" | "published" | "error";
   msg: string;
 };
-
-/* Gallery position of each generated pose (owner 2026-10-20, Challenge T-Shirt):
-   hero full-length front, then the front crops / close-ups / detail, then the
-   second full-length shot, seated, back close-up, full back last. */
-const RANK_MALE: Record<number, number> = { 1: 0, 3: 1, 5: 2, 6: 3, 2: 4, 8: 5, 7: 6, 4: 7 };
-const RANK_FEMALE: Record<number, number> = { 1: 0, 4: 1, 7: 2, 5: 3, 6: 4, 3: 5, 8: 6, 2: 7 };
-/* The same order for the product's current Shopify pictures, by the view each shows. */
-const EX_RANK: Record<string, number> = { "full-front": 0, "front-close": 1, detail: 2, side: 3, other: 4, seated: 5, "back-close": 6, back: 7 };
-const VIEW_MALE: Record<number, string> = { 1: "front", 2: "front", 3: "front close-up", 4: "back", 5: "front close-up", 6: "detail", 7: "back close-up", 8: "lifestyle" };
-const VIEW_FEMALE: Record<number, string> = { 1: "front", 2: "back", 3: "three-quarter", 4: "front close-up", 5: "detail", 6: "front", 7: "front close-up", 8: "lifestyle" };
 
 /** Shopify's green bag, for "View in Shopify". */
 function ShopifyBag() {
@@ -99,7 +88,6 @@ function DownloadIcon() {
   );
 }
 
-const picKey = (u: string | null | undefined) => (u ?? "").split("?")[0];
 const newKey = () => Math.random().toString(36).slice(2, 10);
 const btn =
   "inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-[0.74rem] uppercase tracking-wide disabled:opacity-50 max-md:min-h-11";
@@ -150,48 +138,6 @@ async function download(card: Card, name: string) {
   } catch {
     window.open(card.src, "_blank");
   }
-}
-
-/** The colour of the block a position sits in: the nearest ★ to its left, else the first colour. */
-function blockColourAt(cards: Card[], idx: number, colours: string[]): string {
-  for (let i = idx; i >= 0; i--) if (cards[i].color) return cards[i].color;
-  return colours[0] ?? "";
-}
-
-/** Generated + current pictures in the owner's order (see the file header). */
-function arrange(gen: Map<string, Card[]>, existing: Card[], include: boolean, colours: string[]): Card[] {
-  const blocks = new Map<string, Card[]>();
-  const untied: Card[] = [];
-  let cur = "";
-  for (const c of existing) {
-    if (c.color) cur = c.color;
-    if (cur) blocks.set(cur, [...(blocks.get(cur) ?? []), { ...c }]);
-    else untied.push({ ...c });
-  }
-  /* Each colour's current pictures in the owner's order: a full-length shot
-     first (a three-quarter one if there is no straight front), then crops and
-     details, seated, back close-up, back last. */
-  for (const [colour, list] of blocks) {
-    const hasFront = list.some((c) => c.view === "full-front");
-    const r = (c: Card) => (!hasFront && c.view === "side" ? -1 : EX_RANK[c.view ?? "other"] ?? 4);
-    const sorted = list.map((c, i) => ({ c, i })).sort((a, b) => r(a.c) - r(b.c) || a.i - b.i).map((x) => x.c);
-    sorted.forEach((c, i) => (c.color = i === 0 ? colour : ""));
-    blocks.set(colour, sorted);
-  }
-  const order = [...colours, ...[...gen.keys()].filter((c) => !colours.includes(c))];
-  const out: Card[] = [];
-  for (const colour of order) {
-    const g = gen.get(colour) ?? [];
-    const e = include ? blocks.get(colour) ?? [] : [];
-    if (g.length) {
-      /* The new full-length front becomes this colour's ★ main picture. */
-      e.forEach((c) => (c.color = ""));
-      g.forEach((c, i) => (c.color = i === 0 ? colour : ""));
-    }
-    out.push(...g, ...e);
-  }
-  if (include) out.push(...untied);
-  return out;
 }
 
 export function BulkUploadTab({ active }: { active: boolean }) {
@@ -298,7 +244,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         `/api/inventory/catalog/matrices/${matrixId}`,
       );
       const live = d.variants.filter((v) => !v.archived);
-      const colours = [...new Set(live.map((v) => (v.color || "").trim()).filter(Boolean))];
+      const colours = liveColours(live);
       const variantIdsByColour: Record<string, string[]> = {};
       for (const v of live) {
         const c = (v.color || "").trim();
@@ -308,20 +254,11 @@ export function BulkUploadTab({ active }: { active: boolean }) {
       let existing: Card[] = [];
       if (d.matrix.shopify_product_id) {
         const mj = await getJson<{ media?: { id: string; url: string; alt: string | null }[] }>(`/api/shopify/media?matrixId=${matrixId}`);
-        const mainOf = new Map<string, string>();
-        for (const v of live) if (v.shopify_image_url && v.color && !mainOf.has(picKey(v.shopify_image_url))) mainOf.set(picKey(v.shopify_image_url), v.color.trim());
+        const mainOf = mainPictureColours(live);
         const media = mj.media ?? [];
-        const vj = media.length
-          ? await fetch("/api/studio/classify-views", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ urls: media.map((m) => m.url) }),
-            })
-              .then((x) => x.json() as Promise<{ views?: string[] }>)
-              .catch(() => ({ views: [] as string[] }))
-          : { views: [] as string[] };
+        const views = await classifyViews(media.map((m) => m.url));
         existing = media.map((m, i) => ({
-          view: vj.views?.[i] ?? "other",
+          view: views[i] ?? "other",
           key: `ex-${m.id}`,
           kind: "existing" as const,
           mediaId: m.id,
@@ -346,8 +283,8 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           const { left, right } = await splitPanelToThreeByFour(p.imageBase64, p.mime || "image/png");
           for (const [b64png, pose] of [[left, p.poseA], [right, p.poseB]] as const) {
             const b64 = await toJpeg(b64png);
-            const rank = rj.accessory ? pose : (female ? RANK_FEMALE : RANK_MALE)[pose] ?? 9;
-            const view = rj.accessory ? `shot ${pose}` : (female ? VIEW_FEMALE : VIEW_MALE)[pose] ?? `pose ${pose}`;
+            const rank = poseRank(pose, female, !!rj.accessory);
+            const view = poseView(pose, female, !!rj.accessory);
             list.push({
               rank,
               card: {
@@ -368,16 +305,10 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         let shown = colour;
         if (colours.length > 1 && list[0]) {
           const hero = list.slice().sort((a, b) => a.rank - b.rank)[0].card;
-          const wj = await fetch("/api/studio/which-colour", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: hero.src, colours, item: d.matrix.description ?? "" }),
-          })
-            .then((x) => x.json() as Promise<{ colour?: string | null }>)
-            .catch(() => ({ colour: null }));
-          if (wj.colour && wj.colour.toUpperCase() !== colour.toUpperCase()) {
-            shown = wj.colour;
-            notes.push(`${run.modelName ?? "The"} run was requested as ${colour} but the pictures show ${wj.colour} — they are in ${wj.colour}'s block (change it at the top of the row).`);
+          const wc = await whichColour(hero.src, colours, d.matrix.description ?? "");
+          if (wc && wc.toUpperCase() !== colour.toUpperCase()) {
+            shown = wc;
+            notes.push(`${run.modelName ?? "The"} run was requested as ${colour} but the pictures show ${wc} — they are in ${wc}'s block (change it at the top of the row).`);
           }
         }
         runCards.current.set(run.id, { matrixId, colour: shown, cards: list.map((x) => x.card) });
@@ -385,8 +316,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
       const gen = genFor(matrixId);
       /* Blocks follow the colour order the Shopify gallery already has (the
          owner's option order); colours not on Shopify yet follow. */
-      const shopOrder = existing.map((c) => c.color).filter((c, i, a) => c && a.indexOf(c) === i);
-      const colourOrder = [...shopOrder, ...colours.filter((c) => !shopOrder.includes(c))];
+      const colourOrder = galleryColourOrder(existing, colours);
       patchRow(matrixId, (r) => ({
         ...r,
         name: d.matrix.description ?? r.name,

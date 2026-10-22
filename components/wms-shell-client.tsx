@@ -127,16 +127,16 @@ export function WmsShellClient({
                   window.location.reload();
                 }
               }}
-              className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:hidden"
+              className="flex items-center gap-2.5 rounded-md px-1.5 py-1 text-sm font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:hidden"
             >
               {/* The Carbon mark, drawn in the text colour: white on the dark theme. */}
               <span
                 aria-hidden
-                className="inline-block h-5 w-5 shrink-0"
+                className="inline-block h-7 w-7 shrink-0"
                 style={{
                   backgroundColor: "var(--wms-fg)",
-                  WebkitMaskImage: "url(/carbon-logo-mark.png)",
-                  maskImage: "url(/carbon-logo-mark.png)",
+                  WebkitMaskImage: "url(/carbon-logo-mark-bold.png)",
+                  maskImage: "url(/carbon-logo-mark-bold.png)",
                   WebkitMaskRepeat: "no-repeat",
                   maskRepeat: "no-repeat",
                   WebkitMaskPosition: "center",

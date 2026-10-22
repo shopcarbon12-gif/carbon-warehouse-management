@@ -146,7 +146,7 @@ export async function notifyStudioBatchResults(pool: Pool, batchId: string, tena
         `SELECT i.matrix_id::text, m.description AS product_name, i.model_name, i.item_colour, i.results,
                 jsonb_array_length(i.panels) AS panel_count
            FROM studio_batch_items i JOIN matrices m ON m.id = i.matrix_id
-          WHERE i.batch_id = $1::uuid`,
+          WHERE i.batch_id = $1::uuid AND i.status <> 'cancelled'`, // a stopped run sends no alert
         [batchId],
       )
     ).rows;

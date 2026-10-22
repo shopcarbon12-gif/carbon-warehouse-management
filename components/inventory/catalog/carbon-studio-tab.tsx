@@ -2,6 +2,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { orderStudioGallery } from "@/lib/studio/gallery-order";
+import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
 import { parseSpecBackState, specListsBackDesign, specRiskReport, studioRefViewKey, type SpecIssue } from "@/lib/studio-item-spec";
 import {
@@ -1289,6 +1291,7 @@ export function CarbonStudioTab({
     const batch = fresh.map((im): ItemRef => ({ url: im.imageUrl, preview: previewFor(im.imageUrl), view }));
     itemRefsRef.current = [...itemRefsRef.current, ...batch];
     setItemRefs((prev) => [...prev, ...batch.filter((b) => !prev.some((p) => p.url === b.url))]);
+    prepRefsRef.current(batch);
     return fresh.length;
   }, []);
 
@@ -1493,12 +1496,13 @@ export function CarbonStudioTab({
     }
   }, []);
 
-  /* Bulk Studio (owner 2026-10-20): every photo added to General / Front / Back
-     — uploaded, from the phone, or handed over from before the scan — is
-     prepared on its own: moved to the box it belongs in, turned upright, and
-     a person's head cut off just under the chin. It shows at once where it was
-     dropped and moves when it is ready; the manual rotate / crop / drag still
-     work afterwards. Style with photos are other products and are left alone. */
+  /* Bulk Studio (owner 2026-10-20), and the Studio tab since 2026-10-22: every
+     photo added to General / Front / Back — uploaded, from the phone, or handed
+     over from before the scan — is prepared on its own: moved to the box it
+     belongs in, turned upright, and a person's head cut off just under the
+     chin. It shows at once where it was dropped and moves when it is ready; the
+     manual rotate / crop / drag still work afterwards. Style with photos are
+     other products and are left alone. */
   const prepSeen = useRef<Set<string>>(new Set());
   const [prepping, setPrepping] = useState(0);
   /* Called only where photos are ADDED (upload, phone, the pre-scan draft) —
@@ -1506,7 +1510,6 @@ export function CarbonStudioTab({
      re-sorted or turned back (owner 2026-10-20). One call per photo address. */
   const prepItemRefs = useCallback(
     (refs: ItemRef[]) => {
-      if (!bulkMode) return;
       const fresh = refs.filter((r) => (r.view ?? "general") !== "styling" && !prepSeen.current.has(r.url));
       const urls = [...new Set(fresh.map((r) => r.url))];
       for (const u of urls) prepSeen.current.add(u);
@@ -1536,7 +1539,7 @@ export function CarbonStudioTab({
           .finally(() => setPrepping((n) => n - 1));
       }
     },
-    [bulkMode, productName, itemType],
+    [productName, itemType],
   );
   prepRefsRef.current = prepItemRefs;
 
@@ -2877,56 +2880,41 @@ export function CarbonStudioTab({
     try {
       const r = await fetch(`/api/shopify/media?matrixId=${matrixId}`);
       const j = (await r.json().catch(() => ({}))) as { media?: Array<{ id: string; url: string; alt: string }> };
-      const existing: MediaItem[] = (j.media || []).map((m) => ({
-        key: `ex-${m.id}`,
-        kind: "existing",
-        mediaId: m.id,
-        url: m.url,
-        alt: m.alt || "",
-        color: "",
-      }));
-      setShopifyExisting(existing);
-      // Only the SELECTED generated crops are shown by default. Base order is
-      // carbon-gen's canonical push order — ascending POSE NUMBER (the female
-      // panels render 7+5 / 6+8, so generation order ≠ pose order) — then the
-      // gender rule is applied on top:
-      //  • MEN → Pose 4 LAST, Pose 7 second-to-last (8b3787c).
-      //  • WOMEN → Pose 2 LAST so Pose 1 leads / becomes hero (9942a07). The
-      //    previous implementation pushed EVERY right-frame crop last
-      //    (1,3,7,6,2,4,5,8) — that was a bug against its own spec.
+      /* Same order as Bulk Studio › Upload (owner 2026-10-22): colour blocks in
+         the gallery's colour order, each colour's ★ main picture first,
+         generated poses in the owner's pose order (accessory shots in shot
+         order), current pictures by view, the new set in the block of the
+         colour it actually shows. */
       const picked = crops.filter((c) => c.selected && c.b64);
-      const poseNum = (c: Crop) => {
-        const m = c.label.match(/(?:Pose|Shot) (\d+)/);
-        return m ? Number(m[1]) : 0;
-      };
-      /* Accessory sets are pushed in shot order: Shot 1, the hero, becomes the
-         main image, and the gender rules for garment poses do not apply. */
-      const isShotSet = picked.some((c) => / · Shot \d+/.test(c.label));
-      const isMale = (model?.gender || "").toLowerCase() === "male";
-      const rank = isShotSet
-        ? () => 0
-        : isMale
-        ? (c: Crop) => (poseNum(c) === 4 ? 2 : poseNum(c) === 7 ? 1 : 0)
-        : (c: Crop) => (poseNum(c) === 2 ? 1 : 0);
-      const ordered = [...picked].sort((a, b) => rank(a) - rank(b) || poseNum(a) - poseNum(b));
-      const news: MediaItem[] = ordered.map((c) => ({
-        key: `new-${c.id}`,
-        kind: "new",
+      const res = await orderStudioGallery({
+        matrixId,
+        media: j.media || [],
+        crops: picked.map((c) => ({ id: c.id, label: c.label, b64: c.b64 as string })),
+        gender: model?.gender || "",
+        colour: color || "",
+        includeShopify,
+      });
+      const toItem = (c: (typeof res.cards)[number]): MediaItem => ({
+        key: c.key,
+        kind: c.kind,
+        mediaId: c.mediaId,
         b64: c.b64,
-        url: `data:image/png;base64,${c.b64}`,
-        alt: "",
-        color: "",
-      }));
-      const seed = includeShopify ? [...existing, ...news] : news;
+        url: c.src,
+        alt: c.alt,
+        color: c.color,
+      });
+      setShopifyExisting(res.existing.map(toItem));
+      const seed = res.cards.map(toItem);
       setMediaItems(seed);
       setShowMedia(true);
+      if (res.note) setMsg(res.note);
       void autoAltMissing(seed);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load media");
     } finally {
       setMediaBusy(null);
     }
-  }, [matrixId, crops, includeShopify, autoAltMissing, model]);
+  }, [matrixId, crops, includeShopify, autoAltMissing, model, color]);
 
   // Toggle existing Shopify pictures in/out of the manager without losing edits
   // to the newly-generated ones.
@@ -3356,7 +3344,8 @@ export function CarbonStudioTab({
           <div className="flex-1" />
           <button
             type="button"
-            disabled={!canManage || !productRefCount || specBusy || busy !== null}
+            disabled={!canManage || !productRefCount || specBusy || busy !== null || prepping > 0}
+            title={prepping > 0 ? "Photos are still being sorted…" : undefined}
             onClick={() => void analyzeItem(refViews)}
             className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-1 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-accent)] disabled:opacity-50 max-md:min-h-11"
           >
@@ -3531,7 +3520,7 @@ export function CarbonStudioTab({
           const renderZone = (zone: (typeof REF_VIEWS)[number], nested = false): ReactNode => {
             /* Bulk: one box holds General and Style with (each photo keeps its own kind). */
             const zoneRefs = itemRefs.filter((r) =>
-              bulk && zone.view === "general" ? (r.view ?? "general") === "general" || r.view === "styling" : (r.view ?? "general") === zone.view,
+              zone.view === "general" ? (r.view ?? "general") === "general" || r.view === "styling" : (r.view ?? "general") === zone.view,
             );
             const isActive = activeView === zone.view;
             const isOver = dragOverView === zone.view;
@@ -3585,7 +3574,7 @@ export function CarbonStudioTab({
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <span className="font-mono text-[0.72rem] font-semibold uppercase tracking-wide text-[var(--wms-fg)]">
-                    {bulk && zone.view === "general" ? "Accessories · General · Style with" : zone.title}
+                    {zone.view === "general" ? "Accessories · General · Style with" : zone.title}
                     {zoneRefs.length ? ` · ${zoneRefs.length}` : ""}
                   </span>
                   {isActive ? (
@@ -3596,7 +3585,7 @@ export function CarbonStudioTab({
                 </div>
                 {bulk && zone.view === "styling" ? null : (
                   <p className="mb-2 font-mono text-[0.64rem] leading-snug text-[var(--wms-muted)]">
-                    {bulk && zone.view === "general" ? "Accessories, flats, any view — works exactly as before." : zone.hint}
+                    {zone.view === "general" ? "Accessories, flats, any view — works exactly as before." : zone.hint}
                   </p>
                 )}
                 {zone.view === "back" && !(bulk && zoneRefs.length > 0) ? (
@@ -3761,7 +3750,7 @@ export function CarbonStudioTab({
                           {rotatingUrl === ref.url ? "…" : "⟳"}
                         </button>
                       ) : null}
-                      {bulk && ref.view === "styling" && zone.view !== "styling" ? (
+                      {ref.view === "styling" && zone.view !== "styling" ? (
                         <span className="pointer-events-none absolute inset-x-0 top-5 bg-black/65 py-0.5 text-center font-mono text-[0.55rem] uppercase tracking-wide text-white">
                           Style with
                         </span>
@@ -3855,8 +3844,77 @@ export function CarbonStudioTab({
               </Fragment>
             );
           };
-          return (bulk ? REF_VIEWS.filter((z) => z.view !== "styling") : REF_VIEWS).map((z) => renderZone(z));
+          /* Style with lives inside the Accessories · General box in both Bulk
+             Studio and the Studio tab (owner 2026-10-22). */
+          return REF_VIEWS.filter((z) => z.view !== "styling").map((z) => renderZone(z));
           })()}
+        </div>
+        {qr ? (
+          <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
+            <img src={qr.url} alt="Scan with your phone" className="h-32 w-32 rounded bg-white p-1" />
+            <div className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
+              Scan with your phone to take product photos. Each photo the phone sends appears above
+              within a few seconds. <b>Keep this open until the phone says every photo was sent</b>, then
+              click Done.
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={qrBusy}
+                  onClick={() => void finishPhoneCamera()}
+                  className="rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+                >
+                  {qrBusy ? "Collecting…" : "✓ Done"}
+                </button>
+                <button
+                  type="button"
+                  disabled={qrBusy}
+                  title="Ask the server for every photo this session received — for anything that did not appear"
+                  onClick={() =>
+                    void collectHandoff(qr.sessionId, true).then((res) => {
+                      if (res.status === "gone") setErr("That phone session has expired — scan a new code.");
+                      else if (res.status === "error") setErr("Could not reach the server — try again.");
+                      else if (!res.added) setMsg("Nothing new from the phone yet.");
+                    })
+                  }
+                  className="rounded border border-[var(--wms-border)] px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
+                >
+                  ↻ Check again
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Studio tab (owner 2026-10-22): the colourway, the item spec and the jeans
+          label fold into one section, closed by default — the summary says
+          whether the spec is ready. Bulk Studio keeps the spec in the background. */}
+      {!bulk ? (
+        <details className="group rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)]/40">
+          <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2 font-mono text-[0.74rem] uppercase tracking-wide text-[var(--wms-fg)] max-md:min-h-11">
+            <span aria-hidden className="inline-block transition-transform group-open:rotate-90">▸</span>
+            <span>{[showColourway ? "Colourway" : "", "Item spec", canManage && isJeansType ? "Jeans label" : ""].filter(Boolean).join(" · ")}</span>
+            <span
+              className={`normal-case tracking-normal ${
+                !productRefCount
+                  ? "text-[var(--wms-muted)]"
+                  : specStale || specRisk.blocking.length
+                    ? "text-[var(--wms-status-warning-fg)]"
+                    : "text-[var(--wms-status-success-fg)]"
+              }`}
+            >
+              {!productRefCount
+                ? "— add photos first"
+                : !itemSpec.trim()
+                  ? "— not analyzed yet"
+                  : specStale
+                    ? "— photos changed, re-analyze"
+                    : specRisk.blocking.length
+                      ? `— ${specRisk.blocking.length} line(s) to check`
+                      : `— spec ready · ${itemSpec.split("\n").filter(Boolean).length} lines`}
+            </span>
+          </summary>
+          <div className="space-y-3 px-3 pb-3">
           {/* Another colourway: same product, same analysis, one photo of the new
               colour. Only rendered when the catalogue actually has colours. */}
           {showColourway ? (
@@ -3968,48 +4026,11 @@ export function CarbonStudioTab({
               </div>
             </div>
           ) : null}
-        </div>
-        {qr ? (
-          <div className="mt-3 flex items-center gap-3 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-3">
-            <img src={qr.url} alt="Scan with your phone" className="h-32 w-32 rounded bg-white p-1" />
-            <div className="font-mono text-[0.74rem] text-[var(--wms-muted)]">
-              Scan with your phone to take product photos. Each photo the phone sends appears above
-              within a few seconds. <b>Keep this open until the phone says every photo was sent</b>, then
-              click Done.
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={qrBusy}
-                  onClick={() => void finishPhoneCamera()}
-                  className="rounded border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
-                >
-                  {qrBusy ? "Collecting…" : "✓ Done"}
-                </button>
-                <button
-                  type="button"
-                  disabled={qrBusy}
-                  title="Ask the server for every photo this session received — for anything that did not appear"
-                  onClick={() =>
-                    void collectHandoff(qr.sessionId, true).then((res) => {
-                      if (res.status === "gone") setErr("That phone session has expired — scan a new code.");
-                      else if (res.status === "error") setErr("Could not reach the server — try again.");
-                      else if (!res.added) setMsg("Nothing new from the phone yet.");
-                    })
-                  }
-                  className="rounded border border-[var(--wms-border)] px-2 py-1 text-[var(--wms-fg)] disabled:opacity-50 max-md:min-h-11"
-                >
-                  ↻ Check again
-                </button>
-              </div>
-            </div>
+            {labelBlock}
+            {specBlock}
           </div>
-        ) : null}
-      </div>
-
-      {!bulk ? labelBlock : null}
-
-      {/* Bulk Studio: the spec works in the background — the page's Analyze button shows whether it passed. */}
-      {!bulk ? specBlock : null}
+        </details>
+      ) : null}
 
       {!bulk ? optionsBlock : null}
 
@@ -4182,7 +4203,7 @@ export function CarbonStudioTab({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
-          disabled={!canManage || busy !== null || !model || !orderedRefUrls(refViews).length || !panels.length}
+          disabled={!canManage || busy !== null || prepping > 0 || !model || !orderedRefUrls(refViews).length || !panels.length}
           onClick={() => void generate()}
           className="rounded-md border border-[var(--wms-accent)]/60 bg-[var(--wms-accent)]/15 px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:bg-[var(--wms-accent)]/25 disabled:opacity-50"
         >
@@ -4198,13 +4219,16 @@ export function CarbonStudioTab({
         </button>
         <button
           type="button"
-          disabled={!canManage || busy !== null || !model || !orderedRefUrls(refViews).length || !panels.length}
+          disabled={!canManage || busy !== null || prepping > 0 || !model || !orderedRefUrls(refViews).length || !panels.length}
           onClick={() => void generate("batch")}
           title="Queue exactly this run for tonight's OpenAI batch (sent 1 AM Eastern, half the price). The pictures are saved to Dropbox and come back here for review — nothing is published by itself."
           className="rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-3 py-1.5 font-mono text-[0.78rem] uppercase tracking-wide text-[var(--wms-fg)] hover:border-[var(--wms-accent)]/60 disabled:opacity-50 max-md:min-h-11"
         >
           {busy === "batch" ? "Adding to batch…" : `☾ Add ${panels.length} to tonight's batch`}
         </button>
+        {!bulk ? (
+          <BatchStopButton items={batchItems} onStopped={() => void refreshBatch()} disabled={!canManage} />
+        ) : null}
         {busy === "generate" || busy === "analyze" || busy === "batch" ? (
           <button
             type="button"
@@ -4234,6 +4258,11 @@ export function CarbonStudioTab({
           >
             ⏱ {clockText}
             {clock.endedAt === null ? "" : " total"}
+          </span>
+        ) : null}
+        {!bulk && prepping > 0 ? (
+          <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">
+            Sorting {prepping} photo{prepping === 1 ? "" : "s"} (upright, head cut, front / back)…
           </span>
         ) : null}
         {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
