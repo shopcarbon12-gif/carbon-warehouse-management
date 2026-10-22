@@ -1072,11 +1072,11 @@ function ReviewBox({
           <button
             type="button"
             className="wms-btn-success-solid max-md:flex-1"
-            disabled={busy !== null || scan.status === "approved"}
+            disabled={busy !== null || (scan.status === "approved" && !beforeAction)}
             onClick={() => void act("approve")}
           >
             {busy === "approve" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            Approve
+            {beforeAction ? "Save & approve" : "Approve"}
           </button>
           <button
             type="button"
