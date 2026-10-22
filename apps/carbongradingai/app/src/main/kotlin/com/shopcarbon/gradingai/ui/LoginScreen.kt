@@ -1,6 +1,8 @@
 package com.shopcarbon.gradingai.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,11 +41,13 @@ fun LoginScreen(onDone: () -> Unit) {
     val canFinger = remember { activity?.let { com.shopcarbon.gradingai.auth.Biometric.available(it) } == true }
     var useFinger by remember { mutableStateOf(canFinger) }
     Column(
-        Modifier.fillMaxSize().padding(24.dp).imePadding(),
+        Modifier.fillMaxSize().background(Palette.ground).padding(24.dp).imePadding(),
         verticalArrangement = Arrangement.spacedBy(14.dp, androidx.compose.ui.Alignment.CenterVertically),
+        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
     ) {
+        AppLogo(Modifier.size(104.dp))
         Text("CarbonGradingAI", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
-        Muted("Sign in with your WMS account. Measurements save straight into the WMS.")
+        Muted("Sign in with your CarbonWMS account. Measurements save straight into CarbonWMS.")
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
@@ -67,6 +71,12 @@ fun LoginScreen(onDone: () -> Unit) {
                 } finally { busy = false }
             }
         }
-        Muted("Server: ${app.prefs.origin}")
+        Muted(app.prefs.origin.removePrefix("https://"))
     }
 }
+
+/** The app icon (owner-approved 2026-10-22), for Sign in and the lock screen. */
+@Composable
+fun AppLogo(modifier: Modifier) = androidx.compose.foundation.Image(
+    androidx.compose.ui.res.painterResource(com.shopcarbon.gradingai.R.drawable.app_logo), "CarbonGradingAI", modifier,
+)

@@ -13,7 +13,7 @@ class LabelCheckTest {
         // The Ayla Dress label on the S25: "elestane" against the WMS's "Elastane".
         val r = LabelCheck.compare("S\n90% POLYESTER 10% ELESTANE\n90% POLIÉSTER 10% ELASTANO", sizes, "S", "90% Polyester, 10% Elastane")
         assertNull(r.flag)
-        assertTrue(r.summary, r.summary.contains("Fabric matches the WMS"))
+        assertTrue(r.summary, r.summary.contains("Fabric matches CarbonWMS"))
     }
 
     @Test fun brandAndOtherLanguages() {

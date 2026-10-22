@@ -152,7 +152,7 @@ private fun CheckAccuracy(nav: Nav, f: Flat, readings: MutableList<Double>, onAg
     val img = remember(f) { f.photo.asImageBitmap() }
     val (mw, mh, md) = quadSizes(corners, f.pxPerCm)
     Page("Check accuracy", onBack = { nav.back() }) {
-        Muted("Drag the four corners onto the object's corners (or save now and set them on the WMS). Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away, tilt ${"%.1f".format(f.plane.tiltDeg)}°, depth ${"%.0f".format(f.depthAgeMs)} ms old.")
+        Muted("Drag the four corners onto the object's corners (or save now and set them on CarbonWMS). Squared up at ${"%.2f".format(f.pxPerCm)} px/cm from ${f.depthPoints} depth points, ${(f.plane.axisDistanceM * 100).roundToInt()} cm away, tilt ${"%.1f".format(f.plane.tiltDeg)}°, depth ${"%.0f".format(f.depthAgeMs)} ms old.")
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val scale = with(density) { maxWidth.toPx() } / f.photo.width
             Canvas(
@@ -206,7 +206,7 @@ private fun CheckAccuracy(nav: Nav, f: Flat, readings: MutableList<Double>, onAg
                                 File(ctx.cacheDir, "check.jpg").also { out -> out.outputStream().use { f.photo.compress(Bitmap.CompressFormat.JPEG, 90, it) } }
                             }
                             app.api.saveAccuracyCheck(body, file); saved = true
-                            msg = "Saved to the WMS (Size Grading › Scan review › Accuracy checks) — the corners can be moved there."
+                            msg = "Saved to CarbonWMS (Size Grading › Scan review › Accuracy checks) — the corners can be moved there."
                         }
                         catch (e: Exception) { msg = "Not saved: ${e.message}" }
                         finally { saving = false }

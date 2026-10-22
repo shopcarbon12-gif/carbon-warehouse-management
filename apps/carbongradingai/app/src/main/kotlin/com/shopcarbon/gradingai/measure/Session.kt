@@ -23,7 +23,11 @@ import java.util.TimeZone
 import kotlin.math.abs
 
 /** What is being measured: the product, the size in hand (one SKU stands for every colour), and how. */
-data class MeasureTarget(val lookup: Lookup, val sizeLabel: String, val sku: SizeRow, val profile: Profile, val labelFlag: String? = null)
+data class MeasureTarget(
+    val lookup: Lookup, val sizeLabel: String, val sku: SizeRow, val profile: Profile, val labelFlag: String? = null,
+    /** Re-scan: the saved scan this one replaces (CarbonWMS retires it when this one saves). */
+    val replaces: String? = null,
+)
 
 sealed class AiState {
     data object Idle : AiState()
@@ -78,7 +82,9 @@ class MeasureSession(
     private var aiJob: Job? = null
     private val undo = ArrayDeque<Pair<Map<String, MLine>, Map<String, MLine>?>>()
     var labelFlag by mutableStateOf(target.labelFlag)
-    val canUndo get() = undo.isNotEmpty()
+    /** Snapshot state, so the Undo button turns on the moment a line is moved. */
+    private var undoCount by mutableStateOf(0)
+    val canUndo get() = undoCount > 0
 
     /** The crotch points this type takes from the second photo. */
     val crotchKeys: Set<String> get() = profile.crotchKeys.filter { k -> profile.points.any { it.key == k } }.toSet()
@@ -118,7 +124,7 @@ class MeasureSession(
         // and not the crotch points when the crotch photo gives them.
         val skip = if (crotchPlanned || crotch != null) crotchKeys else emptySet()
         val keys = (profile.aiKeys + scan.unsure).distinct().filter { k -> profile.points.any { it.key == k } && k !in removed && k !in skip }
-        if (cfg?.aiEnabled != true) { ai = AiState.Off("AI assist is off on the WMS — place the seam points by hand."); return }
+        if (cfg?.aiEnabled != true) { ai = AiState.Off("AI assist is off on CarbonWMS — place the seam points by hand."); return }
         if (keys.isEmpty()) { ai = AiState.Off("This garment has no seam points for the AI."); return }
         ai = AiState.Running(System.currentTimeMillis())
         aiJob = app.scope.launch {
@@ -152,6 +158,12 @@ class MeasureSession(
         startCrotchAi(app, part)
     }
 
+    /** A saved scan reopened for editing: its second photo comes back as it was, no AI run. */
+    fun restoreCrotch(second: Scan) {
+        crotch = CrotchPart(second, second.outline.keys)
+        crotchPlanned = false
+    }
+
     /** No crotch photo after all: the crotch points are placed on the main photo. */
     fun skipCrotch(app: App) {
         crotchPlanned = false
@@ -170,7 +182,7 @@ class MeasureSession(
 
     private fun startCrotchAi(app: App, part: CrotchPart) {
         val keys = crotchKeys.filter { it !in removed }
-        if (app.config?.aiEnabled != true) { part.ai = AiState.Off("AI assist is off on the WMS — place the crotch by hand."); return }
+        if (app.config?.aiEnabled != true) { part.ai = AiState.Off("AI assist is off on CarbonWMS — place the crotch by hand."); return }
         if (keys.isEmpty()) { part.ai = AiState.Off("No crotch points to place."); return }
         part.ai = AiState.Running(System.currentTimeMillis())
         part.job = app.scope.launch {
@@ -211,7 +223,7 @@ class MeasureSession(
 
     fun cancelAi() { aiJob?.cancel(); crotch?.job?.cancel() }
 
-    fun beginEdit() { undo.addLast(lines.toMap() to crotch?.lines?.toMap()); if (undo.size > 40) undo.removeFirst() }
+    fun beginEdit() { undo.addLast(lines.toMap() to crotch?.lines?.toMap()); if (undo.size > 40) undo.removeFirst(); undoCount = undo.size }
 
     fun moveEnd(which: Photo, key: String, index: Int, to: Pt) {
         val set = linesOf(which) ?: return
@@ -221,6 +233,7 @@ class MeasureSession(
 
     fun undo() {
         val (main, c) = undo.removeLastOrNull() ?: return
+        undoCount = undo.size
         lines.clear(); lines.putAll(main)
         crotch?.let { part -> if (c != null) { part.lines.clear(); part.lines.putAll(c) } }
     }
@@ -276,6 +289,7 @@ class MeasureSession(
             .put("aiCostUsd", aiCost ?: JSONObject.NULL)
             .put("capturedAt", iso.format(Date(scan.capturedAt)))
             .put("flags", JSONArray(flags(app)))
+            .put("replaces", target.replaces ?: JSONObject.NULL)
             .put("crotch", if (c == null) JSONObject.NULL else JSONObject()
                 .put("pxPerCm", c.scan.pxPerCm)
                 .put("photoW", c.scan.photo.width)

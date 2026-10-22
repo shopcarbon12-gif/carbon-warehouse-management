@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -68,8 +69,17 @@ fun sourceColor(l: MLine?): Color = when {
     l == null -> Palette.muted
     l.moved || l.source == "manual" -> Palette.manual
     l.source == "ai" -> Palette.ai
-    else -> Palette.accent
+    else -> Palette.outline
 }
+
+/** A value against the size guide: green within 1 cm, orange within 2.5 cm, red beyond. */
+fun guideColor(delta: Double): Color = when {
+    abs(delta) <= 1.0 -> Palette.ok
+    abs(delta) <= 2.5 -> Palette.warn
+    else -> Palette.bad
+}
+
+fun signed(d: Double): String = (if (d >= 0) "+" else "−") + Units.cm(abs(d))
 
 /** Result: Size AI's lines on the squared-up photo, every end draggable, then Save. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -119,23 +129,26 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
 
     LaunchedEffect(saveWhenReady, aiBusy) { if (saveWhenReady && !aiBusy && !saving) { saveWhenReady = false; save() } }
 
+    val guide = s.target.lookup.guideFor(s.target.sizeLabel)
     Page(
-        "${s.target.lookup.name} · ${s.target.sizeLabel}",
+        "Check lines",
         onBack = { s.cancelAi(); discardAll(); nav.back() },
+        largeTitle = false,
+        actions = { GlassCircle(androidx.compose.material.icons.Icons.Filled.CameraAlt, "Retake", { s.cancelAi(); discardAll(); nav.replace(Screen.Capture(s.target)) }) },
         bottom = {
-            Row(Modifier.fillMaxWidth().background(Palette.surface).navigationBarsPadding().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Secondary("Undo", Modifier.width(90.dp), enabled = s.canUndo) { s.undo() }
-                Secondary("Retake", Modifier.width(100.dp)) { s.cancelAi(); discardAll(); nav.replace(Screen.Capture(s.target)) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Secondary("Undo", Modifier.width(96.dp), enabled = s.canUndo) { s.undo() }
                 Primary(
-                    when { saving -> "Saving…"; saveWhenReady && aiBusy -> "Waiting for AI… saves itself"; else -> "Save to WMS" },
+                    when { saving -> "Saving…"; saveWhenReady && aiBusy -> "Waiting for AI… saves itself"; else -> "Save to CarbonWMS" },
                     Modifier.weight(1f), enabled = !saving && !saveWhenReady && cm.isNotEmpty(),
                 ) { if (aiBusy) saveWhenReady = true else save() }
             }
         },
     ) {
+        Text("${s.target.lookup.name} · ${s.target.sizeLabel}", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(s.profile.label, style = MaterialTheme.typography.bodyMedium, color = Palette.text, modifier = Modifier.weight(1f))
-            Pill(if (picking) "Close" else "Change type", Palette.accent) { picking = !picking }
+            Pill(if (picking) "Close" else "Change type") { picking = !picking }
         }
         Muted("${s.scan.depth.distanceCm.roundToInt()} cm · ${s.scan.depth.tiltDeg.roundToInt()}° · ${if (s.scan.depth.tof) "depth sensor" else "TEST MODE"}")
         if (picking) Card {
@@ -143,7 +156,7 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
             for ((group, list) in app.config?.groupedProfiles().orEmpty()) {
                 Text(group, style = MaterialTheme.typography.bodySmall, color = Palette.muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (p in list) Pill(p.label, if (p.id == s.profile.id) Palette.accent else Palette.muted, filled = p.id == s.profile.id) { if (p.id != s.profile.id) switchTo(p.id) }
+                    for (p in list) Pill(p.label, filled = p.id == s.profile.id) { if (p.id != s.profile.id) switchTo(p.id) }
                 }
             }
         }
@@ -199,9 +212,9 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
         }
         Legend()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for ((k, label) in listOf("cm" to "CM", "in" to "INCH", "both" to "BOTH")) Pill(label, if (units == k) Palette.accent else Palette.muted, filled = units == k) { units = k; app.prefs.units = k }
+            for ((k, label) in listOf("cm" to "CM", "in" to "INCH", "both" to "BOTH")) Pill(label, filled = units == k) { units = k; app.prefs.units = k }
         }
-        Muted("✕ leaves a measurement out of this save (remembered for this product's other sizes).")
+        Muted("✕ leaves a measurement out of this save (remembered for this product's other sizes)." + if (guide.isNotEmpty()) " The chips compare with the size guide." else "")
         // Points, L/R pairs on one row.
         val shown = mutableSetOf<String>()
         for (p in s.profile.points) {
@@ -214,7 +227,7 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
             val mismatch = !off && vals.size == 2 && vals.all { it != null } && abs(vals[0]!! - vals[1]!!) > limit
             val isSel = pair.any { it.key == selected }
             Row(
-                Modifier.fillMaxWidth().background(if (isSel) Palette.raised else Palette.surface, RoundedCornerShape(10.dp))
+                Modifier.fillMaxWidth().background(if (isSel) Palette.accentSoft else Palette.surface, RoundedCornerShape(14.dp))
                     .clickable { if (off) s.toggleRemoved(app, keys) else selected = pair.first().key }.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -225,10 +238,17 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
                     Text(if (pair.size == 2) p.label.removeSuffix(" L") + " L / R" else p.label, style = MaterialTheme.typography.bodyMedium, color = if (off) Palette.muted else Palette.text)
                     if (off) Text("left out — tap to bring it back", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
                     else {
-                        val tags = pair.mapNotNull { s.lines[it.key] ?: crotch?.lines?.get(it.key) }.map { if (it.moved) "moved" else if (it.source == "ai") "AI" else "" }.filter { it.isNotEmpty() }.distinct()
-                        if (tags.isNotEmpty() || mismatch) Text((tags + if (mismatch) listOf("L/R differ") else emptyList()).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = if (mismatch) Palette.warn else Palette.ai)
+                        val tags = pair.mapNotNull { s.lines[it.key] ?: crotch?.lines?.get(it.key) }.map { if (it.moved) "Edited" else if (it.source == "ai") "AI" else "" }.filter { it.isNotEmpty() }.distinct()
+                        if (tags.isNotEmpty() || mismatch) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            tags.forEach { t -> Badge(t, if (t == "AI") Palette.ai else Palette.manual) }
+                            if (mismatch) Badge("L/R differ", Palette.warn)
+                        }
                     }
                 }
+                // Against the size guide: the pair's average (or the single value) minus the guide's number.
+                val gv = guide[p.pairOf ?: p.key] ?: guide[p.key]
+                val mine = vals.filterNotNull().takeIf { it.isNotEmpty() }?.average()
+                if (!off && gv != null && mine != null) Badge(signed(mine - gv), guideColor(mine - gv))
                 if (!off) Text(
                     vals.joinToString(" / ") { v -> v?.let { Units.show(it, units) } ?: "—" },
                     style = MaterialTheme.typography.titleMedium, color = if (vals.any { it == null }) Palette.muted else Palette.text, fontWeight = FontWeight.SemiBold,
@@ -248,7 +268,7 @@ fun ResultScreen(nav: Nav, s: MeasureSession) {
 
 @Composable
 private fun Legend() = Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-    for ((c, t) in listOf(Palette.accent to "outline", Palette.ai to "AI", Palette.manual to "moved by you")) Row(verticalAlignment = Alignment.CenterVertically) {
+    for ((c, t) in listOf(Palette.outline to "outline", Palette.ai to "AI", Palette.manual to "edited by you")) Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(10.dp).background(c, CircleShape)); Text(" $t", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
     }
 }
@@ -259,16 +279,17 @@ private fun Legend() = Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) 
  * 3×, on the side of the photo away from the finger.
  */
 @Composable
-fun PhotoEditor(s: MeasureSession, which: Photo, selected: String?, units: String, allCm: Map<String, Double>, onSelect: (String?) -> Unit) {
+fun PhotoEditor(s: MeasureSession, which: Photo, selected: String?, units: String, allCm: Map<String, Double>, maxHeightFraction: Float = 0.6f, onSelect: (String?) -> Unit) {
     val photo = if (which == Photo.CROTCH) s.crotch?.scan?.photo ?: return else s.scan.photo
     val bmp = remember(photo) { photo.asImageBitmap() }
     val density = LocalDensity.current
     var drag by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    val selectedNow = androidx.compose.runtime.rememberUpdatedState(selected)
     var finger by remember { mutableStateOf<Pt?>(null) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val wPx = with(density) { maxWidth.toPx() }
         // At most ~60% of the screen tall, so the list below stays reachable on tall garments.
-        val maxH = with(density) { (LocalConfiguration.current.screenHeightDp * 0.6f).dp.toPx() }
+        val maxH = with(density) { (LocalConfiguration.current.screenHeightDp * maxHeightFraction).dp.toPx() }
         val scale = minOf(wPx / bmp.width, maxH / bmp.height)
         val hDp = with(density) { (bmp.height * scale).toDp() }
         val wDp = with(density) { (bmp.width * scale).toDp() }
@@ -296,10 +317,12 @@ fun PhotoEditor(s: MeasureSession, which: Photo, selected: String?, units: Strin
         Canvas(
             Modifier.align(Alignment.TopCenter).width(wDp).height(hDp)
                 .pointerInput(s, which) { detectTapGestures { o -> onSelect(nearestLine(o)) } }
-                .pointerInput(s, selected, which) {
+                // Keyed without `selected`: picking the line while dragging must not restart the gesture
+                // (a restart dropped the finger-up, so the magnifier stayed on screen); it is read live instead.
+                .pointerInput(s, which) {
                     detectDragGestures(
                         onDragStart = { o ->
-                            val h = nearestEnd(o, selected) ?: nearestEnd(o, null)
+                            val h = nearestEnd(o, selectedNow.value) ?: nearestEnd(o, null)
                             if (h != null) { s.beginEdit(); drag = h; onSelect(h.first); finger = toPhoto(o) }
                         },
                         onDrag = { change, _ ->

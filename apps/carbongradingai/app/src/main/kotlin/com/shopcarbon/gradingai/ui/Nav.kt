@@ -9,7 +9,14 @@ import com.shopcarbon.gradingai.model.SaveResult
 sealed class Screen {
     data object Login : Screen()
     data object Home : Screen()
+    data object Catalog : Screen()
+    /** A product from the Catalog: every size and colour with its status. */
+    data class Product(val lookup: Lookup) : Screen()
     data object Queue : Screen()
+    /** Scans the app or CarbonWMS flagged, waiting for a look. */
+    data object ToCheck : Screen()
+    /** A scan already saved: its photo and lines, editable, saved back to CarbonWMS. */
+    data class EditSaved(val scanId: String) : Screen()
     data class Guide(val profileId: String? = null) : Screen()
     data class Item(val lookup: Lookup, val preSize: String? = null) : Screen()
     /** `crotchFor`: the second photo of a pair of bottoms, for that session's crotch points. */
@@ -28,7 +35,7 @@ class Nav(start: Screen) {
     /** The product last opened, for the Studio / SEO tabs. */
     var currentItem: Lookup? = null
 
-    fun go(s: Screen) { if (s is Screen.Item) currentItem = s.lookup; stack.add(s) }
+    fun go(s: Screen) { if (s is Screen.Item) currentItem = s.lookup; if (s is Screen.Product) currentItem = s.lookup; stack.add(s) }
     fun replace(s: Screen) { stack[stack.lastIndex] = s }
     fun back(): Boolean { if (stack.size <= 1) return false; stack.removeAt(stack.lastIndex); return true }
     fun reset(s: Screen) { stack.clear(); stack.add(s) }

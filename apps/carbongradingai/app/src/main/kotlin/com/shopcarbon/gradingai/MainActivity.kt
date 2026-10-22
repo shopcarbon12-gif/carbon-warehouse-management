@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
@@ -26,7 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.shopcarbon.gradingai.auth.Biometric
+import com.shopcarbon.gradingai.ui.AppLogo
 import com.shopcarbon.gradingai.ui.CaptureScreen
+import com.shopcarbon.gradingai.ui.CatalogScreen
+import com.shopcarbon.gradingai.ui.EditSavedScreen
+import com.shopcarbon.gradingai.ui.ProductScreen
+import com.shopcarbon.gradingai.ui.ToCheckScreen
 import com.shopcarbon.gradingai.ui.GradingTheme
 import com.shopcarbon.gradingai.ui.GuideScreen
 import com.shopcarbon.gradingai.ui.HomeScreen
@@ -55,21 +61,42 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Light screens: dark status-bar icons (the camera draws its own dark glass).
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
         // Measuring is hands-busy work: the screen stays on while the app is open.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val app = App.get(this)
+        /* Debug builds only: sign in with a session token handed in by adb, so the
+           screens can be checked on the emulator. Never present in a release APK. */
+        if (BuildConfig.DEBUG) intent.getStringExtra("debugToken")?.let { t ->
+            app.vault.saveLogin(intent.getStringExtra("debugEmail") ?: "debug@local", "debug")
+            app.vault.setToken(t)
+            app.prefs.biometricLock = false
+        }
         locked.value = app.prefs.biometricLock && app.vault.hasLogin()
         setContent {
             GradingTheme {
-                val nav = remember { Nav(if (app.vault.hasLogin()) Screen.Home else Screen.Login).also { this.nav = it } }
+                val nav = remember {
+                    Nav(if (app.vault.hasLogin()) Screen.Home else Screen.Login).also { n ->
+                        this.nav = n
+                        // Debug builds only: open a saved scan straight away (emulator checks).
+                        if (BuildConfig.DEBUG) intent.getStringExtra("debugScan")?.let { n.go(Screen.EditSaved(it)) }
+                    }
+                }
                 if (locked.value) { LockScreen { locked.value = false }; return@GradingTheme }
                 BackHandler(enabled = nav.stack.size > 1) { nav.back() }
                 Box(Modifier.fillMaxSize().background(Palette.ground)) {
                     when (val s = nav.top) {
                         Screen.Login -> LoginScreen { nav.reset(Screen.Home) }
                         Screen.Home -> HomeScreen(nav)
+                        Screen.Catalog -> CatalogScreen(nav)
+                        is Screen.Product -> ProductScreen(nav, s.lookup)
                         Screen.Queue -> QueueScreen(nav)
+                        Screen.ToCheck -> ToCheckScreen(nav)
+                        is Screen.EditSaved -> key(s) { EditSavedScreen(nav, s.scanId) }
                         is Screen.Guide -> GuideScreen(nav, s.profileId)
                         is Screen.Item -> ItemScreen(nav, s.lookup, s.preSize)
                         // Keyed by the screen itself: photo 1 → photo 2 replaces one Capture with another, and without
@@ -113,7 +140,7 @@ class MainActivity : FragmentActivity() {
         lastUpdateCheck = now
         lifecycleScope.launch {
             runCatching { app.config = app.api.config() }
-            val idle = when (nav?.top) { Screen.Home, Screen.Queue, Screen.Settings, is Screen.Guide, Screen.Login, null -> true; else -> false }
+            val idle = when (nav?.top) { Screen.Home, Screen.Catalog, Screen.Queue, Screen.ToCheck, Screen.Settings, is Screen.Guide, is Screen.Product, Screen.Login, null -> true; else -> false }
             if (idle) Updater.run(this@MainActivity, app.config?.app)
         }
     }
@@ -128,6 +155,7 @@ class MainActivity : FragmentActivity() {
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            AppLogo(Modifier.size(96.dp))
             Text("CarbonGradingAI", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
             Muted("Locked — use your fingerprint to open it.")
             err?.let { Muted(it) }

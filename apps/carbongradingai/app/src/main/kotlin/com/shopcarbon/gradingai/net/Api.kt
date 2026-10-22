@@ -4,6 +4,7 @@ import android.webkit.CookieManager
 import com.shopcarbon.gradingai.BuildConfig
 import com.shopcarbon.gradingai.auth.Vault
 import com.shopcarbon.gradingai.model.AppConfig
+import com.shopcarbon.gradingai.model.CatalogRow
 import com.shopcarbon.gradingai.model.Lookup
 import com.shopcarbon.gradingai.model.Queue
 import com.shopcarbon.gradingai.model.SaveResult
@@ -51,7 +52,7 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
             val j = runCatching { JSONObject(text) }.getOrNull()
             if (!res.isSuccessful) throw ApiError(res.code, j?.optString("error")?.takeIf { it.isNotBlank() } ?: "Sign-in failed (${res.code})")
             val token = j?.optString("token").orEmpty()
-            if (token.isBlank()) throw ApiError(res.code, "The WMS did not return a session.")
+            if (token.isBlank()) throw ApiError(res.code, "CarbonWMS did not return a session.")
             vault.saveLogin(email, password)
             vault.setToken(token)
             syncWebCookie(token)
@@ -76,6 +77,20 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     suspend fun lookupCode(code: String): Lookup = Lookup.parse(getJson("/api/grading-app/lookup?code=${enc(code)}"))
     suspend fun lookupMatrix(matrixId: String): Lookup = Lookup.parse(getJson("/api/grading-app/lookup?matrixId=${enc(matrixId)}"))
     suspend fun queue(): Queue = Queue.parse(getJson("/api/grading-app/queue"))
+
+    /** The Catalog tab: name, UPC, custom SKU, vendor or colour. */
+    suspend fun catalog(q: String, filter: String): List<CatalogRow> =
+        CatalogRow.parseList(getJson("/api/grading-app/catalog?q=${enc(q)}&filter=${enc(filter)}&limit=60"))
+
+    /** One saved scan with its lines (to edit it). */
+    suspend fun scan(id: String): JSONObject = getJson("/api/grading-app/scans/${enc(id)}").let { it.optJSONObject("scan") ?: it }
+
+    /** Lines moved on a saved scan: CarbonWMS works the numbers out again and updates the items. */
+    suspend fun adjustScan(id: String, lines: JSONObject, crotchLines: JSONObject?): JSONObject = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("action", "adjust").put("lines", lines).put("crotchLines", crotchLines ?: JSONObject.NULL)
+            .toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/scans/${enc(id)}").patch(body) }
+    }
 
     /** The scan's photo → the product's Carbon Studio, FRONT section. */
     suspend fun sendToStudio(scanId: String): JSONObject = withContext(Dispatchers.IO) {
@@ -158,9 +173,9 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
             val text = it.body?.string().orEmpty()
             val j = runCatching { JSONObject(text) }.getOrNull()
             if (!it.isSuccessful) {
-                throw ApiError(it.code, j?.optString("error")?.takeIf { e -> e.isNotBlank() } ?: "The WMS answered ${it.code}")
+                throw ApiError(it.code, j?.optString("error")?.takeIf { e -> e.isNotBlank() } ?: "CarbonWMS answered ${it.code}")
             }
-            return j ?: throw ApiError(it.code, "The WMS sent something that is not JSON.")
+            return j ?: throw ApiError(it.code, "CarbonWMS sent something that is not JSON.")
         }
     }
 

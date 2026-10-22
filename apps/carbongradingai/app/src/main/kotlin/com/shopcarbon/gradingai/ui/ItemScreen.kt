@@ -6,7 +6,14 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -103,72 +110,98 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
     // The photo of the colour in hand, live from Shopify; the product's main photo otherwise.
     val photo = size?.let { s -> item.skusOfSize(s).firstNotNullOfOrNull { it.image } } ?: item.image
 
-    Page(item.name, onBack = { nav.back() }, bottom = { BottomTabs(null) { onTab(nav, it, app) } }) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            NetImage(photo, Modifier.width(110.dp).aspectRatio(0.8f), crop = true, maxPx = 600)
+    var picking by remember { mutableStateOf(size == null || profile == null || fromCode.size > 1) }
+    var fabricOpen by remember { mutableStateOf(false) }
+    Page(
+        item.name, onBack = { nav.back() }, largeTitle = false,
+        bottom = {
+            Primary("Start measuring", enabled = size != null && profile != null) {
+                val s = size!!
+                val sku = item.skusOfSize(s).firstOrNull { it.customSkuId == item.picked } ?: item.skusOfSize(s).first()
+                nav.go(Screen.Capture(MeasureTarget(item, s, sku, profile!!)))
+            }
+        },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            NetImage(photo, Modifier.width(92.dp).aspectRatio(0.8f), crop = true, maxPx = 600, corner = 16.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(item.name, style = MaterialTheme.typography.titleMedium, color = Palette.text)
-                Muted(listOfNotNull(item.upc?.let { "UPC $it" }, item.vendor, item.subcategory?.lowercase()).joinToString(" · "))
-                item.cutGroup?.let { Pill("Cut: ${it.name} · ${it.products} products", Palette.accent) }
+                Text(item.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
+                Muted(listOfNotNull(size?.let { "Size $it" }, profile?.label, "${item.colours().size} colour${if (item.colours().size == 1) "" else "s"}").joinToString(" · "))
             }
         }
         if (!item.measurable && item.profileId == null) Notice(item.profileWhy, Palette.bad)
+        Steps(listOf("Lay flat", "Photo", "Check"), 0)
 
         /* After a tag scan the size and the type are usually known: show them on
            one line and keep the pickers closed (owner, 2026-10-20). */
-        var picking by remember { mutableStateOf(size == null || profile == null || fromCode.size > 1) }
         if (!picking && size != null && profile != null) {
-            Card {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Size $size · ${profile.label}", style = MaterialTheme.typography.titleMedium, color = Palette.text)
-                        Muted("${item.skusOfSize(size!!).size} SKU(s): ${item.skusOfSize(size!!).mapNotNull { it.color }.distinct().joinToString()}" +
-                            if (profile.crotchKeys.isNotEmpty()) " · 2 photos" else "")
-                    }
-                    Pill("Change", Palette.accent) { picking = true }
-                }
+            Group {
+                ListRow(
+                    "Size $size · ${profile.label}",
+                    subtitle = "${item.skusOfSize(size!!).size} SKU(s): ${item.skusOfSize(size!!).mapNotNull { it.color }.distinct().joinToString()}" + if (profile.crotchKeys.isNotEmpty()) " · 2 photos" else "",
+                    trailing = { Text("Change", style = MaterialTheme.typography.bodyMedium, color = Palette.accent) },
+                    onClick = { picking = true },
+                )
             }
         } else {
-            Label("Size in hand")
-            if (fromCode.size > 1) Muted("This hang tag is shared by several sizes — pick the one in your hand.")
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (l in labels) {
-                    val measured = item.skusOfSize(l).any { it.lastMeasuredAt != null }
-                    Pill(if (measured) "$l ✓" else l, if (l == size) Palette.accent else Palette.muted, filled = l == size) { size = l }
-                }
-            }
-            size?.let { s -> Muted("One reading covers ${item.skusOfSize(s).size} SKU(s): ${item.skusOfSize(s).mapNotNull { it.color }.distinct().joinToString()}") }
-
-            Label("Measure as")
-            for ((group, list) in cfg?.groupedProfiles().orEmpty()) {
-                Text(group, style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+            Card {
+                Label("Size in hand")
+                if (fromCode.size > 1) Muted("This hang tag is shared by several sizes — pick the one in your hand.")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (p in list) Pill(p.label, if (p.id == profileId) Palette.accent else Palette.muted, filled = p.id == profileId) { profileId = p.id }
+                    for (l in labels) {
+                        val measured = item.skusOfSize(l).any { it.lastMeasuredAt != null }
+                        Pill(if (measured) "$l ✓" else l, filled = l == size) { size = l }
+                    }
                 }
+                size?.let { s -> Muted("One reading covers ${item.skusOfSize(s).size} SKU(s): ${item.skusOfSize(s).mapNotNull { it.color }.distinct().joinToString()}") }
+                Label("Measure as")
+                for ((group, list) in cfg?.groupedProfiles().orEmpty()) {
+                    Text(group, style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (p in list) Pill(p.label, filled = p.id == profileId) { profileId = p.id }
+                    }
+                }
+                if (item.profileId != null) Muted("Suggested — ${item.profileWhy}.")
+                if (size != null && profile != null) Secondary("Done") { picking = false }
             }
-            if (item.profileId != null) Muted("Suggested — ${item.profileWhy}.")
-            profile?.let { p -> Muted("${p.points.size} points: ${p.points.joinToString { it.label }}") }
-            if (size != null && profile != null) Secondary("Done") { picking = false }
         }
 
-        Card {
-            Label("Fabric & care")
+        // How to lay it: the guide picture with its lines, and the laying text.
+        profile?.let { p ->
+            Card(padding = 12.dp) {
+                GuidePicture(p)
+                Text(p.lay, style = MaterialTheme.typography.bodyMedium, color = Palette.text)
+                if (p.crotchKeys.isNotEmpty()) Muted("Photo 2: ${p.crotchLay.ifBlank { "lay it as shown for the ${p.secondTitle}." }}")
+                Text("Full guide", style = MaterialTheme.typography.bodyMedium, color = Palette.accent, modifier = Modifier.clickable { nav.go(Screen.Guide(profileId)) })
+            }
+        }
+
+        Group {
+            ListRow(
+                "Fabric & care",
+                trailing = { Badge(if (fabric != null) "On file" else "Missing", if (fabric != null) Palette.ok else Palette.warn) },
+                chevron = true,
+                onClick = { fabricOpen = !fabricOpen },
+            )
+            item.cutGroup?.let { ListRow("Cut group", divider = true, trailing = { Text("${it.name} (${it.products})", style = MaterialTheme.typography.bodyMedium, color = Palette.muted) }) }
+        }
+        if (fabricOpen) Card {
             if (fabric != null) {
-                KeyValue("Fabric (WMS)", fabric!!)
-                care?.let { KeyValue("Care (WMS)", it) }
+                KeyValue("Fabric (CarbonWMS)", fabric!!)
+                care?.let { KeyValue("Care (CarbonWMS)", it) }
             } else {
-                Muted("No fabric in the WMS for this product. Photograph the care label to add it.")
+                Muted("No fabric in CarbonWMS for this product. Photograph the care label to add it.")
                 labelNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Palette.warn) }
-                readFabric?.let { KeyValue("Fabric on label", it, Palette.accent) }
-                readCare?.let { if (care == null) KeyValue("Care on label", it, Palette.accent) }
+                readFabric?.let { KeyValue("Fabric on label", it, Palette.ok) }
+                readCare?.let { if (care == null) KeyValue("Care on label", it, Palette.ok) }
                 if (readFabric != null || (readCare != null && care == null)) {
-                    Primary("Save to WMS") {
+                    Primary("Save to CarbonWMS") {
                         scope.launch {
                             try {
                                 val r = app.api.saveLabel(item.matrixId, readFabric, if (care == null) readCare else null)
                                 fabric = r.optString("fabric").takeIf { it.isNotBlank() && it != "null" }
                                 care = r.optString("care").takeIf { it.isNotBlank() && it != "null" }
-                                labelNote = "Saved to the WMS — it reaches Shopify with the next product-details sync."
+                                labelNote = "Saved to CarbonWMS — it reaches Shopify with the next product-details sync."
                                 readFabric = null; readCare = null
                             } catch (e: Exception) { labelNote = "Could not save: ${e.message}" }
                         }
@@ -177,12 +210,21 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
                 Secondary(if (labelBusy) "Reading…" else "Photograph care label", enabled = !labelBusy) { checkLabel() }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Secondary("How to lay it", Modifier.weight(1f), enabled = profile != null) { nav.go(Screen.Guide(profileId)) }
-            Primary("Measure →", Modifier.weight(1f), enabled = size != null && profile != null) {
-                val s = size!!
-                val sku = item.skusOfSize(s).firstOrNull { it.customSkuId == item.picked } ?: item.skusOfSize(s).first()
-                nav.go(Screen.Capture(MeasureTarget(item, s, sku, profile!!)))
+    }
+}
+
+/** The measuring steps, the current one in blue. */
+@Composable
+fun Steps(names: List<String>, current: Int) {
+    Row(
+        Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        names.forEachIndexed { i, n ->
+            if (i > 0) Box(Modifier.weight(1f).height(1.dp).background(Palette.line))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Dot(if (i <= current) Palette.accent else Palette.line, size = 8.dp)
+                Text(n, style = MaterialTheme.typography.labelMedium, color = if (i == current) Palette.accent else if (i < current) Palette.text else Palette.muted)
             }
         }
     }

@@ -109,9 +109,9 @@ object LabelCheck {
             val wms = fibres(wmsFabric.orEmpty())
             val read = label.entries.joinToString { "${it.value}% ${it.key}" }
             when {
-                wms.isEmpty() -> notes += "Fabric on label: $read (none in the WMS)."
-                wms == label -> notes += "Fabric matches the WMS."
-                else -> { notes += "Fabric on label ($read) differs from the WMS ($wmsFabric)."; flag = flag ?: "care label fabric differs from WMS: $read" }
+                wms.isEmpty() -> notes += "Fabric on label: $read (none in CarbonWMS)."
+                wms == label -> notes += "Fabric matches CarbonWMS."
+                else -> { notes += "Fabric on label ($read) differs from CarbonWMS ($wmsFabric)."; flag = flag ?: "care label fabric differs from WMS: $read" }
             }
         }
         return Result(notes.joinToString(" "), flag, labelSize)

@@ -35,23 +35,22 @@ fun GuideScreen(nav: Nav, profileId: String?) {
     val profiles = app.config?.profiles.orEmpty()
     val p = profiles.firstOrNull { it.id == profileId }
     if (p == null) {
-        Page("Measuring guide", onBack = { nav.back() }, bottom = { BottomTabs(Tab.Guide) { onTab(nav, it, app) } }) {
-            Muted("Standard flat measurements: straight across the garment lying smooth, never doubled. Buttons and zips closed, nothing stretched.")
-            if (profiles.isEmpty()) Notice("The guide comes from the WMS — connect once to load it.")
-            for (x in profiles) Card(Modifier.clickable { nav.go(Screen.Guide(x.id)) }) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    NetImage(x.guide?.image, Modifier.width(72.dp).aspectRatio(1f), maxPx = 300)
-                    androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
-                        Text(x.label, style = MaterialTheme.typography.titleMedium, color = Palette.text)
-                        Muted("${x.points.size} points")
-                    }
+        Page("Guide", tabs = { BottomTabs(Tab.Guide) { onTab(nav, it) } }) {
+            Muted("How to lay each garment. Flat measurements: straight across the garment lying smooth, never doubled; buttons and zips closed, nothing stretched.")
+            if (profiles.isEmpty()) Notice("The guide comes from CarbonWMS — connect once to load it.")
+            for (pair in profiles.chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                for (x in pair) Card(Modifier.weight(1f).clickable { nav.go(Screen.Guide(x.id)) }, padding = 12.dp) {
+                    NetImage(x.guide?.image, Modifier.fillMaxWidth().aspectRatio(1f), maxPx = 400, background = Color.White)
+                    Text(x.label, style = MaterialTheme.typography.titleMedium, color = Palette.text)
+                    Muted("${x.points.size} points")
                 }
+                if (pair.size == 1) Box(Modifier.weight(1f))
             }
         }
         return
     }
-    Page(p.label, onBack = { nav.back() }) {
-        GuidePicture(p)
+    Page(p.label, onBack = { nav.back() }, largeTitle = false) {
+        Card(padding = 10.dp) { GuidePicture(p) }
         Notice("Lay it like this: ${p.lay}", Palette.accent)
         p.points.forEachIndexed { i, pt ->
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

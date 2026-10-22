@@ -22,12 +22,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -219,64 +220,165 @@ fun CaptureScreen(nav: Nav, target: MeasureTarget, crotchFor: MeasureSession? = 
         else -> "Ready — tap the shutter"
     }
 
+    val surfaceOk = checks[0].ok
+    val distOk = checks[1].ok
+    val chips = listOf(
+        Check(dist?.let { "${it.roundToInt()} cm" } ?: "Distance", if (surfaceOk == false) false else distOk, ""),
+        Check("Level", checks[2].ok, ""),
+        Check(if (checks[3].ok == false) "Not all in frame" else "All in frame", checks[3].ok, ""),
+        Check(if (st?.still == false) "Moving" else "Still", st?.still, ""),
+    )
+    val holdMs = (cap?.holdStillMs ?: 800).toFloat()
+    val countdown = if (ready && auto && readySince > 0) ((now - readySince) / holdMs).coerceIn(0f, 1f) else 0f
+    // Re-draw the countdown ring while it runs.
+    var frame by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(ready, auto, readySince) { while (ready && auto && readySince > 0 && !fired) { frame = System.currentTimeMillis(); kotlinx.coroutines.delay(50) } }
+    @Suppress("UNUSED_EXPRESSION") frame
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView({ camera.view }, Modifier.fillMaxSize())
-        // Frame guide: exactly the area the photo holds — keep the garment inside it.
+        // Frame guide: exactly the area the photo holds — keep the garment inside the corner brackets.
         val density = LocalDensity.current
         preview?.let { r ->
             with(density) {
-                Box(
-                    Modifier.offset(r[0].toDp(), r[1].toDp()).size(r[2].toDp(), r[3].toDp())
-                        .border(2.dp, if (ready) Palette.accent else Color.White.copy(alpha = 0.6f), RoundedCornerShape(4.dp)),
-                )
+                CornerBrackets(Modifier.offset(r[0].toDp(), r[1].toDp()).size(r[2].toDp(), r[3].toDp()), if (ready) Palette.ok else Color.White)
             }
         }
         // Readable from a metre away: the whole screen edge turns green when every check passes.
-        if (allGreen && processing == null) Box(Modifier.fillMaxSize().border(14.dp, Palette.accent))
-        Column(Modifier.fillMaxWidth().statusBarsPadding().background(Color.Black.copy(alpha = 0.55f)).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { crotchFor?.cancelAi(); nav.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White) }
-                Column(Modifier.weight(1f)) {
-                    Text("${target.lookup.name} · ${target.sizeLabel}", style = MaterialTheme.typography.titleMedium, color = Color.White)
+        if (allGreen && processing == null) Box(Modifier.fillMaxSize().border(12.dp, Palette.ok))
+        Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GlassCircle(Icons.Filled.Close, "Close", { crotchFor?.cancelAi(); nav.back() }, dark = true)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(
-                        (if (crotchFor != null) "Photo 2 of 2 · ${target.profile.secondTitle}" else if (target.profile.crotchKeys.isNotEmpty()) "Photo 1 of 2 · ${target.profile.label}" else target.profile.label) + if (testPhone) " · TEST MODE" else "",
-                        style = MaterialTheme.typography.bodySmall, color = if (testPhone) Palette.warn else if (crotchFor != null) Palette.accent else Palette.muted,
+                        "${target.lookup.name} · ${target.sizeLabel}", style = MaterialTheme.typography.titleMedium, color = Color.White, maxLines = 1,
+                        modifier = Modifier.background(Palette.glassDark, RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 9.dp),
                     )
                 }
-                Text("Auto", style = MaterialTheme.typography.bodySmall, color = Color.White)
-                Switch(auto, { auto = it; app.prefs.autoCapture = it })
+                Text(
+                    if (auto) "Auto" else "Manual", style = MaterialTheme.typography.labelMedium, color = if (auto) Color.White else Palette.warn,
+                    modifier = Modifier.background(Palette.glassDark, RoundedCornerShape(50)).clickable { auto = !auto; app.prefs.autoCapture = auto }.padding(horizontal = 14.dp, vertical = 9.dp),
+                )
             }
+            val two = crotchFor != null || target.profile.crotchKeys.isNotEmpty()
+            Text(
+                (if (crotchFor != null) "Photo 2 of 2 · ${target.profile.secondTitle}" else if (two) "Photo 1 of 2" else target.profile.label) + if (testPhone) " · TEST MODE" else "",
+                style = MaterialTheme.typography.labelMedium, color = Color.White,
+                modifier = Modifier.background(if (testPhone) Palette.warn else if (crotchFor != null) Palette.accent else Palette.glassDark, RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 5.dp),
+            )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (c in checks) {
-                    val col = when (c.ok) { true -> Palette.accent; false -> Palette.warn; null -> Palette.muted }
-                    Column(Modifier.weight(1f).background(col.copy(alpha = 0.18f), RoundedCornerShape(8.dp)).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(c.label + if (c.ok == true) " ✓" else "", style = MaterialTheme.typography.labelSmall, color = col)
-                        Text(c.value, style = MaterialTheme.typography.labelMedium, color = Color.White)
+                for (c in chips) {
+                    val col = when (c.ok) { true -> Palette.ok; false -> Palette.warn; null -> Color.White.copy(alpha = 0.5f) }
+                    Row(
+                        Modifier.weight(1f).background(Palette.glassDark, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+                    ) {
+                        Box(Modifier.size(8.dp).background(col, CircleShape))
+                        Text(" ${c.label}", style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
                     }
                 }
             }
-            if (crotchFor != null) Text(target.profile.crotchLay.ifBlank { "Second photo: lay it as shown for the ${target.profile.secondTitle}." }, style = MaterialTheme.typography.bodyMedium, color = Palette.accent)
-            else Text(target.profile.lay, style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+            Text(
+                if (crotchFor != null) target.profile.crotchLay.ifBlank { "Lay it as shown for the ${target.profile.secondTitle}." } else target.profile.lay,
+                style = MaterialTheme.typography.bodySmall, color = Color.White, textAlign = TextAlign.Center,
+                modifier = Modifier.background(Palette.glassDark, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+            )
         }
         Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = 0.55f)).navigationBarsPadding().padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            problem?.let { Text(it, color = Palette.bad, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center) }
-            Text(hint, color = if (ready) Palette.accent else Color.White, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-            if (processing != null) CircularProgressIndicator(color = Palette.accent)
-            else Box(
-                Modifier.size(74.dp).border(4.dp, Color.White, CircleShape).padding(7.dp)
-                    .background(if (allGreen) Palette.accent else Color.White.copy(alpha = 0.35f), CircleShape)
-                    .then(Modifier.clickableNoRipple(enabled = st?.tracking == true) { problem = null; fired = true; camera.requestCapture() }),
-            )
-            if (ready && auto && readySince > 0) Text("${((cap?.holdStillMs ?: 800) - (now - readySince)).coerceAtLeast(0) / 100 / 10.0} s", color = Palette.muted, style = MaterialTheme.typography.bodySmall)
-            // The crotch photo can be skipped: the crotch is then placed on the first photo.
-            if (crotchFor != null && processing == null && crotchFor.crotch == null) Text(
-                "Skip — measure it all on the first photo",
-                color = Palette.muted, style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.clickable { crotchFor.skipCrotch(app); nav.replace(Screen.Result(crotchFor)) }.padding(6.dp),
-            )
+            problem?.let {
+                Text(it, color = Color.White, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
+                    modifier = Modifier.background(Palette.bad.copy(alpha = 0.85f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 8.dp))
+            }
+            if (processing != null) ProcessingCard(processing!!)
+            else {
+                val arrow = when {
+                    hint.startsWith("Move the phone up") || hint.contains("cut off") -> Icons.Filled.ArrowUpward
+                    hint.startsWith("Move the phone down") -> Icons.Filled.ArrowDownward
+                    else -> null
+                }
+                Row(
+                    Modifier.background(if (ready) Palette.ok.copy(alpha = 0.9f) else Palette.glassDark, RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    arrow?.let { Icon(it, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
+                    Text(hint, color = Color.White, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                }
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Shutter(enabled = st?.tracking == true, green = allGreen, countdown = countdown, label = if (auto) "Auto" else "Tap") { problem = null; fired = true; camera.requestCapture() }
+                    // The second photo can be skipped: its points are then placed on the first photo.
+                    if (crotchFor != null && crotchFor.crotch == null) Text(
+                        "Skip", color = Color.White, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.align(Alignment.CenterEnd).background(Palette.glassDark, RoundedCornerShape(50))
+                            .clickable { crotchFor.skipCrotch(app); nav.replace(Screen.Result(crotchFor)) }.padding(horizontal = 18.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Four rounded corner brackets marking exactly what the photo will hold. */
+@Composable
+private fun CornerBrackets(modifier: Modifier, color: Color) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val l = minOf(size.width, size.height) * 0.12f
+        val w = 5.dp.toPx()
+        val c = androidx.compose.ui.graphics.StrokeCap.Round
+        fun seg(x1: Float, y1: Float, x2: Float, y2: Float) = drawLine(color, androidx.compose.ui.geometry.Offset(x1, y1), androidx.compose.ui.geometry.Offset(x2, y2), w, c)
+        val r = size.width; val b = size.height
+        seg(0f, 0f, l, 0f); seg(0f, 0f, 0f, l)
+        seg(r, 0f, r - l, 0f); seg(r, 0f, r, l)
+        seg(0f, b, l, b); seg(0f, b, 0f, b - l)
+        seg(r, b, r - l, b); seg(r, b, r, b - l)
+    }
+}
+
+/** The iPhone-camera-style shutter: white disc, a blue ring filling up while it holds still. */
+@Composable
+private fun Shutter(enabled: Boolean, green: Boolean, countdown: Float, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.size(84.dp).clickableNoRipple(enabled, onClick), contentAlignment = Alignment.Center) {
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+                val w = 5.dp.toPx()
+                drawCircle(Color.White.copy(alpha = 0.9f), radius = size.minDimension / 2 - w / 2, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+                if (countdown > 0f) drawArc(
+                    Palette.accent, -90f, 360f * countdown, false,
+                    topLeft = androidx.compose.ui.geometry.Offset(w / 2, w / 2), size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(w, cap = androidx.compose.ui.graphics.StrokeCap.Round),
+                )
+                drawCircle(if (green) Color.White else Color.White.copy(alpha = 0.55f), radius = size.minDimension / 2 - w * 2.4f)
+            }
+        }
+        Text(label, color = if (green) Palette.accent else Color.White, style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.background(Palette.glassDark, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 2.dp))
+    }
+}
+
+/** After the shutter: the steps the phone works through, ticked off. */
+@Composable
+private fun ProcessingCard(now: String) {
+    val steps = listOf("Squaring up the photo", "Finding the garment", "Placing the points")
+    val at = when {
+        now.startsWith("Squaring") -> 0
+        now.startsWith("Finding") -> 1
+        else -> 2
+    }
+    Column(
+        Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.95f), RoundedCornerShape(20.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        steps.forEachIndexed { i, t ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    i < at -> Icon(Icons.Filled.CheckCircle, null, tint = Palette.ok, modifier = Modifier.size(22.dp))
+                    i == at -> CircularProgressIndicator(Modifier.size(20.dp), color = Palette.accent, strokeWidth = 2.5.dp)
+                    else -> Box(Modifier.size(22.dp))
+                }
+                Text(t, style = MaterialTheme.typography.bodyLarge, color = if (i <= at) Palette.text else Palette.muted)
+            }
         }
     }
 }
