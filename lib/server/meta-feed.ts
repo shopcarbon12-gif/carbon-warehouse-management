@@ -155,6 +155,10 @@ let lastTick = 0;
  * the feed (the web app holds the OpenAI key, as with the Studio night batch).
  */
 export async function maybeRunMetaFeed(pool: Pool): Promise<void> {
+  /* Off since 2026-10-22: the owner rejected the cropped close-ups and the Meta
+     feed was removed (every item restored to Shopify's picture). Set
+     META_CLOSEUP_FEED=1 on the worker to build it again. */
+  if (process.env.META_CLOSEUP_FEED !== "1") return;
   const now = Date.now();
   if (now - lastTick < 10 * 60_000) return;
   lastTick = now;
