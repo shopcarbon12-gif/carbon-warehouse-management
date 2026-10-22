@@ -69,7 +69,9 @@ export function BarcodeScanButton({
 
   useEffect(() => {
     const w = window as BridgeWindow;
-    if (typeof w.CarbonWMSPC?.scanBarcode === "function") return setMode("native");
+    /* CarbonWMSPCNative is the apps' raw bridge, there from the first script; the
+       promise wrapper (CarbonWMSPC) may land a moment later in CarbonGradingAI. */
+    if (typeof w.CarbonWMSPC?.scanBarcode === "function" || (w as { CarbonWMSPCNative?: unknown }).CarbonWMSPCNative) return setMode("native");
     const hasCamera = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
     if (hasCamera && typeof w.BarcodeDetector === "function") return setMode("web");
     setMode("none");
