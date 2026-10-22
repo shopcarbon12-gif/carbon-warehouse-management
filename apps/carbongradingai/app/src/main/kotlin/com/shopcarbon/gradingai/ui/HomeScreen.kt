@@ -139,8 +139,6 @@ fun HomeScreen(nav: Nav) {
                 }
             }
         }
-        Primary(busy ?: "Scan tag", enabled = busy == null) { scan() }
-        err?.let { if (queue != null) Notice(it, Palette.bad) }
         queue?.let { q ->
             if (q.entries.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -153,6 +151,11 @@ fun HomeScreen(nav: Nav) {
                     items(cards, key = { it.matrixId + it.size }) { e -> NextCard(e) { openEntry(nav, app, scope, e.matrixId, e.size) { m -> err = m } } }
                 }
             }
+        }
+        // Scan tag sits under Measure next (owner, 2026-10-22).
+        Primary(busy ?: "Scan tag", enabled = busy == null) { scan() }
+        err?.let { if (queue != null) Notice(it, Palette.bad) }
+        queue?.let { q ->
             Group {
                 ListRow(
                     "Scans to check",
