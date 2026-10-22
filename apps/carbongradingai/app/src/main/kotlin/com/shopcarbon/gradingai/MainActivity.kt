@@ -31,6 +31,8 @@ import com.shopcarbon.gradingai.ui.AppLogo
 import com.shopcarbon.gradingai.ui.BulkStudioScreen
 import com.shopcarbon.gradingai.ui.CaptureScreen
 import com.shopcarbon.gradingai.ui.CatalogScreen
+import com.shopcarbon.gradingai.ui.CompareDoneScreen
+import com.shopcarbon.gradingai.ui.CompareScreen
 import com.shopcarbon.gradingai.ui.EditSavedScreen
 import com.shopcarbon.gradingai.ui.ProductScreen
 import com.shopcarbon.gradingai.ui.ToCheckScreen
@@ -85,6 +87,10 @@ class MainActivity : FragmentActivity() {
                         this.nav = n
                         // Debug builds only: open a saved scan straight away (emulator checks).
                         if (BuildConfig.DEBUG) intent.getStringExtra("debugScan")?.let { n.go(Screen.EditSaved(it)) }
+                        // Debug builds only: open Compare for "<matrixId>:<size>" (emulator checks).
+                        if (BuildConfig.DEBUG) intent.getStringExtra("debugCompare")?.split(":")?.takeIf { it.size == 2 }?.let { (m, z) ->
+                            lifecycleScope.launch { runCatching { n.go(Screen.Compare(app.api.lookupMatrix(m), z)) } }
+                        }
                     }
                 }
                 if (locked.value) { LockScreen { locked.value = false }; return@GradingTheme }
@@ -99,6 +105,8 @@ class MainActivity : FragmentActivity() {
                         Screen.Queue -> QueueScreen(nav)
                         Screen.ToCheck -> ToCheckScreen(nav)
                         is Screen.EditSaved -> key(s) { EditSavedScreen(nav, s.scanId) }
+                        is Screen.Compare -> key(s) { CompareScreen(nav, s.lookup, s.size) }
+                        is Screen.CompareDone -> CompareDoneScreen(nav, s.mine, s.fromName, s.result)
                         is Screen.Guide -> GuideScreen(nav, s.profileId)
                         is Screen.Item -> ItemScreen(nav, s.lookup, s.preSize)
                         // Keyed by the screen itself: photo 1 → photo 2 replaces one Capture with another, and without

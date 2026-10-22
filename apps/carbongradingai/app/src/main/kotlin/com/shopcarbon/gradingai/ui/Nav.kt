@@ -18,6 +18,10 @@ sealed class Screen {
     data object Queue : Screen()
     /** Scans the app or CarbonWMS flagged, waiting for a look. */
     data object ToCheck : Screen()
+    /** Compare the garment in hand (this product, this size) with another product, and copy its grading. */
+    data class Compare(val lookup: Lookup, val size: String) : Screen()
+    /** After a Compare copy: what was written, Undo, and where to go next. */
+    data class CompareDone(val mine: Lookup, val fromName: String, val result: org.json.JSONObject) : Screen()
     /** A scan already saved: its photo and lines, editable, saved back to CarbonWMS. */
     data class EditSaved(val scanId: String) : Screen()
     data class Guide(val profileId: String? = null) : Screen()

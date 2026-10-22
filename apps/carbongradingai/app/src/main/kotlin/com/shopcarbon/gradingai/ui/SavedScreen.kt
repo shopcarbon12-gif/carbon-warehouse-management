@@ -13,7 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -121,13 +121,14 @@ fun SavedScreen(nav: Nav, s: MeasureSession, r: SaveResult?, offline: Boolean) {
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Tile(Icons.Filled.QrCodeScanner, "Scan new tag", Modifier.weight(1f)) { scan() }
-            Tile(Icons.Filled.Edit, "Edit points", Modifier.weight(1f), enabled = r != null) { r?.let { nav.go(Screen.EditSaved(it.scanId)) } }
+            // Compare this garment with another product, and copy its grading (owner, 2026-10-22).
+            Tile(Icons.AutoMirrored.Filled.CompareArrows, "Compare", Modifier.weight(1f)) { nav.go(Screen.Compare(item, s.target.sizeLabel)) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Tile(Icons.Filled.Edit, "Edit points", Modifier.weight(1f), enabled = r != null) { r?.let { nav.go(Screen.EditSaved(it.scanId)) } }
             Tile(Icons.Filled.CameraAlt, "Re-scan $size", Modifier.weight(1f)) {
                 nav.replace(Screen.Capture(s.target.copy(replaces = r?.scanId)))
             }
-            Tile(Icons.Filled.Home, "Home", Modifier.weight(1f)) { nav.home() }
         }
         if (r != null && r.flags.isNotEmpty()) Group(header = "Flags") {
             r.flags.forEachIndexed { i, f -> ListRow(f, divider = i > 0) }

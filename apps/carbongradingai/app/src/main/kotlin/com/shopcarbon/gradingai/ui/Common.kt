@@ -288,7 +288,7 @@ fun Primary(text: String, modifier: Modifier = Modifier.fillMaxWidth(), enabled:
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.labelLarge)
-            caption?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f)) }
+            caption?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 

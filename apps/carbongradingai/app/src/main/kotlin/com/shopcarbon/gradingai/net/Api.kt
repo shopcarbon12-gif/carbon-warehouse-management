@@ -82,6 +82,19 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     suspend fun catalog(q: String, filter: String): List<CatalogRow> =
         CatalogRow.parseList(getJson("/api/grading-app/catalog?q=${enc(q)}&filter=${enc(filter)}&limit=60"))
 
+    /** Compare: copy another product's grading onto every size of this one (the compared size as edited). */
+    suspend fun copyGrading(fromMatrixId: String, toMatrixId: String, overrides: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("fromMatrixId", fromMatrixId).put("toMatrixId", toMatrixId).put("overrides", overrides)
+            .toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/copy").post(body) }
+    }
+
+    /** Undo a Compare copy. */
+    suspend fun undoCopy(rowIds: org.json.JSONArray): JSONObject = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("rowIds", rowIds).toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/grading-app/copy").delete(body) }
+    }
+
     /** One saved scan with its lines (to edit it). */
     suspend fun scan(id: String): JSONObject = getJson("/api/grading-app/scans/${enc(id)}").let { it.optJSONObject("scan") ?: it }
 
