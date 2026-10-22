@@ -1548,14 +1548,27 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
         ? `  • ${half} half (${poseLabel}, seen from BEHIND): "the wearer's left" = the LEFT-hand side of that half; "the wearer's right" = the RIGHT-hand side.`
         : `  • ${half} half (${poseLabel}, facing the camera): "the wearer's left" = the RIGHT-hand side of that half; "the wearer's right" = the LEFT-hand side.`;
     };
-    /* One concrete detail from the spec, named, so the mapping is not abstract. */
+    /* One concrete detail from the spec, named, so the mapping is not abstract.
+       `face` is the side of the garment its line puts it on: a front-only detail
+       (Los Angeles Shirt's hem stars, 2026-10-22) was being placed in the
+       back-facing half too, because this line gave it a side in every frame. */
     const firstSidedDetail = (() => {
       for (const line of itemSpecText.split("\n")) {
-        const m = /^\s*\d+\.\s*[A-Z/ ]+:\s*([^,.]+)[^]*?the wearer's (left|right)/.exec(line);
-        if (m) return { what: m[1].trim().toLowerCase(), side: m[2].toLowerCase() as "left" | "right" };
+        const m = /^\s*\d+\.\s*[A-Z/ —-]+(?:\([^)]*\))?:\s*([^,.]+)[^]*?the wearer's ([Ll]eft|LEFT|[Rr]ight|RIGHT)/.exec(line);
+        if (!m) continue;
+        const front = /\bfront\b/i.test(line), back = /\bback\b(?!\s+(?:view|pose))/i.test(line.replace(/\b(?:no|not|never)\b[^.;]*\bback\b/gi, ""));
+        const face: "front" | "back" | null = front && !back ? "front" : back && !front ? "back" : null;
+        return { what: m[1].trim().toLowerCase(), side: m[2].toLowerCase() as "left" | "right", face };
       }
       return null;
     })();
+    const sidedDetailInHalf = (pose: number | null, half: "LEFT" | "RIGHT"): string => {
+      const d = firstSidedDetail!;
+      const backFacing = isBackFacingPose(normalizedPanelQa.modelGender, pose);
+      if (d.face === "front" && backFacing) return `does NOT appear in the ${half} half at all (that frame is seen from behind and it is a front detail)`;
+      if (d.face === "back" && !backFacing) return `does NOT appear in the ${half} half at all (that frame faces the camera and it is a back detail)`;
+      return `goes on the ${backFacing === (d.side === "left") ? "LEFT" : "RIGHT"}-hand side of the ${half} half`;
+    };
     const wearerSideFrameLines = !accessoryMode && /the wearer's (left|right)/i.test(itemSpecText)
       ? [
           "- WHICH SIDE OF THE PICTURE TO DRAW ON. Every \"the wearer's left\" and \"the wearer's right\" above has already been converted for you, per frame, below. Use these lines literally and do not work it out again. In particular do NOT read the word \"left\" as the left of the picture — read the mapping:",
@@ -1563,17 +1576,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           frameSideLine(normalizedPanelQa.poseB ?? null, "RIGHT"),
           ...(firstSidedDetail
             ? [
-                `  So the ${firstSidedDetail.what} (spec says the wearer's ${firstSidedDetail.side}) goes on the ${
-                  isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseA ?? null) ===
-                  (firstSidedDetail.side === "left")
-                    ? "LEFT"
-                    : "RIGHT"
-                }-hand side of the LEFT half, and on the ${
-                  isBackFacingPose(normalizedPanelQa.modelGender, normalizedPanelQa.poseB ?? null) ===
-                  (firstSidedDetail.side === "left")
-                    ? "LEFT"
-                    : "RIGHT"
-                }-hand side of the RIGHT half.`,
+                `  So the ${firstSidedDetail.what} (spec says the wearer's ${firstSidedDetail.side}${
+                  firstSidedDetail.face ? `, on the ${firstSidedDetail.face.toUpperCase()} of the garment` : ""
+                }) ${sidedDetailInHalf(normalizedPanelQa.poseA ?? null, "LEFT")}, and ${sidedDetailInHalf(normalizedPanelQa.poseB ?? null, "RIGHT").replace(/^goes on/, "on")}.`,
               ]
             : []),
           "  It is the same hip, shoulder or leg of the same body in every frame of this run — it changes side of the picture only because the model has turned around. Never mirror it for any other reason.",
