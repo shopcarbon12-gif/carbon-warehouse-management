@@ -16,6 +16,7 @@ import { runShopifyGraphql } from "@/lib/shopify";
 import { resolveShopContext } from "@/lib/server/shopify-write";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { classifyPhotoViews, photoKey, type PhotoView } from "@/lib/server/photo-views";
+import { signSession } from "@/lib/auth";
 
 const REBUILD_MS = 6 * 60 * 60_000;
 /** Photos looked at per colour when hunting for its close-up. */
@@ -92,7 +93,8 @@ export async function buildMetaFeed(pool: Pool): Promise<{ products: number; var
   }
   const todo = wanted.filter((u) => !known.has(photoKey(u)));
   const apiKey = (getOpenAiApiKey() || "").trim();
-  if (todo.length && apiKey) {
+  if (todo.length && !apiKey) throw new Error("Missing OPENAI_API_KEY");
+  if (todo.length) {
     const fresh = await classifyPhotoViews(new OpenAI({ apiKey }), todo);
     for (const [k, v] of fresh) {
       known.set(k, v);
@@ -136,21 +138,61 @@ export async function buildMetaFeed(pool: Pool): Promise<{ products: number; var
 
 let lastTick = 0;
 
-/** Called on every worker loop; rebuilds the feed every 6 hours. */
+/**
+ * Called on every worker loop. Every 6 hours it asks the web app to rebuild
+ * the feed (the web app holds the OpenAI key, as with the Studio night batch).
+ */
 export async function maybeRunMetaFeed(pool: Pool): Promise<void> {
   const now = Date.now();
   if (now - lastTick < 10 * 60_000) return;
   lastTick = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
   try {
-    const s = await pool.query<{ built_at: Date | null }>(`SELECT built_at FROM meta_feed_state WHERE id = 1`);
+    const s = await pool.query<{ built_at: Date | null; views: number }>(
+      `SELECT built_at, (SELECT count(*) FROM meta_feed_views)::int AS views FROM meta_feed_state WHERE id = 1`,
+    );
     const built = s.rows[0]?.built_at;
-    if (built && now - new Date(built).getTime() < REBUILD_MS) return;
-    const r = await buildMetaFeed(pool);
-    console.log(`[worker] meta feed: ${r.rows} close-ups for ${r.variants} variants (${r.products} products)`);
+    // A build that classified nothing (no OpenAI key there) is not a real build.
+    if (built && s.rows[0].views > 0 && now - new Date(built).getTime() < REBUILD_MS) return;
+    const admin = await pool.query<{ sub: string; email: string; tid: string; role: string; lid: string }>(
+      `SELECT u.id::text AS sub, u.email, m.tenant_id::text AS tid, m.role,
+              (SELECT l.id::text FROM locations l WHERE l.tenant_id = m.tenant_id ORDER BY l.created_at LIMIT 1) AS lid
+         FROM memberships m JOIN users u ON u.id = m.user_id
+        WHERE m.role = 'admin' ORDER BY u.created_at LIMIT 1`,
+    );
+    const a = admin.rows[0];
+    if (!a?.lid) return;
+    const token = await signSession({ sub: a.sub, email: a.email, tid: a.tid, lid: a.lid, role: a.role });
+    const res = await fetch(`${base}/api/storefront/meta-feed/rebuild`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status !== 202 && res.status !== 409) {
+      console.error(`[worker] meta feed rebuild → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
   } catch (e) {
-    console.error("[worker] meta feed build failed", e);
-    await pool
-      .query(`UPDATE meta_feed_state SET error = $1 WHERE id = 1`, [String((e as Error)?.message || e).slice(0, 500)])
-      .catch(() => {});
+    console.error("[worker] meta feed tick failed", e);
   }
+}
+
+let building = false;
+
+/** Web app side: one build at a time, in the background. */
+export function startMetaFeedBuild(pool: Pool): boolean {
+  if (building) return false;
+  building = true;
+  void buildMetaFeed(pool)
+    .then((r) => console.log(`[meta feed] ${r.rows} close-ups for ${r.variants} variants (${r.products} products)`))
+    .catch(async (e) => {
+      console.error("[meta feed] build failed", e);
+      await pool
+        .query(`UPDATE meta_feed_state SET error = $1 WHERE id = 1`, [String((e as Error)?.message || e).slice(0, 500)])
+        .catch(() => {});
+    })
+    .finally(() => {
+      building = false;
+    });
+  return true;
 }
