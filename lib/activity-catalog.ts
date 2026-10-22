@@ -69,6 +69,7 @@ const ROUTES: Record<string, Entry> = {
   },
   "grading-app/releases": { module: "Settings", label: "Uploaded a CarbonGradingAI release" },
   "grading-app/label": { module: "Catalog", label: "CarbonGradingAI: fabric from care label" },
+  "grading-app/copy": { module: "Catalog", label: "CarbonGradingAI: copied another product's measurements (Compare)" },
   "grading-app/scans/[id]/studio": { module: "Studio", label: "CarbonGradingAI: scan photo sent to Studio (front)" },
   "collection-mapping": { module: "Shopify", label: "Changed collection mapping" },
 

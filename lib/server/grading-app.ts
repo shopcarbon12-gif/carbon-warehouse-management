@@ -108,6 +108,16 @@ async function originsOf(pool: Pool, matrixId: string, sizes: SizeRow[]): Promis
   const out: Record<string, SizeOrigin> = {};
   for (const row of r.rows) {
     let scanId = row.scan_id;
+    if (!scanId && row.source === "copied") {
+      const m = /^Copied from (.+?) · (\S+)/.exec(row.note ?? "");
+      const src = m ? (await pool.query<{ id: string }>(`SELECT id FROM matrices WHERE lower(description) = lower($1) ORDER BY (shopify_product_id IS NOT NULL) DESC LIMIT 1`, [m[1]])).rows[0]?.id : null;
+      if (src) {
+        scanId = (await pool.query<{ id: string }>(
+          `SELECT id FROM size_grading_scans WHERE matrix_id = $1::uuid AND upper(trim(size)) = $2 AND status <> 'redo' ORDER BY created_at DESC LIMIT 1`,
+          [src, m![2].toUpperCase()],
+        )).rows[0]?.id ?? null;
+      }
+    }
     if (!scanId && row.source === "graded") {
       // "Game T-Shirt graded chart, applied to …" → that product; "Graded evenly from the … scans" → this one.
       const from = /^(.+?) graded chart/i.exec(row.note ?? "")?.[1]?.trim();
@@ -958,6 +968,79 @@ export async function searchCatalog(pool: Pool, q: string, filter: CatalogFilter
     sizes: [...x.sizes].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)),
   }));
   return (filter === "unmeasured" ? rows.filter((x) => x.sizes.some((z) => !z.measured)) : rows).slice(0, Math.max(1, Math.min(100, limit)));
+}
+
+/* ───────────────────────────── compare & copy ───────────────────────────── */
+
+/**
+ * Compare on the phone (owner, 2026-10-22): the garment in hand against another
+ * product, then "Save" copies the other product's whole grading onto every size
+ * of this one — each size from the other product's same size, the compared size
+ * from the numbers as edited on the screen. Rows are added (source "copied"),
+ * never overwritten, so Undo deletes exactly the rows this copy wrote and every
+ * size shows what it had before.
+ */
+export async function copyGrading(
+  pool: Pool,
+  userId: string | null,
+  opts: { fromMatrixId: string; toMatrixId: string; overrides: Record<string, Record<string, number>> },
+): Promise<{ rowIds: string[]; applied: { size: string; fromSize: string; skus: number; edited: boolean }[]; skipped: string[] }> {
+  const from = (await pool.query<{ description: string | null }>(`SELECT description FROM matrices WHERE id = $1::uuid`, [opts.fromMatrixId])).rows[0];
+  if (!from) throw new Error("The product to copy from is not in CarbonWMS.");
+  // The source's newest reading per size label.
+  const src = await pool.query<{ size: string; points_cm: Record<string, number>; garment_type: string }>(
+    `SELECT DISTINCT ON (upper(trim(cs.size))) upper(trim(cs.size)) AS size, g.points_cm, g.garment_type
+       FROM size_grading_measurements g JOIN custom_skus cs ON cs.id = g.custom_sku_id
+      WHERE cs.matrix_id = $1::uuid
+      ORDER BY upper(trim(cs.size)), g.measured_at DESC`,
+    [opts.fromMatrixId],
+  );
+  const bySize = new Map(src.rows.map((r) => [r.size, r]));
+  const fallbackType = src.rows[0]?.garment_type ?? "top";
+  const target = await pool.query<{ size: string; ids: string[] }>(
+    `SELECT upper(trim(size)) AS size, array_agg(id) AS ids FROM custom_skus
+      WHERE matrix_id = $1::uuid AND archived = false AND size IS NOT NULL AND trim(size) <> ''
+      GROUP BY 1`,
+    [opts.toMatrixId],
+  );
+  const rowIds: string[] = [];
+  const applied: { size: string; fromSize: string; skus: number; edited: boolean }[] = [];
+  const skipped: string[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const t of target.rows) {
+      const override = opts.overrides[t.size];
+      const row = bySize.get(t.size);
+      const points = override ?? row?.points_cm;
+      if (!points || !Object.keys(points).length) { skipped.push(t.size); continue; }
+      const clean: Record<string, number> = {};
+      for (const [k, v] of Object.entries(points)) if (typeof v === "number" && Number.isFinite(v) && v > 0 && v < 400) clean[k] = Math.round(v * 10) / 10;
+      const r = await client.query<{ id: string }>(
+        `INSERT INTO size_grading_measurements (custom_sku_id, garment_type, points_cm, px_per_cm, type_overridden, measured_by, note, view, source)
+         SELECT unnest($1::uuid[]), $2, $3::jsonb, NULL, false, $4, $5, 'front', 'copied'
+         RETURNING id`,
+        [t.ids, row?.garment_type ?? fallbackType, JSON.stringify(clean), userId, `Copied from ${from.description ?? "another product"} · ${t.size}${override ? " (edited on the phone)" : ""}`],
+      );
+      rowIds.push(...r.rows.map((x) => x.id));
+      applied.push({ size: t.size, fromSize: t.size, skus: r.rowCount ?? 0, edited: Boolean(override) });
+    }
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+  return { rowIds, applied, skipped };
+}
+
+/** Undo a copy: deletes only rows a copy wrote (source "copied"), by their ids. */
+export async function undoCopy(pool: Pool, rowIds: string[]): Promise<number> {
+  const ids = rowIds.filter((x) => UUID_RE.test(x));
+  if (!ids.length) return 0;
+  const r = await pool.query(`DELETE FROM size_grading_measurements WHERE id = ANY($1::uuid[]) AND source = 'copied'`, [ids]);
+  return r.rowCount ?? 0;
 }
 
 /* ───────────────────────────── cut groups ───────────────────────────── */
