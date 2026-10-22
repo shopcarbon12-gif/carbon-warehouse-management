@@ -764,7 +764,7 @@ export function buildAccessoryPanelPrompt(args: {
   const outfitRef = lookSheet ? "the LOOK SHEET" : "the styling lock";
   return [
     `Professional ecommerce catalog photo shoot for an ACCESSORY: ${label}. Panel ${args.panelNumber} (Shot ${a} + Shot ${b}).`,
-    "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is the first shot, the RIGHT half (768x1024) is the second shot, with a thin divider between them and nothing else: no third view, no collage, no grid, no text overlay.",
+    "LAYOUT: output exactly one 3200x2000 image — the LEFT half (1600x2000) is the first shot, the RIGHT half (1600x2000) is the second shot, with a thin divider between them and nothing else: no third view, no collage, no grid, no text overlay.",
     `THE PRODUCT: the ${k.noun} in the item photos is what this shoot sells. Reproduce it exactly in every shot — every bead, link, charm, stone, logo, stitch and piece of hardware, the same count, colour, metal tone, finish and proportions. Keep its REAL size: never enlarge it into a costume piece or shrink it, and on the model it sits exactly as such a piece really sits.`,
     `ITEM REFERENCES: the item photos are product references only. Any person, hand or mannequin in them${args.hasStyleWith ? " or in a STYLE-WITH photo" : ""} is a display fixture — never copy a face, skin, body or pose from it.${args.hasStyleWith ? ` The pieces in the STYLE-WITH photos are worn by the model in every on-model shot, exactly as photographed (see ${outfitRef}).` : " Never copy styling from an item photo."}`,
     buildAbsentFeatureGuard(args.itemType),

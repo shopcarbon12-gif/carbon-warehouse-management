@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { splitPanelToThreeByFour } from "@/lib/panelGeneration";
+import { splitPanelToHalves } from "@/lib/panelGeneration";
 import {
   arrange,
   blockColourAt,
@@ -269,7 +269,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           label: `Shopify ${i + 1}`,
         }));
       }
-      /* Generated pictures: each finished panel split into its two 3:4 pictures. */
+      /* Generated pictures: each finished panel split into its two 4:5 pictures. */
       const notes: string[] = [];
       for (const run of runs) {
         const rj = await getJson<{ accessory?: boolean; panels: { panel: number; poseA: number; poseB: number; imageBase64?: string; mime?: string }[] }>(
@@ -280,7 +280,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
         const list: { card: Card; rank: number }[] = [];
         for (const p of rj.panels) {
           if (!p.imageBase64) continue;
-          const { left, right } = await splitPanelToThreeByFour(p.imageBase64, p.mime || "image/png");
+          const { left, right } = await splitPanelToHalves(p.imageBase64, p.mime || "image/png");
           for (const [b64png, pose] of [[left, p.poseA], [right, p.poseB]] as const) {
             const b64 = await toJpeg(b64png);
             const rank = poseRank(pose, female, !!rj.accessory);
@@ -680,7 +680,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
                       draggable={false}
                       title="Click to see it big"
                       onClick={() => setZoom({ matrixId: r.matrixId, idx: i })}
-                      className="aspect-[3/4] w-full cursor-zoom-in rounded object-cover"
+                      className="aspect-[4/5] w-full cursor-zoom-in rounded object-cover"
                     />
                     <div className="absolute left-2 top-2 flex flex-col gap-1">
                       {i === 0 ? <span className="rounded bg-black/70 px-1.5 font-mono text-[0.58rem] uppercase text-white">Hero</span> : null}

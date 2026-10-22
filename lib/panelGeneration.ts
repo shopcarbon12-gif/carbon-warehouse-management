@@ -3,13 +3,24 @@
 //
 // These pure helpers are ported verbatim from components/studio-workspace.tsx so the
 // new "OpenAI V2 Generator" page can reuse the exact same prompt-building, pose-pairing,
-// item-type, and 3:4-split behavior WITHOUT modifying the existing generator page.
+// item-type, and 4:5-split behavior WITHOUT modifying the existing generator page.
 // Keep this file behavior-identical to the originals; the live studio page is the source of truth.
 
 import { getPoseLibraryForGender, resolveGlobalPoseRules, resolvePoseBlock } from "@/lib/panelPoseLibraries";
 
-export const SPLIT_TARGET_WIDTH = 900;
-export const SPLIT_TARGET_HEIGHT = 1200;
+/** One generated panel: two 4:5 frames side by side (owner, 2026-10-22: the store standard is 4:5, 1600x2000). */
+export const PANEL_SIZE = "3200x2000";
+export const SPLIT_TARGET_WIDTH = 1600;
+export const SPLIT_TARGET_HEIGHT = 2000;
+
+/** A prompt built before the 4:5 switch (queued night-batch runs, a Studio tab left open) still
+ *  describes 1536x1024 panels with 3:4 halves: rewrite those layout words to the current size. */
+export function toPanelLayout(prompt: string): string {
+  return prompt
+    .replaceAll("one 1536x1024 image", "one 3200x2000 image")
+    .replaceAll("half (768x1024)", "half (1600x2000)")
+    .replaceAll("each half is a 3:4 portrait", "each half is a 4:5 portrait");
+}
 
 export type SensitivityTier = "low" | "medium" | "high";
 
@@ -826,7 +837,7 @@ export function buildMasterPanelPrompt(args: {
 
   return [
     `Professional ecommerce catalog photo shoot. Panel ${args.panelNumber} (${args.panelLabel}). Model: ${modelLabel}. Item type: ${itemLabel}.`,
-    "LAYOUT: output exactly one 1536x1024 image — the LEFT half (768x1024) is Pose A, the RIGHT half (768x1024) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
+    "LAYOUT: output exactly one 3200x2000 image — the LEFT half (1600x2000) is Pose A, the RIGHT half (1600x2000) is Pose B, with a thin divider between them and nothing else: no third pose, no collage, no grid, no text overlay.",
     `ITEM REFERENCES: take the garment's shape, colour, material, construction and every detail from the item photos. Any person, mannequin or hanger in an item photo${args.hasStyleWith ? " or a STYLE-WITH photo" : ""} is a display fixture — never copy a face, hair, skin tone, body, age, tattoos or pose from it; the person in every frame is the model from the MODEL references.${
       lookSheet ? "" : " The clothes, shoes and accessories those photos show are a different matter: see the next line."
     }`,
@@ -872,7 +883,7 @@ export function buildMasterPanelPrompt(args: {
           `BOTTOMS OVERRIDE (this generation): the locked item is ${itemLabel}, so the library's torso crop for the active crop pose is REPLACED by the 'Bottoms Crop' block given as the ACTIVE POSE above. That frame photographs the ${itemLabel}, not the top: the head and chest stay out of frame.`,
         ]
       : []),
-    "FRAMING: a full-body pose shows the whole body from the top of the hair to the soles of the shoes with white margin above and below — zoom out rather than crop. A crop pose follows its crop exactly as defined above, and the out-of-frame body parts stay out of frame. Keep each pose centred in its own half; each half is a 3:4 portrait.",
+    "FRAMING: a full-body pose shows the whole body from the top of the hair to the soles of the shoes with white margin above and below — zoom out rather than crop. A crop pose follows its crop exactly as defined above, and the out-of-frame body parts stay out of frame. Keep each pose centred in its own half; each half is a 4:5 portrait.",
   ].join("\n");
 }
 
@@ -891,8 +902,8 @@ export function loadBase64Image(b64: string, mime = "image/png") {
   return loadImageSource(`data:${mime};base64,${b64}`, "Failed to load generated panel image");
 }
 
-// Splits a 2-up 1536x1024 panel into left/right strict-3:4 portrait crops (base64, no data: prefix).
-export async function splitPanelToThreeByFour(
+// Splits a 2-up 3200x2000 panel into left/right strict-4:5 portrait crops (base64, no data: prefix).
+export async function splitPanelToHalves(
   b64: string,
   mime = "image/png",
 ): Promise<{ left: string; right: string }> {
@@ -966,7 +977,7 @@ export async function splitPanelToThreeByFour(
     if (tT + tB > halfH * 0.45) { tT = baseInset; tB = baseInset; }
 
     const region = { x: tL, y: tT, w: halfW - tL - tR, h: halfH - tT - tB };
-    // Center-crop the trimmed region to the 3:4 target.
+    // Center-crop the trimmed region to the 4:5 target.
     let srcX = sideOffsetX + region.x;
     let srcY = region.y;
     let srcW = region.w;

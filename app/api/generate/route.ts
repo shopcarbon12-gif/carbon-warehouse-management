@@ -1,6 +1,7 @@
 import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import OpenAI, { toFile } from "openai";
+import sharp from "sharp";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getOpenAiApiKey } from "@/lib/openaiConfig";
@@ -47,8 +48,22 @@ import {
 } from "@/lib/remoteImage";
 import { downloadStorageObject, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { buildPoseVariationDirective, normalizeStrength } from "@/lib/poseVariation";
-import { isLowerBodyProductCategory } from "@/lib/panelGeneration";
+import { isLowerBodyProductCategory, PANEL_SIZE, toPanelLayout } from "@/lib/panelGeneration";
 import { isValidJobId, runGenerateJob, takeEarlyCancel } from "@/lib/server/generate-jobs";
+
+/* Panels come back at 3200x2000. Run QA and the panel-1 reference sent with
+   panels 2-4 work from a 1536-wide copy (the size panels used to be): same
+   judging, same input cost, a quarter of the memory held per run. */
+async function workingCopy(b64: string): Promise<string> {
+  try {
+    const buf = Buffer.from(b64, "base64");
+    const meta = await sharp(buf).metadata();
+    if (!meta.width || meta.width <= 1536) return b64;
+    return (await sharp(buf).resize({ width: 1536 }).png().toBuffer()).toString("base64");
+  } catch {
+    return b64;
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -1090,7 +1105,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     if (denied) return denied;
 
     const {
-      prompt,
+      prompt: promptRaw,
       size,
       modelRefs,
       itemRefs,
@@ -1111,6 +1126,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       itemColour: itemColourRaw,
       jeansLabelId: jeansLabelIdRaw,
     } = await req.json();
+    const prompt: unknown = typeof promptRaw === "string" ? toPanelLayout(promptRaw) : promptRaw;
     /* The operator's own words about this garment and this shoot. */
     const operatorInstruction =
       typeof operatorInstructionRaw === "string"
@@ -1273,12 +1289,14 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           : NaN;
     const resolvedVariationSeed = Number.isFinite(seedSent) ? Math.floor(seedSent) : Math.floor(Date.now() / 1000);
 
-    type ImageSize = "1024x1024" | "1536x1024" | "1024x1536";
-    const allowedSizes = new Set<ImageSize>(["1024x1024", "1536x1024", "1024x1536"]);
+    /* "1536x1024" is no longer offered: anything still asking for it (a queued
+       run, an old tab) gets the current panel size, matching toPanelLayout. */
+    type ImageSize = "1024x1024" | "1024x1536" | typeof PANEL_SIZE;
+    const allowedSizes = new Set<ImageSize>(["1024x1024", "1024x1536", PANEL_SIZE]);
     const finalSize =
       typeof size === "string" && allowedSizes.has(size as ImageSize)
         ? (size as ImageSize)
-        : ("1536x1024" as ImageSize);
+        : (PANEL_SIZE as ImageSize);
     const imageModel = (process.env.OPENAI_IMAGE_MODEL || "gpt-image-1.5").trim() || "gpt-image-1.5";
     // Render quality for gpt-image-* edits (low | medium | high | auto). Pinned
     // high; env-overridable without a redeploy.
@@ -2223,7 +2241,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
     if (source) {
       settleRunAnchor(source.runId, {
         status: "ok",
-        b64,
+        b64: await workingCopy(b64),
         panel: source.panel,
         poseA: normalizedPanelQa.poseA,
         poseB: normalizedPanelQa.poseB,
@@ -2249,7 +2267,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
           panel: Number(normalizedPanelQa.panelNumber) || 0,
           poseA: Number(normalizedPanelQa.poseA) || null,
           poseB: Number(normalizedPanelQa.poseB) || null,
-          b64,
+          b64: await workingCopy(b64),
           logId,
         },
         {

@@ -23,7 +23,8 @@ import {
   getPanelPosePair,
   getPanelButtonLabel,
   pickExpressionDirective,
-  splitPanelToThreeByFour,
+  splitPanelToHalves,
+  PANEL_SIZE,
 } from "@/lib/panelGeneration";
 import { instructionHasStyling, lookConflicts, resolveLookSheet, withNoteFootwear, type ResolvedStyling } from "@/lib/studioLookSheet";
 import { stableLsSystemIdFromString } from "@/lib/utils/ls-id";
@@ -584,7 +585,7 @@ async function panelResponseToCrops(
       (json ? "failed" : "lost connection and the result was no longer available");
     return [{ id: `p${panel}-err-${runTag}`, b64: "", label: `Panel ${panel}: ${detail}`, selected: false }];
   }
-  const { left, right } = await splitPanelToThreeByFour(json.imageBase64);
+  const { left, right } = await splitPanelToHalves(json.imageBase64);
   const qaNotes = Array.isArray(json.qaNotes) && json.qaNotes.length ? json.qaNotes : undefined;
   /* The server had to drop the MIDDLE of this panel's instructions to fit
      OpenAI's prompt limit, and generated anyway. Rides in as a note so the
@@ -2374,7 +2375,7 @@ export function CarbonStudioTab({
       });
       const body = {
         prompt,
-        size: "1536x1024",
+        size: PANEL_SIZE,
         modelRefs: model.ref_image_urls,
         itemRefs: refUrls,
         itemRefViews: runViews,
