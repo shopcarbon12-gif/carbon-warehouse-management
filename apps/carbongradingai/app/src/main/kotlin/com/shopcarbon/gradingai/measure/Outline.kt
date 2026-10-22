@@ -399,7 +399,12 @@ object Outline {
         val cuffPts = pts.filter { proj(it) >= maxP - 1.2 * pxPerCm }
         val up = { p: IntArray -> p[0] * nx + p[1] * ny }
         val topC = cuffPts.maxBy(up)
-        val botC = cuffPts.minBy(up)
+        /* The opening's bottom corner: the underside point farthest below the
+           armpit → tip axis. A sleeve angled down has its opening slanting back
+           from the tip towards the armpit, so a strip at the far end held only
+           the tip — every tee read 3–4 cm (owner's scans, 2026-10-22). */
+        val below = { p: IntArray -> -((p[0] - ax0) * nx + (p[1] - ay0) * ny) }
+        val botC = pts.filter { proj(it) > 0 && below(it) > 0 }.maxByOrNull { below(it) + 0.1 * proj(it) } ?: cuffPts.minBy(up)
         // Shoulder: furthest point of the top edge above the chord high-point → cuff top corner.
         val hps = highPoint(s, left) ?: return null
         val x0 = minOf(hps.first, topC[0]); val x1 = maxOf(hps.first, topC[0])
