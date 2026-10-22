@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -117,9 +118,35 @@ export function WmsShellClient({
             >
               <Menu className="h-5 w-5" strokeWidth={1.75} />
             </button>
-            <span className="truncate text-sm font-semibold text-[var(--wms-fg)] max-md:hidden">
-              CarbonWMS
-            </span>
+            {/* Brand → Dashboard (a tap on the page you're on reloads it, like the sidebar). */}
+            <Link
+              href="/dashboard"
+              onClick={(e) => {
+                if (pathname === "/dashboard") {
+                  e.preventDefault();
+                  window.location.reload();
+                }
+              }}
+              className="flex items-center gap-2 rounded-md px-1.5 py-1 text-sm font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:hidden"
+            >
+              {/* The Carbon mark, drawn in the text colour: white on the dark theme. */}
+              <span
+                aria-hidden
+                className="inline-block h-5 w-5 shrink-0"
+                style={{
+                  backgroundColor: "var(--wms-fg)",
+                  WebkitMaskImage: "url(/carbon-logo-mark.png)",
+                  maskImage: "url(/carbon-logo-mark.png)",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+              <span className="truncate">CarbonWMS</span>
+            </Link>
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--wms-fg)] md:hidden">
               {pageTitle(pathname)}
             </span>
