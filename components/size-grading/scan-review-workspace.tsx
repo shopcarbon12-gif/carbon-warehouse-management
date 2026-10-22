@@ -428,8 +428,9 @@ function ScanWindow({
     if (draft.crotch && cppc > 0) for (const [k, l] of Object.entries(draft.crotch)) if (known.has(k)) cm[k] = polyLen(l.pts) / cppc;
     return withPairAverages(scan.profileDef as unknown as GradingProfile, cm);
   }, [draft, scan]);
-  const saveEdit = async () => {
-    if (!draft || !scan) return;
+  /** Saves the moved lines; true when there was nothing to save or it saved. */
+  const saveEdit = async (): Promise<boolean> => {
+    if (!draft || !scan) return true;
     setSaving(true);
     setEditErr(null);
     try {
@@ -443,26 +444,35 @@ function ScanWindow({
       setDraft(null);
       setEditMsg(`Saved — the new numbers are on ${j.updated ?? 0} item${j.updated === 1 ? "" : "s"}.`);
       await changed();
+      return true;
     } catch (e) {
       setEditErr(e instanceof Error ? e.message : "Could not save");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  /* Closing with moved lines that are not saved asks first: they used to be
+     dropped without a word (owner's Harry T-Shirt shoulders, 2026-10-21). */
+  const [askClose, setAskClose] = useState(false);
+  const requestClose = useCallback(() => {
+    if (draft) setAskClose(true);
+    else onClose();
+  }, [draft, onClose]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   const who = staffLabel(null, null, scan?.by_email ?? row?.by_email ?? null);
 
   return (
     <>
-      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-black/70" onClick={onClose} />
+      <button type="button" aria-label="Close" className="fixed inset-0 z-[60] bg-black/70" onClick={requestClose} />
       <div className="pointer-events-none fixed inset-0 z-[70] flex items-center justify-center p-4 max-md:items-stretch max-md:p-0">
         <div
           role="dialog"
@@ -500,7 +510,7 @@ function ScanWindow({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="rounded p-2 text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] max-md:-my-1.5 max-md:inline-flex max-md:min-h-11 max-md:min-w-11 max-md:items-center max-md:justify-center"
               aria-label="Close"
             >
@@ -546,6 +556,20 @@ function ScanWindow({
                       <span className="text-xs text-[var(--wms-muted)]">Lines adjusted on the WMS {when(scan.adjusted_at)}</span>
                     ) : null}
                   </div>
+                  {askClose && draft ? (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--wms-status-warning-fg)]/60 bg-[var(--wms-status-warning-fg)]/10 p-2 text-sm text-[var(--wms-fg)]">
+                      <span className="w-full">You moved lines on this scan and have not saved them.</span>
+                      <button type="button" className={plainBtn} disabled={saving} onClick={async () => { if (await saveEdit()) onClose(); }}>
+                        <Save className="h-4 w-4" /> Save and close
+                      </button>
+                      <button type="button" className={plainBtn} disabled={saving} onClick={onClose}>
+                        <X className="h-4 w-4" /> Close without saving
+                      </button>
+                      <button type="button" className={plainBtn} onClick={() => setAskClose(false)}>
+                        Keep editing
+                      </button>
+                    </div>
+                  ) : null}
                   {editErr ? <p className="text-sm text-[var(--wms-status-danger-fg)]">{editErr}</p> : null}
                   {editMsg ? <p className="text-sm text-[var(--wms-status-success-fg)]">{editMsg}</p> : null}
                   <ScanPhoto
@@ -582,7 +606,8 @@ function ScanWindow({
                   ) : null}
                 </div>
                 <div className="flex min-w-0 flex-col gap-4">
-                  <ReviewBox scan={scan} onChanged={changed} />
+                  {/* Approve / Redo / Flag save any moved lines first, so a review never drops them. */}
+                  <ReviewBox scan={scan} onChanged={changed} beforeAction={draft ? saveEdit : undefined} />
                   <PointsTable
                     scan={scan}
                     cmOverride={liveCm}
@@ -952,7 +977,16 @@ function DepthFacts({ scan }: { scan: ScanDetail }) {
 
 /* ───────────────────────────── review ───────────────────────────── */
 
-function ReviewBox({ scan, onChanged }: { scan: ScanDetail; onChanged: () => Promise<void> }) {
+function ReviewBox({
+  scan,
+  onChanged,
+  beforeAction,
+}: {
+  scan: ScanDetail;
+  onChanged: () => Promise<void>;
+  /** Unsaved line moves: saved before the review action; false stops the action. */
+  beforeAction?: () => Promise<boolean>;
+}) {
   /** Null until typed in, so the saved note shows and a refetch never wipes a draft. */
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState<"approve" | "redo" | "flag" | null>(null);
@@ -968,7 +1002,12 @@ function ReviewBox({ scan, onChanged }: { scan: ScanDetail; onChanged: () => Pro
     setBusy(action);
     setErr(null);
     setMsg(null);
+    const hadMoves = Boolean(beforeAction) && action !== "redo";
     try {
+      // Redo takes the reading back anyway; the other two keep what was moved.
+      if (beforeAction && action !== "redo" && !(await beforeAction())) {
+        throw new Error("Your moved lines could not be saved, so nothing was changed. Try again.");
+      }
       const res = await fetch(`/api/grading-app/scans/${scan.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -982,7 +1021,9 @@ function ReviewBox({ scan, onChanged }: { scan: ScanDetail; onChanged: () => Pro
       const removed = Number(j.removed ?? 0);
       setMsg(
         action === "approve"
-          ? "Approved — the measurement stands."
+          ? hadMoves
+            ? "Your moved lines were saved, and approved."
+            : "Approved — the measurement stands."
           : action === "flag"
             ? "Flagged — it is back under Needs check."
             : `Taken back — ${removed} measurement${removed === 1 ? "" : "s"} removed from the items.`,
