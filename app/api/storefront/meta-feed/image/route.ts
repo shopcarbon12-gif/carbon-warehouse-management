@@ -1,18 +1,18 @@
 /**
  * GET /api/storefront/meta-feed/image?v=<variant id> — that variant's front
- * close-up (from meta_feed_rows), cropped to a 1080 px square for Meta's
- * catalog ad cards. Only photos already chosen for the feed are served, so this
- * is not an open image proxy.
+ * close-up (from meta_feed_rows), whole and widened to a 1080 px square with
+ * its own backdrop (lib/server/ad-square.ts) for Meta's catalog ad cards.
+ * Only photos already chosen for the feed are served, so this is not an open
+ * image proxy.
  *
  * Public (proxy.ts): Meta downloads the pictures with no WMS session.
  */
-import sharp from "sharp";
 import { getPool } from "@/lib/db";
+import { adSquare } from "@/lib/server/ad-square";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SIZE = 1080;
 const cache = new Map<string, Buffer>();
 
 async function square(src: string): Promise<Buffer> {
@@ -20,12 +20,7 @@ async function square(src: string): Promise<Buffer> {
   if (hit) return hit;
   const res = await fetch(src);
   if (!res.ok) throw new Error(`photo ${res.status}`);
-  const out = await sharp(Buffer.from(await res.arrayBuffer()))
-    .rotate()
-    .flatten({ background: "#ffffff" })
-    .resize(SIZE, SIZE, { fit: "cover", position: "centre" })
-    .jpeg({ quality: 86, mozjpeg: true })
-    .toBuffer();
+  const out = await adSquare(Buffer.from(await res.arrayBuffer()));
   if (cache.size >= 200) cache.delete(cache.keys().next().value as string);
   cache.set(src, out);
   return out;
