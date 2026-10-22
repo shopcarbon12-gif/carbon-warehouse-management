@@ -4,6 +4,33 @@ import { sessionCookieSecure, signSession } from "@/lib/auth";
 import { getPool, isDatabaseUnreachable } from "@/lib/db";
 import { findUserWithTenantLocation } from "@/lib/queries/session-user";
 
+// Lightweight in-memory brute-force throttle, keyed by client IP + email.
+// Per-instance and reset on restart; an upstream WAF/proxy limit is the real
+// defence at scale, but this stops trivially unthrottled password guessing.
+const LOGIN_MAX_ATTEMPTS = 10;
+const LOGIN_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0]?.trim() || "unknown";
+  return req.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+function registerAttempt(key: string): boolean {
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec || now > rec.resetAt) {
+    loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    if (loginAttempts.size > 5000) {
+      for (const [k, v] of loginAttempts) if (now > v.resetAt) loginAttempts.delete(k);
+    }
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > LOGIN_MAX_ATTEMPTS;
+}
+
 async function POST_handler(req: Request) {
   const secureCookie = sessionCookieSecure(req);
   let body: { email?: string; password?: string };
@@ -16,6 +43,14 @@ async function POST_handler(req: Request) {
   const password = body.password ?? "";
   if (!email || !password) {
     return NextResponse.json({ error: "Email and password required" }, { status: 400 });
+  }
+
+  const rlKey = `${clientIp(req)}:${email.toLowerCase()}`;
+  if (registerAttempt(rlKey)) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Wait a few minutes and try again." },
+      { status: 429 },
+    );
   }
 
   const pool = getPool();
@@ -65,6 +100,8 @@ async function POST_handler(req: Request) {
         : "Session signing failed. Set SESSION_SECRET in .env.";
     return NextResponse.json({ error }, { status: 503 });
   }
+  // Successful login clears the throttle so a legitimate user isn't locked out.
+  loginAttempts.delete(rlKey);
   const mobileClient = req.headers.get("x-carbon-mobile") === "1";
   const res = NextResponse.json({
     ok: true,

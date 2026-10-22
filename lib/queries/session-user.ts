@@ -3,6 +3,12 @@ import type { Pool } from "pg";
 import type { SessionPayload } from "@/lib/auth";
 import { sessionRoleFromUserRoleName } from "@/lib/auth/user-role-map";
 
+// A fixed bcrypt hash of a random string. When the email is unknown we still
+// run a compare against this so an unknown email takes the same time as a
+// known one, closing the account-enumeration-by-timing side channel.
+const DUMMY_PASSWORD_HASH =
+  "$2a$10$CwTycUXWue0Thq9StjUM0uJ8DQ6a9Qy6pP9lP0qf4sP3wZt6m7uQK";
+
 function parseDeviceBypass(permissions: unknown): boolean {
   if (!permissions || typeof permissions !== "object") return false;
   const ds = (permissions as Record<string, unknown>).device_security;
@@ -20,7 +26,16 @@ export async function findUserWithTenantLocation(
     [email],
   );
   const user = u.rows[0];
-  if (!user) return null;
+  if (!user) {
+    // Spend the same time as a real compare so timing doesn't reveal which
+    // emails exist. Result is ignored.
+    try {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
   let ok = false;
   try {
     ok = await bcrypt.compare(password, user.password_hash);

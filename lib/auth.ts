@@ -14,9 +14,18 @@ export type SessionPayload = {
 };
 
 function getSecret(): Uint8Array {
-  const raw =
-    process.env.SESSION_SECRET?.trim() ||
-    "dev-only-change-me-min-32-chars!!!!";
+  const raw = process.env.SESSION_SECRET?.trim() || "";
+  if (raw.length < 32) {
+    // Fail closed in production: never fall back to a known, committed key, or
+    // anyone with the source could forge admin tokens for any tenant.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET must be set to a random string of at least 32 characters in production.",
+      );
+    }
+    // Development only: a fixed value so local dev works without setup.
+    return new TextEncoder().encode("dev-only-change-me-min-32-chars!!!!");
+  }
   return new TextEncoder().encode(raw);
 }
 
