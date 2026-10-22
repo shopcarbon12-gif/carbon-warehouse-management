@@ -15,9 +15,6 @@ export default async function OrdersPage() {
         {WAREHOUSE.name} — internal sources; pick by zone, pack, ship.
       </p>
       <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-[var(--muted)]">
-        <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/integrations">
-          Integrations
-        </Link>
         <Link className="text-[var(--accent)] underline-offset-2 hover:underline" href="/dashboard">
           Dashboard
         </Link>
