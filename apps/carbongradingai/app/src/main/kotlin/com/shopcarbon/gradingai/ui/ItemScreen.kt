@@ -40,7 +40,9 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.shopcarbon.gradingai.App
 import com.shopcarbon.gradingai.measure.LabelCheck
 import com.shopcarbon.gradingai.measure.MeasureTarget
+import com.shopcarbon.gradingai.measure.Units
 import com.shopcarbon.gradingai.model.Lookup
+import com.shopcarbon.gradingai.model.SizeStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -112,10 +114,15 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
 
     var picking by remember { mutableStateOf(size == null || profile == null || fromCode.size > 1) }
     var fabricOpen by remember { mutableStateOf(false) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf<String?>(null) }
+    // "Keep it": the next garment's tag, straight from here.
+    val scanNext = rememberTagScanner({ err = it }) { code -> nav.home(); openCode(nav, app, scope, code, { busy = it }) { err = it } }
+    val measured = size?.let { item.statusOf(it) }?.takeIf { it != SizeStatus.NotMeasured }
     Page(
         item.name, onBack = { nav.back() }, largeTitle = false,
         bottom = {
-            Primary("Start measuring", enabled = size != null && profile != null) {
+            Primary(if (measured != null) "Re-measure size $size" else "Start measuring", enabled = size != null && profile != null) {
                 val s = size!!
                 val sku = item.skusOfSize(s).firstOrNull { it.customSkuId == item.picked } ?: item.skusOfSize(s).first()
                 nav.go(Screen.Capture(MeasureTarget(item, s, sku, profile!!)))
@@ -130,6 +137,13 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
             }
         }
         if (!item.measurable && item.profileId == null) Notice(item.profileWhy, Palette.bad)
+        /* The size in hand already has numbers (owner, 2026-10-23): say so, where
+           they came from, and let the operator re-measure or move on. A re-measure
+           does not retire the old scan — the newest reading wins on the item and
+           the old one stays in the history. */
+        if (measured != null && size != null) AlreadyMeasured(app, item, size!!, profile, measured, onKeep = { scanNext() }, onHome = { nav.home() })
+        busy?.let { Muted(it) }
+        err?.let { Notice(it, Palette.bad) }
         Steps(listOf("Lay flat", "Photo", "Check"), 0)
 
         /* After a tag scan the size and the type are usually known: show them on
@@ -209,6 +223,47 @@ fun ItemScreen(nav: Nav, item: Lookup, preSize: String?) {
                 }
                 Secondary(if (labelBusy) "Reading…" else "Photograph care label", enabled = !labelBusy) { checkLabel() }
             }
+        }
+    }
+}
+
+/** The size in hand already has numbers: where they came from, the main ones, and the choice. */
+@Composable
+private fun AlreadyMeasured(
+    app: App, item: Lookup, size: String, profile: com.shopcarbon.gradingai.model.Profile?, status: SizeStatus,
+    onKeep: () -> Unit, onHome: () -> Unit,
+) {
+    val o = item.origins[size]
+    val newest = item.skusOfSize(size).mapNotNull { it.lastMeasuredAt }.maxOrNull()
+    val day = (o?.measuredAt ?: newest)?.let { runCatching {
+        java.time.OffsetDateTime.parse(it).atZoneSameInstant(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("MMM d"))
+    }.getOrNull() }
+    val from = when {
+        status == SizeStatus.Guide -> "from the Shopify size guide"
+        o?.source == "copied" -> "copied from ${o.scanProduct ?: "another product"}${o.scanSize?.let { " · $it" } ?: ""}"
+        o?.source == "web" -> "entered on CarbonWMS"
+        o?.scanProduct != null && o.scanProduct != item.name -> "scanned on ${o.scanProduct}${o.scanSize?.let { " · $it" } ?: ""} (same cut)"
+        else -> "scanned with the app"
+    }
+    // The main numbers, by the garment's own point names (a pair shows its average).
+    val shown = o?.pointsCm.orEmpty().let { cm ->
+        listOf("chest", "waist", "length", "shoulder", "sleeve", "rise", "inseam", "thigh", "outseam").mapNotNull { k ->
+            val v = cm[k] ?: return@mapNotNull null
+            val label = profile?.points?.firstOrNull { it.key == k }?.label
+                ?: profile?.points?.firstOrNull { it.pairOf == k }?.label?.replace(Regex(" [LR]$"), "")
+                ?: k.replaceFirstChar { it.uppercase() }
+            label to v
+        }.take(4)
+    }
+    Card {
+        Text("Size $size is already measured", style = MaterialTheme.typography.titleMedium, color = Palette.text)
+        Muted(listOfNotNull(from.replaceFirstChar { it.uppercase() }, day).joinToString(" · "))
+        for ((l, v) in shown) KeyValue(l, Units.show(v, app.prefs.units))
+        Muted("Re-measure to replace these numbers on the item (the old scan stays in the history), or keep them and scan the next tag.")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Secondary("Keep it — scan next tag", Modifier.weight(1f)) { onKeep() }
+            Secondary("Home", Modifier.width(96.dp)) { onHome() }
         }
     }
 }

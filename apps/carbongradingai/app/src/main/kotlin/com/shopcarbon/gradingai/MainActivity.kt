@@ -91,6 +91,10 @@ class MainActivity : FragmentActivity() {
                         if (BuildConfig.DEBUG) intent.getStringExtra("debugCompare")?.split(":")?.takeIf { it.size == 2 }?.let { (m, z) ->
                             lifecycleScope.launch { runCatching { n.go(Screen.Compare(app.api.lookupMatrix(m), z)) } }
                         }
+                        // Debug builds only: open a hang-tag code as if it was scanned (emulator checks).
+                        if (BuildConfig.DEBUG) intent.getStringExtra("debugCode")?.let { code ->
+                            lifecycleScope.launch { runCatching { n.go(Screen.Item(app.api.lookupCode(code))) } }
+                        }
                     }
                 }
                 if (locked.value) { LockScreen { locked.value = false }; return@GradingTheme }
