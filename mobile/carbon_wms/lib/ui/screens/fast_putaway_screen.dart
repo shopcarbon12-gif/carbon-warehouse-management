@@ -10,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/services/handheld_device_identity.dart';
@@ -147,6 +148,7 @@ class _StoredItem {
     required this.size,
     required this.qty,
     required this.epcs,
+    this.storeCount = 0,
   });
 
   /// Full custom SKU, e.g. `C12345678B8L`.
@@ -172,6 +174,9 @@ class _StoredItem {
   /// Live EPC list for the row-tap → EPC detail screen.
   final List<String> epcs;
 
+  /// LIVE tags of this size in the STORE zone → store icon on the row.
+  final int storeCount;
+
   static _StoredItem fromMap(Map<String, dynamic> m) {
     final rawEpcs = m['epcs'];
     final epcs = rawEpcs is List
@@ -185,6 +190,7 @@ class _StoredItem {
       size: (m['size'] ?? '').toString(),
       qty: m['qty'] as int? ?? m['quantity'] as int? ?? epcs.length,
       epcs: epcs,
+      storeCount: storeZoneCountOf(m),
     );
   }
 }
@@ -2430,6 +2436,7 @@ class _FastPutawayScreenState extends State<FastPutawayScreen> {
                             colorCode: item.colorCode,
                             size: item.size,
                             quantity: item.qty,
+                            inStore: item.storeCount > 0,
                             bgLow: bgLow,
                             mainColor: mainColor,
                           ),
@@ -3425,6 +3432,7 @@ class _StoredItemRow extends StatelessWidget {
     required this.colorCode,
     required this.size,
     required this.quantity,
+    this.inStore = false,
     required this.bgLow,
     required this.mainColor,
   });
@@ -3443,6 +3451,9 @@ class _StoredItemRow extends StatelessWidget {
 
   /// Live EPC count for this row.
   final int quantity;
+
+  /// Size has LIVE tags in the STORE zone → store icon beside the quantity.
+  final bool inStore;
 
   final Color bgLow;
   final Color mainColor;
@@ -3496,6 +3507,11 @@ class _StoredItemRow extends StatelessWidget {
               ],
             ),
           ),
+          if (inStore) ...[
+            SizedBox(width: 8.w),
+            const StoreZoneIcon(),
+            SizedBox(width: 8.w),
+          ],
           Text(
             '×$quantity',
             style: GoogleFonts.manrope(

@@ -1422,14 +1422,18 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                       fontSize: 13.sp, fontWeight: FontWeight.w700, color: _ink),
                 ),
                 SizedBox(height: 2.h),
-                Text(
-                  s.sku.isEmpty ? '—' : s.sku,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.robotoMono(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w600,
-                      color: _slate),
+                // Never cut short: a long SKU shrinks to fit.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    s.sku.isEmpty ? '—' : s.sku,
+                    maxLines: 1,
+                    style: GoogleFonts.robotoMono(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w600,
+                        color: _slate),
+                  ),
                 ),
               ],
             ),

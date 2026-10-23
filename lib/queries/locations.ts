@@ -24,6 +24,8 @@ export type BinContentLineRow = {
   qty: number;
   /** EPCs of this line in the bin (in-stock + pending visibility). */
   epcs: string[];
+  /** LIVE tags of this size (anywhere at the location) in the "Store" zone — the phone's store icon. */
+  store_zone_count: number;
 };
 
 /** One in-stock EPC in a bin, with catalog context for the EPC-list modal. */
@@ -164,6 +166,7 @@ export async function listBinContentsGrouped(
     size: string | null;
     qty: string;
     epcs: string[] | null;
+    store_zone_count: number;
   }>(
     // 1.2.47: bin contents include both primary-bin items (bin_id = $1)
     // AND multi-bin secondaries ($1 = ANY(additional_bin_ids)). The
@@ -182,7 +185,12 @@ export async function listBinContentsGrouped(
        COUNT(i.id)::text AS qty,
        -- The handheld's Bin Assign opens a line's EPC list from this; without
        -- it every tap said "No EPCs found".
-       array_agg(i.epc ORDER BY i.epc) AS epcs
+       array_agg(i.epc ORDER BY i.epc) AS epcs,
+       -- Same rule as the catalog's store_zone_count (Zone Management "Store").
+       (SELECT count(*)::int FROM items s
+          JOIN assigned_zones az ON az.id = s.assigned_zone_id AND az.archived_at IS NULL
+         WHERE s.custom_sku_id = cs.id AND s.location_id = $2::uuid AND s.status = 'in-stock'
+           AND lower(btrim(az.name)) = 'store') AS store_zone_count
      FROM items i
      INNER JOIN bins bin ON bin.id = $1::uuid AND bin.location_id = $2::uuid AND bin.archived_at IS NULL
      INNER JOIN custom_skus cs ON cs.id = i.custom_sku_id
@@ -203,6 +211,7 @@ export async function listBinContentsGrouped(
     size: row.size,
     qty: Number(row.qty),
     epcs: row.epcs ?? [],
+    store_zone_count: row.store_zone_count,
   }));
 }
 

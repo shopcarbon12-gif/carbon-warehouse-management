@@ -847,23 +847,21 @@ class CatalogRowCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Flexible(
-                      child: Text(
-                        sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
-                        style: skuStyle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    // The SKU is never cut short (owner, 2026-10-23): a long
+                    // one shrinks to fit instead of ending in "…".
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
+                          style: skuStyle,
+                          maxLines: 1,
+                        ),
                       ),
                     ),
-                    // Sizes with LIVE tags in the STORE zone (owner, 2026-10-22).
-                    if (storeZoneCountOf(row) > 0) ...[
-                      SizedBox(width: 8.w),
-                      StoreZoneIcon(color: selected ? Colors.white : null),
-                    ],
-                    const Spacer(),
                     if (priceText.isNotEmpty) ...[
                       SizedBox(width: 8.w),
                       Text(priceText, style: priceStyle),
@@ -891,6 +889,13 @@ class CatalogRowCard extends StatelessWidget {
               ],
             ),
           ),
+          // Sizes with LIVE tags in the STORE zone: the icon sits beside the
+          // quantity, off the SKU line (owner, 2026-10-22/23).
+          if (storeZoneCountOf(row) > 0) ...[
+            SizedBox(width: 6.w),
+            StoreZoneIcon(color: selected ? Colors.white : null),
+            if (!showQty) SizedBox(width: 12.w),
+          ],
           if (showQty) ...[
             SizedBox(width: 4.w),
             GestureDetector(

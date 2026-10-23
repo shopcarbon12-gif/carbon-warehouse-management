@@ -2259,25 +2259,22 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                   children: [
                     // Row 1 — SKU (left) + price (right)
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Flexible(
-                          child: Text(
-                            widget.skuLine,
-                            style: skuStyle,
-                            maxLines: expanded ? null : 1,
-                            overflow: expanded
-                                ? TextOverflow.visible
-                                : TextOverflow.ellipsis,
-                            textAlign: TextAlign.left,
+                        // The SKU is never cut short (owner, 2026-10-23): a
+                        // long one shrinks to fit instead of ending in "…".
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              widget.skuLine,
+                              style: skuStyle,
+                              maxLines: 1,
+                              textAlign: TextAlign.left,
+                            ),
                           ),
                         ),
-                        if (widget.inStore) ...[
-                          SizedBox(width: 8.w),
-                          const StoreZoneIcon(),
-                        ],
-                        const Spacer(),
                         if (hasPrice) ...[
                           SizedBox(width: 8.w),
                           Text(widget.priceText, style: priceStyle),
@@ -2311,6 +2308,11 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                 ),
               ),
             ),
+            // Size has LIVE tags in the STORE zone: icon beside the quantity.
+            if (widget.inStore) ...[
+              SizedBox(width: 6.w),
+              const StoreZoneIcon(),
+            ],
             SizedBox(width: 4.w),
             GestureDetector(
               onTap: widget.onQtyTap,

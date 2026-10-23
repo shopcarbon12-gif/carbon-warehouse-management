@@ -600,17 +600,21 @@ class _LineCard extends StatelessWidget {
                       children: [
                         Row(
                           children: [
+                            // Never cut short: a long SKU shrinks to fit.
                             Flexible(
-                              child: Text(
-                                sku == null ? 'NO CATALOG ITEM' : 'SKU: $sku',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: textColor,
-                                  fontFamily: 'monospace',
-                                  height: 1.2,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  sku == null ? 'NO CATALOG ITEM' : 'SKU: $sku',
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: textColor,
+                                    fontFamily: 'monospace',
+                                    height: 1.2,
+                                  ),
                                 ),
                               ),
                             ),
