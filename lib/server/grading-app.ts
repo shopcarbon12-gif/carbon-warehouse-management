@@ -769,10 +769,17 @@ export async function adjustScan(
       !next || same(old, next) ? old : next.source === "ai" && !next.moved ? { pts: next.pts, source: "ai" } : { pts: next.pts, source: "manual", moved: true };
     const mainOut: Record<string, ScanLine> = {};
     for (const [k, l] of Object.entries(s.lines ?? {})) mainOut[k] = known.has(k) ? take(l, lines[k]) : l;
+    /* A point the outline never placed (a photo taken sideways, 2026-10-23) can
+       be added by hand — only this garment's own points, and only placed, never
+       a "moved" copy of nothing. */
+    const added = (next: ScanLine | undefined): next is ScanLine => !!next && Array.isArray(next.pts) && next.pts.length >= 2;
+    for (const [k, l] of Object.entries(lines)) if (known.has(k) && !(k in mainOut) && added(l)) mainOut[k] = { pts: l.pts, source: "manual", moved: true };
     let crotch = s.crotch;
     if (crotch && crotchLines) {
       const c: Record<string, ScanLine> = {};
       for (const [k, l] of Object.entries(crotch.lines ?? {})) c[k] = take(l, crotchLines[k]);
+      const secondKeys = new Set<string>(profile.secondPhoto?.keys ?? profile.crotchPhoto?.keys ?? []);
+      for (const [k, l] of Object.entries(crotchLines)) if (secondKeys.has(k) && !(k in c) && added(l)) c[k] = { pts: l.pts, source: "manual", moved: true };
       crotch = { ...crotch, lines: c };
     }
     const cm: Record<string, number> = {};
