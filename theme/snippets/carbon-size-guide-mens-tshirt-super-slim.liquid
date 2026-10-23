@@ -1,0 +1,409 @@
+<!-- CARBON interactive size guide: Men's Super Slim Fit T-Shirts
+     (custom.size_guide_type = mens-tshirt-super-slim). A copy of the Slim Fit T-Shirts guide
+     with its own sizes (owner 2026-10-23): the Damian Shirt, graded from its CarbonGradingAI
+     measurements into even steps, S–XXL. Four customer measurements
+     only; the source spreadsheet's factory points are deliberately absent. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&display=swap">
+<div id="carbon-size-guide-mens-tshirt-super-slim" class="carbon-size-guide" data-fit="mens-tshirt-super-slim">
+<style>
+/* Every selector is prefixed with the component's own id at build time, so this
+   file is written unprefixed and stays readable. Nothing here can reach the rest
+   of the product page. */
+#carbon-size-guide-mens-tshirt-super-slim {
+  --csg-ink: #0f172a;
+  --csg-navy: #16233a;
+  --csg-blue: #1d4ed8;
+  --csg-blue-soft: #eff6ff;
+  --csg-line: #e5e7eb;
+  --csg-zebra: #f8fafc;
+  --csg-muted: #4b5563;
+  --csg-display: "Oswald", "Archivo Narrow", "Arial Narrow", Helvetica, sans-serif;
+  --csg-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  /* One grid for the whole component. Desktop places the pieces into two
+     columns with the measurement section spanning the description and table
+     rows, so HOW TO MEASURE starts level with the description exactly as in the
+     comp. Phone collapses to one column and re-orders, rather than inheriting
+     the desktop sequence. */
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
+  column-gap: clamp(22px, 3vw, 44px);
+  align-items: start;
+  font-family: var(--csg-body);
+  color: var(--csg-ink);
+  background: #fff;
+  /* clamp() rather than a media-query ladder: this sits in a modal whose width
+     is set by the theme, so the type has to scale to the box it lands in. */
+  padding: clamp(4px, 0.6vw, 10px) clamp(18px, 2.2vw, 30px) clamp(18px, 2.2vw, 30px);
+  -webkit-font-smoothing: antialiased;
+  text-align: left;
+}#carbon-size-guide-mens-tshirt-super-slim * { box-sizing: border-box; min-width: 0; }#carbon-size-guide-mens-tshirt-super-slim :focus-visible { outline: 2px solid var(--csg-blue); outline-offset: 2px; border-radius: 3px; }/* ── header ─────────────────────────────────────────────────────────── */
+/* Spans both columns so a long fit name has the whole modal to sit on one
+   line, with room reserved on the right for the unit switch that shares the
+   row. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-top {
+  grid-column: 1 / -1; grid-row: 1;
+  padding-right: 210px;
+  margin-bottom: clamp(16px, 1.8vw, 24px);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-units-cell { display: contents; }#carbon-size-guide-mens-tshirt-super-slim .csg-wordmark {
+  /* The wordmark is the brand's own letterform — a normal-width grotesque with
+     wide tracking. Setting it in the condensed headline face made it read as a
+     label rather than as the logo. */
+  font-family: var(--csg-body); font-weight: 700;
+  font-size: 14px; letter-spacing: .32em; text-transform: uppercase;
+  margin: 0 0 8px; color: var(--csg-ink);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-title { margin: 0; line-height: .9; }/* The fit name carries the weight; "Size Guide" sits under it lighter and
+   smaller. That contrast is the whole title treatment. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-title-fit {
+  display: block; font-family: var(--csg-display); font-weight: 700;
+  font-size: clamp(20px, 3.2vw, 46px); letter-spacing: -.005em;
+  text-transform: uppercase; white-space: nowrap;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-title-sub {
+  display: block; font-family: var(--csg-display); font-weight: 300;
+  font-size: clamp(21px, 3vw, 38px); letter-spacing: .005em;
+  text-transform: uppercase; color: var(--csg-ink);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-rule { display: block; width: 148px; height: 4px; background: var(--csg-blue); margin: 14px 0 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-subtitle {
+  grid-column: 1; grid-row: 2;
+  margin: 0 0 22px; font-size: clamp(14px, 1.05vw, 16px); line-height: 1.55;
+  color: var(--csg-muted); max-width: 44ch;
+}/* unit switch, top right of the header */
+#carbon-size-guide-mens-tshirt-super-slim .csg-units {
+  grid-column: 2; grid-row: 1; justify-self: end; align-self: start;
+  display: inline-flex; padding: 5px; gap: 4px;
+  background: #f1f3f7; border-radius: 999px; border: 1px solid var(--csg-line);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-unit {
+  appearance: none; border: 0; cursor: pointer; background: transparent;
+  font-family: var(--csg-display); font-weight: 600; font-size: 15px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--csg-muted);
+  padding: 9px 26px; border-radius: 999px;
+  transition: background-color .18s ease, color .18s ease;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-unit[aria-pressed="true"] { background: var(--csg-blue); color: #fff; }/* ── mobile size picker (hidden on desktop, where rows are clicked) ──── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-picker { display: none; grid-column: 1; grid-row: 3; margin: 0 0 16px; }#carbon-size-guide-mens-tshirt-super-slim .csg-picker-label {
+  display: block; font-size: 13px; color: var(--csg-muted); margin: 0 0 6px;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-select {
+  width: 100%; appearance: none; background: #fff url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%230f172a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 14px center;
+  border: 1px solid var(--csg-line); border-radius: 10px;
+  padding: 13px 40px 13px 14px; font-family: var(--csg-display); font-weight: 600;
+  font-size: 19px; color: var(--csg-ink);
+}/* ── two-column body ────────────────────────────────────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-chart { grid-column: 1; grid-row: 4; }/* Spans the description and chart rows so its heading sits level with the
+   description, not below the whole header. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-measure { grid-column: 2; grid-row: 2 / 5; }/* ── table ──────────────────────────────────────────────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  border: 1px solid var(--csg-line); border-radius: 10px; overflow: hidden;
+  font-variant-numeric: tabular-nums;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-table thead th {
+  background: var(--csg-navy); color: #fff; text-align: center;
+  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
+  letter-spacing: .07em; text-transform: uppercase; padding: 13px 8px;
+  line-height: 1.2;
+}/* Two lines, as in the comp: the measurement, then its unit underneath. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-th-unit { display: block; font-weight: 400; font-size: 12.5px; opacity: .85; }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody th, #carbon-size-guide-mens-tshirt-super-slim .csg-table tbody td {
+  text-align: center; padding: 13px 8px; font-size: 16px;
+  border-top: 1px solid var(--csg-line); color: var(--csg-ink);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody th { font-weight: 700; }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody td { color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr:nth-child(even) th, #carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr:nth-child(even) td { background: var(--csg-zebra); }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr { cursor: pointer; }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr:hover th, #carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr:hover td { background: var(--csg-blue-soft); }/* Solid blue with white text — a tint was not readable enough as "chosen". */
+#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr[aria-selected="true"] th, #carbon-size-guide-mens-tshirt-super-slim .csg-table tbody tr[aria-selected="true"] td {
+  background: var(--csg-blue); color: #fff; font-weight: 700;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-table-foot { margin: 10px 2px 0; font-size: 12.5px; color: #6b7280; }/* ── how to measure ─────────────────────────────────────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-measure { border: 0; min-width: 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure > summary {
+  list-style: none; cursor: default; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; margin: 0 0 16px;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-measure > summary::-webkit-details-marker { display: none; }#carbon-size-guide-mens-tshirt-super-slim .csg-h3 {
+  margin: 0; font-family: var(--csg-display); font-weight: 600;
+  font-size: clamp(20px, 1.9vw, 27px); letter-spacing: .02em; text-transform: uppercase;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-chev { display: none; flex: 0 0 auto; }#carbon-size-guide-mens-tshirt-super-slim .csg-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }#carbon-size-guide-mens-tshirt-super-slim .csg-card {
+  border: 1px solid var(--csg-line); border-radius: 12px; background: #fff;
+  padding: 11px; display: flex; flex-direction: column; gap: 11px;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-card-head { display: flex; align-items: center; gap: 9px; margin: 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-badge {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--csg-blue); color: #fff; display: inline-grid; place-items: center;
+  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-card-name {
+  font-family: var(--csg-display); font-weight: 600; font-size: 17px;
+  letter-spacing: .05em; text-transform: uppercase;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-figure { margin: 0; border-radius: 9px; overflow: hidden; background: #f5f5f5; }/* One box for all three so the cards are identical, and contain rather than
+   cover so none is cropped — the sources do not share a shape (waist and hip
+   are 4:3, the inseam 2:3) and cropping either one cuts off the tape, which is
+   the only thing these photos exist to show.
+
+   The box colour is sampled from the photographs' own backdrop (#f6f6f6), so
+   the area a contained photo does not fill reads as more backdrop rather than
+   as a grey band around a floating image. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-photo {
+  display: block; width: 100%; height: auto;
+  aspect-ratio: 1 / 1; object-fit: contain; background: #f5f5f5;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-card-text { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--csg-muted); }/* ── helpful note ───────────────────────────────────────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-note {
+  display: flex; gap: 12px; align-items: flex-start; margin: 20px 0 0;
+  background: var(--csg-blue-soft); border-radius: 10px; padding: 17px 19px;
+  font-size: 14.5px; line-height: 1.6; color: #26324a;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-note-icon {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--csg-blue); color: #fff; display: inline-grid; place-items: center;
+  font-size: 13px; font-weight: 700; font-style: italic; font-family: var(--csg-body);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-note b, #carbon-size-guide-mens-tshirt-super-slim .csg-note strong { color: var(--csg-blue); }/* ── tips strip ─────────────────────────────────────────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-tips {
+  grid-column: 1 / -1;
+  /* nowrap so the tagline stays pinned right against its divider; the list of
+     tips wraps inside its own track instead of pushing the tagline onto a line
+     of its own. */
+  display: flex; align-items: center; gap: clamp(14px, 1.8vw, 26px); flex-wrap: nowrap;
+  margin: clamp(22px, 2.6vw, 32px) 0 0; padding: 18px clamp(16px, 1.8vw, 24px);
+  border: 1px solid var(--csg-line); border-radius: 12px;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-tips-icon { flex: 0 0 auto; color: var(--csg-ink); display: grid; place-items: center; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-title {
+  margin: 0; flex: 0 0 auto; font-family: var(--csg-display); font-weight: 600;
+  font-size: 17px; letter-spacing: .05em; text-transform: uppercase;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-tips-list {
+  /* Three equal columns rather than a flex row: the three tips do not fit on one
+     line beside the title and the tagline at this width, and a flex row put two
+     on the first line and one alone on a second. A column each keeps the rhythm
+     of the comp, and only the longest tip runs to a second line. */
+  margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px clamp(12px, 1.3vw, 20px); flex: 1 1 auto;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-tips-list li { display: flex; align-items: flex-start; gap: 7px; font-size: 13.5px; line-height: 1.4; color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-super-slim .csg-tick { flex: 0 0 auto; color: var(--csg-blue); margin-top: 1px; }#carbon-size-guide-mens-tshirt-super-slim .csg-tagline {
+  margin: 0; flex: 0 0 auto; padding-left: clamp(14px, 1.8vw, 26px);
+  border-left: 1px solid var(--csg-line); font-size: 11.5px; line-height: 1.7;
+  letter-spacing: .16em; text-transform: uppercase; color: #9aa3b2; text-align: right;
+}
+
+/* ── tablet ─────────────────────────────────────────────────────────── */
+@media (max-width: 1000px) {#carbon-size-guide-mens-tshirt-super-slim { grid-template-columns: 1fr; }#carbon-size-guide-mens-tshirt-super-slim .csg-top, #carbon-size-guide-mens-tshirt-super-slim .csg-units, #carbon-size-guide-mens-tshirt-super-slim .csg-subtitle, #carbon-size-guide-mens-tshirt-super-slim .csg-picker, #carbon-size-guide-mens-tshirt-super-slim .csg-chart, #carbon-size-guide-mens-tshirt-super-slim .csg-measure, #carbon-size-guide-mens-tshirt-super-slim .csg-tips {
+    grid-column: 1; grid-row: auto;
+  }/* The comp reads name, then description, then the unit switch. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-top { order: 1; padding-right: 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-subtitle { order: 2; }#carbon-size-guide-mens-tshirt-super-slim .csg-units { order: 3; justify-self: stretch; }#carbon-size-guide-mens-tshirt-super-slim .csg-picker { order: 4; }#carbon-size-guide-mens-tshirt-super-slim .csg-chart { order: 5; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure { order: 6; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips { order: 7; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure { margin-top: 20px; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips { flex-wrap: wrap; }#carbon-size-guide-mens-tshirt-super-slim .csg-tagline { display: none; }
+}
+
+/* ── phone: a different layout, not a smaller one ───────────────────── */
+@media (max-width: 680px) {#carbon-size-guide-mens-tshirt-super-slim { padding: 16px; }#carbon-size-guide-mens-tshirt-super-slim .csg-units { width: 100%; justify-content: stretch; }#carbon-size-guide-mens-tshirt-super-slim .csg-unit { flex: 1 1 0; padding: 11px 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-subtitle { font-size: 13.5px; }#carbon-size-guide-mens-tshirt-super-slim .csg-picker { display: block; }#carbon-size-guide-mens-tshirt-super-slim .csg-table thead th { font-size: 11.5px; padding: 9px 4px; letter-spacing: .04em; }#carbon-size-guide-mens-tshirt-super-slim .csg-th-unit { font-size: 10.5px; }#carbon-size-guide-mens-tshirt-super-slim .csg-table tbody th, #carbon-size-guide-mens-tshirt-super-slim .csg-table tbody td { font-size: 14px; padding: 10px 4px; }/* The measure section becomes a real accordion, and each card becomes a row
+     with a thumbnail — three tall photo cards in a column is a lot of scrolling
+     for something read once. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-measure { border: 1px solid var(--csg-line); border-radius: 12px; padding: 14px; margin-top: 18px; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure > summary { cursor: pointer; margin-bottom: 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure[open] > summary { margin-bottom: 14px; }#carbon-size-guide-mens-tshirt-super-slim .csg-chev { display: block; transition: transform .2s ease; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure[open] .csg-chev { transform: rotate(180deg); }#carbon-size-guide-mens-tshirt-super-slim .csg-cards { grid-template-columns: 1fr; gap: 12px; }#carbon-size-guide-mens-tshirt-super-slim .csg-card {
+    display: grid; grid-template-columns: 62px minmax(0, 1fr);
+    grid-template-rows: auto auto; column-gap: 12px; row-gap: 4px;
+    border: 0; border-top: 1px solid var(--csg-line); border-radius: 0; padding: 12px 0 0;
+  }#carbon-size-guide-mens-tshirt-super-slim .csg-card:first-child { border-top: 0; padding-top: 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-figure { grid-row: 1 / span 2; }/* At thumbnail size a letterboxed photo is mostly empty grey, so the two
+     flat-lays fill their square. The inseam keeps contain — cropping the one
+     photo whose whole job is crotch-to-hem would defeat it. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-photo { aspect-ratio: 1 / 1; object-fit: cover; }#carbon-size-guide-mens-tshirt-super-slim .csg-photo-inseam { object-fit: contain; }#carbon-size-guide-mens-tshirt-super-slim .csg-card-head { grid-column: 2; }#carbon-size-guide-mens-tshirt-super-slim .csg-card-text { grid-column: 2; font-size: 13.5px; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips { flex-direction: column; align-items: flex-start; gap: 10px; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-list { grid-template-columns: 1fr; gap: 9px; }#carbon-size-guide-mens-tshirt-super-slim .csg-note { font-size: 13.5px; }
+}/* ── Desktop placement ───────────────────────────────────────────────────
+   The jeans guides fill the right-hand column with three measurement photos
+   and run their table down the left. This guide has only four measurements,
+   so the overview diagram takes that column beside the table and the four
+   How-to-Measure cards run full width underneath, matching the approved
+   T-shirt composition. Every panel is placed explicitly — the shared grid
+   reserves the right column for .csg-measure, and anything left to auto
+   placement lands in the hole that leaves. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-overview { grid-column: 2; grid-row: 2 / 4; margin: 0; align-self: center; }#carbon-size-guide-mens-tshirt-super-slim .csg-chart { grid-column: 1; grid-row: 3; }#carbon-size-guide-mens-tshirt-super-slim .csg-measure { grid-column: 1 / -1; grid-row: 4; margin-top: clamp(22px, 2.6vw, 32px); }#carbon-size-guide-mens-tshirt-super-slim .csg-note-wrap { grid-column: 1; grid-row: 5; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-card { grid-column: 2; grid-row: 5; }/* The diagram is portrait and the table is six short rows; at the column's
+   full width it would tower over the chart, so it is capped and centred. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-overview img {
+  display: block; margin: 0 auto; max-width: 100%; max-height: 430px;
+  width: auto; height: auto;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }/* The supplied photographs are landscape and already cropped to their subject,
+   so they keep their own shape rather than being forced into the jeans guides'
+   square box, which would crop the ends off the measurement arrows. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-photo { aspect-ratio: 1200 / 624; object-fit: cover; background: #fff; }/* ── helpful note + tips, side by side along the bottom ─────────────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-note { margin: 0; height: 100%; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-card {
+  border: 1px solid var(--csg-line); border-radius: 12px;
+  padding: 17px clamp(16px, 1.8vw, 22px); margin: 20px 0 0;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-note-wrap { margin: 20px 0 0; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-head { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-icon { flex: 0 0 auto; display: grid; place-items: center; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-icon img { display: block; width: 34px; height: auto; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; counter-reset: csgstep; }#carbon-size-guide-mens-tshirt-super-slim .csg-tips-steps li {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px;
+  align-items: start; font-size: 13.5px; line-height: 1.45; color: var(--csg-muted);
+}#carbon-size-guide-mens-tshirt-super-slim .csg-tips-steps li::before {
+  counter-increment: csgstep; content: counter(csgstep);
+  width: 22px; height: 22px; border-radius: 50%; background: var(--csg-blue); color: #fff;
+  display: grid; place-items: center; font-family: var(--csg-display);
+  font-weight: 600; font-size: 13px; margin-top: -1px;
+}/* ── phone: size buttons and the selected size's four figures ──────────── */
+#carbon-size-guide-mens-tshirt-super-slim .csg-mob { display: none; }#carbon-size-guide-mens-tshirt-super-slim .csg-mob-label {
+  margin: 0 0 8px; font-family: var(--csg-display); font-weight: 600;
+  font-size: 15px; letter-spacing: .08em; text-transform: uppercase;
+}/* Six equal columns rather than a wrapping flex row: at 360px the sixth button
+   wrapped onto a line of its own and stretched the full width. */
+#carbon-size-guide-mens-tshirt-super-slim .csg-sizes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; margin: 0 0 16px; }#carbon-size-guide-mens-tshirt-super-slim .csg-size {
+  appearance: none; cursor: pointer; background: #fff; color: var(--csg-ink);
+  border: 1px solid var(--csg-line); border-radius: 10px; padding: 12px 2px; min-width: 0;
+  font-family: var(--csg-display); font-weight: 600; font-size: 16px;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-size[aria-pressed="true"] { background: var(--csg-blue); border-color: var(--csg-blue); color: #fff; }#carbon-size-guide-mens-tshirt-super-slim .csg-sel { border: 1px solid var(--csg-line); border-radius: 12px; overflow: hidden; }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-h {
+  margin: 0; padding: 11px 14px; background: var(--csg-blue-soft);
+  font-family: var(--csg-display); font-weight: 600; font-size: 14px;
+  letter-spacing: .07em; text-transform: uppercase;
+}#carbon-size-guide-mens-tshirt-super-slim .csg-sel-grid { display: grid; grid-template-columns: 1fr 1fr; }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-grid > div { padding: 13px 14px; border-top: 1px solid var(--csg-line); }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-grid > div:nth-child(odd) { border-right: 1px solid var(--csg-line); }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-k { display: block; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--csg-muted); }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-v { display: block; font-family: var(--csg-display); font-weight: 600; font-size: 22px; color: var(--csg-blue); margin-top: 2px; }#carbon-size-guide-mens-tshirt-super-slim .csg-sel-u { font-size: 13px; font-weight: 400; color: var(--csg-muted); margin-left: 3px; }
+
+@media (max-width: 1000px) {
+  /* One column. Every row this file pinned for the desktop composition has to be
+     released here, including the ones the shared sheet also lists — this file's
+     rules come after the shared media block, so they would otherwise still win
+     and leave How to Measure sitting above the size selector. */
+  #carbon-size-guide-mens-tshirt-super-slim .csg-overview, #carbon-size-guide-mens-tshirt-super-slim .csg-chart, #carbon-size-guide-mens-tshirt-super-slim .csg-measure,
+  #carbon-size-guide-mens-tshirt-super-slim .csg-note-wrap, #carbon-size-guide-mens-tshirt-super-slim .csg-tips-card, #carbon-size-guide-mens-tshirt-super-slim .csg-mob {
+    grid-column: 1; grid-row: auto;
+  }
+  /* Reading order: title, note, units, then size, then how to measure. */
+  #carbon-size-guide-mens-tshirt-super-slim .csg-overview { order: 4; align-self: start; margin: 0 0 4px; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-mob { order: 4; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-chart { order: 5; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-measure { order: 6; margin-top: 20px; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-note-wrap { order: 7; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-tips-card { order: 8; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-note { height: auto; }
+}
+@media (max-width: 680px) {
+  /* The full table is not usable on a phone: the size buttons and the selected
+     size's own four figures replace it, exactly as in the approved comp. */
+  #carbon-size-guide-mens-tshirt-super-slim .csg-chart, #carbon-size-guide-mens-tshirt-super-slim .csg-overview { display: none; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-mob { display: block; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-measure { margin-top: 18px; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-cards { grid-template-columns: 1fr; }
+  /* Back to the family's thumbnail row, but landscape so the arrow still reads. */
+  #carbon-size-guide-mens-tshirt-super-slim .csg-card { grid-template-columns: 96px minmax(0, 1fr); }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-photo { aspect-ratio: 1200 / 624; object-fit: cover; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-tips-card { padding: 15px 16px; }
+}
+@media (max-width: 380px) {
+  #carbon-size-guide-mens-tshirt-super-slim .csg-size { font-size: 14.5px; padding: 11px 1px; }
+  #carbon-size-guide-mens-tshirt-super-slim .csg-sizes { gap: 6px; }
+}
+
+</style>
+
+  <div class="csg-top">
+    <p class="csg-wordmark">Carbon</p>
+    <h2 class="csg-title">
+      <span class="csg-title-fit">Men&rsquo;s Super Slim Fit T-Shirts</span><span class="csg-title-sub">Size Guide</span>
+    </h2>
+    <span class="csg-rule" aria-hidden="true"></span>
+  </div>
+
+  <div class="csg-units" role="group" aria-label="Measurement units">
+    <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
+    <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
+  </div>
+
+  <p class="csg-subtitle">All measurements are taken with the garment laid flat.</p>
+
+  <figure class="csg-overview">
+    <img src="{{ 'carbon-tshirt-measure-overview.webp' | asset_url }}" alt="A T-shirt laid flat, labelled with all four measurements: shoulder width, chest width, sleeve length and body length"
+         width="1020" height="1203" loading="lazy" decoding="async">
+  </figure>
+
+  <section class="csg-chart" aria-label="Size chart">
+    <table class="csg-table">
+      <thead><tr><th scope="col">Size</th><th scope="col"><span>Chest Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Shoulder Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Sleeve Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Body Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
+      <tbody><tr data-csg-row="S" data-cm-chest="44.5" data-cm-shoulder="41" data-cm-sleeve="18" data-cm-length="69.5" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="M" data-cm-chest="46.5" data-cm-shoulder="42" data-cm-sleeve="18.5" data-cm-length="71" aria-selected="true" tabindex="0"><th scope="row">M</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="L" data-cm-chest="48.5" data-cm-shoulder="43" data-cm-sleeve="19" data-cm-length="73" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XL" data-cm-chest="50.5" data-cm-shoulder="44" data-cm-sleeve="19.5" data-cm-length="74.5" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XXL" data-cm-chest="52.5" data-cm-shoulder="45" data-cm-sleeve="20" data-cm-length="76.5" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr></tbody>
+    </table>
+  </section>
+
+  <div class="csg-mob">
+    <p class="csg-mob-label" id="carbon-size-guide-mens-tshirt-super-slim-sizes">Select a size</p>
+    <div class="csg-sizes" role="group" aria-labelledby="carbon-size-guide-mens-tshirt-super-slim-sizes"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
+    <div class="csg-sel">
+      <p class="csg-sel-h">Size <span data-csg-sel-size>M</span> measurements</p>
+      <div class="csg-sel-grid"><div><span class="csg-sel-k">Chest Width</span><span class="csg-sel-v" data-csg-sel="chest">&mdash;</span></div><div><span class="csg-sel-k">Shoulder Width</span><span class="csg-sel-v" data-csg-sel="shoulder">&mdash;</span></div><div><span class="csg-sel-k">Sleeve Length</span><span class="csg-sel-v" data-csg-sel="sleeve">&mdash;</span></div><div><span class="csg-sel-k">Body Length</span><span class="csg-sel-v" data-csg-sel="length">&mdash;</span></div></div>
+    </div>
+  </div>
+
+  <details class="csg-measure" open>
+    <summary>
+      <h3 class="csg-h3">How to measure</h3>
+      <svg class="csg-chev" width="18" height="11" viewBox="0 0 18 11" aria-hidden="true" focusable="false"><path d="M1.5 1.5L9 9l7.5-7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </summary>
+    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">Chest Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-chest.webp' | asset_url }}" alt="A T-shirt laid flat with an arrow running straight across the chest from one armhole to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the T-shirt flat. Measure straight across from armpit to armpit just below the armholes. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">Shoulder Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-shoulder.webp' | asset_url }}" alt="The top of a T-shirt laid flat with an arrow running from one shoulder seam to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure straight across from one shoulder seam to the other shoulder seam.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">Sleeve Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-sleeve.webp' | asset_url }}" alt="A T-shirt sleeve with an arrow running from the shoulder seam down to the sleeve opening" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the shoulder seam to the end of the sleeve.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">4</span><span class="csg-card-name">Body Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-body-length.webp' | asset_url }}" alt="A T-shirt laid flat with a vertical arrow from the high point of the shoulder down to the bottom hem" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the high point of shoulder (HPS) straight down to the bottom hem.</p></article></div>
+  </details>
+
+  <div class="csg-note-wrap">
+    <p class="csg-note">
+      <span class="csg-note-icon" aria-hidden="true">i</span>
+      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal production and finishing. For the most accurate fit comparison, measure a T-shirt you already own while it is laid flat.</span>
+    </p>
+  </div>
+
+  <section class="csg-tips-card" aria-label="Tips for the best fit">
+    <div class="csg-tips-head">
+      <span class="csg-tips-icon" aria-hidden="true">
+        <img src="{{ 'carbon-size-guide-tape-icon.png' | asset_url }}" alt="" width="68" height="69" loading="lazy" decoding="async">
+      </span>
+      <h3 class="csg-h3">Tips for the best fit</h3>
+    </div>
+    <ol class="csg-tips-steps"><li><span>Choose a T-shirt you already own that fits you well.</span></li><li><span>Lay it flat on a clean surface and smooth out wrinkles.</span></li><li><span>Measure Chest, Shoulder, Sleeve and Body Length as shown.</span></li><li><span>Compare those measurements with the CARBON size chart.</span></li></ol>
+  </section>
+
+</div>
+<script>
+(function () {
+  var root = document.getElementById("carbon-size-guide-mens-tshirt-super-slim");
+  if (!root || root.dataset.csgReady) return;
+  root.dataset.csgReady = "1";
+
+  var KEYS = ["chest", "shoulder", "sleeve", "length"];
+  var unit = "in";
+  var selected = "M";
+  var rows = [].slice.call(root.querySelectorAll("[data-csg-row]"));
+  var buttons = [].slice.call(root.querySelectorAll("[data-csg-size]"));
+  var units = [].slice.call(root.querySelectorAll("[data-csg-unit]"));
+
+  /* Centimetres are the only stored figures; inches are derived here so the two
+     can never disagree. One decimal, and 28.0 keeps its zero so the column of
+     numbers stays aligned. */
+  function show(cm) {
+    if (cm == null || cm === "") return "\u2014";
+    if (unit === "cm") return String(parseFloat(cm));
+    return (parseFloat(cm) / 2.54).toFixed(1);
+  }
+
+  function rowFor(size) {
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-csg-row") === size) return rows[i];
+    }
+    return null;
+  }
+
+  function paint() {
+    rows.forEach(function (tr) {
+      KEYS.forEach(function (k) {
+        var td = tr.querySelector('[data-csg-cell="' + k + '"]');
+        if (td) td.textContent = show(tr.getAttribute("data-cm-" + k));
+      });
+      tr.setAttribute("aria-selected", tr.getAttribute("data-csg-row") === selected ? "true" : "false");
+    });
+    buttons.forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-size") === selected ? "true" : "false");
+    });
+    units.forEach(function (b) {
+      b.setAttribute("aria-pressed", b.getAttribute("data-csg-unit") === unit ? "true" : "false");
+    });
+    root.querySelectorAll("[data-csg-unitlabel]").forEach(function (el) {
+      el.textContent = "(" + unit + ")";
+    });
+    var tr = rowFor(selected);
+    var label = root.querySelector("[data-csg-sel-size]");
+    if (label) label.textContent = selected;
+    KEYS.forEach(function (k) {
+      var el = root.querySelector('[data-csg-sel="' + k + '"]');
+      if (!el) return;
+      el.innerHTML = tr
+        ? show(tr.getAttribute("data-cm-" + k)) + '<span class="csg-sel-u">' + unit + "</span>"
+        : "\u2014";
+    });
+  }
+
+  function select(size) { selected = size; paint(); }
+
+  rows.forEach(function (tr) {
+    tr.addEventListener("click", function () { select(tr.getAttribute("data-csg-row")); });
+    tr.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(tr.getAttribute("data-csg-row")); }
+    });
+  });
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () { select(b.getAttribute("data-csg-size")); });
+  });
+  units.forEach(function (b) {
+    b.addEventListener("click", function () { unit = b.getAttribute("data-csg-unit"); paint(); });
+  });
+
+  paint();
+})();
+</script>
