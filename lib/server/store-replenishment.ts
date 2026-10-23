@@ -50,6 +50,8 @@ export type ReplenishmentLine = {
   pickedAt: string | null;
   /** Units (EPCs) pulled for this line via "Find any unit" — see pickUnit. */
   pickedUnits: number;
+  /** LIVE tags of this size already in the "Store" zone — the phone's store icon. */
+  storeZoneCount: number;
 };
 
 const SALE_LINE_FACTS = `
@@ -165,10 +167,15 @@ export async function getReplenishmentLines(
     retail_price: string | null;
     bin: string | null;
     picked_units: number;
+    store_zone_count: number;
   }>(
     `WITH facts AS (${SALE_LINE_FACTS.replace(/\$LID/g, "$1")} AND l.sale_id = $2)
      SELECT f.*, cs.sku, m.description AS name, cs.color_code AS color, cs.size,
             (SELECT count(*)::int FROM store_replenishment_units u WHERE u.sale_line_id = f.line_id) AS picked_units,
+            (SELECT count(*)::int FROM items i
+               JOIN assigned_zones az ON az.id = i.assigned_zone_id AND az.archived_at IS NULL
+              WHERE i.custom_sku_id = f.sku_id AND i.location_id = $1::uuid AND i.status = 'in-stock'
+                AND lower(btrim(az.name)) = 'store') AS store_zone_count,
             coalesce(cs.upc, m.upc) AS upc, cs.retail_price::text AS retail_price,
             coalesce(
               (SELECT b.code FROM items i JOIN bins b ON b.id = i.bin_id
@@ -205,6 +212,7 @@ export async function getReplenishmentLines(
       pickedBy: shortStaffName(x.picked_by_name) ?? null, // stored full; shown "First L."
       pickedAt: x.picked_at ? x.picked_at.toISOString() : null,
       pickedUnits: x.picked_units,
+      storeZoneCount: x.store_zone_count,
     })),
   };
 }

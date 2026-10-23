@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
@@ -545,6 +546,8 @@ class _LineCard extends StatelessWidget {
     final pickedBy = pickedByRaw == null ? null : shortStaffName(pickedByRaw);
     final textColor = pickable ? AppColors.textMain : _kTextMuted;
     final pulled = _i(line, 'pickedUnits');
+    // Units of this size already in the STORE zone (owner, 2026-10-22).
+    final inStore = sku != null && storeZoneCountOf(line) > 0;
 
     return Opacity(
       opacity: pickable ? 1 : 0.55,
@@ -595,17 +598,27 @@ class _LineCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          sku == null ? 'NO CATALOG ITEM' : 'SKU: $sku',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: textColor,
-                            fontFamily: 'monospace',
-                            height: 1.2,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                sku == null ? 'NO CATALOG ITEM' : 'SKU: $sku',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: textColor,
+                                  fontFamily: 'monospace',
+                                  height: 1.2,
+                                ),
+                              ),
+                            ),
+                            if (inStore) ...[
+                              const SizedBox(width: 8),
+                              const StoreZoneIcon(),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(

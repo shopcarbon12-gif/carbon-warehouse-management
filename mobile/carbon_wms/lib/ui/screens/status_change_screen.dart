@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
@@ -57,6 +58,7 @@ class _ScannedEpc {
     this.color,
     this.size,
     this.status,
+    this.zone,
   });
 
   final String epc;
@@ -65,6 +67,9 @@ class _ScannedEpc {
   final String? color;
   final String? size;
   String? status;
+
+  /// Assigned zone (Zone Management); "Store" shows the store icon.
+  final String? zone;
   bool expanded = false;
 }
 
@@ -401,6 +406,7 @@ class _StatusChangeScreenState extends State<StatusChangeScreen> {
           // The single Cloud + Geiger tag shows its WMS status even when it
           // has no product (killed / foreign tags are exactly what gets sent).
           status: (enriched || epc == _onlyEpc) ? _str(row?['status']) : null,
+          zone: enriched ? _str(row?['zone']) : null,
         )..expanded = epc == _onlyEpc,
       );
     });
@@ -798,6 +804,12 @@ class _EpcContainer extends StatelessWidget {
                           if ((card.status ?? '').isNotEmpty) ...[
                             SizedBox(width: 8.w),
                             _StatusBadge(wmsStatus: card.status!),
+                          ],
+                          // A LIVE tag in the STORE zone (the zone clears
+                          // once it is no longer LIVE).
+                          if (isStoreZone(card.zone) && card.status == 'in-stock') ...[
+                            SizedBox(width: 8.w),
+                            const StoreZoneIcon(),
                           ],
                         ],
                       ),

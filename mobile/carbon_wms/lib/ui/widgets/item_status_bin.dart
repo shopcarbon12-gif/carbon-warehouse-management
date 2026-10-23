@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:carbon_wms/theme/app_theme.dart';
 import 'package:carbon_wms/ui/widgets/item_line_format.dart';
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 
 /// Operator name for a WMS item status: "LIVE" in the UI, `in-stock` in the
 /// DB. null / empty = the tag has no WMS record.
@@ -94,7 +95,11 @@ class ItemStatusBinLine extends StatelessWidget {
               height: 1.2,
             ),
           ),
-        if (zoneName.isNotEmpty)
+        // STORE shows as the store icon only (owner, 2026-10-22); any other
+        // zone keeps its purple name.
+        if (isStoreZone(zoneName))
+          const StoreZoneIcon()
+        else if (zoneName.isNotEmpty)
           Text(
             'ZONE ${zoneName.toUpperCase()}',
             style: GoogleFonts.robotoMono(

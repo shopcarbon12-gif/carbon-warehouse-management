@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -393,6 +394,11 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                     ],
                   ),
                 ),
+                // Size has LIVE tags in the STORE zone (owner, 2026-10-22).
+                if (storeZoneCountOf(r) > 0) ...[
+                  SizedBox(width: 10.w),
+                  const StoreZoneIcon(),
+                ],
                 SizedBox(width: 10.w),
                 Text('$qty',
                     style: GoogleFonts.spaceGrotesk(
@@ -503,6 +509,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
             zone: zone,
             matrixId: map['matrix_id']?.toString().trim() ?? '',
             epcHint: prof != null ? _epcProfileHint(prof) : null,
+            storeCount: storeZoneCountOf(map),
           );
           _busy = false;
           // Reset the size run for the new item; _loadSiblingSizes repopulates.
@@ -948,12 +955,22 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
                         height: 1.15),
                   ),
                   SizedBox(height: 6.h),
-                  Text(
-                    r.sku,
-                    style: GoogleFonts.robotoMono(
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w700,
-                        color: _teal),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          r.sku,
+                          style: GoogleFonts.robotoMono(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w700,
+                              color: _teal),
+                        ),
+                      ),
+                      if (r.storeCount > 0) ...[
+                        SizedBox(width: 10.w),
+                        const StoreZoneIcon(),
+                      ],
+                    ],
                   ),
                   if (r.upc.isNotEmpty) ...[
                     SizedBox(height: 4.h),
@@ -1224,6 +1241,7 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
           qty: (v['epc_count'] as num?)?.toInt() ??
               int.tryParse('${v['epc_count'] ?? ''}') ??
               0,
+          storeCount: storeZoneCountOf(v),
         ));
       }
       rows.sort((a, b) => _sizeRank(a.size).compareTo(_sizeRank(b.size)));
@@ -1416,6 +1434,10 @@ class _InventoryLookupScreenState extends State<InventoryLookupScreen> {
               ],
             ),
           ),
+          if (s.storeCount > 0) ...[
+            SizedBox(width: 10.w),
+            const StoreZoneIcon(),
+          ],
           SizedBox(width: 10.w),
           // teal qty button → EPC screen
           _qtyButton(s),
@@ -1546,6 +1568,7 @@ class _LookupRow {
     this.imageUrl = '',
     this.matrixId = '',
     this.epcHint,
+    this.storeCount = 0,
   });
 
   final String code;
@@ -1568,6 +1591,9 @@ class _LookupRow {
   /// Matrix (product) UUID — used to fetch the sibling size run in the same colour.
   final String matrixId;
   final String? epcHint;
+
+  /// LIVE tags of this size in the STORE zone → store icon next to the SKU.
+  final int storeCount;
 }
 
 /// One size within the resolved item's colour — a row in the size run.
@@ -1577,10 +1603,14 @@ class _SizeRow {
     required this.sku,
     required this.size,
     required this.qty,
+    this.storeCount = 0,
   });
 
   final String customSkuId;
   final String sku;
   final String size;
   final int qty;
+
+  /// LIVE tags of this size in the STORE zone → store icon.
+  final int storeCount;
 }

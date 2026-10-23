@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/hardware/rfid_manager.dart';
 import 'package:carbon_wms/hardware/rfid_tag_read.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
@@ -1023,6 +1024,8 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
           'color': row['color'] as String?,
           'retail_price': row['retail_price'] as String?,
           'bin_location': row['bin_location'] as String?,
+          // LIVE tags of this size in the STORE zone → store icon on the row.
+          'store_zone_count': storeZoneCountOf(row),
         };
         _applyCatalogToGroup(group, mapped);
         _assetCache[sysIdStr] = mapped;
@@ -1042,6 +1045,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
     g.color = (m['color'] as String?) ?? '';
     g.retailPriceStr = m['retail_price'] as String?;
     g.binLocation = m['bin_location'] as String?;
+    g.storeCount = storeZoneCountOf(m);
     g.catalogResolved = true;
     g.catalogMissing = false;
   }
@@ -1847,6 +1851,7 @@ class _CountInventoryScreenState extends State<CountInventoryScreen> {
                                 binText: _binText(g),
                                 descriptionFallback: _fallbackRow2(g),
                                 qtyText: 'x${g.qty}',
+                                inStore: g.storeCount > 0,
                                 onQtyTap: () => _openGroupEpcList(g),
                                 onDelete: () {
                                   setState(() {
@@ -2096,6 +2101,7 @@ class _CountItemContainer extends StatefulWidget {
     required this.binText,
     required this.descriptionFallback,
     required this.qtyText,
+    this.inStore = false,
     this.onQtyTap,
     this.onDelete,
     this.confirmDelete,
@@ -2112,6 +2118,9 @@ class _CountItemContainer extends StatefulWidget {
   // in place of the item-name/color/size.
   final String descriptionFallback;
   final String qtyText;
+
+  /// Show the STORE zone icon after the SKU.
+  final bool inStore;
   final VoidCallback? onQtyTap;
   final VoidCallback? onDelete;
   final Future<bool> Function()? confirmDelete;
@@ -2253,7 +2262,7 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                       crossAxisAlignment: CrossAxisAlignment.baseline,
                       textBaseline: TextBaseline.alphabetic,
                       children: [
-                        Expanded(
+                        Flexible(
                           child: Text(
                             widget.skuLine,
                             style: skuStyle,
@@ -2264,6 +2273,11 @@ class _CountItemContainerState extends State<_CountItemContainer> {
                             textAlign: TextAlign.left,
                           ),
                         ),
+                        if (widget.inStore) ...[
+                          SizedBox(width: 8.w),
+                          const StoreZoneIcon(),
+                        ],
+                        const Spacer(),
                         if (hasPrice) ...[
                           SizedBox(width: 8.w),
                           Text(widget.priceText, style: priceStyle),
@@ -3790,6 +3804,9 @@ class _GroupedRow {
   String itemName = '';
   String? retailPriceStr; // raw "52.00" string from API
   String? binLocation;
+
+  /// LIVE tags of this size in the STORE zone (server lookup only).
+  int storeCount = 0;
   bool catalogResolved = false; // true once lookup completes (success OR 404)
   bool catalogMissing = false; // true only if lookup returned null
   bool epcInvalid = false; // true if decodeSystemId returned null

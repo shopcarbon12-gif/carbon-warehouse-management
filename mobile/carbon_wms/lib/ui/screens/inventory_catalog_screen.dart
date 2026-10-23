@@ -12,6 +12,7 @@ import 'package:carbon_wms/ui/screens/locate_tag_screen.dart';
 import 'package:carbon_wms/ui/widgets/camera_barcode_scanner.dart';
 import 'package:carbon_wms/ui/widgets/carbon_scaffold.dart';
 import 'package:carbon_wms/ui/widgets/item_line_format.dart';
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/ui/widgets/item_status_bin.dart';
 
 /// Live read-only mirror of `/inventory/catalog` from the WMS web app.
@@ -849,7 +850,7 @@ class CatalogRowCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text(
                         sku.isEmpty ? 'SKU: —' : 'SKU: $sku',
                         style: skuStyle,
@@ -857,6 +858,12 @@ class CatalogRowCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    // Sizes with LIVE tags in the STORE zone (owner, 2026-10-22).
+                    if (storeZoneCountOf(row) > 0) ...[
+                      SizedBox(width: 8.w),
+                      StoreZoneIcon(color: selected ? Colors.white : null),
+                    ],
+                    const Spacer(),
                     if (priceText.isNotEmpty) ...[
                       SizedBox(width: 8.w),
                       Text(priceText, style: priceStyle),
@@ -1019,6 +1026,10 @@ class _CatalogEpcListScreenState extends State<CatalogEpcListScreen> {
                   label: 'SKU',
                   value: sku.isEmpty ? '—' : sku,
                   trailing: priceText.isNotEmpty ? priceText : null,
+                  store: storeZoneCountOf(widget.row) > 0 ||
+                      _epcs.any((e) =>
+                          isStoreZone(e['zone_name']?.toString()) &&
+                          (e['status']?.toString() ?? '') == 'in-stock'),
                 ),
                 if (name.isNotEmpty) _LabeledRow(label: 'ITEM', value: name),
                 if (color.isNotEmpty || size.isNotEmpty)
@@ -1233,10 +1244,14 @@ class _LabeledRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.trailing,
+    this.store = false,
   });
   final String label;
   final String value;
   final String? trailing;
+
+  /// Show the STORE zone icon right after the value.
+  final bool store;
 
   @override
   Widget build(BuildContext context) {
@@ -1267,7 +1282,9 @@ class _LabeledRow extends StatelessWidget {
         children: [
           Text(label, style: labelStyle),
           SizedBox(width: 6.w),
-          Expanded(child: Text(value, style: valueStyle)),
+          Flexible(child: Text(value, style: valueStyle)),
+          if (store) ...[SizedBox(width: 8.w), const StoreZoneIcon()],
+          const Spacer(),
           if (trailing != null) Text(trailing!, style: trailingStyle),
         ],
       ),

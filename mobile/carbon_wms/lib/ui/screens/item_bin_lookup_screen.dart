@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
+import 'package:carbon_wms/ui/widgets/store_zone_icon.dart';
 import 'package:carbon_wms/network/wms_api_client.dart';
 import 'package:carbon_wms/hardware/rfid_vendor_channel.dart';
 import 'package:carbon_wms/services/scan_sounds.dart';
@@ -178,6 +179,8 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
       final byBin = <String, Map<String, _VariantQty>>{};
       // Assigned zone (Zone Management) → units in it.
       final byZone = <String, int>{};
+      // Variant keys (colour|size|sku) with LIVE tags in the STORE zone.
+      final storeKeys = <String>{};
       var total = 0;
       for (final list in lists) {
         for (final e in list) {
@@ -207,6 +210,8 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
           final size = e['size']?.toString().trim() ?? '';
           final vSku = e['sku']?.toString().trim() ?? '';
           final key = '$color|$size|$vSku';
+          // A LIVE unit of this size in the STORE zone → store icon on its line.
+          if (status == 'in-stock' && isStoreZone(zone)) storeKeys.add(key);
           for (final bin in bins) {
             final slot = byBin.putIfAbsent(bin, () => <String, _VariantQty>{});
             final v = slot[key];
@@ -221,6 +226,9 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
       }
 
       _BinGroup buildGroup(String bin, Map<String, _VariantQty> variants) {
+        for (final e in variants.entries) {
+          e.value.inStore = storeKeys.contains(e.key);
+        }
         final list = variants.values.toList()
           ..sort((a, b) {
             final c = a.color.toUpperCase().compareTo(b.color.toUpperCase());
@@ -587,23 +595,49 @@ class _ItemBinLookupScreenState extends State<ItemBinLookupScreen> {
           ),
           if (g.variants.isNotEmpty) ...[
             SizedBox(height: 8.h),
-            for (final v in g.variants)
-              Padding(
-                padding: EdgeInsets.only(left: 34.w, bottom: 6.h),
-                child: Row(
-                  children: [
-                    Expanded(child: _variantLabel(v)),
-                    SizedBox(width: 10.w),
-                    Text(
-                      'x${v.qty}',
-                      style: GoogleFonts.spaceGrotesk(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w800,
-                          color: _slate),
-                    ),
-                  ],
-                ),
+            // COLOR · SIZE, then its quantity in one column, then the STORE
+            // icon at the far right (owner, 2026-10-22).
+            Padding(
+              padding: EdgeInsets.only(left: 34.w),
+              child: Table(
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                columnWidths: {
+                  0: const IntrinsicColumnWidth(),
+                  1: FixedColumnWidth(64.w),
+                  2: const FlexColumnWidth(),
+                  3: FixedColumnWidth(28.w),
+                },
+                children: [
+                  for (final v in g.variants)
+                    TableRow(children: [
+                      Padding(
+                        padding: EdgeInsets.only(bottom: 6.h),
+                        child: _variantLabel(v),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(left: 14.w, bottom: 6.h),
+                        child: Text(
+                          'x${v.qty}',
+                          style: GoogleFonts.spaceGrotesk(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w800,
+                              color: _slate),
+                        ),
+                      ),
+                      const SizedBox.shrink(),
+                      Padding(
+                        padding: EdgeInsets.only(bottom: 6.h),
+                        child: v.inStore
+                            ? const Align(
+                                alignment: Alignment.centerRight,
+                                child: StoreZoneIcon(),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ]),
+                ],
               ),
+            ),
           ],
         ],
       ),
@@ -777,4 +811,7 @@ class _VariantQty {
   final String size;
   final String sku;
   int qty;
+
+  /// This size has LIVE tags in the STORE zone.
+  bool inStore = false;
 }

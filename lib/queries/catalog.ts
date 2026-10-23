@@ -21,6 +21,8 @@ export type CatalogCustomSkuRow = {
   color_code: string | null;
   size: string | null;
   epc_count: number;
+  /** LIVE tags of this size in the "Store" zone (Zone Management) — the phone's store icon. */
+  store_zone_count: number;
 };
 
 export type CatalogItemRow = {
@@ -105,6 +107,7 @@ export async function listCatalogCustomSkus(
     color_code: string | null;
     size: string | null;
     epc_count: string;
+    store_zone_count: string;
   }>(
     `SELECT
        cs.id,
@@ -113,9 +116,12 @@ export async function listCatalogCustomSkus(
        cs.color_code,
        cs.size,
        -- Live inventory only (see listCatalogMatrices) — exclude killed/sold tags.
-       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS epc_count
+       COUNT(i.id) FILTER (WHERE i.status = 'in-stock')::text AS epc_count,
+       -- LIVE tags in the "Store" zone — same rule as the catalog grid's store_zone_count.
+       COUNT(i.id) FILTER (WHERE i.status = 'in-stock' AND lower(btrim(az.name)) = 'store')::text AS store_zone_count
      FROM custom_skus cs
      LEFT JOIN items i ON i.custom_sku_id = cs.id AND i.location_id = $2::uuid
+     LEFT JOIN assigned_zones az ON az.id = i.assigned_zone_id AND az.archived_at IS NULL
      WHERE cs.matrix_id = $1::uuid
      GROUP BY cs.id, cs.sku, cs.ls_system_id, cs.color_code, cs.size
      ORDER BY cs.sku ASC`,
@@ -128,6 +134,7 @@ export async function listCatalogCustomSkus(
     color_code: row.color_code,
     size: row.size,
     epc_count: Number(row.epc_count),
+    store_zone_count: Number(row.store_zone_count),
   }));
 }
 
