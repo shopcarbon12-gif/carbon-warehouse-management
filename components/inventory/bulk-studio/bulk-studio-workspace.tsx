@@ -387,6 +387,11 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
   /** Where each item's photo stream left off: the next batch from the same
       place continues that item until a new tag appears. */
   const streamRef = useRef(new Map<string, { key: string; at: number }>());
+  /** Per phone session (fromKey): which way the shooter works, and — when the
+      hang tag comes LAST — the photos still waiting for their tag. The owner
+      shoots the garment first and its tag last (2026-10-24: every product's
+      photos landed on the previous tag's item). */
+  const tagModeRef = useRef(new Map<string, { mode: "first" | "last"; pending: { file?: File; url?: string }[]; at: number }>());
   const ingest = useCallback(
     (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
       ingestChain.current = ingestChain.current.then(() => ingestOne(fromKey, entriesIn)).catch(() => {});
@@ -422,6 +427,74 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
       /* falls back to "all on this item" */
     }
     if (photos.length !== entries.length) photos = entries.map(() => ({ group: 1, isTag: false }));
+
+    /* Which way does this session shoot? Decided on its first batch: a tag
+       first (or a product already loaded on the item) = each tag STARTS its
+       product; garment photos first on an empty item = each tag ENDS its
+       product, so photos wait for the tag that follows them. */
+    {
+      const live = tagModeRef.current.get(fromKey);
+      const st = live && Date.now() - live.at < 30 * 60_000 ? live : null;
+      const fromItem = itemsRef.current.find((x) => x.key === fromKey);
+      const mode: "first" | "last" = st?.mode ?? (photos[0]?.isTag || fromItem?.matrixId ? "first" : "last");
+      if (mode === "last") {
+        const pending = [...(st?.pending ?? [])];
+        const nowItems = itemsRef.current;
+        const byM = new Map(nowItems.filter((x) => x.matrixId).map((x) => [x.matrixId as string, x.key]));
+        const added: Item[] = [];
+        const filesLast = new Map<string, { file?: File; url?: string }[]>();
+        const notesLast: string[] = [];
+        let firstUsed = nowItems.some((x) => x.key === fromKey && x.matrixId);
+        let lastKey = st ? streamRef.current.get(fromKey)?.key ?? fromKey : fromKey;
+        photos.forEach((p, i) => {
+          if (!p.isTag) {
+            pending.push(entries[i]);
+            return;
+          }
+          const ids = [...new Set((p.matches ?? []).map((m) => m.matrixId))];
+          const matrixId = ids.length === 1 ? ids[0] : null;
+          if (!matrixId) notesLast.push(ids.length ? `tag ${p.sku} matches ${ids.length} products` : `tag ${p.sku || "?"} — no product has that code`);
+          let key: string;
+          if (matrixId && byM.has(matrixId)) key = byM.get(matrixId) as string;
+          else if (!firstUsed && nowItems.some((x) => x.key === fromKey && !x.matrixId)) {
+            key = fromKey;
+            firstUsed = true;
+            if (matrixId) {
+              const fk = key;
+              setItems((prev) => prev.map((x) => (x.key === fk && !x.matrixId ? { ...x, matrixId, fresh: true } : x)));
+              itemsRef.current = itemsRef.current.map((x) => (x.key === fk && !x.matrixId ? { ...x, matrixId, fresh: true } : x));
+            }
+          } else {
+            key = newKey();
+            added.push({ key, matrixId, fresh: true });
+          }
+          if (matrixId) byM.set(matrixId, key);
+          if (pending.length) filesLast.set(key, [...(filesLast.get(key) ?? []), ...pending.splice(0)]);
+          lastKey = key;
+        });
+        if (added.length) {
+          setItems((prev) => [...prev, ...added]);
+          itemsRef.current = [...itemsRef.current, ...added];
+        }
+        tagModeRef.current.set(fromKey, { mode, pending, at: Date.now() });
+        streamRef.current.set(fromKey, { key: lastKey, at: Date.now() });
+        for (const [key, list] of filesLast) {
+          setDraft(key, (prev) => ({ ...(prev ?? { files: [] }), files: [...(prev?.files ?? []), ...list.map((e) => ({ ...e, view: "general" as const }))] }));
+        }
+        const placed = [...filesLast.values()].reduce((n, l) => n + l.length, 0);
+        setBarMsg({
+          text:
+            `${placed} photo${placed === 1 ? "" : "s"} sorted (hang tag after its photos)` +
+            (added.length ? ` — ${added.length} new item${added.length === 1 ? "" : "s"} added` : "") +
+            (pending.length ? ` · ${pending.length} photo${pending.length === 1 ? "" : "s"} waiting for their hang tag` : "") +
+            (notesLast.length ? `. Check: ${notesLast.join("; ")}.` : "."),
+          tone: notesLast.length ? "warn" : "ok",
+        });
+        if (added[0]) setScrollTo(added[0].key);
+        return;
+      }
+      tagModeRef.current.set(fromKey, { mode, pending: [], at: Date.now() });
+    }
     /* Forward only, in shooting order: a new item starts at a tag, or where the
        photos switch to a garment not seen yet — a photo is never sent back to
        an earlier item. */
@@ -507,6 +580,14 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
     const empty = from && !from.matrixId ? from : items.find((x) => !x.matrixId);
     const key = empty?.key ?? newKey();
     setItems((p) => (empty ? p.map((x) => (x.key === key ? { ...x, matrixId, fresh: true } : x)) : [...p, { key, matrixId, fresh: true }]));
+    /* Photos shot before the tag, waiting for it (tag-last session): a scanned
+       tag ends them just like a photographed one. */
+    const waiting = tagModeRef.current.get(fromKey);
+    if (waiting?.mode === "last" && waiting.pending.length) {
+      const list = waiting.pending.splice(0);
+      setDraft(key, (prev) => ({ ...(prev ?? { files: [] }), files: [...(prev?.files ?? []), ...list.map((e) => ({ ...e, view: "general" as const }))] }));
+      streamRef.current.set(fromKey, { key, at: Date.now() });
+    }
     setBarMsg(null);
     setFocusKey(key);
     if (key !== fromKey) setScrollTo(key);

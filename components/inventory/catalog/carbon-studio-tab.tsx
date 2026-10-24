@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { orderStudioGallery } from "@/lib/studio/gallery-order";
 import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
 import { ItemRefCropDialog } from "@/components/inventory/catalog/item-ref-crop-dialog";
@@ -122,6 +122,9 @@ const sameRef = (a: ItemRef, b: { url: string; view?: RefView }) =>
   a.url === b.url && (a.view ?? "general") === (b.view ?? "general");
 /** Drag payload for moving a reference between sections (copy, never move). */
 const REF_DRAG_TYPE = "application/x-carbon-item-ref";
+/** A photo dropped on ANOTHER item's Studio (Bulk Studio) moves there: the
+ *  card it came from hears this and lets it go (owner, 2026-10-24). */
+const REF_MOVED_EVENT = "carbon-studio-ref-moved";
 /* Shared with the server (lib/studio-item-spec) so "have the photos changed?"
    cannot be answered differently in the two places that ask it. */
 const refViewKey = (v: RefViewLists) =>
@@ -861,11 +864,24 @@ export function CarbonStudioTab({
       setItemRefs((prev) =>
         prev.some((x) => sameRef(x, { url, view }))
           ? prev // already labelled for this section — nothing to do
-          : [...prev, { url, preview: prev.find((x) => x.url === url)?.preview, view }],
+          : // A photo from another item has no preview here: show it from its address.
+            [...prev, { url, preview: prev.find((x) => x.url === url)?.preview ?? previewFor(url), view }],
       );
     },
     [canManage, selectView],
   );
+
+  /* This card's own id, carried by every photo dragged out of it. */
+  const studioInstanceId = useId();
+  useEffect(() => {
+    const onMoved = (e: Event) => {
+      const d = (e as CustomEvent<{ url: string; from: string }>).detail;
+      if (!d || d.from !== studioInstanceId) return;
+      setItemRefs((prev) => prev.filter((x) => x.url !== d.url));
+    };
+    window.addEventListener(REF_MOVED_EVENT, onMoved);
+    return () => window.removeEventListener(REF_MOVED_EVENT, onMoved);
+  }, [studioInstanceId]);
 
   /* Touch drag between the sections.
      HTML5 drag-and-drop does not exist on a touch screen, so on a phone the
@@ -3575,8 +3591,12 @@ export function CarbonStudioTab({
                   const dragged = e.dataTransfer.getData(REF_DRAG_TYPE);
                   if (dragged) {
                     try {
-                      const payload = JSON.parse(dragged) as { url: string; view?: RefView };
+                      const payload = JSON.parse(dragged) as { url: string; view?: RefView; from?: string };
                       if (payload?.url) copyRefToView(payload.url, zone.view);
+                      // From another item: a move — that item drops it.
+                      if (payload?.url && payload.from && payload.from !== studioInstanceId) {
+                        window.dispatchEvent(new CustomEvent(REF_MOVED_EVENT, { detail: { url: payload.url, from: payload.from } }));
+                      }
                     } catch {
                       /* not our payload — ignore */
                     }
@@ -3720,7 +3740,7 @@ export function CarbonStudioTab({
                            drop looks the photo up in state instead. */
                         e.dataTransfer.setData(
                           REF_DRAG_TYPE,
-                          JSON.stringify({ url: ref.url, view: ref.view ?? zone.view }),
+                          JSON.stringify({ url: ref.url, view: ref.view ?? zone.view, from: studioInstanceId }),
                         );
                         e.dataTransfer.effectAllowed = "copy";
                       }}
