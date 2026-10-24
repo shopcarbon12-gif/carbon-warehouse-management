@@ -238,10 +238,17 @@ export async function releaseHeldAlert(pool: Pool, visitorId: string, now: boole
       last_title: string | null;
       last_path: string | null;
     }>(
-      `UPDATE visitors SET pending_alert = NULL
-        WHERE visitor_id = $1 AND pending_alert IS NOT NULL
-          ${now ? "" : `AND visit_started_at <= now() - make_interval(secs => ${HOLD_SECONDS})`}
-        RETURNING pending_alert, visits, nickname, customer_name, email, country, city, region, region_code, last_source, device, last_title, last_path`,
+      /* RETURNING shows the row AFTER the update, so the held kind is read in
+         the locked sub-select first — returning pending_alert itself gave NULL,
+         every alert insert failed and none was sent from 2026-10-22 on. */
+      `UPDATE visitors v SET pending_alert = NULL
+         FROM (SELECT visitor_id, pending_alert AS held FROM visitors
+                WHERE visitor_id = $1 AND pending_alert IS NOT NULL
+                  ${now ? "" : `AND visit_started_at <= now() - make_interval(secs => ${HOLD_SECONDS})`}
+                FOR UPDATE) o
+        WHERE v.visitor_id = o.visitor_id
+        RETURNING o.held AS pending_alert, v.visits, v.nickname, v.customer_name, v.email, v.country, v.city, v.region,
+                  v.region_code, v.last_source, v.device, v.last_title, v.last_path`,
       [visitorId],
     );
     const row = r.rows[0];
