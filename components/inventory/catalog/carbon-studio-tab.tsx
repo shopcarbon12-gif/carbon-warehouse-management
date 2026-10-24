@@ -29,6 +29,7 @@ import {
 import { instructionHasStyling, lookConflicts, resolveLookSheet, withNoteFootwear, type ResolvedStyling } from "@/lib/studioLookSheet";
 import { stableLsSystemIdFromString } from "@/lib/utils/ls-id";
 import { imageFilesFromTransfer } from "@/lib/client/image-transfer";
+import { colourwayDecision } from "@/lib/studio-colourway";
 import type { BatchItemSummary, BatchOverview } from "@/lib/server/studio-batch";
 
 /**
@@ -943,6 +944,16 @@ export function CarbonStudioTab({
   const [colorRuns, setColorRuns] = useState<Record<string, ColorRun>>({});
   const [colorBusy, setColorBusy] = useState(false);
   const colorRun = colorRuns[color] ?? null;
+  /** May the saved colourway recolour runs? Not when the item photos already
+   *  show this colour, nor when it names another colour (Damian Shirt's BLACK
+   *  held "bright white" — every run came back white; owner, 2026-10-23). */
+  const colourwayCheck = colorRun?.colorRefUrl
+    ? colourwayDecision({
+        colorKey: color,
+        colourwayName: colorRun.colorName,
+        specGarmentColour: /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(itemSpec)?.[1] ?? "",
+      })
+    : null;
   const loadColorRuns = useCallback(async () => {
     if (!matrixId) return;
     try {
@@ -1439,7 +1450,7 @@ export function CarbonStudioTab({
   const lookPreview = useMemo(() => {
     if (!model) return null;
     const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(itemSpec)?.[1] ?? "";
-    const itemColour = (colorRun?.colorRefUrl ? colorRun.colorName : "") || garmentColour || color;
+    const itemColour = (colorRun?.colorRefUrl && colourwayCheck === "apply" ? colorRun.colorName : "") || garmentColour || color;
     const styleKey = refViews.styling.join("|") + "::" + itemType;
     const instr = instruction.trim();
     const resolveKey = [instr, itemType, model.gender, itemColour].join("::");
@@ -1463,7 +1474,7 @@ export function CarbonStudioTab({
     /* Shown only once the instruction has been read: before that the reader may still supply the piece. */
     const conflicts = pendingReads.length ? [] : lookConflicts(instr, sheet);
     return { text: sheet.text, pendingReads, conflicts };
-  }, [model, itemSpec, colorRun, color, refViews.styling, itemType, instruction, productName, accessoryKind, matrixId, keepStylingPrints, readCache]);
+  }, [model, itemSpec, colorRun, colourwayCheck, color, refViews.styling, itemType, instruction, productName, accessoryKind, matrixId, keepStylingPrints, readCache]);
 
   const prepRefsRef = useRef<(refs: ItemRef[]) => void>(() => {});
   const uploadItems = useCallback(async (files: File[], view?: RefView) => {
@@ -2190,7 +2201,14 @@ export function CarbonStudioTab({
     /* Pinned for the whole run: the operator switching the colour dropdown
        mid-generation must not leave panel 3 rendering a different colourway
        from panel 1. */
-    const activeColorRun = colorRun?.colorRefUrl ? colorRun : null;
+    const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(specForRun)?.[1] ?? "";
+    /* Only a colourway that really changes the colour is sent — checked
+       against THIS run's spec (a batch press may have just analysed it). */
+    const activeColorRun =
+      colorRun?.colorRefUrl &&
+      colourwayDecision({ colorKey: color, colourwayName: colorRun.colorName, specGarmentColour: garmentColour }) === "apply"
+        ? colorRun
+        : null;
     // One facial expression per run so the model doesn't look robotic across
     // products; kept consistent across this run's panels for set coherence.
     const expressionDirective = pickExpressionDirective();
@@ -2202,7 +2220,6 @@ export function CarbonStudioTab({
        lines), and only fall back to streetwear defaults for the pieces they do
        not show. The defaults pick their colour against the product's, which is
        the colourway being rendered when there is one. */
-    const garmentColour = /^\s*\d+\.\s*Garment:[^—\n]*—\s*([^\n.]+)/m.exec(specForRun)?.[1] ?? "";
     const itemColour = activeColorRun?.colorName || garmentColour || color;
     /* An accessory pins this for the whole run, like the colourway: switching
        the item type mid-run must not mix shots and poses in one set. */
@@ -4004,6 +4021,17 @@ export function CarbonStudioTab({
                     {colorRun.hardwareNote ? (
                       <p className="mt-1 text-[0.72rem] text-[var(--wms-status-warning-fg)]">
                         Colour check: {colorRun.hardwareNote}
+                      </p>
+                    ) : null}
+                    {colourwayCheck === "already" ? (
+                      <p className="mt-1 text-[0.72rem] font-semibold text-[var(--wms-status-warning-fg)]">
+                        Not used: the item photos already show {color}, so runs render the photos as they are. Remove
+                        this colour photo if it is not {color}.
+                      </p>
+                    ) : colourwayCheck === "mismatch" ? (
+                      <p className="mt-1 text-[0.72rem] font-semibold text-[var(--wms-status-danger-fg)]">
+                        Not used: this colour photo reads as “{colorRun.colorName.split("—")[0].trim()}”, not {color}.
+                        Replace the photo with a {color} one, or correct the colour name above.
                       </p>
                     ) : null}
                   </div>

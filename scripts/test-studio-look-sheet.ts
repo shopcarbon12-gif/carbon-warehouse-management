@@ -455,3 +455,36 @@ test("owner styling rules still hold for a male and a female jeans run after the
     assert.deepEqual(lookConflicts(note, sheet), []);
   }
 });
+
+/* Damian Shirt, 2026-10-23: its BLACK colourway held a "bright white" photo,
+   so every BLACK run came back white. Cases are the real saved records. */
+test("colourway: not sent when the photos already show the colour or it names another colour", async () => {
+  const { colourwayDecision, colourFamilies } = await import("@/lib/studio-colourway");
+  const white = "bright white — high lightness, low saturation, no undertone, smooth and flat texture";
+  // Damian Shirt: photos + spec are black → nothing to recolour.
+  assert.equal(colourwayDecision({ colorKey: "BLACK", colourwayName: white, specGarmentColour: "black" }), "already");
+  // Same record over white photos: names another colour than BLACK → refused.
+  assert.equal(colourwayDecision({ colorKey: "BLACK", colourwayName: white, specGarmentColour: "white" }), "mismatch");
+  assert.equal(colourwayDecision({ colorKey: "BLACK", colourwayName: "soft sky blue — light", specGarmentColour: "pink" }), "mismatch");
+  assert.equal(colourwayDecision({ colorKey: "BEIGE", colourwayName: "deep black — dark", specGarmentColour: "white" }), "mismatch");
+  // Real dye changes still go through.
+  assert.equal(colourwayDecision({ colorKey: "BLACK", colourwayName: "jet black — very dark", specGarmentColour: "light grey" }), "apply");
+  assert.equal(colourwayDecision({ colorKey: "BEIGE", colourwayName: "washed sand beige — light beige", specGarmentColour: "black" }), "apply");
+  assert.equal(colourwayDecision({ colorKey: "WHITE", colourwayName: "off-white — light", specGarmentColour: "black" }), "apply");
+  // A colour word it does not know → no guess, sent as before.
+  assert.equal(colourwayDecision({ colorKey: "WILD MUSHROOM", colourwayName: "taupe", specGarmentColour: "lavender" }), "apply");
+  assert.equal(colourwayDecision({ colorKey: "XYZ", colourwayName: white, specGarmentColour: "black" }), "apply");
+  assert.deepEqual([...colourFamilies("Off-White")], ["white"]);
+});
+
+test("colourway: a print's accent colour is not the garment colour (Orson Shirt)", async () => {
+  const { colourwayDecision } = await import("@/lib/studio-colourway");
+  assert.equal(
+    colourwayDecision({
+      colorKey: "BLACK",
+      colourwayName: "black with cream abstract stripes — dark black",
+      specGarmentColour: "cream with black abstract stripes",
+    }),
+    "apply",
+  );
+});
