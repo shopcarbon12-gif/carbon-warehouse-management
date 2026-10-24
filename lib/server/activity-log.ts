@@ -39,6 +39,7 @@ const SKIP_ROUTES = new Set<string>([
   "generate/run-qa",
   "generate/job",
   "studio/batch/poll", // night-batch status check, every few minutes while a batch is out
+  "studio/size-fit", // the size a model wears, worked out before every Studio run
   "image-handoff/session",
   "image-handoff/session/[sessionId]",
   "wishlist",

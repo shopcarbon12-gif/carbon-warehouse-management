@@ -722,6 +722,8 @@ export function CarbonStudioTab({
   const [itemRefs, setItemRefs] = useState<ItemRef[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>("");
+  /** The size the model wears this run, from the product's measurements ("Gringo → size M (…)"). */
+  const [sizeFitSummary, setSizeFitSummary] = useState<string>("");
   /* Stopwatch for a run: starts on Generate, stops when the last panel lands,
      and the final time stays on screen. Regenerate starts it from zero. It is
      there to answer "how long did that actually take" without reading a log. */
@@ -2364,6 +2366,30 @@ export function CarbonStudioTab({
     const savedLook =
       !anchored && keepLook && !runAccessory && !chosen.includes(1) ? lookAnchors[lookAnchorKeyFor(model.model_id, lookColour)] : undefined;
     const lookAnchorUrl = savedLook && savedLook.gate !== "flagged" && savedLook.url ? savedLook.url : undefined;
+    /* Size first (owner, 2026-10-24): when the product has measurements, the
+       size this model would really wear and how it sits on them. The Item
+       instruction keeps the final word on the server. No measurements → no
+       size text, exactly as before. */
+    let sizeFitText = "";
+    setSizeFitSummary("");
+    if (!runAccessory) {
+      try {
+        setProgress("Checking which size fits the model…");
+        const r = await fetch("/api/studio/size-fit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abort.signal,
+          body: JSON.stringify({ matrixId, modelName: model.name, itemSpec: specForRun, instruction: instr, itemType, productName }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { fit?: { text?: string; summary?: string } | null };
+        if (r.ok && j.fit?.text) {
+          sizeFitText = j.fit.text;
+          setSizeFitSummary(j.fit.summary ?? "");
+        }
+      } catch {
+        /* no size text — the run goes ahead exactly as before */
+      }
+    }
     /** One panel's request — exactly what /api/generate receives, live or in the night batch. */
     const panelRequest = (panel: number) => {
       const [poseA, poseB] = runAccessory ? accessoryShotPair(panel) : getPanelPosePair(model.gender, panel);
@@ -2430,6 +2456,8 @@ export function CarbonStudioTab({
         modelId: model.model_id,
         itemColour: lookColour,
         ...(lookAnchorUrl ? { lookAnchorUrl } : {}),
+        /* How the size this model wears sits on them (/api/studio/size-fit). */
+        ...(sizeFitText ? { sizeFit: sizeFitText } : {}),
         /* The picked jeans label: the server attaches it to the Pose 4 / Pose 7
            panels when the spec puts a label on the back waistband. */
         ...(isJeansType && jeansLabelId && !runAccessory ? { jeansLabelId } : {}),
@@ -4105,6 +4133,7 @@ export function CarbonStudioTab({
            below; all four panels are sent, the live-only options do not apply. */
         <div className="flex flex-wrap items-center gap-3">
           {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
+          {sizeFitSummary ? <span className="font-mono text-[0.74rem] text-[var(--wms-fg)]">Size: {sizeFitSummary}</span> : null}
           {prepping > 0 ? (
             <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">
               Sorting, straightening and cropping {prepping} photo{prepping === 1 ? "" : "s"}…
@@ -4332,6 +4361,7 @@ export function CarbonStudioTab({
           </span>
         ) : null}
         {progress ? <span className="font-mono text-[0.74rem] text-[var(--wms-accent)]">{progress}</span> : null}
+        {sizeFitSummary ? <span className="font-mono text-[0.74rem] text-[var(--wms-fg)]">Size: {sizeFitSummary}</span> : null}
         {msg ? <span className="font-mono text-[0.74rem] text-[var(--wms-muted)]">{msg}</span> : null}
         {photoWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{photoWarn}</span> : null}
         {aiRefWarn ? <span className="font-mono text-[0.74rem] text-[var(--wms-status-warning-fg)]">{aiRefWarn}</span> : null}

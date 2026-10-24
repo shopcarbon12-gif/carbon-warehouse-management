@@ -1122,6 +1122,7 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
       anchor: anchorRaw,
       lookAnchorUrl: lookAnchorUrlRaw,
       lookSheet: lookSheetRaw,
+      sizeFit: sizeFitRaw,
       modelId: modelIdRaw,
       itemColour: itemColourRaw,
       jeansLabelId: jeansLabelIdRaw,
@@ -1274,6 +1275,12 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
        sent identical in every panel body. Injected verbatim into the protected
        server block, so no panel can have it trimmed or reworded. */
     const lookSheet = typeof lookSheetRaw === "string" ? lookSheetRaw.replace(/\r\n?/g, "\n").trim() : "";
+    /* Size and fit from the product's measurements and the model's body
+       (/api/studio/size-fit, owner 2026-10-24); empty when the product has none. */
+    const sizeFitText =
+      typeof sizeFitRaw === "string" && /^SIZE AND FIT\b/.test(sizeFitRaw.trim())
+        ? sizeFitRaw.replace(/\s+/g, " ").trim().slice(0, 1600)
+        : "";
     const lookSheetBytes = lookSheet ? promptLen(lookSheet) : 0;
     const runTag = req.headers.get("x-generate-run")?.trim() ?? "";
     let imagesDropped: DroppedRefs = {};
@@ -1653,6 +1660,9 @@ async function handleGenerate(req: NextRequest, signal?: AbortSignal): Promise<R
          either — and before the colourway, the same-shoot reference, the
          poses and the operator, which all still read later and win. */
       ...(lookSheet ? [/^LOOK SHEET\b/i.test(lookSheet) ? lookSheet : `LOOK SHEET (SERVER — resolved once for this whole shoot; the same in every panel):\n${lookSheet}`] : []),
+      /* How this size sits on this model, from real measurements. After the
+         product and the outfit; the operator instruction still comes last. */
+      ...(sizeFitText && !accessoryMode ? [sizeFitText] : []),
       ...(colorRun
         ? [
             `COLOURWAY — this run renders the SAME product in a different colour: ${

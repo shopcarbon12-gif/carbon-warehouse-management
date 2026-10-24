@@ -10,8 +10,6 @@ import {
   deleteProductMedia,
   updateMediaAlt,
   reorderProductMedia,
-  createProductMedia,
-  stageImageUpload,
   appendMediaToVariants,
   createProductMediaBatch,
   detachMediaFromVariants,
@@ -21,6 +19,7 @@ import {
 } from "@/lib/server/shopify-write";
 import { syncShopifyImagesForMatrix } from "@/lib/server/shopify-catalog-images";
 import { profileForStudioModel, setMatrixModel } from "@/lib/server/model-profiles";
+import { lastStudioSize } from "@/lib/server/studio-size-fit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -234,7 +233,10 @@ async function POST_handler(req: Request) {
     try {
       const profile = await profileForStudioModel(pool, studioModelName);
       if (profile) {
-        model = await setMatrixModel(pool, matrixId, profile, "studio");
+        /* The size the pictures were generated in for this model (Studio size
+           fit, owner 2026-10-24); none on file → the model's usual size. */
+        const sizeWorn = await lastStudioSize(pool, matrixId, studioModelName);
+        model = await setMatrixModel(pool, matrixId, profile, "studio", { sizeWorn });
         if (model.warning) warnings.push(`model info: ${model.warning}`);
       } else {
         warnings.push(`model info: no measurements on file for "${studioModelName}"`);

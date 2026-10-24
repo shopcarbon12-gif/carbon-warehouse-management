@@ -30,12 +30,17 @@ export type ModelProfile = {
   hips_in: string | null;
   size: string | null;
   jeans_waist: string | null;
+  /** Migration 0135 — inside leg, shoulder width (inches), US shoe size. */
+  inseam_in: string | null;
+  shoulder_in: string | null;
+  shoe_us: string | null;
   height_source: string;
   photos_being_replaced: boolean;
 };
 
 const COLS = `id::text, code, label, kind, studio_model_name, gender, height, height_cm,
-  bust_or_chest_in::text, waist_in::text, hips_in::text, size, jeans_waist, height_source, photos_being_replaced`;
+  bust_or_chest_in::text, waist_in::text, hips_in::text, size, jeans_waist,
+  inseam_in::text, shoulder_in::text, shoe_us, height_source, photos_being_replaced`;
 
 export async function listModelProfiles(pool: Pool): Promise<ModelProfile[]> {
   const r = await pool.query<ModelProfile>(`SELECT ${COLS} FROM model_profiles ORDER BY gender, code`);
@@ -83,6 +88,11 @@ export function measurementsJson(profile: ModelProfile): Record<string, string> 
   if (w) out.waist = w;
   const h = inch(profile.hips_in);
   if (h) out.hips = h;
+  const ins = inch(profile.inseam_in);
+  if (ins) out.inseam = ins;
+  const sh = inch(profile.shoulder_in);
+  if (sh) out.shoulders = sh;
+  if (profile.shoe_us) out.shoe_us = profile.shoe_us;
   if (profile.size) out.usual_size = profile.size;
   return out;
 }
