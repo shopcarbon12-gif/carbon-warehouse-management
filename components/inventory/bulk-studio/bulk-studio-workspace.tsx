@@ -402,12 +402,15 @@ export function BulkStudioWorkspace({ canManage, buildId = "" }: { canManage: bo
     [],
   );
   const ingestOne = async (fromKey: string, entriesIn: { file?: File; url?: string }[]) => {
-    /* Shooting order. Files: their own time stamp. Phone photos: the phone page
-       sends them one after another, and each stored name carries its arrival
-       time — the polls themselves can come back in any order. */
-    const stamp = (e: { file?: File; url?: string }) =>
-      e.file ? e.file.lastModified : Number((e.url ?? "").match(/\/(\d{12,14})(?:-\d+)?\.\w+$/)?.[1] ?? 0);
-    const entries = [...entriesIn].sort((a, b) => stamp(a) - stamp(b) || (a.file && b.file ? a.file.name.localeCompare(b.file.name) : 0));
+    /* Order. Photos picked from the device (and the in-page camera's shots) keep
+       the order they were selected in — the owner picks them garment by garment,
+       hang tag first (owner 2026-10-24: "make sure that the order is by the
+       selected order"); a photo's own time stamp is not used. Phone hand-off
+       photos: the phone page sends them one after another and each stored name
+       carries its arrival time — the polls themselves can come back in any
+       order, so those are sorted by it. */
+    const arrival = (e: { url?: string }) => Number((e.url ?? "").match(/\/(\d{12,14})(?:-\d+)?\.\w+$/)?.[1] ?? 0);
+    const entries = entriesIn.every((e) => e.file) ? [...entriesIn] : [...entriesIn].sort((a, b) => arrival(a) - arrival(b));
     if (!entries.length) return;
     setBarMsg({ text: `Sorting ${entries.length} photo${entries.length === 1 ? "" : "s"} into items…`, tone: "info" });
     type Ph = { group: number; isTag: boolean; sku?: string; matches?: { matrixId: string; name: string }[] };

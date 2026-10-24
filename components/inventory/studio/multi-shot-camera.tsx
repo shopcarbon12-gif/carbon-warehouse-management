@@ -79,7 +79,7 @@ export function MultiShotCamera({ onDone, onClose }: { onDone: (files: File[]) =
       }
       if (!blob) throw new Error("no photo");
       const at = Date.now();
-      // lastModified = the moment it was taken: Bulk Studio sorts by shooting order.
+      // lastModified = the moment it was taken (Bulk Studio keeps the shots in the order they come back in).
       const file = new File([blob], `phone-${at}.jpg`, { type: blob.type || "image/jpeg", lastModified: at });
       setShots((s) => [...s, { file, url: URL.createObjectURL(file) }]);
     } catch {
