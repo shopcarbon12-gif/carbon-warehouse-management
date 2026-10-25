@@ -13,7 +13,7 @@ import { marketingAdminGuard } from "@/lib/server/marketing/guard";
 export const dynamic = "force-dynamic";
 
 const media = z.object({
-  url: z.string().url(),
+  url: z.string().url().optional(),
   kind: z.enum(["image", "video"]).default("image"),
   storagePath: z.string().optional(),
   dropboxPath: z.string().optional(),
@@ -35,10 +35,11 @@ const post = z.object({
   hashtags: z.array(z.string()).max(30).default([]),
   linkUrl: z.string().url().optional(),
   scheduledAt: z.string().datetime({ offset: true }),
-  media: z.array(media).min(1).max(10),
+  media: z.array(media.refine((m) => m.url || m.storagePath, "Each picture needs a url or a storagePath")).min(1).max(10),
   tags: z.array(tag).max(20).default([]),
   targets: z.array(z.enum(["instagram", "facebook"])).min(1).default(["instagram", "facebook"]),
 });
+const PUBLIC_BASE = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://wms.shopcarbon.com").trim().replace(/^'|'$/g, "").replace(/\/+$/, "");
 const schema = z.object({ campaign: z.string().min(1).max(100), posts: z.array(post).min(1).max(100) }).strict();
 
 async function POST_handler(req: Request) {
@@ -84,11 +85,17 @@ async function POST_handler(req: Request) {
         id = r.rows[0].id;
         created++;
       }
-      for (const [i, m] of p.media.entries())
-        await client.query(
-          `INSERT INTO marketing_post_media (post_id, position, kind, url, storage_path, dropbox_path, cover_url) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)`,
-          [id, i, m.kind, m.url, m.storagePath ?? null, m.dropboxPath ?? null, m.coverUrl ?? null],
+      for (const [i, m] of p.media.entries()) {
+        // Files on our private R2 are served through the public marketing-media route.
+        const ins = await client.query<{ id: string }>(
+          `INSERT INTO marketing_post_media (post_id, position, kind, url, storage_path, dropbox_path, cover_url) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7) RETURNING id`,
+          [id, i, m.kind, m.url ?? "", m.storagePath ?? null, m.dropboxPath ?? null, m.coverUrl ?? null],
         );
+        if (!m.url) {
+          const ext = m.kind === "video" ? "mp4" : "jpg";
+          await client.query(`UPDATE marketing_post_media SET url = $2 WHERE id = $1::uuid`, [ins.rows[0].id, `${PUBLIC_BASE}/api/public/marketing-media/${ins.rows[0].id}.${ext}`]);
+        }
+      }
       for (const t of p.tags)
         await client.query(
           `INSERT INTO marketing_post_tags (post_id, media_position, meta_product_id, shopify_handle, label, x, y) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)`,
