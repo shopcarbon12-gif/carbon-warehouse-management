@@ -35,6 +35,16 @@ export const MARKETING_PROVIDERS = [
 export type MarketingProvider = (typeof MARKETING_PROVIDERS)[number]["id"];
 export const PUBLISHABLE: MarketingProvider[] = ["instagram", "facebook"];
 
+/** Where Instagram and Facebook fetch post media (our R2 is private; see /api/public/marketing-media). */
+export const PUBLIC_BASE = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://wms.shopcarbon.com")
+  .trim()
+  .replace(/^'|'$/g, "")
+  .replace(/\/+$/, "");
+
+export function publicMediaUrl(mediaId: string, kind: "image" | "video", cover = false): string {
+  return `${PUBLIC_BASE}/api/public/marketing-media/${mediaId}${cover ? "-cover.jpg" : kind === "video" ? ".mp4" : ".jpg"}`;
+}
+
 export type MarketingPost = {
   id: string;
   campaign: string | null;

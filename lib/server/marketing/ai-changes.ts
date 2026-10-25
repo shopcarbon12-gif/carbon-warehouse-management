@@ -43,7 +43,7 @@ type Plan = {
   remove_tags: { media_position: number; label: string }[];
   move_tags: { media_position: number; label: string; x: number; y: number }[];
   add_tags: { media_position: number; product_name: string; colour: string | null; x: number; y: number }[];
-  picture_edits: { media_position: number; instruction: string }[];
+  picture_edits: { media_position: number; instruction: string; reference_positions: number[] }[];
   summary: string;
   cannot: string[];
 };
@@ -87,30 +87,37 @@ const SCHEMA = {
     },
     picture_edits: {
       type: "array",
-      items: { type: "object", additionalProperties: false, required: ["media_position", "instruction"], properties: { media_position: { type: "integer" }, instruction: { type: "string" } } },
+      items: {
+        type: "object", additionalProperties: false, required: ["media_position", "instruction", "reference_positions"],
+        properties: { media_position: { type: "integer" }, instruction: { type: "string" }, reference_positions: { type: "array", items: { type: "integer" } } },
+      },
     },
     summary: { type: "string" },
     cannot: { type: "array", items: { type: "string" } },
   },
 } as const;
 
-const SYSTEM = `You edit one scheduled social post for CARBON, a fashion boutique in Orlando, Florida. The owner looked at the post and wrote a note asking for changes. Carry out exactly what the note asks — nothing more. Every field the note does not ask about stays unchanged (return null for it, or an empty list).
-
-Copy rules (the owner's, always):
+/** CARBON's copy rules for every Social caption (owner). */
+export const COPY_RULES = `Copy rules (the owner's, always):
 - The brand is written CARBON, in capitals. Never "Carbon Jeans".
 - Never name another brand, shop or designer, and never say where anything is made or comes from.
 - Never mention labels, patches or tags on the clothes.
 - Never name a real venue, hotel or business, even if one appears in the picture.
 - Plain, confident English. No exclamation marks unless the note asks for them.
-- Instagram limits: caption up to 2,200 characters; up to 30 hashtags; up to ${MAX_TAGS_PER_PICTURE} product tags per picture.
+- Instagram limits: caption up to 2,200 characters; up to 30 hashtags; up to ${MAX_TAGS_PER_PICTURE} product tags per picture.`;
 
+const SYSTEM = `You edit one scheduled social post for CARBON, a fashion boutique in Orlando, Florida. The owner looked at the post and wrote a note asking for changes. Carry out exactly what the note asks — nothing more. Every field the note does not ask about stays unchanged (return null for it, or an empty list).
+
+${COPY_RULES}
 Fields:
 - caption: the full new caption (without hashtags), or null if unchanged.
 - hashtags: the full new list WITHOUT the # sign, or null if unchanged.
 - scheduled_local: new day and time in Eastern time as "YYYY-MM-DDTHH:mm", or null. Never in the past.
 - targets: the new channels, or null.
 - Product tags: pictures are numbered from 0 (media_position). x and y are from 0 to 1 (left→right, top→bottom), on the product itself in that picture. add_tags names the product as it is sold (e.g. "Axel Coat") and its colour if the note or picture shows it; only products that are really visible in that picture. remove_tags / move_tags use the tag's label exactly as listed.
-- picture_edits: when the note asks to change what a picture shows, write one precise instruction for a photo-editing model for that picture (what to change, where, and how it should look). The model keeps everything else as it is. Videos cannot be edited.
+- picture_edits: when the note asks to change what a picture shows, write one precise instruction for a photo-editing model for that picture (what to change, where, and how it should look). The model keeps everything else as it is unless the instruction says otherwise. reference_positions: other pictures of this post the model should also see (e.g. picture 0 for its setting and light) — empty when none. Videos cannot be edited.
+
+OWNER'S CAROUSEL RULE (always): a carousel slide that shows one piece on its own must never be a plain catalog photo (a product on white, a flat lay, a store photo). It becomes a commercial ghost-mannequin shot of that exact piece — same cut, colour, print, fabric and hardware — standing in the setting and light of the carousel's first picture. The piece alone: leave out the model and any styling accessory that is not part of it (wallet chains, belts, jewellery, bags, other clothes) — a store photo often shows them. When the note mentions this, or asks to fix such slides, give each one a picture_edit with reference_positions [0].
 - summary: one or two short sentences for the owner saying what you changed.
 - cannot: anything in the note you could not do, each with the reason in a few words.`;
 
@@ -395,7 +402,15 @@ function sizeFor(w: number, h: number): string {
   return SIZES[best];
 }
 
-export function editPrompt(instruction: string): string {
+export function editPrompt(instruction: string, references = 0): string {
+  if (references > 0)
+    return [
+      "Make a CARBON fashion campaign photograph.",
+      `The FIRST image is the picture to change. The other image${references > 1 ? "s are references" : " is a reference"} from the same post (setting, light, colour grade).`,
+      `Do this: ${instruction.trim()}`,
+      "Every garment and accessory from the first image stays exactly as it is: cut, colour, print, fabric, fit, stitching and hardware. Invent nothing on it.",
+      "A real photograph — no added text, logos, watermarks, signs or brand names.",
+    ].join("\n");
   return [
     "Edit this CARBON fashion campaign photograph.",
     `Change ONLY this: ${instruction.trim()}`,
@@ -407,7 +422,7 @@ export function editPrompt(instruction: string): string {
 async function submitPictures(
   postId: string,
   media: { position: number; storage_path: string | null }[],
-  edits: { media_position: number; instruction: string }[],
+  edits: { media_position: number; instruction: string; reference_positions?: number[] }[],
   summary: string,
 ): Promise<PictureState> {
   const ai = openai();
@@ -415,21 +430,43 @@ async function submitPictures(
   const refFileIds: string[] = [];
   const lines: string[] = [];
   const list: PictureState["edits"] = [];
-  for (const e of edits) {
-    const m = media.find((x) => x.position === e.media_position)!;
-    const obj = await downloadStorageObject(m.storage_path!);
+  const fileFor = new Map<number, string>();
+  async function upload(position: number): Promise<{ id: string; w: number; h: number } | null> {
+    const m = media.find((x) => x.position === position);
+    if (!m?.storage_path) return null;
+    const obj = await downloadStorageObject(m.storage_path);
     const buf = Buffer.from(obj.body);
     const meta = await sharp(buf).metadata();
-    const jpg = await sharp(buf).rotate().jpeg({ quality: 92 }).toBuffer();
-    const f = await ai.files.create({ file: await toFile(jpg, `post-${postId}-${e.media_position}.jpg`, { type: "image/jpeg" }), purpose: "vision" });
-    refFileIds.push(f.id);
+    let id = fileFor.get(position);
+    if (!id) {
+      const jpg = await sharp(buf).rotate().jpeg({ quality: 92 }).toBuffer();
+      const f = await ai.files.create({ file: await toFile(jpg, `post-${postId}-${position}.jpg`, { type: "image/jpeg" }), purpose: "vision" });
+      id = f.id;
+      fileFor.set(position, id);
+      refFileIds.push(id);
+    }
+    return { id, w: meta.width ?? 1600, h: meta.height ?? 2000 };
+  }
+  for (const e of edits) {
+    const main = await upload(e.media_position);
+    if (!main) continue;
+    const refs: string[] = [];
+    for (const r of (e.reference_positions ?? []).filter((r) => r !== e.media_position).slice(0, 4)) {
+      const f = await upload(r);
+      if (f) refs.push(f.id);
+    }
     const customId = `${postId}:${e.media_position}`;
     list.push({ position: e.media_position, instruction: e.instruction, customId });
+    // The post's own shape (a carousel's slides all match its first picture).
+    const shapeFrom = refs.length ? (await upload((e.reference_positions ?? [])[0])) ?? main : main;
     lines.push(JSON.stringify({
       custom_id: customId,
       method: "POST",
       url: "/v1/images/edits",
-      body: { model, prompt: editPrompt(e.instruction), images: [{ file_id: f.id }], size: sizeFor(meta.width ?? 1600, meta.height ?? 2000), quality: "high", moderation: "low", n: 1 },
+      body: {
+        model, prompt: editPrompt(e.instruction, refs.length), images: [main.id, ...refs].map((file_id) => ({ file_id })),
+        size: sizeFor(shapeFrom.w, shapeFrom.h), quality: "high", moderation: "low", n: 1,
+      },
     }));
   }
   const input = await ai.files.create({ file: await toFile(Buffer.from(lines.join("\n") + "\n"), `social-${postId}.jsonl`, { type: "application/jsonl" }), purpose: "batch" });

@@ -93,6 +93,29 @@ export function MarketingCalendarWorkspace() {
     }
   }
 
+  /* A new draft at tomorrow's best hour (Instagram followers online), then open it to add pictures. */
+  async function newPost() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const best = await fetcher<{ providers: Record<string, { top: { weekday: number; hour: number }[] }> }>("/api/marketing/best-times").catch(() => null);
+      const tomorrow = new Date(Date.now() + 86_400_000);
+      const day = etDay(tomorrow.toISOString());
+      const wd = new Date(`${day}T12:00:00Z`).getUTCDay();
+      const hour = best?.providers.instagram?.top.find((t) => t.weekday === wd)?.hour ?? 13;
+      const iso = etLocalToIso(`${day}T${String(hour).padStart(2, "0")}:00`);
+      const r = await send<{ post: MarketingPost }>("/api/marketing/posts", "POST", { title: "New post", ...(iso ? { scheduledAt: iso } : {}) });
+      await posts.mutate();
+      setMonth(day.slice(0, 7) === current ? month : day.slice(0, 7));
+      setOpenId(r.post.id);
+      setMsg({ text: "New draft made. Add pictures, then write the caption — or let the AI write it." });
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Something went wrong", err: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function shift(delta: number) {
     const d = new Date(Date.UTC(y, m - 1 + delta, 1));
     setMonth(monthKey(new Date(d.getUTCFullYear(), d.getUTCMonth(), 1)));
@@ -110,6 +133,9 @@ export function MarketingCalendarWorkspace() {
             {counts.failed ? ` · ${counts.failed} failed` : ""}
           </p>
         </div>
+        <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy} onClick={() => void newPost()}>
+          + New post
+        </button>
         <div className={`${card} flex flex-wrap items-center gap-2`}>
           <span className={`inline-flex items-center gap-1.5 font-mono text-[0.72rem] uppercase ${publishOn ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--wms-muted)]"}`}>
             <span className={`h-2 w-2 rounded-full ${publishOn ? "bg-emerald-500" : "bg-zinc-400"}`} />
@@ -201,7 +227,7 @@ export function MarketingCalendarWorkspace() {
 
       {open && (
         <PostPanel
-          key={`${open.id}:${open.status}:${open.scheduledAt}`}
+          key={`${open.id}:${open.status}:${open.scheduledAt}:${open.aiStatus}:${open.media.map((x) => x.url + (x.coverUrl ?? "")).join("|")}`}
           post={open}
           onClose={() => setOpenId(null)}
           onSaved={async (text) => {
@@ -246,12 +272,22 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [when, setWhen] = useState(etLocalInput(post.scheduledAt));
   const [targets, setTargets] = useState<string[]>(post.targets.map((t) => t.provider));
   const [note, setNote] = useState(post.note ?? "");
+  const [title, setTitle] = useState(post.title);
+  const [tags, setTags] = useState<MarketingPost["tags"]>(post.tags);
+  const [pick, setPick] = useState<number | null>(null);
+  const [brief, setBrief] = useState("");
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [tagQuery, setTagQuery] = useState("");
+  const [found, setFound] = useState<{ metaProductId: string; label: string }[]>([]);
   const [askChanges, setAskChanges] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const tagList = hashtags.split(/\s+/).filter(Boolean);
+  const tagsDirty = JSON.stringify(tags) !== JSON.stringify(post.tags);
   const dirty =
+    tagsDirty ||
+    title !== post.title ||
     caption !== post.caption ||
     tagList.join(" ") !== post.hashtags.join(" ") ||
     when !== etLocalInput(post.scheduledAt) ||
@@ -277,7 +313,83 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
       setErr("Pick a valid date and time");
       return null;
     }
-    return { caption, hashtags: tagList, scheduledAt: iso, targets };
+    return { caption, hashtags: tagList, scheduledAt: iso, targets, title, ...(tagsDirty ? { tags: tags.map(({ mediaPosition, metaProductId, handle, label, x, y }) => ({ mediaPosition, metaProductId, handle, label, x, y })) } : {}) };
+  }
+
+  /* Pictures and videos: upload one at a time (they can be large), remove, move. */
+  async function upload(files: FileList | null, role: "media" | "cover" = "media", position = 0) {
+    if (!files?.length) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      for (const f of Array.from(files)) {
+        const fd = new FormData();
+        fd.set("file", f);
+        fd.set("role", role);
+        fd.set("position", String(position));
+        const r = await fetch(`/api/marketing/posts/${post.id}/media`, { method: "POST", body: fd });
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        if (!r.ok) throw new Error(j.error || `Upload failed (${r.status})`);
+      }
+      await onSaved(role === "cover" ? "Cover saved." : "Added.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function mediaCall(method: "DELETE" | "PATCH", body: { position?: number; order?: number[] }, ok: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const url = `/api/marketing/posts/${post.id}/media${method === "DELETE" ? `?position=${body.position}` : ""}`;
+      const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: method === "PATCH" ? JSON.stringify({ order: body.order }) : undefined });
+      const j = (await r.json().catch(() => ({}))) as { error?: string };
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      await onSaved(ok);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+  function move(pos: number, delta: number) {
+    const order = post.media.map((m) => m.position);
+    const i = order.indexOf(pos);
+    const j = i + delta;
+    if (j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    void mediaCall("PATCH", { order }, "Moved.");
+  }
+
+  async function writeWithAi() {
+    setBusy(true);
+    setErr(null);
+    setAiNote(null);
+    try {
+      const r = await send<{ suggestion: { title: string; caption: string; hashtags: string[]; tags: MarketingPost["tags"]; notFound: string[] } }>(
+        "/api/marketing/ai/write", "POST", { postId: post.id, brief },
+      );
+      const sgg = r.suggestion;
+      setTitle(sgg.title || title);
+      setCaption(sgg.caption);
+      setHashtags(sgg.hashtags.join(" "));
+      if (sgg.tags.length) setTags(sgg.tags.map((t) => ({ ...t, handle: null })));
+      setAiNote(
+        `The AI wrote the title, caption and hashtags${sgg.tags.length ? ` and tagged ${sgg.tags.length} product${sgg.tags.length > 1 ? "s" : ""}` : ""}. Check it, then save.` +
+          (sgg.notFound.length ? ` Not in the shop catalog: ${sgg.notFound.join(", ")}.` : ""),
+      );
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "The AI could not write it");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function searchCatalog(q: string) {
+    setTagQuery(q);
+    if (q.trim().length < 2) return setFound([]);
+    const r = await fetcher<{ products: { metaProductId: string; label: string }[] }>(`/api/marketing/catalog?q=${encodeURIComponent(q.trim())}`).catch(() => ({ products: [] }));
+    setFound(r.products);
   }
 
   return (
@@ -303,13 +415,58 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
 
         <div className="flex flex-col gap-3 p-3">
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {post.media.map((md) =>
-              md.kind === "video" ? (
-                <video key={md.position} src={md.url} poster={md.coverUrl ?? undefined} controls muted playsInline className="h-72 w-auto shrink-0 rounded max-md:h-56" />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={md.position} src={md.url} alt={`Slide ${md.position + 1}`} className="h-72 w-auto shrink-0 rounded object-cover max-md:h-56" />
-              ),
+            {post.media.map((md, i) => (
+              <div key={md.position} className="flex shrink-0 flex-col gap-1">
+                {md.kind === "video" ? (
+                  <video src={md.url} poster={md.coverUrl ?? undefined} controls muted playsInline className="h-72 w-auto rounded max-md:h-56" />
+                ) : (
+                  <div
+                    className={`relative ${pick != null && tags[pick]?.mediaPosition === md.position ? "cursor-crosshair ring-2 ring-sky-500" : ""} rounded`}
+                    onClick={(e) => {
+                      if (pick == null || locked) return;
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const x = Math.round(((e.clientX - r.left) / r.width) * 100) / 100;
+                      const y = Math.round(((e.clientY - r.top) / r.height) * 100) / 100;
+                      setTags((cur) => cur.map((t, k) => (k === pick ? { ...t, mediaPosition: md.position, x, y } : t)));
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={md.url} alt={`Slide ${md.position + 1}`} className="h-72 w-auto rounded object-cover max-md:h-56" />
+                    {tags.map((t, k) =>
+                      t.mediaPosition === md.position ? (
+                        <span
+                          key={`${t.metaProductId}:${k}`}
+                          title={t.label}
+                          className={`pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${k === pick ? "bg-sky-500" : "bg-black/70"}`}
+                          style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%` }}
+                        />
+                      ) : null,
+                    )}
+                  </div>
+                )}
+                {!locked && (
+                  <div className="flex items-center gap-1">
+                    <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy || i === 0} onClick={() => move(md.position, -1)} aria-label="Move earlier">‹</button>
+                    <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy || i === post.media.length - 1} onClick={() => move(md.position, 1)} aria-label="Move later">›</button>
+                    {md.kind === "video" && (
+                      <label className={`${btn} cursor-pointer border-[var(--wms-border)]`}>
+                        Cover
+                        <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => void upload(e.target.files, "cover", md.position)} />
+                      </label>
+                    )}
+                    <button type="button" className={`${btn} border-[var(--wms-border)] text-[var(--wms-status-danger-fg)]`} disabled={busy} onClick={() => void mediaCall("DELETE", { position: md.position }, "Removed.")}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            {!locked && post.media.length < 10 && (
+              <label className="flex h-72 w-48 shrink-0 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-[var(--wms-border)] text-xs text-[var(--wms-muted)] max-md:h-56">
+                <span className="text-2xl">+</span>
+                {busy ? "Uploading…" : "Add pictures or a video"}
+                <input type="file" accept="image/*,video/mp4,video/quicktime" multiple className="hidden" disabled={busy} onChange={(e) => void upload(e.target.files)} />
+              </label>
             )}
           </div>
 
@@ -334,6 +491,25 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             </p>
           )}
 
+          <label className="flex flex-col gap-1">
+            <span className={label}>Title (for the calendar)</span>
+            <input className={field} value={title} disabled={locked} onChange={(e) => setTitle(e.target.value)} />
+          </label>
+          {!locked && post.media.length > 0 && (
+            <div className={`${card} flex flex-col gap-2`}>
+              <span className={label}>Write with AI</span>
+              <textarea
+                className={`${field} min-h-14 font-sans text-[0.8rem]`}
+                placeholder="Optional brief: the occasion, the products' names, the mood… The AI looks at the pictures."
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+              />
+              <button type="button" className={`${btn} self-start border-sky-600 text-sky-700 dark:text-sky-300`} disabled={busy} onClick={() => void writeWithAi()}>
+                {busy ? "Working…" : "Write caption, hashtags and tags"}
+              </button>
+              {aiNote && <p className="text-xs text-[var(--wms-fg)]">{aiNote}</p>}
+            </div>
+          )}
           <label className="flex flex-col gap-1">
             <span className={label}>Caption</span>
             <textarea className={`${field} min-h-32 font-sans text-[0.8rem]`} value={caption} disabled={locked} onChange={(e) => setCaption(e.target.value)} />
@@ -365,11 +541,11 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           </fieldset>
 
           <div className="flex flex-col gap-1">
-            <span className={label}>Instagram product tags ({post.tags.length})</span>
-            {post.tags.length ? (
-              <ul className="flex flex-col gap-0.5 text-xs text-[var(--wms-fg)]">
-                {post.tags.map((t, i) => (
-                  <li key={`${t.metaProductId}:${i}`} className="flex flex-wrap gap-x-2">
+            <span className={label}>Instagram product tags ({tags.length})</span>
+            {tags.length ? (
+              <ul className="flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                {tags.map((t, i) => (
+                  <li key={`${t.metaProductId}:${i}`} className={`flex flex-wrap items-center gap-x-2 rounded px-1 ${pick === i ? "bg-sky-500/15" : ""}`}>
                     <span className="font-mono text-[0.66rem] text-[var(--wms-muted)]">slide {t.mediaPosition + 1}</span>
                     {t.handle ? (
                       <a className="underline" href={`https://shopcarbon.com/products/${t.handle}`} target="_blank" rel="noreferrer">
@@ -378,11 +554,49 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     ) : (
                       <span>{t.label}</span>
                     )}
+                    {!locked && (
+                      <>
+                        <button type="button" className="text-sky-700 underline dark:text-sky-300 max-md:py-2" onClick={() => setPick(pick === i ? null : i)}>
+                          {pick === i ? "done placing" : "place on picture"}
+                        </button>
+                        <button type="button" className="text-[var(--wms-status-danger-fg)] underline max-md:py-2" onClick={() => { setTags((cur) => cur.filter((_, k) => k !== i)); setPick(null); }}>
+                          remove
+                        </button>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="text-xs text-[var(--wms-muted)]">No product tags.</p>
+            )}
+            {pick != null && <p className="text-xs text-sky-700 dark:text-sky-300">Click the product on a picture to put the tag there.</p>}
+            {!locked && post.media.some((m) => m.kind === "image") && (
+              <div className="flex flex-col gap-1">
+                <input className={field} placeholder="Tag a product: type its name…" value={tagQuery} onChange={(e) => void searchCatalog(e.target.value)} />
+                {found.length > 0 && (
+                  <ul className="flex max-h-40 flex-col overflow-y-auto rounded border border-[var(--wms-border)] text-xs">
+                    {found.map((p) => (
+                      <li key={p.metaProductId}>
+                        <button
+                          type="button"
+                          className="w-full px-2 py-1 text-left text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] max-md:py-2"
+                          onClick={() => {
+                            const first = post.media.find((m) => m.kind === "image")?.position ?? 0;
+                            if (tags.filter((t) => t.mediaPosition === first).length >= 5) return setErr("Instagram takes at most 5 tags per picture");
+                            setTags((cur) => [...cur, { mediaPosition: first, metaProductId: p.metaProductId, handle: null, label: p.label, x: 0.5, y: 0.5 }]);
+                            setPick(tags.length);
+                            setTagQuery("");
+                            setFound([]);
+                          }}
+                        >
+                          {p.label}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
 

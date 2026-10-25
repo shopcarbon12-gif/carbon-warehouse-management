@@ -216,3 +216,44 @@ export async function searchCatalogProducts(name: string): Promise<CatalogProduc
     groupId: p.retailer_product_group_id ?? null,
   }));
 }
+
+/* ---------------------------------------------------------------- results */
+
+export type PostMetrics = Record<string, number>;
+
+/** What one Instagram post did (lifetime): reach, views, likes, comments, saves, shares, interactions. */
+export async function igMediaMetrics(mediaId: string): Promise<PostMetrics> {
+  const r = await graph<{ data?: { name: string; values?: { value: number }[] }[] }>(`${mediaId}/insights`, "GET", {
+    metric: "reach,views,likes,comments,saved,shares,total_interactions",
+  });
+  const out: PostMetrics = {};
+  for (const m of r.data ?? []) out[m.name] = Number(m.values?.[0]?.value ?? 0);
+  return out;
+}
+
+/** What one Facebook page post did: reactions, comments, shares (the page token reads them). */
+export async function fbPostMetrics(postId: string, pageId: string): Promise<PostMetrics> {
+  const tok = await pageToken(pageId);
+  const r = await graph<{ reactions?: { summary?: { total_count?: number } }; comments?: { summary?: { total_count?: number } }; shares?: { count?: number } }>(
+    postId, "GET", { fields: "reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares" }, tok,
+  );
+  return {
+    reactions: r.reactions?.summary?.total_count ?? 0,
+    comments: r.comments?.summary?.total_count ?? 0,
+    shares: r.shares?.count ?? 0,
+  };
+}
+
+/** The Instagram account on one day: followers now, and that day's reach, views, profile visits and link taps. */
+export async function igAccountDay(igUserId: string, sinceSec: number, untilSec: number): Promise<{ followers: number; reach: number; views: number; profile_views: number; website_clicks: number }> {
+  const acc = await graph<{ followers_count?: number }>(igUserId, "GET", { fields: "followers_count" });
+  const r = await graph<{ data?: { name: string; total_value?: { value: number } }[] }>(`${igUserId}/insights`, "GET", {
+    metric: "reach,views,profile_views,website_clicks",
+    period: "day",
+    metric_type: "total_value",
+    since: sinceSec,
+    until: untilSec,
+  });
+  const v = (n: string) => Number(r.data?.find((m) => m.name === n)?.total_value?.value ?? 0);
+  return { followers: acc.followers_count ?? 0, reach: v("reach"), views: v("views"), profile_views: v("profile_views"), website_clicks: v("website_clicks") };
+}

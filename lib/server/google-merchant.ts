@@ -200,6 +200,26 @@ async function adsSearch<T>(query: string): Promise<T[]> {
   return j.results || [];
 }
 
+/** Google Ads GAQL search (Social → Ads). */
+export async function googleAdsSearch<T>(query: string): Promise<T[]> {
+  return adsSearch<T>(query);
+}
+
+/** Google Ads mutate on `resource` ("campaigns", "campaignBudgets"): one update with its field mask. */
+export async function googleAdsUpdate(resource: "campaigns" | "campaignBudgets", update: Record<string, unknown>, updateMask: string): Promise<void> {
+  const res = await gfetch(`${ADS}/customers/${adsCustomerId()}/${resource}:mutate`, {
+    method: "POST",
+    headers: { "developer-token": (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || "").trim() },
+    body: JSON.stringify({ operations: [{ update, updateMask }] }),
+  });
+  const j = (await res.json()) as { error?: { message?: string; details?: unknown } };
+  if (!res.ok || j.error) throw new Error(`Google Ads: ${j.error?.message ?? res.status}`);
+}
+
+export function googleAdsCustomer(): string {
+  return adsCustomerId();
+}
+
 export type LabelUse = { slot: number; value: string; campaign: string; status: string };
 
 /**
@@ -240,4 +260,58 @@ export async function googleCampaignLabelUse(): Promise<LabelUse[]> {
     if (a?.value) out.push({ slot: idx(a.index), value: a.value.toLowerCase(), campaign: r.campaign.name, status: r.campaign.status });
   }
   return out;
+}
+
+export type GmcIssue = { offerId: string; title: string; link: string | null; image: string | null; severity: string; description: string; detail: string | null; attribute: string | null; destinations: string[] };
+
+/**
+ * Social → Merchant Center: every product problem Google reports (Merchant API
+ * product status, item-level issues) — what keeps a product out of Shopping
+ * ads or free listings, and what only warns.
+ */
+export async function listGmcIssues(): Promise<{ products: number; issues: GmcIssue[] }> {
+  const issues: GmcIssue[] = [];
+  let products = 0;
+  let pageToken = "";
+  do {
+    const res = await gfetch(
+      `${MERCHANT}/products/v1/accounts/${merchantId()}/products?pageSize=1000${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`,
+    );
+    const j = (await res.json()) as {
+      products?: Array<{
+        offerId: string;
+        productAttributes?: { title?: string; link?: string; imageLink?: string };
+        productStatus?: { itemLevelIssues?: Array<{ severity?: string; description?: string; detail?: string; attribute?: string; reportingContext?: string }> };
+      }>;
+      nextPageToken?: string;
+      error?: { message?: string };
+    };
+    if (j.error) throw new Error(`Merchant Center: ${j.error.message}`);
+    for (const p of j.products || []) {
+      products++;
+      const by = new Map<string, GmcIssue>();
+      for (const i of p.productStatus?.itemLevelIssues || []) {
+        const k = `${i.severity}|${i.description}|${i.attribute ?? ""}`;
+        const cur = by.get(k);
+        if (cur) {
+          if (i.reportingContext && !cur.destinations.includes(i.reportingContext)) cur.destinations.push(i.reportingContext);
+          continue;
+        }
+        by.set(k, {
+          offerId: p.offerId,
+          title: p.productAttributes?.title ?? p.offerId,
+          link: p.productAttributes?.link ?? null,
+          image: p.productAttributes?.imageLink ?? null,
+          severity: i.severity ?? "UNKNOWN",
+          description: i.description ?? "",
+          detail: i.detail ?? null,
+          attribute: i.attribute ?? null,
+          destinations: i.reportingContext ? [i.reportingContext] : [],
+        });
+      }
+      issues.push(...by.values());
+    }
+    pageToken = j.nextPageToken || "";
+  } while (pageToken);
+  return { products, issues };
 }

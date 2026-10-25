@@ -3,7 +3,7 @@ import { withActivity } from "@/lib/server/activity-log";
  * PATCH /api/marketing/posts/[id] — edit or decide one post.
  *
  * action: "approve" | "request_changes" | "cancel" | "reopen"
- * caption / hashtags / scheduledAt / targets / note: edits.
+ * caption / hashtags / scheduledAt / targets / tags / title / note: edits.
  *
  * Rules: approval is per post and records who approved it. Any edit to the
  * caption, hashtags, time or channels of an approved post sends it back to
@@ -29,6 +29,21 @@ const schema = z
     scheduledAt: z.string().datetime({ offset: true }).optional(),
     targets: z.array(z.enum(["instagram", "facebook"])).min(1).optional(),
     note: z.string().max(2000).optional(),
+    title: z.string().max(200).optional(),
+    /** The full list of Instagram product tags (replaces what is there). */
+    tags: z
+      .array(
+        z.object({
+          mediaPosition: z.number().int().min(0).max(9),
+          metaProductId: z.string().regex(/^\d+$/),
+          handle: z.string().max(200).nullable().optional(),
+          label: z.string().max(200),
+          x: z.number().min(0).max(1),
+          y: z.number().min(0).max(1),
+        }).strict(),
+      )
+      .max(50)
+      .optional(),
   })
   .strict();
 
@@ -49,7 +64,19 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   const client = await g.pool.connect();
   try {
     await client.query("BEGIN");
-    const contentEdit = b.caption !== undefined || b.hashtags !== undefined || b.scheduledAt !== undefined || b.targets !== undefined;
+    const contentEdit =
+      b.caption !== undefined || b.hashtags !== undefined || b.scheduledAt !== undefined || b.targets !== undefined || b.tags !== undefined;
+    if (b.tags) {
+      const per = new Map<number, number>();
+      for (const t of b.tags) per.set(t.mediaPosition, (per.get(t.mediaPosition) ?? 0) + 1);
+      if ([...per.values()].some((n) => n > 5)) return rollback(client, "Instagram takes at most 5 product tags per picture");
+      await client.query(`DELETE FROM marketing_post_tags WHERE post_id = $1::uuid`, [id]);
+      for (const t of b.tags)
+        await client.query(
+          `INSERT INTO marketing_post_tags (post_id, media_position, meta_product_id, shopify_handle, label, x, y) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)`,
+          [id, t.mediaPosition, t.metaProductId, t.handle ?? null, t.label, t.x, t.y],
+        );
+    }
     const sets: string[] = [];
     const vals: unknown[] = [id];
     const set = (col: string, v: unknown) => {
@@ -57,6 +84,7 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
       sets.push(`${col} = $${vals.length}`);
     };
     if (b.caption !== undefined) set("caption", b.caption);
+    if (b.title !== undefined) set("title", b.title);
     if (b.hashtags !== undefined) set("hashtags", b.hashtags);
     if (b.scheduledAt !== undefined) set("scheduled_at", b.scheduledAt);
     if (b.note !== undefined) set("note", b.note || null);
