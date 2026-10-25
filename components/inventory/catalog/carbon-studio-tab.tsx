@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
+import { zoomNatively } from "@/lib/carbontools-zoom";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { orderStudioGallery } from "@/lib/studio/gallery-order";
 import { BatchStopButton } from "@/components/inventory/studio/batch-stop-button";
@@ -817,6 +818,16 @@ export function CarbonStudioTab({
      full-size view can crop the photo you are actually looking at. Null when
      zooming a generated crop or a Shopify image, which are not references. */
   const [zoomRef, setZoomRef] = useState<ItemRef | null>(null);
+  /* Inside CarbonTools the picture opens in the app's pinch-zoom viewer instead
+     (owner, 2026-10-25) — except an item reference this user may crop, which
+     keeps this overlay for its Crop button. */
+  useEffect(() => {
+    if (!zoom || (zoomRef && canManage)) return;
+    if (zoomNatively([zoom])) {
+      setZoom(null);
+      setZoomRef(null);
+    }
+  }, [zoom, zoomRef, canManage]);
   const [showMedia, setShowMedia] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [mediaBusy, setMediaBusy] = useState<string | null>(null);

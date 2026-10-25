@@ -351,33 +351,48 @@ fun NetImage(
     url: String?, modifier: Modifier, crop: Boolean = false, maxPx: Int = 1400, corner: Dp = 12.dp, background: Color = Palette.raised,
     /** The frame takes the picture's own shape once it loads (no bars at the sides); this ratio until then. */
     fitAspect: Float? = null,
+    /** Tap opens these pictures full screen (pinch to zoom, swipe between them), at [zoomAt]. `listOf(url)` for just this one. */
+    zoom: List<String>? = null,
+    zoomAt: Int = 0,
 ) {
     val ctx = LocalContext.current
     var bmp by remember(url) { mutableStateOf(url?.let { imageCache.get(it) }) }
     LaunchedEffect(url) {
         if (url.isNullOrBlank() || bmp != null) return@LaunchedEffect
-        val app = App.get(ctx)
-        val full = if (url.startsWith("http")) url else app.prefs.origin + url
-        bmp = withContext(Dispatchers.IO) {
-            runCatching {
-                val rb = Request.Builder().url(full)
-                if (full.startsWith(app.prefs.origin)) app.vault.token()?.let { rb.header("Authorization", "Bearer $it") }
-                imageHttp.newCall(rb.build()).execute().use { r ->
-                    val bytes = r.body?.bytes() ?: return@use null
-                    val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
-                    var s = 1
-                    while (maxOf(o.outWidth, o.outHeight) / (s * 2) >= maxPx) s *= 2
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
-                }
-            }.getOrNull()?.also { imageCache.put(url, it) }
-        }
+        bmp = loadNetBitmap(App.get(ctx), url, maxPx)?.also { imageCache.put(url, it) }
     }
     val b = bmp
     val shaped = if (fitAspect != null) modifier.aspectRatio(b?.let { it.width.toFloat() / it.height } ?: fitAspect) else modifier
-    Box(shaped.clip(RoundedCornerShape(corner)).background(background), contentAlignment = Alignment.Center) {
+    val tap = zoom?.filter { it.isNotBlank() }?.takeIf { it.isNotEmpty() }
+    Box(
+        shaped.clip(RoundedCornerShape(corner)).background(background)
+            .then(if (tap != null) Modifier.clickable { Zoom.show(tap, zoomAt.coerceIn(0, tap.lastIndex)) } else Modifier),
+        contentAlignment = Alignment.Center,
+    ) {
         if (b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = if (crop || fitAspect != null) ContentScale.Crop else ContentScale.Fit)
     }
+}
+
+/**
+ * A picture from CarbonWMS (with the session), any https URL, or a data: URL
+ * (Bulk Studio hands those over), decoded no larger than [maxPx] on its long side.
+ */
+suspend fun loadNetBitmap(app: App, url: String, maxPx: Int): Bitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        val bytes = if (url.startsWith("data:")) {
+            android.util.Base64.decode(url.substringAfter(","), android.util.Base64.DEFAULT)
+        } else {
+            val full = if (url.startsWith("http")) url else app.prefs.origin + url
+            val rb = Request.Builder().url(full)
+            if (full.startsWith(app.prefs.origin)) app.vault.token()?.let { rb.header("Authorization", "Bearer $it") }
+            imageHttp.newCall(rb.build()).execute().use { r -> r.body?.bytes() } ?: return@runCatching null
+        }
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        var s = 1
+        while (maxOf(o.outWidth, o.outHeight) / (s * 2) >= maxPx) s *= 2
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
+    }.getOrNull()
 }
 
 /** Downloads an image from CarbonWMS into a file (a saved scan's photo, to edit it). */

@@ -1,6 +1,12 @@
 package com.shopcarbon.gradingai.ui
 
 import androidx.compose.foundation.background
+import com.shopcarbon.gradingai.model.WmsTag
+import com.shopcarbon.gradingai.model.WmsSku
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -122,11 +128,17 @@ fun WmsCatalogScreen(nav: Nav) {
                                 p.sizes.takeIf { it.isNotEmpty() }?.joinToString(" "),
                             ).joinToString(" · "),
                             divider = i > 0,
-                            leading = { NetImage(p.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, background = Color.White) },
+                            leading = { NetImage(p.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, background = Color.White, zoom = p.gallery) },
                             trailing = {
                                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Badge("${p.onHand}", if (p.onHand > 0) Palette.ok else Palette.muted)
-                                    p.price?.let { Text("$%.2f".format(it), style = MaterialTheme.typography.labelSmall, color = Palette.muted) }
+                                    // One dot per size, filled when it has live tags here (as GradingAI's catalog shows measured sizes).
+                                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                        p.sizes.take(10).forEach { z -> Dot(Palette.ok, hollow = p.skus.filter { it.size == z }.sumOf { it.onHand } == 0, size = 8.dp) }
+                                    }
+                                    Text(
+                                        listOfNotNull("${p.onHand} live", p.price?.let { "$%.0f".format(it) }).joinToString(" · "),
+                                        style = MaterialTheme.typography.labelSmall, color = Palette.muted,
+                                    )
                                 }
                             },
                             onClick = { nav.go(Screen.WmsProduct(p)) },
@@ -139,36 +151,114 @@ fun WmsCatalogScreen(nav: Nav) {
     }
 }
 
-/** One CarbonWMS product: every colour, each size with its custom SKU, live tags, bin and price. */
+private fun tagStatus(s: String) = when (s) {
+    "in-stock" -> "Live"
+    else -> s.replace('-', ' ').replaceFirstChar { it.uppercase() }
+}
+
+/**
+ * One CarbonWMS product, laid out like GradingAI's product: its photo (tap to
+ * zoom), Sizes / Colours, and under each custom SKU its tags here — EPC,
+ * status, bin and zone, as Catalog › RFID shows them on CarbonWMS.
+ */
 @Composable
 fun WmsProductScreen(nav: Nav, start: WmsProduct) {
     val app = App.get(LocalContext.current)
+    val scope = rememberCoroutineScope()
     var p by remember { mutableStateOf(start) }
     var err by remember { mutableStateOf<String?>(null) }
+    var tab by remember { mutableStateOf("sizes") }
+    var open by remember { mutableStateOf<String?>(null) }
+    val tags = remember { mutableStateMapOf<String, List<WmsTag>?>() }
     // The list page may hold only part of the product's rows; read them all.
     LaunchedEffect(start.matrixId) { runCatching { app.api.wmsProduct(start) }.onSuccess { it?.let { f -> p = f } }.onFailure { err = it.message } }
+    fun toggle(key: String, skus: List<WmsSku>) {
+        open = if (open == key) null else key
+        if (open == null) return
+        for (s in skus) if (!tags.containsKey(s.customSkuId)) {
+            tags[s.customSkuId] = null
+            scope.launch { runCatching { app.api.wmsTags(s.customSkuId) }.onSuccess { tags[s.customSkuId] = it }.onFailure { tags[s.customSkuId] = emptyList(); err = it.message } }
+        }
+    }
 
     Page(p.name, onBack = { nav.back() }, largeTitle = false, tabs = { BottomTabs(Tab.Catalog) { onTab(nav, it) } }) {
-        NetImage(p.image, Modifier.fillMaxWidth(), maxPx = 1200, corner = 18.dp, background = Color.White, fitAspect = 0.8f)
-        Text(p.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            NetImage(p.image, Modifier.fillMaxWidth(0.62f), maxPx = 900, corner = 20.dp, fitAspect = 0.75f, background = Color.White, zoom = p.gallery)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(p.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
+            Muted(
+                listOfNotNull(
+                    p.upc?.let { "UPC $it" }, p.vendor, p.category,
+                    "${p.colours.size} colour${if (p.colours.size == 1) "" else "s"}", p.price?.let { "$%.2f".format(it) },
+                ).joinToString(" · "),
+            )
+        }
         Card(padding = 14.dp) {
-            p.upc?.let { KeyValue("UPC", it) }
-            p.vendor?.let { KeyValue("Vendor", it) }
-            p.category?.let { KeyValue("Category", it) }
-            p.price?.let { KeyValue("Price", "$%.2f".format(it)) }
-            KeyValue("Live here", "${p.onHand}", if (p.onHand > 0) Palette.ok else Palette.muted)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                val total = p.skus.size
+                val withStock = p.skus.count { it.onHand > 0 }
+                ProgressRing(if (total > 0) withStock.toFloat() / total else 0f, Modifier.size(84.dp), stroke = 10.dp) {
+                    Text("${p.onHand}", style = MaterialTheme.typography.titleLarge, color = Palette.text)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("${p.onHand} live here", style = MaterialTheme.typography.titleMedium, color = Palette.text)
+                    Muted("$withStock of $total SKUs in stock")
+                }
+            }
         }
         err?.let { Notice(it, Palette.bad) }
-        val byColour = p.skus.groupBy { it.color ?: "—" }
-        for ((colour, skus) in byColour) {
-            Group(header = "$colour · ${skus.sumOf { it.onHand }} live") {
-                skus.forEachIndexed { i, s ->
-                    ListRow(
-                        s.size ?: "One size",
-                        subtitle = listOfNotNull(s.sku, s.upc?.let { "UPC $it" }, s.bin?.let { "Bin $it" }).joinToString(" · "),
-                        divider = i > 0,
-                        trailing = { Badge("${s.onHand}", if (s.onHand > 0) Palette.ok else Palette.muted, solid = s.onHand > 0) },
-                    )
+        Row(Modifier.fillMaxWidth().background(Palette.raised, RoundedCornerShape(10.dp)).padding(3.dp)) {
+            for ((id, label) in listOf("sizes" to "Sizes", "colours" to "Colours")) {
+                Text(
+                    label, style = MaterialTheme.typography.labelMedium, color = Palette.text, fontWeight = if (tab == id) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).background(if (tab == id) Palette.surface else Color.Transparent, RoundedCornerShape(8.dp)).clickable { tab = id; open = null }.padding(vertical = 8.dp),
+                )
+            }
+        }
+        val groups: List<Pair<String, List<WmsSku>>> =
+            if (tab == "sizes") p.sizes.map { z -> z to p.skus.filter { it.size == z } } + p.skus.filter { it.size == null }.let { if (it.isEmpty()) emptyList() else listOf("One size" to it) }
+            else p.skus.groupBy { it.color ?: "—" }.toList()
+        Group(footer = "Tap a ${if (tab == "sizes") "size" else "colour"} to see its custom SKUs and tags.") {
+            groups.forEachIndexed { i, (label, skus) ->
+                val live = skus.sumOf { it.onHand }
+                val img = skus.firstNotNullOfOrNull { it.image }
+                ListRow(
+                    label,
+                    subtitle = (if (tab == "sizes") skus.mapNotNull { it.color }.distinct().joinToString(" · ") else skus.mapNotNull { it.size }.joinToString(" · ")).ifBlank { null },
+                    divider = i > 0,
+                    leading = if (tab == "colours") ({ NetImage(img, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, background = Color.White, zoom = p.gallery, zoomAt = p.gallery.indexOf(img).coerceAtLeast(0)) })
+                        else ({ Dot(Palette.ok, hollow = live == 0) }),
+                    trailing = { Badge("$live live", if (live > 0) Palette.ok else Palette.muted, solid = live > 0) },
+                    onClick = { toggle(tab + label, skus) },
+                )
+                if (open == tab + label) Column(
+                    Modifier.fillMaxWidth().background(Palette.ground).padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    for (s in skus) {
+                        Column(Modifier.fillMaxWidth().background(Palette.surface, RoundedCornerShape(12.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                NetImage(s.image, Modifier.size(40.dp), crop = true, maxPx = 200, corner = 8.dp, background = Color.White, zoom = s.image?.let(::listOf))
+                                Column(Modifier.weight(1f)) {
+                                    Text(listOfNotNull(s.color, s.size).joinToString(" · ").ifBlank { s.sku }, style = MaterialTheme.typography.bodyMedium, color = Palette.text, fontWeight = FontWeight.Medium)
+                                    Muted(listOfNotNull(s.sku, s.upc?.let { "UPC $it" }, s.bin?.let { "Bin $it" }, s.price?.toDoubleOrNull()?.let { "$%.2f".format(it) }).joinToString(" · "))
+                                }
+                                Badge("${s.onHand}", if (s.onHand > 0) Palette.ok else Palette.muted)
+                            }
+                            when (val t = tags[s.customSkuId]) {
+                                null -> Muted("Loading tags…")
+                                else -> if (t.isEmpty()) Muted("No tags here.") else for (tag in t) {
+                                    KeyValue(
+                                        tag.epc.ifBlank { tag.serial ?: "—" },
+                                        listOfNotNull(tagStatus(tag.status), tag.bin?.takeIf { it.isNotBlank() }, tag.zone).joinToString(" · "),
+                                        if (tag.status == "in-stock") Palette.ok else Palette.muted,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

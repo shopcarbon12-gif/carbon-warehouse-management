@@ -38,10 +38,12 @@ import com.shopcarbon.gradingai.ui.ProductScreen
 import com.shopcarbon.gradingai.ui.ToCheckScreen
 import com.shopcarbon.gradingai.ui.GradingTheme
 import com.shopcarbon.gradingai.ui.GuideScreen
+import com.shopcarbon.gradingai.ui.SocialEditScreen
 import com.shopcarbon.gradingai.ui.SocialPostScreen
 import com.shopcarbon.gradingai.ui.SocialScreen
 import com.shopcarbon.gradingai.ui.WmsCatalogScreen
 import com.shopcarbon.gradingai.ui.WmsProductScreen
+import com.shopcarbon.gradingai.ui.ZoomHost
 import com.shopcarbon.gradingai.ui.HomeScreen
 import com.shopcarbon.gradingai.ui.ItemScreen
 import com.shopcarbon.gradingai.ui.LoginScreen
@@ -112,6 +114,7 @@ class MainActivity : FragmentActivity() {
                         is Screen.WmsProduct -> WmsProductScreen(nav, s.product)
                         Screen.Social -> SocialScreen(nav)
                         is Screen.SocialPost -> key(s) { SocialPostScreen(nav, s.post) }
+                        is Screen.SocialEdit -> key(s) { SocialEditScreen(nav, s.post) }
                         Screen.Studio -> BulkStudioScreen(nav)
                         is Screen.Product -> ProductScreen(nav, s.lookup)
                         Screen.Queue -> QueueScreen(nav)
@@ -131,6 +134,7 @@ class MainActivity : FragmentActivity() {
                         Screen.Settings -> SettingsScreen(nav) { nav.reset(Screen.Login) }
                         Screen.Probe -> ProbeScreen(nav)
                     }
+                    ZoomHost()
                 }
             }
         }
@@ -162,7 +166,7 @@ class MainActivity : FragmentActivity() {
         lastUpdateCheck = now
         lifecycleScope.launch {
             runCatching { app.config = app.api.config() }
-            val idle = when (nav?.top) { Screen.Home, is Screen.Catalog, Screen.WmsCatalog, is Screen.WmsProduct, Screen.Social, is Screen.SocialPost, Screen.Studio, Screen.Queue, Screen.ToCheck, Screen.Settings, is Screen.Guide, is Screen.Product, Screen.Login, null -> true; else -> false }
+            val idle = when (nav?.top) { Screen.Home, is Screen.Catalog, Screen.WmsCatalog, is Screen.WmsProduct, Screen.Social, is Screen.SocialPost, is Screen.SocialEdit, Screen.Studio, Screen.Queue, Screen.ToCheck, Screen.Settings, is Screen.Guide, is Screen.Product, Screen.Login, null -> true; else -> false }
             if (idle) Updater.run(this@MainActivity, app.config?.app)
         }
     }

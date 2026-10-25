@@ -1,5 +1,6 @@
 "use client";
 
+import { zoomNatively } from "@/lib/carbontools-zoom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import useSWR from "swr";
 import { useUrlParam } from "@/lib/use-url-param";
@@ -1265,7 +1266,12 @@ function DraftThumb({ file, stored, onRemove }: { file?: File; stored?: string; 
     <div className="relative">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element -- a local file preview, not an optimisable asset
-        <img src={url} alt="" className="h-16 w-12 rounded border border-[var(--wms-border)] object-cover" />
+        <img
+          src={url}
+          alt=""
+          className="h-16 w-12 rounded border border-[var(--wms-border)] object-cover"
+          onClick={() => zoomNatively([url])}
+        />
       ) : null}
       <button
         type="button"

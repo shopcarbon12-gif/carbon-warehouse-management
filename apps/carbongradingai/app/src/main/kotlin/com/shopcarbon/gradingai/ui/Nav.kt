@@ -18,6 +18,7 @@ sealed class Screen {
     /** The Social tab: CarbonCast — the posts calendar, approval, publishing switch, best times. */
     data object Social : Screen()
     data class SocialPost(val post: com.shopcarbon.gradingai.model.SocialPost) : Screen()
+    data class SocialEdit(val post: com.shopcarbon.gradingai.model.SocialPost) : Screen()
     /** Bulk Studio: CarbonWMS's own Bulk Studio, inside the app (same settings; sends to the OpenAI batch). */
     data object Studio : Screen()
     /** A product from the Catalog: every size and colour with its status. */

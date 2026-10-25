@@ -223,7 +223,7 @@ fun QueueScreen(nav: Nav) {
             products.forEachIndexed { i, e ->
                 ListRow(
                     "${e.name} · ${e.size}", subtitle = e.sampleSku?.let { "Take $it" }, divider = i > 0,
-                    leading = { NetImage(e.image, Modifier.size(44.dp), crop = true, maxPx = 200, corner = 10.dp) },
+                    leading = { NetImage(e.image, Modifier.size(44.dp), crop = true, maxPx = 200, corner = 10.dp, zoom = e.image?.let(::listOf)) },
                     chevron = true,
                 ) { openEntry(nav, app, scope, e.matrixId, e.size) { err = it } }
             }
@@ -251,7 +251,7 @@ fun ToCheckScreen(nav: Nav) {
                     "${n.name ?: "Item"}${n.size?.let { " · $it" } ?: ""}",
                     subtitle = ago(n.createdAt),
                     divider = i > 0,
-                    leading = { NetImage(n.photo, Modifier.size(52.dp), crop = true, maxPx = 300, corner = 10.dp) },
+                    leading = { NetImage(n.photo, Modifier.size(52.dp), crop = true, maxPx = 300, corner = 10.dp, zoom = n.photo?.let(::listOf)) },
                     trailing = { n.flags.firstOrNull()?.let { Badge(it.take(28), Palette.warn) } },
                     chevron = true,
                 ) { nav.go(Screen.EditSaved(n.scanId)) }

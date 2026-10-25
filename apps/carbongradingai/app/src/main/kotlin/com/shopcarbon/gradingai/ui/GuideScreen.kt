@@ -64,7 +64,7 @@ fun GuideScreen(nav: Nav, profileId: String?) {
         p.guide?.examples?.takeIf { it.isNotEmpty() }?.let { ex ->
             Label("Measured the same way")
             for (e in ex) {
-                NetImage(e.image, Modifier.fillMaxWidth().aspectRatio(1f), maxPx = 900)
+                NetImage(e.image, Modifier.fillMaxWidth().aspectRatio(1f), maxPx = 900, zoom = listOf(e.image))
                 Muted(e.label)
             }
         }

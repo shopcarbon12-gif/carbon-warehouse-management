@@ -62,6 +62,15 @@ export function WmsShellClient({
     if (forceCollapsed) setOpen(false);
   }, [forceCollapsed]);
 
+  /* Inside CarbonTools (the phone app): GradingAI's look for every page, overlays included (globals.css). */
+  useEffect(() => {
+    if (!embedded) return;
+    document.documentElement.dataset.embed = "carbontools";
+    return () => {
+      delete document.documentElement.dataset.embed;
+    };
+  }, [embedded]);
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(PIN_KEY);
@@ -92,12 +101,13 @@ export function WmsShellClient({
     setOpen(next);
   }, []);
 
-  /* Inside the CarbonGradingAI app (its WebView says so in the user agent):
-     only the page, in the light theme — the app has its own bars (owner, 2026-10-22). */
+  /* Inside the CarbonTools app (ex-CarbonGradingAI; its WebView says so in the user agent):
+     only the page, in the light theme — the app has its own bars (owner, 2026-10-22) —
+     dressed like the app's GradingAI screens (owner, 2026-10-25). */
   if (embedded) {
     return (
       <ThemeProvider forceColor="light">
-        <main className="flex min-h-full flex-1 flex-col bg-[var(--wms-bg)] p-3">{children}</main>
+        <main data-embed="carbontools" className="flex min-h-full flex-1 flex-col bg-[var(--wms-bg)] p-3">{children}</main>
       </ThemeProvider>
     );
   }

@@ -8,6 +8,7 @@ import com.shopcarbon.gradingai.model.BestHour
 import com.shopcarbon.gradingai.model.SocialPost
 import com.shopcarbon.gradingai.model.WmsCatalogPage
 import com.shopcarbon.gradingai.model.WmsProduct
+import com.shopcarbon.gradingai.model.WmsTag
 import com.shopcarbon.gradingai.model.objects
 import com.shopcarbon.gradingai.model.CatalogRow
 import com.shopcarbon.gradingai.model.Lookup
@@ -97,6 +98,12 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     suspend fun wmsProduct(p: WmsProduct): WmsProduct? =
         WmsProduct.group(getJson("/api/inventory/catalog?view=grid&page=1&limit=500&q=${enc(p.upc ?: p.name)}")).firstOrNull { it.matrixId == p.matrixId }
 
+    /** One custom SKU's tags at this location (CarbonWMS catalog › RFID): EPC, status, bin, zone. */
+    suspend fun wmsTags(customSkuId: String): List<WmsTag> = withContext(Dispatchers.IO) {
+        val text = callText { Request.Builder().url("$origin/api/inventory/catalog?customSkuId=${enc(customSkuId)}").get() }
+        WmsTag.parseList(org.json.JSONArray(text))
+    }
+
     /** Social (CarbonCast): the publishing switch. */
     suspend fun socialSettings(): Boolean = getJson("/api/marketing/overview").optJSONObject("settings")?.optBoolean("publishEnabled") ?: false
 
@@ -110,9 +117,17 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
         SocialPost.parseList(getJson("/api/marketing/posts?from=${enc(from)}&to=${enc(to)}"))
 
     /** Approve, ask for changes, cancel or reopen one post (`action`), with an optional note. */
-    suspend fun socialDecide(id: String, action: String, note: String? = null): SocialPost = withContext(Dispatchers.IO) {
-        val j = JSONObject().put("action", action)
-        if (note != null) j.put("note", note)
+    suspend fun socialDecide(id: String, action: String, note: String? = null): SocialPost =
+        socialPatch(id, JSONObject().put("action", action).apply { if (note != null) put("note", note) })
+
+    /**
+     * Edit one post: caption, hashtags, time (ISO with offset) and channels. CarbonWMS
+     * sends an approved post back to waiting when any of them changes.
+     */
+    suspend fun socialEdit(id: String, caption: String, hashtags: List<String>, scheduledAt: String, targets: List<String>): SocialPost =
+        socialPatch(id, JSONObject().put("caption", caption).put("hashtags", org.json.JSONArray(hashtags)).put("scheduledAt", scheduledAt).put("targets", org.json.JSONArray(targets)))
+
+    private suspend fun socialPatch(id: String, j: JSONObject): SocialPost = withContext(Dispatchers.IO) {
         val body = j.toString().toRequestBody("application/json".toMediaType())
         SocialPost.parse(call { Request.Builder().url("$origin/api/marketing/posts/${enc(id)}").patch(body) }.getJSONObject("post"))
     }
@@ -237,6 +252,24 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
                 throw ApiError(it.code, j?.optString("error")?.takeIf { e -> e.isNotBlank() } ?: "CarbonWMS answered ${it.code}")
             }
             return j ?: throw ApiError(it.code, "CarbonWMS sent something that is not JSON.")
+        }
+    }
+
+    /** [call] for answers that are a JSON array, not an object: the body text. */
+    private fun callText(build: () -> Request.Builder): String {
+        fun run(): Response = http.newCall(
+            build().header("Authorization", "Bearer ${vault.token().orEmpty()}")
+                .header("Accept", "application/json").header("User-Agent", ua()).build(),
+        ).execute()
+        var res = run()
+        if (res.code == 401 && relogin()) {
+            res.close()
+            res = run()
+        }
+        res.use {
+            val text = it.body?.string().orEmpty()
+            if (!it.isSuccessful) throw ApiError(it.code, runCatching { JSONObject(text).optString("error") }.getOrNull()?.takeIf { e -> e.isNotBlank() } ?: "CarbonWMS answered ${it.code}")
+            return text
         }
     }
 

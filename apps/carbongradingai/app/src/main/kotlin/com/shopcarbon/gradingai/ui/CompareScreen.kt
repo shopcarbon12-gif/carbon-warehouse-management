@@ -187,7 +187,7 @@ fun CompareScreen(nav: Nav, start: Lookup, size: String) {
             ListRow(
                 mine.name,
                 subtitle = listOfNotNull("Size $size", mine.skusOfSize(size).mapNotNull { it.color }.distinct().joinToString().ifBlank { null }, mine.upc?.let { "UPC $it" }).joinToString(" · "),
-                leading = { NetImage(mine.skusOfSize(size).firstNotNullOfOrNull { it.image } ?: mine.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
+                leading = { NetImage(mine.skusOfSize(size).firstNotNullOfOrNull { it.image } ?: mine.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, zoom = (mine.skusOfSize(size).firstNotNullOfOrNull { it.image } ?: mine.image)?.let(::listOf)) },
             )
         }
         // The other product: scan or search.
@@ -218,7 +218,7 @@ fun CompareScreen(nav: Nav, start: Lookup, size: String) {
                 hits.forEachIndexed { i, r ->
                     ListRow(
                         r.name, subtitle = r.upc?.let { "UPC $it" }, divider = i > 0,
-                        leading = { NetImage(r.image, Modifier.size(40.dp), crop = true, maxPx = 200, corner = 8.dp) },
+                        leading = { NetImage(r.image, Modifier.size(40.dp), crop = true, maxPx = 200, corner = 8.dp, zoom = r.image?.let(::listOf)) },
                         onClick = {
                             busy = "Opening…"
                             scope.launch { try { pick(app.api.lookupMatrix(r.matrixId)) } catch (e: Exception) { err = e.message } finally { busy = null } }
@@ -236,7 +236,7 @@ fun CompareScreen(nav: Nav, start: Lookup, size: String) {
                 ListRow(
                     o.name,
                     subtitle = listOfNotNull(o.upc?.let { "UPC $it" }, "${o.colours().size} colour${if (o.colours().size == 1) "" else "s"}").joinToString(" · "),
-                    leading = { NetImage(o.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
+                    leading = { NetImage(o.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, zoom = o.image?.let(::listOf)) },
                     trailing = { Text("Change", style = MaterialTheme.typography.bodyMedium, color = Palette.accent) },
                     onClick = { other = null; otherSize = null; theirEdits.clear() },
                 )

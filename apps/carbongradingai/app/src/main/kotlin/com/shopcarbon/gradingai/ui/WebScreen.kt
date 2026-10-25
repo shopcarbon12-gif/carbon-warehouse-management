@@ -80,8 +80,9 @@ fun WebScreen(nav: Nav, title: String, path: String) {
 /**
  * Bulk Studio tab (owner, 2026-10-22): CarbonWMS's own Bulk Studio — the same
  * settings, models and prompts as the desktop, and it only ever sends to the
- * OpenAI batch. CarbonWMS shows it without its menus inside the app (it sees
- * "CarbonGradingAI" in the user agent); the app's tab bar stays docked below.
+ * OpenAI batch. CarbonWMS shows it without its menus inside the app, in the
+ * app's own look (it sees "CarbonGradingAI" in the user agent — kept on
+ * purpose since the rename to CarbonTools); the app's tab bar stays docked below.
  */
 @Composable
 fun BulkStudioScreen(nav: Nav) {
@@ -145,6 +146,11 @@ fun WmsWebView(path: String, modifier: Modifier, onView: (WebView) -> Unit = {})
                         @JavascriptInterface fun device(): String = android.os.Build.MODEL
                         @JavascriptInterface fun setBusy(label: String, busy: Boolean) {}
                         @JavascriptInterface fun log(msg: String) {}
+                        /** Bulk Studio's pictures open in the app's pinch-zoom viewer (lib/carbontools-zoom.ts). */
+                        @JavascriptInterface fun zoomImage(urlsJson: String, index: Int) {
+                            val urls = runCatching { org.json.JSONArray(urlsJson).let { a -> (0 until a.length()).map { a.getString(it) } } }.getOrNull() ?: return
+                            web.post { Zoom.show(urls, index) }
+                        }
                         @JavascriptInterface fun scanBarcode(id: String) {
                             web.post {
                                 fun reply(ok: Boolean, text: String) = web.evaluateJavascript(

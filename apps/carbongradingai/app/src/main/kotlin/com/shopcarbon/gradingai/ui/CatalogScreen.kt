@@ -115,7 +115,7 @@ fun CatalogScreen(nav: Nav, focus: Boolean = false) {
                         r.name,
                         subtitle = listOfNotNull(r.upc?.let { "UPC $it" }, "${r.colours} colour${if (r.colours == 1) "" else "s"}").joinToString(" · "),
                         divider = i > 0,
-                        leading = { NetImage(r.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
+                        leading = { NetImage(r.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, zoom = r.image?.let(::listOf)) },
                         trailing = {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { r.sizes.take(10).forEach { z -> Dot(Palette.accent, hollow = !z.measured, size = 8.dp) } }
@@ -141,10 +141,12 @@ fun ProductScreen(nav: Nav, item: Lookup) {
     var tab by remember { mutableStateOf("sizes") }
     var open by remember { mutableStateOf<String?>(null) }
     val profile = app.config?.profile(item.profileId)
+    // Every photo of the product (main, then each colour's), for the full-screen viewer.
+    val gallery = (listOfNotNull(item.image) + item.sizes.mapNotNull { it.image }).distinct()
     Page(item.name, onBack = { nav.back() }, largeTitle = false) {
         // The photo's own shape, so there are no white bars beside it.
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            NetImage(item.image, Modifier.fillMaxWidth(0.62f), maxPx = 900, corner = 20.dp, fitAspect = 0.75f)
+            NetImage(item.image, Modifier.fillMaxWidth(0.62f), maxPx = 900, corner = 20.dp, fitAspect = 0.75f, zoom = gallery)
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(item.name, style = MaterialTheme.typography.headlineSmall, color = Palette.text)
@@ -198,7 +200,10 @@ fun ProductScreen(nav: Nav, item: Lookup) {
                     val skus = item.sizes.filter { it.color?.trim() == c }
                     ListRow(
                         c, subtitle = skus.mapNotNull { it.size }.distinct().joinToString(" · "), divider = i > 0,
-                        leading = { NetImage(skus.firstNotNullOfOrNull { it.image } ?: item.image, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
+                        leading = {
+                            val img = skus.firstNotNullOfOrNull { it.image } ?: item.image
+                            NetImage(img, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, zoom = gallery, zoomAt = gallery.indexOf(img).coerceAtLeast(0))
+                        },
                     )
                 }
             }
@@ -228,7 +233,7 @@ private fun SizeOriginPanel(nav: Nav, item: Lookup, size: String) {
         Text(from, style = MaterialTheme.typography.bodyMedium, color = Palette.text, fontWeight = FontWeight.Medium)
         Muted(ago(o.measuredAt))
         if (o.scanId != null && o.scanHasPhoto) {
-            NetImage("/api/grading-app/scans/${o.scanId}/photo", Modifier.fillMaxWidth(0.7f), maxPx = 900, corner = 14.dp, fitAspect = 0.75f)
+            NetImage("/api/grading-app/scans/${o.scanId}/photo", Modifier.fillMaxWidth(0.7f), maxPx = 900, corner = 14.dp, fitAspect = 0.75f, zoom = listOf("/api/grading-app/scans/${o.scanId}/photo"))
             Secondary("See the photo with its lines") { nav.go(Screen.EditSaved(o.scanId)) }
         }
         val labels = profile?.points?.associate { it.key to it.label } ?: emptyMap()

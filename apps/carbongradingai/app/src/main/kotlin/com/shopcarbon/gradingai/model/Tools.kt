@@ -28,6 +28,8 @@ data class WmsProduct(
     val skus: List<WmsSku>,
 ) {
     val image get() = skus.firstNotNullOfOrNull { it.image }
+    /** Every distinct photo (one per colour on Shopify), for the full-screen viewer. */
+    val gallery get() = skus.mapNotNull { it.image }.distinct()
     val onHand get() = skus.sumOf { it.onHand }
     val colours get() = skus.mapNotNull { it.color }.distinct()
     val sizes get() = skus.mapNotNull { it.size }.distinct()
@@ -62,6 +64,18 @@ data class WmsProduct(
     }
 }
 
+/** One tag of a custom SKU at this location. */
+data class WmsTag(val epc: String, val serial: String?, val status: String, val bin: String?, val zone: String?) {
+    companion object {
+        fun parseList(a: org.json.JSONArray): List<WmsTag> = (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map {
+            WmsTag(
+                it.optString("epc"), it.optStringOrNull("serial_number"), it.optString("status"),
+                it.optStringOrNull("bin_code") ?: it.optStringOrNull("pinned_bin_code"), it.optStringOrNull("zone_name"),
+            )
+        }
+    }
+}
+
 data class WmsCatalogPage(val products: List<WmsProduct>, val rows: Int, val total: Int)
 
 /* ───────── Social tab: CarbonCast (GET /api/marketing/...) ───────── */
@@ -86,6 +100,8 @@ data class SocialPost(
 ) {
     /** The picture for lists: the first image, or a video's cover. */
     val thumb get() = media.firstOrNull()?.let { if (it.kind == "video") it.coverUrl else it.url }
+    /** What the viewer shows: each picture, a video as itself. */
+    val gallery get() = media.sortedBy { it.position }.map { it.url }
     val locked get() = status in setOf("publishing", "published", "partly_published")
 
     companion object {

@@ -731,3 +731,73 @@ html[data-theme="light"] .text-zinc-400 { color: #3f3f46; }
 .item-name {
   text-transform: uppercase;
 }
+
+/*
+ * CarbonTools (the phone app, ex-CarbonGradingAI) shows CarbonWMS pages in its
+ * WebView — Bulk Studio. There they wear the app's GradingAI look (owner,
+ * 2026-10-25): iOS-style grey ground, white rounded cards, blue accent, the
+ * phone's own font, no mono capitals. Only inside the app (data-embed is set by
+ * WmsShell's embedded mode) — the desktop is untouched.
+ */
+html[data-embed="carbontools"],
+html[data-theme="light"][data-embed="carbontools"],
+main[data-embed="carbontools"] {
+  --background: #f2f2f7;
+  --foreground: #1c1c1e;
+  --surface: #ffffff;
+  --accent: #007aff;
+  --accent-dim: #0062cc;
+  --wms-bg: #f2f2f7;
+  --wms-fg: #1c1c1e;
+  --wms-muted: #8e8e93;
+  --wms-surface: #ffffff;
+  --wms-surface-elevated: #e9e9ee;
+  --wms-border: #e3e3e8;
+  --wms-accent: #007aff;
+  --wms-secondary: #5856d6;
+  --wms-accent-fg: #ffffff;
+  --wms-status-success-fg: #248a3d;
+  --wms-status-warning-fg: #c93400;
+  --wms-status-danger-fg: #d70015;
+  --wms-status-info-fg: #007aff;
+  --wms-status-orange-fg: #c93400;
+  --wms-table-accent-num: #007aff;
+}
+html[data-embed="carbontools"] {
+  font-size: 1rem;
+  line-height: 1.45;
+  background: #f2f2f7;
+}
+html[data-embed="carbontools"] body,
+html[data-embed="carbontools"] main,
+html[data-embed="carbontools"] .font-mono,
+html[data-embed="carbontools"] button,
+html[data-embed="carbontools"] input,
+html[data-embed="carbontools"] select,
+html[data-embed="carbontools"] textarea {
+  font-family: system-ui, -apple-system, Roboto, "Segoe UI", sans-serif;
+  letter-spacing: normal;
+}
+html[data-embed="carbontools"] main .uppercase {
+  text-transform: none;
+}
+html[data-embed="carbontools"] main .rounded,
+html[data-embed="carbontools"] main .rounded-md {
+  border-radius: 12px;
+}
+html[data-embed="carbontools"] main .rounded-lg,
+html[data-embed="carbontools"] main .rounded-xl {
+  border-radius: 18px;
+}
+html[data-embed="carbontools"] main button.rounded-md,
+html[data-embed="carbontools"] main button.rounded {
+  border-radius: 9999px;
+}
+html[data-embed="carbontools"] main h1.text-lg.font-semibold.tracking-tight {
+  background: none;
+  border: 0;
+  padding: 0.25rem 0.25rem 0.5rem;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}

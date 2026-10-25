@@ -2,6 +2,22 @@ package com.shopcarbon.gradingai.ui
 
 import android.content.Intent
 import android.net.Uri
+import kotlin.math.roundToInt
+import java.time.LocalTime
+import com.shopcarbon.gradingai.model.SocialMedia
+import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -113,20 +129,37 @@ fun SocialScreen(nav: Nav) {
         actions = { GlassCircle(Icons.Filled.Refresh, "Refresh", { reload++ }) },
         tabs = { BottomTabs(Tab.Social) { onTab(nav, it) } },
     ) {
-        Card(padding = 14.dp) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        when (publishing) { true -> "Publishing is ON"; false -> "Publishing is OFF"; null -> "Publishing" },
-                        style = MaterialTheme.typography.titleMedium, color = if (publishing == true) Palette.ok else Palette.text,
-                    )
-                    Muted(if (publishing == true) "Approved posts go out at their time." else "Nothing goes out, even approved posts.")
+        // Like GradingAI's progress card: how much of what is coming is approved.
+        Card(padding = 20.dp) {
+            val coming = posts.orEmpty().filter { it.status != "cancelled" }
+            val ready = coming.count { it.status in setOf("approved", "publishing", "published", "partly_published") }
+            val waiting = coming.count { it.status == "draft" || it.status == "changes_requested" }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                val f = if (coming.isNotEmpty()) ready.toFloat() / coming.size else 0f
+                ProgressRing(f, Modifier.size(132.dp)) {
+                    Text(if (posts == null) "—" else "${(f * 100).roundToInt()}%", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
                 }
-                Switch(
-                    publishing == true, { if (it) askOn = true else setPublishing(false) }, enabled = publishing != null && !busy,
-                    colors = SwitchDefaults.colors(checkedTrackColor = Palette.ok, checkedThumbColor = Color.White),
-                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (posts == null) Muted(if (err != null) "Offline — $err" else "Loading…")
+                    else {
+                        Text("$ready", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
+                        Text("of ${coming.size} posts approved", style = MaterialTheme.typography.bodyMedium, color = Palette.muted)
+                        if (waiting > 0) Text("$waiting waiting for you", style = MaterialTheme.typography.bodySmall, color = Palette.warn)
+                    }
+                }
             }
+        }
+        Group(footer = if (publishing == true) "Approved posts go out at their time." else "Nothing goes out, even approved posts.") {
+            ListRow(
+                when (publishing) { true -> "Publishing is on"; false -> "Publishing is off"; null -> "Publishing" },
+                titleColor = if (publishing == true) Palette.ok else Palette.text,
+                trailing = {
+                    Switch(
+                        publishing == true, { if (it) askOn = true else setPublishing(false) }, enabled = publishing != null && !busy,
+                        colors = SwitchDefaults.colors(checkedTrackColor = Palette.ok, checkedThumbColor = Color.White),
+                    )
+                },
+            )
         }
         if (best.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -153,8 +186,6 @@ fun SocialScreen(nav: Nav) {
             all == null -> Muted("Loading…")
             shown.isEmpty() -> Muted("No posts here.")
             else -> {
-                val waiting = all.count { it.status == "draft" || it.status == "changes_requested" }
-                if (waiting > 0) Muted("$waiting post${if (waiting == 1) "" else "s"} waiting for approval")
                 val byDay = shown.sortedBy { it.scheduledAt ?: "9" }.groupBy { et(it.scheduledAt)?.toLocalDate() }
                 for ((day, list) in byDay) {
                     Group(header = day?.format(DAY_FMT) ?: "No time set") {
@@ -164,7 +195,7 @@ fun SocialScreen(nav: Nav) {
                                 subtitle = listOfNotNull(et(p.scheduledAt)?.format(TIME_FMT), FORMAT[p.format], p.targets.joinToString(" + ") { CHANNEL[it.provider] ?: it.provider }.ifBlank { null })
                                     .joinToString(" · "),
                                 divider = i > 0,
-                                leading = { NetImage(p.thumb, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp) },
+                                leading = { NetImage(p.thumb, Modifier.size(52.dp), crop = true, maxPx = 240, corner = 10.dp, zoom = p.gallery) },
                                 trailing = { Badge(STATUS[p.status] ?: p.status, statusColor(p.status), solid = p.status == "approved") },
                                 onClick = { nav.go(Screen.SocialPost(p)) },
                             )
@@ -207,17 +238,14 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
     fun open(url: String) = runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 
     Page(post.title.ifBlank { "Post" }, onBack = { nav.back() }, largeTitle = false, tabs = { BottomTabs(Tab.Social) { onTab(nav, it) } }) {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (m in post.media.sortedBy { it.position }) {
-                val w = if (post.media.size == 1) Modifier.fillMaxWidth() else Modifier.width(280.dp)
-                if (m.kind == "video") {
-                    Box(w.clickable { open(m.url) }, contentAlignment = Alignment.Center) {
-                        NetImage(m.coverUrl, Modifier.fillMaxWidth(), maxPx = 1200, corner = 18.dp, fitAspect = 9f / 16f)
-                        Icon(Icons.Filled.PlayCircle, "Play the video", tint = Color.White, modifier = Modifier.size(64.dp))
-                    }
-                } else NetImage(m.url, w, maxPx = 1400, corner = 18.dp, fitAspect = 0.8f)
-            }
+        // Phone-sized, like GradingAI's product photo; tap for the full-screen viewer (videos play there).
+        val media = post.media.sortedBy { it.position }
+        if (media.size == 1) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            PostMedia(media[0], post.gallery, 0, Modifier.fillMaxWidth(0.62f))
+        } else Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            media.forEachIndexed { i, m -> PostMedia(m, post.gallery, i, Modifier.width(180.dp)) }
         }
+        if (media.size > 1) Muted("${media.size} pictures — swipe, tap one to zoom")
         Card(padding = 14.dp) {
             KeyValue("Goes out", whenText)
             KeyValue("Format", FORMAT[post.format] ?: post.format)
@@ -247,10 +275,17 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
             when (post.status) {
                 "draft", "changes_requested" -> {
                     Primary(if (busy) "Saving…" else "Approve", enabled = !busy) { ask = "approve" }
+                    Secondary("Edit caption, time or channels", enabled = !busy) { nav.go(Screen.SocialEdit(post)) }
                     Secondary("Ask for changes", enabled = !busy) { note = post.note.orEmpty(); ask = "request_changes" }
                 }
-                "approved" -> Secondary("Take back approval", enabled = !busy) { decide("reopen") }
-                "cancelled", "failed" -> Secondary("Reopen", enabled = !busy) { decide("reopen") }
+                "approved" -> {
+                    Secondary("Take back approval", enabled = !busy) { decide("reopen") }
+                    Secondary("Edit (sends it back for approval)", enabled = !busy) { nav.go(Screen.SocialEdit(post)) }
+                }
+                "cancelled", "failed" -> {
+                    Secondary("Reopen", enabled = !busy) { decide("reopen") }
+                    Secondary("Edit", enabled = !busy) { nav.go(Screen.SocialEdit(post)) }
+                }
             }
             if (post.status != "cancelled") Text(
                 "Cancel this post", style = MaterialTheme.typography.bodyMedium, color = Palette.bad,
@@ -280,6 +315,97 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
             text = { Text("It will not go out. You can reopen it later.") },
             confirmButton = { TextButton(onClick = { ask = null; decide("cancel") }) { Text("Cancel post") } },
             dismissButton = { TextButton(onClick = { ask = null }) { Text("Keep it") } },
+        )
+    }
+}
+
+/** One picture or video of a post, at its own shape; tap opens the viewer at it. */
+@Composable
+private fun PostMedia(m: SocialMedia, gallery: List<String>, at: Int, modifier: Modifier) {
+    if (m.kind == "video") {
+        Box(modifier.aspectRatio(9f / 16f).clip(RoundedCornerShape(20.dp)).background(Color.Black).clickable { Zoom.show(gallery, at) }, contentAlignment = Alignment.Center) {
+            m.coverUrl?.let { NetImage(it, Modifier.fillMaxSize(), crop = true, maxPx = 900, corner = 20.dp) }
+            Icon(Icons.Filled.PlayCircle, "Play the video", tint = Color.White, modifier = Modifier.size(64.dp))
+        }
+    } else NetImage(m.url, modifier, maxPx = 900, corner = 20.dp, fitAspect = 0.8f, zoom = gallery, zoomAt = at)
+}
+
+/**
+ * Edit a post as CarbonWMS › CarbonCast › Calendar does: caption, hashtags,
+ * day and time (Eastern) and the channels. Saving an approved post sends it
+ * back for approval, so what goes out is always what was approved.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun SocialEditScreen(nav: Nav, post: SocialPost) {
+    val app = App.get(LocalContext.current)
+    val scope = rememberCoroutineScope()
+    var caption by remember { mutableStateOf(post.caption) }
+    var tags by remember { mutableStateOf(post.hashtags.joinToString(" ") { if (it.startsWith("#")) it else "#$it" }) }
+    val start = et(post.scheduledAt) ?: LocalDate.now(ET).plusDays(1).atTime(13, 0).atZone(ET)
+    var day by remember { mutableStateOf(start.toLocalDate()) }
+    var time by remember { mutableStateOf(start.toLocalTime().withSecond(0).withNano(0)) }
+    var channels by remember { mutableStateOf(post.targets.map { it.provider }.filter { it in CHANNEL }.toSet().ifEmpty { CHANNEL.keys }) }
+    var pickDay by remember { mutableStateOf(false) }
+    var pickTime by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val hashtagList = tags.split(Regex("""[\s,]+""")).map { it.trim().removePrefix("#") }.filter { it.isNotEmpty() }
+
+    fun save() = scope.launch {
+        busy = true; err = null
+        val iso = day.atTime(time).atZone(ET).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        runCatching { app.api.socialEdit(post.id, caption.trim(), hashtagList, iso, channels.toList()) }
+            .onSuccess { nav.back(); nav.replace(Screen.SocialPost(it)) }
+            .onFailure { err = it.message }
+        busy = false
+    }
+
+    Page(
+        "Edit post", onBack = { nav.back() }, largeTitle = false,
+        bottom = { Primary(if (busy) "Saving…" else "Save", enabled = !busy && channels.isNotEmpty() && caption.length <= 2200 && hashtagList.size <= 30) { save() } },
+    ) {
+        if (post.status == "approved") Notice("This post is approved. Saving a change sends it back for approval.")
+        err?.let { Notice(it, Palette.bad) }
+        Group(header = "Caption") {
+            OutlinedTextField(caption, { caption = it }, Modifier.fillMaxWidth().padding(12.dp), minLines = 6, supportingText = { Text("${caption.length} / 2200") })
+        }
+        Group(header = "Hashtags", footer = "${hashtagList.size} of 30 — separate with spaces") {
+            OutlinedTextField(tags, { tags = it }, Modifier.fillMaxWidth().padding(12.dp), minLines = 2)
+        }
+        Group(header = "Goes out (Eastern)") {
+            ListRow("Day", trailing = { Text(day.format(DAY_FMT), style = MaterialTheme.typography.bodyMedium, color = Palette.accent) }, onClick = { pickDay = true })
+            ListRow("Time", divider = true, trailing = { Text(time.format(TIME_FMT), style = MaterialTheme.typography.bodyMedium, color = Palette.accent) }, onClick = { pickTime = true })
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Label("Channels")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for ((id, label) in CHANNEL) Pill(label, filled = id in channels) { channels = if (id in channels) channels - id else channels + id }
+            }
+            if (channels.isEmpty()) Muted("Pick at least one channel.")
+        }
+    }
+
+    if (pickDay) {
+        val st = rememberDatePickerState(initialSelectedDateMillis = day.atStartOfDay(ZoneId.of("UTC")).toInstant().toEpochMilli())
+        DatePickerDialog(
+            onDismissRequest = { pickDay = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    st.selectedDateMillis?.let { day = Instant.ofEpochMilli(it).atZone(ZoneId.of("UTC")).toLocalDate() }
+                    pickDay = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { pickDay = false }) { Text("Cancel") } },
+        ) { DatePicker(st) }
+    }
+    if (pickTime) {
+        val st = rememberTimePickerState(initialHour = time.hour, initialMinute = time.minute, is24Hour = false)
+        AlertDialog(
+            onDismissRequest = { pickTime = false },
+            confirmButton = { TextButton(onClick = { time = LocalTime.of(st.hour, st.minute); pickTime = false }) { Text("OK") } },
+            dismissButton = { TextButton(onClick = { pickTime = false }) { Text("Cancel") } },
+            text = { TimePicker(st) },
         )
     }
 }
