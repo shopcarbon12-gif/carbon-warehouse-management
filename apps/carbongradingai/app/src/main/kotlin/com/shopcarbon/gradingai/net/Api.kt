@@ -45,6 +45,8 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
         .build()
     // The AI assist works through close-ups for up to ~2.5 minutes.
     private val slow = http.newBuilder().readTimeout(200, TimeUnit.SECONDS).build()
+    // Social uploads: a Reel can be a few hundred MB.
+    private val upload = http.newBuilder().writeTimeout(15, TimeUnit.MINUTES).readTimeout(5, TimeUnit.MINUTES).build()
 
     val origin get() = prefs.origin
 
@@ -126,6 +128,42 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
      */
     suspend fun socialEdit(id: String, caption: String, hashtags: List<String>, scheduledAt: String, targets: List<String>): SocialPost =
         socialPatch(id, JSONObject().put("caption", caption).put("hashtags", org.json.JSONArray(hashtags)).put("scheduledAt", scheduledAt).put("targets", org.json.JSONArray(targets)))
+
+    /** A new post (draft); pictures are added with [socialUpload]. */
+    suspend fun socialCreate(): SocialPost = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("title", "New post").toString().toRequestBody("application/json".toMediaType())
+        SocialPost.parse(call { Request.Builder().url("$origin/api/marketing/posts").post(body) }.getJSONObject("post"))
+    }
+
+    /** Add a picture or video to a post (or a Reel's cover: role "cover", position of the video). */
+    suspend fun socialUpload(id: String, bytes: ByteArray, name: String, mime: String, role: String = "media", position: Int = 0): SocialPost = withContext(Dispatchers.IO) {
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("role", role).addFormDataPart("position", position.toString())
+            .addFormDataPart("file", name, bytes.toRequestBody(mime.toMediaType()))
+            .build()
+        SocialPost.parse(call(upload) { Request.Builder().url("$origin/api/marketing/posts/${enc(id)}/media").post(body) }.getJSONObject("post"))
+    }
+
+    suspend fun socialRemoveMedia(id: String, position: Int): SocialPost = withContext(Dispatchers.IO) {
+        SocialPost.parse(call { Request.Builder().url("$origin/api/marketing/posts/${enc(id)}/media?position=$position").delete() }.getJSONObject("post"))
+    }
+
+    /** "Write with AI": title, caption, hashtags and product tags from the pictures — saved on the post (it still waits for approval). */
+    suspend fun socialWrite(post: SocialPost, brief: String): Pair<SocialPost, String> {
+        val sgg = withContext(Dispatchers.IO) {
+            val body = JSONObject().put("postId", post.id).put("brief", brief).toString().toRequestBody("application/json".toMediaType())
+            call(slow) { Request.Builder().url("$origin/api/marketing/ai/write").post(body) }.getJSONObject("suggestion")
+        }
+        val tags = sgg.optJSONArray("tags") ?: org.json.JSONArray()
+        val patch = JSONObject().put("title", sgg.optString("title", post.title)).put("caption", sgg.optString("caption"))
+            .put("hashtags", sgg.optJSONArray("hashtags") ?: org.json.JSONArray())
+        if (tags.length() > 0) patch.put("tags", tags)
+        val saved = socialPatch(post.id, patch)
+        val missing = sgg.optJSONArray("notFound")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty()
+        val note = "The AI wrote the caption and hashtags" + (if (tags.length() > 0) " and tagged ${tags.length()} product(s)" else "") + "." +
+            (if (missing.isNotEmpty()) " Not in the shop catalog: ${missing.joinToString()}." else "")
+        return saved to note
+    }
 
     private suspend fun socialPatch(id: String, j: JSONObject): SocialPost = withContext(Dispatchers.IO) {
         val body = j.toString().toRequestBody("application/json".toMediaType())

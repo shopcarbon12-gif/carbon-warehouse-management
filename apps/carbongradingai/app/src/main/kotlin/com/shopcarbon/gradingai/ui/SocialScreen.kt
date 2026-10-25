@@ -1,6 +1,8 @@
 package com.shopcarbon.gradingai.ui
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import kotlin.math.roundToInt
 import java.time.LocalTime
@@ -75,7 +77,7 @@ private val STATUS = mapOf(
     "failed" to "Failed", "cancelled" to "Cancelled",
 )
 private val FORMAT = mapOf("image" to "Single image", "carousel" to "Carousel", "reel" to "Reel", "story" to "Story")
-private val CHANNEL = mapOf("instagram" to "Instagram", "facebook" to "Facebook")
+private val CHANNEL = mapOf("instagram" to "Instagram", "facebook" to "Facebook", "bluesky" to "Bluesky")
 private val FILTERS = listOf("all" to "All", "waiting" to "Waiting", "approved" to "Approved", "out" to "Gone out")
 
 private fun statusColor(s: String) = when (s) {
@@ -90,6 +92,22 @@ private fun et(iso: String?) = iso?.let { runCatching { Instant.parse(it).atZone
 private fun hourLabel(h: Int) = when { h == 0 -> "12 AM"; h < 12 -> "$h AM"; h == 12 -> "12 PM"; else -> "${h - 12} PM" }
 
 private var lastFilter = "all"
+
+/** The phone's photos or videos → a post, one by one (they can be large). */
+private suspend fun uploadPicked(ctx: android.content.Context, app: App, postId: String, uris: List<Uri>, onProgress: (String) -> Unit): SocialPost? {
+    var last: SocialPost? = null
+    uris.forEachIndexed { i, u ->
+        onProgress("Uploading ${i + 1} of ${uris.size}…")
+        val mime = ctx.contentResolver.getType(u) ?: "image/jpeg"
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ctx.contentResolver.openInputStream(u)?.use { it.readBytes() } } ?: return@forEachIndexed
+        val name = if (mime.startsWith("video")) "video-$i.mp4" else "photo-$i.jpg"
+        last = app.api.socialUpload(postId, bytes, name, mime)
+    }
+    return last
+}
+
+private val PICK_TYPES = arrayOf("image/*", "video/mp4", "video/quicktime")
+
 
 /**
  * The Social tab on the phone (owner, 2026-10-24 — no separate app;
@@ -109,6 +127,24 @@ fun SocialScreen(nav: Nav) {
     var busy by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(lastFilter) }
     var reload by remember { mutableIntStateOf(0) }
+    val ctx = LocalContext.current
+    var progress by remember { mutableStateOf<String?>(null) }
+    // New post (owner, 2026-10-25): pick photos or a video, then write with AI on the post.
+    val pickNew = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                progress = "Making the post…"
+                val p = app.api.socialCreate()
+                val done = uploadPicked(ctx, app, p.id, uris.take(10)) { progress = it } ?: p
+                nav.go(Screen.SocialPost(done))
+            } catch (e: Exception) {
+                err = e.message
+            } finally {
+                progress = null
+            }
+        }
+    }
 
     LaunchedEffect(reload) {
         err = null
@@ -160,6 +196,19 @@ fun SocialScreen(nav: Nav) {
                     )
                 },
             )
+        }
+        Primary(progress ?: "New post", enabled = progress == null) { pickNew.launch(PICK_TYPES) }
+        // The rest of Social, as on CarbonWMS (shown in the app's look).
+        Group {
+            for ((i, item) in listOf(
+                Triple("Results", "Reach, likes, saves and followers", "/marketing/results"),
+                Triple("Ads", "Meta and Google campaigns — pause, resume, budget", "/marketing/ads"),
+                Triple("Merchant Center", "Products Google is not showing, and why", "/marketing/merchant"),
+                Triple("Best time", "When followers are online", "/marketing/best-time"),
+                Triple("Social channels", "Connected accounts", "/integrations/social"),
+            ).withIndex()) {
+                ListRow(item.first, subtitle = item.second, divider = i > 0, chevron = true, onClick = { nav.go(Screen.Web(item.first, item.third)) })
+            }
         }
         if (best.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -224,6 +273,43 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
     var ask by remember { mutableStateOf<String?>(null) }
+    var progress by remember { mutableStateOf<String?>(null) }
+    var brief by remember { mutableStateOf("") }
+    var aiNote by remember { mutableStateOf<String?>(null) }
+    var coverFor by remember { mutableStateOf<Int?>(null) }
+    val addMore = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                uploadPicked(ctx, app, post.id, uris.take(10 - post.media.size)) { progress = it }?.let { nav.replace(Screen.SocialPost(it)) }
+            } catch (e: Exception) { err = e.message } finally { progress = null }
+        }
+    }
+    val pickCover = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val pos = coverFor ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            try {
+                progress = "Uploading the cover…"
+                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } } ?: return@launch
+                nav.replace(Screen.SocialPost(app.api.socialUpload(post.id, bytes, "cover.jpg", ctx.contentResolver.getType(uri) ?: "image/jpeg", "cover", pos)))
+            } catch (e: Exception) { err = e.message } finally { progress = null }
+        }
+    }
+    fun removeAt(pos: Int) = scope.launch {
+        busy = true
+        runCatching { app.api.socialRemoveMedia(post.id, pos) }.onSuccess { nav.replace(Screen.SocialPost(it)) }.onFailure { err = it.message }
+        busy = false
+    }
+    fun writeAi() = scope.launch {
+        busy = true; err = null
+        progress = "The AI is looking at the pictures…"
+        runCatching { app.api.socialWrite(post, brief) }
+            .onSuccess { (p, note) -> aiNote = note; nav.replace(Screen.SocialPost(p)) }
+            .onFailure { err = it.message }
+        progress = null
+        busy = false
+    }
     var note by remember { mutableStateOf("") }
     val whenText = et(post.scheduledAt)?.format(WHEN_FMT) ?: "No time set"
     val channels = post.targets.joinToString(" + ") { CHANNEL[it.provider] ?: it.provider }
@@ -253,6 +339,22 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
             media.forEachIndexed { i, m -> PostMedia(m, post.gallery, i, Modifier.width(180.dp)) }
         }
         if (media.size > 1) Muted("${media.size} pictures — swipe, tap one to zoom")
+        if (!post.locked) {
+            if (media.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (m in media) {
+                    Pill("Remove ${m.position + 1}", Palette.bad) { if (!busy) removeAt(m.position) }
+                    if (m.kind == "video") Pill(if (m.coverUrl != null) "Change cover" else "Add cover") { coverFor = m.position; pickCover.launch("image/*") }
+                }
+            }
+            progress?.let { Muted(it) }
+            if (media.size < 10) Secondary(if (media.isEmpty()) "Add photos or a video" else "Add more", enabled = progress == null) { addMore.launch(PICK_TYPES) }
+            if (media.isNotEmpty()) Card(padding = 14.dp) {
+                Label("Write with AI")
+                OutlinedTextField(brief, { brief = it }, Modifier.fillMaxWidth(), placeholder = { Text("Optional: the occasion, the products, the mood") }, minLines = 2)
+                Secondary(if (busy) "Working…" else "Write caption, hashtags and tags", enabled = !busy) { writeAi() }
+                aiNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Palette.text) }
+            }
+        }
         Card(padding = 14.dp) {
             KeyValue("Goes out", whenText)
             KeyValue("Format", FORMAT[post.format] ?: post.format)
@@ -370,7 +472,7 @@ fun SocialEditScreen(nav: Nav, post: SocialPost) {
     val start = et(post.scheduledAt) ?: LocalDate.now(ET).plusDays(1).atTime(13, 0).atZone(ET)
     var day by remember { mutableStateOf(start.toLocalDate()) }
     var time by remember { mutableStateOf(start.toLocalTime().withSecond(0).withNano(0)) }
-    var channels by remember { mutableStateOf(post.targets.map { it.provider }.filter { it in CHANNEL }.toSet().ifEmpty { CHANNEL.keys }) }
+    var channels by remember { mutableStateOf(post.targets.map { it.provider }.filter { it in CHANNEL }.toSet().ifEmpty { setOf("instagram", "facebook") }) }
     var pickDay by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
