@@ -33,6 +33,8 @@ const ET = "America/New_York";
 const MAX_TAGS_PER_PICTURE = 5;
 const STALE_WORKING_MS = 15 * 60_000;
 const MAX_ATTEMPTS = 3;
+/** The owner's example of the carousel style (a garment hanging from a wire, 2026-10-25). */
+const STYLE_EXAMPLE = "marketing/style/hanging-wire.jpg";
 const SIZES: Record<string, string> = { "4:5": "1600x2000", "9:16": "1440x2560", "16:9": "2560x1440", "1:1": "2048x2048" };
 
 type Plan = {
@@ -43,7 +45,7 @@ type Plan = {
   remove_tags: { media_position: number; label: string }[];
   move_tags: { media_position: number; label: string; x: number; y: number }[];
   add_tags: { media_position: number; product_name: string; colour: string | null; x: number; y: number }[];
-  picture_edits: { media_position: number; instruction: string; reference_positions: number[] }[];
+  picture_edits: { media_position: number; instruction: string; reference_positions: number[]; style_example: boolean }[];
   summary: string;
   cannot: string[];
 };
@@ -88,8 +90,11 @@ const SCHEMA = {
     picture_edits: {
       type: "array",
       items: {
-        type: "object", additionalProperties: false, required: ["media_position", "instruction", "reference_positions"],
-        properties: { media_position: { type: "integer" }, instruction: { type: "string" }, reference_positions: { type: "array", items: { type: "integer" } } },
+        type: "object", additionalProperties: false, required: ["media_position", "instruction", "reference_positions", "style_example"],
+        properties: {
+          media_position: { type: "integer" }, instruction: { type: "string" },
+          reference_positions: { type: "array", items: { type: "integer" } }, style_example: { type: "boolean" },
+        },
       },
     },
     summary: { type: "string" },
@@ -117,7 +122,7 @@ Fields:
 - Product tags: pictures are numbered from 0 (media_position). x and y are from 0 to 1 (left→right, top→bottom), on the product itself in that picture. add_tags names the product as it is sold (e.g. "Axel Coat") and its colour if the note or picture shows it; only products that are really visible in that picture. remove_tags / move_tags use the tag's label exactly as listed.
 - picture_edits: when the note asks to change what a picture shows, write one precise instruction for a photo-editing model for that picture (what to change, where, and how it should look). The model keeps everything else as it is unless the instruction says otherwise. reference_positions: other pictures of this post the model should also see (e.g. picture 0 for its setting and light) — empty when none. Videos cannot be edited.
 
-OWNER'S CAROUSEL RULE (always): a carousel slide that shows one piece on its own must never be a plain catalog photo (a product on white, a flat lay, a store photo). It becomes a commercial ghost-mannequin shot of that exact piece — same cut, colour, print, fabric and hardware — standing in the setting and light of the carousel's first picture. The piece alone: leave out the model and any styling accessory that is not part of it (wallet chains, belts, jewellery, bags, other clothes) — a store photo often shows them. When the note mentions this, or asks to fix such slides, give each one a picture_edit with reference_positions [0].
+OWNER'S CAROUSEL RULE (2026-10-25): only for a carousel whose first picture is the campaign shot and whose next pictures each show ONE piece of that outfit (a catalog photo: product on white, a flat lay, a store photo, a person wearing it). Each such piece becomes the owner's hanging style — never a ghost mannequin, never a copied catalog photo: the real garment hangs in mid-air from a thin, barely visible wire, shaped as if worn but with nobody in it (sleeves falling naturally, real fabric weight and texture), an open jacket or overshirt may show a plain white tee inside; shoes and bags are not hung — they stand on the ground of the setting. It is set in the location and light of the carousel's first picture. The piece alone: no model and no styling accessory that is not part of it (wallet chains, belts, jewellery, other clothes). Keep the piece exact — cut, colour, print, fabric, stitching, hardware and any lettering. For each such slide give a picture_edit with reference_positions [0] and style_example true. style_example is false for every other edit.
 - summary: one or two short sentences for the owner saying what you changed. In summary and cannot, count pictures as the owner sees them: the first picture is picture 1.
 - cannot: anything in the note you could not do, each with the reason in a few words.`;
 
@@ -402,11 +407,14 @@ function sizeFor(w: number, h: number): string {
   return SIZES[best];
 }
 
-export function editPrompt(instruction: string, references = 0): string {
-  if (references > 0)
+export function editPrompt(instruction: string, references = 0, styleExample = false): string {
+  if (references > 0 || styleExample)
     return [
       "Make a CARBON fashion campaign photograph.",
-      `The FIRST image is the picture to change. The other image${references > 1 ? "s are references" : " is a reference"} from the same post (setting, light, colour grade).`,
+      `The FIRST image is the picture to change.${references > 0 ? ` The next image${references > 1 ? "s are references" : " is a reference"} from the same post (setting, light, colour grade).` : ""}`,
+      ...(styleExample
+        ? ["The LAST image only shows the STYLE wanted: a garment hanging in mid-air from a thin wire, shaped as if worn with nobody in it. Copy only that way of showing it — never its garment, colour, white tee or setting unless the instruction asks for them."]
+        : []),
       `Do this: ${instruction.trim()}`,
       "Every garment and accessory from the first image stays exactly as it is: cut, colour, print, fabric, fit, stitching and hardware. Invent nothing on it.",
       "A real photograph — no added text, logos, watermarks, signs or brand names.",
@@ -422,7 +430,7 @@ export function editPrompt(instruction: string, references = 0): string {
 async function submitPictures(
   postId: string,
   media: { position: number; storage_path: string | null }[],
-  edits: { media_position: number; instruction: string; reference_positions?: number[] }[],
+  edits: { media_position: number; instruction: string; reference_positions?: number[]; style_example?: boolean }[],
   summary: string,
 ): Promise<PictureState> {
   const ai = openai();
@@ -431,6 +439,7 @@ async function submitPictures(
   const lines: string[] = [];
   const list: PictureState["edits"] = [];
   const fileFor = new Map<number, string>();
+  let styleFile: string | null = null;
   async function upload(position: number): Promise<{ id: string; w: number; h: number } | null> {
     const m = media.find((x) => x.position === position);
     if (!m?.storage_path) return null;
@@ -455,6 +464,16 @@ async function submitPictures(
       const f = await upload(r);
       if (f) refs.push(f.id);
     }
+    if ((e as { style_example?: boolean }).style_example) {
+      if (!styleFile) {
+        const obj = await downloadStorageObject(STYLE_EXAMPLE);
+        const f = await ai.files.create({ file: await toFile(Buffer.from(obj.body), "style-hanging.jpg", { type: "image/jpeg" }), purpose: "vision" });
+        styleFile = f.id;
+        refFileIds.push(f.id);
+      }
+      refs.push(styleFile);
+    }
+    const styled = Boolean((e as { style_example?: boolean }).style_example);
     const customId = `${postId}:${e.media_position}`;
     list.push({ position: e.media_position, instruction: e.instruction, customId });
     // The post's own shape (a carousel's slides all match its first picture).
@@ -464,7 +483,7 @@ async function submitPictures(
       method: "POST",
       url: "/v1/images/edits",
       body: {
-        model, prompt: editPrompt(e.instruction, refs.length), images: [main.id, ...refs].map((file_id) => ({ file_id })),
+        model, prompt: editPrompt(e.instruction, refs.length - (styled ? 1 : 0), styled), images: [main.id, ...refs].map((file_id) => ({ file_id })),
         size: sizeFor(shapeFrom.w, shapeFrom.h), quality: "high", moderation: "low", n: 1,
       },
     }));
