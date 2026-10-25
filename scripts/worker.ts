@@ -12,6 +12,7 @@ import { signSession } from "@/lib/auth";
 import { nightlySendDue } from "@/lib/server/studio-batch";
 import { maybeRunShieldMaintenance } from "@/lib/server/shield/maintenance";
 import { maybeRunMetaFeed } from "@/lib/server/meta-feed";
+import { maybeRunMarketing } from "@/lib/server/marketing/scheduler";
 
 loadEnvConfig(process.cwd());
 
@@ -339,6 +340,7 @@ async function main() {
       await maybeRunGradingAi(pool);
       await maybeRunShieldMaintenance(pool);
       await maybeRunMetaFeed(pool);
+      await maybeRunMarketing(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

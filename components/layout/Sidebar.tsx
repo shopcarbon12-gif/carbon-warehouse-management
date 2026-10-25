@@ -53,6 +53,9 @@ import {
   Eye,
   Undo2,
   X,
+  CalendarDays,
+  Clock,
+  Megaphone,
 } from "lucide-react";
 import useSWR from "swr";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -114,6 +117,16 @@ const sections: NavSection[] = [
       { href: "/shopify/carbon-shield", label: "Carbon Shield", icon: ShieldCheck },
       { href: "/shopify/email-popup", label: "Email Popup", icon: MailPlus },
       { href: "/shopify/visitors", label: "Visitors", icon: Eye },
+    ],
+  },
+  {
+    id: "marketing",
+    label: "CarbonMarketing",
+    isActiveSection: (p) => p.startsWith("/marketing"),
+    items: [
+      { href: "/marketing/calendar", label: "Calendar", icon: CalendarDays },
+      { href: "/marketing/best-time", label: "Best time", icon: Clock },
+      { href: "/integrations/social", label: "Social channels", icon: Megaphone },
     ],
   },
   {
@@ -193,6 +206,7 @@ const sections: NavSection[] = [
     isActiveSection: (p) => p.startsWith("/integrations"),
     items: [
       { href: "/integrations/shopify", label: "Shopify", icon: ImageIcon },
+      { href: "/integrations/social", label: "Social channels", icon: Megaphone },
     ],
   },
   {

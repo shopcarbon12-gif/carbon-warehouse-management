@@ -17,6 +17,8 @@ export function isAdminOnlyPath(pathname: string): boolean {
   if (pathname.startsWith("/infrastructure")) return true;
   if (pathname.startsWith("/settings")) return true;
   if (pathname.startsWith("/integrations")) return true;
+  if (pathname.startsWith("/marketing")) return true;
+  if (pathname.startsWith("/api/marketing")) return true;
   // Shopify → Sales: customer names and money.
   if (pathname.startsWith("/shopify")) return true;
   if (pathname.startsWith("/api/shopify/sales")) return true;
