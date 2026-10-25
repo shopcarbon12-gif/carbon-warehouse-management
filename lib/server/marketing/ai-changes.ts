@@ -371,10 +371,19 @@ export function pickCatalogProduct(list: CatalogProduct[], name: string, colour:
   const pool = exact.length ? exact : live.filter((p) => p.name.toLowerCase().includes(n));
   if (!pool.length) return null;
   if (c) {
-    const byColour = pool.find((p) => (p.color ?? "").toLowerCase() === c) ?? pool.find((p) => (p.color ?? "").toLowerCase().includes(c));
+    const col = (p: CatalogProduct) => (p.color ?? "").toLowerCase();
+    const words = (x: string) => x.split(/[^a-z]+/).filter((w) => w.length > 2 && !["mid", "deep", "dark", "light", "washed", "wash"].includes(w));
+    const byColour =
+      pool.find((p) => col(p) === c) ??
+      pool.find((p) => col(p) && (col(p).includes(c) || c.includes(col(p)))) ??
+      // "mid-blue" ↔ "BLUE WASHED", "deep blue" ↔ "BLUE": the main colour word.
+      pool.find((p) => words(col(p)).some((w) => words(c).includes(w)));
     if (byColour) return byColour;
+    // Only one colour exists for it: that is the one in the picture.
+    const colours = new Set(pool.map(col).filter(Boolean));
+    if (colours.size === 1) return pool[0];
     // A colour the catalog does not have for it: not that product.
-    if (pool.some((p) => p.color)) return null;
+    if (colours.size) return null;
   }
   return pool[0];
 }
