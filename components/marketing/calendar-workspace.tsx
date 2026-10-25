@@ -525,7 +525,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           <fieldset className="flex flex-col gap-1">
             <span className={label}>Channels</span>
             <div className="flex flex-wrap gap-3">
-              {(["instagram", "facebook"] as const).map((t) => (
+              {(["instagram", "facebook", "bluesky"] as const).map((t) => (
                 <label key={t} className="flex items-center gap-1.5 text-xs text-[var(--wms-fg)] max-md:min-h-11">
                   <input
                     type="checkbox"
@@ -534,7 +534,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     disabled={locked}
                     onChange={(e) => setTargets((cur) => (e.target.checked ? [...cur, t] : cur.filter((x) => x !== t)))}
                   />
-                  {t === "instagram" ? "Instagram (with product tags)" : "Facebook page (with shop link)"}
+                  {t === "instagram" ? "Instagram (with product tags)" : t === "facebook" ? "Facebook page (with shop link)" : "Bluesky (300 characters, up to 4 pictures)"}
                 </label>
               ))}
             </div>

@@ -32,7 +32,7 @@ const createSchema = z
     caption: z.string().max(2200).default(""),
     hashtags: z.array(z.string().max(100)).max(30).default([]),
     scheduledAt: z.string().datetime({ offset: true }).optional(),
-    targets: z.array(z.enum(["instagram", "facebook"])).min(1).default(["instagram", "facebook"]),
+    targets: z.array(z.enum(["instagram", "facebook", "bluesky"])).min(1).default(["instagram", "facebook"]),
   })
   .strict();
 

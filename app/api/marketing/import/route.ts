@@ -37,7 +37,7 @@ const post = z.object({
   scheduledAt: z.string().datetime({ offset: true }),
   media: z.array(media.refine((m) => m.url || m.storagePath, "Each picture needs a url or a storagePath")).min(1).max(10),
   tags: z.array(tag).max(20).default([]),
-  targets: z.array(z.enum(["instagram", "facebook"])).min(1).default(["instagram", "facebook"]),
+  targets: z.array(z.enum(["instagram", "facebook", "bluesky"])).min(1).default(["instagram", "facebook"]),
 });
 const PUBLIC_BASE = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://wms.shopcarbon.com").trim().replace(/^'|'$/g, "").replace(/\/+$/, "");
 const schema = z.object({ campaign: z.string().min(1).max(100), posts: z.array(post).min(1).max(100) }).strict();

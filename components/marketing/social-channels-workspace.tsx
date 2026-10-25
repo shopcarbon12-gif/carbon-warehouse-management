@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import { btn, card, fetcher, label, send } from "./marketing-shared";
+import { btn, card, fetcher, field, label, send } from "./marketing-shared";
 
 /**
  * Integrations → Social channels. Every channel Social covers:
@@ -22,10 +22,49 @@ type Provider = {
 type Overview = { providers: Provider[] };
 const KIND_LABEL = { social: "Social networks", ads: "Ad platforms", shop: "Shopping catalogs" } as const;
 
+/** What each channel still needs from the owner before Social can post there (2026-10-25). */
+const NEEDS: Record<string, string> = {
+  tiktok: "A TikTok for Developers app with the Content Posting API, and TikTok's audit — until it passes, TikTok only allows private posts.",
+  youtube: "Sign in to Google once more with YouTube upload allowed (same Google login as Ads and Merchant Center), for Shorts.",
+  pinterest: "A Pinterest business account and a Pinterest developer app (Standard access).",
+  snapchat: "A Snapchat Public Profile and access to Snap's Public Profile API (granted by Snap on request).",
+  google_business: "Google's approval for the Business Profile API (an application form), then one Google sign-in.",
+  linkedin: "A LinkedIn company page and a LinkedIn developer app with Community Management access.",
+  x: "An X developer account (the paid Basic plan allows posting) and its keys.",
+  threads: "Add the Threads use case to the Meta app, then sign in to Threads once.",
+  twitch: "Twitch has no API for posting pictures; skipped.",
+  meta_ads: "Live: Social → Ads.",
+  google_ads: "Live: Social → Ads.",
+  merchant_center: "Live: Social → Merchant Center.",
+  meta_catalog: "Live: Instagram product tags use it.",
+};
+
 export function SocialChannelsWorkspace() {
   const { data, error, mutate } = useSWR<Overview>("/api/marketing/overview", fetcher);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
+  const [bsky, setBsky] = useState({ handle: "", appPassword: "" });
+
+  async function bluesky(connect: boolean) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      if (connect) {
+        const r = await send<{ handle: string }>("/api/marketing/channels/bluesky", "POST", bsky);
+        setMsg({ text: `Bluesky connected as @${r.handle}.` });
+        setBsky({ handle: "", appPassword: "" });
+      } else {
+        const res = await fetch("/api/marketing/channels/bluesky", { method: "DELETE" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setMsg({ text: "Bluesky disconnected." });
+      }
+      await mutate();
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Something went wrong", err: true });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function syncMeta() {
     setBusy(true);
@@ -63,8 +102,9 @@ export function SocialChannelsWorkspace() {
               .filter((p) => p.kind === kind)
               .map((p) => {
                 const connected = p.accounts.some((a) => a.status === "connected");
-                const state = connected && p.publishing ? "Live" : connected || p.credentials ? "Credentials present" : `Coming in phase ${p.phase}`;
-                const tone = connected && p.publishing ? "text-emerald-600 dark:text-emerald-400" : p.credentials || connected ? "text-sky-600 dark:text-sky-400" : "text-[var(--wms-muted)]";
+                const live = (connected && p.publishing) || ["meta_ads", "google_ads", "merchant_center", "meta_catalog"].includes(p.id) && p.credentials;
+                const state = live ? "Live" : connected || p.credentials ? "Keys present" : "Needs your account";
+                const tone = live ? "text-emerald-600 dark:text-emerald-400" : p.credentials || connected ? "text-sky-600 dark:text-sky-400" : "text-[var(--wms-muted)]";
                 return (
                   <div key={p.id} className={card}>
                     <div className="flex items-start justify-between gap-2">
@@ -77,9 +117,21 @@ export function SocialChannelsWorkspace() {
                         {a.lastError && <span className="block text-[var(--wms-status-danger-fg)]">Last error: {a.lastError}</span>}
                       </p>
                     ))}
-                    {!p.accounts.length && p.credentials && !p.publishing && (
-                      <p className="mt-1 text-xs text-[var(--wms-muted)]">The server has keys for this account; posting/campaign control arrives in phase {p.phase}.</p>
-                    )}
+                    {p.id === "bluesky" &&
+                      (connected ? (
+                        <button type="button" className={`${btn} mt-2 border-[var(--wms-border)]`} disabled={busy} onClick={() => void bluesky(false)}>
+                          Disconnect
+                        </button>
+                      ) : (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          <input className={field} placeholder="handle, e.g. shopcarbon.bsky.social" autoComplete="off" value={bsky.handle} onChange={(e) => setBsky({ ...bsky, handle: e.target.value })} />
+                          <input className={field} type="password" placeholder="App password (Bluesky › Settings › App passwords)" autoComplete="new-password" value={bsky.appPassword} onChange={(e) => setBsky({ ...bsky, appPassword: e.target.value })} />
+                          <button type="button" className={`${btn} self-start border-sky-600 text-sky-700 dark:text-sky-300`} disabled={busy || !bsky.handle || !bsky.appPassword} onClick={() => void bluesky(true)}>
+                            Connect Bluesky
+                          </button>
+                        </div>
+                      ))}
+                    {!connected && NEEDS[p.id] && <p className="mt-1 text-xs text-[var(--wms-muted)]">{NEEDS[p.id]}</p>}
                   </div>
                 );
               })}

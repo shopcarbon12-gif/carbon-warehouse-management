@@ -10,6 +10,8 @@
  */
 import type { Pool } from "pg";
 import { fullCaption, listPosts, type MarketingPost } from "./store";
+import { publishBluesky } from "./bluesky";
+import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
 
 const TICK_MS = 60_000;
@@ -97,7 +99,16 @@ async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): P
           ? await publishInstagram(account, post.format, caption, media)
           : t.provider === "facebook"
             ? await publishFacebook(account, post.format, caption, media, post.linkUrl)
-            : (() => {
+            : t.provider === "bluesky"
+              ? await (async () => {
+                  const b = await pool.query<{ name: string; secret: string | null }>(
+                    `SELECT name, secret FROM marketing_channels WHERE tenant_id = $1::uuid AND provider = 'bluesky' AND status = 'connected' LIMIT 1`,
+                    [tenantId],
+                  );
+                  if (!b.rows[0]?.secret) throw new Error("Bluesky is not connected");
+                  return publishBluesky(b.rows[0].name, open(b.rows[0].secret), post.caption, post.hashtags, media);
+                })()
+              : (() => {
                 throw new Error(`${t.provider} publishing is not built yet`);
               })();
       await pool.query(

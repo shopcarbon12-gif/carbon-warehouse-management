@@ -27,7 +27,7 @@ const schema = z
     caption: z.string().max(2200).optional(),
     hashtags: z.array(z.string().max(100)).max(30).optional(),
     scheduledAt: z.string().datetime({ offset: true }).optional(),
-    targets: z.array(z.enum(["instagram", "facebook"])).min(1).optional(),
+    targets: z.array(z.enum(["instagram", "facebook", "bluesky"])).min(1).optional(),
     note: z.string().max(2000).optional(),
     title: z.string().max(200).optional(),
     /** The full list of Instagram product tags (replaces what is there). */
@@ -107,6 +107,12 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
       if (!when) return rollback(client, "Pick a date and time first");
       if (!post.media.length) return rollback(client, "This post has no picture or video");
       if (!targets.length) return rollback(client, "Pick at least one channel");
+      const connected = await client.query<{ provider: string }>(
+        `SELECT DISTINCT provider FROM marketing_channels WHERE tenant_id = $1::uuid AND status = 'connected' AND provider = ANY($2::text[])`,
+        [g.session.tid, targets],
+      );
+      const missing = targets.filter((t) => !connected.rows.some((r) => r.provider === t));
+      if (missing.length) return rollback(client, `Connect ${missing.join(" and ")} first (Social → Social channels)`);
       set("status", "approved");
       set("approved_by", g.session.email ?? g.session.sub);
       sets.push("approved_at = now()");

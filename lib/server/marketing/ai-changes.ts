@@ -66,7 +66,7 @@ const SCHEMA = {
     caption: nullable({ type: "string" }),
     hashtags: nullable({ type: "array", items: { type: "string" } }),
     scheduled_local: nullable({ type: "string" }),
-    targets: nullable({ type: "array", items: { type: "string", enum: ["instagram", "facebook"] } }),
+    targets: nullable({ type: "array", items: { type: "string", enum: ["instagram", "facebook", "bluesky"] } }),
     remove_tags: {
       type: "array",
       items: { type: "object", additionalProperties: false, required: ["media_position", "label"], properties: { media_position: { type: "integer" }, label: { type: "string" } } },
@@ -118,7 +118,7 @@ Fields:
 - picture_edits: when the note asks to change what a picture shows, write one precise instruction for a photo-editing model for that picture (what to change, where, and how it should look). The model keeps everything else as it is unless the instruction says otherwise. reference_positions: other pictures of this post the model should also see (e.g. picture 0 for its setting and light) — empty when none. Videos cannot be edited.
 
 OWNER'S CAROUSEL RULE (always): a carousel slide that shows one piece on its own must never be a plain catalog photo (a product on white, a flat lay, a store photo). It becomes a commercial ghost-mannequin shot of that exact piece — same cut, colour, print, fabric and hardware — standing in the setting and light of the carousel's first picture. The piece alone: leave out the model and any styling accessory that is not part of it (wallet chains, belts, jewellery, bags, other clothes) — a store photo often shows them. When the note mentions this, or asks to fix such slides, give each one a picture_edit with reference_positions [0].
-- summary: one or two short sentences for the owner saying what you changed.
+- summary: one or two short sentences for the owner saying what you changed. In summary and cannot, count pictures as the owner sees them: the first picture is picture 1.
 - cannot: anything in the note you could not do, each with the reason in a few words.`;
 
 /* ---------------------------------------------------------------- time */
