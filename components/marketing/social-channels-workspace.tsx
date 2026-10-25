@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { btn, card, fetcher, label, send } from "./marketing-shared";
 
 /**
- * Integrations → Social channels. Every channel CarbonMarketing covers:
+ * Integrations → Social channels. Every channel CarbonCast covers:
  * social networks, ad platforms and shopping catalogs. Meta (Instagram +
  * Facebook) is live; the others show what they need and which phase brings them.
  */
@@ -46,7 +46,7 @@ export function SocialChannelsWorkspace() {
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-semibold text-[var(--wms-fg)]">Social channels</h1>
-          <p className="text-xs text-[var(--wms-muted)]">Accounts CarbonMarketing publishes to. Posts only go out after approval in CarbonMarketing → Calendar.</p>
+          <p className="text-xs text-[var(--wms-muted)]">Accounts CarbonCast publishes to. Posts only go out after approval in CarbonCast → Calendar.</p>
         </div>
         <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy} onClick={syncMeta}>
           {busy ? "Reading Meta…" : "Sync Meta accounts"}

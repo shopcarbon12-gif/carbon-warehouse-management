@@ -1,5 +1,5 @@
 /**
- * CarbonMarketing scheduler, run from the worker loop once a minute.
+ * CarbonCast scheduler, run from the worker loop once a minute.
  *
  * A post goes out only when ALL of these are true:
  *   - the tenant's publish switch is on (marketing_settings.publish_enabled),

@@ -21,7 +21,7 @@ import {
 } from "./marketing-shared";
 
 /**
- * CarbonMarketing → Calendar. Every planned post by day; open one to check the
+ * CarbonCast → Calendar. Every planned post by day; open one to check the
  * pictures, caption, time, channels and Instagram product tags, then Approve
  * it (or ask for changes). Approval is per post. Nothing publishes while the
  * publish switch is off, and an edit after approval needs a new approval.
@@ -104,7 +104,7 @@ export function MarketingCalendarWorkspace() {
     <div className="flex min-w-0 flex-col gap-3 p-3 max-md:p-2">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">CarbonMarketing · Calendar</h1>
+          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">CarbonCast · Calendar</h1>
           <p className="text-xs text-[var(--wms-muted)]">
             {waiting} waiting for approval · {counts.approved ?? 0} approved · {counts.published ?? 0} published
             {counts.failed ? ` · ${counts.failed} failed` : ""}

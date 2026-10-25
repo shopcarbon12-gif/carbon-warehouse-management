@@ -1,5 +1,5 @@
 /**
- * CarbonMarketing → Meta: publish to an Instagram business account (single
+ * CarbonCast → Meta: publish to an Instagram business account (single
  * image, carousel, Reel; with Instagram Shop product tags) and to a Facebook
  * page. Uses the system-user token (META_SYSTEM_USER_TOKEN), which carries
  * instagram_content_publish, instagram_shopping_tag_products and

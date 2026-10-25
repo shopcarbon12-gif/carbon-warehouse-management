@@ -38,7 +38,7 @@ function isPublicPath(pathname: string): boolean {
      unsubscribe link in its welcome email — no WMS session; the unsubscribe
      link carries a random per-signup token. */
   if (pathname === "/api/storefront/welcome-signup") return true;
-  /* CarbonMarketing post media: Instagram/Facebook fetch the picture or video
+  /* CarbonCast post media: Instagram/Facebook fetch the picture or video
      when a post is published. Random UUID per file; only post media is served. */
   if (pathname.startsWith("/api/public/marketing-media/")) return true;
   if (pathname === "/api/storefront/welcome-unsubscribe") return true;

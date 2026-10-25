@@ -1,5 +1,5 @@
 /**
- * CarbonMarketing scheduler test against a real Postgres (DATABASE_URL) with
+ * CarbonCast scheduler test against a real Postgres (DATABASE_URL) with
  * migration 0136 applied, and a fake Meta Graph API (no network).
  *
  *   DATABASE_URL=postgres://… npx tsx scripts/test-marketing-scheduler.ts

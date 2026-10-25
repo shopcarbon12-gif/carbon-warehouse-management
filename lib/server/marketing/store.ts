@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
 /**
- * Every channel CarbonMarketing covers — all of Metricool's networks plus the
+ * Every channel CarbonCast covers — all of Metricool's networks plus the
  * ad platforms and shopping feeds — in the order the Integrations page shows
  * them. kind: social = organic posting, ads = paid campaigns, shop = product
  * catalogs and shopping feeds.

@@ -1,6 +1,6 @@
 /**
  * GET /api/public/marketing-media/<media id>[.jpg|.mp4] — the picture or video
- * of a CarbonMarketing post, served from R2 so Instagram and Facebook can
+ * of a CarbonCast post, served from R2 so Instagram and Facebook can
  * fetch it when the post is published (they need a public URL; our R2 bucket
  * is private). Public (no session): the id is a random UUID per file and only
  * files that belong to a post are served.
