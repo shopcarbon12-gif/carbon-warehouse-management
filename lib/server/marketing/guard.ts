@@ -6,7 +6,7 @@ import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
 import type { SessionPayload } from "@/lib/auth";
 
-/** CarbonCast APIs are for admins, like Shopify and Integrations. */
+/** Social APIs are for admins, like Shopify and Integrations. */
 export async function marketingAdminGuard(
   req: Request,
 ): Promise<{ error: NextResponse } | { session: SessionPayload; pool: Pool }> {

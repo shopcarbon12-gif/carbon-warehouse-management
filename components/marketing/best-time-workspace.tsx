@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { btn, card, fetcher, label, send } from "./marketing-shared";
 
 /**
- * CarbonCast → Best time. When the audience is online, per weekday and
+ * Social → Best time. When the audience is online, per weekday and
  * hour (Eastern), read from the channel itself (Instagram: followers online,
  * last 30 days). Darker = more people online. The best hour per day between
  * 8 AM and 10 PM is listed for scheduling.
@@ -40,7 +40,7 @@ export function MarketingBestTimeWorkspace() {
     <div className="flex min-w-0 flex-col gap-3 p-3 max-md:p-2">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">CarbonCast · Best time</h1>
+          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">Social · Best time</h1>
           <p className="text-xs text-[var(--wms-muted)]">
             When @shopcarbon followers are online, Eastern time. {ig ? `Updated ${new Date(ig.computedAt).toLocaleString("en-US", { timeZone: "America/New_York" })}.` : ""}
           </p>

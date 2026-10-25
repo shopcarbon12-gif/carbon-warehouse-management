@@ -1,4 +1,4 @@
-/** Shared types, fetcher, Eastern-time helpers and class tokens for CarbonCast screens. */
+/** Shared types, fetcher, Eastern-time helpers and class tokens for Social screens. */
 import type { MarketingPost } from "@/lib/server/marketing/store";
 
 export type { MarketingPost };

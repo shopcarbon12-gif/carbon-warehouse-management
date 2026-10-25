@@ -104,7 +104,7 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
         WmsTag.parseList(org.json.JSONArray(text))
     }
 
-    /** Social (CarbonCast): the publishing switch. */
+    /** Social: the publishing switch. */
     suspend fun socialSettings(): Boolean = getJson("/api/marketing/overview").optJSONObject("settings")?.optBoolean("publishEnabled") ?: false
 
     suspend fun setSocialPublishing(on: Boolean): Boolean = withContext(Dispatchers.IO) {
@@ -130,6 +130,12 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     private suspend fun socialPatch(id: String, j: JSONObject): SocialPost = withContext(Dispatchers.IO) {
         val body = j.toString().toRequestBody("application/json".toMediaType())
         SocialPost.parse(call { Request.Builder().url("$origin/api/marketing/posts/${enc(id)}").patch(body) }.getJSONObject("post"))
+    }
+
+    /** One post again (there is no single-post GET): read from its own day. */
+    suspend fun socialPost(post: SocialPost): SocialPost? {
+        val t = post.scheduledAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: java.time.Instant.now()
+        return socialPosts(t.minusSeconds(86_400).toString(), t.plusSeconds(86_400).toString()).firstOrNull { it.id == post.id }
     }
 
     suspend fun bestHours(): List<BestHour> =

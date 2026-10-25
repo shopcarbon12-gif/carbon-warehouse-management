@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 
 /**
- * Every channel CarbonCast covers — all of Metricool's networks plus the
+ * Every channel Social covers — all of Metricool's networks plus the
  * ad platforms and shopping feeds — in the order the Integrations page shows
  * them. kind: social = organic posting, ads = paid campaigns, shop = product
  * catalogs and shopping feeds.
@@ -52,6 +52,10 @@ export type MarketingPost = {
   media: { position: number; kind: "image" | "video"; url: string; coverUrl: string | null }[];
   tags: { mediaPosition: number; metaProductId: string; handle: string | null; label: string; x: number; y: number }[];
   targets: { provider: string; status: string; permalink: string | null; error: string | null; publishedAt: string | null; attempts: number }[];
+  /** Ask for changes, carried out by the AI (ai-changes.ts): queued → working → (picture) → done / failed. */
+  aiStatus: "queued" | "working" | "picture" | "done" | "failed" | null;
+  aiSummary: string | null;
+  aiError: string | null;
 };
 
 export async function getMarketingSettings(pool: Pool, tenantId: string): Promise<{ publishEnabled: boolean; updatedAt: string | null; updatedBy: string | null }> {
@@ -111,6 +115,9 @@ export async function listPosts(pool: Pool, tenantId: string, opts: { from?: str
     media: p.media,
     tags: (p.tags as MarketingPost["tags"]).map((t) => ({ ...t, x: Number(t.x), y: Number(t.y) })),
     targets: p.targets,
+    aiStatus: p.ai_status ?? null,
+    aiSummary: p.ai_summary ?? null,
+    aiError: p.ai_error ?? null,
   }));
 }
 

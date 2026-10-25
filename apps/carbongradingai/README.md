@@ -7,7 +7,7 @@ update in place. Four tabs:
 - **Catalog**: CarbonWMS's own Inventory › Catalog (`/api/inventory/catalog?view=grid`). It shows
   live tags at the login's location.
 - **Bulk Studio**: unchanged.
-- **Social**: CarbonCast (`/api/marketing/*`, admin). Lists posts by day (Eastern), approves each
+- **Social** (ex-CarbonCast; `/api/marketing/*`, admin). Lists posts by day (Eastern), approves each
   post on its own or asks for changes or cancels it, holds the publishing switch (with a confirm),
   and shows the best hours.
 

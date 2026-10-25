@@ -13,6 +13,7 @@ import { nightlySendDue } from "@/lib/server/studio-batch";
 import { maybeRunShieldMaintenance } from "@/lib/server/shield/maintenance";
 import { maybeRunMetaFeed } from "@/lib/server/meta-feed";
 import { maybeRunMarketing } from "@/lib/server/marketing/scheduler";
+import { marketingAiPending } from "@/lib/server/marketing/ai-changes";
 
 loadEnvConfig(process.cwd());
 
@@ -320,6 +321,45 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
   await sleep(50 + Math.floor(Math.random() * 80));
 }
 
+const SOCIAL_AI_TICK_MS = 60_000;
+let lastSocialAiTickAt = 0;
+
+/**
+ * Social "Ask for changes" (lib/server/marketing/ai-changes.ts): while a note
+ * is queued or a new picture is out with the OpenAI batch, ask the web app —
+ * which holds the AI keys — to carry on, once a minute, as the admin who asked.
+ */
+async function maybeRunSocialAi(pool: Pool): Promise<void> {
+  const now = Date.now();
+  if (now - lastSocialAiTickAt < SOCIAL_AI_TICK_MS) return;
+  lastSocialAiTickAt = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
+  try {
+    for (const t of await marketingAiPending(pool)) {
+      const u = await pool.query<{ sub: string; email: string; role: string; lid: string | null }>(
+        `SELECT u.id::text AS sub, u.email, m.role,
+                (SELECT l.id::text FROM locations l WHERE l.tenant_id = m.tenant_id ORDER BY l.created_at LIMIT 1) AS lid
+           FROM memberships m JOIN users u ON u.id = m.user_id
+          WHERE m.tenant_id = $1::uuid AND m.role = 'admin'
+          ORDER BY (u.id::text = $2) DESC, u.created_at LIMIT 1`,
+        [t.tenant_id, t.requested_by ?? ""],
+      );
+      const a = u.rows[0];
+      if (!a?.lid) continue;
+      const token = await signSession({ sub: a.sub, email: a.email, tid: t.tenant_id, lid: a.lid, role: a.role });
+      const res = await fetch(`${base}/api/marketing/ai/tick`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.status !== 202) console.error(`[worker] social ai tick → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+  } catch (e) {
+    console.error("[worker] social ai tick failed", e);
+  }
+}
+
 async function main() {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   console.log("WMS worker started (Ctrl+C to stop)");
@@ -341,6 +381,7 @@ async function main() {
       await maybeRunShieldMaintenance(pool);
       await maybeRunMetaFeed(pool);
       await maybeRunMarketing(pool);
+      await maybeRunSocialAi(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);

@@ -121,7 +121,7 @@ const sections: NavSection[] = [
   },
   {
     id: "marketing",
-    label: "CarbonCast",
+    label: "Social",
     isActiveSection: (p) => p.startsWith("/marketing"),
     items: [
       { href: "/marketing/calendar", label: "Calendar", icon: CalendarDays },

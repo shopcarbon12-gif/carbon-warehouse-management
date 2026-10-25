@@ -15,7 +15,7 @@ sealed class Screen {
     data object WmsCatalog : Screen()
     /** One product of the CarbonWMS catalog: every colour and size with its stock. */
     data class WmsProduct(val product: com.shopcarbon.gradingai.model.WmsProduct) : Screen()
-    /** The Social tab: CarbonCast — the posts calendar, approval, publishing switch, best times. */
+    /** The Social tab — the posts calendar, approval, publishing switch, best times. */
     data object Social : Screen()
     data class SocialPost(val post: com.shopcarbon.gradingai.model.SocialPost) : Screen()
     data class SocialEdit(val post: com.shopcarbon.gradingai.model.SocialPost) : Screen()

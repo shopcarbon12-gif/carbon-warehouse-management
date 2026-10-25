@@ -78,7 +78,7 @@ data class WmsTag(val epc: String, val serial: String?, val status: String, val 
 
 data class WmsCatalogPage(val products: List<WmsProduct>, val rows: Int, val total: Int)
 
-/* ───────── Social tab: CarbonCast (GET /api/marketing/...) ───────── */
+/* ───────── Social tab (GET /api/marketing/...) ───────── */
 
 data class SocialMedia(val position: Int, val kind: String, val url: String, val coverUrl: String?)
 data class SocialTag(val mediaPosition: Int, val label: String)
@@ -97,7 +97,12 @@ data class SocialPost(
     val media: List<SocialMedia>,
     val tags: List<SocialTag>,
     val targets: List<SocialTarget>,
+    /** Ask for changes, carried out by the AI: queued, working, picture, done, failed. */
+    val aiStatus: String? = null,
+    val aiSummary: String? = null,
+    val aiError: String? = null,
 ) {
+    val aiBusy get() = aiStatus == "queued" || aiStatus == "working" || aiStatus == "picture"
     /** The picture for lists: the first image, or a video's cover. */
     val thumb get() = media.firstOrNull()?.let { if (it.kind == "video") it.coverUrl else it.url }
     /** What the viewer shows: each picture, a video as itself. */
@@ -112,6 +117,7 @@ data class SocialPost(
             p.optJSONArray("media").objects().map { SocialMedia(it.optInt("position"), it.optString("kind", "image"), it.optString("url"), it.optStringOrNull("coverUrl")) },
             p.optJSONArray("tags").objects().map { SocialTag(it.optInt("mediaPosition"), it.optString("label")) },
             p.optJSONArray("targets").objects().map { SocialTarget(it.optString("provider"), it.optString("status"), it.optStringOrNull("permalink"), it.optStringOrNull("error")) },
+            p.optStringOrNull("aiStatus"), p.optStringOrNull("aiSummary"), p.optStringOrNull("aiError"),
         )
 
         fun parseList(j: JSONObject): List<SocialPost> = j.optJSONArray("posts").objects().map(::parse)

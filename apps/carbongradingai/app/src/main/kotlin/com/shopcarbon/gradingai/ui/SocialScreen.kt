@@ -68,7 +68,7 @@ private val TIME_FMT = DateTimeFormatter.ofPattern("h:mm a")
 private val WHEN_FMT = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a")
 private val DAYS = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
-/** Same words as CarbonWMS › CarbonCast › Calendar. */
+/** Same words as CarbonWMS › Social › Calendar. */
 private val STATUS = mapOf(
     "draft" to "Waiting for approval", "changes_requested" to "Changes requested", "approved" to "Approved",
     "publishing" to "Publishing", "published" to "Published", "partly_published" to "Partly published",
@@ -92,7 +92,7 @@ private fun hourLabel(h: Int) = when { h == 0 -> "12 AM"; h < 12 -> "$h AM"; h =
 private var lastFilter = "all"
 
 /**
- * The Social tab: CarbonCast on the phone (owner, 2026-10-24 — no separate app;
+ * The Social tab on the phone (owner, 2026-10-24 — no separate app;
  * it lives in CarbonTools). Every post by day, Eastern time; each one is
  * approved on its own — nothing goes out without that approval, and nothing
  * at all while the publishing switch is off.
@@ -125,7 +125,7 @@ fun SocialScreen(nav: Nav) {
     }
 
     Page(
-        "Social", eyebrow = "CARBONCAST",
+        "Social",
         actions = { GlassCircle(Icons.Filled.Refresh, "Refresh", { reload++ }) },
         tabs = { BottomTabs(Tab.Social) { onTab(nav, it) } },
     ) {
@@ -236,6 +236,13 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
         busy = false
     }
     fun open(url: String) = runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    LaunchedEffect(post.id, post.aiStatus) {
+        while (post.aiBusy) {
+            kotlinx.coroutines.delay(20_000)
+            val fresh = runCatching { app.api.socialPost(post) }.getOrNull() ?: continue
+            if (fresh != post) { nav.replace(Screen.SocialPost(fresh)); break }
+        }
+    }
 
     Page(post.title.ifBlank { "Post" }, onBack = { nav.back() }, largeTitle = false, tabs = { BottomTabs(Tab.Social) { onTab(nav, it) } }) {
         // Phone-sized, like GradingAI's product photo; tap for the full-screen viewer (videos play there).
@@ -257,7 +264,20 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
             t.error?.let { Notice("${CHANNEL[t.provider] ?: t.provider}: $it", Palette.bad) }
             t.permalink?.let { link -> Secondary("Open on ${CHANNEL[t.provider] ?: t.provider}") { open(link) } }
         }
-        post.note?.let { Notice("Note: $it", Palette.warn) }
+        post.note?.takeIf { post.status == "changes_requested" || post.aiStatus != null }?.let { Notice("You asked: $it", Palette.warn) }
+        // The AI carries out "Ask for changes" and sends the post back for approval.
+        if (post.aiStatus != null) Card(padding = 14.dp) {
+            Label(
+                when (post.aiStatus) {
+                    "queued", "working" -> "AI is making the changes…"
+                    "picture" -> "AI is making the new picture…"
+                    "failed" -> "AI could not finish"
+                    else -> "What the AI changed"
+                },
+            )
+            Text(post.aiSummary ?: post.aiError ?: "", style = MaterialTheme.typography.bodyMedium, color = if (post.aiStatus == "failed") Palette.bad else Palette.text)
+            if (post.aiBusy) Muted("This screen checks again every 20 seconds.")
+        }
         Group(header = "Caption") {
             Text(post.caption.ifBlank { "No caption." }, style = MaterialTheme.typography.bodyLarge, color = Palette.text, modifier = Modifier.padding(16.dp))
             if (post.hashtags.isNotEmpty()) Text(
@@ -274,7 +294,7 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
         if (!post.locked) {
             when (post.status) {
                 "draft", "changes_requested" -> {
-                    Primary(if (busy) "Saving…" else "Approve", enabled = !busy) { ask = "approve" }
+                    Primary(if (post.aiBusy) "AI is still working" else if (busy) "Saving…" else "Approve", enabled = !busy && !post.aiBusy) { ask = "approve" }
                     Secondary("Edit caption, time or channels", enabled = !busy) { nav.go(Screen.SocialEdit(post)) }
                     Secondary("Ask for changes", enabled = !busy) { note = post.note.orEmpty(); ask = "request_changes" }
                 }
@@ -305,7 +325,12 @@ fun SocialPostScreen(nav: Nav, post: SocialPost) {
         "request_changes" -> AlertDialog(
             onDismissRequest = { ask = null },
             title = { Text("What should change?") },
-            text = { OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), placeholder = { Text("Note for the post") }, minLines = 3) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The AI makes these changes — caption, hashtags, time, channels, product tags or the picture — and sends the post back for your approval.", style = MaterialTheme.typography.bodySmall, color = Palette.muted)
+                    OutlinedTextField(note, { note = it }, Modifier.fillMaxWidth(), placeholder = { Text("e.g. shorter caption, Tuesday 6 PM, tag the shoes, warmer light") }, minLines = 3)
+                }
+            },
             confirmButton = { TextButton(onClick = { ask = null; decide("request_changes", note.trim()) }) { Text("Send") } },
             dismissButton = { TextButton(onClick = { ask = null }) { Text("Back") } },
         )
@@ -331,7 +356,7 @@ private fun PostMedia(m: SocialMedia, gallery: List<String>, at: Int, modifier: 
 }
 
 /**
- * Edit a post as CarbonWMS › CarbonCast › Calendar does: caption, hashtags,
+ * Edit a post as CarbonWMS › Social › Calendar does: caption, hashtags,
  * day and time (Eastern) and the channels. Saving an approved post sends it
  * back for approval, so what goes out is always what was approved.
  */

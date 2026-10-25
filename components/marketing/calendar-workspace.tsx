@@ -21,7 +21,7 @@ import {
 } from "./marketing-shared";
 
 /**
- * CarbonCast → Calendar. Every planned post by day; open one to check the
+ * Social → Calendar. Every planned post by day; open one to check the
  * pictures, caption, time, channels and Instagram product tags, then Approve
  * it (or ask for changes). Approval is per post. Nothing publishes while the
  * publish switch is off, and an edit after approval needs a new approval.
@@ -104,7 +104,7 @@ export function MarketingCalendarWorkspace() {
     <div className="flex min-w-0 flex-col gap-3 p-3 max-md:p-2">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">CarbonCast · Calendar</h1>
+          <h1 className="text-lg font-semibold text-[var(--wms-fg)]">Social · Calendar</h1>
           <p className="text-xs text-[var(--wms-muted)]">
             {waiting} waiting for approval · {counts.approved ?? 0} approved · {counts.published ?? 0} published
             {counts.failed ? ` · ${counts.failed} failed` : ""}
@@ -318,7 +318,21 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               Approved by {post.approvedBy} {post.approvedAt ? `on ${etWhen(post.approvedAt)}` : ""}
             </p>
           )}
-          {post.note && post.status === "changes_requested" && <p className="text-xs text-amber-700 dark:text-amber-300">Changes asked: {post.note}</p>}
+          {post.note && (post.status === "changes_requested" || post.aiStatus) && <p className="text-xs text-amber-700 dark:text-amber-300">Changes asked: {post.note}</p>}
+          {post.aiStatus && (
+            <p className={`${card} text-xs ${post.aiStatus === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-fg)]"}`}>
+              <span className={`${label} block`}>
+                {post.aiStatus === "queued" || post.aiStatus === "working"
+                  ? "AI is making the changes…"
+                  : post.aiStatus === "picture"
+                    ? "AI is making the new picture…"
+                    : post.aiStatus === "failed"
+                      ? "AI could not finish"
+                      : "What the AI changed"}
+              </span>
+              {post.aiSummary ?? post.aiError ?? ""}
+            </p>
+          )}
 
           <label className="flex flex-col gap-1">
             <span className={label}>Caption</span>
@@ -442,7 +456,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             <div className="flex flex-col gap-2">
               <textarea
                 className={`${field} min-h-20 font-sans text-[0.8rem]`}
-                placeholder="What should change? Picture, caption, time, products…"
+                placeholder="What should change? Picture, caption, hashtags, time, channels, product tags… The AI does it and sends it back for approval."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
@@ -450,7 +464,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                 type="button"
                 className={`${btn} self-start border-amber-500 text-amber-700 dark:text-amber-300`}
                 disabled={busy || !note.trim()}
-                onClick={() => patch({ action: "request_changes", note }, "Marked as needing a change.")}
+                onClick={() => patch({ action: "request_changes", note }, "Sent to the AI — it makes the changes and sends the post back for your approval.")}
               >
                 Send change request
               </button>

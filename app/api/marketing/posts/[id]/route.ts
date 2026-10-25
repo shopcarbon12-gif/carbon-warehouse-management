@@ -10,10 +10,11 @@ import { withActivity } from "@/lib/server/activity-log";
  * draft, so what goes out is always exactly what someone approved. Published
  * posts cannot be edited.
  */
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
 import { listPosts, PUBLISHABLE } from "@/lib/server/marketing/store";
+import { runMarketingAi } from "@/lib/server/marketing/ai-changes";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   if (["publishing", "published", "partly_published"].includes(post.status))
     return NextResponse.json({ error: "This post has already gone out and cannot be changed" }, { status: 409 });
 
+  let aiQueued = false;
   const client = await g.pool.connect();
   try {
     await client.query("BEGIN");
@@ -70,6 +72,8 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
       set("approved_at", null);
     }
     if (b.action === "approve") {
+      if (post.aiStatus === "queued" || post.aiStatus === "working" || post.aiStatus === "picture")
+        return rollback(client, "The AI is still making the changes you asked for — approve it when it is back");
       const when = b.scheduledAt ?? post.scheduledAt;
       const targets = b.targets ?? post.targets.map((t) => t.provider);
       if (!when) return rollback(client, "Pick a date and time first");
@@ -83,6 +87,17 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
       set("status", "changes_requested");
       set("approved_by", null);
       set("approved_at", null);
+      // The AI carries out the note (lib/server/marketing/ai-changes.ts) and sends the post back for approval.
+      const note = (b.note ?? post.note ?? "").trim();
+      if (note) {
+        set("ai_status", "queued");
+        set("ai_requested_by", g.session.sub);
+        set("ai_attempts", 0);
+        set("ai_summary", null);
+        set("ai_error", null);
+        sets.push("ai_requested_at = now()");
+        aiQueued = true;
+      }
     } else if (b.action === "cancel") {
       set("status", "cancelled");
       set("approved_by", null);
@@ -100,8 +115,14 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   } finally {
     client.release();
   }
-  const [after] = await listPosts(g.pool, g.session.tid, { ids: [id] });
-  return NextResponse.json({ post: after });
+  const [updated] = await listPosts(g.pool, g.session.tid, { ids: [id] });
+  if (aiQueued) {
+    const pool = g.pool;
+    after(async () => {
+      await runMarketingAi(pool).catch((e) => console.error("[social-ai] run after request failed", e));
+    });
+  }
+  return NextResponse.json({ post: updated });
 }
 
 async function rollback(client: { query: (q: string) => Promise<unknown> }, error: string) {

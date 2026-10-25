@@ -1,5 +1,5 @@
 /**
- * CarbonCast → Meta: publish to an Instagram business account (single
+ * Social → Meta: publish to an Instagram business account (single
  * image, carousel, Reel; with Instagram Shop product tags) and to a Facebook
  * page. Uses the system-user token (META_SYSTEM_USER_TOKEN), which carries
  * instagram_content_publish, instagram_shopping_tag_products and
@@ -191,4 +191,28 @@ export async function instagramOnlineFollowers(igUserId: string): Promise<{ week
     const [weekday, hour] = k.split(":").map(Number);
     return { weekday, hour, score: s.total / s.n };
   });
+}
+
+export type CatalogProduct = { id: string; name: string; color: string | null; availability: string; visibility: string; groupId: string | null };
+
+/**
+ * Products of the Meta catalog (META_CATALOG_ID) whose name contains `name` —
+ * the ids Instagram product tags take. Used when "Ask for changes" adds a tag.
+ */
+export async function searchCatalogProducts(name: string): Promise<CatalogProduct[]> {
+  const catalog = process.env.META_CATALOG_ID?.trim();
+  if (!catalog) throw new MetaPublishError("META_CATALOG_ID is not set");
+  const j = await graph<{ data?: { id: string; name?: string; color?: string; availability?: string; visibility?: string; retailer_product_group_id?: string }[] }>(
+    `${catalog}/products`,
+    "GET",
+    { filter: JSON.stringify({ name: { i_contains: name } }), fields: "id,name,color,availability,visibility,retailer_product_group_id", limit: 100 },
+  );
+  return (j.data ?? []).map((p) => ({
+    id: p.id,
+    name: p.name ?? "",
+    color: p.color ?? null,
+    availability: p.availability ?? "",
+    visibility: p.visibility ?? "",
+    groupId: p.retailer_product_group_id ?? null,
+  }));
 }
