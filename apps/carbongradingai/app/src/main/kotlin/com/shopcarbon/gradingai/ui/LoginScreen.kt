@@ -46,7 +46,7 @@ fun LoginScreen(onDone: () -> Unit) {
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
     ) {
         AppLogo(Modifier.size(104.dp))
-        Text("CarbonGradingAI", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
+        Text("CarbonTools", style = MaterialTheme.typography.headlineSmall, color = Palette.text)
         Muted("Sign in with your CarbonWMS account. Measurements save straight into CarbonWMS.")
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email") }, singleLine = true,
@@ -78,5 +78,5 @@ fun LoginScreen(onDone: () -> Unit) {
 /** The app icon (owner-approved 2026-10-22), for Sign in and the lock screen. */
 @Composable
 fun AppLogo(modifier: Modifier) = androidx.compose.foundation.Image(
-    androidx.compose.ui.res.painterResource(com.shopcarbon.gradingai.R.drawable.app_logo), "CarbonGradingAI", modifier,
+    androidx.compose.ui.res.painterResource(com.shopcarbon.gradingai.R.drawable.app_logo), "CarbonTools", modifier,
 )

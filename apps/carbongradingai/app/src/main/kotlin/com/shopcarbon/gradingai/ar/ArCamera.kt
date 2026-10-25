@@ -135,7 +135,7 @@ class ArCamera(
                 tof = withTof.isNotEmpty()
                 if (!tof && requireTof) {
                     s.close()
-                    return "This phone has no depth sensor ARCore can use. CarbonGradingAI measures on the Galaxy Note10+, Note10+ 5G, S20+ and S20 Ultra."
+                    return "This phone has no depth sensor ARCore can use. GradingAI measures on the Galaxy Note10+, Note10+ 5G, S20+ and S20 Ultra."
                 }
                 val configs = if (tof) withTof else s.getSupportedCameraConfigs(back)
                 /* A config whose preview (GPU texture) has the photo's (CPU image's) shape

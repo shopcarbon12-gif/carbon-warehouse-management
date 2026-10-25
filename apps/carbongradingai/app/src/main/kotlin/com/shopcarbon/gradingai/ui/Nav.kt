@@ -9,8 +9,15 @@ import com.shopcarbon.gradingai.model.SaveResult
 sealed class Screen {
     data object Login : Screen()
     data object Home : Screen()
-    /** `focus`: opened from Home's search box — the keyboard comes up at once. */
+    /** GradingAI's catalog search (under Scan tag): sizes measured per product. `focus`: the keyboard comes up at once. */
     data class Catalog(val focus: Boolean = false) : Screen()
+    /** The Catalog tab: CarbonWMS's own catalog (Inventory › Catalog). */
+    data object WmsCatalog : Screen()
+    /** One product of the CarbonWMS catalog: every colour and size with its stock. */
+    data class WmsProduct(val product: com.shopcarbon.gradingai.model.WmsProduct) : Screen()
+    /** The Social tab: CarbonCast — the posts calendar, approval, publishing switch, best times. */
+    data object Social : Screen()
+    data class SocialPost(val post: com.shopcarbon.gradingai.model.SocialPost) : Screen()
     /** Bulk Studio: CarbonWMS's own Bulk Studio, inside the app (same settings; sends to the OpenAI batch). */
     data object Studio : Screen()
     /** A product from the Catalog: every size and colour with its status. */

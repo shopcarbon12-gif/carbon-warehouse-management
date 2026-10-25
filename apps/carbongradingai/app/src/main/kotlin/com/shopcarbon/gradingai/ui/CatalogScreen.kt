@@ -81,7 +81,7 @@ fun CatalogScreen(nav: Nav, focus: Boolean = false) {
         repeat(5) { delay(120); if (runCatching { focuser.requestFocus() }.isSuccess) { keyboard?.show(); return@LaunchedEffect } }
     }
 
-    Page("Catalog", tabs = { BottomTabs(Tab.Catalog) { onTab(nav, it) } }) {
+    Page("Catalog search", onBack = { nav.back() }, tabs = { BottomTabs(Tab.Home) { onTab(nav, it) } }) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 Modifier.fillMaxWidth().height(48.dp).background(Palette.surface, RoundedCornerShape(14.dp)).padding(start = 12.dp),

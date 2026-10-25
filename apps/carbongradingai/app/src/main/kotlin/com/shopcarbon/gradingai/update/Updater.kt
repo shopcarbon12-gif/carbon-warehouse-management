@@ -49,7 +49,7 @@ object Updater {
         try {
             fun say(s: String?) { state = s; note.value = s; onState(s) }
             say("Downloading update ${rel.latestVersion}…")
-            val f = File(ctx.cacheDir, "updates/CarbonGradingAI-${rel.latestVersion}.apk")
+            val f = File(ctx.cacheDir, "updates/CarbonTools-${rel.latestVersion}.apk")
             App.get(ctx).api.download(rel.downloadUrl, f) { p -> say("Downloading update ${rel.latestVersion}… ${(p * 100).toInt()}%") }
             if (rel.sha1 != null && sha1(f) != rel.sha1.lowercase()) {
                 f.delete(); say("The update did not download correctly — it will try again."); return false

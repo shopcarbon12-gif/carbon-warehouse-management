@@ -20,7 +20,7 @@ object Biometric {
         })
         p.authenticate(
             BiometricPrompt.PromptInfo.Builder()
-                .setTitle("CarbonGradingAI")
+                .setTitle("CarbonTools")
                 .setSubtitle("Unlock with your fingerprint")
                 .setAllowedAuthenticators(KINDS)
                 .build(),

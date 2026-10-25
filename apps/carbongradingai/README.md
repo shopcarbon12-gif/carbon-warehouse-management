@@ -1,4 +1,19 @@
-# CarbonGradingAI — measure a garment from one photo
+# CarbonTools (was CarbonGradingAI) — GradingAI, Catalog, Bulk Studio, Social
+
+**Since 1.3.0 (owner, 2026-10-24) the app is CarbonTools.** Same package and signing key, so phones
+update in place. Four tabs:
+- **GradingAI** (the old Home): measuring. The Guide and the grading catalog search are inside it,
+  under Scan tag.
+- **Catalog**: CarbonWMS's own Inventory › Catalog (`/api/inventory/catalog?view=grid`). It shows
+  live tags at the login's location.
+- **Bulk Studio**: unchanged.
+- **Social**: CarbonCast (`/api/marketing/*`, admin). Lists posts by day (Eastern), approves each
+  post on its own or asks for changes or cancels it, holds the publishing switch (with a confirm),
+  and shows the best hours.
+
+The WebView still adds ` CarbonGradingAI` to its user agent, because the web layout keys on it.
+
+## GradingAI — measure a garment from one photo
 
 Native Kotlin app (Jetpack Compose + ARCore), package `com.shopcarbon.gradingai`. The phone's
 **time-of-flight depth sensor** measures the table, the photo is squared up onto it at an exact
@@ -40,7 +55,7 @@ never written to an item.
 
 ## Build, test, release
 ```bash
-bash apps/carbongradingai/scripts/build-release.sh      # unit tests + ~/CarbonGradingAIRelease/CarbonGradingAI V<version>.apk
+bash apps/carbongradingai/scripts/build-release.sh      # unit tests + ~/CarbonToolsRelease/CarbonTools V<version>.apk
 ```
 First run created the release keystore (`keys/`, `key.properties`, gitignored; backup in
 `~/CarbonGradingAIRelease/keys-backup/`) — every future APK must be signed with it.

@@ -17,11 +17,11 @@ bash apps/carbonwms-pc/scripts/build-release.sh
 ```
 Output: `~/CarbonWmsPcRelease/CarbonWMS-PC V{appVersionName}.apk` (version in `apps/carbonwms-pc/app/build.gradle.kts`). See `apps/carbonwms-pc/README.md`.
 
-**CarbonGradingAI APK (all agents):** the garment-measuring app (depth-sensor Samsungs, package `com.shopcarbon.gradingai`) lives in `apps/carbongradingai/` (Kotlin + ARCore, no Flutter). Its lists, definitions, guide pictures, AI and Studio/SEO screens come from the WMS (`/api/grading-app/*`) — those changes never need an APK. Build with:
+**CarbonTools APK (all agents; was CarbonGradingAI):** the garment-measuring app, now also Catalog (CarbonWMS catalog) and Social (CarbonCast) tabs (depth-sensor Samsungs, package `com.shopcarbon.gradingai`) lives in `apps/carbongradingai/` (Kotlin + ARCore, no Flutter). Its lists, definitions, guide pictures, AI and Studio/SEO screens come from the WMS (`/api/grading-app/*`) — those changes never need an APK. Build with:
 ```bash
 bash apps/carbongradingai/scripts/build-release.sh
 ```
-Output: `~/CarbonGradingAIRelease/CarbonGradingAI V{appVersionName}.apk`. See `apps/carbongradingai/README.md`.
+Output: `~/CarbonToolsRelease/CarbonTools V{appVersionName}.apk` (signing key backup stays in `~/CarbonGradingAIRelease/keys-backup/`). See `apps/carbongradingai/README.md`.
 
 ---
 

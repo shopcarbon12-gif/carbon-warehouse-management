@@ -102,19 +102,11 @@ fun HomeScreen(nav: Nav) {
     val scan = rememberTagScanner({ err = it }) { code -> openCode(nav, app, scope, code, { busy = it }) { err = it } }
 
     Page(
-        "CarbonGradingAI",
+        "GradingAI",
         header = { BrandTitle() },
         actions = { GlassCircle(Icons.Filled.Settings, "Settings", { nav.go(Screen.Settings) }) },
         tabs = { BottomTabs(Tab.Home) { onTab(nav, it) } },
     ) {
-        // Search from Home: opens the Catalog with the keyboard up (name, UPC, custom SKU, vendor, colour).
-        Row(
-            Modifier.fillMaxWidth().height(48.dp).background(Palette.surface, RoundedCornerShape(14.dp)).clickable { nav.go(Screen.Catalog(focus = true)) }.padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.Filled.Search, null, tint = Palette.muted, modifier = Modifier.size(22.dp))
-            Text("Search name, UPC, custom SKU…", style = MaterialTheme.typography.bodyLarge, color = Palette.muted, modifier = Modifier.weight(1f))
-        }
         com.shopcarbon.gradingai.update.Updater.note.value?.let { Notice(it, Palette.accent) }
         if (!phoneSupported(app)) {
             Notice(
@@ -154,6 +146,14 @@ fun HomeScreen(nav: Nav) {
         }
         // Scan tag sits under Measure next (owner, 2026-10-22).
         Primary(busy ?: "Scan tag", enabled = busy == null) { scan() }
+        // GradingAI's catalog search, under Scan tag (owner, 2026-10-24): opens it with the keyboard up (name, UPC, custom SKU, vendor, colour).
+        Row(
+            Modifier.fillMaxWidth().height(48.dp).background(Palette.surface, RoundedCornerShape(14.dp)).clickable { nav.go(Screen.Catalog(focus = true)) }.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(Icons.Filled.Search, null, tint = Palette.muted, modifier = Modifier.size(22.dp))
+            Text("Search name, UPC, custom SKU…", style = MaterialTheme.typography.bodyLarge, color = Palette.muted, modifier = Modifier.weight(1f))
+        }
         err?.let { if (queue != null) Notice(it, Palette.bad) }
         queue?.let { q ->
             Group {
@@ -167,6 +167,10 @@ fun HomeScreen(nav: Nav) {
                     onClick = { nav.go(Screen.ToCheck) },
                 )
             }
+        }
+        // The measuring guide lives inside GradingAI (owner, 2026-10-24); the tab became Social.
+        Group {
+            ListRow("Guide", subtitle = "How to lay each garment, and where every point sits", chevron = true, onClick = { nav.go(Screen.Guide(null)) })
         }
     }
 }
@@ -186,13 +190,13 @@ fun openEntry(nav: Nav, app: App, scope: kotlinx.coroutines.CoroutineScope, matr
     }
 }
 
-/** The four tabs: each opens from Home, so Back always leads home. */
+/** The four tabs: each opens from GradingAI (the first tab), so Back always leads there. */
 fun onTab(nav: Nav, t: Tab) {
     when (t) {
         Tab.Home -> nav.home()
-        Tab.Catalog -> { nav.home(); nav.go(Screen.Catalog()) }
+        Tab.Catalog -> { nav.home(); nav.go(Screen.WmsCatalog) }
         Tab.Studio -> { nav.home(); nav.go(Screen.Studio) }
-        Tab.Guide -> { nav.home(); nav.go(Screen.Guide(null)) }
+        Tab.Social -> { nav.home(); nav.go(Screen.Social) }
     }
 }
 

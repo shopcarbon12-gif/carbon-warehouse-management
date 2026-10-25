@@ -4,6 +4,11 @@ import android.webkit.CookieManager
 import com.shopcarbon.gradingai.BuildConfig
 import com.shopcarbon.gradingai.auth.Vault
 import com.shopcarbon.gradingai.model.AppConfig
+import com.shopcarbon.gradingai.model.BestHour
+import com.shopcarbon.gradingai.model.SocialPost
+import com.shopcarbon.gradingai.model.WmsCatalogPage
+import com.shopcarbon.gradingai.model.WmsProduct
+import com.shopcarbon.gradingai.model.objects
 import com.shopcarbon.gradingai.model.CatalogRow
 import com.shopcarbon.gradingai.model.Lookup
 import com.shopcarbon.gradingai.model.Queue
@@ -81,6 +86,40 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     /** The Catalog tab: name, UPC, custom SKU, vendor or colour. */
     suspend fun catalog(q: String, filter: String): List<CatalogRow> =
         CatalogRow.parseList(getJson("/api/grading-app/catalog?q=${enc(q)}&filter=${enc(filter)}&limit=60"))
+
+    /** The Catalog tab: CarbonWMS's catalog grid (live products; `stock` "", "in" or "out"). */
+    suspend fun wmsCatalog(q: String, stock: String, page: Int, limit: Int = 300): WmsCatalogPage {
+        val j = getJson("/api/inventory/catalog?view=grid&page=$page&limit=$limit&q=${enc(q)}&stock=${enc(stock)}")
+        return WmsCatalogPage(WmsProduct.group(j), j.optJSONArray("rows")?.length() ?: 0, j.optInt("total"))
+    }
+
+    /** One product's every row (the list page may have cut it): searched by its UPC, or its name. */
+    suspend fun wmsProduct(p: WmsProduct): WmsProduct? =
+        WmsProduct.group(getJson("/api/inventory/catalog?view=grid&page=1&limit=500&q=${enc(p.upc ?: p.name)}")).firstOrNull { it.matrixId == p.matrixId }
+
+    /** Social (CarbonCast): the publishing switch. */
+    suspend fun socialSettings(): Boolean = getJson("/api/marketing/overview").optJSONObject("settings")?.optBoolean("publishEnabled") ?: false
+
+    suspend fun setSocialPublishing(on: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("publishEnabled", on).toString().toRequestBody("application/json".toMediaType())
+        call { Request.Builder().url("$origin/api/marketing/settings").patch(body) }.optJSONObject("settings")?.optBoolean("publishEnabled") ?: on
+    }
+
+    /** Posts scheduled between two instants (ISO), with their pictures, tags and channel results. */
+    suspend fun socialPosts(from: String, to: String): List<SocialPost> =
+        SocialPost.parseList(getJson("/api/marketing/posts?from=${enc(from)}&to=${enc(to)}"))
+
+    /** Approve, ask for changes, cancel or reopen one post (`action`), with an optional note. */
+    suspend fun socialDecide(id: String, action: String, note: String? = null): SocialPost = withContext(Dispatchers.IO) {
+        val j = JSONObject().put("action", action)
+        if (note != null) j.put("note", note)
+        val body = j.toString().toRequestBody("application/json".toMediaType())
+        SocialPost.parse(call { Request.Builder().url("$origin/api/marketing/posts/${enc(id)}").patch(body) }.getJSONObject("post"))
+    }
+
+    suspend fun bestHours(): List<BestHour> =
+        getJson("/api/marketing/best-times").optJSONObject("providers")?.optJSONObject("instagram")?.optJSONArray("top").objects()
+            .map { BestHour(it.optInt("weekday"), it.optInt("hour")) }
 
     /** Compare: copy another product's grading onto every size of this one (the compared size as edited). */
     suspend fun copyGrading(fromMatrixId: String, toMatrixId: String, overrides: JSONObject): JSONObject = withContext(Dispatchers.IO) {
@@ -223,5 +262,5 @@ class Api(private val prefs: Prefs, private val vault: Vault) {
     private fun File.asBody(type: String): RequestBody = asRequestBody(type.toMediaType())
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
-    private fun ua() = "CarbonGradingAI/${BuildConfig.VERSION_NAME} (Android ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL})"
+    private fun ua() = "CarbonTools/${BuildConfig.VERSION_NAME} (Android ${android.os.Build.VERSION.RELEASE}; ${android.os.Build.MODEL})"
 }

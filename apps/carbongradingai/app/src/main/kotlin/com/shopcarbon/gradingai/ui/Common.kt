@@ -33,9 +33,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -93,7 +94,7 @@ fun Page(
     eyebrow: String? = null,
     /** false: the title sits small and centred in the top bar (detail screens). */
     largeTitle: Boolean = true,
-    /** Replaces the large title (Home: the Carbon mark + "CarbonGradingAI"). */
+    /** Replaces the large title (Home: the Carbon mark + "CarbonTools"). */
     header: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -135,12 +136,12 @@ fun Page(
     }
 }
 
-/** The Carbon mark and "CarbonGradingAI" in the logo's typeface (Home). */
+/** The Carbon mark and "CarbonTools" in the logo's typeface (Home). */
 @Composable
 fun BrandTitle() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Image(androidx.compose.ui.res.painterResource(com.shopcarbon.gradingai.R.drawable.carbon_mark), "Carbon", Modifier.size(38.dp))
-        Text("CarbonGradingAI", fontFamily = Brand, fontSize = 30.sp, color = Palette.text, maxLines = 1)
+        Text("CarbonTools", fontFamily = Brand, fontSize = 30.sp, color = Palette.text, maxLines = 1)
     }
 }
 
@@ -159,10 +160,10 @@ fun GlassCircle(icon: ImageVector, label: String, onClick: () -> Unit, tint: Col
 /* ───────────────────────── tab bar ───────────────────────── */
 
 enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Home", Icons.Filled.Home),
+    Home("GradingAI", Icons.Filled.Straighten),
     Catalog("Catalog", Icons.Filled.GridView),
     Studio("Bulk Studio", Icons.Filled.AutoAwesome),
-    Guide("Guide", Icons.AutoMirrored.Filled.MenuBook),
+    Social("Social", Icons.Filled.Campaign),
 }
 
 /** The floating Liquid Glass tab bar: four tabs, the chosen one in blue. */

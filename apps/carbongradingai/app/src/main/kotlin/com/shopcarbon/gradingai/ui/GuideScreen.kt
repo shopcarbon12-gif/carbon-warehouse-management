@@ -35,7 +35,7 @@ fun GuideScreen(nav: Nav, profileId: String?) {
     val profiles = app.config?.profiles.orEmpty()
     val p = profiles.firstOrNull { it.id == profileId }
     if (p == null) {
-        Page("Guide", tabs = { BottomTabs(Tab.Guide) { onTab(nav, it) } }) {
+        Page("Guide", onBack = { nav.back() }, tabs = { BottomTabs(Tab.Home) { onTab(nav, it) } }) {
             Muted("How to lay each garment. Flat measurements: straight across the garment lying smooth, never doubled; buttons and zips closed, nothing stretched.")
             if (profiles.isEmpty()) Notice("The guide comes from CarbonWMS — connect once to load it.")
             for (pair in profiles.chunked(2)) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

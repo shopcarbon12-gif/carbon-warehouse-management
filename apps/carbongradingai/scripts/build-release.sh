@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# CarbonGradingAI release APK (Linux build host, no Flutter needed).
+# CarbonTools release APK (was CarbonGradingAI; Linux build host, no Flutter needed).
 #   bash apps/carbongradingai/scripts/build-release.sh
-# Output: ~/CarbonGradingAIRelease/CarbonGradingAI V<version>.apk (+ .sha1)
+# Output: ~/CarbonToolsRelease/CarbonTools V<version>.apk (+ .sha1)
 # Optional: RELEASE_ROOT, GRADLE_USER_HOME, ANDROID_HOME. The signing key is created on first run
 # (keys/carbongradingai-release.jks + key.properties, both gitignored) and copied to
 # ~/CarbonGradingAIRelease/keys-backup/ — it must never change: app updates need the same key.
@@ -15,7 +15,9 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$REPO_ROOT/.tools/gradle-user-home}"
 export TMPDIR="${TMPDIR:-$REPO_ROOT/.tools/tmp}"
 mkdir -p "$GRADLE_USER_HOME" "$TMPDIR"
-RELEASE_ROOT="${RELEASE_ROOT:-$HOME/CarbonGradingAIRelease}"
+RELEASE_ROOT="${RELEASE_ROOT:-$HOME/CarbonToolsRelease}"
+# The signing key and its backup keep their old names and place (~/CarbonGradingAIRelease/keys-backup/).
+KEYS_BACKUP="${KEYS_BACKUP:-$HOME/CarbonGradingAIRelease/keys-backup}"
 
 [[ -f local.properties ]] || echo "sdk.dir=$ANDROID_HOME" > local.properties
 
@@ -30,12 +32,12 @@ if [[ ! -f key.properties ]]; then
       -dname "CN=CarbonGradingAI, O=Carbon, C=US" >/dev/null
     printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=carbongradingai\nkeyPassword=%s\n' "$KS" "$PASS" "$PASS" > key.properties
     chmod 600 key.properties
-    mkdir -p "$RELEASE_ROOT/keys-backup"
-    cp -f "$KS" key.properties "$RELEASE_ROOT/keys-backup/"
-    chmod 600 "$RELEASE_ROOT/keys-backup/"*
-    echo "!! NEW release keystore created: $KS — backed up to $RELEASE_ROOT/keys-backup/. Keep both safe."
+    mkdir -p "$KEYS_BACKUP"
+    cp -f "$KS" key.properties "$KEYS_BACKUP/"
+    chmod 600 "$KEYS_BACKUP/"*
+    echo "!! NEW release keystore created: $KS — backed up to $KEYS_BACKUP/. Keep both safe."
   else
-    echo "error: $KS exists but key.properties is missing — restore key.properties from $RELEASE_ROOT/keys-backup/." >&2
+    echo "error: $KS exists but key.properties is missing — restore key.properties from $KEYS_BACKUP/." >&2
     exit 1
   fi
 fi
@@ -48,7 +50,7 @@ APK="$ROOT/app/build/outputs/apk/release/app-release.apk"
 VERSION="$(sed -nE 's/^val appVersionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -1)"
 mkdir -p "$RELEASE_ROOT"
 sha1="$(sha1sum "$APK" | awk '{print $1}')"
-VNAME="CarbonGradingAI V${VERSION}.apk"
+VNAME="CarbonTools V${VERSION}.apk"
 cp -f "$APK" "$RELEASE_ROOT/$VNAME"
 printf '%s\n' "$sha1" > "$RELEASE_ROOT/${VNAME}.sha1"
 echo "Built: $RELEASE_ROOT/$VNAME"
