@@ -10,7 +10,7 @@
  */
 import type { Pool } from "pg";
 import { claudeStructured, type ClaudeBlock } from "@/lib/server/claude";
-import { COPY_RULES, pickCatalogProduct } from "./ai-changes";
+import { COPY_RULES, TAG_PLACEMENT, pickCatalogProduct } from "./ai-changes";
 import { searchCatalogProducts } from "./meta";
 import { campaignIdentity } from "./campaign-identity";
 import type { MarketingPost } from "./store";
@@ -81,7 +81,7 @@ Fields:
 - title: a short working name for the calendar (3–6 words).
 - caption: the caption without hashtags. Open with the clothes or the moment, not "Introducing". Name the pieces by their colour and cut as they look in the picture. End with one plain call to action (the shop link is in the bio). Under 900 characters.
 - hashtags: 3 to 5 (Instagram allows 5), WITHOUT the # sign, mixing CARBON's own (e.g. CARBON, TheArtOfArriving when it fits) with ones shoppers search.
-- products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. At most 5 per picture.`;
+- products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. ${TAG_PLACEMENT} At most 5 per picture.`;
   const identity = campaignIdentity(post.campaign);
   const d = await claudeStructured<Draft>({ system: identity ? `${system}\n\n${identity}` : system, content, schema: SCHEMA as unknown as Record<string, unknown>, effort: "high" });
 

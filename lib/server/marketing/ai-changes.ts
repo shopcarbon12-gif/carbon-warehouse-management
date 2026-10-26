@@ -120,6 +120,9 @@ export const AI_TELLS = `Never write these (they make a caption read as AI-writt
 - Emojis as bullets, hype punctuation (!?), Unicode bold letters.
 - Never invent facts (prices, stock, fabric, fit, reviews, discounts) that are not in the post or the brief.`;
 
+/** Where a product tag's dot goes (owner, 2026-10-26: "make sure the dot is actually on the item, never hide a face"). */
+export const TAG_PLACEMENT = `Put the dot on the visible fabric of that exact piece, near its middle: a top or jacket on the chest or torso, trousers or jeans on the thigh, a dress on its body, shoes on the shoe, a bag on the bag. Never on a face, head, hair, neck, hands or skin, never on the background, and never on another piece; with several people, on the person who wears it.`;
+
 export const COPY_RULES = `Copy rules (the owner's, always):
 - The brand is written CARBON, in capitals. Never "Carbon Jeans".
 - Never name another brand, shop or designer, and never say where anything is made or comes from. CARBON's own product names are not brands, even when they sound like one (e.g. the Celine Sweater): name them freely.
@@ -137,7 +140,7 @@ Fields:
 - hashtags: the full new list WITHOUT the # sign, or null if unchanged.
 - scheduled_local: new day and time in Eastern time as "YYYY-MM-DDTHH:mm", or null. Never in the past.
 - targets: the new channels, or null.
-- Product tags: pictures are numbered from 0 (media_position). x and y are from 0 to 1 (left→right, top→bottom), on the product itself in that picture. add_tags names the product as it is sold (e.g. "Axel Coat") and its colour if the note or picture shows it; only products that are really visible in that picture. remove_tags / move_tags use the tag's label exactly as listed.
+- Product tags: pictures are numbered from 0 (media_position). x and y are from 0 to 1 (left→right, top→bottom), on the product itself in that picture. ${TAG_PLACEMENT} add_tags names the product as it is sold (e.g. "Axel Coat") and its colour if the note or picture shows it; only products that are really visible in that picture. remove_tags / move_tags use the tag's label exactly as listed.
 - picture_edits: when the note asks to change what a picture shows, write one precise instruction for a photo-editing model for that picture (what to change, where, and how it should look). The model keeps everything else as it is unless the instruction says otherwise. reference_positions: other pictures of this post the model should also see (e.g. picture 0 for its setting and light) — empty when none. Videos cannot be edited.
 
 OWNER'S CAROUSEL RULE (2026-10-25, final): only for a carousel whose first picture is the campaign shot and whose next pictures each show ONE piece of that outfit (a catalog photo: product on white, a flat lay, a store photo, a person wearing it). Each such garment floats on its own in mid-air in the location and light of the carousel's first picture, with NOTHING holding it (no wire, string, hanger, mannequin or person), caught in motion as if just tossed or lifted by a breeze: sleeves or legs swing and bend loosely, the hem flares, real folds and drape — relaxed and alive, never a stiff ghost-mannequin shape. Shoes and bags stand on the ground of that place. The piece alone: no model and no SEPARATE styling item (other clothes, jewellery, bags) — but keep everything that belongs to the piece, including attached hardware (e.g. the silver chain on the Colin Evening Pants). Keep the piece exact — cut, colour, wash and distressing, print, stitching, hardware and every letter. If two such slides would show the same thing (e.g. a set photographed together), keep one. For each such slide give a picture_edit with reference_positions [0]. style_example is always false.
