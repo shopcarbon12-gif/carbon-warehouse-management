@@ -20,6 +20,8 @@ import {
   type MarketingPost,
 } from "./marketing-shared";
 import { TikTokPostBox } from "./tiktok-post-box";
+import { CatalogImageLightbox } from "@/components/inventory/catalog/catalog-image-lightbox";
+import { zoomNatively } from "@/lib/carbontools-zoom";
 
 /**
  * Social → Calendar. Every planned post by day; open one to check the
@@ -291,6 +293,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [tagQuery, setTagQuery] = useState("");
   const [found, setFound] = useState<{ metaProductId: string; label: string }[]>([]);
   const [askChanges, setAskChanges] = useState(false);
+  // Full-screen picture viewer (tap a picture); on CarbonTools the app's own viewer opens instead.
+  const [viewAt, setViewAt] = useState<number | null>(null);
+  const viewUrls = post.media.map((m) => (m.kind === "video" ? (m.coverUrl ?? "") : m.url)).filter(Boolean);
+  const isStory = post.format === "story";
   // Caption check: the text it was run on, and what it found.
   // A caption the owner took from the check's fix counts as passed.
   const [passedText, setPassedText] = useState<string | null>(null);
@@ -486,7 +492,11 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                   <div
                     className={`relative ${pick != null && tags[pick]?.mediaPosition === md.position ? "cursor-crosshair ring-2 ring-sky-500" : ""} rounded`}
                     onClick={(e) => {
-                      if (pick == null || locked) return;
+                      if (pick == null || locked) {
+                        const at = viewUrls.indexOf(md.url);
+                        if (!zoomNatively(viewUrls, at)) setViewAt(Math.max(0, at));
+                        return;
+                      }
                       const r = e.currentTarget.getBoundingClientRect();
                       const x = Math.round(((e.clientX - r.left) / r.width) * 100) / 100;
                       const y = Math.round(((e.clientY - r.top) / r.height) * 100) / 100;
@@ -494,7 +504,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={md.url} alt={`Slide ${md.position + 1}`} className="h-72 w-auto rounded object-cover max-md:h-56" />
+                    <img src={md.url} alt={`Slide ${md.position + 1}`} className={`h-72 w-auto rounded object-cover max-md:h-56 ${pick == null ? "cursor-zoom-in" : ""}`} />
                     {tags.map((t, k) =>
                       t.mediaPosition === md.position ? (
                         <span
@@ -558,7 +568,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             <span className={label}>Title (for the calendar)</span>
             <input className={field} value={title} disabled={locked} onChange={(e) => setTitle(e.target.value)} />
           </label>
-          {!locked && post.media.length > 0 && (
+          {isStory && <p className="text-xs text-[var(--wms-muted)]">A Story is the picture alone: Instagram and Facebook show no caption, hashtags or product tags on it.</p>}
+          {!locked && !isStory && post.media.length > 0 && (
             <div className={`${card} flex flex-col gap-2`}>
               <span className={label}>Write with AI</span>
               <textarea
@@ -609,6 +620,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               {aiNote && <p className="text-xs text-[var(--wms-fg)]">{aiNote}</p>}
             </div>
           )}
+          {!isStory && (<>
           <label className="flex flex-col gap-1">
             <span className={label}>Caption</span>
             <textarea className={`${field} min-h-32 font-sans text-[0.8rem]`} value={caption} disabled={locked} onChange={(e) => setCaption(e.target.value)} />
@@ -617,7 +629,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             <span className={label}>Hashtags (Instagram allows 5)</span>
             <input className={field} value={hashtags} disabled={locked} onChange={(e) => setHashtags(e.target.value)} />
           </label>
-          {!locked && caption.trim() && post.format !== "story" && (
+          </>)}
+          {!locked && caption.trim() && !isStory && (
             <div className="flex flex-col gap-2">
               <button type="button" className={`${btn} self-start border-[var(--wms-border)]`} disabled={busy || checking} onClick={() => runCheck()}>
                 {checking ? "Checking the caption…" : checkFresh?.ok ? "Caption check passed ✓" : "Check caption"}
@@ -666,7 +679,11 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           <fieldset className="flex flex-col gap-1">
             <span className={label}>Channels</span>
             <div className="flex flex-wrap gap-3">
-              {(["instagram", "facebook", "bluesky", "tiktok"] as const).map((t) => (
+              {(["instagram", "facebook", "bluesky", "tiktok"] as const)
+                // Bluesky only shows when a post already uses it (CARBON has no Bluesky account).
+                .filter((t) => t !== "bluesky" || targets.includes("bluesky"))
+                .filter((t) => !isStory || t === "instagram" || t === "facebook")
+                .map((t) => (
                 <label key={t} className="flex items-center gap-1.5 text-xs text-[var(--wms-fg)] max-md:min-h-11">
                   <input
                     type="checkbox"
@@ -681,6 +698,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             </div>
           </fieldset>
 
+          {!isStory && (
           <div className="flex flex-col gap-1">
             <span className={label}>Instagram product tags ({tags.length})</span>
             {tags.length ? (
@@ -741,6 +759,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             )}
           </div>
 
+          )}
+
           {post.targets.some((t) => t.status !== "pending") && (
             <div className="flex flex-col gap-1">
               <span className={label}>Results</span>
@@ -761,7 +781,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             </div>
           )}
 
-          {post.media.length > 0 && <TikTokPostBox post={post} caption={caption} hashtags={tagList} onDone={onSaved} />}
+          {viewAt != null && <CatalogImageLightbox images={viewUrls} startIndex={viewAt} alt={post.title} onClose={() => setViewAt(null)} />}
+          {post.media.length > 0 && !isStory && <TikTokPostBox post={post} caption={caption} hashtags={tagList} onDone={onSaved} />}
 
           {err && <p className="text-xs text-[var(--wms-status-danger-fg)]">{err}</p>}
 
