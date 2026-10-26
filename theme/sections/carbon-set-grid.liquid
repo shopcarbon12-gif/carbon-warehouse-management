@@ -1,0 +1,125 @@
+{%- comment -%}
+  CARBON set grid (owner, 2026-10-26): one card per matching set instead of one
+  card per piece. Pieces are paired through the carbon_set.partners metafield
+  (handles, written by CarbonWMS). The card shows the outfit photo (hover: the
+  other piece), the set name, what is in it, each piece's price and the set
+  total. Clicking opens the first piece's normal product page, where the
+  "Complete the Look" notice and the set cart guard take over.
+  Used by templates/collection.sets.json (Women / Men Winter Sets).
+{%- endcomment -%}
+{{- 'product-grid.css' | asset_url | stylesheet_tag -}}
+{%- liquid
+  assign columns_desktop = section.settings.columns_desktop
+  assign bottoms = 'Pants,Jogger,Joggers,Skirt,Shorts,Short,Leggings,Legging,Trousers,Trouser'
+  assign seen = '|'
+  assign set_count = 0
+-%}
+<div class="row full-width-row-full carbon-set-grid">
+  <div class="small-12 columns">
+    {%- paginate collection.products by 250 -%}
+    <ul class="products collection row small-up-2 medium-up-{{ columns_desktop }}">
+      {%- for p in collection.products -%}
+        {%- assign key = '|' | append: p.handle | append: '|' -%}
+        {%- if seen contains key -%}{%- continue -%}{%- endif -%}
+        {%- liquid
+          assign partners = p.metafields.carbon_set.partners.value
+          assign tops = ''
+          assign lows = ''
+          assign total = 0
+          assign handles = p.handle
+          for h in partners
+            assign handles = handles | append: ',' | append: h
+          endfor
+          assign handle_list = handles | split: ','
+          assign piece_count = 0
+          for q in collection.products
+            if handle_list contains q.handle
+              assign seen = seen | append: q.handle | append: '|'
+              assign piece_count = piece_count | plus: 1
+              assign total = total | plus: q.price
+              assign words = q.title | remove: ' Set' | split: ' '
+              assign kind = words | last
+              assign bottom_list = bottoms | split: ','
+              if bottom_list contains kind
+                assign lows = lows | append: q.handle | append: ','
+              else
+                assign tops = tops | append: q.handle | append: ','
+              endif
+            endif
+          endfor
+          assign ordered = tops | append: lows | split: ','
+          assign set_count = set_count | plus: 1
+        -%}
+        {%- assign lead = nil -%}{%- assign second = nil -%}
+        {%- for h in ordered -%}
+          {%- for q in collection.products -%}
+            {%- if q.handle == h -%}
+              {%- if lead == nil -%}{%- assign lead = q -%}{%- elsif second == nil -%}{%- assign second = q -%}{%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        {%- endfor -%}
+        {%- liquid
+          assign name_words = lead.title | remove: ' Set' | split: ' '
+          assign set_name = ''
+          for w in name_words
+            unless forloop.last
+              assign set_name = set_name | append: w | append: ' '
+            endunless
+          endfor
+          assign set_name = set_name | strip | append: ' Set'
+          if name_words.size == 1
+            assign set_name = lead.title
+          endif
+        -%}
+        <li class="column carbon-set-card">
+          <product-card class="product-card text-{{ settings.product_content_alignment }}">
+            <figure class="product-featured-image{% if second %} thb-hover{% endif %}">
+              <span class="carbon-set-badge">{{ piece_count }}-piece set</span>
+              <a href="{{ lead.url | within: collection }}" title="{{ set_name | escape }}" class="product-featured-image-link aspect-ratio aspect-ratio--{{ settings.product_aspect_ratio }}" style="--padding-bottom: 125%;">
+                {%- if second and second.featured_image -%}
+                  {%- render 'responsive-image', class: 'product-secondary-image', image: second.featured_image, sizes: '375x0,770x0', priority: 'low', defer: true, loading: 'lazy' -%}
+                {%- endif -%}
+                {%- if lead.featured_image -%}
+                  {%- render 'responsive-image', class: 'product-primary-image', image: lead.featured_image, sizes: '375x0,770x0', loading: 'lazy' -%}
+                {%- endif -%}
+              </a>
+            </figure>
+            <div class="product-card-info">
+              <a href="{{ lead.url | within: collection }}" title="{{ set_name | escape }}" class="product-card-title">{{ set_name }}</a>
+              <p class="carbon-set-pieces">
+                {%- for h in ordered -%}
+                  {%- for q in collection.products -%}
+                    {%- if q.handle == h -%}
+                      {%- assign qw = q.title | remove: ' Set' | split: ' ' -%}
+                      <a href="{{ q.url | within: collection }}">{{ qw | last }} {{ q.price | money }}</a>{% unless forloop.parentloop.last %}<span> + </span>{% endunless %}
+                    {%- endif -%}
+                  {%- endfor -%}
+                {%- endfor -%}
+              </p>
+              <div class="product-price carbon-set-total"><span class="price"><span class="amount">Set {{ total | money }}</span></span></div>
+            </div>
+          </product-card>
+        </li>
+      {%- endfor -%}
+    </ul>
+    {%- endpaginate -%}
+    {%- if set_count == 0 -%}<p class="carbon-set-empty">No sets in this collection yet.</p>{%- endif -%}
+  </div>
+</div>
+<style>
+  .carbon-set-grid .carbon-set-card .product-featured-image { position: relative; }
+  .carbon-set-grid .carbon-set-card .carbon-set-badge { position: absolute; top: 12px; left: 12px; z-index: 3; display: inline-block; background: #151515; color: #fff !important; font-size: 11px !important; line-height: 1 !important; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 6px 10px; pointer-events: none; }
+  .carbon-set-grid .carbon-set-pieces { margin: 6px 0 4px; font-size: 13px; line-height: 1.4; opacity: .75; }
+  .carbon-set-grid .carbon-set-pieces a { color: inherit; text-decoration: none; }
+  .carbon-set-grid .carbon-set-pieces a:hover { text-decoration: underline; }
+  .carbon-set-grid .carbon-set-total { font-weight: 600; }
+</style>
+{% schema %}
+{
+  "name": "CARBON set grid",
+  "settings": [
+    { "type": "range", "id": "columns_desktop", "label": "Columns on desktop", "min": 2, "max": 5, "step": 1, "default": 4 }
+  ],
+  "presets": [{ "name": "CARBON set grid" }]
+}
+{% endschema %}

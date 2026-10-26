@@ -1,0 +1,35 @@
+{
+  "sections": {
+    "main-collection-banner": {
+      "type": "main-collection-banner",
+      "settings": {
+        "show_collection_image": true,
+        "show_collection_description": true,
+        "show_subcollections": true,
+        "make_heading_uppercase": true,
+        "overlay_color": "#000000",
+        "overlay_opacity": 40
+      }
+    },
+    "set-grid": {
+      "type": "carbon-set-grid",
+      "settings": {
+        "columns_desktop": 4
+      }
+    },
+    "spacer": {
+      "type": "spacer",
+      "settings": {
+        "spacer_mobile": 35,
+        "spacer_desktop": 40,
+        "border_separator": false,
+        "border_separator_full": false
+      }
+    }
+  },
+  "order": [
+    "main-collection-banner",
+    "set-grid",
+    "spacer"
+  ]
+}
