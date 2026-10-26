@@ -1,6 +1,6 @@
 /**
  * Social — one Story picture (1080×1920) made from a feed post's campaign
- * shot: cropped to 9:16 around the tagged product, with the product's name and
+ * shot: cropped to 9:16 around the tagged product. Optionally (text given) with the product's name and
  * price and shopcarbon.com on a soft dark fade at the bottom, under the
  * campaign's line, above Instagram's own bar (the safe zone). The text is
  * drawn with next/og (Satori + Resvg, its own font), then laid on the photo
@@ -15,7 +15,7 @@ const H = 1920;
 export async function renderStoryImage(
   photo: Buffer,
   focus: { x: number; y: number } | null,
-  text: { name: string; price: string | null; topLine?: string | null },
+  text: { name: string; price: string | null; topLine?: string | null } | null,
 ): Promise<Buffer> {
   const img = sharp(photo).rotate();
   const meta = await img.metadata();
@@ -31,6 +31,8 @@ export async function renderStoryImage(
     top = Math.round(Math.min(Math.max((focus?.y ?? 0.5) * h - ch / 2, 0), h - ch));
   }
   const base = await img.extract({ left, top, width: cw, height: ch }).resize(W, H, { fit: "cover" }).toBuffer();
+  // No text: the clean photo (the owner's choice for Stories, 2026-10-26).
+  if (!text) return sharp(base).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 
   const overlay = new ImageResponse(
     (

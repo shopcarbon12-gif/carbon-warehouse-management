@@ -3,19 +3,17 @@
  * every day keep the account at the top of the feed).
  *
  * For each coming feed post (single picture or carousel) that has no Story
- * yet, make one: its campaign shot as a 9:16 Story with the tagged product's
- * name and price (story-image.tsx), the same day in the evening (the best
+ * yet, make one: its campaign shot as a clean 9:16 Story cropped around the
+ * tagged product, no text on it (story-image.tsx), the same day in the evening (the best
  * evening hour of Instagram followers for that weekday, after the post),
  * to Instagram and Facebook. Each Story is a draft that needs its own approval,
  * like every post. source_ref "story:<feed post id>" links it to its post.
  */
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
-import { catalogProductInfo } from "./meta";
 import { publicMediaUrl } from "./store";
 import { renderStoryImage } from "./story-image";
 import { etLocalToIso } from "./ai-changes";
-import { campaignStoryLine } from "./campaign-identity";
 
 type Feed = { id: string; title: string; campaign: string | null; at: Date; day: string; weekday: number; hour: number; storage_path: string | null };
 
@@ -61,9 +59,9 @@ export async function makeStories(pool: Pool, tenantId: string, by: string | nul
       continue;
     }
     try {
-      const info = await catalogProductInfo(tag.meta_product_id).catch(() => ({ name: tag.label, price: null }));
       const photo = Buffer.from((await downloadStorageObject(f.storage_path)).body);
-      const jpg = await renderStoryImage(photo, { x: tag.x, y: tag.y }, { name: info.name || tag.label, price: info.price, topLine: campaignStoryLine(f.campaign) });
+      // The clean photo, no text on it (owner, 2026-10-26: "Remove texts from pics").
+      const jpg = await renderStoryImage(photo, { x: tag.x, y: tag.y }, null);
       // The weekday's best evening hour, after the feed post (at least 2 hours later), by 10 PM.
       const evening = best.filter((b) => b.weekday === f.weekday).sort((a, b) => b.score - a.score)[0]?.hour ?? 20;
       const hour = Math.min(22, Math.max(evening, f.hour + 2));
