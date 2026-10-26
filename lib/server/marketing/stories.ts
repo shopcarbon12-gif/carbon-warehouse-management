@@ -28,7 +28,7 @@ export async function makeStories(pool: Pool, tenantId: string, by: string | nul
          FROM marketing_posts p
         WHERE p.tenant_id = $1::uuid AND p.format IN ('image', 'carousel') AND p.status NOT IN ('cancelled', 'published')
           AND p.scheduled_at > now()
-          AND NOT EXISTS (SELECT 1 FROM marketing_posts s WHERE s.tenant_id = p.tenant_id AND s.source_ref = 'story:' || p.id::text AND s.status <> 'cancelled')
+          AND NOT EXISTS (SELECT 1 FROM marketing_posts s WHERE s.tenant_id = p.tenant_id AND (s.source_ref = 'story:' || p.id::text OR s.source_ref LIKE 'story:' || p.id::text || '#%') AND s.status <> 'cancelled')
         ORDER BY p.scheduled_at`,
       [tenantId],
     )
