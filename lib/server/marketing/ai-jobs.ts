@@ -107,7 +107,7 @@ async function runOne(pool: Pool, tenantId: string, job: JobRow & { requested_by
   }
   const caption = String(job.input.caption ?? "");
   const hashtags = Array.isArray(job.input.hashtags) ? job.input.hashtags.map(String) : [];
-  return checkCaption({ caption, hashtags, format: post.format, channels: post.targets.map((t) => t.provider) });
+  return checkCaption({ caption, hashtags, format: post.format, channels: post.targets.map((t) => t.provider), campaign: post.campaign });
 }
 
 /** One pass: recover stuck jobs, queue due weekly reviews, run up to 4 queued jobs. */

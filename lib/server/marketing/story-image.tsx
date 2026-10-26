@@ -1,7 +1,8 @@
 /**
  * Social — one Story picture (1080×1920) made from a feed post's campaign
  * shot: cropped to 9:16 around the tagged product, with the product's name and
- * price and shopcarbon.com on a soft dark fade at the bottom. The text is
+ * price and shopcarbon.com on a soft dark fade at the bottom, under the
+ * campaign's line, above Instagram's own bar (the safe zone). The text is
  * drawn with next/og (Satori + Resvg, its own font), then laid on the photo
  * with sharp, so the server needs no system fonts.
  */
@@ -11,7 +12,11 @@ import { ImageResponse } from "next/og";
 const W = 1080;
 const H = 1920;
 
-export async function renderStoryImage(photo: Buffer, focus: { x: number; y: number } | null, text: { name: string; price: string | null }): Promise<Buffer> {
+export async function renderStoryImage(
+  photo: Buffer,
+  focus: { x: number; y: number } | null,
+  text: { name: string; price: string | null; topLine?: string | null },
+): Promise<Buffer> {
   const img = sharp(photo).rotate();
   const meta = await img.metadata();
   const w = meta.width ?? W;
@@ -30,17 +35,19 @@ export async function renderStoryImage(photo: Buffer, focus: { x: number; y: num
   const overlay = new ImageResponse(
     (
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        {/* Instagram's own bars cover about the bottom 250 px: the text stays above them (the campaign pack's safe space). */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            padding: "0 80px 170px 80px",
-            height: 640,
+            padding: "0 80px 320px 80px",
+            height: 760,
             justifyContent: "flex-end",
             backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.62))",
             color: "white",
           }}
         >
+          {text.topLine && <div style={{ fontSize: 28, letterSpacing: 6, marginBottom: 26, opacity: 0.9 }}>{text.topLine}</div>}
           <div style={{ fontSize: 62, fontWeight: 600, lineHeight: 1.1, letterSpacing: 1 }}>{text.name}</div>
           <div style={{ fontSize: 40, marginTop: 22, opacity: 0.92, letterSpacing: 2 }}>
             {[text.price, "shopcarbon.com"].filter(Boolean).join("  ·  ")}

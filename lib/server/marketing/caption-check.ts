@@ -10,6 +10,7 @@
  */
 import { claudeStructured } from "@/lib/server/claude";
 import { COPY_RULES } from "./ai-changes";
+import { campaignIdentity } from "./campaign-identity";
 
 export type CaptionCheck = {
   ok: boolean;
@@ -52,9 +53,10 @@ How to answer:
 - caption: the caption with ONLY those problems fixed (no hashtags in it). Keep everything else word for word: the facts, product names, colours, the voice, the line breaks. Never add facts. If there are no issues, return the caption unchanged.
 - hashtags: the fixed list without the # sign (unchanged when they were fine).`;
 
-export async function checkCaption(input: { caption: string; hashtags: string[]; format: string; channels: string[] }): Promise<CaptionCheck> {
+export async function checkCaption(input: { caption: string; hashtags: string[]; format: string; channels: string[]; campaign?: string | null }): Promise<CaptionCheck> {
+  const identity = campaignIdentity(input.campaign);
   const r = await claudeStructured<{ issues: CaptionCheck["issues"]; caption: string; hashtags: string[] }>({
-    system: SYSTEM,
+    system: identity ? `${SYSTEM}\n\n${identity}` : SYSTEM,
     content: [
       {
         type: "text",

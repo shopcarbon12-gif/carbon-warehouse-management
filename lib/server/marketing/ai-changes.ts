@@ -28,6 +28,7 @@ import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { listPosts, PUBLISHABLE, type MarketingPost } from "./store";
 import { searchCatalogProducts, type CatalogProduct } from "./meta";
+import { campaignIdentity } from "./campaign-identity";
 
 const ET = "America/New_York";
 const MAX_TAGS_PER_PICTURE = 5;
@@ -372,7 +373,8 @@ export async function planChange(
     ].join("\n"),
   });
 
-  return await claudeStructured<Plan>({ system: SYSTEM, content, schema: SCHEMA as unknown as Record<string, unknown>, effort: "high" });
+  const identity = campaignIdentity(post.campaign);
+  return await claudeStructured<Plan>({ system: identity ? `${SYSTEM}\n\n${identity}` : SYSTEM, content, schema: SCHEMA as unknown as Record<string, unknown>, effort: "high" });
 }
 
 function titleCase(s: string) {
