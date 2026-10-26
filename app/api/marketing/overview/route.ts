@@ -30,6 +30,7 @@ export async function GET(req: Request) {
     meta_catalog: env("META_SYSTEM_USER_TOKEN") && env("META_CATALOG_ID"),
     google_ads: env("GOOGLE_ADS_REFRESH_TOKEN") && env("GOOGLE_ADS_DEVELOPER_TOKEN"),
     merchant_center: env("GMC_MERCHANT_ID"),
+    tiktok: env("TIKTOK_CLIENT_KEY") && env("TIKTOK_CLIENT_SECRET"),
   };
   return NextResponse.json({
     settings,

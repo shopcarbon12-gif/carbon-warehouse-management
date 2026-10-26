@@ -11,6 +11,7 @@
 import type { Pool } from "pg";
 import { fullCaption, listPosts, type MarketingPost } from "./store";
 import { publishBluesky } from "./bluesky";
+import { publishTikTok } from "./tiktok";
 import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
 
@@ -108,6 +109,8 @@ async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): P
                   if (!b.rows[0]?.secret) throw new Error("Bluesky is not connected");
                   return publishBluesky(b.rows[0].name, open(b.rows[0].secret), post.caption, post.hashtags, media);
                 })()
+              : t.provider === "tiktok"
+                ? await publishTikTok(pool, tenantId, post.format, post.caption, post.hashtags, media)
               : (() => {
                 throw new Error(`${t.provider} publishing is not built yet`);
               })();

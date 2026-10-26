@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import { useUrlParam } from "@/lib/use-url-param";
 import { btn, card, fetcher, field, label, send } from "./marketing-shared";
 
 /**
@@ -24,7 +25,7 @@ const KIND_LABEL = { social: "Social networks", ads: "Ad platforms", shop: "Shop
 
 /** What each channel still needs from the owner before Social can post there (2026-10-25). */
 const NEEDS: Record<string, string> = {
-  tiktok: "A TikTok for Developers app with the Content Posting API, and TikTok's audit — until it passes, TikTok only allows private posts.",
+  tiktok: "Waiting for the TikTok app keys. Until TikTok reviews the app, posts can only go to a private TikTok account.",
   youtube: "Sign in to Google once more with YouTube upload allowed (same Google login as Ads and Merchant Center), for Shorts.",
   pinterest: "A Pinterest business account and a Pinterest developer app (Standard access).",
   snapchat: "A Snapchat Public Profile and access to Snap's Public Profile API (granted by Snap on request).",
@@ -44,6 +45,8 @@ export function SocialChannelsWorkspace() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [bsky, setBsky] = useState({ handle: "", appPassword: "" });
+  // Back from TikTok's sign-in: ?tiktok=connected or the reason it failed.
+  const [tiktokNote] = useUrlParam("tiktok");
 
   async function disconnect(provider: string, accountId: string, name: string) {
     if (!window.confirm(`Disconnect ${name}? Social stops posting there until you connect it again.`)) return;
@@ -106,6 +109,11 @@ export function SocialChannelsWorkspace() {
           {busy ? "Reading Meta…" : "Sync Meta accounts"}
         </button>
       </header>
+      {tiktokNote && (
+        <p className={`text-xs ${tiktokNote === "connected" ? "text-emerald-700 dark:text-emerald-300" : "text-[var(--wms-status-danger-fg)]"}`}>
+          {tiktokNote === "connected" ? "TikTok connected." : `TikTok: ${tiktokNote}`}
+        </p>
+      )}
       {msg && <p className={`text-xs ${msg.err ? "text-[var(--wms-status-danger-fg)]" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.text}</p>}
       {error && <p className="text-xs text-[var(--wms-status-danger-fg)]">{error.message}</p>}
 
@@ -141,6 +149,14 @@ export function SocialChannelsWorkspace() {
                         ) : null}
                       </div>
                     ))}
+                    {p.id === "tiktok" && !connected && p.credentials && (
+                      <a href="/api/marketing/channels/tiktok/start" className={`${btn} mt-2 inline-block border-sky-600 text-sky-700 dark:text-sky-300`}>
+                        Connect TikTok
+                      </a>
+                    )}
+                    {p.id === "tiktok" && connected && (
+                      <p className="mt-1 text-xs text-[var(--wms-muted)]">Reconnect any time with Connect TikTok after disconnecting. Until TikTok reviews the app, posts go out private.</p>
+                    )}
                     {p.id === "bluesky" &&
                       (connected ? (
                         <button type="button" className={`${btn} mt-2 border-[var(--wms-border)]`} disabled={busy} onClick={() => void bluesky(false)}>

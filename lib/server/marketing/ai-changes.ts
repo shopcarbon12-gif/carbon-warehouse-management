@@ -68,7 +68,7 @@ const SCHEMA = {
     caption: nullable({ type: "string" }),
     hashtags: nullable({ type: "array", items: { type: "string" } }),
     scheduled_local: nullable({ type: "string" }),
-    targets: nullable({ type: "array", items: { type: "string", enum: ["instagram", "facebook", "bluesky"] } }),
+    targets: nullable({ type: "array", items: { type: "string", enum: ["instagram", "facebook", "bluesky", "tiktok"] } }),
     remove_tags: {
       type: "array",
       items: { type: "object", additionalProperties: false, required: ["media_position", "label"], properties: { media_position: { type: "integer" }, label: { type: "string" } } },

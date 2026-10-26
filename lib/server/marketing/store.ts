@@ -33,7 +33,7 @@ export const MARKETING_PROVIDERS = [
   { id: "snapchat_catalog", label: "Snapchat catalog", kind: "shop", phase: 3 },
 ] as const;
 export type MarketingProvider = (typeof MARKETING_PROVIDERS)[number]["id"];
-export const PUBLISHABLE: MarketingProvider[] = ["instagram", "facebook", "bluesky"];
+export const PUBLISHABLE: MarketingProvider[] = ["instagram", "facebook", "bluesky", "tiktok"];
 
 /** Where Instagram and Facebook fetch post media (our R2 is private; see /api/public/marketing-media). */
 export const PUBLIC_BASE = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://wms.shopcarbon.com")

@@ -27,7 +27,7 @@ const schema = z
     caption: z.string().max(2200).optional(),
     hashtags: z.array(z.string().max(100)).max(30).optional(),
     scheduledAt: z.string().datetime({ offset: true }).optional(),
-    targets: z.array(z.enum(["instagram", "facebook", "bluesky"])).min(1).optional(),
+    targets: z.array(z.enum(["instagram", "facebook", "bluesky", "tiktok"])).min(1).optional(),
     note: z.string().max(2000).optional(),
     title: z.string().max(200).optional(),
     /** The full list of Instagram product tags (replaces what is there). */
