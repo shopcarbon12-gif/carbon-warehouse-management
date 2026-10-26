@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { useUrlParam } from "@/lib/use-url-param";
 import {
@@ -27,8 +27,14 @@ import { TikTokPostBox } from "./tiktok-post-box";
  * it (or ask for changes). Approval is per post. Nothing publishes while the
  * publish switch is off, and an edit after approval needs a new approval.
  * "Post to TikTok…" sends one post to TikTok right away (tiktok-post-box.tsx).
+ * Approve first runs the caption check (AI tells, 5 hashtags, the first 125
+ * characters); when it finds problems the owner fixes them or approves as is.
  */
 
+type AiJob = { id: string; postId: string | null; kind: "write" | "check" | "weekly_review"; input: Record<string, unknown>; status: "queued" | "working" | "done" | "failed" | "dismissed"; result: unknown; error: string | null };
+type WrittenSuggestion = { title: string; caption: string; hashtags: string[]; tags: Omit<MarketingPost["tags"][number], "handle">[]; notFound: string[] };
+const PASSED: CaptionCheckResult = { ok: true, issues: [], caption: "", hashtags: [] };
+type CaptionCheckResult = { ok: boolean; issues: { rule: string; quote: string; fix: string }[]; caption: string; hashtags: string[] };
 type Overview = { settings: { publishEnabled: boolean; updatedAt: string | null; updatedBy: string | null }; counts: Record<string, number> };
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -135,9 +141,12 @@ export function MarketingCalendarWorkspace() {
             {counts.failed ? ` · ${counts.failed} failed` : ""}
           </p>
         </div>
-        <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy} onClick={() => void newPost()}>
-          + New post
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy} onClick={() => void newPost()}>
+            + New post
+          </button>
+          <StoriesButton onDone={async () => { await posts.mutate(); }} />
+        </div>
         <div className={`${card} flex flex-wrap items-center gap-2`}>
           <span className={`inline-flex items-center gap-1.5 font-mono text-[0.72rem] uppercase ${publishOn ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--wms-muted)]"}`}>
             <span className={`h-2 w-2 rounded-full ${publishOn ? "bg-emerald-500" : "bg-zinc-400"}`} />
@@ -282,6 +291,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [tagQuery, setTagQuery] = useState("");
   const [found, setFound] = useState<{ metaProductId: string; label: string }[]>([]);
   const [askChanges, setAskChanges] = useState(false);
+  // Caption check: the text it was run on, and what it found.
+  // A caption the owner took from the check's fix counts as passed.
+  const [passedText, setPassedText] = useState<string | null>(null);
+  const [pendingApprove, setPendingApprove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -364,28 +377,76 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     void mediaCall("PATCH", { order }, "Moved.");
   }
 
-  async function writeWithAi() {
-    setBusy(true);
+  /* AI jobs run on the server (ai-jobs.ts): refreshing or leaving the page loses nothing; results wait here. */
+  const jobs = useSWR<{ jobs: AiJob[] }>(`/api/marketing/ai/jobs?postId=${post.id}`, fetcher, {
+    refreshInterval: (d) => (d?.jobs.some((j) => j.status === "queued" || j.status === "working") ? 3000 : 0),
+  });
+  const writeJob = jobs.data?.jobs.find((j) => j.kind === "write") ?? null;
+  const checkJob = jobs.data?.jobs.find((j) => j.kind === "check") ?? null;
+  const checkKey = `${caption}\n#${tagList.map((h) => h.replace(/^#+/, "")).join(" ")}`;
+  const checkJobKey = checkJob ? `${String(checkJob.input.caption ?? "")}\n#${((checkJob.input.hashtags as string[] | undefined) ?? []).join(" ")}` : null;
+  const checkForText = checkJobKey === checkKey ? checkJob : null;
+  const checkFresh = checkForText?.status === "done" ? (checkForText.result as CaptionCheckResult) : passedText === checkKey ? PASSED : null;
+  const checking = checkForText?.status === "queued" || checkForText?.status === "working";
+
+  async function aiJob(body: Record<string, unknown>) {
     setErr(null);
-    setAiNote(null);
     try {
-      const r = await send<{ suggestion: { title: string; caption: string; hashtags: string[]; tags: MarketingPost["tags"]; notFound: string[] } }>(
-        "/api/marketing/ai/write", "POST", { postId: post.id, brief },
-      );
-      const sgg = r.suggestion;
-      setTitle(sgg.title || title);
-      setCaption(sgg.caption);
-      setHashtags(sgg.hashtags.join(" "));
-      if (sgg.tags.length) setTags(sgg.tags.map((t) => ({ ...t, handle: null })));
-      setAiNote(
-        `The AI wrote the title, caption and hashtags${sgg.tags.length ? ` and tagged ${sgg.tags.length} product${sgg.tags.length > 1 ? "s" : ""}` : ""}. Check it, then save.` +
-          (sgg.notFound.length ? ` Not in the shop catalog: ${sgg.notFound.join(", ")}.` : ""),
-      );
+      await send("/api/marketing/ai/jobs", "POST", body);
+      await jobs.mutate();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "The AI could not write it");
-    } finally {
-      setBusy(false);
+      setErr(e instanceof Error ? e.message : "The AI could not start");
     }
+  }
+  async function dismiss(id: string) {
+    await fetch(`/api/marketing/ai/jobs/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "dismiss" }) }).catch(() => null);
+    await jobs.mutate();
+  }
+
+  /** Check the caption as it is on screen (unless that exact text is already checked or being checked). */
+  function runCheck() {
+    if (!caption.trim() || checkForText) return;
+    void aiJob({ kind: "check", postId: post.id, caption, hashtags: tagList.map((h) => h.replace(/^#+/, "")) });
+  }
+
+  /* Approve: the caption is checked first (unless it passed, or the owner chose to approve it as it is). */
+  async function approve(force = false) {
+    const e = edits();
+    if (!e) return;
+    if (!force && caption.trim() && post.format !== "story") {
+      if (!checkFresh) {
+        setPendingApprove(true);
+        runCheck();
+        return;
+      }
+      if (!checkFresh.ok) return;
+    }
+    setPendingApprove(false);
+    await patch({ ...e, action: "approve" }, "Approved. It goes out at its time while publishing is on.");
+  }
+  // Approve waits for its caption check; it goes ahead when the check passes.
+  useEffect(() => {
+    if (!pendingApprove) return;
+    if (checkForText?.status === "failed") {
+      setPendingApprove(false);
+      setErr(checkForText.error ?? "The caption check did not finish");
+    } else if (checkFresh) {
+      setPendingApprove(false);
+      if (checkFresh.ok) void approve(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingApprove, checkForText?.status, checkFresh]);
+
+  function applyWritten(sgg: WrittenSuggestion, jobId: string) {
+    setTitle(sgg.title || title);
+    setCaption(sgg.caption);
+    setHashtags(sgg.hashtags.join(" "));
+    if (sgg.tags.length) setTags(sgg.tags.map((t) => ({ ...t, handle: null })));
+    setAiNote(
+      `The AI wrote the title, caption and hashtags${sgg.tags.length ? ` and tagged ${sgg.tags.length} product${sgg.tags.length > 1 ? "s" : ""}` : ""}. Check it, then save.` +
+        (sgg.notFound.length ? ` Not in the shop catalog: ${sgg.notFound.join(", ")}.` : ""),
+    );
+    void dismiss(jobId);
   }
   async function searchCatalog(q: string) {
     setTagQuery(q);
@@ -506,9 +567,45 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                 value={brief}
                 onChange={(e) => setBrief(e.target.value)}
               />
-              <button type="button" className={`${btn} self-start border-sky-600 text-sky-700 dark:text-sky-300`} disabled={busy} onClick={() => void writeWithAi()}>
-                {busy ? "Working…" : "Write caption, hashtags and tags"}
+              <button
+                type="button"
+                className={`${btn} self-start border-sky-600 text-sky-700 dark:text-sky-300`}
+                disabled={busy || writeJob?.status === "queued" || writeJob?.status === "working"}
+                onClick={() => void aiJob({ kind: "write", postId: post.id, brief })}
+              >
+                {writeJob?.status === "queued" || writeJob?.status === "working" ? "The AI is writing…" : "Write caption, hashtags and tags"}
               </button>
+              {(writeJob?.status === "queued" || writeJob?.status === "working") && (
+                <p className="text-xs text-[var(--wms-muted)]">It runs on the server: keep working, refresh or close the page. The caption waits here when it is ready.</p>
+              )}
+              {writeJob?.status === "done" && (() => {
+                const sgg = writeJob.result as WrittenSuggestion;
+                return (
+                  <div className="flex flex-col gap-1.5 rounded border border-sky-600/40 p-2 text-xs text-[var(--wms-fg)]">
+                    <span className={label}>The AI wrote</span>
+                    <b>{sgg.title}</b>
+                    <p className="whitespace-pre-wrap">{sgg.caption}</p>
+                    <p className="font-mono text-[var(--wms-muted)]">{sgg.hashtags.map((h) => `#${h}`).join(" ")}</p>
+                    {sgg.tags.length > 0 && <p className="text-[var(--wms-muted)]">Product tags: {sgg.tags.map((t) => t.label).join(", ")}</p>}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} onClick={() => applyWritten(sgg, writeJob.id)}>
+                        Use it
+                      </button>
+                      <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={() => void dismiss(writeJob.id)}>
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+              {writeJob?.status === "failed" && (
+                <p className="text-xs text-[var(--wms-status-danger-fg)]">
+                  {writeJob.error ?? "The AI could not write it"}{" "}
+                  <button type="button" className="underline max-md:py-2" onClick={() => void dismiss(writeJob.id)}>
+                    dismiss
+                  </button>
+                </p>
+              )}
               {aiNote && <p className="text-xs text-[var(--wms-fg)]">{aiNote}</p>}
             </div>
           )}
@@ -517,9 +614,51 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             <textarea className={`${field} min-h-32 font-sans text-[0.8rem]`} value={caption} disabled={locked} onChange={(e) => setCaption(e.target.value)} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className={label}>Hashtags</span>
+            <span className={label}>Hashtags (Instagram allows 5)</span>
             <input className={field} value={hashtags} disabled={locked} onChange={(e) => setHashtags(e.target.value)} />
           </label>
+          {!locked && caption.trim() && post.format !== "story" && (
+            <div className="flex flex-col gap-2">
+              <button type="button" className={`${btn} self-start border-[var(--wms-border)]`} disabled={busy || checking} onClick={() => runCheck()}>
+                {checking ? "Checking the caption…" : checkFresh?.ok ? "Caption check passed ✓" : "Check caption"}
+              </button>
+              {checkFresh && !checkFresh.ok && (
+                <div className={`${card} flex flex-col gap-2 border-amber-500/60`}>
+                  <span className={label}>Caption check · {checkFresh.issues.length} to fix</span>
+                  <ul className="flex flex-col gap-1.5 text-xs text-[var(--wms-fg)]">
+                    {checkFresh.issues.map((i, k) => (
+                      <li key={k}>
+                        <b>{i.rule}</b>: &ldquo;{i.quote}&rdquo; <span className="text-[var(--wms-muted)]">→ {i.fix}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-[var(--wms-muted)] max-md:py-2">See the fixed caption</summary>
+                    <p className="mt-1 whitespace-pre-wrap text-[var(--wms-fg)]">{checkFresh.caption}</p>
+                    <p className="mt-1 font-mono text-[var(--wms-muted)]">{checkFresh.hashtags.map((h) => `#${h}`).join(" ")}</p>
+                  </details>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`${btn} border-sky-600 text-sky-700 dark:text-sky-300`}
+                      onClick={() => {
+                        setCaption(checkFresh.caption);
+                        setHashtags(checkFresh.hashtags.join(" "));
+                        setPassedText(`${checkFresh.caption}\n#${checkFresh.hashtags.join(" ")}`);
+                      }}
+                    >
+                      Use the fixed caption
+                    </button>
+                    {post.status !== "approved" && post.status !== "cancelled" && (
+                      <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy} onClick={() => void approve(true)}>
+                        Approve as it is
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <label className="flex flex-col gap-1">
             <span className={label}>Date and time (Eastern)</span>
             <input type="datetime-local" className={field} value={when} disabled={locked} onChange={(e) => setWhen(e.target.value)} />
@@ -632,13 +771,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                 <button
                   type="button"
                   className={`${btn} border-emerald-600 bg-emerald-600 text-white`}
-                  disabled={busy}
-                  onClick={() => {
-                    const e = edits();
-                    if (e) patch({ ...e, action: "approve" }, "Approved. It goes out at its time while publishing is on.");
-                  }}
+                  disabled={busy || checking || pendingApprove}
+                  onClick={() => void approve()}
                 >
-                  {dirty ? "Save and approve" : "Approve"}
+                  {checking || pendingApprove ? "Checking the caption…" : dirty ? "Save and approve" : "Approve"}
                 </button>
               )}
               {dirty && (
@@ -690,6 +826,49 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * "Make Stories": one Story for each coming feed post that has none yet
+ * (lib/server/marketing/stories.ts). It runs on the server; the new Stories
+ * appear in the calendar as drafts waiting for approval.
+ */
+function StoriesButton({ onDone }: { onDone: () => Promise<void> }) {
+  const { data, mutate } = useSWR<{ jobs: AiJob[] }>("/api/marketing/ai/jobs?kind=stories", fetcher, {
+    refreshInterval: (d) => (d?.jobs.some((j) => j.status === "queued" || j.status === "working") ? 4000 : 0),
+  });
+  const job = data?.jobs[0] ?? null;
+  const running = job?.status === "queued" || job?.status === "working";
+  const seen = useRef<string | null>(null);
+  const r = job?.status === "done" ? (job.result as { created: number; skipped: string[] }) : null;
+  // When a run finishes, reload the calendar once so the new Stories show.
+  useEffect(() => {
+    if (job?.status === "done" && seen.current !== job.id) {
+      seen.current = job.id;
+      void onDone();
+    }
+  }, [job?.status, job?.id, onDone]);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        className={`${btn} border-[var(--wms-border)]`}
+        disabled={running}
+        title="One 9:16 Story for each coming feed post, the same evening, as a draft for approval"
+        onClick={async () => {
+          await send("/api/marketing/ai/jobs", "POST", { kind: "stories" }).catch(() => null);
+          await mutate();
+        }}
+      >
+        {running ? "Making Stories…" : "Make Stories"}
+      </button>
+      {r && (
+        <span className="text-xs text-[var(--wms-muted)]" title={r.skipped.join("\n")}>
+          {r.created} Stories made{r.skipped.length ? ` · ${r.skipped.length} skipped` : ""}
+        </span>
+      )}
     </div>
   );
 }

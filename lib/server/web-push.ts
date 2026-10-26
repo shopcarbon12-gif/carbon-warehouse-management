@@ -13,7 +13,7 @@
 import webpush from "web-push";
 import type { Pool } from "pg";
 
-export type PushKind = "orders" | "studio" | "visitor_new" | "visitor_back" | "visitor_checkout" | "visitor_cart" | "test";
+export type PushKind = "orders" | "studio" | "visitor_new" | "visitor_back" | "visitor_checkout" | "visitor_cart" | "social" | "test";
 export type PushPayload = { kind: PushKind; title: string; body: string; url?: string; tag?: string; /** Which sound an open WMS page plays. */ sound?: PushSound };
 /** Which sound an open WMS page plays: order ka-ching, Studio chime, visitor doorbell, checkout double doorbell. */
 export type PushSound = "orders" | "studio" | "visitor" | "checkout";

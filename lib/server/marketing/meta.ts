@@ -92,7 +92,14 @@ export type PublishResult = { remoteId: string; permalink: string | null };
 export async function publishInstagram(igUserId: string, format: string, caption: string, media: MediaItem[]): Promise<PublishResult> {
   if (!media.length) throw new MetaPublishError("The post has no picture or video");
   let creationId: string;
-  if (format === "reel") {
+  if (format === "story") {
+    // A Story is one picture or video, 9:16; Instagram takes no caption or product tags on it.
+    const m = media[0];
+    const c = await graph<{ id: string }>(`${igUserId}/media`, "POST",
+      m.kind === "video" ? { media_type: "STORIES", video_url: m.url } : { media_type: "STORIES", image_url: m.url });
+    await waitForContainer(c.id);
+    creationId = c.id;
+  } else if (format === "reel") {
     const v = media.find((m) => m.kind === "video");
     if (!v) throw new MetaPublishError("A Reel needs a video");
     const c = await graph<{ id: string }>(`${igUserId}/media`, "POST", {
@@ -139,7 +146,13 @@ export async function publishFacebook(pageId: string, format: string, message: s
   const text = link ? `${message}\n\n${link}` : message;
   let id: string;
   const video = media.find((m) => m.kind === "video");
-  if (format === "reel" && video) {
+  if (format === "story") {
+    const pic = media.find((m) => m.kind === "image");
+    if (!pic) throw new MetaPublishError("Facebook Stories from Social take a picture");
+    const p = await graph<{ id: string }>(`${pageId}/photos`, "POST", { url: pic.url, published: false }, tok);
+    const r = await graph<{ post_id?: string; id?: string }>(`${pageId}/photo_stories`, "POST", { photo_id: p.id }, tok);
+    return { remoteId: r.post_id ?? r.id ?? p.id, permalink: null };
+  } else if (format === "reel" && video) {
     const r = await graph<{ id: string }>(`${pageId}/videos`, "POST", { file_url: video.url, description: text }, tok);
     id = r.id;
   } else if (media.length > 1) {
@@ -191,6 +204,13 @@ export async function instagramOnlineFollowers(igUserId: string): Promise<{ week
     const [weekday, hour] = k.split(":").map(Number);
     return { weekday, hour, score: s.total / s.n };
   });
+}
+
+/** A catalog product's shop name and price ("$45.00"), for the text on a Story. */
+export async function catalogProductInfo(id: string): Promise<{ name: string; price: string | null }> {
+  const r = await graph<{ name?: string; price?: string; sale_price?: string }>(id, "GET", { fields: "name,price,sale_price" });
+  const clean = (p?: string) => (p ? p.replace(/\s*[A-Z]{3}$/, "").replace(/\.00$/, "") : null);
+  return { name: r.name ?? "", price: clean(r.sale_price) ?? clean(r.price) };
 }
 
 export type CatalogProduct = { id: string; name: string; color: string | null; availability: string; visibility: string; groupId: string | null };

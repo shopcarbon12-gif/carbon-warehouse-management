@@ -103,13 +103,30 @@ const SCHEMA = {
 } as const;
 
 /** CARBON's copy rules for every Social caption (owner). */
+/** Writing that reads as machine-made (the copywriting and social skills' blacklist), for every caption the AI writes or checks. */
+export const AI_TELLS = `Never write these (they make a caption read as AI-written):
+- Contrast reveals: "It's not X, it's Y", "Not because X. Because Y.", "Not just X, but Y", "Less X, more Y". Say Y directly.
+- Negation lists: "No X, no Y, no Z", "No X. Just Y." Say what does happen.
+- Trailing pile-ons: a full sentence, then a comma and more restating clauses or an "-ing" clause. End the sentence at the claim.
+- Self-answered questions and colon reveals: "The result? ...", "The best part: ...", "Here's the secret: ...".
+- Em dashes (—) anywhere in a social caption. Use a period, comma or line break.
+- Stock phrases: "Say goodbye to", "X, reimagined", "Unlock", "Elevate your", "Take it to the next level", "Here's the thing", "Imagine...", "In today's...", "When it comes to", "game-changer", "effortless", "the X you deserve".
+- Words: delve, tapestry, testament, realm, embark, beacon, elevate, curated, seamless, timeless (unless it is a fact), effortlessly, truly, genuinely, literally.
+- Fragment drumbeats ("Soft. Warm. Yours.") and lists of three, more than once per caption.
+- Broetry: one short sentence per line for the whole caption. Write sentences and break lines where a person would pause.
+- Engagement bait: "Agree?", "Thoughts?", "Tag someone who...", "Let that sink in", "Read that again".
+- Tidy closers and wisdom-shaped lines ("Because you deserve it.", "Style is a feeling."). End on the piece, the offer or the call to action.
+- Emojis as bullets, hype punctuation (!?), Unicode bold letters.
+- Never invent facts (prices, stock, fabric, fit, reviews, discounts) that are not in the post or the brief.`;
+
 export const COPY_RULES = `Copy rules (the owner's, always):
 - The brand is written CARBON, in capitals. Never "Carbon Jeans".
 - Never name another brand, shop or designer, and never say where anything is made or comes from.
 - Never mention labels, patches or tags on the clothes.
 - Never name a real venue, hotel or business, even if one appears in the picture.
 - Plain, confident English. No exclamation marks unless the note asks for them.
-- Instagram limits: caption up to 2,200 characters; up to 30 hashtags; up to ${MAX_TAGS_PER_PICTURE} product tags per picture.`;
+- Instagram limits: caption up to 2,200 characters; at most 5 hashtags (Instagram's limit; 3–5 is best); up to ${MAX_TAGS_PER_PICTURE} product tags per picture. Put the point in the first 125 characters (the part shown before "more").
+${AI_TELLS}`;
 
 const SYSTEM = `You edit one scheduled social post for CARBON, a fashion boutique in Orlando, Florida. The owner looked at the post and wrote a note asking for changes. Carry out exactly what the note asks — nothing more. Every field the note does not ask about stays unchanged (return null for it, or an empty list).
 

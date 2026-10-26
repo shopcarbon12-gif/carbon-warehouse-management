@@ -79,7 +79,7 @@ ${COPY_RULES}
 Fields:
 - title: a short working name for the calendar (3–6 words).
 - caption: the caption without hashtags. Open with the clothes or the moment, not "Introducing". Name the pieces by their colour and cut as they look in the picture. End with one plain call to action (the shop link is in the bio). Under 900 characters.
-- hashtags: 5 to 12, WITHOUT the # sign, mixing CARBON's own (e.g. CARBON, TheArtOfArriving when it fits) with ones shoppers search.
+- hashtags: 3 to 5 (Instagram allows 5), WITHOUT the # sign, mixing CARBON's own (e.g. CARBON, TheArtOfArriving when it fits) with ones shoppers search.
 - products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. At most 5 per picture.`;
   const d = await claudeStructured<Draft>({ system, content, schema: SCHEMA as unknown as Record<string, unknown>, effort: "high" });
 
@@ -101,7 +101,7 @@ Fields:
   return {
     title: d.title.trim().slice(0, 200),
     caption: d.caption.trim().slice(0, 2200),
-    hashtags: d.hashtags.map((h) => h.trim().replace(/^#+/, "")).filter(Boolean).slice(0, 30),
+    hashtags: d.hashtags.map((h) => h.trim().replace(/^#+/, "")).filter(Boolean).slice(0, 5),
     tags,
     notFound,
   };

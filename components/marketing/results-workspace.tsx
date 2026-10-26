@@ -8,6 +8,9 @@ import { btn, card, fetcher, label, send } from "./marketing-shared";
  * Social → Results. The Instagram account by day (followers, reach, views,
  * profile visits, link taps) and what each published post did on each channel.
  * The worker refreshes the numbers every 3 hours.
+ * The weekly review (weekly-review.ts) arrives every Monday morning for the
+ * week before, or on "Review last week now"; it runs on the server, so leaving
+ * the page does not stop it.
  */
 
 type Day = { day: string; followers: number | null; reach: number | null; views: number | null; profile_views: number | null; website_clicks: number | null };
@@ -71,6 +74,8 @@ export function MarketingResultsWorkspace() {
           </div>
         ))}
       </div>
+
+      <WeeklyReviewCard />
 
       <div className={card}>
         <span className={`${label} mb-2 block`}>Accounts reached per day (30 days)</span>
@@ -147,6 +152,144 @@ export function MarketingResultsWorkspace() {
           <p className="text-xs text-[var(--wms-muted)]">Nothing published from Social yet. Results appear here a few hours after a post goes out.</p>
         )}
       </div>
+    </div>
+  );
+}
+
+type Review = {
+  weekStart: string;
+  numbers: { posts: number; reach: number; interactions: number; saves: number; shares: number; followersStart: number | null; followersEnd: number | null; profileViews: number; linkTaps: number };
+  summary: string;
+  worked: { title: string; why: string }[];
+  weak: { title: string; why: string }[];
+  patterns: string[];
+  nextWeek: { action: string; why: string }[];
+  postSuggestions: { title: string; suggestion: string }[];
+};
+type ReviewJob = { id: string; status: string; result: Review | null; error: string | null; input: { weekStart?: string } };
+
+/** The latest weekly review: what worked, what did not, and what to do next week. */
+function WeeklyReviewCard() {
+  const { data, mutate } = useSWR<{ jobs: ReviewJob[] }>("/api/marketing/ai/jobs?kind=weekly_review", fetcher, {
+    refreshInterval: (d) => (d?.jobs.some((j) => j.status === "queued" || j.status === "working") ? 4000 : 60_000),
+  });
+  const [err, setErr] = useState<string | null>(null);
+  const job = data?.jobs[0] ?? null;
+  const running = job?.status === "queued" || job?.status === "working";
+  const r = job?.status === "done" ? job.result : null;
+  const week = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+  async function runNow() {
+    setErr(null);
+    try {
+      await send("/api/marketing/ai/jobs", "POST", { kind: "weekly_review" });
+      await mutate();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not start the review");
+    }
+  }
+
+  return (
+    <div className={`${card} flex flex-col gap-3`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <span className={`${label} block`}>Weekly review{r ? ` · week of ${week(r.weekStart)}` : ""}</span>
+          <span className="text-xs text-[var(--wms-muted)]">Every Monday morning, for the week before. Suggestions only; the calendar is not changed.</span>
+        </div>
+        <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={running} onClick={() => void runNow()}>
+          {running ? "Reviewing…" : "Review last week now"}
+        </button>
+      </div>
+      {running && <p className="text-xs text-[var(--wms-muted)]">The AI is reviewing the week on the server. You can leave this page; the review waits here.</p>}
+      {job?.status === "failed" && <p className="text-xs text-[var(--wms-status-danger-fg)]">{job.error ?? "The review did not finish"}</p>}
+      {err && <p className="text-xs text-[var(--wms-status-danger-fg)]">{err}</p>}
+      {!job && <p className="text-xs text-[var(--wms-muted)]">No review yet. The first one comes on Monday after posts start going out.</p>}
+      {r && (
+        <>
+          <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-5">
+            {(
+              [
+                ["Posts", nf.format(r.numbers.posts)],
+                ["Reach", nf.format(r.numbers.reach)],
+                ["Interactions", nf.format(r.numbers.interactions)],
+                ["Saves · shares", `${nf.format(r.numbers.saves)} · ${nf.format(r.numbers.shares)}`],
+                [
+                  "Followers",
+                  r.numbers.followersEnd == null
+                    ? "—"
+                    : `${nf.format(r.numbers.followersEnd)}${r.numbers.followersStart != null && r.numbers.followersEnd !== r.numbers.followersStart ? ` (${r.numbers.followersEnd > r.numbers.followersStart ? "+" : ""}${nf.format(r.numbers.followersEnd - r.numbers.followersStart)})` : ""}`,
+                ],
+              ] as [string, string][]
+            ).map(([k, v]) => (
+              <div key={k} className="rounded border border-[var(--wms-border)] p-2">
+                <span className={`${label} block`}>{k}</span>
+                <span className="font-semibold text-[var(--wms-fg)]">{v}</span>
+              </div>
+            ))}
+          </div>
+          {r.summary && <p className="text-sm text-[var(--wms-fg)]">{r.summary}</p>}
+          <div className="grid gap-3 md:grid-cols-2">
+            {r.worked.length > 0 && (
+              <div>
+                <span className={`${label} block text-emerald-700 dark:text-emerald-300`}>Worked</span>
+                <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                  {r.worked.map((w, i) => (
+                    <li key={i}>
+                      <b>{w.title}</b>: {w.why}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {r.weak.length > 0 && (
+              <div>
+                <span className={`${label} block text-amber-700 dark:text-amber-300`}>Weaker</span>
+                <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                  {r.weak.map((w, i) => (
+                    <li key={i}>
+                      <b>{w.title}</b>: {w.why}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          {r.patterns.length > 0 && (
+            <div>
+              <span className={`${label} block`}>What we see</span>
+              <ul className="mt-1 list-disc pl-4 text-xs text-[var(--wms-fg)]">
+                {r.patterns.map((p, i) => (
+                  <li key={i}>{p}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {r.nextWeek.length > 0 && (
+            <div>
+              <span className={`${label} block`}>Next week</span>
+              <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                {r.nextWeek.map((a, i) => (
+                  <li key={i}>
+                    <b>{a.action}</b> <span className="text-[var(--wms-muted)]">· {a.why}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {r.postSuggestions.length > 0 && (
+            <div>
+              <span className={`${label} block`}>For posts already planned</span>
+              <ul className="mt-1 flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                {r.postSuggestions.map((s, i) => (
+                  <li key={i}>
+                    <b>{s.title}</b>: {s.suggestion}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

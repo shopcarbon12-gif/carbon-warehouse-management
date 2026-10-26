@@ -14,6 +14,7 @@ import { maybeRunShieldMaintenance } from "@/lib/server/shield/maintenance";
 import { maybeRunMetaFeed } from "@/lib/server/meta-feed";
 import { maybeRunMarketing } from "@/lib/server/marketing/scheduler";
 import { marketingAiPending } from "@/lib/server/marketing/ai-changes";
+import { aiJobsPending } from "@/lib/server/marketing/ai-jobs";
 
 loadEnvConfig(process.cwd());
 
@@ -336,7 +337,8 @@ async function maybeRunSocialAi(pool: Pool): Promise<void> {
   const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
   if (!base) return;
   try {
-    for (const t of await marketingAiPending(pool)) {
+    const pending = [...(await marketingAiPending(pool)), ...(await aiJobsPending(pool))].filter((t, i, all) => all.findIndex((x) => x.tenant_id === t.tenant_id) === i);
+    for (const t of pending) {
       const u = await pool.query<{ sub: string; email: string; role: string; lid: string | null }>(
         `SELECT u.id::text AS sub, u.email, m.role,
                 (SELECT l.id::text FROM locations l WHERE l.tenant_id = m.tenant_id ORDER BY l.created_at LIMIT 1) AS lid

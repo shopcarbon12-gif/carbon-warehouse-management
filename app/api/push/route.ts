@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KINDS = new Set(["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "visitor_cart"]);
+const KINDS = new Set(["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "visitor_cart", "social"]);
 const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout"];
 
 async function authed(req: NextRequest) {
