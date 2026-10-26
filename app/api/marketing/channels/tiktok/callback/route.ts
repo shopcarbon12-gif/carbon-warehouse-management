@@ -37,7 +37,7 @@ async function GET_handler(req: Request) {
     );
     return back("tiktok=connected");
   } catch (e) {
-    return back(`tiktok=${encodeURIComponent(e instanceof Error ? e.message : "TikTok sign-in failed")}`);
+    return back(`tiktok=${encodeURIComponent((e instanceof Error ? e.message : "sign-in failed").replace(/^TikTok:\s*/, ""))}`);
   }
 }
 

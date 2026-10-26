@@ -171,7 +171,10 @@ export function SocialChannelsWorkspace() {
                           </button>
                         </div>
                       ))}
-                    {!connected && NEEDS[p.id] && <p className="mt-1 text-xs text-[var(--wms-muted)]">{NEEDS[p.id]}</p>}
+                    {!connected && NEEDS[p.id] && !(p.id === "tiktok" && p.credentials) && <p className="mt-1 text-xs text-[var(--wms-muted)]">{NEEDS[p.id]}</p>}
+                    {!connected && p.id === "tiktok" && p.credentials && (
+                      <p className="mt-1 text-xs text-[var(--wms-muted)]">Sign in with a TikTok account added as a target user in the app&apos;s Sandbox. Until TikTok reviews the app, posts can only go to a private account.</p>
+                    )}
                   </div>
                 );
               })}

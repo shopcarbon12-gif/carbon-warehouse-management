@@ -91,12 +91,13 @@ async function api<T>(path: string, token: string, body?: unknown, method = "POS
   return j;
 }
 
+/** The account's display name (user.info.basic only — the username needs user.info.profile, which we do not ask for). */
 export async function tiktokUserInfo(token: string): Promise<{ openId: string; name: string }> {
-  const j = await api<{ data?: { user?: { open_id?: string; display_name?: string; username?: string } } }>(
-    "/user/info/?fields=open_id,display_name,username", token, undefined, "GET",
+  const j = await api<{ data?: { user?: { open_id?: string; display_name?: string } } }>(
+    "/user/info/?fields=open_id,display_name", token, undefined, "GET",
   );
   const u = j.data?.user ?? {};
-  return { openId: u.open_id ?? "", name: u.username ? `@${u.username}` : u.display_name ?? "TikTok" };
+  return { openId: u.open_id ?? "", name: u.display_name || "TikTok" };
 }
 
 /** The account's tokens, refreshed when they are within an hour of running out. */
@@ -166,11 +167,8 @@ export async function publishTikTok(
     const st = s.data?.status;
     if (st === "PUBLISH_COMPLETE") {
       const postId = s.data?.publicaly_available_post_id?.[0];
-      const handle = (await tiktokUserInfo(token).catch(() => null))?.name;
-      return {
-        remoteId: String(postId ?? publishId),
-        permalink: postId && handle?.startsWith("@") ? `https://www.tiktok.com/${handle}/${format === "reel" ? "video" : "photo"}/${postId}` : null,
-      };
+      // Without the username TikTok's /@user/ path is unknown; its short form opens the post.
+      return { remoteId: String(postId ?? publishId), permalink: postId ? `https://www.tiktok.com/@/video/${postId}` : null };
     }
     if (st === "FAILED") throw new Error(`TikTok could not post it: ${s.data?.fail_reason ?? "unknown reason"}`);
   }
