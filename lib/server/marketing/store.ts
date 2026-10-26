@@ -59,7 +59,7 @@ export type MarketingPost = {
   note: string | null;
   approvedBy: string | null;
   approvedAt: string | null;
-  media: { position: number; kind: "image" | "video"; url: string; coverUrl: string | null }[];
+  media: { id: string; position: number; kind: "image" | "video"; url: string; coverUrl: string | null; altText: string | null }[];
   tags: { mediaPosition: number; metaProductId: string; handle: string | null; label: string; x: number; y: number }[];
   targets: { provider: string; status: string; permalink: string | null; error: string | null; publishedAt: string | null; attempts: number }[];
   /** Ask for changes, carried out by the AI (ai-changes.ts): queued → working → (picture) → done / failed. */
@@ -95,7 +95,7 @@ export async function listPosts(pool: Pool, tenantId: string, opts: { from?: str
   }
   const r = await pool.query(
     `SELECT p.*,
-            COALESCE((SELECT json_agg(json_build_object('position', m.position, 'kind', m.kind, 'url', m.url, 'coverUrl', m.cover_url) ORDER BY m.position)
+            COALESCE((SELECT json_agg(json_build_object('id', m.id, 'position', m.position, 'kind', m.kind, 'url', m.url, 'coverUrl', m.cover_url, 'altText', m.alt_text) ORDER BY m.position)
                         FROM marketing_post_media m WHERE m.post_id = p.id), '[]') AS media,
             COALESCE((SELECT json_agg(json_build_object('mediaPosition', t.media_position, 'metaProductId', t.meta_product_id, 'handle', t.shopify_handle,
                                                         'label', t.label, 'x', t.x, 'y', t.y) ORDER BY t.media_position, t.label)

@@ -14,6 +14,7 @@ import { publishBluesky } from "./bluesky";
 import { publishTikTok } from "./tiktok";
 import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
+import { writeAltTexts } from "@/lib/seo/alt-text";
 
 const TICK_MS = 60_000;
 const RESULTS_EVERY_MS = 3 * 3600_000;
@@ -77,11 +78,42 @@ async function channel(pool: Pool, tenantId: string, provider: string): Promise<
   return r.rows[0]?.account_id ?? null;
 }
 
+/**
+ * Every feed picture goes out with alt text (owner, 2026-10-26: "add it all auto
+ * always"). Pictures without one get it written now, with the shared alt-text
+ * rules, and saved, so it is written once. Stories take no alt text.
+ */
+export async function ensureAltTexts(pool: Pool, post: MarketingPost): Promise<void> {
+  if (post.format === "story") return;
+  const missing = post.media.filter((m) => m.kind === "image" && !m.altText?.trim());
+  if (!missing.length) return;
+  const tagged = (pos: number) => post.tags.filter((t) => t.mediaPosition === pos).map((t) => t.label);
+  const alts = await writeAltTexts({
+    kind: "social",
+    images: missing.map((m) => ({ id: m.id, url: m.url })),
+    context: [
+      `Instagram post "${post.title}".`,
+      ...missing.map((m, i) => (tagged(m.position).length ? `Picture ${i + 1} shows these CARBON products: ${tagged(m.position).join("; ")}.` : "")),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  });
+  for (const m of missing) {
+    const alt = alts.get(m.id);
+    if (!alt) continue;
+    await pool.query(`UPDATE marketing_post_media SET alt_text = $2 WHERE id = $1::uuid AND (alt_text IS NULL OR alt_text = '')`, [m.id, alt]);
+    m.altText = alt;
+  }
+}
+
 async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): Promise<boolean> {
+  // Alt text is a nice-to-have: a failure here never stops the post.
+  await ensureAltTexts(pool, post).catch((e) => console.warn(`[marketing] alt text for ${post.id}: ${e instanceof Error ? e.message : e}`));
   const media: MediaItem[] = post.media.map((m) => ({
     kind: m.kind,
     url: m.url,
     coverUrl: m.coverUrl,
+    altText: m.altText,
     tags: post.tags.filter((t) => t.mediaPosition === m.position).map((t) => ({ productId: t.metaProductId, x: t.x, y: t.y })),
   }));
   const caption = fullCaption(post);

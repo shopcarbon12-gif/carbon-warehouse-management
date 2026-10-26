@@ -416,7 +416,7 @@ export function BulkUploadTab({ active }: { active: boolean }) {
           const res = await fetch("/api/openai/image-alt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl: j.src, itemType: j.itemType }),
+            body: JSON.stringify({ imageUrl: j.src, itemType: j.itemType, matrixId: j.matrixId }),
           });
           const out = (await res.json().catch(() => ({}))) as { altText?: string; alt?: string };
           const alt = (out.altText || out.alt || "").trim();

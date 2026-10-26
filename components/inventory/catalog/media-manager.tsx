@@ -197,7 +197,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
         const r = await fetch("/api/openai/image-alt", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageUrl: m.url }),
+          body: JSON.stringify({ imageUrl: m.url, matrixId }),
         });
         const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
         return { key: m.key, alt: (j.alt || j.altText || "").trim() };
@@ -341,7 +341,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
       const r = await fetch("/api/openai/image-alt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: item.url }),
+        body: JSON.stringify({ imageUrl: item.url, matrixId }),
       });
       const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
       const alt = (j.alt || j.altText || "").trim();
@@ -362,7 +362,7 @@ export function MediaManager({ matrixId, shopifyProductId, variants, canManage }
           const r = await fetch("/api/openai/image-alt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ imageUrl: m.url }),
+            body: JSON.stringify({ imageUrl: m.url, matrixId }),
           });
           const j = (await r.json().catch(() => ({}))) as { alt?: string; altText?: string };
           return { key: m.key, alt: (j.alt || j.altText || "").trim() };

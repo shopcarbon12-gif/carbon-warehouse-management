@@ -69,11 +69,26 @@ export async function discoverMetaAccounts(): Promise<MetaAccount[]> {
 }
 
 export type ProductTag = { productId: string; x: number; y: number };
-export type MediaItem = { kind: "image" | "video"; url: string; coverUrl?: string | null; tags: ProductTag[] };
+export type MediaItem = { kind: "image" | "video"; url: string; coverUrl?: string | null; tags: ProductTag[]; altText?: string | null };
 
 const tagParam = (tags: ProductTag[]) =>
   tags.length ? tags.slice(0, 5).map((t) => ({ product_id: t.productId, x: clamp01(t.x), y: clamp01(t.y) })) : undefined;
 const clamp01 = (n: number) => Math.min(1, Math.max(0, Number(n) || 0.5));
+/** Instagram's custom alt text for a feed picture (screen readers); left out when there is none. */
+const altParam = (m: MediaItem) => (m.altText?.trim() ? m.altText.trim().slice(0, 1000) : undefined);
+
+/** An image container with its alt text; if Instagram refuses the alt_text field, the picture still goes out without it. */
+async function imageContainer(igUserId: string, params: Record<string, unknown>, m: MediaItem): Promise<{ id: string }> {
+  const alt = altParam(m);
+  if (!alt) return graph<{ id: string }>(`${igUserId}/media`, "POST", params);
+  try {
+    return await graph<{ id: string }>(`${igUserId}/media`, "POST", { ...params, alt_text: alt });
+  } catch (e) {
+    if (!(e instanceof MetaPublishError) || !/alt_text|param/i.test(e.message)) throw e;
+    console.warn(`[marketing] Instagram refused alt_text (${e.message}); publishing without it`);
+    return graph<{ id: string }>(`${igUserId}/media`, "POST", params);
+  }
+}
 
 /** Video containers process asynchronously; wait until Instagram says FINISHED. */
 async function waitForContainer(id: string): Promise<void> {
@@ -115,10 +130,10 @@ export async function publishInstagram(igUserId: string, format: string, caption
   } else if (format === "carousel" && media.length > 1) {
     const children: string[] = [];
     for (const m of media.slice(0, 10)) {
-      const c = await graph<{ id: string }>(`${igUserId}/media`, "POST",
+      const c =
         m.kind === "video"
-          ? { media_type: "VIDEO", video_url: m.url, is_carousel_item: true }
-          : { image_url: m.url, is_carousel_item: true, product_tags: tagParam(m.tags) });
+          ? await graph<{ id: string }>(`${igUserId}/media`, "POST", { media_type: "VIDEO", video_url: m.url, is_carousel_item: true })
+          : await imageContainer(igUserId, { image_url: m.url, is_carousel_item: true, product_tags: tagParam(m.tags) }, m);
       if (m.kind === "video") await waitForContainer(c.id);
       children.push(c.id);
     }
@@ -126,7 +141,7 @@ export async function publishInstagram(igUserId: string, format: string, caption
     creationId = c.id;
   } else {
     const m = media[0];
-    const c = await graph<{ id: string }>(`${igUserId}/media`, "POST", { image_url: m.url, caption, product_tags: tagParam(m.tags) });
+    const c = await imageContainer(igUserId, { image_url: m.url, caption, product_tags: tagParam(m.tags) }, m);
     creationId = c.id;
   }
   const pub = await graph<{ id: string }>(`${igUserId}/media_publish`, "POST", { creation_id: creationId });

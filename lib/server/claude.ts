@@ -80,7 +80,9 @@ export async function claudeJson<T>(
 }
 
 /** A content block of a user turn: text, or a picture by URL. */
-export type ClaudeBlock = { type: "text"; text: string } | { type: "image"; source: { type: "url"; url: string } };
+export type ClaudeBlock =
+  | { type: "text"; text: string }
+  | { type: "image"; source: { type: "url"; url: string } | { type: "base64"; media_type: string; data: string } };
 
 /**
  * One system + user turn whose answer must match `schema` (structured

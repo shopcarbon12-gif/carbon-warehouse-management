@@ -1,13 +1,12 @@
 import { withActivity } from "@/lib/server/activity-log";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionFromRequest } from "@/lib/get-session-from-request";
 import { getPool } from "@/lib/db";
 import { requireSessionScopes } from "@/lib/server/api-require-scopes";
 import { SCOPES } from "@/lib/auth/roles";
-import { getOpenAiApiKey } from "@/lib/openaiConfig";
+import { writeAltTexts } from "@/lib/seo/alt-text";
 import {
   assertDataUrlSize,
   fetchRemoteImageBytes,
@@ -23,8 +22,8 @@ function normalizeText(value: unknown) {
 
 function clampAltLength(text: string) {
   const trimmed = text.trim().replace(/\s+/g, " ");
-  if (trimmed.length <= 120) return trimmed;
-  return `${trimmed.slice(0, 117).trimEnd()}...`;
+  if (trimmed.length <= 125) return trimmed;
+  return `${trimmed.slice(0, 122).trimEnd()}...`;
 }
 
 async function toModelImageUrl(rawUrl: string) {
@@ -94,22 +93,13 @@ async function POST_handler(req: NextRequest) {
       return NextResponse.json({ error: "Missing imageUrl or storagePath" }, { status: 400 });
     }
 
-    const apiKey = normalizeText(getOpenAiApiKey());
-    if (!apiKey) {
-      return NextResponse.json({ error: "Missing OPENAI_API_KEY" }, { status: 500 });
+    // The product name lets the alt text follow the store format ("<Name> in <Colour> – <view>").
+    let productName = normalizeText(body?.productTitle);
+    const matrixId = normalizeText(body?.matrixId);
+    if (!productName && /^[0-9a-f-]{36}$/i.test(matrixId)) {
+      const r = await authPool.query<{ description: string | null }>(`SELECT description FROM matrices WHERE id = $1::uuid`, [matrixId]).catch(() => null);
+      productName = normalizeText(r?.rows[0]?.description);
     }
-
-    const client = new OpenAI({ apiKey });
-    const prompt = [
-      "Act as an SEO specialist and accessibility expert.",
-      "Analyze the product image and write optimized alt text based only on what is visually present.",
-      "Do not use the product name.",
-      "Write one natural-sounding sentence (80-120 characters).",
-      "Include relevant descriptive keywords but avoid repetition or stuffing.",
-      'Do not use promotional language like "best", "cheap", or "high quality".',
-      "Return only the alt text.",
-      `Item type context: ${itemType}.`,
-    ].join("\n");
 
     let modelImageUrl = "";
     try {
@@ -120,44 +110,16 @@ async function POST_handler(req: NextRequest) {
         { status: 400 }
       );
     }
-    let rawAlt = "";
-    try {
-      const response = await client.responses.create({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        max_output_tokens: 180,
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: prompt },
-              { type: "input_image", image_url: modelImageUrl || imageUrl, detail: "auto" },
-            ],
-          },
-        ],
-      });
-      rawAlt = normalizeText(response.output_text || "");
-    } catch {
-      rawAlt = "";
-    }
-
-    if (!rawAlt) {
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.2,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: modelImageUrl || imageUrl } },
-            ],
-          },
-        ],
-      });
-      rawAlt = normalizeText(completion.choices?.[0]?.message?.content || "");
-    }
-
+    // One alt-text standard for the shop and Social (lib/seo/alt-text.ts), owner 2026-10-26.
+    const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(modelImageUrl);
+    const alts = await writeAltTexts({
+      kind: "shop",
+      images: [m ? { id: "1", base64: { mediaType: m[1], data: m[2] } } : { id: "1", url: imageUrl }],
+      productName: productName || null,
+      colour: normalizeText(body?.colour) || null,
+      context: `Item type: ${itemType}.`,
+    });
+    const rawAlt = alts.get("1") || "";
     if (!rawAlt) {
       return NextResponse.json({ error: "Alt generation returned empty content." }, { status: 500 });
     }
