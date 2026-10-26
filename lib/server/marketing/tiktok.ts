@@ -149,7 +149,9 @@ export async function publishTikTok(
     });
     publishId = j.data?.publish_id ?? "";
   } else {
-    const photos = media.filter((m) => m.kind === "image").slice(0, 35).map((m) => m.url);
+    // TikTok refuses photos over 1080×1920 (picture_size_check_failed): use the shrunk copy.
+    const photos = media.filter((m) => m.kind === "image").slice(0, 35)
+      .map((m) => m.url.replace(/(\/marketing-media\/[0-9a-f-]{36})\.(jpe?g|png)(\?.*)?$/i, "$1-tiktok.jpg"));
     if (!photos.length) throw new Error("TikTok needs at least one picture");
     const j = await api<{ data?: { publish_id?: string } }>("/post/publish/content/init/", token, {
       media_type: "PHOTO",

@@ -3,16 +3,18 @@
  * of a Social post, served from R2 so Instagram and Facebook can
  * fetch it when the post is published (they need a public URL; our R2 bucket
  * is private). Public (no session): the id is a random UUID per file and only
- * files that belong to a post are served.
+ * files that belong to a post are served. "<id>-tiktok.jpg" is the picture
+ * shrunk to TikTok's photo limit (1080×1920).
  */
 import { getPool } from "@/lib/db";
+import sharp from "sharp";
 import { downloadStorageObject } from "@/lib/storageProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
-const UUID_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(-cover)?(\.(jpg|jpeg|png|mp4))?$/i;
+const UUID_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(-cover|-tiktok)?(\.(jpg|jpeg|png|mp4))?$/i;
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { id } = await params;
@@ -28,13 +30,19 @@ export async function GET(_req: Request, { params }: Ctx) {
   );
   const row = r.rows[0];
   // "<id>-cover.jpg": a Reel's cover picture.
-  const path = m[2] ? row?.cover_storage_path : row?.storage_path;
-  if (!row || !path) return new Response("Not found", { status: 404 });
+  const cover = m[2]?.toLowerCase() === "-cover";
+  const tiktok = m[2]?.toLowerCase() === "-tiktok";
+  const path = cover ? row?.cover_storage_path : row?.storage_path;
+  if (!row || !path || (tiktok && row.kind !== "image")) return new Response("Not found", { status: 404 });
   try {
     const obj = await downloadStorageObject(path);
+    if (tiktok) {
+      const jpg = await sharp(Buffer.from(obj.body)).rotate().resize(1080, 1920, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+      return new Response(new Uint8Array(jpg), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=86400" } });
+    }
     return new Response(obj.body, {
       headers: {
-        "Content-Type": obj.contentType || (row.kind === "video" && !m[2] ? "video/mp4" : "image/jpeg"),
+        "Content-Type": obj.contentType || (row.kind === "video" && !cover ? "video/mp4" : "image/jpeg"),
         "Cache-Control": "public, max-age=86400",
       },
     });
