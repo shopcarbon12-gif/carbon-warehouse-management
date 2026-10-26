@@ -53,14 +53,14 @@ How to answer:
 - caption: the caption with ONLY those problems fixed (no hashtags in it). Keep everything else word for word: the facts, product names, colours, the voice, the line breaks. Never add facts. If there are no issues, return the caption unchanged.
 - hashtags: the fixed list without the # sign (unchanged when they were fine).`;
 
-export async function checkCaption(input: { caption: string; hashtags: string[]; format: string; channels: string[]; campaign?: string | null }): Promise<CaptionCheck> {
+export async function checkCaption(input: { caption: string; hashtags: string[]; format: string; channels: string[]; campaign?: string | null; products?: string[] }): Promise<CaptionCheck> {
   const identity = campaignIdentity(input.campaign);
   const r = await claudeStructured<{ issues: CaptionCheck["issues"]; caption: string; hashtags: string[] }>({
     system: identity ? `${SYSTEM}\n\n${identity}` : SYSTEM,
     content: [
       {
         type: "text",
-        text: `Format: ${input.format}. Channels: ${input.channels.join(" + ") || "instagram + facebook"}.\n\nCAPTION:\n${input.caption}\n\nHASHTAGS: ${input.hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ") || "(none)"}`,
+        text: `Format: ${input.format}. Channels: ${input.channels.join(" + ") || "instagram + facebook"}.${input.products?.length ? `\nCARBON's own products tagged in this post (their names are CARBON product names, never another brand): ${input.products.join("; ")}.` : ""}\n\nCAPTION:\n${input.caption}\n\nHASHTAGS: ${input.hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ") || "(none)"}`,
       },
     ],
     schema: SCHEMA as unknown as Record<string, unknown>,

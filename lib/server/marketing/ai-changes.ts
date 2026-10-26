@@ -122,7 +122,7 @@ export const AI_TELLS = `Never write these (they make a caption read as AI-writt
 
 export const COPY_RULES = `Copy rules (the owner's, always):
 - The brand is written CARBON, in capitals. Never "Carbon Jeans".
-- Never name another brand, shop or designer, and never say where anything is made or comes from.
+- Never name another brand, shop or designer, and never say where anything is made or comes from. CARBON's own product names are not brands, even when they sound like one (e.g. the Celine Sweater): name them freely.
 - Never mention labels, patches or tags on the clothes.
 - Never name a real venue, hotel or business, even if one appears in the picture.
 - Plain, confident English. No exclamation marks unless the note asks for them.
