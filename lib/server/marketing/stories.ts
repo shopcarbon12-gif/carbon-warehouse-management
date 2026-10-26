@@ -49,7 +49,9 @@ export async function makeStories(pool: Pool, tenantId: string, by: string | nul
     }
     const tag = (
       await pool.query<{ meta_product_id: string; label: string; x: number; y: number }>(
-        `SELECT meta_product_id, label, x::float AS x, y::float AS y FROM marketing_post_tags WHERE post_id = $1::uuid AND media_position = 0 ORDER BY id LIMIT 1`,
+        // The main garment: shoes and bags only when nothing else is tagged, then the tag nearest the middle.
+        `SELECT meta_product_id, label, x::float AS x, y::float AS y FROM marketing_post_tags WHERE post_id = $1::uuid AND media_position = 0
+          ORDER BY (label ~* '(heel|sneaker|shoe|boot|sandal|loafer|bag)') ASC, abs(x - 0.5) + abs(y - 0.45) ASC, id LIMIT 1`,
         [f.id],
       )
     ).rows[0];
