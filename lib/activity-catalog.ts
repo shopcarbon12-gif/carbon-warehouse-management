@@ -116,6 +116,7 @@ const ROUTES: Record<string, Entry> = {
   "marketing/results": { module: "Social", label: "Refreshed social results" },
   "marketing/channels/tiktok/callback": { module: "Social", label: "Connected TikTok" },
   "marketing/channels/disconnect": { module: "Social", label: "Disconnected a social account" },
+  "marketing/posts/[id]/tiktok": { module: "Social", label: "Posted to TikTok" },
   "marketing/channels/bluesky": { module: "Social", label: "Connected or disconnected Bluesky" },
   "marketing/ads": { module: "Social", label: "Paused, resumed or re-budgeted an ad campaign" },
   "marketing/posts": { module: "Social", label: "Made a new social post" },

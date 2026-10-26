@@ -121,7 +121,141 @@ async function accessToken(pool: Pool, tenantId: string): Promise<{ token: strin
 
 const PRIVACY_ORDER = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
 
-/** Post a carousel / single picture (TikTok photo post) or a Reel (TikTok video), then wait for TikTok to finish it. */
+export type TikTokCreator = {
+  nickname: string;
+  username: string;
+  avatarUrl: string | null;
+  privacyOptions: string[];
+  commentDisabled: boolean;
+  duetDisabled: boolean;
+  stitchDisabled: boolean;
+  maxVideoSeconds: number | null;
+  /** Unaudited (Sandbox) app: TikTok only takes "Only me" posts. */
+  sandbox: boolean;
+};
+
+/** What TikTok's posting rules make the person choose before every post (Content Sharing Guidelines). */
+export type TikTokChoices = {
+  privacy: string;
+  allowComment: boolean;
+  allowDuet: boolean;
+  allowStitch: boolean;
+  /** "Your brand" → labelled Promotional content. */
+  yourBrand: boolean;
+  /** "Branded content" (paid partnership) → labelled Paid partnership; never "Only me". */
+  brandedContent: boolean;
+};
+
+async function creatorInfo(token: string): Promise<TikTokCreator> {
+  const j = await api<{
+    data?: {
+      creator_nickname?: string; creator_username?: string; creator_avatar_url?: string; privacy_level_options?: string[];
+      comment_disabled?: boolean; duet_disabled?: boolean; stitch_disabled?: boolean; max_video_post_duration_sec?: number;
+    };
+  }>("/post/publish/creator_info/query/", token, {});
+  const d = j.data ?? {};
+  return {
+    nickname: d.creator_nickname ?? "",
+    username: d.creator_username ?? "",
+    avatarUrl: d.creator_avatar_url ?? null,
+    privacyOptions: d.privacy_level_options ?? ["SELF_ONLY"],
+    commentDisabled: Boolean(d.comment_disabled),
+    duetDisabled: Boolean(d.duet_disabled),
+    stitchDisabled: Boolean(d.stitch_disabled),
+    maxVideoSeconds: d.max_video_post_duration_sec ?? null,
+    sandbox: process.env.TIKTOK_MODE === "sandbox",
+  };
+}
+
+export async function tiktokCreator(pool: Pool, tenantId: string): Promise<TikTokCreator> {
+  return creatorInfo((await accessToken(pool, tenantId)).token);
+}
+
+/** Hand the post to TikTok (it then downloads and processes the media); returns TikTok's publish id. */
+export async function startTikTokPost(
+  pool: Pool,
+  tenantId: string,
+  format: string,
+  caption: string,
+  hashtags: string[],
+  media: { kind: string; url: string }[],
+  choices: TikTokChoices,
+): Promise<{ publishId: string; creator: TikTokCreator }> {
+  const { token } = await accessToken(pool, tenantId);
+  const creator = await creatorInfo(token);
+  if (!creator.privacyOptions.includes(choices.privacy)) throw new Error("TikTok does not offer that privacy setting for this account");
+  if (creator.sandbox && choices.privacy !== "SELF_ONLY") throw new Error("Until TikTok reviews the app, posts can only be \"Only me\"");
+  if (choices.brandedContent && choices.privacy === "SELF_ONLY") throw new Error("Branded content cannot be private");
+  const tags = hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ");
+  const text = `${caption.trim()}${tags ? `\n\n${tags}` : ""}`;
+  const brand = { brand_organic_toggle: choices.yourBrand, brand_content_toggle: choices.brandedContent };
+  const video = media.find((m) => m.kind === "video");
+  let publishId: string;
+  if (format === "reel" && video) {
+    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/video/init/", token, {
+      post_info: {
+        title: [...text].slice(0, 2200).join(""),
+        privacy_level: choices.privacy,
+        disable_comment: creator.commentDisabled || !choices.allowComment,
+        disable_duet: creator.duetDisabled || !choices.allowDuet,
+        disable_stitch: creator.stitchDisabled || !choices.allowStitch,
+        ...brand,
+      },
+      source_info: { source: "PULL_FROM_URL", video_url: video.url },
+    });
+    publishId = j.data?.publish_id ?? "";
+  } else {
+    // TikTok refuses photos over 1080×1920 (picture_size_check_failed): use the shrunk copy.
+    const photos = media.filter((m) => m.kind === "image").slice(0, 35)
+      .map((m) => m.url.replace(/(\/marketing-media\/[0-9a-f-]{36})\.(jpe?g|png)(\?.*)?$/i, "$1-tiktok.jpg"));
+    if (!photos.length) throw new Error("TikTok needs at least one picture");
+    // Instagram's first line works as TikTok's photo title (90 characters).
+    const title = [...caption.trim().split("\n")[0]].slice(0, 90).join("");
+    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/content/init/", token, {
+      media_type: "PHOTO",
+      post_mode: "DIRECT_POST",
+      post_info: {
+        title,
+        description: [...text].slice(0, 4000).join(""),
+        privacy_level: choices.privacy,
+        disable_comment: creator.commentDisabled || !choices.allowComment,
+        auto_add_music: true,
+        ...brand,
+      },
+      source_info: { source: "PULL_FROM_URL", photo_images: photos, photo_cover_index: 0 },
+    });
+    publishId = j.data?.publish_id ?? "";
+  }
+  if (!publishId) throw new Error("TikTok did not accept the post");
+  return { publishId, creator };
+}
+
+/** Where TikTok is with a post: processing, done (with the post's link when public) or failed. */
+export async function tiktokPostStatus(
+  pool: Pool,
+  tenantId: string,
+  publishId: string,
+  format: string,
+  username: string,
+): Promise<{ state: "processing" | "published" | "failed"; error: string | null; remoteId: string; permalink: string | null }> {
+  const { token } = await accessToken(pool, tenantId);
+  const s = await api<{ data?: { status?: string; fail_reason?: string; publicaly_available_post_id?: (string | number)[] } }>(
+    "/post/publish/status/fetch/", token, { publish_id: publishId },
+  );
+  const st = s.data?.status;
+  const postId = s.data?.publicaly_available_post_id?.[0];
+  if (st === "FAILED") return { state: "failed", error: `TikTok could not post it: ${s.data?.fail_reason ?? "unknown reason"}`, remoteId: publishId, permalink: null };
+  if (st === "PUBLISH_COMPLETE")
+    return {
+      state: "published",
+      error: null,
+      remoteId: String(postId ?? publishId),
+      permalink: postId && username ? `https://www.tiktok.com/@${username}/${format === "reel" ? "video" : "photo"}/${postId}` : null,
+    };
+  return { state: "processing", error: null, remoteId: publishId, permalink: null };
+}
+
+/** Scheduled posts (the calendar): the most public setting TikTok allows, comments on; then wait for TikTok to finish it. */
 export async function publishTikTok(
   pool: Pool,
   tenantId: string,
@@ -131,52 +265,18 @@ export async function publishTikTok(
   media: { kind: string; url: string }[],
 ): Promise<{ remoteId: string; permalink: string | null }> {
   const { token } = await accessToken(pool, tenantId);
-  const info = await api<{ data?: { privacy_level_options?: string[]; creator_username?: string } }>("/post/publish/creator_info/query/", token, {});
-  const options = info.data?.privacy_level_options ?? ["SELF_ONLY"];
+  const info = await creatorInfo(token);
   // A Sandbox (unaudited) app may only post privately, even when TikTok offers more.
-  const privacy = process.env.TIKTOK_MODE === "sandbox" ? "SELF_ONLY" : PRIVACY_ORDER.find((p) => options.includes(p)) ?? options[0];
-  const handle = info.data?.creator_username;
-  const tags = hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ");
-  const text = `${caption.trim()}${tags ? `\n\n${tags}` : ""}`;
-  // Instagram's first line works as TikTok's photo title (90 characters).
-  const title = [...caption.trim().split("\n")[0]].slice(0, 90).join("");
-  let publishId: string;
-  const video = media.find((m) => m.kind === "video");
-  if (format === "reel" && video) {
-    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/video/init/", token, {
-      post_info: { title: [...text].slice(0, 2200).join(""), privacy_level: privacy, disable_comment: false, disable_duet: false, disable_stitch: false },
-      source_info: { source: "PULL_FROM_URL", video_url: video.url },
-    });
-    publishId = j.data?.publish_id ?? "";
-  } else {
-    // TikTok refuses photos over 1080×1920 (picture_size_check_failed): use the shrunk copy.
-    const photos = media.filter((m) => m.kind === "image").slice(0, 35)
-      .map((m) => m.url.replace(/(\/marketing-media\/[0-9a-f-]{36})\.(jpe?g|png)(\?.*)?$/i, "$1-tiktok.jpg"));
-    if (!photos.length) throw new Error("TikTok needs at least one picture");
-    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/content/init/", token, {
-      media_type: "PHOTO",
-      post_mode: "DIRECT_POST",
-      post_info: { title, description: [...text].slice(0, 4000).join(""), privacy_level: privacy, disable_comment: false, auto_add_music: true, brand_organic_toggle: true },
-      source_info: { source: "PULL_FROM_URL", photo_images: photos, photo_cover_index: 0 },
-    });
-    publishId = j.data?.publish_id ?? "";
-  }
-  if (!publishId) throw new Error("TikTok did not accept the post");
+  const privacy = info.sandbox ? "SELF_ONLY" : PRIVACY_ORDER.find((p) => info.privacyOptions.includes(p)) ?? info.privacyOptions[0];
+  const { publishId } = await startTikTokPost(pool, tenantId, format, caption, hashtags, media, {
+    privacy, allowComment: true, allowDuet: true, allowStitch: true, yourBrand: true, brandedContent: false,
+  });
   // TikTok downloads and processes the media; wait for the outcome (up to ~5 minutes).
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 10_000));
-    const s = await api<{ data?: { status?: string; fail_reason?: string; publicaly_available_post_id?: (string | number)[] } }>(
-      "/post/publish/status/fetch/", token, { publish_id: publishId },
-    );
-    const st = s.data?.status;
-    if (st === "PUBLISH_COMPLETE") {
-      const postId = s.data?.publicaly_available_post_id?.[0];
-      return {
-        remoteId: String(postId ?? publishId),
-        permalink: postId && handle ? `https://www.tiktok.com/@${handle}/${format === "reel" ? "video" : "photo"}/${postId}` : null,
-      };
-    }
-    if (st === "FAILED") throw new Error(`TikTok could not post it: ${s.data?.fail_reason ?? "unknown reason"}`);
+    const s = await tiktokPostStatus(pool, tenantId, publishId, format, info.username);
+    if (s.state === "published") return { remoteId: s.remoteId, permalink: s.permalink };
+    if (s.state === "failed") throw new Error(s.error ?? "TikTok could not post it");
   }
   return { remoteId: publishId, permalink: null };
 }

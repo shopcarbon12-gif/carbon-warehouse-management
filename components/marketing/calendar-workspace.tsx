@@ -19,12 +19,14 @@ import {
   STATUS_TONE,
   type MarketingPost,
 } from "./marketing-shared";
+import { TikTokPostBox } from "./tiktok-post-box";
 
 /**
  * Social → Calendar. Every planned post by day; open one to check the
  * pictures, caption, time, channels and Instagram product tags, then Approve
  * it (or ask for changes). Approval is per post. Nothing publishes while the
  * publish switch is off, and an edit after approval needs a new approval.
+ * "Post to TikTok…" sends one post to TikTok right away (tiktok-post-box.tsx).
  */
 
 type Overview = { settings: { publishEnabled: boolean; updatedAt: string | null; updatedBy: string | null }; counts: Record<string, number> };
@@ -619,6 +621,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               ))}
             </div>
           )}
+
+          {post.media.length > 0 && <TikTokPostBox post={post} caption={caption} hashtags={tagList} onDone={onSaved} />}
 
           {err && <p className="text-xs text-[var(--wms-status-danger-fg)]">{err}</p>}
 
