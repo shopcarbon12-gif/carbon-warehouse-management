@@ -143,7 +143,8 @@ async function pageToken(pageId: string): Promise<string> {
 /** Publish one post to a Facebook page. Facebook links are clickable, so the shop link goes in the text. */
 export async function publishFacebook(pageId: string, format: string, message: string, media: MediaItem[], link: string | null): Promise<PublishResult> {
   const tok = await pageToken(pageId);
-  const text = link ? `${message}\n\n${link}` : message;
+  // Facebook has no "link in bio": the shop link goes right after the call to action instead.
+  const text = link ? `${message.replace(/,?\s*(?:tap the |via the )?link in (?:our |the )?bio\.?/gi, ".").replace(/\.\./g, ".")}\n\n${link}` : message;
   let id: string;
   const video = media.find((m) => m.kind === "video");
   if (format === "story") {

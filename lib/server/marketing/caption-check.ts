@@ -45,7 +45,7 @@ ${COPY_RULES}
 Also check:
 - The first 125 characters must say something concrete about the clothes or the moment (Instagram cuts the rest behind "more").
 - One plain call to action at most.
-- Facebook gets the same caption; Bluesky and TikTok may shorten it, so the opening sentence must work on its own.
+- Facebook gets the same caption; Bluesky and TikTok may shorten it, so the opening sentence must work on its own. "link in bio" is fine: on Facebook it is replaced by the shop link automatically, so never flag it.
 - Hashtags: 3 to 5, no # sign, no spaces, relevant to the pictures and to what shoppers search. CARBON's own tag counts as one.
 
 How to answer:
