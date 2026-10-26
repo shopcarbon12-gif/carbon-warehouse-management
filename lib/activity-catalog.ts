@@ -114,6 +114,7 @@ const ROUTES: Record<string, Entry> = {
   "marketing/channels/sync": { module: "Social", label: "Synced social accounts" },
   "marketing/best-times": { module: "Social", label: "Refreshed best posting times" },
   "marketing/results": { module: "Social", label: "Refreshed social results" },
+  "marketing/channels/disconnect": { module: "Social", label: "Disconnected a social account" },
   "marketing/channels/bluesky": { module: "Social", label: "Connected or disconnected Bluesky" },
   "marketing/ads": { module: "Social", label: "Paused, resumed or re-budgeted an ad campaign" },
   "marketing/posts": { module: "Social", label: "Made a new social post" },

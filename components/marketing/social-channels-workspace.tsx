@@ -45,6 +45,21 @@ export function SocialChannelsWorkspace() {
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [bsky, setBsky] = useState({ handle: "", appPassword: "" });
 
+  async function disconnect(provider: string, accountId: string, name: string) {
+    if (!window.confirm(`Disconnect ${name}? Social stops posting there until you connect it again.`)) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await send("/api/marketing/channels/disconnect", "POST", { provider, accountId });
+      setMsg({ text: `${name} disconnected.${provider === "instagram" || provider === "facebook" ? " Press “Sync Meta accounts” to connect it again." : ""}` });
+      await mutate();
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Something went wrong", err: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function bluesky(connect: boolean) {
     setBusy(true);
     setMsg(null);
@@ -112,10 +127,19 @@ export function SocialChannelsWorkspace() {
                       <span className={`font-mono text-[0.66rem] uppercase ${tone}`}>{state}</span>
                     </div>
                     {p.accounts.map((a) => (
-                      <p key={a.accountId} className="mt-1 text-xs text-[var(--wms-fg)]">
-                        {a.name} <span className="font-mono text-[0.62rem] text-[var(--wms-muted)]">({a.accountId})</span>
-                        {a.lastError && <span className="block text-[var(--wms-status-danger-fg)]">Last error: {a.lastError}</span>}
-                      </p>
+                      <div key={a.accountId} className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--wms-fg)]">
+                        <p className={a.status === "connected" ? "" : "text-[var(--wms-muted)] line-through"}>
+                          {a.name} <span className="font-mono text-[0.62rem] text-[var(--wms-muted)]">({a.accountId})</span>
+                          {a.lastError && <span className="block text-[var(--wms-status-danger-fg)] no-underline">Last error: {a.lastError}</span>}
+                        </p>
+                        {a.status === "connected" && p.id !== "bluesky" ? (
+                          <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy} onClick={() => void disconnect(p.id, a.accountId, a.name)}>
+                            Disconnect
+                          </button>
+                        ) : a.status !== "connected" ? (
+                          <span className="text-[0.66rem] text-[var(--wms-muted)]">Disconnected</span>
+                        ) : null}
+                      </div>
                     ))}
                     {p.id === "bluesky" &&
                       (connected ? (
