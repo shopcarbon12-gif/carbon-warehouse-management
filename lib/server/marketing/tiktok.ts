@@ -131,9 +131,11 @@ export async function publishTikTok(
   media: { kind: string; url: string }[],
 ): Promise<{ remoteId: string; permalink: string | null }> {
   const { token } = await accessToken(pool, tenantId);
-  const info = await api<{ data?: { privacy_level_options?: string[]; max_video_post_duration_sec?: number } }>("/post/publish/creator_info/query/", token, {});
+  const info = await api<{ data?: { privacy_level_options?: string[]; creator_username?: string } }>("/post/publish/creator_info/query/", token, {});
   const options = info.data?.privacy_level_options ?? ["SELF_ONLY"];
-  const privacy = PRIVACY_ORDER.find((p) => options.includes(p)) ?? options[0];
+  // A Sandbox (unaudited) app may only post privately, even when TikTok offers more.
+  const privacy = process.env.TIKTOK_MODE === "sandbox" ? "SELF_ONLY" : PRIVACY_ORDER.find((p) => options.includes(p)) ?? options[0];
+  const handle = info.data?.creator_username;
   const tags = hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ");
   const text = `${caption.trim()}${tags ? `\n\n${tags}` : ""}`;
   // Instagram's first line works as TikTok's photo title (90 characters).
@@ -167,8 +169,10 @@ export async function publishTikTok(
     const st = s.data?.status;
     if (st === "PUBLISH_COMPLETE") {
       const postId = s.data?.publicaly_available_post_id?.[0];
-      // Without the username TikTok's /@user/ path is unknown; its short form opens the post.
-      return { remoteId: String(postId ?? publishId), permalink: postId ? `https://www.tiktok.com/@/video/${postId}` : null };
+      return {
+        remoteId: String(postId ?? publishId),
+        permalink: postId && handle ? `https://www.tiktok.com/@${handle}/${format === "reel" ? "video" : "photo"}/${postId}` : null,
+      };
     }
     if (st === "FAILED") throw new Error(`TikTok could not post it: ${s.data?.fail_reason ?? "unknown reason"}`);
   }
