@@ -64,7 +64,13 @@ const files = await gql(
 );
 console.log(`theme: ${files.theme.name} (${files.theme.role})`);
 const remote = files.theme.files.nodes[0]?.body?.content ?? "";
-const state = md5(remote) === md5(BEFORE) ? "original" : md5(remote) === md5(AFTER) ? "deployed" : "changed";
+// First upload (45dd1f3a) matched JEANS as a page link; the menu item is a typed address, so it never fired.
+const FIRST_TRY_MD5 = "5407db1516097203d3643b112bbcfbb2";
+const state =
+  md5(remote) === md5(BEFORE) ? "original"
+  : md5(remote) === md5(AFTER) ? "deployed"
+  : md5(remote) === FIRST_TRY_MD5 ? "first try"
+  : "changed";
 console.log(`${FILE}: ${state}`);
 if (state === "changed") {
   console.error("The theme's mobile menu is neither the backed-up original nor this version — not overwriting it.");

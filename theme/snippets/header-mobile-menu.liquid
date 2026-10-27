@@ -61,7 +61,11 @@
       					# page (/pages/jeans, where you pick men or women) instead of opening the
       					# MEN / WOMEN sub-menu. This snippet is only the mobile drawer; the desktop
       					# menu keeps its dropdown.
-      					if link.type == 'page_link' and link.object.handle == 'jeans'
+      					# JEANS is a typed address (/pages/jeans, or /es/pages/jeans in another
+      					# language) in the Shopify menu, not a page link, so match the address.
+      					assign link_path = link.url | split: '?' | first
+      					assign link_tail = link_path | split: '/' | last
+      					if link_tail == 'jeans' and link_path contains '/pages/'
       						assign has_sub_menu = false
       						assign has_mega_menu = false
       					endif
