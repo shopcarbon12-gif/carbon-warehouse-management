@@ -1,7 +1,7 @@
 # Carbon WMS — background sync worker (no HTTP). Coolify: second application, same repo/branch, Dockerfile = Dockerfile.worker.
 # Drains `sync_jobs` (lightspeed_pull / lightspeed_catalog queued rows). Same DATABASE_URL + Lightspeed env as the web app.
 FROM node:20-alpine
-RUN apk add --no-cache libc6-compat tzdata
+RUN apk add --no-cache libc6-compat tzdata ffmpeg
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

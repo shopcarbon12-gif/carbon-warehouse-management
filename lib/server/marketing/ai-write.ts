@@ -13,6 +13,7 @@ import { claudeStructured, type ClaudeBlock } from "@/lib/server/claude";
 import { COPY_RULES, TAG_PLACEMENT, pickCatalogProduct } from "./ai-changes";
 import { searchCatalogProducts } from "./meta";
 import { campaignIdentity } from "./campaign-identity";
+import { videoFrames } from "./video-frames";
 import type { MarketingPost } from "./store";
 
 export type WrittenPost = {
@@ -60,9 +61,24 @@ export async function writePost(pool: Pool, tenantId: string, post: MarketingPos
   );
   const content: ClaudeBlock[] = [];
   for (const m of post.media) {
-    const still = m.kind === "video" ? m.coverUrl : m.url;
-    content.push({ type: "text", text: `Picture ${m.position}${m.kind === "video" ? " (a video — its cover)" : ""}:` });
-    if (still) content.push({ type: "image", source: { type: "url", url: still } });
+    if (m.kind === "video") {
+      // The video itself, not just its cover: the cover can show a look that is not in it.
+      const frames = await videoFrames(m.url);
+      if (frames.length) {
+        content.push({ type: "text", text: `Picture ${m.position} is a VIDEO. ${frames.length} frames from start to end — write about these:` });
+        for (const f of frames) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: f } });
+        if (m.coverUrl) {
+          content.push({ type: "text", text: `The video's cover picture (only the thumbnail; if it shows a look that is not in the frames above, do not write about it):` });
+          content.push({ type: "image", source: { type: "url", url: m.coverUrl } });
+        }
+      } else {
+        content.push({ type: "text", text: `Picture ${m.position} (a video — its cover):` });
+        if (m.coverUrl) content.push({ type: "image", source: { type: "url", url: m.coverUrl } });
+      }
+      continue;
+    }
+    content.push({ type: "text", text: `Picture ${m.position}:` });
+    content.push({ type: "image", source: { type: "url", url: m.url } });
   }
   content.push({
     type: "text",
@@ -81,16 +97,21 @@ Fields:
 - title: a short working name for the calendar (3–6 words).
 - caption: the caption without hashtags. Open with the clothes or the moment, not "Introducing". Name the pieces by their colour and cut as they look in the picture. End with one plain call to action (the shop link is in the bio). Under 900 characters.
 - hashtags: 3 to 5 (Instagram allows 5), WITHOUT the # sign, mixing CARBON's own (e.g. CARBON, TheArtOfArriving when it fits) with ones shoppers search.
-- products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. ${TAG_PLACEMENT} At most 5 per picture.`;
+- products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. ${TAG_PLACEMENT} At most 5 per picture.
+
+For a Reel (a video): write about what the frames show from start to end, the looks the viewer will actually see. The cover is only the thumbnail. For products, pick the 5 pieces that are clearest and on screen longest, and give the video's picture number.`;
   const identity = campaignIdentity(post.campaign);
   const d = await claudeStructured<Draft>({ system: identity ? `${system}\n\n${identity}` : system, content, schema: SCHEMA as unknown as Record<string, unknown>, effort: "high" });
 
   const tags: WrittenPost["tags"] = [];
   const notFound: string[] = [];
   const clamp = (v: number) => Math.round(Math.max(0, Math.min(1, Number(v) || 0.5)) * 100) / 100;
+  // A Reel is tagged on its video (Instagram takes up to 5 there, without positions).
+  const reelVideo = post.format === "reel" ? post.media.find((m) => m.kind === "video")?.position : undefined;
   for (const p of d.products) {
+    if (reelVideo != null) p.media_position = reelVideo;
     if (tags.filter((t) => t.mediaPosition === p.media_position).length >= 5) continue;
-    if (!post.media.some((m) => m.position === p.media_position && m.kind === "image")) continue;
+    if (!post.media.some((m) => m.position === p.media_position && (m.kind === "image" || m.position === reelVideo))) continue;
     const hit = pickCatalogProduct(await searchCatalogProducts(p.product_name).catch(() => []), p.product_name, p.colour);
     if (!hit) {
       notFound.push(`${p.product_name}${p.colour ? ` (${p.colour})` : ""}`);

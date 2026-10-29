@@ -28,6 +28,7 @@ import { getOpenAiApiKey } from "@/lib/openaiConfig";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { listPosts, PUBLISHABLE, type MarketingPost } from "./store";
 import { searchCatalogProducts, type CatalogProduct } from "./meta";
+import { videoFrames } from "./video-frames";
 import { campaignIdentity } from "./campaign-identity";
 
 const ET = "America/New_York";
@@ -268,7 +269,10 @@ async function processChange(pool: Pool, tenantId: string, id: string, log: (m: 
     if (t) { t.x = clamp(mv.x); t.y = clamp(mv.y); }
   }
   for (const a of plan.add_tags) {
-    if (!media.rows.some((m) => m.position === a.media_position && m.kind === "image")) {
+    // A Reel carries its tags on the video (no positions); anything else only on photos.
+    const reelVideo = post.format === "reel" ? media.rows.find((m) => m.kind === "video")?.position : undefined;
+    if (reelVideo != null) a.media_position = reelVideo;
+    if (!media.rows.some((m) => m.position === a.media_position && (m.kind === "image" || m.position === reelVideo))) {
       cannot.push(`${a.product_name}: picture ${a.media_position + 1} is not a photo, so it cannot carry a tag.`);
       continue;
     }
@@ -356,10 +360,19 @@ export async function planChange(
   const media = { rows: mediaRows };
   const content: ClaudeBlock[] = [];
   for (const m of media.rows) {
-    const still = m.kind === "video" ? m.cover_url : m.url;
-    content.push({ type: "text", text: `Picture ${m.position}${m.kind === "video" ? " (a video — its cover below)" : ""}:` });
-    if (still) content.push({ type: "image", source: { type: "url", url: still } });
-    else content.push({ type: "text", text: "(a video with no still picture)" });
+    if (m.kind === "video") {
+      // The video itself (frames start to end), then its cover: the two can show different looks.
+      const frames = await videoFrames(m.url);
+      content.push({ type: "text", text: frames.length ? `Picture ${m.position} is a VIDEO. ${frames.length} frames from start to end:` : `Picture ${m.position} (a video — its cover below):` });
+      for (const f of frames) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: f } });
+      if (m.cover_url) {
+        if (frames.length) content.push({ type: "text", text: "Its cover picture (the thumbnail):" });
+        content.push({ type: "image", source: { type: "url", url: m.cover_url } });
+      } else if (!frames.length) content.push({ type: "text", text: "(a video with no still picture)" });
+      continue;
+    }
+    content.push({ type: "text", text: `Picture ${m.position}:` });
+    content.push({ type: "image", source: { type: "url", url: m.url } });
   }
   const today = new Date().toLocaleString("en-US", { timeZone: ET, weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
   content.push({
