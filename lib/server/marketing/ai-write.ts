@@ -87,6 +87,9 @@ export async function writePost(pool: Pool, tenantId: string, post: MarketingPos
             string_agg(DISTINCT cs.color_code, ', ') AS line
        FROM matrices m JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = FALSE
       WHERE m.shopify_product_id IS NOT NULL AND m.shopify_sync_status = 'published'
+        -- On sale: a Shopify draft has no shop photo (Eugene Puffer Coat), and nothing sold out.
+        AND m.shopify_featured_image_url IS NOT NULL
+        AND EXISTS (SELECT 1 FROM items i JOIN custom_skus c2 ON c2.id = i.custom_sku_id WHERE c2.matrix_id = m.id AND i.status = 'in-stock')
       GROUP BY m.id, m.description, m.subcategory_1, m.category
       ORDER BY m.description`,
   );
