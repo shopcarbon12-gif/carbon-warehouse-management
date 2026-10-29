@@ -425,6 +425,35 @@ export async function setInventoryQuantitiesBulk(
   return errors.length ? { ok: false, error: errors.join("; ") } : { ok: true };
 }
 
+/**
+ * Read back the "available" quantity of each inventory item at one location,
+ * so a publish can prove the stock it sent actually landed. Items Shopify does
+ * not know (or that are not stocked at the location) come back as null.
+ */
+export async function readAvailableQuantities(
+  ctx: ShopCtx,
+  inventoryItemIds: string[],
+  locationId: string,
+): Promise<{ ok: true; quantities: Map<string, number | null> } | { ok: false; error: string }> {
+  const quantities = new Map<string, number | null>();
+  for (let i = 0; i < inventoryItemIds.length; i += 100) {
+    const ids = inventoryItemIds.slice(i, i + 100);
+    const res = await gql<{
+      nodes?: Array<{ id: string; inventoryLevel?: { quantities?: Array<{ name: string; quantity: number }> } | null } | null>;
+    }>(
+      ctx,
+      `query($ids: [ID!]!, $loc: ID!) { nodes(ids: $ids) { ... on InventoryItem { id inventoryLevel(locationId: $loc) { quantities(names: ["available"]) { name quantity } } } } }`,
+      { ids, loc: locationId },
+    );
+    if (!res.data?.nodes) return { ok: false, error: "could not read the stock back from Shopify" };
+    ids.forEach((id, k) => {
+      const q = res.data!.nodes![k]?.inventoryLevel?.quantities?.find((x) => x.name === "available");
+      quantities.set(id, q ? q.quantity : null);
+    });
+  }
+  return { ok: true, quantities };
+}
+
 export type StagedFile = { filename: string; mimeType: string; bytes: Uint8Array };
 export type StagedResult = { ok: true; resourceUrl: string } | { ok: false; error: string };
 

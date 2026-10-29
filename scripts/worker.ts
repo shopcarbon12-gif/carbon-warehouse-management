@@ -116,6 +116,14 @@ async function maybeEnqueueInventoryAutoSync(pool: Pool): Promise<void> {
     return;
   }
   try {
+    // A run cut off by a worker restart stays 'running' forever and blocked every
+    // later sync (2026-10-26 → 10-29: no stock reached Shopify for 3 days). A run
+    // that has not reported progress for 20 minutes is dead — close it.
+    await pool.query(
+      `UPDATE sync_jobs SET status = 'failed', finished_at = now(),
+              progress_message = COALESCE(progress_message || ' — ', '') || 'stalled (no progress for 20 min, worker restarted?)'
+        WHERE job_type = 'shopify_inventory_sync' AND status = 'running' AND updated_at < now() - interval '20 minutes'`,
+    );
     const active = await pool.query(
       `SELECT 1 FROM sync_jobs WHERE job_type = 'shopify_inventory_sync' AND status IN ('queued','running') LIMIT 1`,
     );

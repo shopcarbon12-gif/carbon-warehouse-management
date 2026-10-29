@@ -17,6 +17,7 @@ import {
   productSet,
   primaryLocationId,
   setInventoryQuantitiesBulk,
+  readAvailableQuantities,
   salesChannelPublicationIds,
   publishToPublication,
   setMetafields,
@@ -185,10 +186,28 @@ export async function pushMatrixToShopify(
       WHERE id = $1::uuid`,
     [matrixId, set.productId],
   );
+  // Problems that mean the shop does NOT match the WMS: the job fails on these.
+  const problems: string[] = [];
   for (const v of variants) {
     const sv = bySku.get((v.sku || "").trim().toLowerCase());
     if (!sv) {
-      warnings.push(`Variant ${v.sku} not returned by Shopify.`);
+      problems.push(`${v.sku} (${[v.color_code, v.size].filter(Boolean).join(" ")}) is not on Shopify`);
+      continue;
+    }
+    // An archived duplicate row can still hold this Shopify variant (Ride Blazer
+    // GREEN, 2026-10-29): free it, or the unique index crashes the publish and
+    // stock keeps going to the dead variant the active row points at.
+    await pool.query(
+      `UPDATE custom_skus SET shopify_variant_id = NULL, shopify_inventory_item_id = NULL
+        WHERE shopify_variant_id = $2 AND id <> $1::uuid AND archived = TRUE`,
+      [v.id, sv.id],
+    );
+    const holder = await pool.query<{ sku: string }>(
+      `SELECT sku FROM custom_skus WHERE shopify_variant_id = $2 AND id <> $1::uuid LIMIT 1`,
+      [v.id, sv.id],
+    );
+    if (holder.rows[0]) {
+      problems.push(`${v.sku}: its Shopify variant is linked to another active row (${holder.rows[0].sku})`);
       continue;
     }
     await pool.query(
@@ -236,10 +255,25 @@ export async function pushMatrixToShopify(
     }
     if (quantities.length) {
       const r = await setInventoryQuantitiesBulk(ctx, quantities);
-      if (!r.ok) warnings.push(`Inventory: ${r.error}`);
+      if (!r.ok) problems.push(`Stock: ${r.error}`);
+      // Check: read every size back from Shopify and compare with the WMS count.
+      const back = await readAvailableQuantities(ctx, quantities.map((q) => q.inventoryItemId), locId);
+      if (!back.ok) {
+        problems.push(`Stock: ${back.error}`);
+      } else {
+        for (const v of variants) {
+          const invId = bySku.get((v.sku || "").trim().toLowerCase())?.inventoryItem?.id;
+          if (!invId) continue;
+          const want = onHand.get(v.id) || 0;
+          const got = back.quantities.get(invId);
+          if (got !== want) {
+            problems.push(`${[v.color_code, v.size].filter(Boolean).join(" ") || v.sku}: CarbonWMS ${want}, Shopify ${got ?? "not stocked"}`);
+          }
+        }
+      }
     }
   } else {
-    warnings.push("No Shopify location found — inventory not set.");
+    problems.push("No Shopify location found — stock not set.");
   }
 
   // ---- publish to every sales channel ----------------------------------
@@ -252,6 +286,12 @@ export async function pushMatrixToShopify(
     if (!r.ok) warnings.push(`Publish: ${r.error}`);
   } else {
     warnings.push("Online Store publication not found — product is ACTIVE but not published to storefront.");
+  }
+
+  if (problems.length) {
+    const msg = `Shopify does not match CarbonWMS — ${problems.join("; ")}`;
+    await setStatus(pool, matrixId, "error", [msg, ...warnings].join("; "));
+    return { ok: false, status: "error", productId: set.productId, message: msg, warnings };
   }
 
   if (warnings.length) {
@@ -325,7 +365,7 @@ export async function executeShopifyProductPush(pool: Pool, jobId: string): Prom
     const result = await pushMatrixToShopify(pool, matrixId, locationId);
     const status = result.ok ? "completed" : "failed";
     const msg = result.ok
-      ? `${result.message}${result.warnings.length ? " (" + result.warnings.length + " warnings)" : ""}`
+      ? `${result.message}${result.warnings.length ? " Warnings: " + result.warnings.join("; ") : ""}`
       : `${result.status}: ${result.message}`;
     await pool.query(
       `UPDATE sync_jobs SET status = $2, progress_message = $3, finished_at = now(), progress_pct = 100 WHERE id = $1::uuid`,

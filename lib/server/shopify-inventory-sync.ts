@@ -24,6 +24,7 @@ import {
 
 type Row = {
   id: string;
+  sku: string;
   inv: string;
   last: number | null;
   qty: number;
@@ -32,9 +33,10 @@ type Row = {
 async function selectRows(pool: Pool, full: boolean): Promise<Row[]> {
   // WMS on-hand: RFID items = live in-stock EPC count; MANUAL (non-RFID) items =
   // their manual_item_qty set-up quantity. Single-location store.
-  const r = await pool.query<{ id: string; inv: string; last: number | null; qty: number }>(
-    `SELECT id, inv, last, qty FROM (
+  const r = await pool.query<Row>(
+    `SELECT id, sku, inv, last, qty FROM (
        SELECT cs.id::text AS id,
+              cs.sku,
               cs.shopify_inventory_item_id AS inv,
               cs.shopify_qty_synced AS last,
               CASE WHEN COALESCE(m.is_manual_only, FALSE)
@@ -94,17 +96,23 @@ export async function syncShopifyInventory(
   const rows = await selectRows(pool, opts.full);
   let pushed = 0;
   let failed = 0;
+  const failedSkus: string[] = [];
   for (let i = 0; i < rows.length; i += 1) {
+    let ok = false;
     try {
-      if (await pushOne(pool, ctx, locationId, rows[i])) pushed += 1;
-      else failed += 1;
+      ok = await pushOne(pool, ctx, locationId, rows[i]);
     } catch {
+      ok = false;
+    }
+    if (ok) pushed += 1;
+    else {
       failed += 1;
+      failedSkus.push(rows[i].sku);
     }
     if (opts.jobId && (i + 1) % 25 === 0) {
       await pool.query(
         `UPDATE sync_jobs SET progress_done = $2, progress_total = $3, progress_pct = $4,
-                progress_message = $5 WHERE id = $1::uuid`,
+                progress_message = $5, updated_at = now() WHERE id = $1::uuid`,
         [opts.jobId, i + 1, rows.length, Math.round(((i + 1) / Math.max(1, rows.length)) * 100), `synced ${pushed} / ${i + 1}`],
       );
     }
@@ -130,7 +138,7 @@ export async function syncShopifyInventory(
     total: rows.length,
     pushed,
     failed,
-    message: `Synced ${pushed} variant(s) to Shopify${failed ? `, ${failed} failed` : ""}${opts.full ? "" : " (delta)"}.${surplusNote}`,
+    message: `Synced ${pushed} variant(s) to Shopify${failed ? `, ${failed} failed (${failedSkus.slice(0, 15).join(", ")}${failedSkus.length > 15 ? ", …" : ""})` : ""}${opts.full ? "" : " (delta)"}.${surplusNote}`,
   };
 }
 
