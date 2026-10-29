@@ -73,6 +73,8 @@ export type MediaItem = { kind: "image" | "video"; url: string; coverUrl?: strin
 
 const tagParam = (tags: ProductTag[]) =>
   tags.length ? tags.slice(0, 5).map((t) => ({ product_id: t.productId, x: clamp01(t.x), y: clamp01(t.y) })) : undefined;
+/** Reel product tags: Instagram takes x / y on images only, so a Reel's tags are the product ids alone. */
+const reelTagParam = (tags: ProductTag[]) => (tags.length ? tags.slice(0, 5).map((t) => ({ product_id: t.productId })) : undefined);
 const clamp01 = (n: number) => Math.min(1, Math.max(0, Number(n) || 0.5));
 /** Instagram's custom alt text for a feed picture (screen readers); left out when there is none. */
 const altParam = (m: MediaItem) => (m.altText?.trim() ? m.altText.trim().slice(0, 1000) : undefined);
@@ -123,7 +125,7 @@ export async function publishInstagram(igUserId: string, format: string, caption
       cover_url: v.coverUrl ?? undefined,
       caption,
       share_to_feed: true,
-      product_tags: tagParam(v.tags),
+      product_tags: reelTagParam(v.tags),
     });
     await waitForContainer(c.id);
     creationId = c.id;
