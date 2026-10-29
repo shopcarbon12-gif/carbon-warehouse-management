@@ -123,6 +123,7 @@ const ROUTES: Record<string, Entry> = {
   "marketing/ads": { module: "Social", label: "Paused, resumed or re-budgeted an ad campaign" },
   "marketing/posts": { module: "Social", label: "Made a new social post" },
   "marketing/posts/[id]/media": { module: "Social", label: "Changed a social post's pictures" },
+  "marketing/posts/[id]/facebook-tags": { module: "Social", label: "Marked a post's Facebook product tags" },
   "shopify/visitors/[id]": { module: "Shopify", label: { PATCH: "Named a store visitor" } },
   "shopify/status": { module: "Shopify", label: "Changed Shopify product status" },
   "shopify/media": { module: "Shopify", label: { POST: "Changed Shopify images", PUT: "Changed Shopify images", PATCH: "Reordered Shopify images", DELETE: "Deleted Shopify image" } },

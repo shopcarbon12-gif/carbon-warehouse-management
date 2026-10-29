@@ -87,6 +87,7 @@ export function MarketingCalendarWorkspace() {
   const publishOn = overview.data?.settings.publishEnabled ?? false;
   const counts = overview.data?.counts ?? {};
   const waiting = (counts.draft ?? 0) + (counts.changes_requested ?? 0);
+  const fbToTag = (posts.data?.posts ?? []).filter(needsFacebookTags).length;
 
   async function setPublish(on: boolean) {
     setBusy(true);
@@ -158,6 +159,9 @@ export function MarketingCalendarWorkspace() {
           <p className="text-xs text-[var(--wms-muted)]">
             {waiting} waiting for approval · {counts.approved ?? 0} approved · {counts.published ?? 0} published
             {counts.failed ? ` · ${counts.failed} failed` : ""}
+            {fbToTag ? (
+              <span className="text-amber-700 dark:text-amber-300"> · {fbToTag} on Facebook need product tags this month</span>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -334,6 +338,7 @@ function PostChip({ post, onOpen }: { post: MarketingPost; onOpen: () => void })
         <span className="block truncate font-mono text-[0.62rem] opacity-80">
           {post.scheduledAt ? new Date(post.scheduledAt).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }) : ""} ·{" "}
           {STATUS_LABEL[post.status] ?? post.status}
+          {needsFacebookTags(post) && <span className="text-amber-700 dark:text-amber-300"> · FB tags</span>}
         </span>
       </span>
     </button>
@@ -869,7 +874,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                   {t.permalink && (
                     <>
                       {" · "}
-                      <a className="underline" href={t.permalink} target="_blank" rel="noreferrer">
+                      <a className="underline" href={postUrl(t.permalink)} target="_blank" rel="noreferrer">
                         open post
                       </a>
                     </>
@@ -879,6 +884,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               ))}
             </div>
           )}
+
+          {!isStory && <FacebookTagsCard post={post} onDone={onSaved} />}
 
           {viewAt != null && <CatalogImageLightbox images={viewUrls} startIndex={viewAt} alt={post.title} onClose={() => setViewAt(null)} />}
           {post.media.length > 0 && !isStory && <TikTokPostBox post={post} caption={caption} hashtags={tagList} onDone={onSaved} />}
@@ -946,6 +953,108 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/** Facebook gives Reels a relative permalink ("/reel/…"). */
+function postUrl(permalink: string): string {
+  return permalink.startsWith("/") ? `https://www.facebook.com${permalink}` : permalink;
+}
+
+/** A published Facebook post whose products still have to be tagged there by hand. */
+function needsFacebookTags(post: MarketingPost): boolean {
+  const fb = post.targets.find((t) => t.provider === "facebook");
+  return post.format !== "story" && post.tags.length > 0 && fb?.status === "published" && !fb.tagsDoneAt;
+}
+
+/**
+ * Facebook card (owner, 2026-10-29). Meta's API tags products on Instagram only,
+ * so once a post is out on Facebook this card lists the same products, each with
+ * a Copy button, links to the post and to Meta Business Suite, and a Done tick.
+ */
+function FacebookTagsCard({ post, onDone }: { post: MarketingPost; onDone: (text: string) => Promise<void> }) {
+  const fb = post.targets.find((t) => t.provider === "facebook");
+  const { data } = useSWR<{ pageId: string | null }>(fb?.status === "published" ? `/api/marketing/posts/${post.id}/facebook-tags` : null, fetcher);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!fb || fb.status !== "published" || !post.tags.length) return null;
+  // One line per product, even when it is tagged on several slides.
+  const products = [...new Map(post.tags.map((t) => [t.metaProductId, t.label])).values()];
+  const done = !!fb.tagsDoneAt;
+  const suite = data?.pageId
+    ? `https://business.facebook.com/latest/posts/published_posts?asset_id=${data.pageId}`
+    : "https://business.facebook.com/latest/posts/published_posts";
+
+  async function copy(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(text);
+      setTimeout(() => setCopied((c) => (c === text ? null : c)), 1500);
+    } catch {
+      setErr("Copy is blocked here: select the name and copy it.");
+    }
+  }
+
+  async function mark(next: boolean) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await send(`/api/marketing/posts/${post.id}/facebook-tags`, "POST", { done: next });
+      await onDone(next ? "Marked as tagged on Facebook." : "Facebook tags marked as not done.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={`${card} flex flex-col gap-2 ${done ? "" : "border-amber-500/60"}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-mono text-[0.72rem] uppercase tracking-wide text-[var(--wms-fg)]">
+          Tag products on Facebook {done ? "· done" : `· ${products.length} to tag`}
+        </span>
+        {done && <span className="text-xs text-emerald-700 dark:text-emerald-300">Tagged {etWhen(fb.tagsDoneAt)} ET</span>}
+      </div>
+      {!done && (
+        <p className="text-xs text-[var(--wms-muted)]">
+          Facebook does not let CarbonWMS tag products, so this one is by hand: open the post in Meta Business Suite, choose Edit, then Tag products, and paste each name below.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <a className={`${btn} border-[var(--wms-border)]`} href={suite} target="_blank" rel="noreferrer">
+          Open Meta Business Suite
+        </a>
+        {fb.permalink && (
+          <a className={`${btn} border-[var(--wms-border)]`} href={postUrl(fb.permalink)} target="_blank" rel="noreferrer">
+            Open the post on Facebook
+          </a>
+        )}
+      </div>
+      <ul className="flex flex-col gap-1">
+        {products.map((p) => (
+          <li key={p} className="flex items-center justify-between gap-2 text-xs text-[var(--wms-fg)]">
+            <span className="select-text">{p}</span>
+            <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={() => void copy(p)}>
+              {copied === p ? "Copied" : "Copy"}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        {done ? (
+          <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy} onClick={() => void mark(false)}>
+            Not done yet
+          </button>
+        ) : (
+          <button type="button" className={`${btn} border-emerald-600 bg-emerald-600 text-white`} disabled={busy} onClick={() => void mark(true)}>
+            Done: tagged on Facebook
+          </button>
+        )}
+        {err && <span className="text-xs text-[var(--wms-status-danger-fg)]">{err}</span>}
+      </div>
     </div>
   );
 }

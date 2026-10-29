@@ -61,7 +61,8 @@ export type MarketingPost = {
   approvedAt: string | null;
   media: { id: string; position: number; kind: "image" | "video"; url: string; coverUrl: string | null; altText: string | null }[];
   tags: { mediaPosition: number; metaProductId: string; handle: string | null; label: string; x: number; y: number }[];
-  targets: { provider: string; status: string; permalink: string | null; error: string | null; publishedAt: string | null; attempts: number }[];
+  /** tagsDoneAt: Facebook only — when the owner ticked the products as tagged by hand on Facebook. */
+  targets: { provider: string; status: string; permalink: string | null; error: string | null; publishedAt: string | null; attempts: number; tagsDoneAt: string | null }[];
   /** Ask for changes, carried out by the AI (ai-changes.ts): queued → working → (picture) → done / failed. */
   aiStatus: "queued" | "working" | "picture" | "done" | "failed" | null;
   aiSummary: string | null;
@@ -101,7 +102,7 @@ export async function listPosts(pool: Pool, tenantId: string, opts: { from?: str
                                                         'label', t.label, 'x', t.x, 'y', t.y) ORDER BY t.media_position, t.label)
                         FROM marketing_post_tags t WHERE t.post_id = p.id), '[]') AS tags,
             COALESCE((SELECT json_agg(json_build_object('provider', g.provider, 'status', g.status, 'permalink', g.permalink, 'error', g.error,
-                                                        'publishedAt', g.published_at, 'attempts', g.attempts) ORDER BY g.provider)
+                                                        'publishedAt', g.published_at, 'attempts', g.attempts, 'tagsDoneAt', g.tags_done_at) ORDER BY g.provider)
                         FROM marketing_post_targets g WHERE g.post_id = p.id), '[]') AS targets
        FROM marketing_posts p
       WHERE ${where}
