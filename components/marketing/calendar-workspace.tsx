@@ -288,6 +288,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [title, setTitle] = useState(post.title);
   const [tags, setTags] = useState<MarketingPost["tags"]>(post.tags);
   const [pick, setPick] = useState<number | null>(null);
+  const [dragging, setDragging] = useState<number | null>(null);
   const [brief, setBrief] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
@@ -507,12 +508,38 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     <img src={md.url} alt={`Slide ${md.position + 1}`} className={`h-72 w-auto rounded object-cover max-md:h-56 ${pick == null ? "cursor-zoom-in" : ""}`} />
                     {tags.map((t, k) =>
                       t.mediaPosition === md.position ? (
+                        // Drag a dot to move its tag (owner, 2026-10-29). The wrapper is the
+                        // grab area (44px on phones); the visible dot stays small.
                         <span
                           key={`${t.metaProductId}:${k}`}
-                          title={t.label}
-                          className={`pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white ${k === pick ? "bg-sky-500" : "bg-black/70"}`}
+                          title={locked ? t.label : `${t.label} — drag to move`}
+                          className={`group absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center max-md:h-11 max-md:w-11 ${locked ? "pointer-events-none" : "cursor-grab touch-none active:cursor-grabbing"}`}
                           style={{ left: `${t.x * 100}%`, top: `${t.y * 100}%` }}
-                        />
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => {
+                            if (locked) return;
+                            e.stopPropagation();
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            setDragging(k);
+                          }}
+                          onPointerMove={(e) => {
+                            if (dragging !== k) return;
+                            const box = e.currentTarget.parentElement?.getBoundingClientRect();
+                            if (!box) return;
+                            const x = Math.round(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) * 100) / 100;
+                            const y = Math.round(Math.min(1, Math.max(0, (e.clientY - box.top) / box.height)) * 100) / 100;
+                            setTags((cur) => cur.map((c, j) => (j === k ? { ...c, x, y } : c)));
+                          }}
+                          onPointerUp={() => setDragging(null)}
+                          onPointerCancel={() => setDragging(null)}
+                        >
+                          <span className={`h-3 w-3 rounded-full border-2 border-white shadow ${k === pick || k === dragging ? "bg-sky-500" : "bg-black/70"}`} />
+                          {dragging === k && (
+                            <span className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-black/80 px-1.5 py-0.5 text-[0.66rem] text-white">
+                              {t.label}
+                            </span>
+                          )}
+                        </span>
                       ) : null,
                     )}
                   </div>
@@ -730,6 +757,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               <p className="text-xs text-[var(--wms-muted)]">No product tags.</p>
             )}
             {pick != null && <p className="text-xs text-sky-700 dark:text-sky-300">Click the product on a picture to put the tag there.</p>}
+            {!locked && tags.length > 0 && pick == null && <p className="text-xs text-[var(--wms-muted)]">Drag a dot on the picture to move its tag, then Save.</p>}
             {!locked && post.media.some((m) => m.kind === "image") && (
               <div className="flex flex-col gap-1">
                 <input className={field} placeholder="Tag a product: type its name…" value={tagQuery} onChange={(e) => void searchCatalog(e.target.value)} />
