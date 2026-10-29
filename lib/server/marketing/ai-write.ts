@@ -80,9 +80,20 @@ export async function writePost(pool: Pool, tenantId: string, post: MarketingPos
     content.push({ type: "text", text: `Picture ${m.position}:` });
     content.push({ type: "image", source: { type: "url", url: m.url } });
   }
+  // What CARBON sells (published on Shopify), so products are named as sold, not described
+  // ("cream puffer jacket", "teal" for TURQUOISE found nothing in the catalog).
+  const catalog = await pool.query<{ line: string }>(
+    `SELECT m.description || ' (' || COALESCE(NULLIF(m.subcategory_1, ''), NULLIF(m.category, ''), 'clothing') || ') — ' ||
+            string_agg(DISTINCT cs.color_code, ', ') AS line
+       FROM matrices m JOIN custom_skus cs ON cs.matrix_id = m.id AND cs.archived = FALSE
+      WHERE m.shopify_product_id IS NOT NULL AND m.shopify_sync_status = 'published'
+      GROUP BY m.id, m.description, m.subcategory_1, m.category
+      ORDER BY m.description`,
+  );
   content.push({
     type: "text",
     text: [
+      catalog.rows.length ? `CARBON's catalog — "name (type) — colours". Name products ONLY from this list:\n${catalog.rows.map((r) => r.line).join("\n")}` : "",
       `Format: ${post.format}. Channels: ${post.targets.map((t) => t.provider).join(" + ") || "instagram + facebook"}.`,
       post.caption.trim() ? `The caption so far (improve it, keep what is good):\n${post.caption}` : "",
       voice.rows.length ? `CARBON's recent captions — write in this voice:\n${voice.rows.map((r) => `---\n${r.caption}`).join("\n")}` : "",
@@ -97,7 +108,7 @@ Fields:
 - title: a short working name for the calendar (3–6 words).
 - caption: the caption without hashtags. Open with the clothes or the moment, not "Introducing". Name the pieces by their colour and cut as they look in the picture. End with one plain call to action (the shop link is in the bio). Under 900 characters.
 - hashtags: 3 to 5 (Instagram allows 5), WITHOUT the # sign, mixing CARBON's own (e.g. CARBON, TheArtOfArriving when it fits) with ones shoppers search.
-- products: every CARBON piece you can see, by the name it is sold under if the brief or caption gives it, else a plain description (e.g. "black puffer coat"); its colour; which picture; and x, y from 0 to 1 on the piece. ${TAG_PLACEMENT} At most 5 per picture.
+- products: every CARBON piece you can see. product_name is copied exactly from CARBON's catalog list, and colour is exactly one of the colours listed for it (the catalog's word, e.g. TURQUOISE, not "teal"). Only pick a catalog name when its type and colour fit the piece you see; if no listed product fits, leave that piece out. Give which picture, and x, y from 0 to 1 on the piece. ${TAG_PLACEMENT} At most 5 per picture.
 
 For a Reel (a video): write about what the frames show from start to end, the looks the viewer will actually see. The cover is only the thumbnail. For products, pick the 5 pieces that are clearest and on screen longest, and give the video's picture number.`;
   const identity = campaignIdentity(post.campaign);
