@@ -24,9 +24,13 @@ export async function makeStories(pool: Pool, tenantId: string, by: string | nul
               to_char(p.scheduled_at AT TIME ZONE 'America/New_York', 'YYYY-MM-DD') AS day,
               extract(dow FROM p.scheduled_at AT TIME ZONE 'America/New_York')::int AS weekday,
               extract(hour FROM p.scheduled_at AT TIME ZONE 'America/New_York')::int AS hour,
-              (SELECT m.storage_path FROM marketing_post_media m WHERE m.post_id = p.id AND m.kind = 'image' ORDER BY m.position LIMIT 1) AS storage_path
+              -- A Reel's Story is made from its cover picture.
+              COALESCE(
+                (SELECT m.storage_path FROM marketing_post_media m WHERE m.post_id = p.id AND m.kind = 'image' ORDER BY m.position LIMIT 1),
+                (SELECT m.cover_storage_path FROM marketing_post_media m WHERE m.post_id = p.id AND m.kind = 'video' ORDER BY m.position LIMIT 1)
+              ) AS storage_path
          FROM marketing_posts p
-        WHERE p.tenant_id = $1::uuid AND p.format IN ('image', 'carousel') AND p.status NOT IN ('cancelled', 'published')
+        WHERE p.tenant_id = $1::uuid AND p.format IN ('image', 'carousel', 'reel') AND p.status NOT IN ('cancelled', 'published')
           AND p.scheduled_at > now()
           AND NOT EXISTS (SELECT 1 FROM marketing_posts s WHERE s.tenant_id = p.tenant_id AND (s.source_ref = 'story:' || p.id::text OR s.source_ref LIKE 'story:' || p.id::text || '#%') AND s.status <> 'cancelled')
         ORDER BY p.scheduled_at`,
@@ -43,7 +47,7 @@ export async function makeStories(pool: Pool, tenantId: string, by: string | nul
   let created = 0;
   for (const f of feed) {
     if (!f.storage_path) {
-      skipped.push(`${f.title}: no picture`);
+      skipped.push(`${f.title}: no picture yet (a Reel needs its cover)`);
       continue;
     }
     const tag = (

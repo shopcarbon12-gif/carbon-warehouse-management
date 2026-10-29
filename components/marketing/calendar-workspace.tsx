@@ -103,22 +103,39 @@ export function MarketingCalendarWorkspace() {
     }
   }
 
-  /* A new draft at tomorrow's best hour (Instagram followers online), then open it to add pictures. */
+  /* "+ New post" opens a small form: what kind of post and when (Eastern). The time
+     starts at tomorrow's best hour (Instagram followers online); the owner can change both. */
+  const [draft, setDraft] = useState<{ format: "image" | "reel" | "story"; when: string } | null>(null);
+  async function openNewPost() {
+    setMsg(null);
+    const best = await fetcher<{ providers: Record<string, { top: { weekday: number; hour: number }[] }> }>("/api/marketing/best-times").catch(() => null);
+    const day = etDay(new Date(Date.now() + 86_400_000).toISOString());
+    const wd = new Date(`${day}T12:00:00Z`).getUTCDay();
+    const hour = best?.providers.instagram?.top.find((t) => t.weekday === wd)?.hour ?? 13;
+    setDraft({ format: "image", when: `${day}T${String(hour).padStart(2, "0")}:00` });
+  }
   async function newPost() {
+    if (!draft) return;
+    const iso = etLocalToIso(draft.when);
+    if (!iso) return setMsg({ text: "Pick a date and time.", err: true });
     setBusy(true);
     setMsg(null);
     try {
-      const best = await fetcher<{ providers: Record<string, { top: { weekday: number; hour: number }[] }> }>("/api/marketing/best-times").catch(() => null);
-      const tomorrow = new Date(Date.now() + 86_400_000);
-      const day = etDay(tomorrow.toISOString());
-      const wd = new Date(`${day}T12:00:00Z`).getUTCDay();
-      const hour = best?.providers.instagram?.top.find((t) => t.weekday === wd)?.hour ?? 13;
-      const iso = etLocalToIso(`${day}T${String(hour).padStart(2, "0")}:00`);
-      const r = await send<{ post: MarketingPost }>("/api/marketing/posts", "POST", { title: "New post", ...(iso ? { scheduledAt: iso } : {}) });
+      const title = draft.format === "story" ? "New Story" : draft.format === "reel" ? "New Reel" : "New post";
+      const r = await send<{ post: MarketingPost }>("/api/marketing/posts", "POST", { title, format: draft.format, scheduledAt: iso });
       await posts.mutate();
+      const day = draft.when.slice(0, 10);
       setMonth(day.slice(0, 7) === current ? month : day.slice(0, 7));
       setOpenId(r.post.id);
-      setMsg({ text: "New draft made. Add pictures, then write the caption — or let the AI write it." });
+      setDraft(null);
+      setMsg({
+        text:
+          draft.format === "reel"
+            ? "New Reel made. Add the video, then a picture for its cover, then the caption."
+            : draft.format === "story"
+              ? "New Story made. Add one 9:16 picture."
+              : "New draft made. Add pictures (several make a carousel), then write the caption, or let the AI write it.",
+      });
     } catch (e) {
       setMsg({ text: e instanceof Error ? e.message : "Something went wrong", err: true });
     } finally {
@@ -144,7 +161,7 @@ export function MarketingCalendarWorkspace() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy} onClick={() => void newPost()}>
+          <button type="button" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy} onClick={() => void (draft ? setDraft(null) : openNewPost())}>
             + New post
           </button>
           <StoriesButton onDone={async () => { await posts.mutate(); }} />
@@ -175,6 +192,50 @@ export function MarketingCalendarWorkspace() {
           )}
         </div>
       </header>
+      {draft && (
+        <form
+          className={`${card} flex flex-wrap items-end gap-3`}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void newPost();
+          }}
+        >
+          <fieldset className="flex flex-col gap-1">
+            <span className="font-mono text-[0.66rem] uppercase tracking-wide text-[var(--wms-muted)]">Type</span>
+            <div className="flex flex-wrap gap-1">
+              {(
+                [
+                  ["image", "Post / carousel"],
+                  ["reel", "Reel"],
+                  ["story", "Story"],
+                ] as const
+              ).map(([f, l]) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-pressed={draft.format === f}
+                  className={`${btn} ${draft.format === f ? "border-sky-600 bg-sky-600 text-white" : "border-[var(--wms-border)]"}`}
+                  onClick={() => setDraft({ ...draft, format: f })}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <label className="flex flex-col gap-1">
+            <span className="font-mono text-[0.66rem] uppercase tracking-wide text-[var(--wms-muted)]">Date and time (Eastern)</span>
+            <input type="datetime-local" className={field} value={draft.when} onChange={(e) => setDraft({ ...draft, when: e.target.value })} />
+          </label>
+          <div className="flex gap-2">
+            <button type="submit" className={`${btn} border-sky-600 bg-sky-600 text-white`} disabled={busy}>
+              Create
+            </button>
+            <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={() => setDraft(null)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
       {msg && <p className={`text-xs ${msg.err ? "text-[var(--wms-status-danger-fg)]" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.text}</p>}
 
       <div className="flex items-center gap-2">
@@ -240,7 +301,8 @@ export function MarketingCalendarWorkspace() {
 
       {open && (
         <PostPanel
-          key={`${open.id}:${open.status}:${open.scheduledAt}:${open.aiStatus}:${open.media.map((x) => x.url + (x.coverUrl ?? "")).join("|")}`}
+          // Not keyed on the media: adding a picture must not throw away an unsaved date or caption.
+          key={`${open.id}:${open.status}:${open.scheduledAt}:${open.aiStatus}`}
           post={open}
           onClose={() => setOpenId(null)}
           onSaved={async (text) => {
@@ -289,6 +351,15 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [tags, setTags] = useState<MarketingPost["tags"]>(post.tags);
   const [pick, setPick] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
+  // Removing or reordering media moves/drops tags on the server: take the saved tags again.
+  const mediaKey = post.media.map((x) => x.url + (x.coverUrl ?? "")).join("|");
+  const lastMedia = useRef(mediaKey);
+  useEffect(() => {
+    if (lastMedia.current === mediaKey) return;
+    lastMedia.current = mediaKey;
+    setTags(post.tags);
+    setPick(null);
+  }, [mediaKey, post.tags]);
   const [brief, setBrief] = useState("");
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
@@ -905,17 +976,20 @@ function StoriesButton({ onDone }: { onDone: () => Promise<void> }) {
         type="button"
         className={`${btn} border-[var(--wms-border)]`}
         disabled={running}
-        title="One 9:16 Story for each coming feed post, the same evening, as a draft for approval"
+        title="Makes a 9:16 Story (the post's picture with its product name and price) for each coming post, Reel or carousel that has no Story yet, the same evening, as a draft for approval. To make one Story by hand, use + New post → Story."
         onClick={async () => {
           await send("/api/marketing/ai/jobs", "POST", { kind: "stories" }).catch(() => null);
           await mutate();
         }}
       >
-        {running ? "Making Stories…" : "Make Stories"}
+        {running ? "Making Stories…" : "Make Stories from posts"}
       </button>
       {r && (
-        <span className="text-xs text-[var(--wms-muted)]" title={r.skipped.join("\n")}>
-          {r.created} Stories made{r.skipped.length ? ` · ${r.skipped.length} skipped` : ""}
+        <span className="text-xs text-[var(--wms-muted)]">
+          {r.created
+            ? `${r.created} new Stories made (drafts).`
+            : "No new Stories: every coming post already has one."}
+          {r.skipped.length ? ` Skipped: ${r.skipped.join("; ")}.` : ""}
         </span>
       )}
     </div>

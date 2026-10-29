@@ -37,7 +37,11 @@ async function editable(client: PoolClient, tenantId: string, id: string): Promi
   return null;
 }
 
-/** Format follows the media (one picture, several, a video) and an approved post needs approving again. */
+/**
+ * Format follows the media (one picture, several, a video) and an approved post needs approving again.
+ * A Story stays a Story and a Reel stays a Reel: a Reel's extra picture is its cover, never a
+ * carousel slide (a carousel would drop the video on Facebook and lose Reels reach on Instagram).
+ */
 async function settle(client: PoolClient, id: string) {
   const m = await client.query<{ kind: string }>(`SELECT kind FROM marketing_post_media WHERE post_id = $1::uuid ORDER BY position`, [id]);
   const kinds = m.rows.map((r) => r.kind);
@@ -45,6 +49,7 @@ async function settle(client: PoolClient, id: string) {
     `UPDATE marketing_posts SET
         format = CASE
           WHEN format = 'story' THEN 'story'
+          WHEN format = 'reel' THEN 'reel'
           WHEN $2::int = 1 AND $3::boolean THEN 'reel'
           WHEN $2::int > 1 THEN 'carousel'
           ELSE 'image' END,
@@ -98,8 +103,15 @@ async function POST_handler(req: Request, { params }: Ctx) {
       await client.query("ROLLBACK");
       return NextResponse.json({ error: why }, { status: why === "Post not found" ? 404 : 409 });
     }
-    if (role === "cover") {
-      const position = Number(form.get("position") ?? 0);
+    // A picture added to a Reel that already has its video is the Reel's cover.
+    const fmt = await client.query<{ format: string; video: number | null }>(
+      `SELECT p.format, (SELECT m.position FROM marketing_post_media m WHERE m.post_id = p.id AND m.kind = 'video' ORDER BY m.position LIMIT 1) AS video
+         FROM marketing_posts p WHERE p.id = $1::uuid`,
+      [id],
+    );
+    const reelCover = role !== "cover" && !isVideo && fmt.rows[0]?.format === "reel" && fmt.rows[0]?.video != null;
+    if (role === "cover" || reelCover) {
+      const position = reelCover ? Number(fmt.rows[0].video) : Number(form.get("position") ?? 0);
       const v = await client.query<{ id: string }>(
         `SELECT id FROM marketing_post_media WHERE post_id = $1::uuid AND position = $2 AND kind = 'video'`,
         [id, position],
