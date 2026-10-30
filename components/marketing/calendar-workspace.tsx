@@ -438,7 +438,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
         const j = (await r.json().catch(() => ({}))) as { error?: string };
         if (!r.ok) throw new Error(j.error || `Upload failed (${r.status})`);
       }
-      await onSaved(role === "cover" ? "Cover saved." : "Added.");
+      const asCover = role === "cover" || (post.format === "reel" && post.media.some((m) => m.kind === "video") && !Array.from(files).some((f) => f.type.startsWith("video/")));
+      await onSaved(asCover ? "Set as the Reel's cover (the picture next to the video)." : "Added.");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -578,7 +579,19 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             {post.media.map((md, i) => (
               <div key={md.position} className="flex shrink-0 flex-col gap-1">
                 {md.kind === "video" ? (
-                  <video src={md.url} poster={md.coverUrl ?? undefined} controls muted playsInline className="h-72 w-auto rounded max-md:h-56" />
+                  <div className="flex items-end gap-2">
+                    <video src={md.url} poster={md.coverUrl ?? undefined} controls muted playsInline className="h-72 w-auto rounded max-md:h-56" />
+                    {/* The cover is the Reel's still picture; a picture added to a Reel becomes it (owner, 2026-10-29: "I don't see it"). */}
+                    <div className="flex flex-col items-center gap-1">
+                      {md.coverUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={md.coverUrl} alt="Reel cover" className="h-24 w-auto rounded border border-[var(--wms-border)]" />
+                      ) : (
+                        <span className="flex h-24 w-14 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-center text-[0.6rem] text-[var(--wms-muted)]">no cover</span>
+                      )}
+                      <span className={label}>Cover</span>
+                    </div>
+                  </div>
                 ) : (
                   <div
                     className={`relative ${pick != null && tags[pick]?.mediaPosition === md.position ? "cursor-crosshair ring-2 ring-sky-500" : ""} rounded`}
