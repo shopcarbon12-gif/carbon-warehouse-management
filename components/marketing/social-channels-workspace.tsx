@@ -29,7 +29,7 @@ const NEEDS: Record<string, string> = {
   youtube: "Sign in to Google once more with YouTube upload allowed (same Google login as Ads and Merchant Center), for Shorts.",
   pinterest: "A Pinterest business account and a Pinterest developer app (Standard access).",
   snapchat: "A Snapchat Public Profile and access to Snap's Public Profile API (granted by Snap on request).",
-  google_business: "Google's approval for the Business Profile API (an application form), then one Google sign-in.",
+  google_business: "Waiting for Google to approve the Business Profile API (case 3-5973000041638) and for the Google sign-in keys on the server; then press Connect Google Business once.",
   linkedin: "A LinkedIn company page and a LinkedIn developer app with Community Management access.",
   x: "An X developer account (the paid Basic plan allows posting) and its keys.",
   threads: "Add the Threads use case to the Meta app, then sign in to Threads once.",
@@ -47,6 +47,13 @@ export function SocialChannelsWorkspace() {
   const [bsky, setBsky] = useState({ handle: "", appPassword: "" });
   // Back from TikTok's sign-in: ?tiktok=connected or the reason it failed.
   const [tiktokNote] = useUrlParam("tiktok");
+  // Back from Google's sign-in: ?google=connected or the reason it failed.
+  const [googleNote] = useUrlParam("google");
+  const googleConnected = !!data?.providers.find((p) => p.id === "google_business")?.accounts.some((a) => a.status === "connected");
+  const terms = useSWR<{ months: number; terms: { term: string; count: number | null; below: number | null }[] }>(
+    googleConnected ? "/api/marketing/channels/google-business/search-terms?months=3" : null,
+    fetcher,
+  );
 
   async function disconnect(provider: string, accountId: string, name: string) {
     if (!window.confirm(`Disconnect ${name}? Social stops posting there until you connect it again.`)) return;
@@ -114,6 +121,11 @@ export function SocialChannelsWorkspace() {
           {tiktokNote === "connected" ? "TikTok connected." : `TikTok: ${tiktokNote}`}
         </p>
       )}
+      {googleNote && (
+        <p className={`text-xs ${googleNote === "connected" ? "text-emerald-700 dark:text-emerald-300" : "text-[var(--wms-status-danger-fg)]"}`}>
+          {googleNote === "connected" ? "Google Business Profile connected." : `Google Business: ${googleNote}`}
+        </p>
+      )}
       {msg && <p className={`text-xs ${msg.err ? "text-[var(--wms-status-danger-fg)]" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.text}</p>}
       {error && <p className="text-xs text-[var(--wms-status-danger-fg)]">{error.message}</p>}
 
@@ -156,6 +168,32 @@ export function SocialChannelsWorkspace() {
                     )}
                     {p.id === "tiktok" && connected && (
                       <p className="mt-1 text-xs text-[var(--wms-muted)]">Reconnect any time with Connect TikTok after disconnecting. Until TikTok reviews the app, posts go out private.</p>
+                    )}
+                    {p.id === "google_business" && !connected && p.credentials && (
+                      <a href="/api/marketing/channels/google-business/start" className={`${btn} mt-2 inline-block border-sky-600 text-sky-700 dark:text-sky-300`}>
+                        Connect Google Business
+                      </a>
+                    )}
+                    {p.id === "google_business" && connected && (
+                      <div className="mt-2 flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+                        <span className={label}>What people searched to find you (last {terms.data?.months ?? 3} months)</span>
+                        {terms.error ? (
+                          <p className="text-[var(--wms-status-danger-fg)]">{terms.error.message}</p>
+                        ) : !terms.data ? (
+                          <p className="text-[var(--wms-muted)]">Reading Google…</p>
+                        ) : terms.data.terms.length ? (
+                          <ul className="flex flex-col">
+                            {terms.data.terms.slice(0, 15).map((t) => (
+                              <li key={t.term} className="flex justify-between gap-2">
+                                <span className="select-text">{t.term}</span>
+                                <span className="font-mono tabular-nums text-[var(--wms-muted)]">{t.count ?? `< ${t.below ?? 15}`}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[var(--wms-muted)]">Google has no search terms for these months yet.</p>
+                        )}
+                      </div>
                     )}
                     {p.id === "bluesky" &&
                       (connected ? (

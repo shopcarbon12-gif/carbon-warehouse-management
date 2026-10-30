@@ -33,7 +33,7 @@ export const MARKETING_PROVIDERS = [
   { id: "snapchat_catalog", label: "Snapchat catalog", kind: "shop", phase: 3 },
 ] as const;
 export type MarketingProvider = (typeof MARKETING_PROVIDERS)[number]["id"];
-export const PUBLISHABLE: MarketingProvider[] = ["instagram", "facebook", "bluesky", "tiktok"];
+export const PUBLISHABLE: MarketingProvider[] = ["instagram", "facebook", "bluesky", "tiktok", "google_business"];
 
 /** Where Instagram and Facebook fetch post media (our R2 is private; see /api/public/marketing-media). */
 export const PUBLIC_BASE = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://wms.shopcarbon.com")
@@ -54,6 +54,8 @@ export type MarketingPost = {
   caption: string;
   hashtags: string[];
   linkUrl: string | null;
+  /** Google Business only: the button on the post (GOOGLE_BUTTONS value; null = Buy). */
+  googleButton: string | null;
   scheduledAt: string | null;
   status: string;
   note: string | null;
@@ -118,6 +120,7 @@ export async function listPosts(pool: Pool, tenantId: string, opts: { from?: str
     caption: p.caption,
     hashtags: p.hashtags ?? [],
     linkUrl: p.link_url,
+    googleButton: p.google_button ?? null,
     scheduledAt: p.scheduled_at?.toISOString() ?? null,
     status: p.status,
     note: p.note,

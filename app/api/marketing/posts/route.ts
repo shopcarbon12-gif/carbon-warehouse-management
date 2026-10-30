@@ -32,7 +32,7 @@ const createSchema = z
     caption: z.string().max(2200).default(""),
     hashtags: z.array(z.string().max(100)).max(30).default([]),
     scheduledAt: z.string().datetime({ offset: true }).optional(),
-    targets: z.array(z.enum(["instagram", "facebook", "bluesky", "tiktok"])).min(1).default(["instagram", "facebook"]),
+    targets: z.array(z.enum(["instagram", "facebook", "bluesky", "tiktok", "google_business"])).min(1).optional(),
   })
   .strict();
 
@@ -48,7 +48,13 @@ async function POST_handler(req: Request) {
     [g.session.tid, b.title, b.format, b.caption, b.hashtags.map((h) => h.replace(/^#+/, "")), b.scheduledAt ?? null, g.session.email ?? null],
   );
   const id = r.rows[0].id;
-  for (const t of b.targets) await g.pool.query(`INSERT INTO marketing_post_targets (post_id, provider) VALUES ($1::uuid, $2)`, [id, t]);
+  // Default channels: Instagram + Facebook, and Google Business once it is connected (not for Stories).
+  let targets = b.targets;
+  if (!targets) {
+    const gb = await g.pool.query(`SELECT 1 FROM marketing_channels WHERE tenant_id = $1::uuid AND provider = 'google_business' AND status = 'connected' LIMIT 1`, [g.session.tid]);
+    targets = ["instagram", "facebook", ...(gb.rowCount && b.format !== "story" ? (["google_business"] as const) : [])];
+  }
+  for (const t of targets) await g.pool.query(`INSERT INTO marketing_post_targets (post_id, provider) VALUES ($1::uuid, $2)`, [id, t]);
   const [post] = await listPosts(g.pool, g.session.tid, { ids: [id] });
   return NextResponse.json({ post }, { status: 201 });
 }

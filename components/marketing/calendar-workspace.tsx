@@ -351,6 +351,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   const [hashtags, setHashtags] = useState(post.hashtags.join(" "));
   const [when, setWhen] = useState(etLocalInput(post.scheduledAt));
   const [targets, setTargets] = useState<string[]>(post.targets.map((t) => t.provider));
+  const [googleButton, setGoogleButton] = useState<string>(post.googleButton ?? "BUY");
+  // Google Business shows once it is connected (Social → channels), or when the post already uses it.
+  const { data: overview } = useSWR<{ providers: { id: string; accounts: { status: string }[] }[] }>("/api/marketing/overview", fetcher);
+  const googleConnected = !!overview?.providers.find((p) => p.id === "google_business")?.accounts.some((a) => a.status === "connected");
   const [note, setNote] = useState(post.note ?? "");
   const [title, setTitle] = useState(post.title);
   const [tags, setTags] = useState<MarketingPost["tags"]>(post.tags);
@@ -389,7 +393,8 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     caption !== post.caption ||
     tagList.join(" ") !== post.hashtags.join(" ") ||
     when !== etLocalInput(post.scheduledAt) ||
-    [...targets].sort().join(",") !== post.targets.map((t) => t.provider).sort().join(",");
+    [...targets].sort().join(",") !== post.targets.map((t) => t.provider).sort().join(",") ||
+    googleButton !== (post.googleButton ?? "BUY");
 
   async function patch(body: Record<string, unknown>, ok: string) {
     setBusy(true);
@@ -411,7 +416,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
       setErr("Pick a valid date and time");
       return null;
     }
-    return { caption, hashtags: tagList, scheduledAt: iso, targets, title, ...(tagsDirty ? { tags: tags.map(({ mediaPosition, metaProductId, handle, label, x, y }) => ({ mediaPosition, metaProductId, handle, label, x, y })) } : {}) };
+    return { caption, hashtags: tagList, scheduledAt: iso, targets, title, ...(googleButton !== (post.googleButton ?? "BUY") ? { googleButton } : {}), ...(tagsDirty ? { tags: tags.map(({ mediaPosition, metaProductId, handle, label, x, y }) => ({ mediaPosition, metaProductId, handle, label, x, y })) } : {}) };
   }
 
   /* Pictures and videos: upload one at a time (they can be large), remove, move. */
@@ -782,9 +787,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           <fieldset className="flex flex-col gap-1">
             <span className={label}>Channels</span>
             <div className="flex flex-wrap gap-3">
-              {(["instagram", "facebook", "bluesky", "tiktok"] as const)
+              {(["instagram", "facebook", "google_business", "bluesky", "tiktok"] as const)
                 // Bluesky only shows when a post already uses it (CARBON has no Bluesky account).
                 .filter((t) => t !== "bluesky" || targets.includes("bluesky"))
+                .filter((t) => t !== "google_business" || googleConnected || targets.includes("google_business"))
                 .filter((t) => !isStory || t === "instagram" || t === "facebook")
                 .map((t) => (
                 <label key={t} className="flex items-center gap-1.5 text-xs text-[var(--wms-fg)] max-md:min-h-11">
@@ -795,10 +801,29 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     disabled={locked}
                     onChange={(e) => setTargets((cur) => (e.target.checked ? [...cur, t] : cur.filter((x) => x !== t)))}
                   />
-                  {t === "instagram" ? "Instagram (with product tags)" : t === "facebook" ? "Facebook page (with shop link)" : t === "bluesky" ? "Bluesky (300 characters, up to 4 pictures)" : "TikTok (photo post or video)"}
+                  {t === "instagram" ? "Instagram (with product tags)" : t === "facebook" ? "Facebook page (with shop link)" : t === "google_business" ? "Google Business Profile (one picture, no hashtags, with a button)" : t === "bluesky" ? "Bluesky (300 characters, up to 4 pictures)" : "TikTok (photo post or video)"}
                 </label>
               ))}
             </div>
+            {targets.includes("google_business") && !isStory && (
+              <label className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--wms-fg)]">
+                <span className={label}>Google button</span>
+                <select className={field} value={googleButton} disabled={locked} onChange={(e) => setGoogleButton(e.target.value)}>
+                  {GOOGLE_BUTTON_CHOICES.map((b) => (
+                    <option key={b.value} value={b.value}>
+                      {b.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[var(--wms-muted)]">
+                  {googleButton === "CALL"
+                    ? "Calls the store's phone."
+                    : googleButton === "NONE"
+                      ? "No button."
+                      : `Opens ${post.linkUrl ?? "shopcarbon.com"}.`}
+                </span>
+              </label>
+            )}
           </fieldset>
 
           {!isStory && (
@@ -956,6 +981,17 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     </div>
   );
 }
+
+/** The button on a Google Business post (Google's own list; lib/server/marketing/google-business.ts GOOGLE_BUTTONS). */
+const GOOGLE_BUTTON_CHOICES = [
+  { value: "BUY", label: "Buy" },
+  { value: "ORDER", label: "Order online" },
+  { value: "LEARN_MORE", label: "Learn more" },
+  { value: "BOOK", label: "Book" },
+  { value: "SIGN_UP", label: "Sign up" },
+  { value: "CALL", label: "Call now" },
+  { value: "NONE", label: "None" },
+];
 
 /** Facebook gives Reels a relative permalink ("/reel/…"). */
 function postUrl(permalink: string): string {

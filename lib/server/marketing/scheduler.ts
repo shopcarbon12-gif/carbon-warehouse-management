@@ -12,6 +12,7 @@ import type { Pool } from "pg";
 import { fullCaption, listPosts, type MarketingPost } from "./store";
 import { publishBluesky } from "./bluesky";
 import { publishTikTok } from "./tiktok";
+import { publishGoogleBusiness } from "./google-business";
 import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
 import { writeAltTexts } from "@/lib/seo/alt-text";
@@ -143,6 +144,17 @@ async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): P
                 })()
               : t.provider === "tiktok"
                 ? await publishTikTok(pool, tenantId, post.format, post.caption, post.hashtags, media)
+              : t.provider === "google_business"
+                ? await (async () => {
+                    const c = await pool.query<{ secret: string | null }>(
+                      `SELECT secret FROM marketing_channels WHERE tenant_id = $1::uuid AND provider = 'google_business' AND status = 'connected' LIMIT 1`,
+                      [tenantId],
+                    );
+                    if (!c.rows[0]?.secret) throw new Error("Google Business is not connected");
+                    // One photo: the first picture, or a Reel's cover.
+                    const pic = media.find((m) => m.kind === "image")?.url ?? media.find((m) => m.kind === "video")?.coverUrl ?? null;
+                    return publishGoogleBusiness(c.rows[0].secret, account, post.caption, pic, post.linkUrl, post.googleButton);
+                  })()
               : (() => {
                 throw new Error(`${t.provider} publishing is not built yet`);
               })();

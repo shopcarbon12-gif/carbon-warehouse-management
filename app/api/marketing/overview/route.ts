@@ -31,6 +31,7 @@ export async function GET(req: Request) {
     google_ads: env("GOOGLE_ADS_REFRESH_TOKEN") && env("GOOGLE_ADS_DEVELOPER_TOKEN"),
     merchant_center: env("GMC_MERCHANT_ID"),
     tiktok: env("TIKTOK_CLIENT_KEY") && env("TIKTOK_CLIENT_SECRET"),
+    google_business: env("GOOGLE_BUSINESS_CLIENT_ID") && env("GOOGLE_BUSINESS_CLIENT_SECRET"),
   };
   return NextResponse.json({
     settings,

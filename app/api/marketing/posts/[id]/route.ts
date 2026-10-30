@@ -27,7 +27,8 @@ const schema = z
     caption: z.string().max(2200).optional(),
     hashtags: z.array(z.string().max(100)).max(30).optional(),
     scheduledAt: z.string().datetime({ offset: true }).optional(),
-    targets: z.array(z.enum(["instagram", "facebook", "bluesky", "tiktok"])).min(1).optional(),
+    targets: z.array(z.enum(["instagram", "facebook", "bluesky", "tiktok", "google_business"])).min(1).optional(),
+    googleButton: z.enum(["BUY", "ORDER", "LEARN_MORE", "BOOK", "SIGN_UP", "CALL", "NONE"]).optional(),
     note: z.string().max(2000).optional(),
     title: z.string().max(200).optional(),
     /** The full list of Instagram product tags (replaces what is there). */
@@ -65,7 +66,7 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   try {
     await client.query("BEGIN");
     const contentEdit =
-      b.caption !== undefined || b.hashtags !== undefined || b.scheduledAt !== undefined || b.targets !== undefined || b.tags !== undefined;
+      b.caption !== undefined || b.hashtags !== undefined || b.scheduledAt !== undefined || b.targets !== undefined || b.tags !== undefined || b.googleButton !== undefined;
     if (b.tags) {
       const per = new Map<number, number>();
       for (const t of b.tags) per.set(t.mediaPosition, (per.get(t.mediaPosition) ?? 0) + 1);
@@ -88,6 +89,7 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
     if (b.hashtags !== undefined) set("hashtags", b.hashtags);
     if (b.scheduledAt !== undefined) set("scheduled_at", b.scheduledAt);
     if (b.note !== undefined) set("note", b.note || null);
+    if (b.googleButton !== undefined) set("google_button", b.googleButton);
     if (b.targets !== undefined) {
       await client.query(`DELETE FROM marketing_post_targets WHERE post_id = $1::uuid AND provider <> ALL($2::text[])`, [id, b.targets]);
       for (const t of b.targets.filter((x) => PUBLISHABLE.includes(x)))
