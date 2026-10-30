@@ -24,6 +24,11 @@ function isPublicPath(pathname: string): boolean {
   /* Lightspeed R-Series OAuth: browser hits these without WMS session. */
   if (pathname.startsWith("/api/lightspeed/auth")) return true;
   if (pathname.startsWith("/api/lightspeed/callback")) return true;
+  /* TikTok / Google sign-in come back here, often inside the TikTok app's own
+     browser (no WMS session). The route checks the sealed, 15-minute "state"
+     that only a signed-in admin could have started instead. */
+  if (pathname === "/api/marketing/channels/tiktok/callback") return true;
+  if (pathname === "/api/marketing/channels/google-business/callback") return true;
   if (pathname.startsWith("/api/webhooks/")) return true;
   /* Storefront wishlist sync: called from shopcarbon.com by a shopper's browser,
    * which has no WMS session. Authenticates inside the route via an HMAC that
