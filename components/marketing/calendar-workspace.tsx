@@ -584,8 +584,18 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                     {/* The cover is the Reel's still picture; a picture added to a Reel becomes it (owner, 2026-10-29: "I don't see it"). */}
                     <div className="flex flex-col items-center gap-1">
                       {md.coverUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={md.coverUrl} alt="Reel cover" className="h-24 w-auto rounded border border-[var(--wms-border)]" />
+                        <button
+                          type="button"
+                          aria-label="See the cover full size"
+                          className="cursor-zoom-in rounded max-md:min-h-11"
+                          onClick={() => {
+                            const at = viewUrls.indexOf(md.coverUrl ?? "");
+                            if (!zoomNatively(viewUrls, at)) setViewAt(Math.max(0, at));
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={md.coverUrl} alt="Reel cover" className="h-24 w-auto rounded border border-[var(--wms-border)]" />
+                        </button>
                       ) : (
                         <span className="flex h-24 w-14 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-center text-[0.6rem] text-[var(--wms-muted)]">no cover</span>
                       )}
