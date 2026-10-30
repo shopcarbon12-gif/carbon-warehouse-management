@@ -952,7 +952,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                   Reopen
                 </button>
               ) : (
-                <button type="button" className={`${btn} border-[var(--wms-border)] text-[var(--wms-muted)]`} disabled={busy} onClick={() => patch({ action: "cancel" }, "Cancelled. It will not be published.")}>
+                <button type="button" className={`${btn} border-[var(--wms-border)] text-[var(--wms-muted)]`} disabled={busy} onClick={() => { if (window.confirm("Cancel this post? It will be removed from the calendar and never published.")) void patch({ action: "cancel" }, "Cancelled and removed from the calendar. It will not be published."); }}>
                   Cancel post
                 </button>
               )}

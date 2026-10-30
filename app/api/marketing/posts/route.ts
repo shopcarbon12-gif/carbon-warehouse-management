@@ -22,7 +22,10 @@ export async function GET(req: Request) {
   const from = url.searchParams.get("from") ?? undefined;
   const to = url.searchParams.get("to") ?? undefined;
   if ((from && !ISO.test(from)) || (to && !ISO.test(to))) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
-  return NextResponse.json({ posts: await listPosts(g.pool, g.session.tid, { from, to }) });
+  // A cancelled post is gone from Social (owner, 2026-10-29: "remove it completely").
+  // The row and its pictures stay in the database — pictures are never deleted.
+  const posts = (await listPosts(g.pool, g.session.tid, { from, to })).filter((p) => p.status !== "cancelled");
+  return NextResponse.json({ posts });
 }
 
 const createSchema = z
