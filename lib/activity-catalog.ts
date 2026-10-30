@@ -124,6 +124,7 @@ const ROUTES: Record<string, Entry> = {
   "marketing/posts": { module: "Social", label: "Made a new social post" },
   "marketing/posts/[id]/media": { module: "Social", label: "Changed a social post's pictures" },
   "marketing/channels/google-business/callback": { module: "Social", label: "Connected Google Business Profile" },
+  "marketing/posts/approve": { module: "Social", label: "Approved social posts" },
   "marketing/posts/[id]/facebook-tags": { module: "Social", label: "Marked a post's Facebook product tags" },
   "shopify/visitors/[id]": { module: "Shopify", label: { PATCH: "Named a store visitor" } },
   "shopify/status": { module: "Shopify", label: "Changed Shopify product status" },

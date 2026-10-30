@@ -16,6 +16,7 @@ import type { Pool } from "pg";
 import { listPosts } from "./store";
 import { writePost } from "./ai-write";
 import { checkCaption } from "./caption-check";
+import { approveNow } from "./approve";
 import { runWeeklyReview } from "./weekly-review";
 import { makeStories } from "./stories";
 import { sendPush } from "@/lib/server/web-push";
@@ -138,6 +139,14 @@ export async function runAiJobs(pool: Pool, log: (m: string) => void = (m) => co
               const result = await runOne(pool, job.tenant_id, job);
               await pool.query(`UPDATE marketing_ai_jobs SET status = 'done', result = $2::jsonb, error = NULL, updated_at = now() WHERE id = $1::uuid`, [job.id, JSON.stringify(result)]);
               done++;
+              // Approve pressed before the check finished: approve now if it passed and the caption is still the one checked.
+              if (job.kind === "check" && job.input.approveWhenOk && job.post_id && (result as { ok?: boolean })?.ok) {
+                const r = await pool.query(
+                  `SELECT 1 FROM marketing_posts WHERE id = $1::uuid AND caption = $2 AND status IN ('draft', 'changes_requested')`,
+                  [job.post_id, String(job.input.caption ?? "")],
+                );
+                if (r.rowCount) await approveNow(pool, job.post_id, String(job.input.approvedBy ?? job.requested_by ?? "Social"));
+              }
               await notify(pool, job);
             } catch (e) {
               failed++;

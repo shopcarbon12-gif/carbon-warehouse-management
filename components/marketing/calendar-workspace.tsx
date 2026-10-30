@@ -107,6 +107,7 @@ export function MarketingCalendarWorkspace() {
   /* "+ New post" opens a small form: what kind of post and when (Eastern). The time
      starts at tomorrow's best hour (Instagram followers online); the owner can change both. */
   const [draft, setDraft] = useState<{ format: "image" | "reel" | "story"; when: string } | null>(null);
+  const [showApproveAll, setShowApproveAll] = useState(false);
   async function openNewPost() {
     setMsg(null);
     const best = await fetcher<{ providers: Record<string, { top: { weekday: number; hour: number }[] }> }>("/api/marketing/best-times").catch(() => null);
@@ -169,6 +170,9 @@ export function MarketingCalendarWorkspace() {
             + New post
           </button>
           <StoriesButton onDone={async () => { await posts.mutate(); }} />
+          <button type="button" className={`${btn} border-emerald-600 text-emerald-700 dark:text-emerald-300`} onClick={() => setShowApproveAll((v) => !v)}>
+            Approve all…
+          </button>
         </div>
         <div className={`${card} flex flex-wrap items-center gap-2`}>
           <span className={`inline-flex items-center gap-1.5 font-mono text-[0.72rem] uppercase ${publishOn ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--wms-muted)]"}`}>
@@ -196,6 +200,7 @@ export function MarketingCalendarWorkspace() {
           )}
         </div>
       </header>
+      {showApproveAll && <ApproveAllBar onDone={async () => { await posts.mutate(); await overview.mutate(); }} onClose={() => setShowApproveAll(false)} />}
       {draft && (
         <form
           className={`${card} flex flex-wrap items-end gap-3`}
@@ -381,7 +386,6 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   // Caption check: the text it was run on, and what it found.
   // A caption the owner took from the check's fix counts as passed.
   const [passedText, setPassedText] = useState<string | null>(null);
-  const [pendingApprove, setPendingApprove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -497,33 +501,38 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     void aiJob({ kind: "check", postId: post.id, caption, hashtags: tagList.map((h) => h.replace(/^#+/, "")) });
   }
 
-  /* Approve: the caption is checked first (unless it passed, or the owner chose to approve it as it is). */
+  /* Approve on the server (lib/server/marketing/approve.ts): it checks the post and, if the caption still needs its
+     check, approves it by itself when the check passes — moving on to another post no longer drops it. "Approve as it
+     is" (force) skips the caption check. Unsaved edits are saved first. */
   async function approve(force = false) {
     const e = edits();
     if (!e) return;
-    if (!force && caption.trim() && post.format !== "story") {
-      if (!checkFresh) {
-        setPendingApprove(true);
-        runCheck();
+    if (force) {
+      await patch({ ...e, action: "approve" }, "Approved. It goes out at its time while publishing is on.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      if (Object.keys(e).length) await send(`/api/marketing/posts/${post.id}`, "PATCH", e);
+      const r = await send<{ outcomes: { result: string; reason?: string }[] }>("/api/marketing/posts/approve", "POST", { ids: [post.id] });
+      const o = r.outcomes[0];
+      if (!o || o.result === "blocked") {
+        setErr(`Not approved: ${o?.reason ?? "the post was not found"}`);
+        await jobs.mutate();
         return;
       }
-      if (!checkFresh.ok) return;
+      await onSaved(
+        o.result === "approved"
+          ? "Approved. It goes out at its time while publishing is on."
+          : "Checking the caption — it approves itself when the check passes. You can move on.",
+      );
+    } catch (x) {
+      setErr(x instanceof Error ? x.message : "Something went wrong");
+    } finally {
+      setBusy(false);
     }
-    setPendingApprove(false);
-    await patch({ ...e, action: "approve" }, "Approved. It goes out at its time while publishing is on.");
   }
-  // Approve waits for its caption check; it goes ahead when the check passes.
-  useEffect(() => {
-    if (!pendingApprove) return;
-    if (checkForText?.status === "failed") {
-      setPendingApprove(false);
-      setErr(checkForText.error ?? "The caption check did not finish");
-    } else if (checkFresh) {
-      setPendingApprove(false);
-      if (checkFresh.ok) void approve(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingApprove, checkForText?.status, checkFresh]);
 
   function applyWritten(sgg: WrittenSuggestion, jobId: string) {
     setTitle(sgg.title || title);
@@ -656,7 +665,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               Approved by {post.approvedBy} {post.approvedAt ? `on ${etWhen(post.approvedAt)}` : ""}
             </p>
           )}
-          {post.note && (post.status === "changes_requested" || post.aiStatus) && <p className="text-xs text-amber-700 dark:text-amber-300">Changes asked: {post.note}</p>}
+          {post.note && (post.status === "changes_requested" || post.aiStatus === "queued" || post.aiStatus === "working" || post.aiStatus === "picture") && <p className="text-xs text-amber-700 dark:text-amber-300">Changes asked: {post.note}</p>}
           {post.aiStatus && (
             <p className={`${card} text-xs ${post.aiStatus === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-fg)]"}`}>
               <span className={`${label} block`}>
@@ -923,10 +932,10 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                 <button
                   type="button"
                   className={`${btn} border-emerald-600 bg-emerald-600 text-white`}
-                  disabled={busy || checking || pendingApprove}
+                  disabled={busy || checking}
                   onClick={() => void approve()}
                 >
-                  {checking || pendingApprove ? "Checking the caption…" : dirty ? "Save and approve" : "Approve"}
+                  {checking ? "Checking the caption…" : dirty ? "Save and approve" : "Approve"}
                 </button>
               )}
               {dirty && (
@@ -978,6 +987,99 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+type ApproveOutcome = { id: string; title: string; when: string | null; result: "approved" | "checking" | "blocked"; reason?: string };
+
+/**
+ * "Approve all" (owner, 2026-10-29): every open Story, Reel or Post (or all of them) whose time falls between two
+ * Eastern dates is approved on the server — the same checks as one post's Approve. A post whose caption still needs
+ * its check approves itself when the check passes; anything held back is listed with the reason.
+ */
+function ApproveAllBar({ onDone, onClose }: { onDone: () => Promise<void>; onClose: () => void }) {
+  const today = etDay(new Date().toISOString());
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(etDay(new Date(Date.now() + 6 * 86_400_000).toISOString()));
+  const [busy, setBusy] = useState<string | null>(null);
+  const [res, setRes] = useState<{ label: string; outcomes: ApproveOutcome[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const KINDS = [
+    ["story", "Approve all Stories"],
+    ["reel", "Approve all Reels"],
+    ["post", "Approve all Posts"],
+    ["all", "Approve all"],
+  ] as const;
+
+  async function run(kind: string, label: string) {
+    setBusy(kind);
+    setErr(null);
+    setRes(null);
+    try {
+      const r = await send<{ outcomes: ApproveOutcome[] }>("/api/marketing/posts/approve", "POST", { kind, from, to });
+      setRes({ label, outcomes: r.outcomes });
+      await onDone();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const n = (k: ApproveOutcome["result"]) => res?.outcomes.filter((o) => o.result === k) ?? [];
+  return (
+    <div className={`${card} flex flex-col gap-2`}>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1">
+          <span className={label}>From</span>
+          <input type="date" className={field} value={from} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className={label}>To</span>
+          <input type="date" className={field} value={to} min={from} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {KINDS.map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              className={`${btn} ${k === "all" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-600 text-emerald-700 dark:text-emerald-300"}`}
+              disabled={busy != null || !from || !to}
+              onClick={() => void run(k, l)}
+            >
+              {busy === k ? "Approving…" : l}
+            </button>
+          ))}
+        </div>
+        <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <p className="text-xs text-[var(--wms-muted)]">
+        Approves the drafts in these dates (Eastern). Each one is checked first: picture, a time still ahead, channels connected, product tags taggable on
+        Instagram, and the caption check. Approved posts go out at their own time.
+      </p>
+      {err && <p className="text-xs text-[var(--wms-status-danger-fg)]">{err}</p>}
+      {res && (
+        <div className="flex flex-col gap-1 text-xs text-[var(--wms-fg)]">
+          <p>
+            <b>{res.label}:</b>{" "}
+            {res.outcomes.length === 0
+              ? "nothing to approve in these dates."
+              : `${n("approved").length} approved · ${n("checking").length} checking the caption (they approve themselves when it passes) · ${n("blocked").length} not approved`}
+          </p>
+          {n("blocked").length > 0 && (
+            <ul className="flex flex-col gap-0.5">
+              {n("blocked").map((o) => (
+                <li key={o.id} className="text-[var(--wms-status-danger-fg)]">
+                  {etWhen(o.when)} · {o.title}: {o.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

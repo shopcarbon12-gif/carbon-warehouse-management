@@ -295,3 +295,21 @@ export async function igAccountDay(igUserId: string, sinceSec: number, untilSec:
   const v = (n: string) => Number(r.data?.find((m) => m.name === n)?.total_value?.value ?? 0);
   return { followers: acc.followers_count ?? 0, reach: v("reach"), views: v("views"), profile_views: v("profile_views"), website_clicks: v("website_clicks") };
 }
+
+/**
+ * Meta catalog products a post tags that Instagram would refuse: anything not
+ * "published" (e.g. visible_only_with_overrides — the launch carousel's
+ * hidden Jade Cream blazer, 2026-10-27) or not found.
+ */
+export async function untaggableProducts(ids: string[]): Promise<{ id: string; why: string }[]> {
+  const bad: { id: string; why: string }[] = [];
+  for (const id of [...new Set(ids)]) {
+    try {
+      const p = await graph<{ visibility?: string }>(id, "GET", { fields: "visibility" });
+      if (p.visibility !== "published") bad.push({ id, why: p.visibility ?? "unknown" });
+    } catch (e) {
+      bad.push({ id, why: e instanceof Error ? e.message : "not found" });
+    }
+  }
+  return bad;
+}
