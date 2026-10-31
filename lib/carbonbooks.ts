@@ -52,3 +52,31 @@ export async function carbonBooksVisible(userId: string): Promise<boolean> {
   cache.set(userId, { visible, at: Date.now() });
   return visible;
 }
+
+/**
+ * Access management (Settings → Users & roles → CarbonBooks). WMS forwards the request with the
+ * signed-in person as the actor; CarbonBooks checks they are a CarbonBooks Admin and that the
+ * change carries their SMS code. WMS stores nothing.
+ */
+export async function carbonBooksAdminCall(
+  path: string,
+  actor: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<Response> {
+  const cfg = carbonBooksConfig();
+  if (!cfg) return Response.json({ error: "CarbonBooks is not connected." }, { status: 503 });
+  const key = createHmac("sha256", cfg.secret).update("carbonbooks-wms-access-admin").digest("base64url");
+  try {
+    const res = await fetch(`${cfg.url}${path}`, {
+      method: init.method ?? "GET",
+      headers: { Authorization: `Bearer ${key}`, "X-WMS-Actor": actor, "Content-Type": "application/json" },
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const text = await res.text();
+    return new Response(text, { status: res.status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  } catch {
+    return Response.json({ error: "CarbonBooks can't be reached right now." }, { status: 502 });
+  }
+}
