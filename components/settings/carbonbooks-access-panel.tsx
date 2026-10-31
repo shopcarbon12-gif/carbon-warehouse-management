@@ -9,7 +9,7 @@ import type { TenantUserListRow } from "@/lib/queries/settings-users";
  *
  * Who may see CarbonBooks and at which level is decided here, but stored and enforced by
  * CarbonBooks itself (books.shopcarbon.com): WMS only forwards the change. Every change needs
- * the acting CarbonBooks Admin's SMS code. Everyone starts Blocked — CarbonBooks is invisible
+ * the acting CarbonBooks Admin's emailed code. Everyone starts Blocked — CarbonBooks is invisible
  * to them, including in the WMS menu.
  */
 const LEVELS = [
@@ -27,7 +27,7 @@ const AREAS = [
 ] as const;
 
 type Grant = { level: Level; areaOverrides: Partial<Record<string, Level>>; companyIds: string[] | null; locationIds: string[] | null };
-type AccessInfo = { grant: Grant; account: { status: string; username: string | null; phoneHint: string | null } | null; isSelf: boolean };
+type AccessInfo = { grant: Grant; account: { status: string; username: string | null; email: string | null } | null; isSelf: boolean };
 
 const fetcher = async (url: string) => {
   const res = await fetch(url, { cache: "no-store" });
@@ -50,7 +50,7 @@ export function CarbonBooksAccessPanel() {
     <div className="space-y-4">
       <p className="text-sm text-[var(--wms-muted)]">
         Choose who can open CarbonBooks and what they may do. People set to <b>Blocked</b> don&rsquo;t see CarbonBooks anywhere, including this menu.
-        Every change is confirmed with a code texted to <b>your</b> phone and recorded in the CarbonBooks security log.
+        Every change is confirmed with a code emailed to <b>you</b> and recorded in the CarbonBooks security log.
       </p>
       <label className="block space-y-1.5">
         <span className="text-sm font-semibold">Person</span>
@@ -68,7 +68,6 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
   const { data, error, mutate } = useSWR<AccessInfo>(`/api/carbonbooks/access?user=${user.id}`, fetcher, { revalidateOnFocus: false });
   const [level, setLevel] = useState<Level | null>(null);
   const [overrides, setOverrides] = useState<Partial<Record<string, Level>> | null>(null);
-  const [phone, setPhone] = useState("");
   const [step, setStep] = useState<"edit" | "code" | "done">("edit");
   const [challenge, setChallenge] = useState("");
   const [hint, setHint] = useState("");
@@ -93,7 +92,7 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
     const j = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) return setMsg({ ok: false, text: j.error ?? "Couldn't send the code." });
-    setChallenge(j.challenge); setHint(j.phoneHint); setCode(""); setStep("code");
+    setChallenge(j.challenge); setHint(j.sentTo); setCode(""); setStep("code");
   }
   async function apply() {
     setBusy(true); setMsg(null);
@@ -103,7 +102,7 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
       body: JSON.stringify({
         target: user.id,
         grant: { level: curLevel, areaOverrides: curOver, companyIds: data!.grant.companyIds, locationIds: data!.grant.locationIds },
-        invitePhone: needsInvite && phone ? phone.trim() : undefined,
+        inviteEmail: needsInvite ? user.email : undefined,
         challenge, code,
       }),
     });
@@ -114,7 +113,7 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
       return setMsg({ ok: false, text: j.error ?? "The change wasn't saved." });
     }
     setInvite(j.inviteUrl ?? null); setStep("done"); setMsg({ ok: true, text: "Saved. The change is in the CarbonBooks security log." });
-    setLevel(null); setOverrides(null); setPhone("");
+    setLevel(null); setOverrides(null);
     await mutate();
   }
 
@@ -124,8 +123,8 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
     <div className="space-y-4 rounded-lg border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-4">
       <div className="text-sm">
         <b>CarbonBooks account:</b>{" "}
-        {data.account?.status === "active" ? <>active — username <code>{data.account.username}</code>, phone {data.account.phoneHint}</>
-          : data.account?.status === "invited" ? <>invitation sent (phone {data.account.phoneHint}), not accepted yet</>
+        {data.account?.status === "active" ? <>active — username <code>{data.account.username}</code>, codes go to {data.account.email}</>
+          : data.account?.status === "invited" ? <>invitation sent to {data.account.email}, not accepted yet</>
           : <>none yet</>}
       </div>
 
@@ -166,22 +165,20 @@ function PersonAccess({ user }: { user: TenantUserListRow }) {
           )}
 
           {needsInvite && (
-            <label className="block space-y-1.5">
-              <span className="text-sm font-semibold">Mobile number for the invitation</span>
-              <input className={inputCls} inputMode="tel" placeholder="+14075550142" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              <span className="block text-sm text-[var(--wms-muted)]">CarbonBooks texts sign-in codes to this number. Write it with the country code, like +14075550142.</span>
-            </label>
+            <p className="text-sm text-[var(--wms-muted)]">
+              An invitation will be emailed to <b>{user.email}</b> (their CarbonWMS email). CarbonBooks sends sign-in codes to that address.
+            </p>
           )}
 
-          <button type="button" className={primaryCls} disabled={busy || (needsInvite && !phone.trim())} onClick={askCode}>
-            {busy ? "Sending code…" : "Save — text me a code to confirm"}
+          <button type="button" className={primaryCls} disabled={busy} onClick={askCode}>
+            {busy ? "Sending code…" : "Save — email me a code to confirm"}
           </button>
         </>
       )}
 
       {step === "code" && (
         <div className="space-y-3">
-          <p>We texted a 6-digit code to <b>your</b> phone {hint}. Enter it to confirm this change.</p>
+          <p>We emailed a 6-digit code to <b>you</b> ({hint}). Enter it to confirm this change.</p>
           <input className={`${inputCls} max-w-[220px] text-center text-2xl tracking-[0.4em]`} inputMode="numeric" autoComplete="one-time-code" maxLength={6}
             aria-label="6-digit code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} />
           <div className="flex flex-wrap gap-2">
