@@ -1,0 +1,55 @@
+{
+ "product": {
+  "id": "gid://shopify/Product/9217359806716",
+  "title": "Imagin Hat",
+  "handle": "imagin-hat",
+  "seo": {
+   "title": "Imagin Hat – Graphic Cap | Carbon",
+   "description": "Imagin Hat: Black cap with bold IMAGINE and MAKE IT REAL! text, featuring purple and neon accents."
+  }
+ },
+ "es": [
+  {
+   "key": "title",
+   "value": "Sombrero Imagin"
+  },
+  {
+   "key": "body_html",
+   "value": "<p>La gorra Imagin es una gorra negra que presenta el texto llamativo 'IMAGINE' y 'MAKE IT REAL!'. Tiene detalles en morado y neón, un detalle de rayas en la visera y el logotipo de Carbon en el lateral.</p><ul>\n\n<li>Gorra negra con detalle morado</li>\n\n<li>Detalle neón</li>\n\n<li>Texto IMAGINE</li>\n\n<li>Texto MAKE IT REAL!</li>\n\n<li>Logotipo de Carbon en el lateral</li>\n\n\n</ul>"
+  },
+  {
+   "key": "product_type",
+   "value": "HOMBRES &gt;&gt; ACCESORIOS"
+  },
+  {
+   "key": "meta_title",
+   "value": "Imagin Hat – Gorra Gráfica | Carbon"
+  },
+  {
+   "key": "meta_description",
+   "value": "Gorra Imagin: Gorra negra con el texto IMAGINE y MAKE IT REAL! en negrita, con detalles en morado y neón."
+  }
+ ],
+ "pt": [
+  {
+   "key": "title",
+   "value": "Boné Imagin"
+  },
+  {
+   "key": "product_type",
+   "value": "HOMEM &gt;&gt; ACESSÓRIOS"
+  },
+  {
+   "key": "body_html",
+   "value": "<p>O boné Imagin é um boné preto que apresenta o texto em destaque \"IMAGINE\" e \"MAKE IT REAL!\". Ele possui detalhes em roxo e neon, uma aba listrada e o logotipo da Carbon na lateral.</p><ul>\n\n<li>Boné preto com detalhes em roxo</li>\n\n<li>Detalhe em neon</li>\n\n<li>Texto IMAGINE</li>\n\n<li>Texto MAKE IT REAL!</li>\n\n<li>Logotipo da Carbon na lateral</li>\n\n\n</ul>"
+  },
+  {
+   "key": "meta_title",
+   "value": "Imagin Hat – Boné Gráfico | Carbon"
+  },
+  {
+   "key": "meta_description",
+   "value": "Boné Imagin: Boné preto com o texto IMAGINE e MAKE IT REAL! em destaque, apresentando detalhes em roxo e neon."
+  }
+ ]
+}

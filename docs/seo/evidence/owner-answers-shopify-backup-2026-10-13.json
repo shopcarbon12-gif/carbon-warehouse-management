@@ -1,0 +1,2354 @@
+{
+ "adrian-cargo-pants": {
+  "id": "gid://shopify/Product/9217471545596",
+  "title": "Adrian Cargo Pants",
+  "status": "ACTIVE",
+  "type": "MEN >> PANTS",
+  "colours": [
+   "KHAKI",
+   "STONE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799376494844",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563397884",
+      "name": "KHAKI"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563430652",
+      "name": "STONE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563463420",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799376527612",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563627260",
+      "name": "XS"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563561724",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563528956",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563496188",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486563594492",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895676063996",
+   "value": "90% Polyester, 10% Lycra"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38419528515836",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_41_21PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419528548604",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_35_22PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419528483068",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_41_42PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419528384764",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_33_48PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419528417532",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_32_39PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473629436",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_29_47PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473727740",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_22_12PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473596668",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_30_20PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473662204",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_29_01PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473694972",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_28_24PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473793276",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_02_59PM_e93f1365-43d3-4200-867c-a1dd1e011b00.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473826044",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_02_56PM_045c6b9d-a5b1-46e3-b282-000c3ef1e767.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473891580",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_02_47PM_f4007da9-8041-4f39-a476-19e246aba36a.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473760508",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_07_52PM.png?v=1769575973"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38419473924348",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPTImageJan27_2026_11_02_44PM_0833232f-c4a7-4806-a93d-c2a3c767ae6b.png?v=1769575973"
+   }
+  ]
+ },
+ "axel-coat": {
+  "id": "gid://shopify/Product/9217473151228",
+  "title": "Axel Coat",
+  "status": "ACTIVE",
+  "type": "MEN >> COAT",
+  "colours": [
+   "BLUE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799378854140",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486569525500",
+      "name": "BLUE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799378886908",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486569623804",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486569591036",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486569558268",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486569656572",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895687827708",
+   "value": "100% Naylon"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285558808828",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-0.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285558841596",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-1.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285558874364",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-2.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285558907132",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-3.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285558939900",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-4.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285558972668",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-5.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285559005436",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-6.png?v=1790994778"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285559038204",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790994773166-7.png?v=1790994778"
+   }
+  ]
+ },
+ "beaded-bracelet-f": {
+  "id": "gid://shopify/Product/9217322221820",
+  "title": "Beaded Bracelet F",
+  "status": "ACTIVE",
+  "type": "MEN >> ACCESSORIES",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799196369148",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486174212348",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799196401916",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486174245116",
+      "name": "11"
+     }
+    ]
+   }
+  ],
+  "fabric": null,
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285568377084",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-0.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568409852",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-1.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568442620",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-2.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568475388",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-3.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568508156",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-4.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568540924",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-5.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568573692",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-6.png?v=1790995023"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285568606460",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995017308-7.png?v=1790995023"
+   }
+  ]
+ },
+ "bracelet-z": {
+  "id": "gid://shopify/Product/9217360789756",
+  "title": "Bracelet Z",
+  "status": "ACTIVE",
+  "type": "MEN >> ACCESSORIES",
+  "colours": [
+   "BLUE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799250764028",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486364168444",
+      "name": "BLUE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799250796796",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486364201212",
+      "name": "OS"
+     }
+    ]
+   }
+  ],
+  "fabric": null,
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285609894140",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-0.png?v=1790995852"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285609926908",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-1.png?v=1790995852"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285609959676",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-2.png?v=1790995852"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285609992444",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-3.png?v=1790995853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285610025212",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-4.png?v=1790995852"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285610057980",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790995847807-5.png?v=1790995853"
+   }
+  ]
+ },
+ "braided-bracelet-f": {
+  "id": "gid://shopify/Product/9217322975484",
+  "title": "Braided Bracelet F",
+  "status": "ACTIVE",
+  "type": "MEN >> ACCESSORIES",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799197745404",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486175588604",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799197778172",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486175621372",
+      "name": "11"
+     }
+    ]
+   }
+  ],
+  "fabric": null,
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285635518716",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-0.png?v=1790996419"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285635551484",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-1.png?v=1790996419"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285635584252",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-2.png?v=1790996419"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285635617020",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-3.png?v=1790996419"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285635649788",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-4.png?v=1790996419"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285635682556",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790996414362-5.png?v=1790996419"
+   }
+  ]
+ },
+ "camel-flush-sneakers": {
+  "id": "gid://shopify/Product/9217356169468",
+  "title": "Camel Flush Sneakers",
+  "status": "ACTIVE",
+  "type": "MEN >> SHOES",
+  "colours": [
+   "CAMEL FLUSH WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799244767484",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342705404",
+      "name": "CAMEL FLUSH GREY"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342738172",
+      "name": "CAMEL FLUSH WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799244800252",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342770940",
+      "name": "40"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342803708",
+      "name": "41"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342836476",
+      "name": "42"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486342869244",
+      "name": "43"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486357975292",
+      "name": "44"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486358008060",
+      "name": "45"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895593849084",
+   "value": "Upper: PU, Lining: PU, Sole: Rubber"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38375353024764",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/wtgeztnoxzje8nr8zezr.jpg?v=1769602496"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375353057532",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/hrjzoruqtjf22nuabslt.jpg?v=1769602496"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375352991996",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/xcmc9olb8yt7y9l6dllq.jpg?v=1769602496"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375352959228",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/jr2wk8aezxdo0l4yjhaw.jpg?v=1769602496"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400307560700",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944040521-4.jpg?v=1791944043"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400307593468",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944040521-5.jpg?v=1791944043"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400307626236",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944040521-6.jpg?v=1791944043"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400307659004",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944040521-7.jpg?v=1791944043"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400307691772",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944040521-8.jpg?v=1791944043"
+   }
+  ]
+ },
+ "choices-t-shirt": {
+  "id": "gid://shopify/Product/9217348108540",
+  "title": "Choices T-Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> T-SHIRT",
+  "colours": [
+   "BLACK",
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799231725820",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295322876",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295355644",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799231758588",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295453948",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295421180",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295388412",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295486716",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486295519484",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895577399548",
+   "value": "95% Cotton, 5% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400342098172",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-0.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342130940",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-1.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342163708",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-2.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342196476",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-3.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342229244",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-4.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342262012",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-5.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342294780",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-6.jpg?v=1791944587"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400342327548",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944583665-7.jpg?v=1791944587"
+   }
+  ]
+ },
+ "choose-your-future-t-shirt": {
+  "id": "gid://shopify/Product/9217348403452",
+  "title": "Choose Your Future T-Shirt",
+  "status": "ACTIVE",
+  "type": "T-SHIRT",
+  "colours": [
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799232151804",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296436988",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296469756",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799232184572",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296568060",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296535292",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296502524",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296600828",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486296633596",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895577596156",
+   "value": "95% Cotton, 5% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46384971284732",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-4.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971317500",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-5.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971350268",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-6.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971383036",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-7.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971153660",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-0.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971186428",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-1.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971219196",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-2.jpg?v=1791819813"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46384971251964",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791819809287-3.jpg?v=1791819813"
+   }
+  ]
+ },
+ "cole-pants-set": {
+  "id": "gid://shopify/Product/9217472364796",
+  "title": "Cole Pants Set",
+  "status": "ACTIVE",
+  "type": "MEN >> PANTS",
+  "colours": [
+   "CREAM",
+   "GREY"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799377740028",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566379772",
+      "name": "CREAM"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566412540",
+      "name": "GREY"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799377772796",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566510844",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566478076",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566445308",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566543612",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895677178108",
+   "value": "65% Cotton, 35% Polyester"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285945110780",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791001899923-0.png?v=1791001905"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285945176316",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791001899923-2.png?v=1791001905"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285945209084",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791001899923-3.png?v=1791001905"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285945241852",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791001899923-4.png?v=1791001904"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285956874492",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002578035-6.png?v=1791002581"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285950943484",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002215199-6.png?v=1791002219"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285950976252",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002215199-7.png?v=1791002219"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285956907260",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002578035-9.png?v=1791002581"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285951009020",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002215199-8.png?v=1791002218"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285951041788",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791002215199-9.png?v=1791002218"
+   }
+  ]
+ },
+ "creed-jeans": {
+  "id": "gid://shopify/Product/9217348894972",
+  "title": "Creed Jeans",
+  "status": "ACTIVE",
+  "type": "MEN >> JEANS",
+  "colours": [
+   "BLUE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799232938236",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299156732",
+      "name": "BLUE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799232971004",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299189500",
+      "name": "29"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299222268",
+      "name": "30"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299255036",
+      "name": "31"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299287804",
+      "name": "32"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299320572",
+      "name": "33"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299353340",
+      "name": "34"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486299386108",
+      "name": "36"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895577694460",
+   "value": "97% Cotton, 3% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/39848577925372",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/download_1.png?v=1786537958"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39848577990908",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/download_3.png?v=1786537958"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39848578023676",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/download_4.png?v=1786537958"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39848578056444",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/download_5.png?v=1786537958"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39848577958140",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/download_2.png?v=1786537958"
+   }
+  ]
+ },
+ "david-denim-shorts": {
+  "id": "gid://shopify/Product/9217498382588",
+  "title": "David Denim Shorts",
+  "status": "ACTIVE",
+  "type": "MEN >> SHORTS",
+  "colours": [
+   "GREY WASHED"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799413784828",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678184188",
+      "name": "GREY WASHED"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799413817596",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678216956",
+      "name": "30"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678249724",
+      "name": "31"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678282492",
+      "name": "32"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678315260",
+      "name": "33"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678348028",
+      "name": "34"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678380796",
+      "name": "36"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486678413564",
+      "name": "38"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895728460028",
+   "value": "98% Cotton, 2% Spandex"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46285996622076",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-0.png?v=1791003977"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285996654844",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-1.png?v=1791003977"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285996687612",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-2.png?v=1791003977"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285996720380",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-3.png?v=1791003978"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285996753148",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-4.png?v=1791003977"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46285996785916",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791003972386-5.png?v=1791003977"
+   }
+  ]
+ },
+ "don-t-care-mesh-hat": {
+  "id": "gid://shopify/Product/9217359741180",
+  "title": "Don't Care Mesh Hat",
+  "status": "ACTIVE",
+  "type": "MEN >> ACCESSORIES",
+  "colours": [
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799249289468",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486360072444",
+      "name": "WHITE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486360039676",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799249322236",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486360105212",
+      "name": "OS"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895595028732",
+   "value": "100% Cotton"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400233275644",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-0.jpg?v=1791942793"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400233308412",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-1.jpg?v=1791942793"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400233341180",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-2.jpg?v=1791942793"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400233373948",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-3.jpg?v=1791942793"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400233406716",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-4.jpg?v=1791942793"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400233439484",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791942789168-5.jpg?v=1791942793"
+   }
+  ]
+ },
+ "don-t-touch-me-t-shirt": {
+  "id": "gid://shopify/Product/9217344930044",
+  "title": "Don't Touch Me T-Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> T-SHIRT",
+  "colours": [
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799227564284",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277333244",
+      "name": "WHITE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277300476",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799227597052",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277431548",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277398780",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277366012",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277464316",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486277497084",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895576285436",
+   "value": "95% Cotton, 5% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400354255100",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-0.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354287868",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-1.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354320636",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-2.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354353404",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-3.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354386172",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-4.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354418940",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-5.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354451708",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-6.jpg?v=1791944807"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400354484476",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944803296-7.jpg?v=1791944807"
+   }
+  ]
+ },
+ "dream-top-set": {
+  "id": "gid://shopify/Product/9217475019004",
+  "title": "Dream Top Set",
+  "status": "ACTIVE",
+  "type": "MEN >> T- SHIRT",
+  "colours": [
+   "PRINT"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799381704956",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486576177404",
+      "name": "PRINT"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799381737724",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486576275708",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486576242940",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486576210172",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486576308476",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895688876284",
+   "value": "100% Polyester"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/39925797486844",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787763266473-0.png?v=1787763271"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39925797519612",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787763266473-1.jpg?v=1787763271"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39925797552380",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787763266473-2.png?v=1787763271"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39925797585148",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787763266473-3.png?v=1787763271"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39925797617916",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787763266473-4.png?v=1787763271"
+   }
+  ]
+ },
+ "dreamin-pants-set": {
+  "id": "gid://shopify/Product/9217472233724",
+  "title": "Dreamin Pants Set",
+  "status": "ACTIVE",
+  "type": "SWEATPANTS",
+  "colours": [
+   "BLACK",
+   "GREY",
+   "TEAL"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799377510652",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486565855484",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486565921020",
+      "name": "GREY"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486565888252",
+      "name": "TEAL"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799377543420",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566019324",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486565986556",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486565953788",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486566052092",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895677014268",
+   "value": "65% Cotton, 35% Polyester"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400286163196",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-0.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286195964",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-1.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286228732",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-2.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286261500",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-3.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286294268",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-4.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286327036",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-5.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286359804",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-6.jpg?v=1791943667"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286392572",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-7.jpg?v=1791943667"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286425340",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-8.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286458108",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-9.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286490876",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-10.jpg?v=1791943666"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400286523644",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943660774-11.jpg?v=1791943667"
+   }
+  ]
+ },
+ "fill-in-the-blank-t-shirt": {
+  "id": "gid://shopify/Product/9217346109692",
+  "title": "Fill In The Blank T-Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> T-SHIRT",
+  "colours": [
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799229169916",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281167100",
+      "name": "WHITE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281199868",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281134332",
+      "name": "BLUE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799229202684",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281298172",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281265404",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281232636",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486281330940",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486356566268",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895576678652",
+   "value": "95% Cotton, 5% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/40002462122236",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-4.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462155004",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-5.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462187772",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-6.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462220540",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-7.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462253308",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-8.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462286076",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-9.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462318844",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-10.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462351612",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-11.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002461991164",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-0.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462023932",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-1.jpg?v=1788776467"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462056700",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-2.jpg?v=1788776468"
+   },
+   {
+    "id": "gid://shopify/MediaImage/40002462089468",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1788776463006-3.jpg?v=1788776467"
+   }
+  ]
+ },
+ "game-t-shirt": {
+  "id": "gid://shopify/Product/9217488781564",
+  "title": "Game T-Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> T- SHIRT",
+  "colours": [
+   "BLACK",
+   "BLUE",
+   "GREY"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799400481020",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646038780",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486645973244",
+      "name": "BLUE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646006012",
+      "name": "GREY"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799400513788",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646137084",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646104316",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646071548",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486646169852",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895701197052",
+   "value": "100% Cotton"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/39408369238268",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_01052909-e73c-404b-9387-f621773324eb.png?v=1781229871"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369271036",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_8f1f68f9-b108-4153-a81f-4cb3cb941bee.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369303804",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_e960843d-a41e-4384-ad98-8f617c18628b.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369336572",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_e00a0ec8-1937-45ca-a874-09e8af449e73.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369369340",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_ee7ca583-9296-4e0f-b577-7bd70b2f3132.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369402108",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_434309a4-57cc-4836-a614-4906361f1eca.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369434876",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_cccee3a2-0134-4a0b-bdd9-d36f526de0fb.png?v=1781229873"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369467644",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_10825316-4c36-48f8-a79e-5a7c20170d2d.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369500412",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_b96a3de4-e476-41d1-863a-f0a32c378407.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369533180",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_364926e7-824d-48e6-af6f-6456d6ff57ab.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369565948",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_128a483e-9c15-4917-a291-f8821d90529b.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369598716",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_331bbb6d-3376-4db8-94a8-f59de68853f4.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369631484",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_5e734a72-7d14-4e4a-acd0-2022343bf68a.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369664252",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_b1368953-cea3-4134-96c5-e0f955d85583.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369697020",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_85f0eca3-6bc8-4ecc-8ae9-f1b4a119523d.png?v=1781229873"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369729788",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_39ad9874-0f95-42f7-aa14-5aa4bd9dfeac.png?v=1781229872"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369762556",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_6a35f15c-153b-4e89-8a06-f5f312b62093.png?v=1781229871"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39408369795324",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/preview_e54066e9-ec00-4c4f-a848-8d580a78bf84.png?v=1781229871"
+   }
+  ]
+ },
+ "logo-sneakers": {
+  "id": "gid://shopify/Product/9217356267772",
+  "title": "Logo Sneakers",
+  "status": "ACTIVE",
+  "type": "MEN >> SHOES",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799244931324",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343098620",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343131388",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799244964092",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343164156",
+      "name": "40"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343196924",
+      "name": "41"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343229692",
+      "name": "42"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486343262460",
+      "name": "43"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486358270204",
+      "name": "44"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486358302972",
+      "name": "45"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895594340604",
+   "value": "Upper: PU, Lining: PU, Sole: Rubber"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400318669052",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944224496-0.jpg?v=1791944226"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375353647356",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/mllweb9qqys4lwwlgpvi.jpg?v=1769065970"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375353680124",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/k3dptolw2uvt8kmajkz7.jpg?v=1769065969"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400318701820",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791944224496-3.jpg?v=1791944226"
+   }
+  ]
+ },
+ "louie-shorts-set": {
+  "id": "gid://shopify/Product/9217466171644",
+  "title": "Louie Shorts Set",
+  "status": "ACTIVE",
+  "type": "MEN >> SHORTS",
+  "colours": [
+   "LIGHT BLUE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799367581948",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539247868",
+      "name": "LIGHT BLUE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539215100",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799367614716",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539346172",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539313404",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539280636",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539378940",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486539411708",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895661580540",
+   "value": "100% Cotton"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46234248413436",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790658850074-0.png?v=1790658853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234248446204",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790658850074-1.png?v=1790658853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234248478972",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790658850074-2.png?v=1790658853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234248511740",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790658850074-3.png?v=1790658853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234248544508",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790658850074-4.png?v=1790658853"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234021822716",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790654298771-1.png?v=1790654303"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234021855484",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790654298771-2.png?v=1790654303"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234021888252",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790654298771-3.png?v=1790654303"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234021921020",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790654298771-4.png?v=1790654303"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46234021953788",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1790654298771-5.png?v=1790654303"
+   }
+  ]
+ },
+ "oz-jeans": {
+  "id": "gid://shopify/Product/9217500217596",
+  "title": "OZ Jeans",
+  "status": "ACTIVE",
+  "type": "MEN >> JEANS",
+  "colours": [
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799416406268",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684803324",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799416439036",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684836092",
+      "name": "29"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684868860",
+      "name": "30"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684901628",
+      "name": "31"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684934396",
+      "name": "32"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684967164",
+      "name": "33"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486684999932",
+      "name": "34"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486685032700",
+      "name": "36"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895728886012",
+   "value": "97% Cotton, 3% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/39908680925436",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553946580.png?v=1787553949"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681122044",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553950040.png?v=1787553953"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681154812",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553953034.png?v=1787553956"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681351420",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553955992.png?v=1787553959"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681416956",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553959080.png?v=1787553962"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681580796",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553962122.png?v=1787553965"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908681646332",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787553965134.png?v=1787553968"
+   }
+  ]
+ },
+ "ronald-pants": {
+  "id": "gid://shopify/Product/9217362264316",
+  "title": "Ronald Pants",
+  "status": "ACTIVE",
+  "type": "MEN >> PANTS",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799253057788",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486373015804",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799253090556",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486373114108",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486373081340",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486373048572",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486373146876",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895596830972",
+   "value": "64% Polyester, 32% Viscose, 4% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46400296812796",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943873459-0.jpg?v=1791943878"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400296845564",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943873459-1.jpg?v=1791943878"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400296878332",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943873459-2.jpg?v=1791943878"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400296911100",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943873459-3.jpg?v=1791943878"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46400296943868",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791943873459-4.jpg?v=1791943878"
+   }
+  ]
+ },
+ "russell-jacket": {
+  "id": "gid://shopify/Product/9217473446140",
+  "title": "Russell Jacket",
+  "status": "ACTIVE",
+  "type": "MEN >> JACKET",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799379312892",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570508540",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799379345660",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570606844",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570574076",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570541308",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570639612",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486570672380",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895688483068",
+   "value": "100% Polyester"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38375716946172",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/zsixczfbuyzvolu4ixtr.jpg?v=1769063042"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375716978940",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ja2pexfgp0605xokyzia.jpg?v=1769063042"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375717011708",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/lbc9hgtunxx2pvf3f87q.jpg?v=1769063042"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375717044476",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/h9eibqd1k8bufpyt0hsf.jpg?v=1769063041"
+   }
+  ]
+ },
+ "rye-jeans": {
+  "id": "gid://shopify/Product/9217500578044",
+  "title": "Rye Jeans",
+  "status": "ACTIVE",
+  "type": "MEN >> JEANS",
+  "colours": [
+   "BLACK"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799416930556",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687260924",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799416963324",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687293692",
+      "name": "30"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687326460",
+      "name": "31"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687359228",
+      "name": "32"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687391996",
+      "name": "33"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687424764",
+      "name": "34"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687457532",
+      "name": "36"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486687490300",
+      "name": "38"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895729311996",
+   "value": "97% Cotton, 3% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/39908732469500",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787555314420.png?v=1787555316"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908732502268",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787555316829.png?v=1787555319"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908732535036",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787555318911.png?v=1787555321"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908732567804",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787555321027.png?v=1787555323"
+   },
+   {
+    "id": "gid://shopify/MediaImage/39908732961020",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1787555323128.png?v=1787555325"
+   }
+  ]
+ },
+ "summer-flip-flops": {
+  "id": "gid://shopify/Product/9217360101628",
+  "title": "Summer Flip Flops",
+  "status": "ACTIVE",
+  "type": "MEN >> SHOES",
+  "colours": [
+   "BLACK",
+   "RED",
+   "STONE",
+   "WHITE"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799249813756",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486360989948",
+      "name": "BLACK"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486361022716",
+      "name": "RED"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486361055484",
+      "name": "STONE"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486360957180",
+      "name": "WHITE"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799249846524",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486361088252",
+      "name": "36"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486361121020",
+      "name": "37"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486361153788",
+      "name": "38"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486652920060",
+      "name": "39"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486652952828",
+      "name": "40"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486653378812",
+      "name": "41"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486653411580",
+      "name": "42"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486653477116",
+      "name": "43"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486653509884",
+      "name": "44"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486653542652",
+      "name": "45"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895595553020",
+   "value": "Upper: PVC, Sole: PVC"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38375396278524",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/q0xsqshlkot0qcwkyzi0.jpg?v=1769066121"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375396311292",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/jtylikskf94eelvv0l4v.jpg?v=1769066120"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375396344060",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/a925vr9ye0m6figdjlbe.jpg?v=1769066120"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375396376828",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/u74ugvb6h36pwyc5yucp.jpg?v=1769066121"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375396409596",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/zwsq0seznwf5xgwtqytl.jpg?v=1769066121"
+   }
+  ]
+ },
+ "survive-t-shirt": {
+  "id": "gid://shopify/Product/9217478983932",
+  "title": "Survive T-Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> T- SHIRT",
+  "colours": [
+   "TEAL"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799387242748",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486594887932",
+      "name": "TEAL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486594920700",
+      "name": "BLACK"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799387275516",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486595019004",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486594986236",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486594953468",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486595051772",
+      "name": "XL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895690547452",
+   "value": "100% Cotton"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/46308300226812",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-8.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300259580",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-9.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300292348",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-10.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300325116",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-11.png?v=1791220540"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300357884",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-12.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300390652",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-13.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300423420",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-14.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308300456188",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791220535938-15.png?v=1791220541"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308237869308",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-0.png?v=1791219842"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308237902076",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-1.png?v=1791219843"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308237934844",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-2.png?v=1791219843"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308237967612",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-3.png?v=1791219843"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308238000380",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-4.png?v=1791219842"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308238033148",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-5.png?v=1791219845"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308238065916",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-6.png?v=1791219843"
+   },
+   {
+    "id": "gid://shopify/MediaImage/46308238098684",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/studio-1791219837866-7.png?v=1791219843"
+   }
+  ]
+ },
+ "tom-denim-shirt": {
+  "id": "gid://shopify/Product/9217442709756",
+  "title": "Tom Denim Shirt",
+  "status": "ACTIVE",
+  "type": "MEN >> DENIM JACKET",
+  "colours": [
+   "GREY WASHED"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799339794684",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487802108",
+      "name": "GREY WASHED"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799339827452",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487900412",
+      "name": "S"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487867644",
+      "name": "M"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487834876",
+      "name": "L"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487933180",
+      "name": "XL"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486487965948",
+      "name": "XXL"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895640609020",
+   "value": "98% Cotton, 2% Elastane"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38375532953852",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/imrxtfc8ttluwtmstwq9.jpg?v=1769060823"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375532986620",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/nhfcma8cmim4ewr8hasc.jpg?v=1769060824"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375533019388",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/sfcrcclcqnzkb26rvper.jpg?v=1769060824"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375533052156",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/o4dz5zsjku3f1kkiidl7.jpg?v=1769060824"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375533084924",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/cit7i8wgicuzvhsf2njf.jpg?v=1769060822"
+   }
+  ]
+ },
+ "weston-jeans": {
+  "id": "gid://shopify/Product/9217330774268",
+  "title": "Weston Jeans",
+  "status": "ACTIVE",
+  "type": "MEN >> JEANS",
+  "colours": [
+   "DARK GREY"
+  ],
+  "options": [
+   {
+    "id": "gid://shopify/ProductOption/11799208198396",
+    "name": "Color",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214582524",
+      "name": "DARK GREY"
+     }
+    ]
+   },
+   {
+    "id": "gid://shopify/ProductOption/11799208231164",
+    "name": "Size",
+    "optionValues": [
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214615292",
+      "name": "29"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214648060",
+      "name": "30"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214680828",
+      "name": "31"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214713596",
+      "name": "32"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214746364",
+      "name": "33"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214779132",
+      "name": "34"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214811900",
+      "name": "36"
+     },
+     {
+      "id": "gid://shopify/ProductOptionValue/4486214844668",
+      "name": "38"
+     }
+    ]
+   }
+  ],
+  "fabric": {
+   "id": "gid://shopify/Metafield/190895543550204",
+   "value": "98% Cotton, 2% Spandex"
+  },
+  "media": [
+   {
+    "id": "gid://shopify/MediaImage/38375126696188",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/yvumub2mrmobqpkvwhea.jpg?v=1769478761"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375126794492",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/apiulkxbmqqyn8iz1olp.jpg?v=1769478759"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375126728956",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ov9msyl6bymdhzpp9xqj.jpg?v=1769478760"
+   },
+   {
+    "id": "gid://shopify/MediaImage/38375126761724",
+    "url": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/hotknifrb0byg2ddecwu.jpg?v=1769478760"
+   }
+  ]
+ }
+}

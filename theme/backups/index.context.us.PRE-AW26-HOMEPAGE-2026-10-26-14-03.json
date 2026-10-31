@@ -1,0 +1,662 @@
+{
+  "parent": "index.json",
+  "context": {
+    "market": "us"
+  },
+  "sections": {
+    "spacer_ttCDi": {
+      "type": "spacer",
+      "disabled": false,
+      "settings": {
+        "spacer_mobile": 50,
+        "spacer_desktop": 35,
+        "border_separator": false,
+        "border_separator_full": true
+      },
+      "blocks": {},
+      "block_order": [],
+      "name": "Spacer"
+    },
+    "slideshow_AThAn": {
+      "type": "slideshow",
+      "disabled": false,
+      "settings": {
+        "desktop_height": "desktop-height-650",
+        "mobile_height": "mobile-height-500",
+        "full_width": true,
+        "autoplay": true,
+        "autoplay_length": 5,
+        "transition": "swipe",
+        "header-a592d03159444797b622ab30a7a456a2": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "slide_3Enqq": {
+          "type": "slide",
+          "disabled": false,
+          "settings": {
+            "image": "shopify:\/\/shop_images\/band_Carbon_Exclusive_banner_91248a7b-0e4c-472a-9d5f-64a93c261fed.jpg",
+            "mobile_image": "shopify:\/\/shop_images\/band_Carbon_Exclusive_banner_91248a7b-0e4c-472a-9d5f-64a93c261fed.jpg",
+            "slide_link": "",
+            "header-48e1fa11699051fed73326392d11554b": null,
+            "video_background": true,
+            "video": "",
+            "video_hosted": null,
+            "header-43c6f5918457c398e4c744d75c438d2c": null,
+            "subheading": "",
+            "heading": "",
+            "heading_size": "h1-xlarge",
+            "content": "The next drop is not for everyone — just for those who move different.\nStay tuned. Carbon Exclusive is coming.",
+            "description_size": "medium",
+            "content_position": "bottom-center",
+            "text_alignment": "center",
+            "content_size": "medium",
+            "header-7c4e2ecc6472e0798f148ad128889694": null,
+            "overlay_color": "#ffffff",
+            "overlay_opacity": 83,
+            "overlay_gradient": "linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4) 100%)",
+            "header-9736fde1380395b124e45eb870739d90": null,
+            "button_1_text": "",
+            "button_1_link": "",
+            "button_1_outline": true,
+            "header-febebb6778310a9bcbe22f2905112506": null,
+            "button_2_text": "Soon",
+            "button_2_link": "",
+            "button_2_outline": true
+          }
+        },
+        "slide_XLwQE": {
+          "type": "slide",
+          "disabled": true,
+          "settings": {
+            "image": null,
+            "mobile_image": null,
+            "slide_link": "",
+            "header-eb82afbb688313ede43108150c50bc44": null,
+            "video_background": false,
+            "video": "https:\/\/www.youtube.com\/watch?v=_9VUPq3SxOc",
+            "video_hosted": null,
+            "header-72c83f58a95b22ff8642639771af573f": null,
+            "subheading": "Add a tagline",
+            "heading": "Slide Heading",
+            "heading_size": "h1-xlarge",
+            "content": "Add descriptive text for your slide here.",
+            "description_size": "medium",
+            "content_position": "middle-center",
+            "text_alignment": "center",
+            "content_size": "medium",
+            "header-cacc695287d0e19cf65d0188fd3f4dcb": null,
+            "overlay_color": "#000000",
+            "overlay_opacity": 70,
+            "overlay_gradient": "linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.4) 100%)",
+            "header-09eea97a0f4deec854b62281d14b5142": null,
+            "button_1_text": "Shop Now",
+            "button_1_link": "",
+            "button_1_outline": true,
+            "header-da37c8fb21b67a78752458ae53b82b36": null,
+            "button_2_text": "Shop Now",
+            "button_2_link": "",
+            "button_2_outline": false
+          }
+        },
+        "slide_Ymcgt": {
+          "type": "slide",
+          "disabled": true,
+          "settings": {
+            "image": null,
+            "mobile_image": null,
+            "slide_link": "",
+            "header-68bace9eab950327755752faa06c4ecd": null,
+            "video_background": false,
+            "video": "https:\/\/www.youtube.com\/watch?v=_9VUPq3SxOc",
+            "video_hosted": null,
+            "header-df9b524621ced3085197c3b3bab07862": null,
+            "subheading": "Add a tagline",
+            "heading": "Slide Heading",
+            "heading_size": "h1-xlarge",
+            "content": "Add descriptive text for your slide here.",
+            "description_size": "medium",
+            "content_position": "middle-center",
+            "text_alignment": "center",
+            "content_size": "medium",
+            "header-3404102594878ab23ba59470809036e8": null,
+            "overlay_color": "#000000",
+            "overlay_opacity": 70,
+            "overlay_gradient": "linear-gradient(180deg, rgba(0,0,0, 0.1), rgba(0, 0, 0, 0.4) 100%)",
+            "header-678811367ee75384a82675be06820535": null,
+            "button_1_text": "Shop Now",
+            "button_1_link": "",
+            "button_1_outline": true,
+            "header-477960a75bde5f27ec7044f1e7962de5": null,
+            "button_2_text": "Shop Now",
+            "button_2_link": "",
+            "button_2_outline": false
+          }
+        }
+      },
+      "block_order": [
+        "slide_3Enqq",
+        "slide_XLwQE",
+        "slide_Ymcgt"
+      ],
+      "name": "Slideshow"
+    },
+    "collection_tabs_MNkVH": {
+      "type": "collection-tabs",
+      "disabled": false,
+      "custom_css": [
+        ".section-spacing.section-spacing--disable-top {margin-top: 20px;}"
+      ],
+      "settings": {
+        "heading": "POPULAR PRODUCTS",
+        "heading_left": true,
+        "description": "<h6>Men<\/h6>",
+        "full_width": true,
+        "product_limit": 12,
+        "columns_desktop": 4,
+        "show_view_all": false,
+        "show_progress_bar": true,
+        "header-954e006aca9b36815eebf7bbd5c1e0eb": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "collection_jQqGC": {
+          "type": "collection",
+          "disabled": false,
+          "settings": {
+            "collection": "t-shirts",
+            "header-89ed13475dee7a1d8d466477970acd81": null,
+            "enable_promotion": false,
+            "image": null,
+            "title": "Promotion heading",
+            "text": "Advertise a promotion or a sale",
+            "link_label": "Explore",
+            "content_position": "bottom-left",
+            "text_alignment": "left",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "header-61799e0cccbdde2075e6af1dd715cf60": null,
+            "overlay_color": "#000000",
+            "overlay_opacity": 70
+          }
+        }
+      },
+      "block_order": [
+        "collection_jQqGC"
+      ]
+    },
+    "featured_collection_U8BUg": {
+      "type": "featured-collection",
+      "disabled": false,
+      "custom_css": [
+        ".section-spacing.section-spacing--disable-top {margin-top: 20px;}"
+      ],
+      "settings": {
+        "heading": "FEATURED PRODUCTS",
+        "heading_left": true,
+        "description": "<h6>Men<\/h6>",
+        "full_width": true,
+        "header-ae7070b30bbd5c2d78033631f918e4c4": null,
+        "collection": "jeans-men",
+        "display_type": "carousel",
+        "product_limit": 12,
+        "columns_desktop": 4,
+        "show_view_all": false,
+        "header-ae9367a1bba51fbadf69136c67c9910f": null,
+        "mobile_swipe": true,
+        "header-9af932cbaab0f7e54e16369097fef8a6": null,
+        "show_progress_bar": true,
+        "header-44534d88c4b3e74c8b28ceb0cc54b704": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {},
+      "block_order": []
+    },
+    "rich_text_93j3H": {
+      "type": "rich-text",
+      "disabled": false,
+      "settings": {
+        "section_width": "full-width-row-full",
+        "text_width": "large",
+        "text_position": "center",
+        "text_alignment": "center",
+        "header-6b4e2afc57444884bbde28e28c2cac18": null,
+        "color_bg": "rgba(0,0,0,0)",
+        "color_text": "#151515",
+        "color_links": "#151515",
+        "header-3c9245c2f3bf4c93b7af654caf06ac5d": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "heading_aNdKh": {
+          "type": "heading",
+          "disabled": false,
+          "settings": {
+            "text": "FOLLOW US ON INSTAGRAM",
+            "size": "h3"
+          }
+        }
+      },
+      "block_order": [
+        "heading_aNdKh"
+      ]
+    },
+    "custom_liquid_mH4qx": {
+      "type": "custom-liquid",
+      "disabled": false,
+      "settings": {
+        "custom_liquid": "{% comment %}\n  Homepage Instagram row — the Custom Liquid section under \"FOLLOW US ON INSTAGRAM\".\n\n  Deliberately empty of content. The hero, the profile header, the post grid and\n  the popup are all built by the widget Carbon serves at \/instagram\/widget, and\n  every value it uses — hero image, overlay text, handle, follow button — is\n  edited at app.shopcarbon.com\/studio\/instagram-widget. Nothing about the\n  section lives in the theme any more, so changing it never means touching\n  Shopify, and the live row cannot drift from what the studio shows.\n\n  Posts come from Carbon's own endpoint, which calls Meta at most once every 15\n  minutes and serves every shopper from cache — traffic can never exhaust a\n  quota, which is what took the previous third-party widget offline. The access\n  token stays on the server and never reaches the browser.\n\n  If the feed is ever unavailable the widget renders nothing at all, leaving\n  this container empty rather than showing a broken or half-filled section.\n{% endcomment %}\n\n<div data-carbon-instagram><\/div>\n<script src=\"https:\/\/app.shopcarbon.com\/instagram\/widget\" defer><\/script>",
+        "section_width": "full-width-row-full"
+      },
+      "blocks": {},
+      "block_order": []
+    },
+    "spacer_39c9F": {
+      "type": "spacer",
+      "disabled": false,
+      "settings": {
+        "spacer_mobile": 30,
+        "spacer_desktop": 50,
+        "border_separator": false,
+        "border_separator_full": false
+      },
+      "blocks": {},
+      "block_order": []
+    },
+    "testimonials_tgj4p": {
+      "type": "testimonials",
+      "disabled": false,
+      "settings": {
+        "full_width": true,
+        "text_size": "medium",
+        "pagination": "dots",
+        "autoplay": false,
+        "autoplay_length": 3,
+        "header-23bcd3ed9f535ec1c191ce3633f45a89": null,
+        "color_bg": "rgba(0,0,0,0)",
+        "color_text": "#151515",
+        "header-3636301441095e792201d4c739a00971": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "quote_eqp7L": {
+          "type": "quote",
+          "disabled": false,
+          "settings": {
+            "image": null,
+            "stars": "",
+            "text": "Show us how you wear it!",
+            "author": "Tag @shopcarbon #shopcarbon & you could be featured right here."
+          }
+        }
+      },
+      "block_order": [
+        "quote_eqp7L"
+      ]
+    },
+    "spacer_j84Qm": {
+      "type": "spacer",
+      "disabled": false,
+      "settings": {
+        "spacer_mobile": 15,
+        "spacer_desktop": 25,
+        "border_separator": false,
+        "border_separator_full": false
+      },
+      "blocks": {},
+      "block_order": []
+    },
+    "gallery_8Ghmp": {
+      "type": "gallery",
+      "disabled": false,
+      "settings": {
+        "columns_desktop": 4,
+        "section_width": "grid",
+        "mobile_swipe": true,
+        "image_ratio": "adapt",
+        "content_position": "bottom-left",
+        "text_alignment": "left",
+        "column_spacing": "small",
+        "heading_size": "h2",
+        "header-903034dc1d8355fb87d15740528726fe": null,
+        "overlay_color": "#000000",
+        "overlay_opacity": 0,
+        "header-c65b23d323bdb80f8cb7a5f1ac83e156": null,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": false
+      },
+      "blocks": {
+        "image_bXrVH": {
+          "type": "image",
+          "disabled": false,
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Untitled-13.png",
+            "subheading": "",
+            "title": "",
+            "text": "@BranVanWinkelhoff",
+            "link_label": "",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "header-dbdb8d706b26e60ce920010998c180cf": null,
+            "product_list": [
+              "royal-satin-bottom-set-cream-fb",
+              "royal-satin-2-piece-top-set-cream-6a"
+            ]
+          }
+        },
+        "image_eYkPw": {
+          "type": "image",
+          "disabled": false,
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Untitled-3.png",
+            "subheading": "",
+            "title": "",
+            "text": "@joaavasquez",
+            "link_label": "",
+            "link": "",
+            "use_text_button": true,
+            "block_link": "",
+            "header-4c47dc8cf6b8d41427a7495204252a42": null,
+            "product_list": [
+              "kyle-cargo-pants"
+            ]
+          }
+        },
+        "image_UDgye": {
+          "type": "image",
+          "disabled": false,
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Untitle-3.png",
+            "subheading": "",
+            "title": "",
+            "text": "@alexanicholeeeee",
+            "link_label": "",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "header-fb8fa112be6135521316dc5115b7cc07": null,
+            "product_list": [
+              "eden-dress-2-pieces"
+            ]
+          }
+        },
+        "image_kNWiW": {
+          "type": "image",
+          "disabled": false,
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Unt1itled-3.png",
+            "subheading": "",
+            "title": "",
+            "text": "@wpaul_95",
+            "link_label": "",
+            "link": "",
+            "use_text_button": false,
+            "block_link": "",
+            "header-aeef59e8721fb270b2fc2bf4d3685cef": null,
+            "product_list": [
+              "dream-shorts-set",
+              "dream-top-set"
+            ]
+          }
+        }
+      },
+      "block_order": [
+        "image_bXrVH",
+        "image_eYkPw",
+        "image_UDgye",
+        "image_kNWiW"
+      ]
+    },
+    "16479477632637c9a7": {
+      "settings": {},
+      "blocks": {
+        "164794776393e76b8e-2": {
+          "settings": {
+            "video_background": true,
+            "video_hosted": "shopify:\/\/files\/videos\/aw2026 website banner.mp4",
+            "subheading": "INTRODUCING",
+            "heading": "THE ART OF ARRIVING",
+            "heading_size": "h1-large",
+            "content": "AUTUMN \/ WINTER 2026",
+            "description_size": "large",
+            "button_1_link": "https:\/\/shopcarbon.com\/pages\/men-jeans-cuts-1",
+            "button_2_link": "https:\/\/shopcarbon.com\/pages\/women-jeans-cuts"
+          }
+        },
+        "164794776393e76b8e-1": {
+          "disabled": true,
+          "settings": {
+            "video_background": true,
+            "video_hosted": "shopify:\/\/files\/videos\/CARBON_MAIN BANNER COMING SOON.mp4",
+            "subheading": "IN-STORE ONLY",
+            "heading": "Spring\/Summer 2025\nNew Collection",
+            "content": "Fresh Looks for a Hot Season!",
+            "button_1_text": "",
+            "button_2_text": ""
+          }
+        }
+      }
+    },
+    "1662389920b1295ea2": {
+      "disabled": true,
+      "settings": {},
+      "blocks": {}
+    },
+    "image_banner_8mzqcg": {
+      "disabled": true,
+      "settings": {},
+      "blocks": {}
+    },
+    "166143150135dd97e2": {
+      "custom_css": [
+        "h4.h3 {font-size: x-large;}"
+      ],
+      "settings": {
+        "section_width": "grid",
+        "column_spacing": "large",
+        "heading_size": "h3",
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "6a1c724d-715f-4918-acea-e9f4464d74de": {
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Tight_portrait_of_a_fashion_model-2.png",
+            "title": "Men",
+            "link": "shopify:\/\/collections\/winter-sets",
+            "block_link": "",
+            "product_list": [
+              "rostory-hoodie-set"
+            ],
+            "subheading": "Stay Hot, Stay Stylish "
+          }
+        },
+        "bbdd3a28-ed72-4073-b920-e0710a00f80b": {
+          "settings": {
+            "image": "shopify:\/\/shop_images\/Tight_portrait_of_a_fashion_model-1_6c0639ec-7ccf-45cb-8705-406d7d72e455.png",
+            "link": "shopify:\/\/collections\/winter-sets-women",
+            "product_list": [
+              "urban-chic-collar-pants-set-3a",
+              "white-street-chic-hoodie-dress-b3"
+            ]
+          }
+        }
+      }
+    },
+    "16614195534fb74bc3": {
+      "custom_css": [
+        ".section-spacing.section-spacing--disable-top {margin-top: 20px;}"
+      ],
+      "settings": {
+        "heading": "POPULAR PRODUCTS",
+        "heading_left": true,
+        "description": "<h6>Women<\/h6>",
+        "full_width": true,
+        "product_limit": 12,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {
+        "collection_p3bG7V": {
+          "settings": {
+            "collection": "summer-sets"
+          }
+        }
+      },
+      "block_order": [
+        "collection_p3bG7V"
+      ]
+    },
+    "1661539188062a849e": {
+      "settings": {
+        "image": "shopify:\/\/shop_images\/shop_the_look_f9c6aef0-d87d-44cd-a2e5-358acdb3a42f_copy.jpg",
+        "image_mobile": "shopify:\/\/shop_images\/SQUARE_TheLook-Mobile.jpg",
+        "section_width": "full-width-row-full"
+      },
+      "blocks": {
+        "fda9f8c9-12e5-4536-bc2c-f950960c43b7": {
+          "settings": {
+            "product_handle": "tom-denim-shirt",
+            "x_position": 25,
+            "y_position": 28,
+            "x_position_mobile": 51
+          }
+        },
+        "product_gMKfR": {
+          "type": "product",
+          "disabled": false,
+          "settings": {
+            "product_handle": "colin-evening-pants",
+            "header-f9090665209afe9ec0565a1fd62962f5": null,
+            "x_position": 25,
+            "y_position": 57,
+            "header-a4553ea2fcef20c548671e09b95c338a": null,
+            "x_position_mobile": 54,
+            "y_position_mobile": 57
+          }
+        },
+        "product_yCjVH": {
+          "type": "product",
+          "disabled": false,
+          "settings": {
+            "product_handle": "dennis-jacket",
+            "header-3ee7b13e81d42a1f6e7f76f621dab753": null,
+            "x_position": 84,
+            "y_position": 32,
+            "header-386a2e94e6b61741628bcc32aec48145": null,
+            "x_position_mobile": 100,
+            "y_position_mobile": 0
+          }
+        },
+        "product_LNTBk": {
+          "type": "product",
+          "disabled": false,
+          "settings": {
+            "product_handle": "pablo-pants",
+            "header-89c748909caf69302d15754c95134223": null,
+            "x_position": 74,
+            "y_position": 54,
+            "header-629318abd54ddba7589a688f5dea379a": null,
+            "x_position_mobile": 100,
+            "y_position_mobile": 84
+          }
+        }
+      },
+      "block_order": [
+        "fda9f8c9-12e5-4536-bc2c-f950960c43b7",
+        "product_gMKfR",
+        "product_yCjVH",
+        "product_LNTBk"
+      ]
+    },
+    "166366563622039b3e": {
+      "custom_css": [
+        ".section-spacing.section-spacing--disable-top {margin-top: 20px;}"
+      ],
+      "settings": {
+        "heading": "FEATURED PRODUCTS",
+        "heading_left": true,
+        "description": "<h6>Women<\/h6>",
+        "full_width": true,
+        "collection": "dresses",
+        "product_limit": 12,
+        "disable_top_spacing": true,
+        "disable_bottom_spacing": true
+      },
+      "blocks": {}
+    },
+    "1661512437fd38dfb2": {
+      "settings": {
+        "full_width": true,
+        "content_position": "middle-center",
+        "heading_size": "h2",
+        "overlay_opacity": 15
+      },
+      "blocks": {
+        "collection_YHK7H": {
+          "type": "collection",
+          "disabled": false,
+          "settings": {
+            "collection": "night-dresses",
+            "image": "shopify:\/\/shop_images\/NightDresses_Banner.jpg"
+          }
+        },
+        "collection_cP8YX": {
+          "type": "collection",
+          "disabled": false,
+          "settings": {
+            "collection": "jeans-women",
+            "image": "shopify:\/\/shop_images\/Street_Wall_Women_Jeans_copy.jpg"
+          }
+        }
+      },
+      "block_order": [
+        "collection_YHK7H",
+        "collection_cP8YX"
+      ]
+    },
+    "1662459178b0886a69": {
+      "disabled": true,
+      "settings": {},
+      "blocks": {
+        "4551cbda-76ff-4a07-a279-a29df7956af6": {
+          "disabled": true,
+          "settings": {}
+        }
+      }
+    }
+  },
+  "order": [
+    "16479477632637c9a7",
+    "1662389920b1295ea2",
+    "image_banner_8mzqcg",
+    "spacer_ttCDi",
+    "slideshow_AThAn",
+    "166143150135dd97e2",
+    "16614195534fb74bc3",
+    "1662368401fce27368",
+    "collection_tabs_MNkVH",
+    "1661539188062a849e",
+    "166366563622039b3e",
+    "featured_collection_U8BUg",
+    "1661512437fd38dfb2",
+    "1647955648d6a0baee",
+    "16626364694d37e9d5",
+    "1662459246bd099bb7",
+    "1662459178b0886a69",
+    "16624594877292080f",
+    "rich_text_93j3H",
+    "custom_liquid_mH4qx",
+    "spacer_39c9F",
+    "testimonials_tgj4p",
+    "spacer_j84Qm",
+    "gallery_8Ghmp",
+    "1662636493225665a2"
+  ]
+}
+

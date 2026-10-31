@@ -1,0 +1,230 @@
+{{ 'featured-collection.css' | asset_url | stylesheet_tag }}
+{{ 'product-grid.css' | asset_url | stylesheet_tag }}
+<style>
+  .carbon-set-card .product-featured-image { position: relative; }
+  .carbon-set-card .carbon-set-badge { position: absolute; top: 12px; left: 12px; z-index: 30; display: inline-block; background: #151515; color: #fff !important; font-size: 11px !important; line-height: 1 !important; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 6px 10px; pointer-events: none; }
+  .carbon-set-card .carbon-set-pieces { margin: 6px 0 4px; font-size: 13px; line-height: 1.4; opacity: .75; }
+  .carbon-set-card .carbon-set-pieces a { color: inherit; text-decoration: none; }
+  .carbon-set-card .carbon-set-pieces a:hover { text-decoration: underline; }
+  .carbon-set-card .carbon-set-total { font-weight: 600; }
+</style>
+{%- liquid
+	assign section_heading = section.settings.heading
+	assign section_heading_left = section.settings.heading_left
+	assign section_description = section.settings.description
+	assign full_width = section.settings.full_width
+	assign display_type = section.settings.display_type
+	assign columns_desktop = section.settings.columns_desktop
+	assign featured_collection = section.settings.collection
+	assign show_view_all = section.settings.show_view_all
+	assign product_limit = section.settings.product_limit
+	assign mobile_swipe = section.settings.mobile_swipe
+	assign show_progress_bar = section.settings.show_progress_bar
+	assign disable_top_spacing = section.settings.disable_top_spacing
+	assign disable_bottom_spacing = section.settings.disable_bottom_spacing
+	assign columns_class = 'small-6 medium-6 large-4'
+	case columns_desktop
+		when 2
+			assign columns_class = 'small-6 medium-6'
+		when 3
+			assign columns_class = 'small-6 medium-4'
+		when 4
+			assign columns_class = 'small-6 medium-6 large-3'
+	endcase
+
+	if featured_collection.all_products_count > product_limit
+    assign more_in_collection = true
+  endif
+
+	if show_view_all and more_in_collection
+		assign section_heading_button = featured_collection
+	endif
+
+	if display_type == 'carousel'
+		assign element = 'slide-show'
+	else
+		assign element = 'div'
+	endif
+-%}
+<div class="featured-collection{% if mobile_swipe %} swipe-on-mobile{% endif %} section-spacing{% if disable_top_spacing %} section-spacing--disable-top{% endif %}{% if disable_bottom_spacing %} section-spacing--disable-bottom{% endif %}">
+	<div class="row{% if full_width %} full-width-row{% endif %}">
+		<div class="small-12 columns">
+			{% render 'section-header', section_heading: section_heading, section_description: section_description, section_heading_left: section_heading_left, section_heading_button: section_heading_button %}
+		<div class="featured-collection__inner display-type--{{ display_type }}">
+    <{{ element }} id="product-grid-{{ section.id }}" class="products row {{ display_type }}">
+        {%- if featured_collection != blank -%}
+            {%- comment -%} CARBON (owner, 2026-10-27): a set shows as one card with every piece and the set price, never piece by piece — see snippets/carbon-set-card. {%- endcomment -%}
+            {%- assign set_seen = '|' -%}{%- assign shown = 0 -%}
+            {%- for product in featured_collection.products -%}
+                {%- if shown >= product_limit -%}{%- break -%}{%- endif -%}
+                {%- assign set_key = '|' | append: product.handle | append: '|' -%}
+                {%- if set_seen contains set_key -%}{%- continue -%}{%- endif -%}
+                {%- if product.available -%}  <!-- ✅ Hide out-of-stock products -->
+                    {%- assign set_partners = product.metafields.carbon_set.partners.value -%}
+                    <div class="{{ columns_class }} columns {% if display_type == 'carousel' %}carousel__slide{% endif %}">
+                        {%- if set_partners.size > 0 -%}
+                            {%- for h in set_partners -%}{%- assign set_seen = set_seen | append: h | append: '|' -%}{%- endfor -%}
+                            {% render 'carbon-set-card', set_lead: product, set_collection: featured_collection %}
+                        {%- else -%}
+                            {% render 'product-card', product_card_product: product %}
+                        {%- endif -%}
+                    </div>
+                    {%- assign set_seen = set_seen | append: product.handle | append: '|' -%}
+                    {%- assign shown = shown | plus: 1 -%}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- else -%}
+            {%- for i in (1..product_limit) -%}
+                <div class="{{ columns_class }} columns {% if display_type == 'carousel' %}carousel__slide{% endif %}">
+                    {% render 'product-card' %}
+                </div>
+            {%- endfor -%}
+        {%- endif -%}
+
+        {%- if display_type == 'carousel' -%}
+            {%- if product_limit > columns_desktop -%}
+                {%- render 'slideshow-arrows' -%}
+            {%- endif -%}
+        {%- endif -%}
+    </{{ element }}>
+
+    {%- if display_type == 'carousel' and show_progress_bar -%}
+        <div class="flickity-progress">
+            <div class="flickity-progress--bar"></div>
+        </div>
+    {%- endif -%}
+</div>
+
+		</div>
+	</div>
+</div>
+
+{% schema %}
+{
+  "name": "Featured collection",
+  "class": "section-featured-collection",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Featured Collection"
+    },
+		{
+			"type": "checkbox",
+			"id": "heading_left",
+			"default": false,
+			"label": "Left align heading"
+		},
+    {
+      "type": "richtext",
+      "id": "description",
+      "label": "Description",
+      "default": "<p>Curated picks you may also like</p>"
+    },
+		{
+			"type": "checkbox",
+			"id": "full_width",
+			"label": "Make section full width",
+			"default": true
+		},
+		{
+			"type": "header",
+			"content": "Collection"
+		},
+		{
+		 "type": "collection",
+		 "id": "collection",
+		 "label": "Collection"
+		},
+		{
+			"type": "select",
+			"id": "display_type",
+			"options": [
+				{
+					"value": "grid",
+					"label": "Grid"
+				},
+				{
+					"value": "carousel",
+					"label": "Carousel"
+				}
+			],
+			"default": "grid",
+			"label": "Display type"
+		},
+		{
+			"type": "range",
+			"id": "product_limit",
+			"min": 2,
+			"max": 12,
+			"step": 1,
+			"label": "Maximum products to show",
+			"default": 4
+		},
+		{
+			"type": "range",
+			"id": "columns_desktop",
+			"min": 2,
+			"max": 4,
+			"step": 1,
+			"default": 4,
+			"label": "Number of columns on desktop"
+		},
+		{
+			"type": "checkbox",
+			"id": "show_view_all",
+			"default": true,
+			"label": "Enable \"View all\" button if collection has more products than shown"
+		},
+		{
+			"type": "header",
+			"content": "Grid"
+		},
+		{
+			"type": "checkbox",
+			"id": "mobile_swipe",
+			"default": true,
+			"label": "Enable swipe on mobile"
+		},
+		{
+			"type": "header",
+			"content": "Carousel"
+		},
+		{
+			"type": "checkbox",
+			"id": "show_progress_bar",
+			"label": "Show progress bar",
+			"default": true
+		},
+		{
+      "type": "header",
+      "content": "Spacing"
+    },
+		{
+			"type": "checkbox",
+			"id": "disable_top_spacing",
+			"default": false,
+			"label": "Remove top spacing"
+		},
+		{
+			"type": "checkbox",
+			"id": "disable_bottom_spacing",
+			"default": false,
+			"label": "Remove bottom spacing"
+		}
+  ],
+  "presets": [
+    {
+      "name": "Featured collection"
+    }
+  ],
+	"enabled_on": {
+		"templates": ["*"],
+		"groups": [
+			"header", "footer"
+		]
+	}
+}
+
+{% endschema %}

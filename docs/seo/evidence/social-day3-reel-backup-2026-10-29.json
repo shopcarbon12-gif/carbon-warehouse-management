@@ -1,0 +1,88 @@
+{
+ "id": "b4674310-e3fe-4640-a899-3fc993e6db0d",
+ "tenant_id": "2b7b40a9-7266-4024-ba90-0aaa4160a280",
+ "campaign": "AW2026 The Art of Arriving",
+ "source_ref": "AW2026-V2-D03",
+ "title": "Jolie Denim on Denim",
+ "format": "carousel",
+ "caption": "Light wash up top, dark wash to the floor, and warm brown in between. Denim on denim for the first cool evenings of the season.\n\nThe light-wash Jolie denim jacket is worn over the brown Amelia bodysuit, which holds the middle between the two blues. Below it, the dark Nora flare jeans run long and open out toward the floor.\n\nTo wear two washes at once, put the paler denim on top and the deeper wash below, then add one solid colour between them. Here the brown bodysuit does that job and keeps the jacket and jeans from blurring into one shade.\n\nShop the Winter Collection, link in bio.",
+ "hashtags": [
+  "TheArtOfArriving",
+  "CARBONAW26",
+  "DenimOnDenim",
+  "FlareJeans",
+  "DenimJacket"
+ ],
+ "link_url": "https://shopcarbon.com/products/jolie-denim-jacket",
+ "scheduled_at": "2026-10-29T20:00:00.000Z",
+ "status": "approved",
+ "note": null,
+ "approved_by": "Elior@carbonjeanscompany.com",
+ "approved_at": "2026-10-29T10:21:41.966Z",
+ "created_by": "admin@example.com",
+ "created_at": "2026-10-25T02:36:05.810Z",
+ "updated_at": "2026-10-29T10:21:41.966Z",
+ "ai_status": null,
+ "ai_summary": null,
+ "ai_error": null,
+ "ai_attempts": 0,
+ "ai_requested_at": null,
+ "ai_requested_by": null,
+ "ai_picture": null,
+ "targets": [
+  {
+   "id": "34ed0ea0-faaf-4ab1-abff-30d090514a8b",
+   "post_id": "b4674310-e3fe-4640-a899-3fc993e6db0d",
+   "provider": "instagram",
+   "status": "pending",
+   "remote_id": null,
+   "permalink": null,
+   "error": null,
+   "attempts": 0,
+   "published_at": null,
+   "updated_at": "2026-10-24T22:36:05.810578-04:00",
+   "metrics": null,
+   "metrics_at": null
+  },
+  {
+   "id": "966bb8b6-4ec4-4f27-b45d-0abe21c10ebb",
+   "post_id": "b4674310-e3fe-4640-a899-3fc993e6db0d",
+   "provider": "facebook",
+   "status": "pending",
+   "remote_id": null,
+   "permalink": null,
+   "error": null,
+   "attempts": 0,
+   "published_at": null,
+   "updated_at": "2026-10-24T22:36:05.810578-04:00",
+   "metrics": null,
+   "metrics_at": null
+  }
+ ],
+ "media": [
+  {
+   "id": "b70f169c-362c-4ed4-8ba6-53fbff7fde6e",
+   "post_id": "b4674310-e3fe-4640-a899-3fc993e6db0d",
+   "position": 0,
+   "kind": "video",
+   "url": "https://wms.shopcarbon.com/api/public/marketing-media/b70f169c-362c-4ed4-8ba6-53fbff7fde6e.mp4",
+   "storage_path": "marketing/uploads/b4674310-e3fe-4640-a899-3fc993e6db0d/b70f169c-362c-4ed4-8ba6-53fbff7fde6e.mp4",
+   "dropbox_path": null,
+   "cover_url": null,
+   "cover_storage_path": null,
+   "alt_text": null
+  },
+  {
+   "id": "fa75bb30-b263-4fdb-9c29-18eb171564ab",
+   "post_id": "b4674310-e3fe-4640-a899-3fc993e6db0d",
+   "position": 1,
+   "kind": "image",
+   "url": "https://wms.shopcarbon.com/api/public/marketing-media/fa75bb30-b263-4fdb-9c29-18eb171564ab.jpg",
+   "storage_path": "marketing/uploads/b4674310-e3fe-4640-a899-3fc993e6db0d/fa75bb30-b263-4fdb-9c29-18eb171564ab.jpg",
+   "dropbox_path": null,
+   "cover_url": null,
+   "cover_storage_path": null,
+   "alt_text": null
+  }
+ ]
+}

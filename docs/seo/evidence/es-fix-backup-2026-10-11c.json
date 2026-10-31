@@ -1,0 +1,2234 @@
+[
+ {
+  "id": "gid://shopify/Product/9217324613884",
+  "handle": "parker-track-bottom",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; PANTALONES CORTOS",
+  "new": "MUJER &gt;&gt; SHORTS",
+  "digest": "d07ebc3ffb633aa84a6e82d7320d14b2526691e7cfe1f723478102c0264324ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217327104252",
+  "handle": "milo-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217327268092",
+  "handle": "marco-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217327268092",
+  "handle": "marco-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Marco – Hombre Rotos | Carbon",
+  "new": "Jeans Marco – Hombre Rotos | Carbon",
+  "digest": "2efc70e39c1fdbded618c653c6122609383132721d19bc844f83a3497ccafedb"
+ },
+ {
+  "id": "gid://shopify/Product/9217327268092",
+  "handle": "marco-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Marco: vaqueros de hombre azul oscuro con roturas en las rodillas, diseño de cinco bolsillos, cierre de botones y bragueta con cremallera.",
+  "new": "Jeans Marco: jeans de hombre azul oscuro con roturas en las rodillas, diseño de cinco bolsillos, cierre de botones y bragueta con cremallera.",
+  "digest": "e86cfbbfa33694b421ae4f4211d1b2c911851dbd6c96e58d1ac22e12f74c3595"
+ },
+ {
+  "id": "gid://shopify/Product/9217327431932",
+  "handle": "luka-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217327431932",
+  "handle": "luka-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Luka – Hombre Rotos | Carbon",
+  "new": "Jeans Luka – Hombre Rotos | Carbon",
+  "digest": "f4a458ad306ea14163311b9a8b5cf926f2eaef23fe301305d697997fc11839a4"
+ },
+ {
+  "id": "gid://shopify/Product/9217327497468",
+  "handle": "kase-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217327497468",
+  "handle": "kase-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Kase: de lavado azul con frente desgarrado y deshilachado, diseño de cinco bolsillos y pernera cónica.",
+  "new": "Jeans Kase: de lavado azul con frente desgarrado y deshilachado, diseño de cinco bolsillos y pernera cónica.",
+  "digest": "a4ec44440e23edf6de8746f70e4403ecd27f3931471d60e75b4641eafb591585"
+ },
+ {
+  "id": "gid://shopify/Product/9217327563004",
+  "handle": "jaxx-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217327563004",
+  "handle": "jaxx-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Jaxx – Hombre con efecto desgastado | Carbon",
+  "new": "Jeans Jaxx – Hombre con efecto desgastado | Carbon",
+  "digest": "e65867e2e2ba79549e6ca07562cd1a5e2fd56e972a0a422b6f21876eec804d96"
+ },
+ {
+  "id": "gid://shopify/Product/9217327563004",
+  "handle": "jaxx-jeans",
+  "key": "meta_description",
+  "old": "Los vaqueros Jaxx presentan un aspecto lavado en azul con detalles desgastados, efecto de salpicaduras de pintura, cinco bolsillos y cierre de botón y cremallera.",
+  "new": "Los jeans Jaxx presentan un aspecto lavado en azul con detalles desgastados, efecto de salpicaduras de pintura, cinco bolsillos y cierre de botón y cremallera.",
+  "digest": "96259e170bb495a426b1cfdd97954680f7d6f1d5fae3b9af5ec3ac2e18cdc32c"
+ },
+ {
+  "id": "gid://shopify/Product/9217327923452",
+  "handle": "franco-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Franco: jeans azules para hombre con rodillas rasgadas, detalles deshilachados, diseño de cinco bolsillos y corte entallado.",
+  "new": "Jeans Franco: jeans azules para hombre con rodillas rasgadas, detalles deshilachados, diseño de cinco bolsillos y corte entallado.",
+  "digest": "b024d4b6ce0f83c45d54b9375462cd68005975a975da2d1ce0a30a1b7c2e7460"
+ },
+ {
+  "id": "gid://shopify/Product/9217328021756",
+  "handle": "finnley-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Finnley – Hombre Rotos | Carbon",
+  "new": "Jeans Finnley – Hombre Rotos | Carbon",
+  "digest": "1a0041a6f2f9d4dcf7b28f7173d9f72e30030c28c999a241944f9150976b7a50"
+ },
+ {
+  "id": "gid://shopify/Product/9217328021756",
+  "handle": "finnley-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Finnley en color azul con rodillas rasgadas y pernera cónica. Incluyen el logotipo Carbon en la costura lateral.",
+  "new": "Jeans Finnley en color azul con rodillas rasgadas y pernera cónica. Incluyen el logotipo Carbon en la costura lateral.",
+  "digest": "3b8e42f29f0d1e75f321c0ec0cb604deb771386168d662e6f4bc40b232646286"
+ },
+ {
+  "id": "gid://shopify/Product/9217328185596",
+  "handle": "colby-jeans",
+  "key": "body_html",
+  "old": "<p>Los jeans Colby son unos vaqueros azules para hombre con parches rotos y ajuste ceñido. Cuentan con un diseño de cinco bolsillos, cierre de botón y bragueta con cremallera.</p><p>Úsalos con una camiseta estampada y zapatillas deportivas para un look informal.</p><ul>\n\n<li>Detalles desgastados</li>\n\n<li>Parches rotos en los muslos</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Dobladillo hasta el tobillo</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Colby son unos jeans azules para hombre con parches rotos y ajuste ceñido. Cuentan con un diseño de cinco bolsillos, cierre de botón y bragueta con cremallera.</p><p>Úsalos con una camiseta estampada y zapatillas deportivas para un look informal.</p><ul>\n\n<li>Detalles desgastados</li>\n\n<li>Parches rotos en los muslos</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Dobladillo hasta el tobillo</li>\n\n\n</ul>",
+  "digest": "18e8466bbe43f2e106289531a2b7199fefb8c453be23e4671f5ed3d8fdc3b559"
+ },
+ {
+  "id": "gid://shopify/Product/9217328185596",
+  "handle": "colby-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217328185596",
+  "handle": "colby-jeans",
+  "key": "meta_description",
+  "old": "Jeans Colby: Pantalones vaqueros azules para hombre con parches rasgados, corte ajustado y diseño de cinco bolsillos.",
+  "new": "Jeans Colby: Jeans azules para hombre con parches rasgados, corte ajustado y diseño de cinco bolsillos.",
+  "digest": "766667f2734a2f1bbce322624b8c03af0a0ca7dac89e530bd4d556d7650491a1"
+ },
+ {
+  "id": "gid://shopify/Product/9217328316668",
+  "handle": "jay-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Jay en azul lavado con roturas en la parte delantera. Presentan cierre de cremallera, botón y bolsillos inclinados con remaches.",
+  "new": "Jeans Jay en azul lavado con roturas en la parte delantera. Presentan cierre de cremallera, botón y bolsillos inclinados con remaches.",
+  "digest": "ac0922fb756491b77d834b987c7ddf3567c25e2f9b4a194e2fb5c078373c6960"
+ },
+ {
+  "id": "gid://shopify/Product/9217328382204",
+  "handle": "finn-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Finn son unos jeans azules para hombre con un lavado desgastado y perneras ajustadas. El diseño de cinco bolsillos incluye cierre de botón y cremallera, con el texto \"NON BINARY // STYLE NO: 9\" en la pierna derecha.</p>",
+  "new": "<p>Los jeans Finn son unos jeans azules para hombre con un lavado desgastado y perneras ajustadas. El diseño de cinco bolsillos incluye cierre de botón y cremallera, con el texto \"NON BINARY // STYLE NO: 9\" en la pierna derecha.</p>",
+  "digest": "a4ef6cca000140320c5111f33d254aa588d7c5d20e2a30902eac1d0f97d3dfc3"
+ },
+ {
+  "id": "gid://shopify/Product/9217328382204",
+  "handle": "finn-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Finn – Corte cónico para hombre | Carbon",
+  "new": "Jeans Finn – Corte cónico para hombre | Carbon",
+  "digest": "a212bd5132a43176a3df24fb8582e0517a37fc9b67f99cc5251a223d204d2681"
+ },
+ {
+  "id": "gid://shopify/Product/9217328382204",
+  "handle": "finn-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Finn: Jeans azules para hombre con lavado desgastado, perneras ajustadas y texto en la pierna derecha.",
+  "new": "Jeans Finn: Jeans azules para hombre con lavado desgastado, perneras ajustadas y texto en la pierna derecha.",
+  "digest": "2b1562c2359d829e494ba34e0e5c9e94e62e2741cefa9eb354a52e924e4fbb49"
+ },
+ {
+  "id": "gid://shopify/Product/9217328546044",
+  "handle": "dash-jeans",
+  "key": "title",
+  "old": "Pantalones Vaqueros Dash",
+  "new": "Jeans Dash",
+  "digest": "500e9052a6294a3ca3c3b3e76201898648bd740a2b14be21a851bcb162390e01"
+ },
+ {
+  "id": "gid://shopify/Product/9217328546044",
+  "handle": "dash-jeans",
+  "key": "body_html",
+  "old": "<p>Estos vaqueros para hombre vienen en un color negro lavado con detalles de paneles cosidos. Presentan un diseño clásico de cinco bolsillos y cierre de botón y cremallera.</p><p>Combínalos con una camiseta estampada y zapatillas para un look desenfadado.</p><ul>\n\n<li>Color negro lavado</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Detalles de paneles cosidos</li>\n\n<li>Corte de pierna ajustado</li>\n\n\n</ul>",
+  "new": "<p>Estos jeans para hombre vienen en un color negro lavado con detalles de paneles cosidos. Presentan un diseño clásico de cinco bolsillos y cierre de botón y cremallera.</p><p>Combínalos con una camiseta estampada y zapatillas para un look desenfadado.</p><ul>\n\n<li>Color negro lavado</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Detalles de paneles cosidos</li>\n\n<li>Corte de pierna ajustado</li>\n\n\n</ul>",
+  "digest": "a00c3007b871bf2fed34fd73c354fea9cf460feec0e1a95cff46df8bcdd5b8de"
+ },
+ {
+  "id": "gid://shopify/Product/9217328546044",
+  "handle": "dash-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217328546044",
+  "handle": "dash-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Dash: vaqueros negros lavados para hombre con paneles pespunteados y diseño de cinco bolsillos.",
+  "new": "Jeans Dash: jeans negros lavados para hombre con paneles pespunteados y diseño de cinco bolsillos.",
+  "digest": "88da800130d036ce717a934c358ce786e96e164a17875dc9edfb7b8eb83c4658"
+ },
+ {
+  "id": "gid://shopify/Product/9217328677116",
+  "handle": "odin-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Odin en gris claro con rodillas rotas, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "new": "Jeans Odin en gris claro con rodillas rotas, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "digest": "99537648c706d2fe16bce1e7efd6c86d9c77f2e9613e6f7fa5a138c99814c89e"
+ },
+ {
+  "id": "gid://shopify/Product/9217329561852",
+  "handle": "mason-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217330020604",
+  "handle": "kolton-jeans",
+  "key": "title",
+  "old": "Vaqueros Kolton",
+  "new": "Jeans Kolton",
+  "digest": "6babe0acfb2db8bfdd8ce3d38bde3627e791eacd4d3511e602d535fc60d67bd4"
+ },
+ {
+  "id": "gid://shopify/Product/9217330020604",
+  "handle": "kolton-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Kolton – Hombre Rotos | Carbon",
+  "new": "Jeans Kolton – Hombre Rotos | Carbon",
+  "digest": "745ab5fb0b4ef3de0ba1b06ba3bd55698240736cefbfe50c22d9f24ec9f7f621"
+ },
+ {
+  "id": "gid://shopify/Product/9217330020604",
+  "handle": "kolton-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Kolton en azul claro con rodillas rasgadas, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "new": "Jeans Kolton en azul claro con rodillas rasgadas, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "digest": "39294a10cab376db35c64082b056c9a2d0013b7122c52fd1cdde406d0033d931"
+ },
+ {
+  "id": "gid://shopify/Product/9217330446588",
+  "handle": "jase-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Jase son unos pantalones oscuros para hombre con parches desgastados en los muslos para un estilo robusto. Cuentan con el clásico diseño de cinco bolsillos y cierre de botón y cremallera.</p>",
+  "new": "<p>Los jeans Jase son unos pantalones oscuros para hombre con parches desgastados en los muslos para un estilo robusto. Cuentan con el clásico diseño de cinco bolsillos y cierre de botón y cremallera.</p>",
+  "digest": "560b1c22e4be9a7a4d41fb9fbdf4a69b83c478cd0eeb2c6b886866f08f33c3d8"
+ },
+ {
+  "id": "gid://shopify/Product/9217330446588",
+  "handle": "jase-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217330446588",
+  "handle": "jase-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Jase en azul oscuro con parches desgastados, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "new": "Jeans Jase en azul oscuro con parches desgastados, diseño de cinco bolsillos y cierre de botón y cremallera.",
+  "digest": "1ce6fe2e5634c5052cda9ec081716b345172ec61bf5b88f7277d0330f3bc4d0f"
+ },
+ {
+  "id": "gid://shopify/Product/9217330643196",
+  "handle": "ace-jeans",
+  "key": "body_html",
+  "old": "<p>Estos vaqueros blancos para hombre cuentan con un llamativo bolsillo con cremallera en el muslo derecho y detalles acanalados en las rodillas. El diseño de cinco bolsillos y el cierre de botón y cremallera completan el estilo motero.</p><p>Combínalos con una camisa estampada para un estilo destacado.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Bolsillo con cremallera en el muslo derecho</li>\n\n<li>Detalles acanalados en las rodillas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Largo al tobillo</li>\n\n\n</ul>",
+  "new": "<p>Estos jeans blancos para hombre cuentan con un llamativo bolsillo con cremallera en el muslo derecho y detalles acanalados en las rodillas. El diseño de cinco bolsillos y el cierre de botón y cremallera completan el estilo motero.</p><p>Combínalos con una camisa estampada para un estilo destacado.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Bolsillo con cremallera en el muslo derecho</li>\n\n<li>Detalles acanalados en las rodillas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Largo al tobillo</li>\n\n\n</ul>",
+  "digest": "1a0d49e6e3a4234781530ebd134764380e894b2de223061012469ae9c955ad8d"
+ },
+ {
+  "id": "gid://shopify/Product/9217330643196",
+  "handle": "ace-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217330643196",
+  "handle": "ace-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Ace: Pantalones vaqueros blancos para hombre con bolsillo con cremallera y detalles acanalados en las rodillas. Estilo motero con diseño de cinco bolsillos.",
+  "new": "Jeans Ace: Jeans blancos para hombre con bolsillo con cremallera y detalles acanalados en las rodillas. Estilo motero con diseño de cinco bolsillos.",
+  "digest": "d7775f34506ef0232a09cf0d4f873a1575aa488aaea96ece3f3482a0ea15fe39"
+ },
+ {
+  "id": "gid://shopify/Product/9217330708732",
+  "handle": "wilder-jeans",
+  "key": "title",
+  "old": "Vaqueros Wilder",
+  "new": "Jeans Wilder",
+  "digest": "10b29dc3f632b1f5a5d5b252717d153168f873b6bab4c7fa00aee388e190689e"
+ },
+ {
+  "id": "gid://shopify/Product/9217330708732",
+  "handle": "wilder-jeans",
+  "key": "meta_description",
+  "old": "Jeans Wilder: Pantalones vaqueros azules de hombre con efecto lavado, detalles desgastados, cremalleras en los tobillos, diseño de cinco bolsillos y corte entallado.",
+  "new": "Jeans Wilder: Jeans azules de hombre con efecto lavado, detalles desgastados, cremalleras en los tobillos, diseño de cinco bolsillos y corte entallado.",
+  "digest": "f41b8ef2ffc75bd97f1ebb227ca33d5c62ea1a05b9867ce2545f41519c13b8a7"
+ },
+ {
+  "id": "gid://shopify/Product/9217330774268",
+  "handle": "weston-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Weston en gris oscuro ofrecen un corte entallado y elegante con un toque moderno. Un sutil lavado desgastado añade carácter. Las cremalleras en los tobillos y un cinturón con el logotipo de Carbon completan el look.</p><ul>\n\n<li>Color gris oscuro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cremallera en el tobillo</li>\n\n<li>Cinturón con logotipo de Carbon</li>\n\n<li>Cierre de botón y cremallera</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Weston en gris oscuro ofrecen un corte entallado y elegante con un toque moderno. Un sutil lavado desgastado añade carácter. Las cremalleras en los tobillos y un cinturón con el logotipo de Carbon completan el look.</p><ul>\n\n<li>Color gris oscuro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cremallera en el tobillo</li>\n\n<li>Cinturón con logotipo de Carbon</li>\n\n<li>Cierre de botón y cremallera</li>\n\n\n</ul>",
+  "digest": "db25b598974b423fd10792a62670ea37a0824f1b27a5deb86b7bbb0c6b375f23"
+ },
+ {
+  "id": "gid://shopify/Product/9217330872572",
+  "handle": "stone-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217330872572",
+  "handle": "stone-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Stone – Hombre Rotos | Carbon",
+  "new": "Jeans Stone – Hombre Rotos | Carbon",
+  "digest": "ee4baac695a18d4e1c7a83c4208a7078d956c224b6347556780f0af16cf53541"
+ },
+ {
+  "id": "gid://shopify/Product/9217330872572",
+  "handle": "stone-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Stone en gris oscuro con rodillas rasgadas, cremalleras en los tobillos y un lavado desteñido. Presentan un diseño de cinco bolsillos.",
+  "new": "Jeans Stone en gris oscuro con rodillas rasgadas, cremalleras en los tobillos y un lavado desteñido. Presentan un diseño de cinco bolsillos.",
+  "digest": "de43fcea59f049d140b2e9345e5ff2971d4da918fafc7aade88cb246e9ca3890"
+ },
+ {
+  "id": "gid://shopify/Product/9217331659004",
+  "handle": "jay-denim-shorts",
+  "key": "body_html",
+  "old": "<p>Pantalones cortos vaqueros Jay en tejido denim lavado azul con efecto desteñido. Los parches desgastados añaden personalidad. Bragueta de cremallera con botón metálico y cinco trabillas para un ajuste seguro.</p><ul>\n\n<li>Largo hasta la rodilla</li>\n\n<li>Bolsillos delanteros con remaches</li>\n\n<li>Bolsillos traseros lisos</li>\n\n<li>Doble pespunte en contraste de color naranja</li>\n\n<li>Dobladillo liso</li>\n\n\n</ul>",
+  "new": "<p>Shorts de mezclilla Jay en tejido denim lavado azul con efecto desteñido. Los parches desgastados añaden personalidad. Bragueta de cremallera con botón metálico y cinco trabillas para un ajuste seguro.</p><ul>\n\n<li>Largo hasta la rodilla</li>\n\n<li>Bolsillos delanteros con remaches</li>\n\n<li>Bolsillos traseros lisos</li>\n\n<li>Doble pespunte en contraste de color naranja</li>\n\n<li>Dobladillo liso</li>\n\n\n</ul>",
+  "digest": "710a12be753f1a267d295d352499e53c8c761d4205eedb221e608e9ccd376dd0"
+ },
+ {
+  "id": "gid://shopify/Product/9217331659004",
+  "handle": "jay-denim-shorts",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217333264636",
+  "handle": "nash-swimsuit",
+  "key": "meta_title",
+  "old": "Bañador Nash – Pantalones cortos de baño para hombre | Carbon",
+  "new": "Bañador Nash – Shorts de baño para hombre | Carbon",
+  "digest": "d20bf47c9dd2d150852befc391df0f3d8916615cacf31882ec74220965ea2387"
+ },
+ {
+  "id": "gid://shopify/Product/9217333494012",
+  "handle": "niko-swimsuit",
+  "key": "meta_description",
+  "old": "Bañador Niko: Pantalones cortos de baño para hombre con rayas verticales en blanco y negro y cierre con cordón.",
+  "new": "Bañador Niko: Shorts de baño para hombre con rayas verticales en blanco y negro y cierre con cordón.",
+  "digest": "031b35c359d0e70a94b12368b8b8659242a4a125872926c11f0e5e9c347e18cd"
+ },
+ {
+  "id": "gid://shopify/Product/9217333592316",
+  "handle": "teresa-jeans",
+  "key": "product_type",
+  "old": "MUJERES &gt;&gt; VAQUEROS",
+  "new": "MUJERES &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217333625084",
+  "handle": "womens-long-denim-jeans-h",
+  "key": "body_html",
+  "old": "<p>Estos vaqueros vienen en un color azul lavado con cintura alta y frente en forma de V. Los detalles desgastados y deshilachados añaden carácter. La pernera cónica y el estilo de cinco bolsillos completan el look.</p><p>Combínalos con un top ajustado y tacones para un toque urbano y atrevido.</p>",
+  "new": "<p>Estos jeans vienen en un color azul lavado con cintura alta y frente en forma de V. Los detalles desgastados y deshilachados añaden carácter. La pernera cónica y el estilo de cinco bolsillos completan el look.</p><p>Combínalos con un top ajustado y tacones para un toque urbano y atrevido.</p>",
+  "digest": "aac16e6ea5b2eea0d9d919536239e5a2f8207e0633147bd4c4d9aedda7de3ca7"
+ },
+ {
+  "id": "gid://shopify/Product/9217333625084",
+  "handle": "womens-long-denim-jeans-h",
+  "key": "meta_description",
+  "old": "Vaqueros largos de mujer: Pantalones vaqueros azules desgastados de tiro alto con detalles rasgados. Presentan un corte en V en la parte delantera y pernera entallada.",
+  "new": "Jeans largos de mujer: Jeans azules desgastados de tiro alto con detalles rasgados. Presentan un corte en V en la parte delantera y pernera entallada.",
+  "digest": "02cbc1307157a029f9e5a5d9436fc03f361475af173270254e2312fbf2652d9d"
+ },
+ {
+  "id": "gid://shopify/Product/9217333690620",
+  "handle": "womens-long-denim-jeans-i",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217333690620",
+  "handle": "womens-long-denim-jeans-i",
+  "key": "meta_description",
+  "old": "Vaqueros largos de mujer: Vaqueros largos de mujer en azul lavado con roturas desgastadas y bajos deshilachados. Incluye un cinturón de cuerda.",
+  "new": "Jeans largos de mujer: Jeans largos de mujer en azul lavado con roturas desgastadas y bajos deshilachados. Incluye un cinturón de cuerda.",
+  "digest": "e92504f7f93fe4458de1252393f62c66e34959062159104199956aa4799fd38e"
+ },
+ {
+  "id": "gid://shopify/Product/9217334083836",
+  "handle": "maxine-shorts",
+  "key": "title",
+  "old": "Pantalones cortos Maxine",
+  "new": "Shorts Maxine",
+  "digest": "8618208d4f0ebdfb0d53f75249089fa677f05ad16c7c7118646b244610c4d288"
+ },
+ {
+  "id": "gid://shopify/Product/9217334083836",
+  "handle": "maxine-shorts",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; PANTALONES CORTOS",
+  "new": "MUJER &gt;&gt; SHORTS",
+  "digest": "d07ebc3ffb633aa84a6e82d7320d14b2526691e7cfe1f723478102c0264324ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217334182140",
+  "handle": "kinslee-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos Kinslee en color negro lavado con detalles desgastados, cierre de cuatro botones y dobladillo deshilachado.",
+  "new": "Shorts Kinslee en color negro lavado con detalles desgastados, cierre de cuatro botones y dobladillo deshilachado.",
+  "digest": "299f6e7b7d55987f4142114b3b5cff4fe76320250a950a6f9af359bd3c4ab0e0"
+ },
+ {
+  "id": "gid://shopify/Product/9217334182140",
+  "handle": "kinslee-shorts",
+  "key": "title",
+  "old": "Pantalones cortos Kinslee",
+  "new": "Shorts Kinslee",
+  "digest": "cf05098ed3e9befbedea21b594d5296463b12f942f80a738822c6849f10c9c1b"
+ },
+ {
+  "id": "gid://shopify/Product/9217334182140",
+  "handle": "kinslee-shorts",
+  "key": "product_type",
+  "old": "MUJERES &gt;&gt; PANTALONES CORTOS",
+  "new": "MUJERES &gt;&gt; SHORTS",
+  "digest": "d07ebc3ffb633aa84a6e82d7320d14b2526691e7cfe1f723478102c0264324ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217334247676",
+  "handle": "lillie-shorts",
+  "key": "title",
+  "old": "Pantalones cortos Lillie",
+  "new": "Shorts Lillie",
+  "digest": "ce8200602a67d29e0944d9a98b42d6f75da095927897c21f0808488e2ef755a4"
+ },
+ {
+  "id": "gid://shopify/Product/9217334247676",
+  "handle": "lillie-shorts",
+  "key": "body_html",
+  "old": "<p>Los shorts Lillie son unos pantalones cortos negros de tiro alto con cierre de cremallera y botón. Cuentan con dos bolsillos delanteros y dos traseros, lo que ofrece un estilo práctico.</p>",
+  "new": "<p>Los shorts Lillie son unos shorts negros de tiro alto con cierre de cremallera y botón. Cuentan con dos bolsillos delanteros y dos traseros, lo que ofrece un estilo práctico.</p>",
+  "digest": "8ef208e67ec952ba80c045d8252a8bc09f54856b89ece92fa59bad11437a24bf"
+ },
+ {
+  "id": "gid://shopify/Product/9217334247676",
+  "handle": "lillie-shorts",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; PANTALONES CORTOS",
+  "new": "MUJER &gt;&gt; SHORTS",
+  "digest": "d07ebc3ffb633aa84a6e82d7320d14b2526691e7cfe1f723478102c0264324ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217334313212",
+  "handle": "journi-shorts",
+  "key": "title",
+  "old": "Pantalones cortos Journi",
+  "new": "Shorts Journi",
+  "digest": "713d519c3bb2090449f88e2b1d62e8da40b4f33a11b1db4931e71d58b21bcffa"
+ },
+ {
+  "id": "gid://shopify/Product/9217334444284",
+  "handle": "sunny-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Sunny",
+  "new": "Shorts de mezclilla Sunny",
+  "digest": "ff3d3e8063a1e3cb18c26b1c81d1bf5ee5a8cb0b587483d8d055423547065fde"
+ },
+ {
+  "id": "gid://shopify/Product/9217334444284",
+  "handle": "sunny-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla Sunny – Mujer desgastados | Carbon",
+  "new": "Shorts de mezclilla Sunny – Mujer desgastados | Carbon",
+  "digest": "abe11afa2c75b5fafe5da29f473933461228e3d01838a069fa3b10c7547d9fa0"
+ },
+ {
+  "id": "gid://shopify/Product/9217334444284",
+  "handle": "sunny-denim-shorts",
+  "key": "meta_description",
+  "old": "Shorts vaqueros Sunny en lavado azul con detalles rasgados, bajo deshilachado, cinco bolsillos y talle alto.",
+  "new": "Shorts jeans Sunny en lavado azul con detalles rasgados, bajo deshilachado, cinco bolsillos y talle alto.",
+  "digest": "322e698e05fb800599548923f6fcc629c5120689d2c2e0e18a1c75ffdc3aa0be"
+ },
+ {
+  "id": "gid://shopify/Product/9217335197948",
+  "handle": "anya-bodysuit",
+  "key": "body_html",
+  "old": "<p>El body Anya es una prenda blanca con un llamativo patrón geométrico negro. Cuenta con un escote redondo y un diseño sin mangas, acentuado por un ribete negro en el escote y las sisas.</p><p>Combínalo con pantalones cortos de tiro alto o jeans para un look audaz.</p><ul>\n\n<li>Patrón geométrico en blanco y negro</li>\n\n<li>Escote redondo</li>\n\n<li>Sin mangas con ribete negro</li>\n\n\n</ul>",
+  "new": "<p>El body Anya es una prenda blanca con un llamativo patrón geométrico negro. Cuenta con un escote redondo y un diseño sin mangas, acentuado por un ribete negro en el escote y las sisas.</p><p>Combínalo con shorts de tiro alto o jeans para un look audaz.</p><ul>\n\n<li>Patrón geométrico en blanco y negro</li>\n\n<li>Escote redondo</li>\n\n<li>Sin mangas con ribete negro</li>\n\n\n</ul>",
+  "digest": "3d2877dcd61c99776850a0296abb0abfd06b00a15ee545e3466eb6e3a5e35964"
+ },
+ {
+  "id": "gid://shopify/Product/9217335820540",
+  "handle": "karina-short-legging",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217336017148",
+  "handle": "mara-short-legging",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217336017148",
+  "handle": "mara-short-legging",
+  "key": "meta_description",
+  "old": "Shorts Mara: Pantalón corto de tiro alto en color beige y naranja con detalle de costuras y silueta ajustada.",
+  "new": "Shorts Mara: Short de tiro alto en color beige y naranja con detalle de costuras y silueta ajustada.",
+  "digest": "973a17dfc371019b895f78ce896b09e07e148c3b534ce896a2e72a6747d82118"
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "key": "title",
+  "old": "Pantalones cortos Vera",
+  "new": "Shorts Vera",
+  "digest": "43d5f6a821a09b64d081edb4c9bae6dd839afe4984f82e6b8fad2038299e628d"
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "key": "product_type",
+  "old": "MUJERES &gt;&gt; PANTALONES CORTOS",
+  "new": "MUJERES &gt;&gt; SHORTS",
+  "digest": "d07ebc3ffb633aa84a6e82d7320d14b2526691e7cfe1f723478102c0264324ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos Vera – Plisados para mujer | Carbon",
+  "new": "Shorts Vera – Plisados para mujer | Carbon",
+  "digest": "23978bf0f8dbbcb8466d5da3cbe0c1d65b7f92b8eeac06259aa2aa7ece0e5ecd"
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "key": "meta_description",
+  "old": "Vera Shorts: Pantalones cortos azules para mujer con frente plisado, dobladillo con vuelta, bolsillos laterales y trabillas para cinturón.",
+  "new": "Vera Shorts: Shorts azules para mujer con frente plisado, dobladillo con vuelta, bolsillos laterales y trabillas para cinturón.",
+  "digest": "7056169a0451f034a82393c30c4648ab91d3802ba7b53abff6f236d813c439d2"
+ },
+ {
+  "id": "gid://shopify/Product/9217336148220",
+  "handle": "alia-shorts-set",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217336213756",
+  "handle": "carly-chain-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos Carly Chain – Dobladillo para mujer | Carbon",
+  "new": "Shorts Carly Chain – Dobladillo para mujer | Carbon",
+  "digest": "5796fcf7004436b13bef004a52edf7c69b4cbb58a2ae80463c1b4d213eb1054e"
+ },
+ {
+  "id": "gid://shopify/Product/9217336213756",
+  "handle": "carly-chain-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos Carly Chain: Pantalones cortos negros con detalles de cadenas plateadas en el dobladillo. Cintura elástica y largo hasta la mitad del muslo.",
+  "new": "Shorts Carly Chain: Shorts negros con detalles de cadenas plateadas en el dobladillo. Cintura elástica y largo hasta la mitad del muslo.",
+  "digest": "f23e2e964581f9d681b6db687cbf7ede1535d7aee81e978fa9dfe674526efa1a"
+ },
+ {
+  "id": "gid://shopify/Product/9217336869116",
+  "handle": "nia-knit-cami",
+  "key": "body_html",
+  "old": "<p>La camisola de punto Nia presenta una textura acanalada con escote en pico y corte corto. Los tirantes finos completan este look elegante.</p><p>Combínala con unos vaqueros de tiro alto o una falda a juego.</p>",
+  "new": "<p>La camisola de punto Nia presenta una textura acanalada con escote en pico y corte corto. Los tirantes finos completan este look elegante.</p><p>Combínala con unos jeans de tiro alto o una falda a juego.</p>",
+  "digest": "b242f7bc4b38e3b92248ae73d5344e5a3e346c800bf155fcd4e7c4628a6ee5fe"
+ },
+ {
+  "id": "gid://shopify/Product/9217338867964",
+  "handle": "cassidy-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; PANTALONES VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217338966268",
+  "handle": "kira-jeans",
+  "key": "meta_description",
+  "old": "Jeans Kira: vaqueros azules con cierre de botones, silueta ajustada, cinco bolsillos y lavado medio.",
+  "new": "Jeans Kira: jeans azules con cierre de botones, silueta ajustada, cinco bolsillos y lavado medio.",
+  "digest": "8ec1b3d18b9dac52bf84fef4d434a2516ef9d943a92fbb423e7887cd7cea30bb"
+ },
+ {
+  "id": "gid://shopify/Product/9217339064572",
+  "handle": "anaya-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Anaya ofrecen un look azul clásico con un lavado claro. Con un corte de pierna recta y diseño de cinco bolsillos, estos vaqueros incluyen cierre de botón y cremallera.</p><ul>\n\n<li>Lavado claro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pierna recta</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Anaya ofrecen un look azul clásico con un lavado claro. Con un corte de pierna recta y diseño de cinco bolsillos, estos jeans incluyen cierre de botón y cremallera.</p><ul>\n\n<li>Lavado claro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pierna recta</li>\n\n\n</ul>",
+  "digest": "d4d646e62d1da0bd282bccc71cdea46a1966e8b172a66120e8e4d000d2b2ee3f"
+ },
+ {
+  "id": "gid://shopify/Product/9217339064572",
+  "handle": "anaya-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217339293948",
+  "handle": "gia-padded-t-shirt",
+  "key": "body_html",
+  "old": "<p>La camiseta Gia con hombreras destaca por sus hombreras marcadas y su clásico cuello redondo. Este top sin mangas está disponible en blanco y negro, ofreciendo una silueta relajada con un bajo recto.</p><p>Combínala con unos vaqueros rotos para un look desenfadado.</p>",
+  "new": "<p>La camiseta Gia con hombreras destaca por sus hombreras marcadas y su clásico cuello redondo. Este top sin mangas está disponible en blanco y negro, ofreciendo una silueta relajada con un bajo recto.</p><p>Combínala con unos jeans rotos para un look desenfadado.</p>",
+  "digest": "0c53f7a368b681ed406976776b33fd90ab25574817e7a482363999f368692620"
+ },
+ {
+  "id": "gid://shopify/Product/9217339982076",
+  "handle": "successful-tank",
+  "key": "body_html",
+  "old": "<p>Este tank top para hombre presenta un llamativo estampado gráfico con la palabra 'SUCCESSFUL' en la parte delantera. Está disponible en negro, blanco y rojo.</p><p>Combínala con unos vaqueros desgastados para un look informal.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Cuello redondo</li>\n\n<li>Dobladillo recto</li>\n\n\n</ul>",
+  "new": "<p>Este tank top para hombre presenta un llamativo estampado gráfico con la palabra 'SUCCESSFUL' en la parte delantera. Está disponible en negro, blanco y rojo.</p><p>Combínala con unos jeans desgastados para un look informal.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Cuello redondo</li>\n\n<li>Dobladillo recto</li>\n\n\n</ul>",
+  "digest": "57c7da8ebdf5ff0b266f6c2e80ebf76df6bd067fb096a713a7f1b8605516a676"
+ },
+ {
+  "id": "gid://shopify/Product/9217340080380",
+  "handle": "game-over-tank",
+  "key": "body_html",
+  "old": "<p>Este tank top para hombre presenta un llamativo gráfico 'GAME OVER' en azul, rosa y amarillo vibrantes. Su diseño sin mangas y el cuello redondo le dan un toque clásico. Disponible en negro, gris y blanco.</p><p>Combínala con unos vaqueros rotos para un estilo desenfadado.</p><ul>\n\n<li>Tank top para hombre</li>\n\n<li>Llamativo gráfico 'GAME OVER'</li>\n\n<li>Disponible en negro, gris y blanco</li>\n\n\n</ul>",
+  "new": "<p>Este tank top para hombre presenta un llamativo gráfico 'GAME OVER' en azul, rosa y amarillo vibrantes. Su diseño sin mangas y el cuello redondo le dan un toque clásico. Disponible en negro, gris y blanco.</p><p>Combínala con unos jeans rotos para un estilo desenfadado.</p><ul>\n\n<li>Tank top para hombre</li>\n\n<li>Llamativo gráfico 'GAME OVER'</li>\n\n<li>Disponible en negro, gris y blanco</li>\n\n\n</ul>",
+  "digest": "1b5a1ed96c683a4f7c1011afe90706a1f95b41bd16903a883543c30a46ef00cd"
+ },
+ {
+  "id": "gid://shopify/Product/9217340342524",
+  "handle": "good-things-tank",
+  "key": "body_html",
+  "old": "<p>El tank top Good Things presenta un estampado gráfico llamativo con las palabras 'GOOD THINGS TAKE TIME' en un vibrante efecto de goteo. Disponible en negro, gris y blanco, ofrece un look impactante.</p><p>Combínala con unos vaqueros desgastados para un estilo relajado.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Cuello redondo</li>\n\n<li>Estampado gráfico en la parte delantera</li>\n\n\n</ul>",
+  "new": "<p>El tank top Good Things presenta un estampado gráfico llamativo con las palabras 'GOOD THINGS TAKE TIME' en un vibrante efecto de goteo. Disponible en negro, gris y blanco, ofrece un look impactante.</p><p>Combínala con unos jeans desgastados para un estilo relajado.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Cuello redondo</li>\n\n<li>Estampado gráfico en la parte delantera</li>\n\n\n</ul>",
+  "digest": "184e5c8fb8e00f51ac3201657668c862651d0edbca6ad76898cb2299ceb9aa31"
+ },
+ {
+  "id": "gid://shopify/Product/9217340735740",
+  "handle": "carbon-driven-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un llamativo estampado gráfico en ambos lados. La parte delantera muestra 'CARBON DRIVEN' alrededor de un diseño colorido, mientras que la parte trasera luce 'MY LIFE RULES' en un gráfico audaz. El cuello redondo y las mangas cortas completan el look.</p><p>Combínala con unos vaqueros oscuros para un estilo casual.</p>",
+  "new": "<p>Esta camiseta para hombre presenta un llamativo estampado gráfico en ambos lados. La parte delantera muestra 'CARBON DRIVEN' alrededor de un diseño colorido, mientras que la parte trasera luce 'MY LIFE RULES' en un gráfico audaz. El cuello redondo y las mangas cortas completan el look.</p><p>Combínala con unos jeans oscuros para un estilo casual.</p>",
+  "digest": "08c640d7fa975cf4708487435f131e39ee042b0043144fdd697969b2580439a2"
+ },
+ {
+  "id": "gid://shopify/Product/9217343848700",
+  "handle": "heal-the-world-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta de hombre presenta un texto llamativo de «HEAL THE WORLD» en el cuello redondo. Disponible en lila, negro y azul, ofrece un diseño de color sólido con mangas cortas.</p><p>Combínala con unos vaqueros desgastados para un look relajado.</p>",
+  "new": "<p>Esta camiseta de hombre presenta un texto llamativo de «HEAL THE WORLD» en el cuello redondo. Disponible en lila, negro y azul, ofrece un diseño de color sólido con mangas cortas.</p><p>Combínala con unos jeans desgastados para un look relajado.</p>",
+  "digest": "ed3fa60a75602d1bf7e3ebe05a79ad82065226a2579736184a2c226cb680cd1b"
+ },
+ {
+  "id": "gid://shopify/Product/9217343947004",
+  "handle": "social-t-shirt",
+  "key": "body_html",
+  "old": "<p>La camiseta Social presenta un diseño gráfico llamativo con las frases \"Social Social Social\" y \"Sometimes the grass is greener because it's fake\" en la parte delantera. Disponible en negro, rojo y blanco, esta camiseta cuenta con cuello redondo y mangas cortas.</p><p>Combínala con unos vaqueros desgastados para un estilo desenfadado.</p><ul>\n\n<li>Camiseta para hombre</li>\n\n<li>Disponible en negro, rojo y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Diseño gráfico en la parte delantera</li>\n\n\n</ul>",
+  "new": "<p>La camiseta Social presenta un diseño gráfico llamativo con las frases \"Social Social Social\" y \"Sometimes the grass is greener because it's fake\" en la parte delantera. Disponible en negro, rojo y blanco, esta camiseta cuenta con cuello redondo y mangas cortas.</p><p>Combínala con unos jeans desgastados para un estilo desenfadado.</p><ul>\n\n<li>Camiseta para hombre</li>\n\n<li>Disponible en negro, rojo y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Diseño gráfico en la parte delantera</li>\n\n\n</ul>",
+  "digest": "2491b45777d81a03a87344ed2c33896d25c54bec5fd2b50f6e93970658660156"
+ },
+ {
+  "id": "gid://shopify/Product/9217344209148",
+  "handle": "faith-in-yourself-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un llamativo gráfico de un león con traje de astronauta, enmarcado por un texto motivacional. Disponible en blanco y negro clásicos, tiene cuello redondo y mangas cortas.</p><p>Combínala con pantalones cortos de mezclilla desgastados para un look relajado.</p><ul>\n\n<li>Estampado gráfico frontal</li>\n\n<li>Texto: 'DO NOT FEAR THE UNKNOWN'</li>\n\n<li>Texto: 'HAVE FAITH IN YOURSELF'</li>\n\n<li>Texto: 'SINCE NOW'</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta para hombre presenta un llamativo gráfico de un león con traje de astronauta, enmarcado por un texto motivacional. Disponible en blanco y negro clásicos, tiene cuello redondo y mangas cortas.</p><p>Combínala con shorts de mezclilla desgastados para un look relajado.</p><ul>\n\n<li>Estampado gráfico frontal</li>\n\n<li>Texto: 'DO NOT FEAR THE UNKNOWN'</li>\n\n<li>Texto: 'HAVE FAITH IN YOURSELF'</li>\n\n<li>Texto: 'SINCE NOW'</li>\n\n\n</ul>",
+  "digest": "afce1d62123db407cf4f8c06cd91aae1d9bfad0bc7744b2fda3f4fd4808f1421"
+ },
+ {
+  "id": "gid://shopify/Product/9217344307452",
+  "handle": "choose-carbon-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un llamativo estampado \"CHOOSE CARBON. REFLECT YOUR STYLE.\" en la parte delantera y un gráfico de caracteres único en la parte trasera. Disponible en morado, blanco y negro.</p><p>Combínala con unos vaqueros oscuros para un estilo informal.</p><ul>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Logotipo de Carbon en la parte delantera</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta para hombre presenta un llamativo estampado \"CHOOSE CARBON. REFLECT YOUR STYLE.\" en la parte delantera y un gráfico de caracteres único en la parte trasera. Disponible en morado, blanco y negro.</p><p>Combínala con unos jeans oscuros para un estilo informal.</p><ul>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Logotipo de Carbon en la parte delantera</li>\n\n\n</ul>",
+  "digest": "0f952657931a9188efc7da36650f88c4ecbf72aa037c7e700cd3175163e8770a"
+ },
+ {
+  "id": "gid://shopify/Product/9217344438524",
+  "handle": "revolution-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un llamativo estampado \"REVOLUTION\" en la parte frontal y un texto lateral que dice \"IT ALWAYS SEEMS IMPOSSIBLE UNTIL IT'S DONE\". Disponible en rojo, blanco y negro, con cuello redondo y manga corta.</p><p>Combínala con unos vaqueros negros para un look impactante.</p><ul>\n\n<li>Camiseta para hombre</li>\n\n<li>Rojo, blanco, negro</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Estampado \"REVOLUTION\"</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta para hombre presenta un llamativo estampado \"REVOLUTION\" en la parte frontal y un texto lateral que dice \"IT ALWAYS SEEMS IMPOSSIBLE UNTIL IT'S DONE\". Disponible en rojo, blanco y negro, con cuello redondo y manga corta.</p><p>Combínala con unos jeans negros para un look impactante.</p><ul>\n\n<li>Camiseta para hombre</li>\n\n<li>Rojo, blanco, negro</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Estampado \"REVOLUTION\"</li>\n\n\n</ul>",
+  "digest": "21b4c456643d73a64a842f5b685db60bcaf99e8a3715ef96c64996b711854d47"
+ },
+ {
+  "id": "gid://shopify/Product/9217344864508",
+  "handle": "memories-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un llamativo gráfico con la frase \"MEMORIES LAST FOREVER\" en la parte delantera. Disponible en blanco y negro, cuenta con cuello redondo y mangas cortas.</p><p>Combínala con unos vaqueros rotos para lograr un estilo urbano sin esfuerzo.</p>",
+  "new": "<p>Esta camiseta para hombre presenta un llamativo gráfico con la frase \"MEMORIES LAST FOREVER\" en la parte delantera. Disponible en blanco y negro, cuenta con cuello redondo y mangas cortas.</p><p>Combínala con unos jeans rotos para lograr un estilo urbano sin esfuerzo.</p>",
+  "digest": "5925e77facb3e093f6f28619fa2e9fedf397ba9e6341ea995603decdc7b34c91"
+ },
+ {
+  "id": "gid://shopify/Product/9217344930044",
+  "handle": "don-t-touch-me-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un clásico cuello redondo y mangas cortas. Está disponible en blanco nítido y negro intenso.</p><p>Combínala con unos pantalones cortos de mezclilla para un estilo relajado.</p>",
+  "new": "<p>Esta camiseta para hombre presenta un clásico cuello redondo y mangas cortas. Está disponible en blanco nítido y negro intenso.</p><p>Combínala con unos shorts de mezclilla para un estilo relajado.</p>",
+  "digest": "3c3827630d8747ad699aa84f3af58eebbd2f3d743cb90797c6fcdee2d89ea9a5"
+ },
+ {
+  "id": "gid://shopify/Product/9217345814780",
+  "handle": "classic-industry-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta un cuello redondo y mangas cortas.</p><p>Combínala con pantalones deportivos o vaqueros para un look informal.</p>",
+  "new": "<p>Esta camiseta para hombre presenta un cuello redondo y mangas cortas.</p><p>Combínala con pantalones deportivos o jeans para un look informal.</p>",
+  "digest": "edc73d06a36527820aa0dda9d5373133cb6fed419ac2bae9024f3710c3ff37f7"
+ },
+ {
+  "id": "gid://shopify/Product/9217348403452",
+  "handle": "choose-your-future-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre en color blanco presenta un llamativo gráfico frontal con el texto 'Choose Your Future'. El cuello redondo y las mangas cortas completan el diseño.</p><p>Combínala con unos vaqueros para un estilo relajado.</p>",
+  "new": "<p>Esta camiseta para hombre en color blanco presenta un llamativo gráfico frontal con el texto 'Choose Your Future'. El cuello redondo y las mangas cortas completan el diseño.</p><p>Combínala con unos jeans para un estilo relajado.</p>",
+  "digest": "b8784d66a611ff4b3a5f075b40901428cc11f949d22efd5a9fffd74e42c9cd77"
+ },
+ {
+  "id": "gid://shopify/Product/9217348894972",
+  "handle": "creed-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Creed ofrecen un aspecto azul claro con un lavado desgastado. Los detalles rotos y deshilachados añaden un aire relajado, mientras que las costuras en contraste de color naranja realzan las costuras y los bolsillos.</p><ul>\n\n<li>Botón plateado y bragueta con cremallera</li>\n\n<li>Bolsillos delanteros y traseros clásicos</li>\n\n<li>Bolsillo para monedas dentro del bolsillo delantero derecho</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Creed ofrecen un aspecto azul claro con un lavado desgastado. Los detalles rotos y deshilachados añaden un aire relajado, mientras que las costuras en contraste de color naranja realzan las costuras y los bolsillos.</p><ul>\n\n<li>Botón plateado y bragueta con cremallera</li>\n\n<li>Bolsillos delanteros y traseros clásicos</li>\n\n<li>Bolsillo para monedas dentro del bolsillo delantero derecho</li>\n\n\n</ul>",
+  "digest": "b6c40fa42f9c4206a555a4e3593860dea4fc726103589406fb11e71d4aa5a3f4"
+ },
+ {
+  "id": "gid://shopify/Product/9217348894972",
+  "handle": "creed-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217348894972",
+  "handle": "creed-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Creed – Hombre | Carbon",
+  "new": "Jeans Creed – Hombre | Carbon",
+  "digest": "527758372b4c79acb840f0673079f581d7afb5f03571b8def150d5ec2b889dc0"
+ },
+ {
+  "id": "gid://shopify/Product/9217349779708",
+  "handle": "dax-jeans",
+  "key": "title",
+  "old": "Pantalones vaqueros Dax",
+  "new": "Jeans Dax",
+  "digest": "235de49010c63bf8a8db3fc30bfd6ba168cae5b9ad0c08de486d2497e94dda5f"
+ },
+ {
+  "id": "gid://shopify/Product/9217349779708",
+  "handle": "dax-jeans",
+  "key": "body_html",
+  "old": "<p>Vaqueros de hombre en acabado lavado azul con detalles desgastados. El efecto desteñido añade carácter. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p><ul>\n\n<li>Lavado azul</li>\n\n<li>Detalles desgastados en la parte delantera</li>\n\n<li>Cinco bolsillos</li>\n\n<li>Pernera estrecha</li>\n\n\n</ul>",
+  "new": "<p>Jeans de hombre en acabado lavado azul con detalles desgastados. El efecto desteñido añade carácter. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p><ul>\n\n<li>Lavado azul</li>\n\n<li>Detalles desgastados en la parte delantera</li>\n\n<li>Cinco bolsillos</li>\n\n<li>Pernera estrecha</li>\n\n\n</ul>",
+  "digest": "4ea74a44a3a836e7500c200817fe588ad5c5c1ab864fe98ace97cdc9a03f7ab3"
+ },
+ {
+  "id": "gid://shopify/Product/9217349779708",
+  "handle": "dax-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Dax – Lavado para hombre | Carbon",
+  "new": "Jeans Dax – Lavado para hombre | Carbon",
+  "digest": "1cbb56a1d18e651d8e8b1ac3472bb031a3160b18b830f2b35853ef8749265b1d"
+ },
+ {
+  "id": "gid://shopify/Product/9217349779708",
+  "handle": "dax-jeans",
+  "key": "meta_description",
+  "old": "Jeans Dax: Pantalones vaqueros azules con detalles desgastados y efecto lavado. Cuentan con cinco bolsillos y corte cónico.",
+  "new": "Jeans Dax: Jeans azules con detalles desgastados y efecto lavado. Cuentan con cinco bolsillos y corte cónico.",
+  "digest": "ee4b07d90829bf04ea780cf227e57b079802112a2a2173a61df2514fe94fc0a5"
+ },
+ {
+  "id": "gid://shopify/Product/9217349943548",
+  "handle": "julian-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217351024892",
+  "handle": "wade-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Wade",
+  "new": "Shorts de mezclilla Wade",
+  "digest": "3a18aaaeff12dd37cbaf4efb19ec2b38c845f606556ba173803a56fd8e05a357"
+ },
+ {
+  "id": "gid://shopify/Product/9217351024892",
+  "handle": "wade-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Wade: Pantalones cortos de mezclilla azul lavado con frente rasgado y deshilachado, estilo de cinco bolsillos y dobladillo con borde sin rematar.",
+  "new": "Shorts de mezclilla Wade: Shorts de mezclilla azul lavado con frente rasgado y deshilachado, estilo de cinco bolsillos y dobladillo con borde sin rematar.",
+  "digest": "8e3fef3614907dfdef4ee1c698efa886f2247a82ee6605878c512f0d8583deef"
+ },
+ {
+  "id": "gid://shopify/Product/9217351090428",
+  "handle": "trent-denim-shorts",
+  "key": "title",
+  "old": "Trent Shorts vaqueros",
+  "new": "Trent Shorts jeans",
+  "digest": "fb9e8dbd6a285f1588062077ff0e7ee761d647d7b6afb949fcbc6160eeae0aba"
+ },
+ {
+  "id": "gid://shopify/Product/9217351090428",
+  "handle": "trent-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRE &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217351090428",
+  "handle": "trent-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Trent: pantalones cortos de mezclilla gris lavado con detalles desgarrados y diseño de cinco bolsillos.",
+  "new": "Shorts de mezclilla Trent: shorts de mezclilla gris lavado con detalles desgarrados y diseño de cinco bolsillos.",
+  "digest": "04fc3595f69c830bfdefed0af23b86807c232661e5a1873d3a5cc9f8ee8d3f9f"
+ },
+ {
+  "id": "gid://shopify/Product/9217351188732",
+  "handle": "otto-denim-shorts",
+  "key": "title",
+  "old": "Pantalones Cortos de Jean Otto",
+  "new": "Shorts de Jean Otto",
+  "digest": "e8ff423aa2dc6c21a1ab0a8a878e2fa975144c7b2c0af87782cccd2355c56c83"
+ },
+ {
+  "id": "gid://shopify/Product/9217351188732",
+  "handle": "otto-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217351450876",
+  "handle": "jude-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Jude",
+  "new": "Shorts de mezclilla Jude",
+  "digest": "a4389a3c175e8123a132f8aba2b85ddb1ddccb72abcc776e20a7a56fd7661d36"
+ },
+ {
+  "id": "gid://shopify/Product/9217351450876",
+  "handle": "jude-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla Jude – Hombre desgastados | Carbon",
+  "new": "Shorts de mezclilla Jude – Hombre desgastados | Carbon",
+  "digest": "25a2356ff0ff0cb9772ecfa813cd6bc659937a278e25e1875d1be105f2c0458d"
+ },
+ {
+  "id": "gid://shopify/Product/9217351581948",
+  "handle": "lord-denim-shorts",
+  "key": "body_html",
+  "old": "<p>Estos pantalones cortos de mezclilla azul lavado presentan un dobladillo deshilachado y un corte a la altura de la rodilla. La bragueta de cremallera con cierre de botón y los bolsillos clásicos añaden practicidad. Las costuras en contraste de color naranja resaltan el diseño.</p><p>Combínalos con una camiseta estampada para un estilo relajado.</p><ul>\n\n<li>Mezclilla azul lavado</li>\n\n<li>Dobladillo deshilachado</li>\n\n<li>Bragueta de cremallera con cierre de botón</li>\n\n<li>Bolsillos delanteros y traseros clásicos</li>\n\n\n</ul>",
+  "new": "<p>Estos shorts de mezclilla azul lavado presentan un dobladillo deshilachado y un corte a la altura de la rodilla. La bragueta de cremallera con cierre de botón y los bolsillos clásicos añaden practicidad. Las costuras en contraste de color naranja resaltan el diseño.</p><p>Combínalos con una camiseta estampada para un estilo relajado.</p><ul>\n\n<li>Mezclilla azul lavado</li>\n\n<li>Dobladillo deshilachado</li>\n\n<li>Bragueta de cremallera con cierre de botón</li>\n\n<li>Bolsillos delanteros y traseros clásicos</li>\n\n\n</ul>",
+  "digest": "f5adefa7bddcd0bc1845c8647330f11180e448a3418e58f802bfaed5fda19345"
+ },
+ {
+  "id": "gid://shopify/Product/9217351581948",
+  "handle": "lord-denim-shorts",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217351581948",
+  "handle": "lord-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Lord: Pantalones cortos de mezclilla azul lavado con dobladillo deshilachado y costuras en contraste. Cuentan con bolsillos clásicos y cierre de cremallera.",
+  "new": "Shorts de mezclilla Lord: Shorts de mezclilla azul lavado con dobladillo deshilachado y costuras en contraste. Cuentan con bolsillos clásicos y cierre de cremallera.",
+  "digest": "5c9b7bf476d3970e2549fa4c5ef784ef8e08245b688a8c8bf1d23b63718c8e9c"
+ },
+ {
+  "id": "gid://shopify/Product/9217351713020",
+  "handle": "camilo-denim-shorts",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217351745788",
+  "handle": "alex-denim-shorts",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217351975164",
+  "handle": "hank-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Hank",
+  "new": "Shorts de mezclilla Hank",
+  "digest": "cefa9adab056b9be502ab0997a0e71f0ae3f2ee30092c07cdac1002190ed5c97"
+ },
+ {
+  "id": "gid://shopify/Product/9217351975164",
+  "handle": "hank-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217355710716",
+  "handle": "classic-heels",
+  "key": "body_html",
+  "old": "<p>Zapatos de tacón clásicos en color negro con punta afilada y tacón de aguja alto. La plantilla con el logotipo de 'Charles &amp; Keith' grabado añade elegancia.</p><p>Combínalos con unos vaqueros de pernera ancha para un look elegante.</p><ul>\n\n<li>Color negro</li>\n\n<li>Punta afilada</li>\n\n<li>Tacón de aguja alto</li>\n\n<li>Plantilla con el logotipo de 'Charles &amp; Keith' grabado</li>\n\n\n</ul>",
+  "new": "<p>Zapatos de tacón clásicos en color negro con punta afilada y tacón de aguja alto. La plantilla con el logotipo de 'Charles &amp; Keith' grabado añade elegancia.</p><p>Combínalos con unos jeans de pernera ancha para un look elegante.</p><ul>\n\n<li>Color negro</li>\n\n<li>Punta afilada</li>\n\n<li>Tacón de aguja alto</li>\n\n<li>Plantilla con el logotipo de 'Charles &amp; Keith' grabado</li>\n\n\n</ul>",
+  "digest": "bed0573c375c707274823d4aebbae49cff3d52e93e6e221d249445573340cbdf"
+ },
+ {
+  "id": "gid://shopify/Product/9217356005628",
+  "handle": "queen-sneakers",
+  "key": "body_html",
+  "old": "<p>Las zapatillas Queen presentan un empeine blanco impecable con un talón negro en contraste. Los paneles laterales perforados realzan el diseño, mientras que la suela blanca y el cierre con cordones completan el look. Combínalas con joggers o vaqueros para un estilo relajado.</p><ul>\n\n<li>Empeine blanco</li>\n\n<li>Talón negro</li>\n\n<li>Cierre con cordones</li>\n\n<li>Paneles laterales perforados</li>\n\n<li>Logotipo Carbon en el talón</li>\n\n\n</ul>",
+  "new": "<p>Las zapatillas Queen presentan un empeine blanco impecable con un talón negro en contraste. Los paneles laterales perforados realzan el diseño, mientras que la suela blanca y el cierre con cordones completan el look. Combínalas con joggers o jeans para un estilo relajado.</p><ul>\n\n<li>Empeine blanco</li>\n\n<li>Talón negro</li>\n\n<li>Cierre con cordones</li>\n\n<li>Paneles laterales perforados</li>\n\n<li>Logotipo Carbon en el talón</li>\n\n\n</ul>",
+  "digest": "ca87c12185fcbc9f8316d2e026d17e9a0ffd61bd424da8b547d6edbbd6b661ac"
+ },
+ {
+  "id": "gid://shopify/Product/9217356169468",
+  "handle": "camel-flush-sneakers",
+  "key": "body_html",
+  "old": "<p>Estas zapatillas de corte bajo presentan un tono gris camello con un sutil estampado de camuflaje. Los ojales dorados añaden un toque de detalle, mientras que la suela negra equilibra el look.</p><p>Combínalas con unos vaqueros oscuros para un estilo urbano y elegante.</p><ul>\n\n<li>Sutil estampado de camuflaje</li>\n\n<li>Ojales dorados</li>\n\n<li>Cierre de cordones</li>\n\n<li>Suela negra</li>\n\n<li>Texto en el lateral</li>\n\n\n</ul>",
+  "new": "<p>Estas zapatillas de corte bajo presentan un tono gris camello con un sutil estampado de camuflaje. Los ojales dorados añaden un toque de detalle, mientras que la suela negra equilibra el look.</p><p>Combínalas con unos jeans oscuros para un estilo urbano y elegante.</p><ul>\n\n<li>Sutil estampado de camuflaje</li>\n\n<li>Ojales dorados</li>\n\n<li>Cierre de cordones</li>\n\n<li>Suela negra</li>\n\n<li>Texto en el lateral</li>\n\n\n</ul>",
+  "digest": "b3b400d95fac94494dc57033201f075b4c7ab23422de8329b5de57ff70e2b5cf"
+ },
+ {
+  "id": "gid://shopify/Product/9217356202236",
+  "handle": "johnny-sneakers",
+  "key": "body_html",
+  "old": "<p>Estas zapatillas grises de corte bajo presentan un diseño impecable con cordones y suela blanca. El logotipo de Carbon en el talón añade un toque sutil.</p><p>Combínalas con unos vaqueros oscuros para un look elegante.</p><ul>\n\n<li>Color gris</li>\n\n<li>Diseño de corte bajo</li>\n\n<li>Cierre con cordones</li>\n\n<li>Suela blanca</li>\n\n<li>Logotipo de Carbon en el talón</li>\n\n\n</ul>",
+  "new": "<p>Estas zapatillas grises de corte bajo presentan un diseño impecable con cordones y suela blanca. El logotipo de Carbon en el talón añade un toque sutil.</p><p>Combínalas con unos jeans oscuros para un look elegante.</p><ul>\n\n<li>Color gris</li>\n\n<li>Diseño de corte bajo</li>\n\n<li>Cierre con cordones</li>\n\n<li>Suela blanca</li>\n\n<li>Logotipo de Carbon en el talón</li>\n\n\n</ul>",
+  "digest": "7dba2ba6c3917447da16ee54f3e7b5283ba880c8583d19ea659efbcfa33539b0"
+ },
+ {
+  "id": "gid://shopify/Product/9217356267772",
+  "handle": "logo-sneakers",
+  "key": "body_html",
+  "old": "<p>Estas zapatillas bajas para hombre vienen en elegante color negro y blanco. Presentan un cierre de cordones y texto en el talón. Los laterales perforados añaden un detalle sutil.</p><p>Combínalas con unos vaqueros para un look impecable y casual.</p><ul>\n\n<li>Opciones de color negro y blanco</li>\n\n<li>Cierre de cordones</li>\n\n<li>Texto en el talón</li>\n\n<li>Detalles laterales perforados</li>\n\n\n</ul>",
+  "new": "<p>Estas zapatillas bajas para hombre vienen en elegante color negro y blanco. Presentan un cierre de cordones y texto en el talón. Los laterales perforados añaden un detalle sutil.</p><p>Combínalas con unos jeans para un look impecable y casual.</p><ul>\n\n<li>Opciones de color negro y blanco</li>\n\n<li>Cierre de cordones</li>\n\n<li>Texto en el talón</li>\n\n<li>Detalles laterales perforados</li>\n\n\n</ul>",
+  "digest": "e2ec56d0529474d8ba177133ac6bffb901fbd6ce82e1d7c202180b72bd6edb9d"
+ },
+ {
+  "id": "gid://shopify/Product/9217356988668",
+  "handle": "off-sneakers",
+  "key": "body_html",
+  "old": "<p>Las zapatillas Off están disponibles en un elegante color negro o un blanco impecable. La audaz suela a rayas añade un contraste impactante. Acabadas con el logotipo de Carbon en la lengüeta.</p><p>Combínalas con tus vaqueros favoritos para un look desenfadado.</p><ul>\n\n<li>Opciones de color en negro y blanco</li>\n\n<li>Diseño de suela a rayas</li>\n\n<li>Cierre con cordones</li>\n\n<li>Logotipo de Carbon en la lengüeta</li>\n\n\n</ul>",
+  "new": "<p>Las zapatillas Off están disponibles en un elegante color negro o un blanco impecable. La audaz suela a rayas añade un contraste impactante. Acabadas con el logotipo de Carbon en la lengüeta.</p><p>Combínalas con tus jeans favoritos para un look desenfadado.</p><ul>\n\n<li>Opciones de color en negro y blanco</li>\n\n<li>Diseño de suela a rayas</li>\n\n<li>Cierre con cordones</li>\n\n<li>Logotipo de Carbon en la lengüeta</li>\n\n\n</ul>",
+  "digest": "7bc6106cfcd72ea0260a1ba758b6a4b694413a16e91df3c9144ef2d5bc9eba63"
+ },
+ {
+  "id": "gid://shopify/Product/9217361019132",
+  "handle": "freya-pant",
+  "key": "meta_description",
+  "old": "Pantalón Freya: pantalón corto blanco con cintura elástica, cierre de cordón, dos bolsillos laterales y puños fruncidos.",
+  "new": "Pantalón Freya: short blanco con cintura elástica, cierre de cordón, dos bolsillos laterales y puños fruncidos.",
+  "digest": "3eb5d2fdb539a129ac6c53c0b892dc69e64562e077db69cf5265d32f18bf3f5a"
+ },
+ {
+  "id": "gid://shopify/Product/9217361084668",
+  "handle": "nora-flare-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217361084668",
+  "handle": "nora-flare-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros acampanados Nora: Vaqueros acampanados azules con diseño de cinco bolsillos y lavado oscuro. Cuentan con cierre de botón y cremallera.",
+  "new": "Jeans acampanados Nora: Jeans acampanados azules con diseño de cinco bolsillos y lavado oscuro. Cuentan con cierre de botón y cremallera.",
+  "digest": "fb6858ebc45593f02f248cb8a736fe9e964bbd90fde0a5502d69a94b4d97cc27"
+ },
+ {
+  "id": "gid://shopify/Product/9217361150204",
+  "handle": "blakely-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Blakely: vaqueros pitillo negros con diseño de cinco bolsillos, cierre de botón y cremallera, y largo hasta el tobillo.",
+  "new": "Jeans Blakely: jeans pitillo negros con diseño de cinco bolsillos, cierre de botón y cremallera, y largo hasta el tobillo.",
+  "digest": "c925a3144a4ba03ebf1db1cf823dbd17205ee877a1cdc429239aa50cf4a84a76"
+ },
+ {
+  "id": "gid://shopify/Product/9217361477884",
+  "handle": "bailey-crop-tank",
+  "key": "body_html",
+  "old": "<p>La camiseta corta Bailey es una prenda ajustada con escote recto y tirantes finos. Es sin mangas, con una textura suave y un diseño liso en el pecho.</p><p>Llévala con vaqueros de tiro alto para un look informal.</p><ul>\n\n<li>Opciones en negro y verde</li>\n\n<li>Dobladillo recto</li>\n\n<li>Diseño sin mangas</li>\n\n\n</ul>",
+  "new": "<p>La camiseta corta Bailey es una prenda ajustada con escote recto y tirantes finos. Es sin mangas, con una textura suave y un diseño liso en el pecho.</p><p>Llévala con jeans de tiro alto para un look informal.</p><ul>\n\n<li>Opciones en negro y verde</li>\n\n<li>Dobladillo recto</li>\n\n<li>Diseño sin mangas</li>\n\n\n</ul>",
+  "digest": "8c8e95205da9f811a8d72aaafbaa26fcda72844e0c009b6c5e85c14328e1670f"
+ },
+ {
+  "id": "gid://shopify/Product/9217364164860",
+  "handle": "cindy-bodysuit",
+  "key": "body_html",
+  "old": "<p>El body Cindy es una prenda de malla negra transparente con un escote en V profundo y detalles de tiras. Sus mangas largas crean una silueta elegante.</p><p>Combínalo con pantalones cortos de tiro alto para un look atrevido.</p><ul>\n\n<li>Tejido de malla transparente</li>\n\n<li>Escote en V profundo con tiras</li>\n\n<li>Mangas largas</li>\n\n<li>Costuras verticales</li>\n\n<li>Costura bajo el busto</li>\n\n\n</ul>",
+  "new": "<p>El body Cindy es una prenda de malla negra transparente con un escote en V profundo y detalles de tiras. Sus mangas largas crean una silueta elegante.</p><p>Combínalo con shorts de tiro alto para un look atrevido.</p><ul>\n\n<li>Tejido de malla transparente</li>\n\n<li>Escote en V profundo con tiras</li>\n\n<li>Mangas largas</li>\n\n<li>Costuras verticales</li>\n\n<li>Costura bajo el busto</li>\n\n\n</ul>",
+  "digest": "c5c624d4d4f1030ed23e82bc45f8b5c44765db1b2e7894825600389eaf7d9f1e"
+ },
+ {
+  "id": "gid://shopify/Product/9217364394236",
+  "handle": "tommy-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de Tommy",
+  "new": "Shorts de Tommy",
+  "digest": "7f2aee1309dee5e1c1c2c6eba7d8f9c2a9b3f0b6b974c29ea4efdddcdeae04e0"
+ },
+ {
+  "id": "gid://shopify/Product/9217364394236",
+  "handle": "tommy-shorts",
+  "key": "body_html",
+  "old": "<p>Los pantalones cortos Tommy ofrecen un look elegante con bolsillos cargo y herrajes en forma de D. Disponibles en blanco y negro, estos pantalones cortos cuentan con una cintura elástica con cordón y detalles de correas en los bolsillos.</p><ul>\n\n<li>Bolsillos cargo</li>\n\n<li>Herrajes en forma de D</li>\n\n<li>Cintura elástica con cordón</li>\n\n<li>Detalles de correas en los bolsillos</li>\n\n<li>Hasta la rodilla</li>\n\n\n</ul>",
+  "new": "<p>Los shorts Tommy ofrecen un look elegante con bolsillos cargo y herrajes en forma de D. Disponibles en blanco y negro, estos shorts cuentan con una cintura elástica con cordón y detalles de correas en los bolsillos.</p><ul>\n\n<li>Bolsillos cargo</li>\n\n<li>Herrajes en forma de D</li>\n\n<li>Cintura elástica con cordón</li>\n\n<li>Detalles de correas en los bolsillos</li>\n\n<li>Hasta la rodilla</li>\n\n\n</ul>",
+  "digest": "cae63cfb078e8db87b53a15dbee02678947823b9ca6191c9888736c9870d604b"
+ },
+ {
+  "id": "gid://shopify/Product/9217364721916",
+  "handle": "new-york-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta negra para mujer presenta un llamativo gráfico con el texto 'NEW YORK' y las inscripciones adicionales 'SAPIENTIA ET LIBERTAS', 'NY' y '1993'. El lavado desgastado le aporta un aire vintage. El cuello redondo y las mangas cortas completan el diseño.</p><p>Combínala con pantalones cortos o vaqueros para un estilo relajado.</p>",
+  "new": "<p>Esta camiseta negra para mujer presenta un llamativo gráfico con el texto 'NEW YORK' y las inscripciones adicionales 'SAPIENTIA ET LIBERTAS', 'NY' y '1993'. El lavado desgastado le aporta un aire vintage. El cuello redondo y las mangas cortas completan el diseño.</p><p>Combínala con shorts o jeans para un estilo relajado.</p>",
+  "digest": "5725119c00bf49949158f29ebf0f894563a678de973bc8801bb03ed208beda77"
+ },
+ {
+  "id": "gid://shopify/Product/9217367015676",
+  "handle": "burning-t-shirt",
+  "key": "body_html",
+  "old": "<p>La camiseta Burning presenta un acabado lavado en negro con un llamativo gráfico de águila y el texto 'BURNING HOLIDAY'. Tiene cuello redondo y mangas cortas.</p><p>Combínala con pantalones cortos de mezclilla para un look informal.</p>",
+  "new": "<p>La camiseta Burning presenta un acabado lavado en negro con un llamativo gráfico de águila y el texto 'BURNING HOLIDAY'. Tiene cuello redondo y mangas cortas.</p><p>Combínala con shorts de mezclilla para un look informal.</p>",
+  "digest": "15cedc90015d0ebee98cfc86cfe90bfdea7eb6e3276b992e4c8cc95ac9bcb60f"
+ },
+ {
+  "id": "gid://shopify/Product/9217370325244",
+  "handle": "more-love-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta de mujer en color blanco presenta un llamativo estampado gráfico con el texto «more love, love more» en la parte delantera. Tiene un cuello redondo clásico y mangas cortas.</p><p>Combínala con unos vaqueros para un look urbano sencillo.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Mangas cortas</li>\n\n<li>Estampado gráfico en la parte delantera</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta de mujer en color blanco presenta un llamativo estampado gráfico con el texto «more love, love more» en la parte delantera. Tiene un cuello redondo clásico y mangas cortas.</p><p>Combínala con unos jeans para un look urbano sencillo.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Mangas cortas</li>\n\n<li>Estampado gráfico en la parte delantera</li>\n\n\n</ul>",
+  "digest": "3890c0191e907d4062eafb049b1307768ff1335195b32b3ceafbf1b1df2fe195"
+ },
+ {
+  "id": "gid://shopify/Product/9217392607484",
+  "handle": "l-a-tank-top",
+  "key": "body_html",
+  "old": "<p>Este tank top viene en un tono azul grisáceo con un llamativo gráfico de 'LOS ANGELES CALIFORNIA' en la parte delantera. Es sin mangas y cuenta con cuello redondo y corte corto.</p><p>Combínala con pantalones cortos de tiro alto para un estilo desenfadado.</p>",
+  "new": "<p>Este tank top viene en un tono azul grisáceo con un llamativo gráfico de 'LOS ANGELES CALIFORNIA' en la parte delantera. Es sin mangas y cuenta con cuello redondo y corte corto.</p><p>Combínala con shorts de tiro alto para un estilo desenfadado.</p>",
+  "digest": "e6cca8f6f817bd7ff0ec8fd16157372f495368aff1b0ef3255fb3882856a7af5"
+ },
+ {
+  "id": "gid://shopify/Product/9217393918204",
+  "handle": "luna-tank-top",
+  "key": "body_html",
+  "old": "<p>Este tank top blanco presenta un cuello redondo y un diseño sin mangas. El fruncido lateral añade un toque único a su corte corto.</p><p>Combínala con unos vaqueros de tiro alto para un estilo moderno.</p>",
+  "new": "<p>Este tank top blanco presenta un cuello redondo y un diseño sin mangas. El fruncido lateral añade un toque único a su corte corto.</p><p>Combínala con unos jeans de tiro alto para un estilo moderno.</p>",
+  "digest": "6c40f933e132fa50c689f40a96a1078749425f4928f0be01939f190ecce2b95e"
+ },
+ {
+  "id": "gid://shopify/Product/9217395458300",
+  "handle": "florida-crop-top",
+  "key": "body_html",
+  "old": "<p>Este top corto para mujer presenta un llamativo gráfico con el texto \"Florida\" en la parte delantera. Diseñado con mangas enrolladas y cuello redondo, ofrece un estilo relajado. Disponible en azul/gris y verde azulado.</p><p>Combínalo con pantalones cortos de talle alto para un aire casual.</p><ul>\n\n<li>Estilo top corto</li>\n\n<li>Mangas enrolladas</li>\n\n<li>Gráfico con el texto \"Florida\"</li>\n\n<li>Disponible en azul/gris y verde azulado</li>\n\n\n</ul>",
+  "new": "<p>Este top corto para mujer presenta un llamativo gráfico con el texto \"Florida\" en la parte delantera. Diseñado con mangas enrolladas y cuello redondo, ofrece un estilo relajado. Disponible en azul/gris y verde azulado.</p><p>Combínalo con shorts de talle alto para un aire casual.</p><ul>\n\n<li>Estilo top corto</li>\n\n<li>Mangas enrolladas</li>\n\n<li>Gráfico con el texto \"Florida\"</li>\n\n<li>Disponible en azul/gris y verde azulado</li>\n\n\n</ul>",
+  "digest": "3b49f516208faf206a18dee5e9e5ddf918598dc2fb0bc1ad5bff0ee20c335fed"
+ },
+ {
+  "id": "gid://shopify/Product/9217397489916",
+  "handle": "nova-string-top",
+  "key": "body_html",
+  "old": "<p>Este top corto presenta un cuello en V y un cordón en el centro para un efecto fruncido. Está rematado con mangas cortas y un dobladillo liso.</p><p>Combínalo con pantalones cortos de tiro alto para un look relajado.</p><ul>\n\n<li>Color beige</li>\n\n<li>Diseño con cuello en V</li>\n\n<li>Cordón central</li>\n\n<li>Mangas cortas</li>\n\n\n</ul>",
+  "new": "<p>Este top corto presenta un cuello en V y un cordón en el centro para un efecto fruncido. Está rematado con mangas cortas y un dobladillo liso.</p><p>Combínalo con shorts de tiro alto para un look relajado.</p><ul>\n\n<li>Color beige</li>\n\n<li>Diseño con cuello en V</li>\n\n<li>Cordón central</li>\n\n<li>Mangas cortas</li>\n\n\n</ul>",
+  "digest": "5044f92cf7773ca6d359c2444ddd2f25266bf7b4784322a25047f551fc9289da"
+ },
+ {
+  "id": "gid://shopify/Product/9217399849212",
+  "handle": "orlando-crop-top",
+  "key": "body_html",
+  "old": "<p>Este crop top viene en color beige, azul grisáceo y azul verdoso con un llamativo gráfico 'ORLANDO ORIGINAL TEAM'. Presenta un cuello redondo y mangas cortas para un look relajado.</p><p>Combínalo con pantalones cortos de tiro alto para un estilo casual.</p>",
+  "new": "<p>Este crop top viene en color beige, azul grisáceo y azul verdoso con un llamativo gráfico 'ORLANDO ORIGINAL TEAM'. Presenta un cuello redondo y mangas cortas para un look relajado.</p><p>Combínalo con shorts de tiro alto para un estilo casual.</p>",
+  "digest": "a28895afebae602852c05e967cf594e1eba9fbed2a3fc91c7bc5c1358bbce55b"
+ },
+ {
+  "id": "gid://shopify/Product/9217405157628",
+  "handle": "cut-out-crop-top",
+  "key": "body_html",
+  "old": "<p>Este crop top para mujer presenta una gran abertura ovalada en la espalda con cierre de lazo. Tiene cuello redondo y mangas cortas. Disponible en negro, beige y marrón.</p><p>Combínalo con pantalones cortos o vaqueros de tiro alto para un look relajado.</p><ul>\n\n<li>Dobladillo corto</li>\n\n<li>Dobladillo liso</li>\n\n<li>Textura suave</li>\n\n\n</ul>",
+  "new": "<p>Este crop top para mujer presenta una gran abertura ovalada en la espalda con cierre de lazo. Tiene cuello redondo y mangas cortas. Disponible en negro, beige y marrón.</p><p>Combínalo con shorts o jeans de tiro alto para un look relajado.</p><ul>\n\n<li>Dobladillo corto</li>\n\n<li>Dobladillo liso</li>\n\n<li>Textura suave</li>\n\n\n</ul>",
+  "digest": "0d4a93b6695c57ab09eda7f9eb4343a02694e38281fe56c46073950ceffd8eb3"
+ },
+ {
+  "id": "gid://shopify/Product/9217408172284",
+  "handle": "maya-padded-crop-top",
+  "key": "body_html",
+  "old": "<p>El top corto con hombreras Maya presenta hombreras y un cuello redondo para un estilo audaz. Su largo corto y dobladillo elástico ofrecen una silueta moderna.</p><p>Combínalo con jeans o pantalones cortos de tiro alto para un estilo casual.</p><ul>\n\n<li>Hombreras</li>\n\n<li>Largo corto</li>\n\n<li>Dobladillo elástico</li>\n\n<li>Sin mangas</li>\n\n\n</ul>",
+  "new": "<p>El top corto con hombreras Maya presenta hombreras y un cuello redondo para un estilo audaz. Su largo corto y dobladillo elástico ofrecen una silueta moderna.</p><p>Combínalo con jeans o shorts de tiro alto para un estilo casual.</p><ul>\n\n<li>Hombreras</li>\n\n<li>Largo corto</li>\n\n<li>Dobladillo elástico</li>\n\n<li>Sin mangas</li>\n\n\n</ul>",
+  "digest": "44c0025b563dc61e354681d12f2036b07445407a35faf0fc71d3647da1d01056"
+ },
+ {
+  "id": "gid://shopify/Product/9217421639932",
+  "handle": "one-shoulder-sweatshirt",
+  "key": "body_html",
+  "old": "<p>Este top de mujer en color arcilla presenta un diseño de un solo hombro con escote asimétrico. Sus mangas anchas y su corte corto le dan un toque fresco.</p><p>Combínalo con unos vaqueros de tiro alto para un look equilibrado.</p>",
+  "new": "<p>Este top de mujer en color arcilla presenta un diseño de un solo hombro con escote asimétrico. Sus mangas anchas y su corte corto le dan un toque fresco.</p><p>Combínalo con unos jeans de tiro alto para un look equilibrado.</p>",
+  "digest": "cbf48249d2b59a4fdd867bbfa8f7785337e3c338f1ee1a9e3d331622396091e7"
+ },
+ {
+  "id": "gid://shopify/Product/9217423868156",
+  "handle": "marne-tank-top",
+  "key": "body_html",
+  "old": "<p>El tank top Marne es un top de canalé con escote cuadrado y largo corto. Disponible en lavanda, negro, crudo y color champiñón.</p><p>Combínala con pantalones cortos de talle alto para un estilo desenfadado.</p><ul>\n\n<li>Escote cuadrado</li>\n\n<li>Textura de canalé</li>\n\n<li>Largo corto</li>\n\n\n</ul>",
+  "new": "<p>El tank top Marne es un top de canalé con escote cuadrado y largo corto. Disponible en lavanda, negro, crudo y color champiñón.</p><p>Combínala con shorts de talle alto para un estilo desenfadado.</p><ul>\n\n<li>Escote cuadrado</li>\n\n<li>Textura de canalé</li>\n\n<li>Largo corto</li>\n\n\n</ul>",
+  "digest": "a603aaffbc60d64fcb3f9d5608d8459d1e2014428978380a48c4daa5158e1798"
+ },
+ {
+  "id": "gid://shopify/Product/9217425506556",
+  "handle": "erin-tank-top",
+  "key": "body_html",
+  "old": "<p>El tank top Erin es un modelo corto en color champiñón silvestre. Presenta un cuello redondo, textura acanalada y un detalle fruncido en la parte delantera.</p><p>Combínala con unos vaqueros de tiro alto para un look desenfadado.</p>",
+  "new": "<p>El tank top Erin es un modelo corto en color champiñón silvestre. Presenta un cuello redondo, textura acanalada y un detalle fruncido en la parte delantera.</p><p>Combínala con unos jeans de tiro alto para un look desenfadado.</p>",
+  "digest": "b67589eb2a4bb18eaab832f0256a30fd253b080e0803ab17902d73a5ff433316"
+ },
+ {
+  "id": "gid://shopify/Product/9217432256764",
+  "handle": "verona-tee",
+  "key": "body_html",
+  "old": "<p>La camiseta Verona es un top corto sin mangas con cuello redondo. Presenta un detalle plisado en la parte delantera y un dobladillo sin rematar. Disponible en color crudo y champiñón silvestre.</p><p>Combínala con unos vaqueros de tiro alto para un look desenfadado.</p>",
+  "new": "<p>La camiseta Verona es un top corto sin mangas con cuello redondo. Presenta un detalle plisado en la parte delantera y un dobladillo sin rematar. Disponible en color crudo y champiñón silvestre.</p><p>Combínala con unos jeans de tiro alto para un look desenfadado.</p>",
+  "digest": "f27095a79696fdbf70fd49c13acf3b73551cdea76b54eca449d31d14191201ee"
+ },
+ {
+  "id": "gid://shopify/Product/9217434288380",
+  "handle": "nice-shorts-set",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217434288380",
+  "handle": "nice-shorts-set",
+  "key": "meta_description",
+  "old": "Conjunto de pantalones cortos Nice: pantalones cortos beige hasta la rodilla con textura acanalada y cintura ancha. Sin bolsillos ni cierres para un estilo elegante.",
+  "new": "Conjunto de shorts Nice: shorts beige hasta la rodilla con textura acanalada y cintura ancha. Sin bolsillos ni cierres para un estilo elegante.",
+  "digest": "2c30805ff461fab02c9e0bb8989c26698d0cc6184f40f0c691c90fe38bf7393b"
+ },
+ {
+  "id": "gid://shopify/Product/9217434386684",
+  "handle": "drawstring-sweat-shorts",
+  "key": "body_html",
+  "old": "<p>Estos pantalones cortos de mujer cuentan con una cintura elástica y cierre de cordón. Los bolsillos laterales añaden funcionalidad. Disponibles en negro, arcilla y crema jade.</p><p>Combínalos con una camiseta holgada para un estilo relajado.</p>",
+  "new": "<p>Estos shorts de mujer cuentan con una cintura elástica y cierre de cordón. Los bolsillos laterales añaden funcionalidad. Disponibles en negro, arcilla y crema jade.</p><p>Combínalos con una camiseta holgada para un estilo relajado.</p>",
+  "digest": "62d9374834b4fd7e16b6794e46a83372de6c8e78973e78cea8bfc2052b28f36c"
+ },
+ {
+  "id": "gid://shopify/Product/9217434386684",
+  "handle": "drawstring-sweat-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de algodón con cordón: Shorts para mujer con cintura elástica y cordón ajustable. Disponibles en color negro, arcilla y crema jade.",
+  "new": "Shorts de algodón con cordón: Shorts para mujer con cintura elástica y cordón ajustable. Disponibles en color negro, arcilla y crema jade.",
+  "digest": "d00bbc22ad1f661c025fd109e72511c31d16b0ea9c9a7def3f599f6af1f629bf"
+ },
+ {
+  "id": "gid://shopify/Product/9217434747132",
+  "handle": "padded-tee-sleeveless",
+  "key": "body_html",
+  "old": "<p>La camiseta sin mangas Padded Tee en color gris gravedad presenta un diseño sin mangas con hombreras y cuello redondo. Su silueta relajada ofrece un aire informal.</p><p>Combínala con unos vaqueros de tiro alto para un look casual.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Hombreras</li>\n\n<li>Cuello redondo</li>\n\n<li>Color gris gravedad</li>\n\n\n</ul>",
+  "new": "<p>La camiseta sin mangas Padded Tee en color gris gravedad presenta un diseño sin mangas con hombreras y cuello redondo. Su silueta relajada ofrece un aire informal.</p><p>Combínala con unos jeans de tiro alto para un look casual.</p><ul>\n\n<li>Diseño sin mangas</li>\n\n<li>Hombreras</li>\n\n<li>Cuello redondo</li>\n\n<li>Color gris gravedad</li>\n\n\n</ul>",
+  "digest": "531a80b5efb51aecfd720899458af33f1e7862c9dea8343a27a9f1f8154c55e0"
+ },
+ {
+  "id": "gid://shopify/Product/9217435894012",
+  "handle": "smile-tank-top",
+  "key": "body_html",
+  "old": "<p>Este tank top para hombre presenta un gráfico llamativo con una cara sonriente de color verde neón y ojos cruzados sobre una mancha rosa. El texto \"SMILE 84\" y \"LOST\" le aporta un toque atrevido. Sin mangas y con cuello redondo, tiene un corte informal.</p><p>Combínala con pantalones cortos o vaqueros para un look relajado.</p><ul>\n\n<li>Opciones en lila y blanco</li>\n\n<li>Gráfico grande en la parte delantera</li>\n\n<li>Diseño sin mangas</li>\n\n\n</ul>",
+  "new": "<p>Este tank top para hombre presenta un gráfico llamativo con una cara sonriente de color verde neón y ojos cruzados sobre una mancha rosa. El texto \"SMILE 84\" y \"LOST\" le aporta un toque atrevido. Sin mangas y con cuello redondo, tiene un corte informal.</p><p>Combínala con shorts o jeans para un look relajado.</p><ul>\n\n<li>Opciones en lila y blanco</li>\n\n<li>Gráfico grande en la parte delantera</li>\n\n<li>Diseño sin mangas</li>\n\n\n</ul>",
+  "digest": "be82f0d38a2ce9d15c17f6b0aba253f6e5b03b6ffff074f44a7299bb1f0cfbab"
+ },
+ {
+  "id": "gid://shopify/Product/9217436025084",
+  "handle": "popit-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta gris para hombre presenta un llamativo diseño de un pop-it arcoíris en la parte posterior. El cuello redondo y las mangas cortas ofrecen un ajuste clásico. El texto frontal dice: 'AHORA VOLVAMOS A NUESTRA INFANCIA Y EMPECEMOS A CORRER, VEAMOS CUÁL DE NOSOTROS SERÁ MÁS RÁPIDO'.</p><p>Combínala con unos pantalones cortos negros para un estilo relajado.</p>",
+  "new": "<p>Esta camiseta gris para hombre presenta un llamativo diseño de un pop-it arcoíris en la parte posterior. El cuello redondo y las mangas cortas ofrecen un ajuste clásico. El texto frontal dice: 'AHORA VOLVAMOS A NUESTRA INFANCIA Y EMPECEMOS A CORRER, VEAMOS CUÁL DE NOSOTROS SERÁ MÁS RÁPIDO'.</p><p>Combínala con unos shorts negros para un estilo relajado.</p>",
+  "digest": "c951df5a4254f61634271980894bae65293f5a8a906a3f69f67bf9fec394e238"
+ },
+ {
+  "id": "gid://shopify/Product/9217436352764",
+  "handle": "hana-wide-belt",
+  "key": "body_html",
+  "old": "<p>El cinturón ancho Hana en color marrón presenta un diseño llamativo de perforaciones cuadradas y una impactante hebilla dorada. Este cinturón ancho aporta estructura a los vestidos o combina con vaqueros de tiro alto para un look excepcional.</p><ul>\n\n<li>Color marrón</li>\n\n<li>Diseño de perforaciones cuadradas</li>\n\n<li>Hebilla dorada</li>\n\n<li>Dos orificios en la hebilla</li>\n\n\n</ul>",
+  "new": "<p>El cinturón ancho Hana en color marrón presenta un diseño llamativo de perforaciones cuadradas y una impactante hebilla dorada. Este cinturón ancho aporta estructura a los vestidos o combina con jeans de tiro alto para un look excepcional.</p><ul>\n\n<li>Color marrón</li>\n\n<li>Diseño de perforaciones cuadradas</li>\n\n<li>Hebilla dorada</li>\n\n<li>Dos orificios en la hebilla</li>\n\n\n</ul>",
+  "digest": "85fc1ecf7539d48e4cee5e1b086c051f1c0a8edc4defecba98366e6e05bca3b9"
+ },
+ {
+  "id": "gid://shopify/Product/9217437532412",
+  "handle": "stringer-pride-tank-top",
+  "key": "body_html",
+  "old": "<p>El tank top Stringer Pride presenta un llamativo gráfico de arcoíris con el texto 'BE THE ELEMENT'. Disponible en blanco y negro.</p><p>Combínala con unos pantalones cortos desgastados para un look relajado.</p><ul>\n\n<li>Escote redondo</li>\n\n<li>Diseño de espalda nadadora</li>\n\n<li>Aberturas laterales</li>\n\n\n</ul>",
+  "new": "<p>El tank top Stringer Pride presenta un llamativo gráfico de arcoíris con el texto 'BE THE ELEMENT'. Disponible en blanco y negro.</p><p>Combínala con unos shorts desgastados para un look relajado.</p><ul>\n\n<li>Escote redondo</li>\n\n<li>Diseño de espalda nadadora</li>\n\n<li>Aberturas laterales</li>\n\n\n</ul>",
+  "digest": "b701c998def55cb7136cadf8e20dd9539f98a50b8c391e94f437bde83a54b881"
+ },
+ {
+  "id": "gid://shopify/Product/9217437729020",
+  "handle": "sean-knit-sweater",
+  "key": "body_html",
+  "old": "<p>Este suéter de punto para hombre presenta un diseño desgastado con cuello redondo y manga larga. Disponible en beige, azul, crema y gris.</p><p>Combínalo con vaqueros para un look desenfadado.</p><ul>\n\n<li>Diseño desgastado</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga larga</li>\n\n<li>Detalles rasgados</li>\n\n\n</ul>",
+  "new": "<p>Este suéter de punto para hombre presenta un diseño desgastado con cuello redondo y manga larga. Disponible en beige, azul, crema y gris.</p><p>Combínalo con jeans para un look desenfadado.</p><ul>\n\n<li>Diseño desgastado</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga larga</li>\n\n<li>Detalles rasgados</li>\n\n\n</ul>",
+  "digest": "2cd2e1b0ae24d70e454a29c468cde8d59afa5493b944875c490dc6884f526b6d"
+ },
+ {
+  "id": "gid://shopify/Product/9217439170812",
+  "handle": "enjoy-life-hoodie",
+  "key": "body_html",
+  "old": "<p>Esta sudadera con capucha para hombre está disponible en beige y negro, y presenta un llamativo estampado con el texto \"gotta enjoy life more\" en el pecho. Incluye una capucha con cordón y un clásico bolsillo tipo canguro. Los puños y el dobladillo acanalados completan el diseño.</p><p>Combínala con tus vaqueros favoritos para un estilo desenfadado.</p>",
+  "new": "<p>Esta sudadera con capucha para hombre está disponible en beige y negro, y presenta un llamativo estampado con el texto \"gotta enjoy life more\" en el pecho. Incluye una capucha con cordón y un clásico bolsillo tipo canguro. Los puños y el dobladillo acanalados completan el diseño.</p><p>Combínala con tus jeans favoritos para un estilo desenfadado.</p>",
+  "digest": "1a7e3fa08f53fc0bf762e0736a06c2041e5268aeaca36df8ca2f2ecd0f43230a"
+ },
+ {
+  "id": "gid://shopify/Product/9217439498492",
+  "handle": "apology-hoodie",
+  "key": "body_html",
+  "old": "<p>La sudadera Apology es un jersey negro con capucha y cordón ajustable. Incluye un bolsillo tipo canguro y un bolsillo con cremallera en la manga izquierda. La palabra «Create» está bordada en el puño de la manga derecha.</p><p>Combínala con vaqueros para un look relajado.</p>",
+  "new": "<p>La sudadera Apology es un jersey negro con capucha y cordón ajustable. Incluye un bolsillo tipo canguro y un bolsillo con cremallera en la manga izquierda. La palabra «Create» está bordada en el puño de la manga derecha.</p><p>Combínala con jeans para un look relajado.</p>",
+  "digest": "bd1e5dfd873b89512970c5cd737066683b96f768417ebd6c10f331e94125f2e4"
+ },
+ {
+  "id": "gid://shopify/Product/9217439826172",
+  "handle": "smiley-hoodie",
+  "key": "body_html",
+  "old": "<p>Esta sudadera con capucha blanca para hombre presenta un llamativo gráfico de cara sonriente en negro en el pecho y un colorido diseño de alienígena en la espalda. Cuenta con capucha y cordones ajustables, mangas largas y un bolsillo delantero tipo canguro. Los puños y el bajo acanalados completan el look.</p><p>Combínala con unos vaqueros desgastados para lograr un aire relajado.</p>",
+  "new": "<p>Esta sudadera con capucha blanca para hombre presenta un llamativo gráfico de cara sonriente en negro en el pecho y un colorido diseño de alienígena en la espalda. Cuenta con capucha y cordones ajustables, mangas largas y un bolsillo delantero tipo canguro. Los puños y el bajo acanalados completan el look.</p><p>Combínala con unos jeans desgastados para lograr un aire relajado.</p>",
+  "digest": "cdf66ca262cf9787a846f4d8a7225c5b7bfed098249e24e2409f75c155172e32"
+ },
+ {
+  "id": "gid://shopify/Product/9217443496188",
+  "handle": "marcus-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Marcus en azul oscuro están confeccionados con un diseño clásico de cinco bolsillos y pierna recta. El cierre de botón y cremallera ofrece un ajuste seguro.</p><p>Combínalos con una camiseta blanca impecable para un look limpio.</p>",
+  "new": "<p>Los jeans Marcus en azul oscuro están confeccionados con un diseño clásico de cinco bolsillos y pierna recta. El cierre de botón y cremallera ofrece un ajuste seguro.</p><p>Combínalos con una camiseta blanca impecable para un look limpio.</p>",
+  "digest": "bb94453380d0d7e73e24c591bfea8787c16e7f64dc461256f6a62573fe5d541b"
+ },
+ {
+  "id": "gid://shopify/Product/9217443496188",
+  "handle": "marcus-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Marcus – Hombre Azul Oscuro | Carbon",
+  "new": "Jeans Marcus – Hombre Azul Oscuro | Carbon",
+  "digest": "ed14485a08fd336f525c4c20e07d7d6790a8efa662da17217e9a29783de18a3c"
+ },
+ {
+  "id": "gid://shopify/Product/9217443758332",
+  "handle": "mark-jeans",
+  "key": "body_html",
+  "old": "<p>Vaqueros pitillo negros de silueta elegante y diseño de cinco bolsillos. Cierre de cremallera y botón para un look clásico.</p><p>Combínalos con una sudadera para un toque relajado.</p><ul>\n\n<li>Silueta pitillo</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de cremallera y botón</li>\n\n\n</ul>",
+  "new": "<p>Jeans pitillo negros de silueta elegante y diseño de cinco bolsillos. Cierre de cremallera y botón para un look clásico.</p><p>Combínalos con una sudadera para un toque relajado.</p><ul>\n\n<li>Silueta pitillo</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de cremallera y botón</li>\n\n\n</ul>",
+  "digest": "ad4c7a58789a7ffa0dae6b988cc3aea20995a287b15984a5e877b36218b556ab"
+ },
+ {
+  "id": "gid://shopify/Product/9217443758332",
+  "handle": "mark-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Mark: Pantalones vaqueros negros ajustados de silueta elegante y diseño de cinco bolsillos. Cierre de cremallera y botón para un estilo clásico.",
+  "new": "Jeans Mark: Jeans negros ajustados de silueta elegante y diseño de cinco bolsillos. Cierre de cremallera y botón para un estilo clásico.",
+  "digest": "a1f537d21c17eb2750b7895e546c4e3f317e139a1345b227aebd870b21c1db73"
+ },
+ {
+  "id": "gid://shopify/Product/9217443954940",
+  "handle": "kaleb-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Kaleb – Hombre Rotos | Carbon",
+  "new": "Jeans Kaleb – Hombre Rotos | Carbon",
+  "digest": "906ebb9bf458c664356a392448e4a373a45404687f5efe1f3911cdec1b5aae93"
+ },
+ {
+  "id": "gid://shopify/Product/9217443954940",
+  "handle": "kaleb-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Kaleb en negro con roturas en las rodillas, diseño de cinco bolsillos y cierre de botones.",
+  "new": "Jeans Kaleb en negro con roturas en las rodillas, diseño de cinco bolsillos y cierre de botones.",
+  "digest": "821042be7846271ec7988172e1f36f93acc92e0342e342d705e88c47104935f4"
+ },
+ {
+  "id": "gid://shopify/Product/9217444315388",
+  "handle": "simon-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Simon en lavado gris ofrecen un aspecto rudo con detalles desgastados y deshilachados. El lavado desteñido y las perneras ajustadas aportan un toque moderno.</p><p>Combínalos con zapatillas de caña alta para un estilo informal.</p><ul>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Efecto desgastado en los muslos y las rodillas</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Simon en lavado gris ofrecen un aspecto rudo con detalles desgastados y deshilachados. El lavado desteñido y las perneras ajustadas aportan un toque moderno.</p><p>Combínalos con zapatillas de caña alta para un estilo informal.</p><ul>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Efecto desgastado en los muslos y las rodillas</li>\n\n\n</ul>",
+  "digest": "c1a3a3852eb119e615d2d01b1364d277145011655766c3ba318cedea4f5c979e"
+ },
+ {
+  "id": "gid://shopify/Product/9217444315388",
+  "handle": "simon-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Simon: Lavado gris con detalles desgarrados y deshilachados, que presenta un lavado desteñido y perneras cónicas para un estilo moderno.",
+  "new": "Jeans Simon: Lavado gris con detalles desgarrados y deshilachados, que presenta un lavado desteñido y perneras cónicas para un estilo moderno.",
+  "digest": "87c00b90a395c943fae2249102293e4e238138e217a4c4e236eefcfd229b2334"
+ },
+ {
+  "id": "gid://shopify/Product/9217444446460",
+  "handle": "rafael-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Rafael – Hombre Rotos | Carbon",
+  "new": "Jeans Rafael – Hombre Rotos | Carbon",
+  "digest": "960b8e7e5413de01a5c56bafeec5031eb6c69e8dfaf4b7677b481dfd73fd3716"
+ },
+ {
+  "id": "gid://shopify/Product/9217444446460",
+  "handle": "rafael-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Rafael en gris con rodillas rasgadas, detalles deshilachados y lavado desgastado. Presentan un diseño de cinco bolsillos.",
+  "new": "Jeans Rafael en gris con rodillas rasgadas, detalles deshilachados y lavado desgastado. Presentan un diseño de cinco bolsillos.",
+  "digest": "804ea3d29c173fb81ab415375d281b1352fee11b2539278ec2a47c7165a5b609"
+ },
+ {
+  "id": "gid://shopify/Product/9217444577532",
+  "handle": "beckham-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217444970748",
+  "handle": "tristan-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Tristan presentan un acabado lavado en azul con una silueta ajustada. Los detalles desgastados en los muslos y las sutiles arrugas añaden personalidad. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p>",
+  "new": "<p>Los jeans Tristan presentan un acabado lavado en azul con una silueta ajustada. Los detalles desgastados en los muslos y las sutiles arrugas añaden personalidad. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p>",
+  "digest": "32dd3b00ee78c48a83facdd124ad6ddfb3c87f0df677feac195f47b20b337fa2"
+ },
+ {
+  "id": "gid://shopify/Product/9217444970748",
+  "handle": "tristan-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217444970748",
+  "handle": "tristan-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Tristan – Ajustados para hombre | Carbon",
+  "new": "Jeans Tristan – Ajustados para hombre | Carbon",
+  "digest": "524c76b6839cbdd2cf731d1d6608de0e8d0317ef561c1c0966a43018b14b9f30"
+ },
+ {
+  "id": "gid://shopify/Product/9217445363964",
+  "handle": "leon-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217445560572",
+  "handle": "elliott-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Elliott ofrecen un look urbano con su color blanco, rodillas rotas y diseño de cinco bolsillos. Los detalles desgastados en los muslos realzan su estilo atrevido.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Rodillas rotas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Detalles desgastados en los muslos</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Elliott ofrecen un look urbano con su color blanco, rodillas rotas y diseño de cinco bolsillos. Los detalles desgastados en los muslos realzan su estilo atrevido.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Rodillas rotas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Detalles desgastados en los muslos</li>\n\n\n</ul>",
+  "digest": "d048b2e7486bdc3e0dcf5e65d8e0a06fa7d12a1f1586d53fb96441073f50a740"
+ },
+ {
+  "id": "gid://shopify/Product/9217445560572",
+  "handle": "elliott-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Elliott en color blanco con rodillas rasgadas y diseño de cinco bolsillos. Los detalles desgastados añaden un toque atrevido.",
+  "new": "Jeans Elliott en color blanco con rodillas rasgadas y diseño de cinco bolsillos. Los detalles desgastados añaden un toque atrevido.",
+  "digest": "ef3cb0216aa93e3aa8bedcd2e9268e3ad8175a83a99bf9993676bea1a451f7c2"
+ },
+ {
+  "id": "gid://shopify/Product/9217445724412",
+  "handle": "juan-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Juan en color blanco están confeccionados con roturas y deshilachados en las rodillas para un look atrevido. El estilo de cinco bolsillos y el cierre de botones le dan un toque clásico, mientras que la silueta ajustada aporta un aire moderno.</p><p>Úsalos con una sudadera para un estilo relajado.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Rodillas rotas y deshilachadas</li>\n\n<li>Estilo de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Juan en color blanco están confeccionados con roturas y deshilachados en las rodillas para un look atrevido. El estilo de cinco bolsillos y el cierre de botones le dan un toque clásico, mientras que la silueta ajustada aporta un aire moderno.</p><p>Úsalos con una sudadera para un estilo relajado.</p><ul>\n\n<li>Color blanco</li>\n\n<li>Rodillas rotas y deshilachadas</li>\n\n<li>Estilo de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n\n</ul>",
+  "digest": "2760e7e9220dceb3e81612ccc2cb81d8166ea106a3a0753aacba2a92e4c1b4c8"
+ },
+ {
+  "id": "gid://shopify/Product/9217445724412",
+  "handle": "juan-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217445724412",
+  "handle": "juan-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Juan – Rotos para hombre | Carbon",
+  "new": "Jeans Juan – Rotos para hombre | Carbon",
+  "digest": "c55ff430eadc25a4a3839a0b972864ff5735e9039a9522605378fbdf028fcbf5"
+ },
+ {
+  "id": "gid://shopify/Product/9217445724412",
+  "handle": "juan-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Juan en color blanco con rodillas rasgadas, silueta pitillo y estilo de cinco bolsillos.",
+  "new": "Jeans Juan en color blanco con rodillas rasgadas, silueta pitillo y estilo de cinco bolsillos.",
+  "digest": "b1b875e3e4d4af69c0d57e64752ded740f9fbf5856d22d37fb58b68afddf8819"
+ },
+ {
+  "id": "gid://shopify/Product/9217445921020",
+  "handle": "carlos-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217445921020",
+  "handle": "carlos-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Carlos para hombre en color blanco con diseño de 5 bolsillos y roturas en la parte delantera. Cierre de cremallera y botón.",
+  "new": "Jeans Carlos para hombre en color blanco con diseño de 5 bolsillos y roturas en la parte delantera. Cierre de cremallera y botón.",
+  "digest": "00af52ee0dc273e91d9203039ee504067f97fad8030d70d23d31912170725b6b"
+ },
+ {
+  "id": "gid://shopify/Product/9217448870140",
+  "handle": "dennis-jacket",
+  "key": "body_html",
+  "old": "<p>La chaqueta Dennis es una bomber negra que presenta llamativas rayas en chevron marrones y beige en el pecho. Cuenta con cierre de cremallera frontal y puños acanalados. Dos bolsillos laterales con cremallera añaden funcionalidad.</p><p>Combínala con vaqueros oscuros y zapatillas para un look elegante.</p>",
+  "new": "<p>La chaqueta Dennis es una bomber negra que presenta llamativas rayas en chevron marrones y beige en el pecho. Cuenta con cierre de cremallera frontal y puños acanalados. Dos bolsillos laterales con cremallera añaden funcionalidad.</p><p>Combínala con jeans oscuros y zapatillas para un look elegante.</p>",
+  "digest": "46e71ab492f2bedccd40ba7acde1e2e5661bc21493702c498bc52ce5c766e980"
+ },
+ {
+  "id": "gid://shopify/Product/9217449656572",
+  "handle": "interested-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camisa de hombre presenta un llamativo gráfico con el texto INTERESTED en la parte delantera. Disponible en blanco y negro, tiene mangas largas y cuello redondo. El dobladillo recto le da un acabado pulcro.</p><p>Combínala con unos vaqueros oscuros para lograr un look elegante.</p>",
+  "new": "<p>Esta camisa de hombre presenta un llamativo gráfico con el texto INTERESTED en la parte delantera. Disponible en blanco y negro, tiene mangas largas y cuello redondo. El dobladillo recto le da un acabado pulcro.</p><p>Combínala con unos jeans oscuros para lograr un look elegante.</p>",
+  "digest": "f212b398c84a0c51e70dd3495821542ac5a3f27c81f3d3b59739e58493f84836"
+ },
+ {
+  "id": "gid://shopify/Product/9217449787644",
+  "handle": "complete-shirt",
+  "key": "body_html",
+  "old": "<p>La camisa Complete es una prenda negra de manga larga para hombre con un llamativo estampado gráfico en la parte frontal. Presenta la palabra \"COMPLETE.\" y el logotipo de Carbon. El cuello redondo y el dobladillo recto ofrecen un acabado impecable.</p><p>Combínala con unos vaqueros rotos para lograr un look informal.</p>",
+  "new": "<p>La camisa Complete es una prenda negra de manga larga para hombre con un llamativo estampado gráfico en la parte frontal. Presenta la palabra \"COMPLETE.\" y el logotipo de Carbon. El cuello redondo y el dobladillo recto ofrecen un acabado impecable.</p><p>Combínala con unos jeans rotos para lograr un look informal.</p>",
+  "digest": "9e0015e72a9c5aaba6041461ee7475709a3e2b4021f4ef6892277822e40d81b4"
+ },
+ {
+  "id": "gid://shopify/Product/9217450934524",
+  "handle": "time-never-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camisa de manga larga para hombre presenta un llamativo estampado frontal \"TIME NEVER COMES AGAIN\" y un gráfico abstracto en la espalda. El cuello redondo y el dobladillo recto ofrecen un aspecto impecable.</p><p>Combínala con unos vaqueros desgastados para lograr un estilo relajado.</p><ul>\n\n<li>Disponible en beige, negro y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Gráfico abstracto con texto en la espalda</li>\n\n\n</ul>",
+  "new": "<p>Esta camisa de manga larga para hombre presenta un llamativo estampado frontal \"TIME NEVER COMES AGAIN\" y un gráfico abstracto en la espalda. El cuello redondo y el dobladillo recto ofrecen un aspecto impecable.</p><p>Combínala con unos jeans desgastados para lograr un estilo relajado.</p><ul>\n\n<li>Disponible en beige, negro y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Gráfico abstracto con texto en la espalda</li>\n\n\n</ul>",
+  "digest": "e356fa2ffebe9c41b3a497e8447c16549a155c5a838cce1092467fd2b338868e"
+ },
+ {
+  "id": "gid://shopify/Product/9217451098364",
+  "handle": "carbon-classic-t",
+  "key": "body_html",
+  "old": "<p>La camiseta Carbon Classic T es una prenda de cuello redondo con un diseño sencillo y limpio. Disponible en negro y turquesa, cuenta con mangas cortas y un dobladillo curvo.</p><p>Combínala con pantalones cortos o vaqueros para un estilo directo.</p>",
+  "new": "<p>La camiseta Carbon Classic T es una prenda de cuello redondo con un diseño sencillo y limpio. Disponible en negro y turquesa, cuenta con mangas cortas y un dobladillo curvo.</p><p>Combínala con shorts o jeans para un estilo directo.</p>",
+  "digest": "779a7a3779d3908ac295c073c3ea9af4351b1a3afe870580b41e4de323c58d08"
+ },
+ {
+  "id": "gid://shopify/Product/9217452146940",
+  "handle": "lilith-sweater",
+  "key": "body_html",
+  "old": "<p>El suéter Lilith presenta una textura de punto acanalado en color beige con una llamativa manga negra. Los detalles de aberturas en los hombros añaden un toque vanguardista al cuello redondo.</p><p>Combínalo con pantalones vaqueros negros para un contraste audaz.</p>",
+  "new": "<p>El suéter Lilith presenta una textura de punto acanalado en color beige con una llamativa manga negra. Los detalles de aberturas en los hombros añaden un toque vanguardista al cuello redondo.</p><p>Combínalo con jeans negros para un contraste audaz.</p>",
+  "digest": "b8a95d3d1136d41d287228d918a519ac8e85b630d2630d1308865c685b4aa8fe"
+ },
+ {
+  "id": "gid://shopify/Product/9217465450748",
+  "handle": "bobby-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Bobby en azul claro presentan un diseño delantero desgastado y deshilachado con un lavado desteñido. Su silueta ajustada incluye un diseño de cinco bolsillos y una cinturilla con el logotipo de Carbon.</p><ul>\n\n<li>Color azul claro</li>\n\n<li>Parte delantera desgastada y deshilachada</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cinturilla con el logotipo de Carbon</li>\n\n<li>Lavado desteñido</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Bobby en azul claro presentan un diseño delantero desgastado y deshilachado con un lavado desteñido. Su silueta ajustada incluye un diseño de cinco bolsillos y una cinturilla con el logotipo de Carbon.</p><ul>\n\n<li>Color azul claro</li>\n\n<li>Parte delantera desgastada y deshilachada</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cinturilla con el logotipo de Carbon</li>\n\n<li>Lavado desteñido</li>\n\n\n</ul>",
+  "digest": "654138c0d110d7c95fdc96de930f1fee3b8a0321cc23b27e2ea4242871a66983"
+ },
+ {
+  "id": "gid://shopify/Product/9217465450748",
+  "handle": "bobby-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Bobby – Corte desgastado para hombre | Carbon",
+  "new": "Jeans Bobby – Corte desgastado para hombre | Carbon",
+  "digest": "e9e84ab63e63de7e1ae651dfbef8ffe1386d52fa5932352fc900232e6207b739"
+ },
+ {
+  "id": "gid://shopify/Product/9217465450748",
+  "handle": "bobby-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Bobby: vaqueros para hombre en azul claro con roturas en la parte delantera, lavado desgastado y silueta ajustada.",
+  "new": "Jeans Bobby: jeans para hombre en azul claro con roturas en la parte delantera, lavado desgastado y silueta ajustada.",
+  "digest": "7b6a43f14585e3e4fff5c687da2d2b06ff3e745ca025b9af7811b5b95eb02273"
+ },
+ {
+  "id": "gid://shopify/Product/9217465516284",
+  "handle": "andy-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Andy – Hombre Rotos | Carbon",
+  "new": "Jeans Andy – Hombre Rotos | Carbon",
+  "digest": "5a99ce346507aca2f8523fd0716004278f9293876561f929153a951b7b1e1f66"
+ },
+ {
+  "id": "gid://shopify/Product/9217465516284",
+  "handle": "andy-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Andy: vaqueros de lavado azul con parches rasgados, detalle de cadena, diseño de cinco bolsillos y logotipo Carbon.",
+  "new": "Jeans Andy: jeans de lavado azul con parches rasgados, detalle de cadena, diseño de cinco bolsillos y logotipo Carbon.",
+  "digest": "df3f24a9df3fa14ed7d77366192d0f85248484791a981749346f57a105a7f279"
+ },
+ {
+  "id": "gid://shopify/Product/9217465712892",
+  "handle": "neil-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217465712892",
+  "handle": "neil-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Neil – Hombre Rotos | Carbon",
+  "new": "Jeans Neil – Hombre Rotos | Carbon",
+  "digest": "7418d5e52f383df2e273428e2aa4646cb4569d7127843891c24682950ac66722"
+ },
+ {
+  "id": "gid://shopify/Product/9217465712892",
+  "handle": "neil-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Neil: Pantalones vaqueros azules para hombre con efecto lavado, rodillas rotas y parches desgastados. Presentan un diseño de cinco bolsillos y cintura con el logotipo de Carbon.",
+  "new": "Jeans Neil: Jeans azules para hombre con efecto lavado, rodillas rotas y parches desgastados. Presentan un diseño de cinco bolsillos y cintura con el logotipo de Carbon.",
+  "digest": "c44f96c217fbb22320afa3711809a2b6ae655468e8c1b2a4a6a406424796667e"
+ },
+ {
+  "id": "gid://shopify/Product/9217465811196",
+  "handle": "aaron-jeans",
+  "key": "body_html",
+  "old": "<p>Estos vaqueros para hombre en color azul lavado lucen un atrevido diseño desgastado y deshilachado en la parte delantera. El diseño clásico de cinco bolsillos y la pernera cónica completan el look.</p><p>Combínalos con una camiseta sencilla y zapatillas deportivas para un estilo relajado.</p><ul>\n\n<li>Detalles desgastados y deshilachados</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pernera cónica</li>\n\n\n</ul>",
+  "new": "<p>Estos jeans para hombre en color azul lavado lucen un atrevido diseño desgastado y deshilachado en la parte delantera. El diseño clásico de cinco bolsillos y la pernera cónica completan el look.</p><p>Combínalos con una camiseta sencilla y zapatillas deportivas para un estilo relajado.</p><ul>\n\n<li>Detalles desgastados y deshilachados</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pernera cónica</li>\n\n\n</ul>",
+  "digest": "ee16d77b268fde0a4740e52a2646ec0562f2a1c58ec6af4891eed64d1ebedfb1"
+ },
+ {
+  "id": "gid://shopify/Product/9217465811196",
+  "handle": "aaron-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217465811196",
+  "handle": "aaron-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Aaron: Vaqueros azul lavado con roturas y deshilachados en la parte delantera. Presentan un diseño de cinco bolsillos y corte cónico.",
+  "new": "Jeans Aaron: Jeans azul lavado con roturas y deshilachados en la parte delantera. Presentan un diseño de cinco bolsillos y corte cónico.",
+  "digest": "134e4a7ed6e750fa32c9dc2daf957a0709a3ba3ac71094065a5a3e35ee50706f"
+ },
+ {
+  "id": "gid://shopify/Product/9217466171644",
+  "handle": "louie-shorts-set",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217467744508",
+  "handle": "les-benjamin-tee",
+  "key": "body_html",
+  "old": "<p>La camiseta Les Benjamin es una camiseta negra con cuello redondo y mangas cortas. Presenta el bordado \"LES BENJAMINS\" en blanco en la parte delantera. El diseño se completa con un cuello acanalado y un dobladillo recto.</p><p>Combínala con unos vaqueros desgastados para un estilo relajado.</p><ul>\n\n<li>Camiseta negra</li>\n\n<li>Bordado \"LES BENJAMINS\" en blanco</li>\n\n<li>Pecho liso</li>\n\n<li>Cuello acanalado</li>\n\n\n</ul>",
+  "new": "<p>La camiseta Les Benjamin es una camiseta negra con cuello redondo y mangas cortas. Presenta el bordado \"LES BENJAMINS\" en blanco en la parte delantera. El diseño se completa con un cuello acanalado y un dobladillo recto.</p><p>Combínala con unos jeans desgastados para un estilo relajado.</p><ul>\n\n<li>Camiseta negra</li>\n\n<li>Bordado \"LES BENJAMINS\" en blanco</li>\n\n<li>Pecho liso</li>\n\n<li>Cuello acanalado</li>\n\n\n</ul>",
+  "digest": "c0ed85525bd15642cb6352ff12c72eb15dde1bee579df11cc0f3662f36b7697a"
+ },
+ {
+  "id": "gid://shopify/Product/9217467810044",
+  "handle": "brave-tee",
+  "key": "body_html",
+  "old": "<p>La camiseta Brave presenta un acabado lavado al ácido con un llamativo estampado de tigre en la parte delantera. Tiene un cuello redondo clásico y mangas cortas.</p><p>Combínala con unos vaqueros negros para un look atrevido.</p>",
+  "new": "<p>La camiseta Brave presenta un acabado lavado al ácido con un llamativo estampado de tigre en la parte delantera. Tiene un cuello redondo clásico y mangas cortas.</p><p>Combínala con unos jeans negros para un look atrevido.</p>",
+  "digest": "48f5f5ec7304a9c80af144abea0d9fde3e9b28c18bacda5abc8b8881b8163434"
+ },
+ {
+  "id": "gid://shopify/Product/9217468104956",
+  "handle": "philadelphia-tee",
+  "key": "body_html",
+  "old": "<p>La camiseta Philadelphia en negro lavado al ácido presenta mangas cortas y cuello redondo. Un llamativo estampado de \"Philadelphia\" se sitúa en el centro del pecho, acompañado de un gráfico de una pelota de béisbol y un tigre. La camiseta está rematada con un dobladillo recto y una costura central en la espalda.</p><p>Úsala con leggings o vaqueros para un look relajado.</p><ul>\n\n<li>Lavado al ácido</li>\n\n<li>Serigrafía de \"Philadelphia\"</li>\n\n<li>Gráficos de béisbol y tigre</li>\n\n<li>Espalda lisa</li>\n\n\n</ul>",
+  "new": "<p>La camiseta Philadelphia en negro lavado al ácido presenta mangas cortas y cuello redondo. Un llamativo estampado de \"Philadelphia\" se sitúa en el centro del pecho, acompañado de un gráfico de una pelota de béisbol y un tigre. La camiseta está rematada con un dobladillo recto y una costura central en la espalda.</p><p>Úsala con leggings o jeans para un look relajado.</p><ul>\n\n<li>Lavado al ácido</li>\n\n<li>Serigrafía de \"Philadelphia\"</li>\n\n<li>Gráficos de béisbol y tigre</li>\n\n<li>Espalda lisa</li>\n\n\n</ul>",
+  "digest": "f5ef968e253d0f1f82be8acb0ade9ec0dbdfeafbfe6831f7181fd1cac59188c9"
+ },
+ {
+  "id": "gid://shopify/Product/9217468530940",
+  "handle": "gemma-jeans",
+  "key": "title",
+  "old": "Vaqueros Gemma",
+  "new": "Jeans Gemma",
+  "digest": "a2aaa0ef9702a5aa8611cf10606723acf5a1cfa4893425b843e5fa29ab417764"
+ },
+ {
+  "id": "gid://shopify/Product/9217468530940",
+  "handle": "gemma-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Gemma – Mujer Rotos | Carbon",
+  "new": "Jeans Gemma – Mujer Rotos | Carbon",
+  "digest": "053d2d39db7e0fa61b2a321fc022cd50de655d2585f7f67971e23b8908f40ed6"
+ },
+ {
+  "id": "gid://shopify/Product/9217468596476",
+  "handle": "londyn-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217468596476",
+  "handle": "londyn-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Londyn – Ajustados para mujer | Carbon",
+  "new": "Jeans Londyn – Ajustados para mujer | Carbon",
+  "digest": "6de8a011166db65c074eb9f04452fe68d5407493c3fd3a967bab36d60e79ff10"
+ },
+ {
+  "id": "gid://shopify/Product/9217468662012",
+  "handle": "noelle-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217468662012",
+  "handle": "noelle-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Noelle – Pitillo para mujer | Carbon",
+  "new": "Jeans Noelle – Pitillo para mujer | Carbon",
+  "digest": "0076c0d122ffbd866a809b6d74355be79313dfa47e0a001aa0b28875ab9e4d04"
+ },
+ {
+  "id": "gid://shopify/Product/9217468760316",
+  "handle": "elsie-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217468760316",
+  "handle": "elsie-jeans",
+  "key": "meta_description",
+  "old": "Jeans Elsie: vaqueros ajustados azules con rodillas rotas, detalles desgastados, diseño de cinco bolsillos y largo al tobillo.",
+  "new": "Jeans Elsie: jeans ajustados azules con rodillas rotas, detalles desgastados, diseño de cinco bolsillos y largo al tobillo.",
+  "digest": "435d781246e197657773161149a60f62c5caa44056b60ace83455ff72e3e4b9b"
+ },
+ {
+  "id": "gid://shopify/Product/9217468924156",
+  "handle": "kaia-jeans",
+  "key": "title",
+  "old": "Vaqueros Kaia",
+  "new": "Jeans Kaia",
+  "digest": "35c30bfbfe7e0751f2cd7be2ab3e6ee0852257ed483d63fa880a67446d3859b9"
+ },
+ {
+  "id": "gid://shopify/Product/9217468989692",
+  "handle": "rowan-jeans",
+  "key": "title",
+  "old": "Vaqueros Rowan",
+  "new": "Jeans Rowan",
+  "digest": "75b04167d899b19e67f6a46cdcba24d6204843355389b811e477bedbc9557ec9"
+ },
+ {
+  "id": "gid://shopify/Product/9217468989692",
+  "handle": "rowan-jeans",
+  "key": "product_type",
+  "old": "MUJER &gt;&gt; VAQUEROS",
+  "new": "MUJER &gt;&gt; JEANS",
+  "digest": "8cb19add1566794f14733b1302645e50118033bbe774eb192416aa9fa9f0cfd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217470595324",
+  "handle": "scarlet-romper",
+  "key": "body_html",
+  "old": "<p>El romper Scarlet en beige presenta un escote cruzado y tirantes finos. Los pantalones cortos acampanados con un dobladillo en capas completan el look.</p><p>Combínalo con sandalias para un estilo relajado o con tacones para una salida nocturna.</p>",
+  "new": "<p>El romper Scarlet en beige presenta un escote cruzado y tirantes finos. Los shorts acampanados con un dobladillo en capas completan el look.</p><p>Combínalo con sandalias para un estilo relajado o con tacones para una salida nocturna.</p>",
+  "digest": "d13d3fffad522df904984598ddd13a66b011604711dad96f1919a11650cd6e64"
+ },
+ {
+  "id": "gid://shopify/Product/9217473118460",
+  "handle": "brooks-coat",
+  "key": "body_html",
+  "old": "<p>El abrigo Brooks es un abrigo acolchado negro con cuello alto y cierre de cremallera. Su tejido brillante y sus paneles acolchados horizontales añaden un toque elegante. Los puños elásticos y los bolsillos abiertos completan el diseño.</p><p>Combínalo con vaqueros desgastados y zapatillas para un look informal.</p>",
+  "new": "<p>El abrigo Brooks es un abrigo acolchado negro con cuello alto y cierre de cremallera. Su tejido brillante y sus paneles acolchados horizontales añaden un toque elegante. Los puños elásticos y los bolsillos abiertos completan el diseño.</p><p>Combínalo con jeans desgastados y zapatillas para un look informal.</p>",
+  "digest": "04a700b67d611c049fb0ee57017613003efbe53e48d829a4fa1dbc5804e71baf"
+ },
+ {
+  "id": "gid://shopify/Product/9217473315068",
+  "handle": "philip-puffer-coat",
+  "key": "body_html",
+  "old": "<p>El abrigo acolchado Philip es un abrigo para hombre con un diseño acolchado en negro y crema. Cuenta con una capucha con borde de piel y cierre frontal de cremallera. Dos bolsillos delanteros con solapa y cierre de botón añaden funcionalidad. Los puños acanalados completan el look.</p><p>Combínalo con unos vaqueros desgastados para un estilo informal.</p>",
+  "new": "<p>El abrigo acolchado Philip es un abrigo para hombre con un diseño acolchado en negro y crema. Cuenta con una capucha con borde de piel y cierre frontal de cremallera. Dos bolsillos delanteros con solapa y cierre de botón añaden funcionalidad. Los puños acanalados completan el look.</p><p>Combínalo con unos jeans desgastados para un estilo informal.</p>",
+  "digest": "7b4e553cfdda83f83c5912b3f12b4d3cb99f97768df829f14cb099512a8b550b"
+ },
+ {
+  "id": "gid://shopify/Product/9217481146620",
+  "handle": "brave-and-wild-short-set",
+  "key": "body_html",
+  "old": "<p>El conjunto de pantalón corto Brave And Wild presenta un llamativo gráfico del número \"5\" sobre pantalones cortos de color blanco y negro. Una cintura elástica con cordón ajustable y bolsillos laterales completan el diseño.</p>",
+  "new": "<p>El conjunto de short Brave And Wild presenta un llamativo gráfico del número \"5\" sobre shorts de color blanco y negro. Una cintura elástica con cordón ajustable y bolsillos laterales completan el diseño.</p>",
+  "digest": "36372362fa175b5560c3a6fd79473c8abdffbed21232dbd66b46d2310a9012cf"
+ },
+ {
+  "id": "gid://shopify/Product/9217481146620",
+  "handle": "brave-and-wild-short-set",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217484456188",
+  "handle": "palm-shorts-set",
+  "key": "title",
+  "old": "Conjunto de pantalón corto Palm",
+  "new": "Conjunto de short Palm",
+  "digest": "44f9eb31d626982a2e4436859a7299e945850ef83229798e94d46eb52fbde02d"
+ },
+ {
+  "id": "gid://shopify/Product/9217484456188",
+  "handle": "palm-shorts-set",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9217484914940",
+  "handle": "felix-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217484914940",
+  "handle": "felix-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Felix: vaqueros azules para hombre con estampado de camuflaje, corte recto, cierre de botones y estilo de cinco bolsillos.",
+  "new": "Jeans Felix: jeans azules para hombre con estampado de camuflaje, corte recto, cierre de botones y estilo de cinco bolsillos.",
+  "digest": "68f8f19161f2048088a67dd45adac84deee720e1d2c6ee106c6872f688a7f6ba"
+ },
+ {
+  "id": "gid://shopify/Product/9217484947708",
+  "handle": "gleann-jeans",
+  "key": "title",
+  "old": "Vaqueros Gleann",
+  "new": "Jeans Gleann",
+  "digest": "c47079ee49ad7e1633cb655efaf501a1453ce92124851ccf654aa164272dae8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217484947708",
+  "handle": "gleann-jeans",
+  "key": "body_html",
+  "old": "<p>Estos vaqueros negros presentan rodillas rotas y una pernera recta para un estilo relajado. El diseño de cinco bolsillos y los remaches metálicos añaden detalles clásicos.</p><p>Combínalos con una camiseta estampada para un look desenfadado.</p><ul>\n\n<li>Rodillas rotas</li>\n\n<li>Estilo de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Remaches metálicos</li>\n\n<li>Cierre de cremallera</li>\n\n\n</ul>",
+  "new": "<p>Estos jeans negros presentan rodillas rotas y una pernera recta para un estilo relajado. El diseño de cinco bolsillos y los remaches metálicos añaden detalles clásicos.</p><p>Combínalos con una camiseta estampada para un look desenfadado.</p><ul>\n\n<li>Rodillas rotas</li>\n\n<li>Estilo de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Remaches metálicos</li>\n\n<li>Cierre de cremallera</li>\n\n\n</ul>",
+  "digest": "4a98aab7cb9e9f6dea3ecdd8cc15b609f9833470022fb4a371dcc6e04f960fcc"
+ },
+ {
+  "id": "gid://shopify/Product/9217484947708",
+  "handle": "gleann-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Gleann: Jeans negros con rodillas rasgadas y corte recto. Estilo de cinco bolsillos con remaches metálicos.",
+  "new": "Jeans Gleann: Jeans negros con rodillas rasgadas y corte recto. Estilo de cinco bolsillos con remaches metálicos.",
+  "digest": "b281bc81450d39dedb6ed660525ae685b525563a671506188719170e34a0c475"
+ },
+ {
+  "id": "gid://shopify/Product/9217485046012",
+  "handle": "jim-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Jim ofrecen un tono azul claro con un lavado desgastado, presentando rodillas rotas y detalles envejecidos en los muslos. El diseño clásico de cinco bolsillos incluye un cierre de botón y cremallera, complementado con una silueta de pierna recta.</p><ul>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Rodillas rotas</li>\n\n<li>Detalles envejecidos</li>\n\n<li>Cierre de botón</li>\n\n<li>Pierna recta</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Jim ofrecen un tono azul claro con un lavado desgastado, presentando rodillas rotas y detalles envejecidos en los muslos. El diseño clásico de cinco bolsillos incluye un cierre de botón y cremallera, complementado con una silueta de pierna recta.</p><ul>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Rodillas rotas</li>\n\n<li>Detalles envejecidos</li>\n\n<li>Cierre de botón</li>\n\n<li>Pierna recta</li>\n\n\n</ul>",
+  "digest": "62fd6714103edbbd00b2c070f0d43cecdd531037b4ed59887bb2f53702fbfb85"
+ },
+ {
+  "id": "gid://shopify/Product/9217485046012",
+  "handle": "jim-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Jim – Hombre Rotos | Carbon",
+  "new": "Jeans Jim – Hombre Rotos | Carbon",
+  "digest": "7ae30af0e1351f4fc104dc94ff6583078ec22f244773c7ce3e9032a96b4c23ce"
+ },
+ {
+  "id": "gid://shopify/Product/9217485046012",
+  "handle": "jim-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Jim en azul claro con rodillas rotas y muslos desgastados. Presentan un diseño de cinco bolsillos, cierre de botones y pierna recta.",
+  "new": "Jeans Jim en azul claro con rodillas rotas y muslos desgastados. Presentan un diseño de cinco bolsillos, cierre de botones y pierna recta.",
+  "digest": "ea55363ebde36bce9a399d59159acf85377a9aa0aed83d120da64f32c8e48971"
+ },
+ {
+  "id": "gid://shopify/Product/9217485144316",
+  "handle": "joel-jeans",
+  "key": "meta_description",
+  "old": "Jeans Joel: Pantalones vaqueros de hombre en azul con lavado claro, detalles rotos, diseño de cinco bolsillos y cierre de botones.",
+  "new": "Jeans Joel: Jeans de hombre en azul con lavado claro, detalles rotos, diseño de cinco bolsillos y cierre de botones.",
+  "digest": "859f45f1e8739ef5d32becd89a8fb37806b4a1d74329d8d1320b9a6881c1c5c1"
+ },
+ {
+  "id": "gid://shopify/Product/9217485209852",
+  "handle": "lewis-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Lewis – Cargo para hombre | Carbon",
+  "new": "Jeans Lewis – Cargo para hombre | Carbon",
+  "digest": "43edac9b63d790a0fb28730e78e316db9fe22385f722ffc80938d6f2847e15dd"
+ },
+ {
+  "id": "gid://shopify/Product/9217485635836",
+  "handle": "73-shorts-set",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217487503612",
+  "handle": "ricky-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Ricky en azul claro con lavado ácido y pedrería. Cierre de cremallera y botón de cobre.",
+  "new": "Jeans Ricky en azul claro con lavado ácido y pedrería. Cierre de cremallera y botón de cobre.",
+  "digest": "08d496ccaa39d2b0820db85008b753924749225ea0eb5dbedce18a335ea7892d"
+ },
+ {
+  "id": "gid://shopify/Product/9217487667452",
+  "handle": "luis-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Luis presentan un llamativo efecto de salpicaduras de pintura sobre un lavado claro. Con un diseño de cinco bolsillos y pernera recta, ofrecen un look relajado.</p><ul>\n\n<li>Efecto de salpicaduras de pintura</li>\n\n<li>Lavado claro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pernera recta</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Luis presentan un llamativo efecto de salpicaduras de pintura sobre un lavado claro. Con un diseño de cinco bolsillos y pernera recta, ofrecen un look relajado.</p><ul>\n\n<li>Efecto de salpicaduras de pintura</li>\n\n<li>Lavado claro</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón y cremallera</li>\n\n<li>Pernera recta</li>\n\n\n</ul>",
+  "digest": "8acfeb03c310b13e760bd98174ab846bea159ffca5203a5c123516e850a23009"
+ },
+ {
+  "id": "gid://shopify/Product/9217487765756",
+  "handle": "don-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Don ofrecen un aspecto resistente con acabados en gris lavado y azul claro. Los detalles desgastados y los múltiples bolsillos realzan el estilo cargo. El cierre de botones y las trabillas para el cinturón completan el diseño.</p><ul>\n\n<li>Opciones en gris lavado y azul claro</li>\n\n<li>Detalles desgastados</li>\n\n<li>Múltiples bolsillos cargo</li>\n\n<li>Cierre de botones</li>\n\n\n</ul>",
+  "new": "<p>Los jeans Don ofrecen un aspecto resistente con acabados en gris lavado y azul claro. Los detalles desgastados y los múltiples bolsillos realzan el estilo cargo. El cierre de botones y las trabillas para el cinturón completan el diseño.</p><ul>\n\n<li>Opciones en gris lavado y azul claro</li>\n\n<li>Detalles desgastados</li>\n\n<li>Múltiples bolsillos cargo</li>\n\n<li>Cierre de botones</li>\n\n\n</ul>",
+  "digest": "8f59154ab321e765bbf43451b5b1cd08a0ce8037a1d6882b05a62e75cd12753b"
+ },
+ {
+  "id": "gid://shopify/Product/9217487765756",
+  "handle": "don-jeans",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; VAQUEROS",
+  "new": "HOMBRE &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217487798524",
+  "handle": "troy-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Troy – Diseño de patchwork | Carbon",
+  "new": "Jeans Troy – Diseño de patchwork | Carbon",
+  "digest": "07e7c86cf3e1c417402ceeb5fad88fc9b5a557883b389e0855e6040726a63dff"
+ },
+ {
+  "id": "gid://shopify/Product/9217488191740",
+  "handle": "pedro-jeans",
+  "key": "meta_description",
+  "old": "Jeans Pedro: Pantalones vaqueros blancos con detalles deshilachados en la parte delantera, herrajes plateados y texto en relieve en la cintura. Incluyen dobladillo.",
+  "new": "Jeans Pedro: Jeans blancos con detalles deshilachados en la parte delantera, herrajes plateados y texto en relieve en la cintura. Incluyen dobladillo.",
+  "digest": "2ddc20a8ced67539cfd82a74b64735ef127e1ab7cd0ad188fc462df3cb747c9d"
+ },
+ {
+  "id": "gid://shopify/Product/9217488257276",
+  "handle": "alvin-jeans",
+  "key": "body_html",
+  "old": "<p>Vaqueros blancos para hombre con rodillas rotas y corte recto. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p><p>Combínalos con una camiseta estampada para un look desenfadado.</p><ul>\n\n<li>Rodillas rotas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Cierre de cremallera</li>\n\n\n</ul>",
+  "new": "<p>Jeans blancos para hombre con rodillas rotas y corte recto. Diseño clásico de cinco bolsillos con cierre de botón y cremallera.</p><p>Combínalos con una camiseta estampada para un look desenfadado.</p><ul>\n\n<li>Rodillas rotas</li>\n\n<li>Diseño de cinco bolsillos</li>\n\n<li>Cierre de botón</li>\n\n<li>Cierre de cremallera</li>\n\n\n</ul>",
+  "digest": "24f74c474813695027b79f1f7ed58ce1f91206b6af0ef613cbcd8bb03401c90d"
+ },
+ {
+  "id": "gid://shopify/Product/9217488453884",
+  "handle": "prospect-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta el texto «Prospect» en la parte delantera y un llamativo gráfico de alas de pájaro en la espalda. Disponible en negro y crema.</p><p>Combínala con pantalones cortos tipo cargo para un look relajado.</p><ul>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Texto en la espalda: «Protecting Rare Species», «Homo sapiens recovery...let's strongly unite!»</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta para hombre presenta el texto «Prospect» en la parte delantera y un llamativo gráfico de alas de pájaro en la espalda. Disponible en negro y crema.</p><p>Combínala con shorts tipo cargo para un look relajado.</p><ul>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n<li>Texto en la espalda: «Protecting Rare Species», «Homo sapiens recovery...let's strongly unite!»</li>\n\n\n</ul>",
+  "digest": "149e6b23d2570f37817654280d653bdb7a19ba50fe805983d2cd1080bbb794d7"
+ },
+ {
+  "id": "gid://shopify/Product/9217488716028",
+  "handle": "angels-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta el texto «kill them» en negrita en la parte delantera y un intrincado gráfico angelical con una calavera en la parte trasera. Disponible en varios colores.</p><p>Combínala con unos pantalones cortos tipo cargo para un estilo relajado.</p><ul>\n\n<li>Opciones en negro, verde y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n\n</ul>",
+  "new": "<p>Esta camiseta para hombre presenta el texto «kill them» en negrita en la parte delantera y un intrincado gráfico angelical con una calavera en la parte trasera. Disponible en varios colores.</p><p>Combínala con unos shorts tipo cargo para un estilo relajado.</p><ul>\n\n<li>Opciones en negro, verde y blanco</li>\n\n<li>Cuello redondo</li>\n\n<li>Manga corta</li>\n\n\n</ul>",
+  "digest": "906a9876a203bc2c7564955d6791cb2818be791ad5e78a8aaedabd282b4f9dec"
+ },
+ {
+  "id": "gid://shopify/Product/9217488781564",
+  "handle": "game-t-shirt",
+  "key": "body_html",
+  "old": "<p>Esta camiseta para hombre presenta el texto «Life Is An Unpredictable Game» en la parte delantera y un llamativo gráfico de dados en la parte trasera. Disponible en negro, azul y gris.</p><p>Combínala con unos pantalones cortos cargo para un estilo desenfadado.</p>",
+  "new": "<p>Esta camiseta para hombre presenta el texto «Life Is An Unpredictable Game» en la parte delantera y un llamativo gráfico de dados en la parte trasera. Disponible en negro, azul y gris.</p><p>Combínala con unos shorts cargo para un estilo desenfadado.</p>",
+  "digest": "d182a0e48756a2c133f5ffb9a7d0b7c8297f6108cee8cdf299aa183d51a6c55e"
+ },
+ {
+  "id": "gid://shopify/Product/9217489109244",
+  "handle": "mykel-shirt",
+  "key": "body_html",
+  "old": "<p>La camisa Mykel es una camisa abotonada para hombre con un llamativo estampado de cuadros en blanco y negro. Cuenta con mangas cortas, cuello clásico y parte delantera abotonada.</p><p>Combínala con unos vaqueros desgastados para un look relajado.</p>",
+  "new": "<p>La camisa Mykel es una camisa abotonada para hombre con un llamativo estampado de cuadros en blanco y negro. Cuenta con mangas cortas, cuello clásico y parte delantera abotonada.</p><p>Combínala con unos jeans desgastados para un look relajado.</p>",
+  "digest": "0a887c2d03987ff250896d18927f94d7509d720fa0f8a5f96cad1857f98cf502"
+ },
+ {
+  "id": "gid://shopify/Product/9217489174780",
+  "handle": "lev-shirt",
+  "key": "body_html",
+  "old": "<p>La camisa Lev es una prenda de botones con cuello abierto y mangas cortas. Está disponible en color crema con un estampado geométrico azul o en negro con un estampado geométrico naranja. El dobladillo recto le aporta un acabado impecable.</p><p>Combínala con unos vaqueros ajustados para un look elegante.</p>",
+  "new": "<p>La camisa Lev es una prenda de botones con cuello abierto y mangas cortas. Está disponible en color crema con un estampado geométrico azul o en negro con un estampado geométrico naranja. El dobladillo recto le aporta un acabado impecable.</p><p>Combínala con unos jeans ajustados para un look elegante.</p>",
+  "digest": "e10ccd04dc8d50d3f0a4af44a20c16b835c3ca9a7a649b5e89c9062b5519b09f"
+ },
+ {
+  "id": "gid://shopify/Product/9217490387196",
+  "handle": "hunter-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos vaqueros Hunter",
+  "new": "Shorts de mezclilla Hunter",
+  "digest": "f417b4bf399f99929c7b275d660b350442588d37c2d279b1ba69e8cf8cbe340e"
+ },
+ {
+  "id": "gid://shopify/Product/9217490387196",
+  "handle": "hunter-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217490387196",
+  "handle": "hunter-denim-shorts",
+  "key": "meta_description",
+  "old": "Shorts vaqueros Hunter: Shorts de mezclilla gris claro con dobladillo y corte a la altura de la rodilla. Incluyen cierre de cremallera, bolsillos delanteros y texto estampado en la cinturilla.",
+  "new": "Shorts jeans Hunter: Shorts de mezclilla gris claro con dobladillo y corte a la altura de la rodilla. Incluyen cierre de cremallera, bolsillos delanteros y texto estampado en la cinturilla.",
+  "digest": "645733e330139b6cb91cafc3020ecffccc3098b347c2c01518aab5a07d5db0bd"
+ },
+ {
+  "id": "gid://shopify/Product/9217492779260",
+  "handle": "ny-top",
+  "key": "body_html",
+  "old": "<p>Esta sudadera marrón presenta un llamativo gráfico de NY con el texto 'GO AS FAR AS YOU CAN'. Tiene cuello redondo, mangas largas y puños y bajo de canalé.</p><p>Combínala con unos vaqueros oscuros para un look desenfadado.</p>",
+  "new": "<p>Esta sudadera marrón presenta un llamativo gráfico de NY con el texto 'GO AS FAR AS YOU CAN'. Tiene cuello redondo, mangas largas y puños y bajo de canalé.</p><p>Combínala con unos jeans oscuros para un look desenfadado.</p>",
+  "digest": "2cb1563b8947c6d97da03be2e7a8b61315b3fe03bdaf1028e3c83e358865233c"
+ },
+ {
+  "id": "gid://shopify/Product/9217493696764",
+  "handle": "goldie-top",
+  "key": "body_html",
+  "old": "<p>El top Goldie presenta un llamativo tono azul con cuello redondo y una abertura única en el hombro. Su textura acanalada y silueta ajustada ofrecen un aspecto elegante.</p><p>Combínalo con vaqueros de tiro alto para un toque informal.</p><ul>\n\n<li>Manga larga</li>\n\n<li>Abertura en el hombro</li>\n\n<li>Textura acanalada</li>\n\n\n</ul>",
+  "new": "<p>El top Goldie presenta un llamativo tono azul con cuello redondo y una abertura única en el hombro. Su textura acanalada y silueta ajustada ofrecen un aspecto elegante.</p><p>Combínalo con jeans de tiro alto para un toque informal.</p><ul>\n\n<li>Manga larga</li>\n\n<li>Abertura en el hombro</li>\n\n<li>Textura acanalada</li>\n\n\n</ul>",
+  "digest": "819237960ac1d7259b74ba0643781839209833ecaf58b2c0eec1bd403692b817"
+ },
+ {
+  "id": "gid://shopify/Product/9217497891068",
+  "handle": "owen-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Owen",
+  "new": "Shorts de mezclilla Owen",
+  "digest": "a86dba072186065f20d3a5ab545555f37a9a1dff1646c2942d58f40952a7bcf0"
+ },
+ {
+  "id": "gid://shopify/Product/9217497891068",
+  "handle": "owen-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217497891068",
+  "handle": "owen-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla Owen – Para hombre, hasta la rodilla | Carbon",
+  "new": "Shorts de mezclilla Owen – Para hombre, hasta la rodilla | Carbon",
+  "digest": "434f47b6fcc3e1fe61e50aac1e34ff78a170b721a9394cb22f92d763d1206ba0"
+ },
+ {
+  "id": "gid://shopify/Product/9217497956604",
+  "handle": "loagan-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Loagan",
+  "new": "Shorts de mezclilla Loagan",
+  "digest": "a6cac2a38873d3e463fb520d9773f777a9780e32558e72c02b5efae966f117d1"
+ },
+ {
+  "id": "gid://shopify/Product/9217497956604",
+  "handle": "loagan-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRE &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRE &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217497956604",
+  "handle": "loagan-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Loagan: Pantalones cortos de mezclilla en azul lavado con dobladillos vueltos y cordón naranja. Presentan un ligero desgaste y bolsillos delanteros inclinados.",
+  "new": "Shorts de mezclilla Loagan: Shorts de mezclilla en azul lavado con dobladillos vueltos y cordón naranja. Presentan un ligero desgaste y bolsillos delanteros inclinados.",
+  "digest": "df4be669ed31faba903ff766cfab24ed2d1d4a7b0dcdb475a3b412108e1644c6"
+ },
+ {
+  "id": "gid://shopify/Product/9217498022140",
+  "handle": "samuel-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Samuel",
+  "new": "Shorts de mezclilla Samuel",
+  "digest": "c7eba07a0f0a971b5dda9dcc270d2849bd86922e455d27692ae888222fdd4c66"
+ },
+ {
+  "id": "gid://shopify/Product/9217498022140",
+  "handle": "samuel-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217498022140",
+  "handle": "samuel-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Samuel: Pantalones cortos de mezclilla en negro lavado con detalles desgastados y dobladillo enrollado. Cuenta con un diseño de cinco bolsillos.",
+  "new": "Shorts de mezclilla Samuel: Shorts de mezclilla en negro lavado con detalles desgastados y dobladillo enrollado. Cuenta con un diseño de cinco bolsillos.",
+  "digest": "e8d99ec82af02a43dbc123ae52de0e5b67b0c36c23041d43f98b85820bac08b6"
+ },
+ {
+  "id": "gid://shopify/Product/9217498317052",
+  "handle": "john-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217498317052",
+  "handle": "john-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla John: Pantalones cortos de mezclilla azul lavado con ligero desgaste, cierre de cremallera y dobladillo enrollado. Incluye bolsillos diagonales y costuras en contraste.",
+  "new": "Shorts de mezclilla John: Shorts de mezclilla azul lavado con ligero desgaste, cierre de cremallera y dobladillo enrollado. Incluye bolsillos diagonales y costuras en contraste.",
+  "digest": "1a6763d808afeadcc29214a43889443d82769351fdf7118deb717dae79829016"
+ },
+ {
+  "id": "gid://shopify/Product/9217498382588",
+  "handle": "david-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos vaqueros David",
+  "new": "Shorts de mezclilla David",
+  "digest": "d6aa74eea52af99cd3b218b089446609782e90e6d0ad9599f561be05542a0559"
+ },
+ {
+  "id": "gid://shopify/Product/9217498382588",
+  "handle": "david-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla David – Estilo desgastado para hombre | Carbon",
+  "new": "Shorts de mezclilla David – Estilo desgastado para hombre | Carbon",
+  "digest": "e79ccb9ea6343b07ca8f8737e2e90d878bb7a3bcbfa566df415d065e14445d00"
+ },
+ {
+  "id": "gid://shopify/Product/9217498480892",
+  "handle": "micah-denim-shorts",
+  "key": "title",
+  "old": "Pantalones cortos de mezclilla Micah",
+  "new": "Shorts de mezclilla Micah",
+  "digest": "c191ba0a43225b3e1da7b4d8d2050604a40cd0a15fe2cee63c79e8047803fb54"
+ },
+ {
+  "id": "gid://shopify/Product/9217498480892",
+  "handle": "micah-denim-shorts",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; PANTALONES CORTOS",
+  "new": "HOMBRES &gt;&gt; SHORTS",
+  "digest": "1b42fcc4005d442be6a260125a9af9e9e85dd96fa7201b8c7bc9a683bd394e8e"
+ },
+ {
+  "id": "gid://shopify/Product/9217498480892",
+  "handle": "micah-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla Micah – Hombre desgastado | Carbon",
+  "new": "Shorts de mezclilla Micah – Hombre desgastado | Carbon",
+  "digest": "b4d49583e25d4cf4b86cd78ac9ebf6366438a365bdb034642bcb639bfdf57598"
+ },
+ {
+  "id": "gid://shopify/Product/9217498480892",
+  "handle": "micah-denim-shorts",
+  "key": "meta_description",
+  "old": "Pantalones cortos de mezclilla Micah: Pantalones cortos de mezclilla en color piedra blanca con corte a la altura de la rodilla y detalle desgastado. Incluye bajos vueltos y cierre de cremallera.",
+  "new": "Shorts de mezclilla Micah: Shorts de mezclilla en color piedra blanca con corte a la altura de la rodilla y detalle desgastado. Incluye bajos vueltos y cierre de cremallera.",
+  "digest": "f4044be86ec494955200df6e4b12f5080c4c3352cae8cf550a1cabf6047671f0"
+ },
+ {
+  "id": "gid://shopify/Product/9217500315900",
+  "handle": "enzi-jeans",
+  "key": "title",
+  "old": "Pantalones vaqueros Enzi",
+  "new": "Jeans Enzi",
+  "digest": "1f1c52b943e1923fe31f061f58797baee70066bbcf3d7a71e84eaecf07ecb930"
+ },
+ {
+  "id": "gid://shopify/Product/9217500315900",
+  "handle": "enzi-jeans",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; VAQUEROS",
+  "new": "HOMBRES &gt;&gt; JEANS",
+  "digest": "f2638cbef3534439a346149ff709e3f773ecffaada1b08bc7a5d1ef78c7e04a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217500414204",
+  "handle": "griffin-jeans",
+  "key": "body_html",
+  "old": "<p>Los vaqueros Griffin ofrecen un look elegante con tejido azul claro, detalles rotos y deshilachados, y un lavado desteñido. Presentan un diseño clásico de cinco bolsillos, cierre de botón, cremallera y trabillas para cinturón.</p>",
+  "new": "<p>Los jeans Griffin ofrecen un look elegante con tejido azul claro, detalles rotos y deshilachados, y un lavado desteñido. Presentan un diseño clásico de cinco bolsillos, cierre de botón, cremallera y trabillas para cinturón.</p>",
+  "digest": "28660d085a6adf7e9571f43db3e211c6c3af8cf6fbae52c1b0f875b3db9e0130"
+ },
+ {
+  "id": "gid://shopify/Product/9217500414204",
+  "handle": "griffin-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Griffin – Hombre Rotos | Carbon",
+  "new": "Jeans Griffin – Hombre Rotos | Carbon",
+  "digest": "a73ec04af79c844a64f306b704cffd7a5e1280d2dba0adaba2d98e0a27354c79"
+ },
+ {
+  "id": "gid://shopify/Product/9217500578044",
+  "handle": "rye-jeans",
+  "key": "title",
+  "old": "Vaqueros Rye",
+  "new": "Jeans Rye",
+  "digest": "eaa859501df8793fe7e760662c3aa506010c85e627f6a1223e11587a4d59ea08"
+ },
+ {
+  "id": "gid://shopify/Product/9217500578044",
+  "handle": "rye-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Rye – Hombre Negro | Carbon",
+  "new": "Jeans Rye – Hombre Negro | Carbon",
+  "digest": "f6310eca2653e732ecffa2d5428f0a6eeae0c7fe0d5fc7aa0ec4eb2bcaaef11b"
+ },
+ {
+  "id": "gid://shopify/Product/9250982920444",
+  "handle": "ryland-short-set",
+  "key": "product_type",
+  "old": "PANTALONES CORTOS",
+  "new": "Shorts",
+  "digest": "b0f4535897027c6ecbaab8381b76c90ae056888d570ac5f22bcb9859cead7792"
+ },
+ {
+  "id": "gid://shopify/Product/9453627343100",
+  "handle": "kai-denim-shorts",
+  "key": "title",
+  "old": "Kai Shorts Vaqueros",
+  "new": "Kai Shorts Jeans",
+  "digest": "e3ef1e5ccb51a45167a2676ba7d804cdc255bef51cbc5f02904d52957fb41d58"
+ },
+ {
+  "id": "gid://shopify/Product/9453627343100",
+  "handle": "kai-denim-shorts",
+  "key": "body_html",
+  "old": "<p>Estos son unos pantalones cortos de mezclilla con lavado azul y corte a la altura de la rodilla. Presentan una bragueta con cremallera y botón metálico, además de un ligero efecto desgastado en la parte delantera y trasera. El dobladillo vuelto y las costuras en contraste de color naranja añaden un toque clásico.</p><ul>\n\n<li>Mezclilla con lavado azul</li>\n\n<li>Ligero efecto desgastado</li>\n\n<li>Dobladillo vuelto</li>\n\n<li>Bragueta con cremallera y botón metálico</li>\n\n<li>Costuras en contraste de color naranja</li>\n\n\n</ul>",
+  "new": "<p>Estos son unos shorts de mezclilla con lavado azul y corte a la altura de la rodilla. Presentan una bragueta con cremallera y botón metálico, además de un ligero efecto desgastado en la parte delantera y trasera. El dobladillo vuelto y las costuras en contraste de color naranja añaden un toque clásico.</p><ul>\n\n<li>Mezclilla con lavado azul</li>\n\n<li>Ligero efecto desgastado</li>\n\n<li>Dobladillo vuelto</li>\n\n<li>Bragueta con cremallera y botón metálico</li>\n\n<li>Costuras en contraste de color naranja</li>\n\n\n</ul>",
+  "digest": "b8d2b8d51c94d475162f54cc1a9a1b9a0ac1dc0e9922d39ebd4d4c9510beaca6"
+ },
+ {
+  "id": "gid://shopify/Product/9453627343100",
+  "handle": "kai-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla Kai – Para hombre, hasta la rodilla | Carbon",
+  "new": "Shorts de mezclilla Kai – Para hombre, hasta la rodilla | Carbon",
+  "digest": "8859810ddb6a4bf2679e6136beb300f03aa07b2e5844d73a6593f525f7cb8e40"
+ },
+ {
+  "id": "gid://shopify/Product/15400676819196",
+  "handle": "ridge-jeans",
+  "key": "title",
+  "old": "Vaqueros Ridge",
+  "new": "Jeans Ridge",
+  "digest": "6ea7540c15f1ea51ab2514628b671f7518c05cef14ba29c4368b5d24c528cd36"
+ },
+ {
+  "id": "gid://shopify/Product/15400676819196",
+  "handle": "ridge-jeans",
+  "key": "meta_title",
+  "old": "Vaqueros Ridge – Hombre desgastados | Carbon",
+  "new": "Jeans Ridge – Hombre desgastados | Carbon",
+  "digest": "07bd770afe1d517350c88917de18aee2433c260e6c738c40d590ea6ab1efe9ae"
+ },
+ {
+  "id": "gid://shopify/Product/15400676819196",
+  "handle": "ridge-jeans",
+  "key": "meta_description",
+  "old": "Vaqueros Ridge: Pantalones superpitillo en negro lavado con roturas, cremalleras en los tobillos y detalles estampados. Cuentan con bolsillos clásicos y herrajes plateados.",
+  "new": "Jeans Ridge: Pantalones superpitillo en negro lavado con roturas, cremalleras en los tobillos y detalles estampados. Cuentan con bolsillos clásicos y herrajes plateados.",
+  "digest": "58248d3f6c4406a9a9c8f1606e2e2a767b4e5f1f44b97242b4253f2d911dc33c"
+ }
+]

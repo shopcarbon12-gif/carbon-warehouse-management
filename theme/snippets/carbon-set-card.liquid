@@ -1,0 +1,128 @@
+{%- comment -%}
+  CARBON set card (owner, 2026-10-27): the Winter Sets card (sections/carbon-set-grid)
+  for product carousels — one card per matching set instead of one card per piece,
+  on the homepage's AW26 Edit and Featured Products rows. Pieces come from the
+  carbon_set.partners metafield (handles, written by CarbonWMS); a partner that is
+  not in the carousel's collection is looked up with all_products, so a set always
+  shows every piece. Tops first, bottoms last; the card links to the first piece.
+
+  Params: set_lead (the piece the carousel reached first), set_collection (the
+  carousel's collection, searched before all_products to save lookups).
+{%- endcomment -%}
+{%- liquid
+  assign bottoms = 'Pants,Jogger,Joggers,Skirt,Shorts,Short,Leggings,Legging,Trousers,Trouser'
+  assign bottom_list = bottoms | split: ','
+  assign handle_list = set_lead.metafields.carbon_set.partners.value
+  assign tops = ''
+  assign lows = ''
+  assign piece_handles = set_lead.handle
+  for h in handle_list
+    assign piece_handles = piece_handles | append: ',' | append: h
+  endfor
+  assign piece_handles = piece_handles | split: ','
+  assign total = 0
+  assign piece_count = 0
+  for h in piece_handles
+    assign q = nil
+    if h == set_lead.handle
+      assign q = set_lead
+    else
+      for c in set_collection.products
+        if c.handle == h
+          assign q = c
+          break
+        endif
+      endfor
+      if q == nil
+        assign q = all_products[h]
+      endif
+    endif
+    if q == nil or q.id == nil
+      continue
+    endif
+    assign piece_count = piece_count | plus: 1
+    assign total = total | plus: q.price
+    assign kind = q.title | remove: ' Set' | split: ' ' | last
+    if bottom_list contains kind
+      assign lows = lows | append: h | append: ','
+    else
+      assign tops = tops | append: h | append: ','
+    endif
+  endfor
+  assign ordered = tops | append: lows | split: ','
+-%}
+{%- assign lead = nil -%}{%- assign second = nil -%}
+{%- for h in ordered -%}
+  {%- liquid
+    if h == set_lead.handle
+      assign q = set_lead
+    else
+      assign q = nil
+      for c in set_collection.products
+        if c.handle == h
+          assign q = c
+          break
+        endif
+      endfor
+      if q == nil
+        assign q = all_products[h]
+      endif
+    endif
+  -%}
+  {%- if lead == nil -%}{%- assign lead = q -%}{%- elsif second == nil -%}{%- assign second = q -%}{%- endif -%}
+{%- endfor -%}
+{%- liquid
+  assign name_words = lead.title | remove: ' Set' | split: ' '
+  assign set_name = ''
+  for w in name_words
+    unless forloop.last
+      assign set_name = set_name | append: w | append: ' '
+    endunless
+  endfor
+  assign set_name = set_name | strip | append: ' Set'
+  if name_words.size == 1
+    assign set_name = lead.title
+  endif
+-%}
+<product-card class="product-card carbon-set-card text-{{ settings.product_content_alignment }}">
+  <figure class="product-featured-image{% if second %} thb-hover{% endif %}">
+    <span class="carbon-set-badge">{{ piece_count }}-piece set</span>
+    <a href="{{ lead.url }}" title="{{ set_name | escape }}" class="product-featured-image-link aspect-ratio aspect-ratio--{{ settings.product_aspect_ratio }}" style="--padding-bottom: 125%;">
+      {%- if second and second.featured_image -%}
+        {%- render 'responsive-image', class: 'product-secondary-image', image: second.featured_image, sizes: '375x0,770x0', priority: 'low', defer: true, loading: 'lazy' -%}
+      {%- endif -%}
+      {%- if lead.featured_image -%}
+        {%- render 'responsive-image', class: 'product-primary-image', image: lead.featured_image, sizes: '375x0,770x0', loading: 'lazy' -%}
+      {%- endif -%}
+    </a>
+  </figure>
+  <div class="product-card-info">
+    {%- if settings.show_products_vendor -%}
+    <div class="product-card-vendor"><a href="{{ lead.vendor | url_for_vendor }}" title="{{ lead.vendor | escape }}">{{ lead.vendor }}</a></div>
+    {%- endif -%}
+    <a href="{{ lead.url }}" title="{{ set_name | escape }}" class="product-card-title">{{ set_name }}</a>
+    <p class="carbon-set-pieces">
+      {%- for h in ordered -%}
+        {%- liquid
+          if h == set_lead.handle
+            assign q = set_lead
+          else
+            assign q = nil
+            for c in set_collection.products
+              if c.handle == h
+                assign q = c
+                break
+              endif
+            endfor
+            if q == nil
+              assign q = all_products[h]
+            endif
+          endif
+          assign qw = q.title | remove: ' Set' | split: ' '
+        -%}
+        <a href="{{ q.url }}">{{ qw | last }} {{ q.price | money }}</a>{% unless forloop.last %}<span> + </span>{% endunless %}
+      {%- endfor -%}
+    </p>
+    <div class="product-price carbon-set-total"><span class="price"><span class="amount">Set {{ total | money }}</span></span></div>
+  </div>
+</product-card>

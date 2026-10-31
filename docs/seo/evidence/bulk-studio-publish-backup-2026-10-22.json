@@ -1,0 +1,3137 @@
+[
+ {
+  "id": "gid://shopify/Product/9217488683260",
+  "handle": "bert-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Bert Essential Streetwear Tee ✨ | Carbon | Trendy Men's Top",
+   "description": "Level up your streetwear game with the Bert Essential Tee. Effortless style meets affordable luxury for your next OOTD. Shop the limited drop at Carbon now! ✨"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Level Up Your Streetwear Game</h3>\n<p>The search for the ultimate everyday staple is officially over. The Bert Essential Streetwear Tee is designed to deliver that effortless, high-end aesthetic you have been scrolling for. Whether you are layering it for a city stroll or making it the centerpiece of your next OOTD, this tee brings that confident vibe to every fit. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Streetwear Essential:</strong> Designed with a modern silhouette that captures the hype culture aesthetic without the designer price tag.</p>\n<p><strong>Versatile Styling:</strong> From sunset dinners to casual hangouts, this tee adapts to your lifestyle and keeps your social presence on point.</p>\n<p><strong>Durable Construction:</strong> Built to handle the rapid cycle of your seasonal refreshes while maintaining its shape and feel.</p>\n<p><strong>Affordable Luxury:</strong> Get that premium look and feel you crave while staying pragmatic about your budget. #ShopCarbon</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p>Available in Blue, White, and Brown. Features a comfortable crewneck design and a relaxed fit that moves with you. Crafted with soft, breathable fabric for all-day wearability. 100% Instagrammable quality.</p>\n</div><div class=\"usage-care\">\n<h4>How to Use &amp; Care:</h4>\n<p>Machine wash cold with like colors to keep your vibes fresh. Tumble dry low or hang dry to preserve the fit. This limited drop is selling fast—grab yours and tag us in your best look!</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we do not just follow trends—we make them accessible. High-style, low-stress shopping for the modern generation. Your best look starts here.</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495546999036",
+     "image": {
+      "altText": "A man stands wearing a white t-shirt with artistic text and denim shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547031804",
+     "image": {
+      "altText": "A man wearing a white t-shirt with artistic text and a casual style, paired with denim shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547064572",
+     "image": {
+      "altText": "White t-shirt featuring artistic text inspired by a famous painter's self-portrait from 1889."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547097340",
+     "image": {
+      "altText": "White t-shirt featuring artistic text with the name and details of a famous painting and museum."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547130108",
+     "image": {
+      "altText": "A man stands wearing a white t-shirt with artistic text, paired with denim shorts and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547162876",
+     "image": {
+      "altText": "A man sits on a white stool wearing a white t-shirt with artistic text, paired with denim shorts and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547195644",
+     "image": {
+      "altText": "A man wearing a white t-shirt featuring a colorful puzzle art design of a famous artist's self-portrait."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495547228412",
+     "image": {
+      "altText": "White t-shirt featuring a colorful puzzle design of a character inspired by a famous artist's self-portrait."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217421639932",
+  "handle": "one-shoulder-sweatshirt",
+  "status": "ACTIVE",
+  "productType": "WOMEN >> TOPS",
+  "seo": {
+   "title": "One Shoulder Sweatshirt – Asymmetric Cropped | Carbon",
+   "description": "Clay one shoulder sweatshirt with wide sleeves and a cropped length. Asymmetric neckline adds a unique touch."
+  },
+  "descriptionHtml": "<p>This women's top in clay features a one shoulder design with an asymmetric neckline. Wide sleeves and a cropped length keep it fresh.</p><p>Pair with high-waisted denim for a balanced look.</p>",
+  "sd": {
+   "value": "This women's top in clay features a one shoulder design with an asymmetric neckline. Wide sleeves and a cropped length keep it fresh.\n\nPair with high-waisted denim for a balanced look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "tops"
+    },
+    {
+     "handle": "tank-tops"
+    },
+    {
+     "handle": "sweatshirts-hoodies-women"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46480850551036",
+     "image": {
+      "altText": "A model with curly hair wears a light-colored cropped top and distressed denim shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850583804",
+     "image": {
+      "altText": "A model with curly hair wears a cropped, cream-colored top paired with distressed denim shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850616572",
+     "image": {
+      "altText": "A cropped, cream-colored top with wide sleeves, paired with distressed high-waisted denim jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850649340",
+     "image": {
+      "altText": "A close-up of a person wearing a light beige cropped top with a wide neckline and short sleeves."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850682108",
+     "image": {
+      "altText": "A woman with curly hair wears a light-colored cropped top and distressed denim shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850714876",
+     "image": {
+      "altText": "A model with curly hair wears a cropped beige top paired with distressed denim shorts and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850747644",
+     "image": {
+      "altText": "A woman with curly hair sits on a white stool, wearing a light top and denim shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480850780412",
+     "image": {
+      "altText": "A woman with curly hair wears a cropped beige top and denim shorts, showcasing a casual summer outfit."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217489371388",
+  "handle": "challenge-t-shirt",
+  "status": "ACTIVE",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Challenge T-Shirt – Graphic | Carbon",
+   "description": "Challenge T-Shirt: Men's black t-shirt with 'challenge' text and checkerboard graphic on the back. Crew neck and short sleeves."
+  },
+  "descriptionHtml": "<p>The Challenge T-Shirt features a bold 'challenge' text on the front and a striking checkerboard graphic on the back. Crew neck and short sleeves complete the look.</p><p>Wear it with distressed jeans for a laid-back vibe.</p><ul>\n<li>Black color</li>\n<li>Crew neckline</li>\n<li>Checkerboard back graphic</li>\n<li>Text 'KEEP MOVING TOWARD DREAMS AND LOVE'</li>\n</ul>",
+  "sd": {
+   "value": "The Challenge T-Shirt features a bold 'challenge' text on the front and a striking checkerboard graphic on the back. Crew neck and short sleeves complete the look.\n\nWear it with distressed jeans for a laid-back vibe."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/38546718294268",
+     "image": {
+      "altText": "A man stands wearing a black t-shirt and distressed gray jeans, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38546718130428",
+     "image": {
+      "altText": "A man wearing a black oversized t-shirt with a checkerboard graphic and motivational text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38546718261500",
+     "image": {
+      "altText": "A man wearing a black oversized t-shirt with a white graphic design, paired with distressed jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38546718163196",
+     "image": {
+      "altText": "Close-up of a black crewneck shirt featuring white text that reads \"challenge\" on the chest area."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38546718097660",
+     "image": {
+      "altText": "A man sits on a white pedestal wearing a black oversized t-shirt and distressed gray jeans, looking directly at the c..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38546718228732",
+     "image": {
+      "altText": "A person wearing a black oversized t-shirt with a checkerboard design and motivational text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845144316",
+     "image": {
+      "altText": "A man stands wearing a loose-fitting gray t-shirt with a small text design, paired with distressed black jeans and wh..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845340924",
+     "image": {
+      "altText": "A man wearing a gray oversized t-shirt with a checkerboard graphic and motivational text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845177084",
+     "image": {
+      "altText": "A man wearing a loose-fitting gray t-shirt with the word \"challenge\" printed in white on the chest."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845209852",
+     "image": {
+      "altText": "A model wearing a loose-fitting gray t-shirt with the word \"challenge\" printed in white on the chest."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845242620",
+     "image": {
+      "altText": "Gray t-shirt featuring a white, stylized text graphic that reads \"challenge\" on the chest area."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845275388",
+     "image": {
+      "altText": "A man stands wearing a gray oversized t-shirt with a casual look, paired with distressed black jeans and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845308156",
+     "image": {
+      "altText": "A man sits on a black stool wearing a gray oversized t-shirt, distressed jeans, and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845373692",
+     "image": {
+      "altText": "A person wearing a gray oversized t-shirt with a checkerboard graphic and motivational text on the back."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217434386684",
+  "handle": "drawstring-sweat-shorts",
+  "status": "ACTIVE",
+  "productType": "WOMEN >> SHORTS",
+  "seo": {
+   "title": "Drawstring Sweat Shorts – Women's Elastic Waist Sweat Shorts | Carbon",
+   "description": "Women's sweat shorts with an elastic waistband and drawstring closure, featuring side pockets. Available in black, clay, and jade cream."
+  },
+  "descriptionHtml": "<p>Elastic waistband sweat shorts with a drawstring closure and side pockets. The curved hem adds a subtle touch.</p><p>Pair with a black tee and sneakers for a laid-back look.</p><ul>\n<li>Elastic waistband</li>\n<li>Drawstring closure</li>\n<li>Side pockets</li>\n<li>Curved hem</li>\n<li>Black, clay, jade cream</li>\n</ul>",
+  "sd": {
+   "value": "These women's shorts feature an elastic waistband and drawstring closure. Side pockets add functionality. Available in black, clay, and jade cream.\n\nWear them with a relaxed tee for a laid-back vibe."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "shorts"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46472522170620",
+     "image": {
+      "altText": "A woman stands wearing a white crop top and black drawstring shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522236156",
+     "image": {
+      "altText": "Black athletic shorts with an elastic waistband and drawstring, featuring side pockets and a relaxed fit."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522268924",
+     "image": {
+      "altText": "Black casual shorts with an elastic waistband and drawstring, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522301692",
+     "image": {
+      "altText": "Black elastic waist shorts with a drawstring, featuring side pockets and a relaxed fit for comfort."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522203388",
+     "image": {
+      "altText": "A woman stands wearing a fitted white tank top and black drawstring shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522367228",
+     "image": {
+      "altText": "A woman stands confidently in black shorts and a white crop top, paired with stylish black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522334460",
+     "image": {
+      "altText": "A woman sits on a white cube, wearing a fitted white tank top and black shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522399996",
+     "image": {
+      "altText": "A woman with long hair wearing a white tank top and black shorts, viewed from the back, standing in casual sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522432764",
+     "image": {
+      "altText": "A woman stands wearing a black graphic t-shirt and light beige shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522596604",
+     "image": {
+      "altText": "A woman stands wearing a black graphic t-shirt and light beige shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522465532",
+     "image": {
+      "altText": "Light beige shorts with an elastic waistband and side pockets, styled with a black graphic tee."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522498300",
+     "image": {
+      "altText": "Light beige shorts with an elastic waistband and drawstring, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522531068",
+     "image": {
+      "altText": "Light beige shorts with an elastic waistband and side pockets, styled with a black graphic t-shirt."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522563836",
+     "image": {
+      "altText": "A woman stands wearing a black graphic t-shirt and light beige shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522629372",
+     "image": {
+      "altText": "A woman sits on a white cube wearing light-colored shorts and a black graphic t-shirt with a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46472522662140",
+     "image": {
+      "altText": "A woman stands with her back to the camera, wearing a black t-shirt and light-colored shorts, paired with black sneak..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483388858620",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483388891388",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483388924156",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483388956924",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483388989692",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483389022460",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483389055228",
+     "image": {
+      "altText": ""
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483389087996",
+     "image": {
+      "altText": ""
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217482326268",
+  "handle": "fade-away-t-shirt",
+  "status": "ACTIVE",
+  "productType": "T-SHIRT",
+  "seo": {
+   "title": "Fade Away T-Shirt – Men's Graphic Crew Neck T-Shirt | CARBON",
+   "description": "Men's red t-shirt with abstract black patterns and bold text prints on front and back. Available in beige, black, burgundy, grey, white."
+  },
+  "descriptionHtml": "<p>Red t-shirt with abstract black patterns and the text 'It all fades away in the end...' on the front. The back features 'Fade Away in the end' in bold print.</p><p>Pair with black jeans and sneakers for a complete look.</p><ul>\n<li>Short sleeves</li>\n<li>Red with black pattern</li>\n<li>Front text: 'It all fades away in the end...'</li>\n<li>Back text: 'Fade Away in the end'</li>\n<li>Crew neck, ribbed collar</li>\n<li>Available in beige, black, burgundy, grey, white</li>\n</ul>",
+  "sd": {
+   "value": "Red T-shirt with a bold black abstract print across the chest and shoulders. White script reads 'It all fades away in the end...' on the front. Pair with black jeans for a strong, casual look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495389614332",
+     "image": {
+      "altText": "A man stands wearing a red graphic t-shirt with a black abstract design and white text on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389647100",
+     "image": {
+      "altText": "A man wearing a red graphic t-shirt with abstract patterns and a motivational quote in white text."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389679868",
+     "image": {
+      "altText": "A red graphic t-shirt featuring a textured design and a motivational quote in white cursive text."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389712636",
+     "image": {
+      "altText": "Red graphic t-shirt featuring intricate patterns and a motivational quote in white cursive text."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389745404",
+     "image": {
+      "altText": "A man stands wearing a red graphic t-shirt with a black abstract design and white text on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389778172",
+     "image": {
+      "altText": "A man sits on a black stool wearing a red graphic t-shirt with a textured design and black jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389810940",
+     "image": {
+      "altText": "A man wearing a red graphic t-shirt with a distressed design and text on the back, posing sideways."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495389843708",
+     "image": {
+      "altText": "A person wearing a red graphic t-shirt with a bold design on the back, paired with black pants."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217471447292",
+  "handle": "gary-cargo-pants",
+  "status": "ACTIVE",
+  "productType": "MEN >> PANTS",
+  "seo": {
+   "title": "Gary Cargo Pants – Men's | Carbon",
+   "description": "Gary Cargo Pants: Men's cargo pants in khaki and stone with elastic waistband and zippered pockets."
+  },
+  "descriptionHtml": "<p>The Gary Cargo Pants bring utility with style. Featuring an elastic waistband and drawstring closure, they offer a relaxed look. Side cargo pockets and zippered details add functionality.</p><p>Pair them with a graphic tee and sneakers for a laid-back vibe.</p><ul>\n<li>Elastic waistband</li>\n<li>Drawstring closure</li>\n<li>Zippered pockets</li>\n</ul>",
+  "sd": {
+   "value": "The Gary Cargo Pants bring utility with style. Featuring an elastic waistband and drawstring closure, they offer a relaxed look. Side cargo pockets and zippered details add functionality.\n\nPair them with a graphic tee and sneakers for a laid-back vibe."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "tracksuits-1"
+    },
+    {
+     "handle": "pants"
+    },
+    {
+     "handle": "sweatpants-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "winter-sets"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46480848290044",
+     "image": {
+      "altText": "A man stands wearing a black t-shirt and beige cargo pants with zippered pockets and elastic cuffs."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848322812",
+     "image": {
+      "altText": "Casual beige pants with zippered pockets and elastic cuffs, paired with black and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848355580",
+     "image": {
+      "altText": "Light brown cargo pants with elastic waistband, drawstring, and multiple zippered pockets."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848388348",
+     "image": {
+      "altText": "Tan cargo pants featuring a zippered pocket and a patch label on the side for added utility."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848421116",
+     "image": {
+      "altText": "A man stands confidently in a black t-shirt and beige cargo pants with zippered pockets, paired with stylish sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848453884",
+     "image": {
+      "altText": "A man sits on a white cube wearing casual khaki pants and black sneakers, paired with a black t-shirt."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848486652",
+     "image": {
+      "altText": "A person wearing khaki cargo pants with side pockets, viewed from the back, against a plain background."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848519420",
+     "image": {
+      "altText": "A man wearing a black t-shirt and beige cargo pants with elastic cuffs, viewed from the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848552188",
+     "image": {
+      "altText": "Light beige jogger pants with elastic cuffs and side pockets, paired with a black graphic t-shirt and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848584956",
+     "image": {
+      "altText": "A man stands wearing beige cargo pants with elastic cuffs, paired with a black graphic t-shirt and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848617724",
+     "image": {
+      "altText": "A man sits on a white cube wearing beige jogger pants, a black t-shirt, and stylish black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480848650492",
+     "image": {
+      "altText": "A man stands with his back to the camera, wearing beige cargo pants and a black t-shirt, paired with black sneakers."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217488519420",
+  "handle": "harry-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": null,
+   "description": "POV: You found the perfect urban fit. The Harry Streetwear Tee delivers a clean aesthetic and durable cotton comfort. Shop this limited drop at Carbon today! 🔥"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Your New Daily Uniform Has Arrived</h3>\n<p>POV: You just found the tee that actually holds its shape and matches every vibe in your rotation. The Harry Essential Streetwear Tee is designed for those who live for that clean, urban aesthetic without the designer price tag. Whether you are layering it under a flannel or letting it stand alone as a statement piece, this tee delivers the confidence you need for your next OOTD post. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Streetwear Ready:</strong> The relaxed, modern fit provides that sought-after silhouette that is perfect for content creation and city strolls. 🏙️</p>\n<p><strong>Durable Construction:</strong> Made with high-quality cotton that maintains its structure wash after wash, ensuring your look stays fresh all season long.</p>\n<p><strong>Versatile Styling:</strong> Available in Black and Grey, these essentials are the foundation of any trendy wardrobe, making it easy to transition from day to night.</p>\n<p><strong>Affordable Luxury:</strong> Get the high-end streetwear look you want while keeping your budget intact for your next weekend trip.</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p><strong>Material:</strong> 100% Soft-Touch Cotton for maximum breathability and comfort. <strong>Fit:</strong> Modern Urban Fit (Standard sizing). <strong>Colors:</strong> Available in Black and Grey. <strong>Care:</strong> Machine wash cold with like colors, tumble dry low to maintain fit and feel.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we are rewriting the rules of trendy essentials. This is a Limited Drop—grab your size before the hype sells out! #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495553749244",
+     "image": {
+      "altText": "A man stands wearing a black t-shirt with a graphic design, paired with light blue jeans and black shoes."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553782012",
+     "image": {
+      "altText": "A man wearing a black t-shirt with a graphic design featuring text related to a magical theme."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553814780",
+     "image": {
+      "altText": "Black t-shirt featuring a graphic design with two characters, mystical elements, and text about a wizarding school."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553847548",
+     "image": {
+      "altText": "A man wearing a black t-shirt with a white graphic design featuring text and a wand illustration."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553880316",
+     "image": {
+      "altText": "Black t-shirt featuring bold white text with a magical theme, showcasing a popular wizarding world design."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553913084",
+     "image": {
+      "altText": "A man stands wearing a black t-shirt with a graphic design, paired with light blue jeans and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553945852",
+     "image": {
+      "altText": "A man sits on a black stool wearing a black t-shirt and light blue jeans, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495553978620",
+     "image": {
+      "altText": "A man wearing a black t-shirt with a graphic design featuring two seated figures and decorative elements on the back."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217488584956",
+  "handle": "highest-self-t-shirt",
+  "status": "ACTIVE",
+  "productType": "T-SHIRT",
+  "seo": {
+   "title": null,
+   "description": "Shop the Highest Self Graphic Tee at Carbon. ✨ Durable cotton, relaxed fit, and affordable luxury for your next OOTD. Limited drop—grab this streetwear vibe! ⚡"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Step Into Your Power</h3>\n<p>Stop settling for basics and start wearing your energy. The Highest Self Graphic Tee is more than just a streetwear essential—it is a daily reminder to vibrate higher and look good doing it. Designed for the trend-setters who live for that perfect OOTD moment, this tee delivers the ultimate blend of comfort and hype culture aesthetics. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Streetwear Perfection:</strong> Features a modern, relaxed fit that is perfect for layering or making a statement on its own.</p>\n<p><strong>Instagrammable Aesthetic:</strong> The bold \"Highest Self\" graphic is designed to pop on camera, making it a go-to choice for your next content drop.</p>\n<p><strong>Durable Construction:</strong> Made with high-quality cotton that maintains its shape and softness, wash after wash—no fast-fashion fatigue here.</p>\n<p><strong>Affordable Luxury:</strong> Get that high-end designer vibe without the luxury price tag, perfect for keeping your rotation fresh on a budget. ⚡</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p><strong>Material:</strong> 100% Premium Cotton for a soft, breathable feel. <strong>Fit:</strong> Unisex relaxed fit (size up for an oversized streetwear look). <strong>Colors:</strong> Available in Black, Burgundy, Green, and Grey. <strong>Weight:</strong> Mid-weight fabric suitable for year-round wear.</p>\n</div><div class=\"usage-care\">\n<h4>How to Use &amp; Care:</h4>\n<p>To keep your graphic looking crisp, machine wash cold inside out with like colors. Tumble dry low or hang dry to preserve the fit. Style it with our signature Carbon denim and your favorite kicks for the ultimate city-stroll vibe.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we are rewriting the rules of trendy essentials. This is a Limited Drop—grab yours before it is gone and join the community making high-style accessible to everyone. #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495541625084",
+     "image": {
+      "altText": "A man stands wearing a red graphic t-shirt with bold white text and black jeans, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541657852",
+     "image": {
+      "altText": "A man wearing a red t-shirt with bold white text that reads \"Pursue Your Highest Self,\" paired with dark jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541690620",
+     "image": {
+      "altText": "A red t-shirt featuring bold white graffiti-style text with an inspirational message and a graphic logo."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541723388",
+     "image": {
+      "altText": "A close-up of a red t-shirt featuring bold white graffiti-style text and a graphic patch on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541756156",
+     "image": {
+      "altText": "A man stands wearing a red graphic t-shirt with bold white text and black jeans, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541788924",
+     "image": {
+      "altText": "A man sits on a black stool wearing a maroon t-shirt with bold white text and black jeans, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541821692",
+     "image": {
+      "altText": "A man wearing a maroon t-shirt with a graphic collage and bold text on the back, showcasing artistic elements."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495541854460",
+     "image": {
+      "altText": "A man wearing a maroon t-shirt with graphic designs and text on the back, paired with black pants."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217489633532",
+  "handle": "kinda-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": null,
+   "description": "Shop the Kinda Graphic Tee at Carbon. Effortless streetwear vibes for your next OOTD. Durable construction meets affordable luxury."
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Your New Favorite Fit Has Arrived</h3>\n<p>Stop scrolling—you just found the piece your feed has been waiting for. The Kinda Graphic Tee is designed for those who live for that effortless streetwear aesthetic. Whether you are hitting the city for content or just chilling with the crew, this tee delivers a look that is high-energy and totally relatable. It is not just a shirt; it is a mood. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Streetwear Ready:</strong> The relaxed fit gives you that sought-after oversized silhouette that is perfect for every OOTD post.</p>\n<p><strong>Versatile Styling:</strong> Effortlessly pairs with your favorite Carbon denim for a complete look that screams affordable luxury.</p>\n<p><strong>Durable Construction:</strong> Made with high-quality materials to ensure it stays in your rotation through every seasonal refresh.</p>\n<p><strong>Social Media Approved:</strong> Designed with the modern creator in mind, this tee is as photogenic as it is comfortable.</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p>Available in Blue and Black colorways. Features a soft-touch graphic print on the front. Crafted from a breathable cotton blend for all-day comfort. Designed with a classic crew neck and drop-shoulder fit. Machine wash cold, tumble dry low to maintain the graphic integrity.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we are rewriting the rules of trendy essentials. We make high-style, low-stress shopping accessible for the modern generation. Your best look starts here. #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495552176380",
+     "image": {
+      "altText": "A man stands wearing a black graphic t-shirt featuring colorful designs and a positive message."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552209148",
+     "image": {
+      "altText": "A man wearing a black graphic t-shirt featuring colorful designs and a positive message about kindness."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552241916",
+     "image": {
+      "altText": "Black t-shirt featuring colorful graphic designs and the phrase about kindness displayed prominently."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552274684",
+     "image": {
+      "altText": "Black t-shirt featuring colorful graphic designs of symbols and the phrase about kindness."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552307452",
+     "image": {
+      "altText": "A man stands wearing a black graphic t-shirt featuring colorful designs and text, paired with black jeans and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552340220",
+     "image": {
+      "altText": "A man sits on a black stool wearing a dark t-shirt featuring colorful graphic designs and text."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552372988",
+     "image": {
+      "altText": "A man with short hair wearing a dark gray t-shirt, looking back while adjusting the neckline."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495552405756",
+     "image": {
+      "altText": "A person wearing a black t-shirt and dark jeans, viewed from the back, showcasing a casual style."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217334247676",
+  "handle": "lillie-shorts",
+  "status": "ACTIVE",
+  "productType": "WOMEN >> SHORTS",
+  "seo": {
+   "title": "Lillie Shorts – High-Waisted | Carbon",
+   "description": "Lillie Shorts: Black high-waisted shorts with button and zip closure, featuring front and back pockets."
+  },
+  "descriptionHtml": "<p>The Lillie Shorts are black high-waisted shorts with a button and zip closure. They feature two front and two back pockets, offering practical style.</p>",
+  "sd": {
+   "value": "The Lillie Shorts are black high-waisted shorts with a button and zip closure. They feature two front and two back pockets, offering practical style."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "shorts"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46491746140412",
+     "image": {
+      "altText": "A person stands wearing a tie-dye tank top and high-waisted black shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746173180",
+     "image": {
+      "altText": "A person wearing high-waisted black denim shorts, paired with a fitted tie-dye tank top."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746205948",
+     "image": {
+      "altText": "Black denim shorts with a high waist, paired with black sneakers, showcasing a casual summer look."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746238716",
+     "image": {
+      "altText": "Black denim shorts featuring a high waist, front pockets, and a classic button closure."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746271484",
+     "image": {
+      "altText": "A woman stands confidently in a casual outfit featuring black denim shorts and a tie-dye tank top."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746304252",
+     "image": {
+      "altText": "A woman stands confidently in black denim shorts paired with a tie-dye tank top and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746337020",
+     "image": {
+      "altText": "A model sits on a white cube wearing black denim shorts and a tie-dye tank top, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491746369788",
+     "image": {
+      "altText": "A woman with long hair wears a tie-dye tank top and black denim shorts, standing with her back to the camera."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622887676",
+     "image": {
+      "altText": "A woman stands confidently in denim shorts paired with a tie-dye tank top and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483623018748",
+     "image": {
+      "altText": "A woman stands wearing a tie-dye tank top and denim shorts, paired with black sneakers against a white background."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622953212",
+     "image": {
+      "altText": "Denim shorts with a high waist, featuring front pockets and a classic blue wash, styled with a fitted top."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622985980",
+     "image": {
+      "altText": "Denim shorts with a high waist and frayed hem, paired with black sneakers for a casual look."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622920444",
+     "image": {
+      "altText": "Denim shorts with a high waist, featuring front pockets and a classic blue wash, styled for casual wear."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483623051516",
+     "image": {
+      "altText": "A woman stands confidently in denim shorts and a tie-dye tank top, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483623084284",
+     "image": {
+      "altText": "A model sits on a white cube wearing denim shorts and a tie-dye tank top, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483623117052",
+     "image": {
+      "altText": "A woman with long hair wears a gray tie-dye tank top and denim shorts, standing with her back to the camera."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217469087996",
+  "handle": "los-angeles-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Los Angeles Streetwear Shirt - West Coast Vibes ✨ | Carbon",
+   "description": "Shop the Los Angeles Streetwear Shirt at Carbon. Get that high-end urban look with affordable luxury. Perfect for your next OOTD. Limited drop—selling fast! 🌴"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Capture the West Coast Aesthetic</h3>\n<p>Bring that effortless California energy to your daily rotation with the Los Angeles Streetwear Shirt. Designed for the trend-setter who lives for that perfect OOTD moment, this piece delivers a high-end streetwear look without the designer price tag. Whether you are hitting the city streets or scouting the next viral photo spot, this shirt ensures you stay at the center of the conversation. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Streetwear Essential:</strong> Features a modern, relaxed fit that captures the current urban vibe perfectly for your next social media drop.</p>\n<p><strong>Versatile Styling:</strong> The neutral palette—available in Black, Blue, and Beige—makes it easy to pair with your favorite Carbon denim for a complete look.</p>\n<p><strong>Affordable Luxury:</strong> Get that high-fashion aesthetic and durable construction while keeping your budget ready for the next seasonal refresh.</p>\n<p><strong>Confidence in Every Fit:</strong> Designed with inclusivity in mind to ensure you feel as good as you look from sunrise to sunset. 🌴</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p>This premium streetwear shirt features a comfortable button-down front and a structured collar for a polished yet casual silhouette. Crafted from a breathable fabric blend suitable for year-round wear. Available in sizes S through XL to accommodate various styling preferences from fitted to oversized.</p>\n</div><div class=\"usage-care\">\n<h4>How to Style &amp; Care:</h4>\n<p>For a true streetwear look, size up and wear it open over a graphic tee. To maintain the quality and color vibrancy, machine wash cold with similar colors and hang to dry. Light iron if needed to keep that crisp, fresh-from-the-drop appearance.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we are rewriting the rules of trendy essentials. This is a Limited Drop—grab your favorite color before it is gone! #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495555780860",
+     "image": {
+      "altText": "A man stands wearing a tan short-sleeve shirt paired with blue jeans and light sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555813628",
+     "image": {
+      "altText": "A man wearing a short-sleeve, tan T-shirt with decorative stitching and a relaxed fit."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555846396",
+     "image": {
+      "altText": "A man wearing a tan oversized t-shirt with \"Los Angeles\" printed in a vintage style on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555879164",
+     "image": {
+      "altText": "A casual short-sleeve t-shirt in a tan color featuring decorative star stitching along the side."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555911932",
+     "image": {
+      "altText": "Close-up of a tan t-shirt featuring unique seam detailing and a classic crew neckline."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555944700",
+     "image": {
+      "altText": "A man stands wearing a tan short-sleeve shirt with unique stitching details, paired with blue jeans and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495555977468",
+     "image": {
+      "altText": "A man sits on a white stool wearing a tan t-shirt and blue jeans, showcasing a casual, relaxed style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495556010236",
+     "image": {
+      "altText": "A person wearing a tan t-shirt with \"Los Angeles\" printed on the back, paired with dark jeans and sneakers."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217488322812",
+  "handle": "mclaren-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": null,
+   "description": "Rev up your OOTD with the McLaren Graphic Streetwear Tee. High-octane F1 energy meets affordable luxury. Shop this limited drop for a track-ready vibe! 🏎️💨"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Fuel Your Streetwear Obsession</h3>\n<p>Rev up your daily rotation with the McLaren Graphic Streetwear Tee. Designed for those who live life in the fast lane, this piece brings that high-octane F1 energy straight to your wardrobe. Whether you are hitting the city streets or capturing your next viral OOTD, this tee delivers a high-end motorsport aesthetic without the luxury price tag. It is more than just a shirt—it is a statement of speed and style. #ShopCarbon</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Track-Ready Aesthetic:</strong> Features bold McLaren branding that taps into the current racing hype culture, making it an instant Instagrammable favorite.</p>\n<p><strong>Versatile Streetwear Fit:</strong> Engineered with a modern silhouette that pairs perfectly with our signature Carbon denim for a complete urban look.</p>\n<p><strong>Durable Construction:</strong> Built to handle the rapid cycle of trends, ensuring you stay stylish through every seasonal refresh.</p>\n<p><strong>Affordable Luxury:</strong> Get the designer motorsport vibe you crave at a price that keeps your budget on track.</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p>Available in Black and Blue colorways. Crafted from a soft, breathable cotton blend designed for all-day comfort. Features a classic crew neck and short sleeves with a standard streetwear fit. Sizing ranges from S to XL to ensure inclusivity in fit for everyone.</p>\n</div><div class=\"usage-care\">\n<h4>How to Style &amp; Care:</h4>\n<p>Style this tee oversized with baggy jeans and fresh kicks for the ultimate streetwear look. To keep your graphic looking sharp, machine wash cold inside out and tumble dry on low heat. Do not iron directly on the print.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we democratize fashion by bringing you the latest trends at accessible prices. This is a Limited Drop—grab yours before it is gone!</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495544148220",
+     "image": {
+      "altText": "A man stands wearing a blue graphic t-shirt featuring a playful design and casual black jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544180988",
+     "image": {
+      "altText": "A man wearing a navy blue t-shirt featuring a graphic design with dice and text related to Las Vegas."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544213756",
+     "image": {
+      "altText": "A navy blue t-shirt featuring a graphic design with dice and text referencing Las Vegas and a racing team."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544246524",
+     "image": {
+      "altText": "Navy blue t-shirt featuring a graphic of dice and text related to Las Vegas and McLaren Formula 1 Team."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544279292",
+     "image": {
+      "altText": "A man stands wearing a blue graphic t-shirt featuring a playful design and text, paired with black jeans and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544312060",
+     "image": {
+      "altText": "A man sits on a stool wearing a blue t-shirt with a graphic design featuring Las Vegas and playful icons."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544344828",
+     "image": {
+      "altText": "A man wearing a blue t-shirt with a graphic design featuring a racing helmet, cherries, and dice."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495544377596",
+     "image": {
+      "altText": "A man wearing a blue graphic t-shirt featuring a racing helmet, cherries, and dice on the back."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217437171964",
+  "handle": "mike-evening-shorts",
+  "status": "DRAFT",
+  "productType": "MEN >> SHORTS",
+  "seo": {
+   "title": "Men's Black Streetwear Evening Shorts - Night Out | Carbon",
+   "description": "Shop Mike Black Evening Shorts at Carbon. 🌙 Get that high-end streetwear vibe with a sharp fit made for making memories. Affordable luxury for your night out! ✨"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>Your New Night-Out Essential</h3>\n<p>Stop scrolling—the search for the perfect evening fit is officially over. 🌙 The Mike Evening Shorts deliver a sharp, confident look designed for making memories. Whether you are hitting a rooftop lounge or heading to a city stroll, these shorts bring that high-end aesthetic to your rotation without the luxury price tag.</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love These:</h4>\n<p><strong>Streetwear Sophistication:</strong> A sleek black finish that pairs perfectly with your favorite graphic tee or a crisp button-down for an instant vibe check.</p>\n<p><strong>Designed for the Moment:</strong> Crafted with a durable 98% cotton and 2% spandex blend that holds its shape while you move, ensuring you look just as good at the end of the night as you did at the start.</p>\n<p><strong>The Perfect Fit:</strong> Engineered with a modern silhouette and a 7-inch inseam to hug the right places while maintaining the comfort that Gen Z and Millennial style-seekers crave.</p>\n<p><strong>Social-Ready Style:</strong> These are the \"instagrammable\" shorts your feed has been waiting for—high-style, low-stress shopping at its best. ✨</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p><strong>Material:</strong> 98% Cotton, 2% Spandex for flexible durability — <strong>Color:</strong> Deep Black — <strong>Fit:</strong> Slim-fit modern evening silhouette — <strong>Inseam:</strong> 7\" — <strong>Hardware:</strong> Reinforced stitching and secure closure — <strong>Availability:</strong> Limited Drop — Selling Fast!</p>\n</div><div class=\"usage-care\">\n<h4>How to Style &amp; Care:</h4>\n<p>Pair with high-top sneakers for a streetwear edge or loafers for a more polished evening look. To keep your Mike Shorts looking fresh, machine wash cold with like colors and tumble dry on low heat. Avoid bleach to maintain that deep black finish.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we don't just follow trends—we make them accessible. High-style, low-stress shopping for the modern generation. Your best look starts here. #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "shorts-men"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46483600802044",
+     "image": {
+      "altText": "A man stands confidently in a white button-up shirt and black pinstriped shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600834812",
+     "image": {
+      "altText": "Men's black pinstriped shorts paired with white sneakers, showcasing a casual yet stylish look."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600867580",
+     "image": {
+      "altText": "Close-up of dark pinstriped shorts featuring a metal keyring and a sleek pendant hanging from the waistband."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600900348",
+     "image": {
+      "altText": "A man wearing a white button-up shirt and black pinstriped shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600933116",
+     "image": {
+      "altText": "A man sits on a white cube wearing a white shirt and striped shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600965884",
+     "image": {
+      "altText": "Back view of tailored shorts featuring a pinstripe pattern, paired with a white button-up shirt."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483600998652",
+     "image": {
+      "altText": "A man wearing a white shirt and pinstriped shorts, standing with his back to the camera, showcasing casual style."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217364721916",
+  "handle": "new-york-t-shirt",
+  "status": "ACTIVE",
+  "productType": "WOMEN >> T-SHIRT",
+  "seo": {
+   "title": "New York T-Shirt – Graphic | Carbon",
+   "description": "New York T-Shirt: Black t-shirt with 'NEW YORK' graphic and distressed wash. Features short sleeves and crew neckline."
+  },
+  "descriptionHtml": "<p>This women's black t-shirt features a bold 'NEW YORK' graphic with additional text 'SAPIENTIA ET LIBERTAS', 'NY', and '1993'. The distressed wash adds a vintage vibe. Crew neckline and short sleeves complete the look.</p><p>Pair with shorts or jeans for a relaxed style.</p>",
+  "sd": {
+   "value": "This women's black t-shirt features a bold 'NEW YORK' graphic with additional text 'SAPIENTIA ET LIBERTAS', 'NY', and '1993'. The distressed wash adds a vintage vibe. Crew neckline and short sleeves complete the look.\n\nPair with shorts or jeans for a relaxed style."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "tops"
+    },
+    {
+     "handle": "t-shirts-women"
+    },
+    {
+     "handle": "fragrance-beauty-women"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46480849404156",
+     "image": {
+      "altText": "A woman stands wearing a loose-fitting gray t-shirt with a colorful New York graphic, paired with black shorts and sn..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849436924",
+     "image": {
+      "altText": "A woman models a relaxed-fit, dark gray t-shirt featuring a colorful graphic design with \"New York\" and decorative el..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849469692",
+     "image": {
+      "altText": "A woman wearing a loose-fitting gray t-shirt featuring a colorful graphic design with \"New York\" and decorative eleme..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849502460",
+     "image": {
+      "altText": "A gray t-shirt featuring a vintage-style graphic with \"New York,\" a circular emblem, and decorative elements."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849535228",
+     "image": {
+      "altText": "A woman wearing a loose-fitting gray t-shirt with a colorful New York graphic, paired with black shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849567996",
+     "image": {
+      "altText": "A woman stands wearing a loose-fitting graphic t-shirt with a New York design, paired with black shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849600764",
+     "image": {
+      "altText": "A woman sits on a white stool wearing a gray oversized t-shirt with a colorful New York graphic and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480849633532",
+     "image": {
+      "altText": "A woman with long hair wears an oversized gray t-shirt, paired with black shorts and sneakers, standing casually."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217487241468",
+  "handle": "oversized-basic-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Oversized Basic T-Shirt: Trendy Streetwear Fit | Carbon",
+   "description": "Shop the ultimate oversized basic tee for that effortless streetwear vibe. ✨ Affordable luxury in trending neutrals. Selling fast—get your POV look at Carbon!"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>The Fit Your Feed Has Been Waiting For ✨</h3>\n<p>Stop scrolling—you just found the holy grail of streetwear basics. Our Oversized Basic T-Shirt delivers that effortless, baggy silhouette that defines modern street style. Whether you are layering it up or letting the fit speak for itself, this tee is designed to be the foundation of your most Instagrammable looks. It is high-style, low-stress dressing for the modern generation.</p>\n</div><div class=\"key-benefits\">\n<h4>Why You Will Love This:</h4>\n<p><strong>Street-Ready Silhouette:</strong> The intentional oversized cut provides that sought-after heavy drape without looking bulky. It is the perfect canvas for your favorite jewelry and denim.</p>\n<p><strong>Versatile Aesthetic:</strong> Available in a range of trending neutrals like Cream, Salmon, and Beige, making it easy to coordinate with any seasonal refresh.</p>\n<p><strong>Durable Construction:</strong> Made with high-quality fabric that maintains its shape and softness wash after wash, ensuring this becomes a long-term staple in your rotation.</p>\n<p><strong>Confidence in Every Stitch:</strong> Designed to move with you, providing a comfortable fit that feels as good as it looks from city strolls to sunset dinners.</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p><strong>Material:</strong> Soft-touch cotton blend for maximum breathability and comfort. <strong>Fit:</strong> Relaxed, oversized silhouette with dropped shoulders. <strong>Care:</strong> Machine wash cold with like colors; tumble dry low. <strong>Available Colors:</strong> Black, White, Cream, Beige, Blue, and Salmon.</p>\n</div><div class=\"usage-care\">\n<h4>Style Tip from Carbon:</h4>\n<p>Pair this tee with our signature Carbon Jeans and chunky sneakers for the ultimate POV look. Tuck it slightly in the front to play with proportions or wear it loose for that relaxed, hype-culture vibe. 📸 #ShopCarbon</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we democratize fashion by delivering high-end aesthetics at accessible prices. This is affordable luxury made for making memories. Selling fast—grab your favorite color before the drop is gone!</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46495548670204",
+     "image": {
+      "altText": "A man stands confidently wearing a beige short-sleeve t-shirt paired with black denim shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548702972",
+     "image": {
+      "altText": "A man wearing a beige oversized t-shirt paired with black denim shorts, standing against a white background."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548735740",
+     "image": {
+      "altText": "A man is wearing a short-sleeve, beige t-shirt paired with dark jeans, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548768508",
+     "image": {
+      "altText": "Close-up of a light beige t-shirt featuring a classic crew neckline and short sleeves."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548801276",
+     "image": {
+      "altText": "A man stands wearing a beige t-shirt, black shorts, and black sneakers against a white background."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548834044",
+     "image": {
+      "altText": "A man sits on a black stool wearing a beige t-shirt and black shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548866812",
+     "image": {
+      "altText": "A man with short brown hair wearing a beige t-shirt and black shorts, looking over his shoulder."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46495548899580",
+     "image": {
+      "altText": "A man stands with his back to the camera, wearing a beige t-shirt and black denim shorts."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217486586108",
+  "handle": "papillon-t-shirt",
+  "status": "DRAFT",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Papillon Graphic Tee - Streetwear Butterfly Style | Carbon",
+   "description": "Shop the Papillon Graphic Tee at Carbon. ✨ High-end streetwear vibes with a bold butterfly design. Durable, affordable luxury for your next OOTD. Selling fast!"
+  },
+  "descriptionHtml": "<div class=\"product-story\">\n<h3>The Vibe You’ve Been Searching For</h3>\n<p>Ready to make a statement? The Papillon Graphic Tee is designed for those who live for the perfect OOTD. Featuring a bold butterfly graphic that captures the essence of modern streetwear, this tee delivers that high-end aesthetic without the luxury price tag. Whether you're hitting the city or creating content for the feed, this is the versatile essential your wardrobe needs right now. ✨</p>\n</div><div class=\"key-benefits\">\n<h4>Why You'll Love This:</h4>\n<p><strong>Streetwear Essential:</strong> The butterfly graphic adds an instant edge to any fit, making it a go-to for your Instagrammable moments.</p>\n<p><strong>Durable Construction:</strong> Made with high-quality materials designed to maintain shape and softness through every wash and wear.</p>\n<p><strong>Versatile Styling:</strong> Effortlessly pairs with your favorite Carbon denim for a complete look that screams confidence.</p>\n<p><strong>Affordable Luxury:</strong> Get the hype-culture look you crave at a price that keeps your budget in check. 💸</p>\n</div><div class=\"specifications\">\n<h4>Product Details:</h4>\n<p>Available in Black and Beige. Features a standard streetwear fit with a soft-touch finish. 100% Cotton-feel durability. Designed for all-day comfort and style agility.</p>\n</div><div class=\"usage-care\">\n<h4>How to Use &amp; Care:</h4>\n<p>Machine wash cold with like colors. Tumble dry low or hang dry to preserve the graphic's vibrant detail. Do not iron directly on the design.</p>\n</div><div class=\"brand-promise\"><p><em>At Carbon, we don't just follow trends—we make them accessible. High-style, low-stress shopping for the modern generation. Your best look starts here. #ShopCarbon</em></p></div>",
+  "sd": null,
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": []
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46483604865276",
+     "image": {
+      "altText": "A man stands wearing a beige oversized t-shirt with a graphic design, paired with black shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483604898044",
+     "image": {
+      "altText": "A man wearing a beige oversized t-shirt with a graphic design, paired with black shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483605061884",
+     "image": {
+      "altText": "A light beige t-shirt featuring a large blue butterfly graphic on the back with text below."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483604996348",
+     "image": {
+      "altText": "A man stands wearing a beige oversized t-shirt with a graphic design, paired with black shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483604930812",
+     "image": {
+      "altText": "Beige short-sleeve t-shirt featuring a stylized graphic text design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483604963580",
+     "image": {
+      "altText": "A close-up of a light beige t-shirt featuring stylized text in dark brown, showcasing a unique graphic design."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483605029116",
+     "image": {
+      "altText": "A man sits on a black stool, wearing a beige t-shirt and black shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483605094652",
+     "image": {
+      "altText": "A man wearing a beige t-shirt with a large blue butterfly graphic and text on the back, paired with black shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707408636",
+     "image": {
+      "altText": "A man stands wearing a loose-fitting black t-shirt with a graphic design, paired with black shorts and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707441404",
+     "image": {
+      "altText": "A man wearing a black oversized t-shirt with a graphic design, paired with matching black shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707474172",
+     "image": {
+      "altText": "A man wearing a black oversized t-shirt featuring a large butterfly graphic and text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707506940",
+     "image": {
+      "altText": "A man wearing a loose-fitting black t-shirt with a subtle graphic design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707539708",
+     "image": {
+      "altText": "Black t-shirt featuring textured, stylized text design on the chest area."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707572476",
+     "image": {
+      "altText": "A man stands wearing a loose-fitting black t-shirt and matching shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707605244",
+     "image": {
+      "altText": "A man sits on a black stool wearing a loose-fitting black t-shirt and matching shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491707638012",
+     "image": {
+      "altText": "A black t-shirt featuring a large blue butterfly graphic on the back with artistic text below."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217488453884",
+  "handle": "prospect-t-shirt",
+  "status": "ACTIVE",
+  "productType": "MEN >> T- SHIRT",
+  "seo": {
+   "title": "Prospect T-Shirt – Graphic | Carbon",
+   "description": "Prospect T-Shirt: Men's t-shirt in black and cream with 'Prospect' text on front and bird wings graphic on back."
+  },
+  "descriptionHtml": "<p>This men's t-shirt features 'Prospect' text across the front and a striking bird wings graphic on the back. Available in black and cream.</p><p>Pair it with cargo shorts for a laid-back look.</p><ul>\n<li>Crew neckline</li>\n<li>Short sleeves</li>\n<li>Text on back: 'Protecting Rare Species', 'Homo sapiens recovery...let's strongly unite!'</li>\n</ul>",
+  "sd": {
+   "value": "This men's t-shirt features 'Prospect' text across the front and a striking bird wings graphic on the back. Available in black and cream.\n\nPair it with cargo shorts for a laid-back look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/39413105000700",
+     "image": {
+      "altText": "A man stands confidently in a white oversized t-shirt and beige cargo shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/39413104902396",
+     "image": {
+      "altText": "A man wearing a white oversized t-shirt featuring a colorful bird wing graphic on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/39413104967932",
+     "image": {
+      "altText": "A man wearing a white oversized t-shirt with a handwritten-style graphic, paired with beige cargo shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/39413104869628",
+     "image": {
+      "altText": "A man sits on a white cube wearing a loose-fitting white t-shirt, beige shorts, and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/39413104935164",
+     "image": {
+      "altText": "A person stands with their back to the camera, wearing a white shirt featuring a colorful eagle graphic and beige car..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844062972",
+     "image": {
+      "altText": "A man stands wearing a black t-shirt with white text, paired with beige cargo shorts and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844259580",
+     "image": {
+      "altText": "A man wearing a black t-shirt with colorful wing graphics and inspirational text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844095740",
+     "image": {
+      "altText": "A man wearing a black t-shirt with a white handwritten design, paired with beige cargo shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844128508",
+     "image": {
+      "altText": "A man wearing a black short-sleeve t-shirt with a white cursive text design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844161276",
+     "image": {
+      "altText": "A close-up of a black t-shirt featuring a stylish white script design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844194044",
+     "image": {
+      "altText": "A man stands confidently in a black t-shirt with a white graphic, paired with beige cargo shorts and black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844226812",
+     "image": {
+      "altText": "A man sits on a white stool wearing a black t-shirt and beige shorts, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480844292348",
+     "image": {
+      "altText": "A man wearing a black t-shirt with colorful wing graphics and motivational text on the back, paired with beige shorts."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217490321660",
+  "handle": "simplify-t-shirt",
+  "status": "ACTIVE",
+  "productType": "T-SHIRT",
+  "seo": {
+   "title": "Simplify T-Shirt – Graphic | Carbon",
+   "description": "Simplify T-Shirt: Beige t-shirt with 'LIVE AMPLIFY STYLE' on front and 'SIMPLIFY' graphic on back."
+  },
+  "descriptionHtml": "<p>The Simplify T-Shirt in beige features a crew neck and short sleeves. 'LIVE AMPLIFY STYLE' is printed on the front, while 'SIMPLIFY' dominates the back. Pair it with dark jeans for a clean look.</p>",
+  "sd": {
+   "value": "The Simplify T-Shirt in beige features a crew neck and short sleeves. 'LIVE AMPLIFY STYLE' is printed on the front, while 'SIMPLIFY' dominates the back. Pair it with dark jeans for a clean look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "new-arrivals"
+    },
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "t-shirts"
+    },
+    {
+     "handle": "short-sleeve-shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-new-now"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "limited-edition-men"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46480846618876",
+     "image": {
+      "altText": "A man stands in a neutral-toned t-shirt paired with black jeans and sneakers, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846651644",
+     "image": {
+      "altText": "A man wearing a light beige t-shirt with a round neckline and short sleeves, standing against a plain background."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846684412",
+     "image": {
+      "altText": "A man wearing a light beige short-sleeve t-shirt with a simple graphic on the shoulder."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846717180",
+     "image": {
+      "altText": "Close-up of a light beige t-shirt featuring black text that reads \"LIVE AMPLIFY STYLE\" on the shoulder."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846749948",
+     "image": {
+      "altText": "A man stands wearing a light beige t-shirt paired with black jeans and sneakers, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846782716",
+     "image": {
+      "altText": "A man sits on a stool wearing a light beige t-shirt and black jeans, paired with black sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846815484",
+     "image": {
+      "altText": "A man wearing a beige t-shirt with a bold black graphic text design on the back, styled casually."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480846848252",
+     "image": {
+      "altText": "A man wearing a beige t-shirt with the word \"SIMPLIFY\" printed on the back, paired with black jeans."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217450672380",
+  "handle": "superior-shirt",
+  "status": "ACTIVE",
+  "productType": "MEN >> SHIRTS",
+  "seo": {
+   "title": "Superior Shirt – Men's Graphic | Carbon",
+   "description": "Superior Shirt: Long sleeve shirt with 'SUPERIOR intelligence' text and colorful cube graphic. Available in black and white."
+  },
+  "descriptionHtml": "<p>This men's shirt features long sleeves and a crew neck. A colorful cube graphic with 'THOUGHTS AS MY FLOW,I' text enhances the back.</p><p>Pair it with dark jeans for a sleek look.</p>",
+  "sd": {
+   "value": "This men's shirt features long sleeves and a crew neck. A colorful cube graphic with 'THOUGHTS AS MY FLOW,I' text enhances the back.\n\nPair it with dark jeans for a sleek look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "graphic-t-shirts-winter"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/38375571685628",
+     "image": {
+      "altText": "Model in black Carbon Superior Intelligence long-sleeve shirt, distressed skinny jeans, and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375571718396",
+     "image": {
+      "altText": "Model in black Superior Intelligence long-sleeve shirt and distressed Carbon with white high-top sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375571783932",
+     "image": {
+      "altText": "Model wearing a Carbon Superior Intelligence black long-sleeve graphic shirt in a minimalist streetwear style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375571751164",
+     "image": {
+      "altText": "Back of men's black long-sleeve Superior Shirt featuring a colorful melting puzzle cube graphic and white text."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217493500156",
+  "handle": "the-who-top",
+  "status": "ACTIVE",
+  "productType": "WOMEN >> SWEATSHIRTS",
+  "seo": {
+   "title": "The Who Top – Women's Graphic | Carbon",
+   "description": "The Who Top: Orange sweatshirt with 'The Who' graphic and ribbed cuffs. Crew neckline and long sleeves."
+  },
+  "descriptionHtml": "<p>This sweatshirt features a bold orange color with 'The Who' graphic on the front. It has a classic crew neckline and long sleeves with ribbed cuffs.</p><p>Pair it with a white skirt for a fresh look.</p><ul>\n<li>Orange color</li>\n<li>Large front graphic</li>\n<li>Crew neckline</li>\n<li>Ribbed cuffs and hem</li>\n</ul>",
+  "sd": {
+   "value": "This sweatshirt features a bold orange color with 'The Who' graphic on the front. It has a classic crew neckline and long sleeves with ribbed cuffs.\n\nPair it with a white skirt for a fresh look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "tops"
+    },
+    {
+     "handle": "sweatshirts-hoodies-women"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46483622625532",
+     "image": {
+      "altText": "A woman stands wearing a green sweatshirt with white text, paired with light blue wide-leg jeans and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622658300",
+     "image": {
+      "altText": "A woman wearing a green sweatshirt with bold white lettering and a casual style, paired with light jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622691068",
+     "image": {
+      "altText": "A woman wearing a green sweatshirt with a distressed white graphic design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622756604",
+     "image": {
+      "altText": "A woman stands wearing a green sweatshirt with bold white lettering, paired with light blue wide-leg jeans and white..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622723836",
+     "image": {
+      "altText": "A close-up of a woman wearing a green sweatshirt featuring bold, distressed white lettering and a crew neckline."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622789372",
+     "image": {
+      "altText": "A woman stands wearing a green sweatshirt with a graphic design, paired with light blue wide-leg jeans and white snea..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622822140",
+     "image": {
+      "altText": "A woman sits on a stool wearing a green sweatshirt with bold white lettering, paired with light blue jeans and white..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46483622854908",
+     "image": {
+      "altText": "A woman with long hair wears a green sweatshirt and light blue wide-leg jeans, facing away from the camera."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375851753724",
+     "image": {
+      "altText": "Model wearing orange The Who graphic sweatshirt, oversized crewneck knit top with white logo, white skirt, and tan heels."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375851786492",
+     "image": {
+      "altText": "Model in orange The Who graphic sweatshirt and white mini skirt, a knit top for streetwear fashion."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375851819260",
+     "image": {
+      "altText": "Model wearing an orange The Who graphic sweatshirt in a relaxed knit fit, for Gen Z streetwear style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375851852028",
+     "image": {
+      "altText": "Back view of a woman wearing an oversized orange crewneck knit sweatshirt, part of The Who Top collection."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728347388",
+     "image": {
+      "altText": "A woman stands wearing a mint green sweatshirt with bold text design, paired with a white skirt and heels."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728380156",
+     "image": {
+      "altText": "A woman with long, wavy hair wears a light green sweatshirt featuring a large, distressed graphic design."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728412924",
+     "image": {
+      "altText": "Light green oversized sweatshirt featuring distressed text design in cream color."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728445692",
+     "image": {
+      "altText": "Light green sweatshirt featuring bold, distressed text and an upward arrow design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728478460",
+     "image": {
+      "altText": "A woman stands wearing a light green sweatshirt with bold cream text, paired with white shorts and beige heels."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728511228",
+     "image": {
+      "altText": "A woman stands wearing a light green sweatshirt with bold white lettering, paired with a white skirt and heels."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728543996",
+     "image": {
+      "altText": "A woman sits on a stool wearing a mint green sweatshirt with a graphic design, paired with white shorts and beige heels."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46491728576764",
+     "image": {
+      "altText": "A woman with wavy hair wears a light green sweatshirt paired with a white skirt and beige heels, viewed from behind."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217450934524",
+  "handle": "time-never-shirt",
+  "status": "ACTIVE",
+  "productType": "SHIRTS",
+  "seo": {
+   "title": "Time Never Shirt – Men's Graphic Long Sleeve Shirt | Carbon",
+   "description": "Men's long sleeve shirt with 'TIME NEVER COMES AGAIN' front print and abstract back graphic. Available in beige, black, and white."
+  },
+  "descriptionHtml": "<p>Long sleeve shirt with a bold 'TIME NEVER COMES AGAIN' print on the front. The back features an abstract graphic with text.</p><p>Pair it with ripped jeans and sneakers for a laid-back look.</p><ul>\n<li>Long sleeves</li>\n<li>Available in beige, black, and white</li>\n<li>'TIME NEVER COMES AGAIN' front print</li>\n<li>Abstract back graphic with text</li>\n<li>Crew neck</li>\n</ul>",
+  "sd": {
+   "value": "This men's long sleeve shirt features a bold 'TIME NEVER COMES AGAIN' front print and an abstract graphic on the back. The crew neck and straight hem offer a clean look.\n\nPair it with distressed jeans for a laid-back vibe."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "men"
+    },
+    {
+     "handle": "shirts"
+    },
+    {
+     "handle": "tops-men"
+    },
+    {
+     "handle": "men-clothing"
+    },
+    {
+     "handle": "men-shirt-shop"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "graphic-t-shirts-winter"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/38375574864124",
+     "image": {
+      "altText": "Time Never Shirt in Beige – full-length front view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46448404562172",
+     "image": {
+      "altText": "Time Never Shirt in Beige – front close-up"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46448404594940",
+     "image": {
+      "altText": "Time Never Shirt in Beige – side view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46448404627708",
+     "image": {
+      "altText": "Time Never Shirt in Beige – back view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375574733052",
+     "image": {
+      "altText": "Time Never Shirt in Black – full-length front view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375574765820",
+     "image": {
+      "altText": "Time Never Shirt in Black – full-length front view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375574798588",
+     "image": {
+      "altText": "Time Never Shirt in Black – front close-up"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/38375574831356",
+     "image": {
+      "altText": "Time Never Shirt in Black – back view"
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845766908",
+     "image": {
+      "altText": "A man stands confidently in a fitted long-sleeve white shirt featuring a circular graphic and text, paired with black..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845799676",
+     "image": {
+      "altText": "A man wearing a long-sleeve white shirt with a circular graphic and text design, paired with black ripped jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845832444",
+     "image": {
+      "altText": "A man wearing a long-sleeve white shirt with a black graphic text design on the front."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845865212",
+     "image": {
+      "altText": "White shirt featuring a graphic print with the text \"TIME NEVER COMES AGAIN\" and a circular design."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845897980",
+     "image": {
+      "altText": "A man wearing a long-sleeve white shirt with a circular graphic and text, paired with black ripped jeans and white sn..."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845930748",
+     "image": {
+      "altText": "A man sits on a black stool wearing a long-sleeve white shirt with a graphic design and black ripped jeans."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845963516",
+     "image": {
+      "altText": "A man wearing a long-sleeve white shirt featuring a colorful graphic design and inspirational text on the back."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480845996284",
+     "image": {
+      "altText": "Long-sleeve white shirt featuring a colorful graphic design and inspirational text on the back."
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "status": "ACTIVE",
+  "productType": "SHORTS",
+  "seo": {
+   "title": "Vera Shorts Set – Women's Light Blue Pleated Shorts | CARBON",
+   "description": "Women's light blue shorts with a pleated front and cuffed hem. High-waisted with side pockets. Part of a matching set. In blue."
+  },
+  "descriptionHtml": "<p>Light blue shorts with a pleated front and cuffed hem. High-waisted design with side pockets and belt loops.</p><p>Part of the Vera Shorts Set: pair it with the <a href=\"/products/vera-blazer-set\">Vera Blazer Set</a>.</p><ul>\n<li>High-waisted</li>\n<li>Pleated front</li>\n<li>Cuffed hem</li>\n<li>Side pockets</li>\n<li>Belt loops</li>\n<li>In blue</li>\n</ul><p class=\"carbon-set-note\"><img src=\"https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Sep_7_2026_03_31_01_AM.png?v=1788766989\" alt=\"Complete the Look — this item is part of a matching set. The coordinating piece in the same size and color is added to your cart automatically. Pieces cannot be mixed or matched and each piece is individually priced.\" loading=\"lazy\" style=\"max-width:100%;height:auto;display:block;\"></p>",
+  "sd": {
+   "value": "Light blue shorts set with a tailored blazer and high-waisted shorts. The blazer features a structured shoulder and a single button closure. Pair with a white crop top and sneakers for a relaxed look."
+  },
+  "collections": {
+   "nodes": [
+    {
+     "handle": "women"
+    },
+    {
+     "handle": "shorts"
+    },
+    {
+     "handle": "clothing-1"
+    },
+    {
+     "handle": "all-products-chatgpt"
+    },
+    {
+     "handle": "full-price-welcome"
+    }
+   ]
+  },
+  "resourcePublicationsV2": {
+   "nodes": [
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Online Store"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Shop"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "TikTok"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Google & YouTube"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Facebook & Instagram"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Pinterest"
+     }
+    },
+    {
+     "isPublished": true,
+     "publication": {
+      "name": "Snapchat Ads"
+     }
+    }
+   ]
+  },
+  "media": {
+   "nodes": [
+    {
+     "id": "gid://shopify/MediaImage/46480847601916",
+     "image": {
+      "altText": "A model wearing light blue tailored shorts paired with a matching blazer and white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847634684",
+     "image": {
+      "altText": "Light blue tailored shorts with pleats, paired with a white top and white sneakers, showcasing a casual style."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847667452",
+     "image": {
+      "altText": "Light blue pleated shorts with rolled cuffs and side pockets, styled for a casual yet polished look."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847700220",
+     "image": {
+      "altText": "Light blue pleated shorts with rolled cuffs, featuring a tailored fit and subtle texture."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847732988",
+     "image": {
+      "altText": "A woman with curly hair wears a light blue blazer and matching shorts, paired with a white crop top and sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847765756",
+     "image": {
+      "altText": "A woman with curly hair wears a light blue blazer and matching shorts, paired with white sneakers."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847798524",
+     "image": {
+      "altText": "A woman with curly hair sits on a white cube, wearing a light blue suit and white sneakers, showcasing stylish shorts."
+     }
+    },
+    {
+     "id": "gid://shopify/MediaImage/46480847831292",
+     "image": {
+      "altText": "A woman with curly hair wears a light blue blazer and matching shorts, paired with white sneakers."
+     }
+    }
+   ]
+  }
+ }
+]

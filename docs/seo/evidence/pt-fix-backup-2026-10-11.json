@@ -1,0 +1,3570 @@
+[
+ {
+  "id": "gid://shopify/Product/9217321369852",
+  "handle": "ava-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto Ava – Feminino | Carbono",
+  "new": "Vestido Curto Ava – Feminino | Carbon",
+  "digest": "40d5bbb3460e32ac0892ee6a4f5afb23bd7e0512dad55b6ba627b1ac6e2a19ba"
+ },
+ {
+  "id": "gid://shopify/Product/9217321500924",
+  "handle": "sapphire-tropics-dress",
+  "key": "meta_title",
+  "old": "Vestido Sapphire Tropics – Mini Feminino | Carbono",
+  "new": "Vestido Sapphire Tropics – Mini Feminino | Carbon",
+  "digest": "d20bd52e762ec0f4cebb3d2a7dec3ef9c4c497dadfaa6e33223f3058d0b56386"
+ },
+ {
+  "id": "gid://shopify/Product/9217321664764",
+  "handle": "lea-floral-dress",
+  "key": "meta_title",
+  "old": "Vestido Floral Lea – Justo Feminino | Carbono",
+  "new": "Vestido Floral Lea – Justo Feminino | Carbon",
+  "digest": "1b07eb185c61a1adbfb402b279410e7921953efab2a6c347ec7baf19808931f6"
+ },
+ {
+  "id": "gid://shopify/Product/9217321730300",
+  "handle": "arya-halter-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto com Decote Halter Arya – Brilho Feminino | Carbono",
+  "new": "Vestido Curto com Decote Halter Arya – Brilho Feminino | Carbon",
+  "digest": "4b047e20008a2c831258c202391fca15973e09382f2bc010a6a127a42bea5218"
+ },
+ {
+  "id": "gid://shopify/Product/9217321763068",
+  "handle": "adalyn-sequin-dress",
+  "key": "meta_title",
+  "old": "Vestido de Paetê Adalyn – Mini Feminino | Carbono",
+  "new": "Vestido de Paetê Adalyn – Mini Feminino | Carbon",
+  "digest": "a87ac747fc5b5657d0b7214f4a03d85c89420bfa4cbea3b983228042918e4d13"
+ },
+ {
+  "id": "gid://shopify/Product/9217322221820",
+  "handle": "beaded-bracelet-f",
+  "key": "meta_title",
+  "old": "Pulseira de Miçangas F – Masculina Preta | Carbono",
+  "new": "Pulseira de Miçangas F – Masculina Preta | Carbon",
+  "digest": "ec5802d0e6ecd8e00a98e5e2a46412c721ae715d7f96eca42ee4b002519f46e7"
+ },
+ {
+  "id": "gid://shopify/Product/9217322844412",
+  "handle": "braided-bracelet-c",
+  "key": "meta_title",
+  "old": "Pulseira Trançada C – Masculina com Contas | Carbono",
+  "new": "Pulseira Trançada C – Masculina com Contas | Carbon",
+  "digest": "cc1bbfccac3a0fb91003155ca713ef1ad8e21d0c46343081c602e8deba02193c"
+ },
+ {
+  "id": "gid://shopify/Product/9217322942716",
+  "handle": "braided-bracelet-e",
+  "key": "meta_title",
+  "old": "Pulseira Trançada E – Envoltória Masculina | Carbono",
+  "new": "Pulseira Trançada E – Envoltória Masculina | Carbon",
+  "digest": "eb12d6d6550a80ab7fb447661bd116c9a5dd08ec86b3d51f0432e76c6ab07221"
+ },
+ {
+  "id": "gid://shopify/Product/9217322975484",
+  "handle": "braided-bracelet-f",
+  "key": "meta_title",
+  "old": "Pulseira Trançada F – Masculina de Enrolar | Carbono",
+  "new": "Pulseira Trançada F – Masculina de Enrolar | Carbon",
+  "digest": "93cd7fd9f0c8292938783223a90558c52128081feab890f4e41ab7f74959ae4e"
+ },
+ {
+  "id": "gid://shopify/Product/9217323073788",
+  "handle": "braided-bracelet-h",
+  "key": "meta_title",
+  "old": "Pulseira Trançada H – Acessório Masculino | Carbono",
+  "new": "Pulseira Trançada H – Acessório Masculino | Carbon",
+  "digest": "fd74f981a21fc8315d51d16fd6b0e8471c0cf461cee305156b29fe48fe5ee269"
+ },
+ {
+  "id": "gid://shopify/Product/9217323204860",
+  "handle": "braided-bracelet-k",
+  "key": "meta_title",
+  "old": "Pulseira Trançada K – Acessório Masculino | Carbono",
+  "new": "Pulseira Trançada K – Acessório Masculino | Carbon",
+  "digest": "8c301f85c5151305e350be9129f14f9199a5cd9a6c3e84b7b327a3d07dda688c"
+ },
+ {
+  "id": "gid://shopify/Product/9217323368700",
+  "handle": "necklace-a",
+  "key": "meta_title",
+  "old": "Colar A – Com miçangas | Carbono",
+  "new": "Colar A – Com miçangas | Carbon",
+  "digest": "4c41cba5112b0d46d6e280f35b949e15c4d5ef3605b256c76ff82df69bdf35e1"
+ },
+ {
+  "id": "gid://shopify/Product/9217323401468",
+  "handle": "necklace-b",
+  "key": "meta_title",
+  "old": "Colar B – Em camadas | Carbono",
+  "new": "Colar B – Em camadas | Carbon",
+  "digest": "052101d63e2c00bfe333e43d089f7391a32f3a2fc34ed6f03309b1f929092c99"
+ },
+ {
+  "id": "gid://shopify/Product/9217323499772",
+  "handle": "necklace-d",
+  "key": "meta_title",
+  "old": "Colar D – Em camadas | Carbono",
+  "new": "Colar D – Em camadas | Carbon",
+  "digest": "eb40934915230ee94764073a828315f4a16a41343cb56fab304d68ab9ef5295a"
+ },
+ {
+  "id": "gid://shopify/Product/9217323565308",
+  "handle": "necklace-e",
+  "key": "meta_title",
+  "old": "Colar E – Com miçangas | Carbono",
+  "new": "Colar E – Com miçangas | Carbon",
+  "digest": "54253999976ff995b92832c87e7e9550ebb38ac4dc926cef4626bb0c51e07741"
+ },
+ {
+  "id": "gid://shopify/Product/9217323892988",
+  "handle": "anklet-c",
+  "key": "meta_title",
+  "old": "Tornozeleira C – Berloques de Praia | Carbono",
+  "new": "Tornozeleira C – Berloques de Praia | Carbon",
+  "digest": "71a11ba082403ec54735d19c2faddce98758afc7ab5d3ab08087bacff71a57ea"
+ },
+ {
+  "id": "gid://shopify/Product/9217323925756",
+  "handle": "bracelet-a",
+  "key": "meta_title",
+  "old": "Pulseira A – Berloque Feminino | Carbono",
+  "new": "Pulseira A – Berloque Feminino | Carbon",
+  "digest": "9bcc54659dda0cbab0e2c8011e32164b0a3b5e8ceaf94a8304ae7f8877e0f005"
+ },
+ {
+  "id": "gid://shopify/Product/9217324024060",
+  "handle": "bracelet-c",
+  "key": "meta_title",
+  "old": "Pulseira C – Design Elegante | Carbono",
+  "new": "Pulseira C – Design Elegante | Carbon",
+  "digest": "5424dc7748e964889e9e22a33b7ddacbeb763ae7bfad55f847554b6bb8ff8ffe"
+ },
+ {
+  "id": "gid://shopify/Product/9217324122364",
+  "handle": "bracelet-e",
+  "key": "meta_title",
+  "old": "Pulseira E – Acessório Feminino | Carbono",
+  "new": "Pulseira E – Acessório Feminino | Carbon",
+  "digest": "2c80ecffc71a4a8db557d2a5e5f4c724a190df16219171dc892be61b506c1dbc"
+ },
+ {
+  "id": "gid://shopify/Product/9217324155132",
+  "handle": "bracelet-f",
+  "key": "meta_title",
+  "old": "Pulseira F – Feminina com Miçangas | Carbono",
+  "new": "Pulseira F – Feminina com Miçangas | Carbon",
+  "digest": "4c82bc2b3a57b762c4efb60d6b7b182d411755abb142e34c9a1936728c2e2cad"
+ },
+ {
+  "id": "gid://shopify/Product/9217324220668",
+  "handle": "bracelet-g",
+  "key": "meta_title",
+  "old": "Pulseira G – Miçangas Feminina | Carbono",
+  "new": "Pulseira G – Miçangas Feminina | Carbon",
+  "digest": "b64b4fdd429e5122e91dce7b611d1e2b9d72e716c130eaac57ba97649b46734c"
+ },
+ {
+  "id": "gid://shopify/Product/9217324253436",
+  "handle": "bracelet-h",
+  "key": "meta_title",
+  "old": "Pulseira H – Feminina com Miçangas | Carbono",
+  "new": "Pulseira H – Feminina com Miçangas | Carbon",
+  "digest": "4be899b649a5d34df9cd59ed8e1231e7febdd5ef55e144b678a9a271bcc38e7e"
+ },
+ {
+  "id": "gid://shopify/Product/9217324384508",
+  "handle": "anklet-d",
+  "key": "meta_title",
+  "old": "Tornozeleira D – Com miçangas | Carbono",
+  "new": "Tornozeleira D – Com miçangas | Carbon",
+  "digest": "9bd2c4c983c66ad0408f30048e908d9b7c621dc76545fc1015798c3d131d9f70"
+ },
+ {
+  "id": "gid://shopify/Product/9217324613884",
+  "handle": "parker-track-bottom",
+  "key": "meta_title",
+  "old": "Shorts Femininos Parker Track – Carbono",
+  "new": "Shorts Femininos Parker Track | Carbon",
+  "digest": "14f0e2270df87eb0a5dcece2c9b909c5129cf001251464bb4c69d52a86dc5f39"
+ },
+ {
+  "id": "gid://shopify/Product/9217324777724",
+  "handle": "alexia-top",
+  "key": "meta_title",
+  "old": "Top Alexia – Cropped Feminino | Carbono",
+  "new": "Top Alexia – Cropped Feminino | Carbon",
+  "digest": "c204f47a3bd40f545d5c5c8f9a5dcb0acdc1c4a8826331f50479342bd7a21e94"
+ },
+ {
+  "id": "gid://shopify/Product/9217324843260",
+  "handle": "marleigh-top",
+  "key": "meta_title",
+  "old": "Blusa Marleigh – Manga Longa Transparente | Carbono",
+  "new": "Blusa Marleigh – Manga Longa Transparente | Carbon",
+  "digest": "445992a1b69ed4e9c07c3bbc3c35930bb192590c7793ac1418d19382deb14681"
+ },
+ {
+  "id": "gid://shopify/Product/9217324908796",
+  "handle": "jaylah-oversized-shirt",
+  "key": "meta_title",
+  "old": "Camisa Oversized Jaylah – Feminina | Carbono",
+  "new": "Camisa Oversized Jaylah – Feminina | Carbon",
+  "digest": "da3a3fb4e14b5f673a7238d1050bec39e1ed51925360e52611d0f5d21921c0ec"
+ },
+ {
+  "id": "gid://shopify/Product/9217325236476",
+  "handle": "harmoni-bodysuit",
+  "key": "meta_title",
+  "old": "Body Harmoni – Tie-Dye Feminino | Carbono",
+  "new": "Body Harmoni – Tie-Dye Feminino | Carbon",
+  "digest": "bb2a9593dc9d861aef6349d1785682cbdc6aaa7ec073ba203ad35ff702b3003f"
+ },
+ {
+  "id": "gid://shopify/Product/9217326874876",
+  "handle": "elodie-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Elodie – Cropped | Carbono",
+  "new": "Conjunto de Moletom Elodie – Cropped | Carbon",
+  "digest": "eadbdfbc2049f071b44a32cc42d7c70f85be53e3c66be89ecd5bf66303a537f7"
+ },
+ {
+  "id": "gid://shopify/Product/9217327005948",
+  "handle": "elodie-jogger-set",
+  "key": "meta_title",
+  "old": "Conjunto Jogger Elodie – Feminino | Carbono",
+  "new": "Conjunto Jogger Elodie – Feminino | Carbon",
+  "digest": "483c682cba929d736a2d37c852c53b3eec867fb716de6577a91db6bbad9eebd2"
+ },
+ {
+  "id": "gid://shopify/Product/9217327104252",
+  "handle": "milo-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Milo – Masculina Estonada | Carbono",
+  "new": "Calça Jeans Milo – Masculina Estonada | Carbon",
+  "digest": "3fb86c2194d684205b17c7403a2a08fc9207095821235d8f1e281673c3ccb32e"
+ },
+ {
+  "id": "gid://shopify/Product/9217327268092",
+  "handle": "marco-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Marco – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Marco – Masculina Rasgada | Carbon",
+  "digest": "2efc70e39c1fdbded618c653c6122609383132721d19bc844f83a3497ccafedb"
+ },
+ {
+  "id": "gid://shopify/Product/9217327431932",
+  "handle": "luka-jeans",
+  "key": "meta_title",
+  "old": "Jeans Luka – Masculino Rasgado | Carbono",
+  "new": "Jeans Luka – Masculino Rasgado | Carbon",
+  "digest": "f4a458ad306ea14163311b9a8b5cf926f2eaef23fe301305d697997fc11839a4"
+ },
+ {
+  "id": "gid://shopify/Product/9217327563004",
+  "handle": "jaxx-jeans",
+  "key": "meta_title",
+  "old": "Jaxx Jeans – Masculino Estonado | Carbono",
+  "new": "Jaxx Jeans – Masculino Estonado | Carbon",
+  "digest": "e65867e2e2ba79549e6ca07562cd1a5e2fd56e972a0a422b6f21876eec804d96"
+ },
+ {
+  "id": "gid://shopify/Product/9217327661308",
+  "handle": "jairo-jeans",
+  "key": "meta_title",
+  "old": "Jeans Jairo – Masculino Destroyed | Carbono",
+  "new": "Jeans Jairo – Masculino Destroyed | Carbon",
+  "digest": "16edf698aa4efbde61a18c6cd2a8b5ded061d5caceeb5ee01f192a5aebb16ee8"
+ },
+ {
+  "id": "gid://shopify/Product/9217327923452",
+  "handle": "franco-jeans",
+  "key": "meta_title",
+  "old": "Franco Jeans – Masculino Rasgado | Carbono",
+  "new": "Franco Jeans – Masculino Rasgado | Carbon",
+  "digest": "23b14d55ebca9d1bfa2b4865ac45f7c8a9c83cb338200903ce91e5fdc91cf4ae"
+ },
+ {
+  "id": "gid://shopify/Product/9217328021756",
+  "handle": "finnley-jeans",
+  "key": "meta_title",
+  "old": "Jeans Finnley – Masculino Rasgado | Carbono",
+  "new": "Jeans Finnley – Masculino Rasgado | Carbon",
+  "digest": "1a0041a6f2f9d4dcf7b28f7173d9f72e30030c28c999a241944f9150976b7a50"
+ },
+ {
+  "id": "gid://shopify/Product/9217328185596",
+  "handle": "colby-jeans",
+  "key": "meta_title",
+  "old": "Jeans Colby – Masculino Desgastado | Carbono",
+  "new": "Jeans Colby – Masculino Desgastado | Carbon",
+  "digest": "d28650a917cec71161cb54c82d0cb2c1be8d2648a023e1725801a054d62a4ca3"
+ },
+ {
+  "id": "gid://shopify/Product/9217328316668",
+  "handle": "jay-jeans",
+  "key": "meta_title",
+  "old": "Jeans Jay – Rasgado | Carbono",
+  "new": "Jeans Jay – Rasgado | Carbon",
+  "digest": "f3552dcb31eee84c4ed13dde70877874d562421c0de1abc4e2c2d99b8ca8a2d0"
+ },
+ {
+  "id": "gid://shopify/Product/9217328677116",
+  "handle": "odin-jeans",
+  "key": "meta_title",
+  "old": "Jeans Odin – Masculino Rasgado | Carbono",
+  "new": "Jeans Odin – Masculino Rasgado | Carbon",
+  "digest": "e33fa446d47a15a76d071465a61173523296f891f553e5f230d149ac1b5e6cdf"
+ },
+ {
+  "id": "gid://shopify/Product/9217329201404",
+  "handle": "nixon-jeans",
+  "key": "meta_title",
+  "old": "Jeans Nixon – Masculino Rasgado | Carbono",
+  "new": "Jeans Nixon – Masculino Rasgado | Carbon",
+  "digest": "b7b96963954bdb7310a1b689c17c4b4b33aaeb5970a5846c0ef83d34d0d8b853"
+ },
+ {
+  "id": "gid://shopify/Product/9217329561852",
+  "handle": "mason-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Mason – Masculina Destroyed | Carbono",
+  "new": "Calça Jeans Mason – Masculina Destroyed | Carbon",
+  "digest": "851c3e5fb58d946d1fe424b5bf4bf57c35ad5aefcba03b8f000e06a284813b37"
+ },
+ {
+  "id": "gid://shopify/Product/9217330020604",
+  "handle": "kolton-jeans",
+  "key": "meta_title",
+  "old": "Jeans Kolton – Masculino Rasgado | Carbono",
+  "new": "Jeans Kolton – Masculino Rasgado | Carbon",
+  "digest": "745ab5fb0b4ef3de0ba1b06ba3bd55698240736cefbfe50c22d9f24ec9f7f621"
+ },
+ {
+  "id": "gid://shopify/Product/9217330446588",
+  "handle": "jase-jeans",
+  "key": "meta_title",
+  "old": "Jeans Jase – Masculino Destroyed | Carbono",
+  "new": "Jeans Jase – Masculino Destroyed | Carbon",
+  "digest": "e54c3cec22b96eee8d572878068a4c28a20b621c1ae8e8f2ec38cc727694a7dd"
+ },
+ {
+  "id": "gid://shopify/Product/9217330708732",
+  "handle": "wilder-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Wilder – Masculina Estonada | Carbono",
+  "new": "Calça Jeans Wilder – Masculina Estonada | Carbon",
+  "digest": "4eb057cb759f637a8bf16b6d4a3875af2006618437d41a6a72241683c137f185"
+ },
+ {
+  "id": "gid://shopify/Product/9217330938108",
+  "handle": "soren-jeans",
+  "key": "meta_title",
+  "old": "Soren Jeans – Biker Masculino | Carbono",
+  "new": "Soren Jeans – Biker Masculino | Carbon",
+  "digest": "302e7ede1552c362f49aa1e62c2d0f15516a9f43101fdacfd81d2400c1fccba7"
+ },
+ {
+  "id": "gid://shopify/Product/9217331659004",
+  "handle": "jay-denim-shorts",
+  "key": "meta_title",
+  "old": "Bermuda Jeans Jay – Masculina Destruída | Carbono",
+  "new": "Bermuda Jeans Jay – Masculina Destruída | Carbon",
+  "digest": "75ad5ddb856dd4fa98223258ac57bc2730ba23b03016f1f39484f4aa54633df8"
+ },
+ {
+  "id": "gid://shopify/Product/9217333264636",
+  "handle": "nash-swimsuit",
+  "key": "meta_title",
+  "old": "Calção de Banho Nash – Shorts de Natação Masculino | Carbono",
+  "new": "Calção de Banho Nash – Shorts de Natação Masculino | Carbon",
+  "digest": "d20bf47c9dd2d150852befc391df0f3d8916615cacf31882ec74220965ea2387"
+ },
+ {
+  "id": "gid://shopify/Product/9217333494012",
+  "handle": "niko-swimsuit",
+  "key": "meta_title",
+  "old": "Calção de Banho Niko – Shorts de Natação Masculino | Carbono",
+  "new": "Calção de Banho Niko – Shorts de Natação Masculino | Carbon",
+  "digest": "313964ada10e0bb7350629a517ad4ada0c82bd69b3b09011705322a80fe00563"
+ },
+ {
+  "id": "gid://shopify/Product/9217333494012",
+  "handle": "niko-swimsuit",
+  "key": "meta_description",
+  "old": "Sunga Niko: Shorts de banho masculinos com listras verticais em preto e branco e fechamento por cordão.",
+  "new": "Short de banho Niko: Shorts de banho masculinos com listras verticais em preto e branco e fechamento por cordão.",
+  "digest": "031b35c359d0e70a94b12368b8b8659242a4a125872926c11f0e5e9c347e18cd"
+ },
+ {
+  "id": "gid://shopify/Product/9217333559548",
+  "handle": "men-swim-bottom-i",
+  "key": "body_html",
+  "old": "<p>Esta sunga masculina apresenta uma marcante estampa geométrica amarela sobre fundo preto. O cós elástico com cordão ajustável oferece praticidade, enquanto os dois bolsos laterais adicionam funcionalidade.</p>",
+  "new": "<p>Este short de banho masculino apresenta uma marcante estampa geométrica amarela sobre fundo preto. O cós elástico com cordão ajustável oferece praticidade, enquanto os dois bolsos laterais adicionam funcionalidade.</p>",
+  "digest": "7eff052deffab5b4f9baab23a6c90b6207e985e249b1ba5a69083ce11496702f"
+ },
+ {
+  "id": "gid://shopify/Product/9217333559548",
+  "handle": "men-swim-bottom-i",
+  "key": "meta_title",
+  "old": "Calção de Natação Masculino I – Shorts Geométricos | Carbono",
+  "new": "Calção de Natação Masculino I – Shorts Geométricos | Carbon",
+  "digest": "2a7a84898da506b0023ff437da64be2bd78eff82398ffb4f9d453b5a91743cfb"
+ },
+ {
+  "id": "gid://shopify/Product/9217333592316",
+  "handle": "teresa-jeans",
+  "key": "meta_title",
+  "old": "Jeans Teresa – Feminino Rasgado | Carbono",
+  "new": "Jeans Teresa – Feminino Rasgado | Carbon",
+  "digest": "4016f6acd791214bd4ff69301dc2aef013b2f33c1ec989554dde6b9810abb380"
+ },
+ {
+  "id": "gid://shopify/Product/9217333854460",
+  "handle": "jolie-denim-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Jeans Jolie – Feminina Destroyed | Carbono",
+  "new": "Jaqueta Jeans Jolie – Feminina Destroyed | Carbon",
+  "digest": "d164bb2a5a1ae9f67170b55027b092ee7c8dfe3f77d845f998469646c8392efe"
+ },
+ {
+  "id": "gid://shopify/Product/9217333952764",
+  "handle": "mylah-denim-vest",
+  "key": "meta_title",
+  "old": "Colete Jeans Mylah – Feminino Stonewashed | Carbono",
+  "new": "Colete Jeans Mylah – Feminino Stonewashed | Carbon",
+  "digest": "7cf17dbc22d11eccab617ed0cbb28691696fa337a6bc0d807cc51490f4d22d9a"
+ },
+ {
+  "id": "gid://shopify/Product/9217334083836",
+  "handle": "maxine-shorts",
+  "key": "meta_title",
+  "old": "Bermuda Maxine – Feminina Altura do Joelho | Carbono",
+  "new": "Bermuda Maxine – Feminina Altura do Joelho | Carbon",
+  "digest": "42e29861673b2561f3138563474897d9d2dad2e5ecfc72704849ea54b245b552"
+ },
+ {
+  "id": "gid://shopify/Product/9217334247676",
+  "handle": "lillie-shorts",
+  "key": "meta_title",
+  "old": "Shorts Lillie – Cintura Alta | Carbono",
+  "new": "Shorts Lillie – Cintura Alta | Carbon",
+  "digest": "85687a1b54ff4e58c15ac4c9f8efb7dbf8a7586cb02e51f17754ff8352505b9a"
+ },
+ {
+  "id": "gid://shopify/Product/9217334608124",
+  "handle": "faye-denim-jumpsuit",
+  "key": "meta_title",
+  "old": "Macaquinho Jeans Faye – Feminino | Carbono",
+  "new": "Macaquinho Jeans Faye – Feminino | Carbon",
+  "digest": "1a8b144f49d902157a5dd399a994c54c1c5757f36ec542c3107b926b6d1506bb"
+ },
+ {
+  "id": "gid://shopify/Product/9217334673660",
+  "handle": "top-buttoned-dress",
+  "key": "meta_title",
+  "old": "Vestido com Botões – Modelagem Ajustada Feminina | Carbono",
+  "new": "Vestido com Botões – Modelagem Ajustada Feminina | Carbon",
+  "digest": "92a4f08b9e040e7b3b26a77c711db8be6dc217fa5686511b462fedeaeb97a24f"
+ },
+ {
+  "id": "gid://shopify/Product/9217334870268",
+  "handle": "blaire-shoulder-dress",
+  "key": "meta_title",
+  "old": "Vestido Blaire Shoulder – Feminino Ombro a Ombro | Carbono",
+  "new": "Vestido Blaire Shoulder – Feminino Ombro a Ombro | Carbon",
+  "digest": "c6636c1647ab68f00fb66062c874535cab3a025fe1e414b5561ca4114d2c532e"
+ },
+ {
+  "id": "gid://shopify/Product/9217335066876",
+  "handle": "amani-bodysuit",
+  "key": "meta_title",
+  "old": "Body Amani – Manga Longa Estampado | Carbono",
+  "new": "Body Amani – Manga Longa Estampado | Carbon",
+  "digest": "bd901c7e558b1dc9a4d72efc03aa43054189762fab728dc6dba3a1fb8b5c245b"
+ },
+ {
+  "id": "gid://shopify/Product/9217335099644",
+  "handle": "laney-bodysuit",
+  "key": "meta_title",
+  "old": "Body Laney – Estampado Feminino | Carbono",
+  "new": "Body Laney – Estampado Feminino | Carbon",
+  "digest": "f92ac4982e28faf77d82de87c44a84ce81dccf15599ef89a08ea2238b09dd88f"
+ },
+ {
+  "id": "gid://shopify/Product/9217335197948",
+  "handle": "anya-bodysuit",
+  "key": "meta_title",
+  "old": "Body Anya – Geométrico | Carbono",
+  "new": "Body Anya – Geométrico | Carbon",
+  "digest": "57a62eab3fa29bdfab2776bfb35b84f009a948b87f11a004892ef6a796e47e27"
+ },
+ {
+  "id": "gid://shopify/Product/9217335492860",
+  "handle": "ciena-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto Ciena – Recorte Feminino | Carbono",
+  "new": "Vestido Curto Ciena – Recorte Feminino | Carbon",
+  "digest": "f24e1ec61e53fa4c1ec11da5d5359706bd9fefc9d92992eb173e1e1b64e3a652"
+ },
+ {
+  "id": "gid://shopify/Product/9217335558396",
+  "handle": "skyla-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto Skyla – Tomara que Caia Feminino | Carbono",
+  "new": "Vestido Curto Skyla – Tomara que Caia Feminino | Carbon",
+  "digest": "aada03b11340cb0f338ac34476e695e3c19eb70eb30d8015d6816da90cea603a"
+ },
+ {
+  "id": "gid://shopify/Product/9217335656700",
+  "handle": "rhea-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Rhea – Com Cordão Feminina | Carbono",
+  "new": "Jaqueta Rhea – Com Cordão Feminina | Carbon",
+  "digest": "193a977c15d1184513bd19a09ed7048e9ad9c43ac5e29ce40c9a029a7f329bb7"
+ },
+ {
+  "id": "gid://shopify/Product/9217335722236",
+  "handle": "ellis-bomber-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Bomber Ellis – Com Zíper Feminina | Carbono",
+  "new": "Jaqueta Bomber Ellis – Com Zíper Feminina | Carbon",
+  "digest": "31874a845a88d018336733814a2245e9742e3e9e4c75d748ee5942eab46f44ab"
+ },
+ {
+  "id": "gid://shopify/Product/9217335820540",
+  "handle": "karina-short-legging",
+  "key": "meta_title",
+  "old": "Short Legging Karina – Cintura Alta Feminina | Carbono",
+  "new": "Short Legging Karina – Cintura Alta Feminina | Carbon",
+  "digest": "897fee9325db1bcb5372001d52b561efc3337030c3025287d57d13ee46fab149"
+ },
+ {
+  "id": "gid://shopify/Product/9217336017148",
+  "handle": "mara-short-legging",
+  "key": "meta_title",
+  "old": "Shorts Legging Mara – Cintura Alta Feminino | Carbono",
+  "new": "Shorts Legging Mara – Cintura Alta Feminino | Carbon",
+  "digest": "ae66018738565ad3c2abf81f1a1fa0644578fbf5c1a563b7fb509803e6658f43"
+ },
+ {
+  "id": "gid://shopify/Product/9217336082684",
+  "handle": "vera-shorts",
+  "key": "meta_title",
+  "old": "Shorts Vera – Feminino Plissado | Carbono",
+  "new": "Shorts Vera – Feminino Plissado | Carbon",
+  "digest": "23978bf0f8dbbcb8466d5da3cbe0c1d65b7f92b8eeac06259aa2aa7ece0e5ecd"
+ },
+ {
+  "id": "gid://shopify/Product/9217336148220",
+  "handle": "alia-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts Alia – Canelado Feminino | Carbono",
+  "new": "Conjunto de Shorts Alia – Canelado Feminino | Carbon",
+  "digest": "d70f888e5f29a01c28efb9b426f359a480aba25536d271080d62296728f46e71"
+ },
+ {
+  "id": "gid://shopify/Product/9217336213756",
+  "handle": "carly-chain-shorts",
+  "key": "meta_title",
+  "old": "Shorts Carly Chain – Feminino com Barra | Carbono",
+  "new": "Shorts Carly Chain – Feminino com Barra | Carbon",
+  "digest": "5796fcf7004436b13bef004a52edf7c69b4cbb58a2ae80463c1b4d213eb1054e"
+ },
+ {
+  "id": "gid://shopify/Product/9217336312060",
+  "handle": "karina-crop-set",
+  "key": "meta_title",
+  "old": "Conjunto Cropped Karina – Feminino de Um Ombro Só | Carbono",
+  "new": "Conjunto Cropped Karina – Feminino de Um Ombro Só | Carbon",
+  "digest": "47843f7155e132ff81afa6e4e69b8e1e438a72d817b2a64d37892dc232a41095"
+ },
+ {
+  "id": "gid://shopify/Product/9217336410364",
+  "handle": "mara-crop-tank",
+  "key": "meta_title",
+  "old": "Regata Cropped Mara – Ajuste Feminino | Carbono",
+  "new": "Regata Cropped Mara – Ajuste Feminino | Carbon",
+  "digest": "d37fcd61259765699b67370acdd68fe0ea9810995fe9fcb0dd8fcf05bde37067"
+ },
+ {
+  "id": "gid://shopify/Product/9217336738044",
+  "handle": "aleena-knot-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Aleena Knot – Cropped Feminina | Carbono",
+  "new": "Camiseta Aleena Knot – Cropped Feminina | Carbon",
+  "digest": "0d3799c356b498ffa75c9e31b080620858250728c636b970d22a971789dbeb68"
+ },
+ {
+  "id": "gid://shopify/Product/9217336869116",
+  "handle": "nia-knit-cami",
+  "key": "meta_title",
+  "old": "Regata de Tricô Nia – Feminina Canelada | Carbono",
+  "new": "Regata de Tricô Nia – Feminina Canelada | Carbon",
+  "digest": "24ce074a968d912a439ea745d7e892730fd2a943a4e5d3ef5ec1f9f687680eb5"
+ },
+ {
+  "id": "gid://shopify/Product/9217337131260",
+  "handle": "leyla-crop-top",
+  "key": "meta_title",
+  "old": "Cropped Leyla – Feminino Ombro a Ombro | Carbono",
+  "new": "Cropped Leyla – Feminino Ombro a Ombro | Carbon",
+  "digest": "4f6ba543d9a4bf96d643f0831f94e86a139de3086644af6045439257537ef00e"
+ },
+ {
+  "id": "gid://shopify/Product/9217337229564",
+  "handle": "alia-crop-set",
+  "key": "meta_title",
+  "old": "Conjunto Cropped Alia – Top Feminino | Carbono",
+  "new": "Conjunto Cropped Alia – Top Feminino | Carbon",
+  "digest": "60e11bb54dbebaaee3e1ca2b0498e0d4a43d0884904404b044e92716306fa21b"
+ },
+ {
+  "id": "gid://shopify/Product/9217337295100",
+  "handle": "marlee-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped Marlee – Geométrico | Carbono",
+  "new": "Top Cropped Marlee – Geométrico | Carbon",
+  "digest": "0729ee61bae004e258c97be0adb0c594d73cb8953446ddec7567a68d2b941da0"
+ },
+ {
+  "id": "gid://shopify/Product/9217337426172",
+  "handle": "jada-skirt",
+  "key": "meta_title",
+  "old": "Saia Jada – Feminina Plissada | Carbono",
+  "new": "Saia Jada – Feminina Plissada | Carbon",
+  "digest": "fc5a33dc148d27d57f29306061ec3f30d500ed1a8b52872530f78c20d1a3f687"
+ },
+ {
+  "id": "gid://shopify/Product/9217337524476",
+  "handle": "nia-knit-skirt",
+  "key": "meta_title",
+  "old": "Saia de Tricô Nia – Midi Feminina | Carbono",
+  "new": "Saia de Tricô Nia – Midi Feminina | Carbon",
+  "digest": "fd7ad90b7bb57f9fbf4c3a738bc6da0e146c042e5e8a1bca102c572fde86a918"
+ },
+ {
+  "id": "gid://shopify/Product/9217337622780",
+  "handle": "maddison-skirt",
+  "key": "meta_title",
+  "old": "Saia Maddison – Mini Feminina | Carbono",
+  "new": "Saia Maddison – Mini Feminina | Carbon",
+  "digest": "0cf65f07e5514e4d6a5577456d755d4d4a9328d37af86c1f10799ce5433b2e77"
+ },
+ {
+  "id": "gid://shopify/Product/9217337753852",
+  "handle": "eve-pencil-skirt",
+  "key": "meta_title",
+  "old": "Saia Lápis Eve – Feminina Cintura Alta | Carbono",
+  "new": "Saia Lápis Eve – Feminina Cintura Alta | Carbon",
+  "digest": "901103266459a85f6d634923c0cfc0758d7089b07166e595cb578a814d870367"
+ },
+ {
+  "id": "gid://shopify/Product/9217337819388",
+  "handle": "noa-bodysuit",
+  "key": "meta_title",
+  "old": "Body Noa – Feminino com Tiras | Carbono",
+  "new": "Body Noa – Feminino com Tiras | Carbon",
+  "digest": "c2d39d9f52bd406bca24c13a487785ef71cb39dceff6dfe8b8c76b371ad839d0"
+ },
+ {
+  "id": "gid://shopify/Product/9217337917692",
+  "handle": "liany-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Liany – Utilitário Feminino | Carbono",
+  "new": "Macaquinho Liany – Utilitário Feminino | Carbon",
+  "digest": "e16814b7c2cf80e7039dcaa431c06a585eb9df8a37fd168be9f944bdbbe47988"
+ },
+ {
+  "id": "gid://shopify/Product/9217338278140",
+  "handle": "maisie-pant",
+  "key": "meta_title",
+  "old": "Calça Maisie – Cintura Alta Feminina | Carbono",
+  "new": "Calça Maisie – Cintura Alta Feminina | Carbon",
+  "digest": "4fa74d5b157825c0ac6d06c6cba2bac869d05e41434ded1edbbd14db6b763bae"
+ },
+ {
+  "id": "gid://shopify/Product/9217338474748",
+  "handle": "camryn-pant",
+  "key": "meta_title",
+  "old": "Calça Camryn – Feminina Cropped | Carbono",
+  "new": "Calça Camryn – Feminina Cropped | Carbon",
+  "digest": "a39875c666fd2db49b62a3825600e12e1efd56e8afe2f4e3cc51b1b36ace853a"
+ },
+ {
+  "id": "gid://shopify/Product/9217338605820",
+  "handle": "kinley-pant",
+  "key": "meta_title",
+  "old": "Calça Kinley – Feminina Reta | Carbono",
+  "new": "Calça Kinley – Feminina Reta | Carbon",
+  "digest": "f61f5fa6ebf4c8a11ce7adcafdf60bf1a9191367741e55aa53d6b910847c6e35"
+ },
+ {
+  "id": "gid://shopify/Product/9217338704124",
+  "handle": "marlee-pant",
+  "key": "meta_title",
+  "old": "Calça Marlee – Feminina Geométrica | Carbono",
+  "new": "Calça Marlee – Feminina Geométrica | Carbon",
+  "digest": "bfba479b592c418e6e0a1be8b4253a0fbf8b215c196a8b76a1331be1305219bc"
+ },
+ {
+  "id": "gid://shopify/Product/9217338933500",
+  "handle": "aylin-jeans",
+  "key": "meta_title",
+  "old": "Jeans Aylin – Feminino Destroyed | Carbono",
+  "new": "Jeans Aylin – Feminino Destroyed | Carbon",
+  "digest": "b89e3794b6a692479bc04f8962366db9b9352a00d251cff2fb599798fe4f508b"
+ },
+ {
+  "id": "gid://shopify/Product/9217339064572",
+  "handle": "anaya-jeans",
+  "key": "meta_title",
+  "old": "Anaya Jeans – Feminino Reta | Carbono",
+  "new": "Anaya Jeans – Feminino Reta | Carbon",
+  "digest": "a338ae46caeb453cb4a829996562376bef8722e3fb91a92e85cedc0488f60cfa"
+ },
+ {
+  "id": "gid://shopify/Product/9217339097340",
+  "handle": "hallie-lace-tank",
+  "key": "meta_title",
+  "old": "Regata Hallie de Renda – Feminina | Carbono",
+  "new": "Regata Hallie de Renda – Feminina | Carbon",
+  "digest": "d9d6528b62318e29e18b05e998c0f73e6c43fad96bbb551ea6a53ed87cb2b3fe"
+ },
+ {
+  "id": "gid://shopify/Product/9217339228412",
+  "handle": "demi-ribbed-tank",
+  "key": "meta_title",
+  "old": "Regata Canelada Demi – Feminina | Carbono",
+  "new": "Regata Canelada Demi – Feminina | Carbon",
+  "digest": "1504c33e5e0940c3d2cde21219d2b9be8d06ea2b556b7ea8ca5c3d0b85a0509d"
+ },
+ {
+  "id": "gid://shopify/Product/9217339293948",
+  "handle": "gia-padded-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta com Enchimento Gia – Feminina | Carbono",
+  "new": "Camiseta com Enchimento Gia – Feminina | Carbon",
+  "digest": "d1678d12b86bf070ef168ed618c49df0e8b118efa8f945490303e06a92bcd376"
+ },
+ {
+  "id": "gid://shopify/Product/9217339359484",
+  "handle": "harlow-mini-skirt",
+  "key": "meta_title",
+  "old": "Saia Curta Harlow – Envelope Feminina | Carbono",
+  "new": "Saia Curta Harlow – Envelope Feminina | Carbon",
+  "digest": "d63f7728bbe86585662ec1efb71bd6eb08b39b05caaa216c17263c6503440bda"
+ },
+ {
+  "id": "gid://shopify/Product/9217339588860",
+  "handle": "amira-bodysuit",
+  "key": "meta_title",
+  "old": "Body Amira – Feminino Canelado | Carbono",
+  "new": "Body Amira – Feminino Canelado | Carbon",
+  "digest": "e2f6cd10186650879c2f3c60e4bb97898facc13db069014e62f9a9361d0add5d"
+ },
+ {
+  "id": "gid://shopify/Product/9217339654396",
+  "handle": "ella-legging",
+  "key": "meta_title",
+  "old": "Legging Ella – Feminina Cropped | Carbono",
+  "new": "Legging Ella – Feminina Cropped | Carbon",
+  "digest": "d96202d0d0f1d98074214521466c39539b5b17dff66654461a23e0f1c1b97f8d"
+ },
+ {
+  "id": "gid://shopify/Product/9217339785468",
+  "handle": "camille-double-pleated-trouser",
+  "key": "meta_title",
+  "old": "Calça Camille com Pregas Duplas – Feminina Wide Leg | Carbono",
+  "new": "Calça Camille com Pregas Duplas – Feminina Wide Leg | Carbon",
+  "digest": "16e3ff53510293d70813d607869e37dc4f2d95d7a255cc1d4452fb2f00d25e90"
+ },
+ {
+  "id": "gid://shopify/Product/9217339851004",
+  "handle": "ryan-polo-shirt",
+  "key": "meta_title",
+  "old": "Camisa Polo Ryan – Masculina | Carbono",
+  "new": "Camisa Polo Ryan – Masculina | Carbon",
+  "digest": "814f15d22660a63a2a40eda1b3b9e89aef546fc3019510993782c4a1faa49525"
+ },
+ {
+  "id": "gid://shopify/Product/9217340080380",
+  "handle": "game-over-tank",
+  "key": "meta_title",
+  "old": "Regata Masculina Game Over – Estampa | Carbono",
+  "new": "Regata Masculina Game Over – Estampa | Carbon",
+  "digest": "a47be8bf45ad4ecb46ef499c4cee3f5bf5b3d8c25b2589a77490ac734cf24356"
+ },
+ {
+  "id": "gid://shopify/Product/9217340342524",
+  "handle": "good-things-tank",
+  "key": "meta_title",
+  "old": "Regata Good Things – Gráfico | Carbono",
+  "new": "Regata Good Things – Gráfico | Carbon",
+  "digest": "4708037afd17de00cba95a0e74d5d2a89103bea0dedc6940b743a44dfdc8bb02"
+ },
+ {
+  "id": "gid://shopify/Product/9217343848700",
+  "handle": "heal-the-world-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Heal The World – Estampada | Carbono",
+  "new": "Camiseta Heal The World – Estampada | Carbon",
+  "digest": "e972d3acfab053f4bcb76e318c4db1f56285561e0b8ab5fcc2327d86d4f99399"
+ },
+ {
+  "id": "gid://shopify/Product/9217343947004",
+  "handle": "social-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Social – Estampa | Carbono",
+  "new": "Camiseta Social – Estampa | Carbon",
+  "digest": "7b723d802f1f95f3f68cbb5b7849c4cc9c3a5b55a8cf4ba151de17089e5d21f2"
+ },
+ {
+  "id": "gid://shopify/Product/9217344209148",
+  "handle": "faith-in-yourself-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Faith In Yourself – Estampada | Carbono",
+  "new": "Camiseta Faith In Yourself – Estampada | Carbon",
+  "digest": "1c06bdff7d32ad782def9fa54077d11d80324affab94a5d10066d521560705f6"
+ },
+ {
+  "id": "gid://shopify/Product/9217344438524",
+  "handle": "revolution-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Revolution – Estampa | Carbono",
+  "new": "Camiseta Revolution – Estampa | Carbon",
+  "digest": "fe5a7f75e6d396a06d3db60502c6e7566f46c33d8edda38b2d0de82659acdbbd"
+ },
+ {
+  "id": "gid://shopify/Product/9217344602364",
+  "handle": "different-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Different – Estampa Masculina | Carbono",
+  "new": "Camiseta Different – Estampa Masculina | Carbon",
+  "digest": "029d20dc609285264b53c33a8fe2b2d330cae7d39d9d57b7bd79fe85f4a07ff1"
+ },
+ {
+  "id": "gid://shopify/Product/9217344864508",
+  "handle": "memories-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Memories – Estampa | Carbono",
+  "new": "Camiseta Memories – Estampa | Carbon",
+  "digest": "4aa79152e8ddb61ccb2493a21b42545247c304e0c5c1e138d7a86cccef463e2d"
+ },
+ {
+  "id": "gid://shopify/Product/9217344930044",
+  "handle": "don-t-touch-me-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Don't Touch Me – Estampa Masculina | Carbono",
+  "new": "Camiseta Don't Touch Me – Estampa Masculina | Carbon",
+  "digest": "447b1e5dfabea401b5c4d09dbdca84c0c9fd8dd74f999e1cdc4ee0bdd8209fcd"
+ },
+ {
+  "id": "gid://shopify/Product/9217345192188",
+  "handle": "city-view-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta City View – Estampa | Carbono",
+  "new": "Camiseta City View – Estampa | Carbon",
+  "digest": "4092bd1d6b2f862a86074182f22252e703dd14b64df402ff644553acf521eea8"
+ },
+ {
+  "id": "gid://shopify/Product/9217345552636",
+  "handle": "trace-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Trace – Estampa | Carbono",
+  "new": "Camiseta Trace – Estampa | Carbon",
+  "digest": "54d682476462377c802f3a10c1326bd51292a0361a88d4bb76f0292cc46d91c0"
+ },
+ {
+  "id": "gid://shopify/Product/9217345814780",
+  "handle": "classic-industry-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Classic Industry – Estampa Masculina | Carbono",
+  "new": "Camiseta Classic Industry – Estampa Masculina | Carbon",
+  "digest": "6f5b5b99a74fe40ad65abfd2d521eb0ddad71680002fbbe3becc50dde7f47ef4"
+ },
+ {
+  "id": "gid://shopify/Product/9217346109692",
+  "handle": "fill-in-the-blank-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Fill In The Blank – Estampa Masculina | Carbono",
+  "new": "Camiseta Fill In The Blank – Estampa Masculina | Carbon",
+  "digest": "41fa52360e0fdf1e972c34b19661eba9d496cb692f99668b515424f101478c7c"
+ },
+ {
+  "id": "gid://shopify/Product/9217346240764",
+  "handle": "shadow-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Shadow – Estampa Masculina | Carbono",
+  "new": "Camiseta Shadow – Estampa Masculina | Carbon",
+  "digest": "c3c496f11517c185c151263c626b270b525ae0e65ab7abe15d46be81f2536f6e"
+ },
+ {
+  "id": "gid://shopify/Product/9217347027196",
+  "handle": "my-rules-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta My Rules – Estampada | Carbono",
+  "new": "Camiseta My Rules – Estampada | Carbon",
+  "digest": "21cfeb1929ebbe4a8615176c87a31be9e88a34f4263739e47bd1054213d45e63"
+ },
+ {
+  "id": "gid://shopify/Product/9217347813628",
+  "handle": "mind-power-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Mind Power – Estampa | Carbono",
+  "new": "Camiseta Mind Power – Estampa | Carbon",
+  "digest": "39d11df5d4e8813747716e8675fb9546cf38dc9682a48e2ab9bdc4fa8010e930"
+ },
+ {
+  "id": "gid://shopify/Product/9217347944700",
+  "handle": "teddyator-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Teddyator – Estampada | Carbono",
+  "new": "Camiseta Teddyator – Estampada | Carbon",
+  "digest": "04848ffb7eff177c9f9c2c32696fe6c0bf6bdef204c52c9015c6a2cc9833ff6f"
+ },
+ {
+  "id": "gid://shopify/Product/9217348108540",
+  "handle": "choices-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Choices – Gola Careca Masculina | Carbono",
+  "new": "Camiseta Choices – Gola Careca Masculina | Carbon",
+  "digest": "1f156f5f1a19f61bd5383fbbce179f4dd93e3746a26bc232603be1eb6196b262"
+ },
+ {
+  "id": "gid://shopify/Product/9217348239612",
+  "handle": "painted-king-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Painted King – Estampa | Carbono",
+  "new": "Camiseta Painted King – Estampa | Carbon",
+  "digest": "7ae89fcf885e73ebddd43337ec1bcb176a46f46356b997dc01ddadd6dc4932ff"
+ },
+ {
+  "id": "gid://shopify/Product/9217348403452",
+  "handle": "choose-your-future-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Choose Your Future – Estampa | Carbono",
+  "new": "Camiseta Choose Your Future – Estampa | Carbon",
+  "digest": "d744ea7f35ac6ddc5e7b1b658a4d26a3f8afc085a7bc790582f6d7b1f2809761"
+ },
+ {
+  "id": "gid://shopify/Product/9217349779708",
+  "handle": "dax-jeans",
+  "key": "meta_title",
+  "old": "Dax Jeans – Masculino Lavado | Carbono",
+  "new": "Dax Jeans – Masculino Lavado | Carbon",
+  "digest": "1cbb56a1d18e651d8e8b1ac3472bb031a3160b18b830f2b35853ef8749265b1d"
+ },
+ {
+  "id": "gid://shopify/Product/9217349812476",
+  "handle": "jogger-jeans",
+  "key": "meta_title",
+  "old": "Calça Jogger Jeans – Estilo Destroyed | Carbono",
+  "new": "Calça Jogger Jeans – Estilo Destroyed | Carbon",
+  "digest": "05c7807598e80c348607137c2649fa1f7d633a89ab9276a503c3d087b52c19eb"
+ },
+ {
+  "id": "gid://shopify/Product/9217349943548",
+  "handle": "julian-jeans",
+  "key": "meta_title",
+  "old": "Julian Jeans – Masculino Destroyed | Carbono",
+  "new": "Julian Jeans – Masculino Destroyed | Carbon",
+  "digest": "75f1c566cdfa470b4b4785ad0b0410ca74c51d086a7920dd24d63cb820f2788b"
+ },
+ {
+  "id": "gid://shopify/Product/9217350271228",
+  "handle": "esteban-jeans",
+  "key": "meta_title",
+  "old": "Jeans Esteban – Masculino Distressed | Carbono",
+  "new": "Jeans Esteban – Masculino Distressed | Carbon",
+  "digest": "2508e03ca4b94b6ff53da7899e67cfa9ae32f66a6999b96e36ea802c576b63f3"
+ },
+ {
+  "id": "gid://shopify/Product/9217350729980",
+  "handle": "archer-overall",
+  "key": "meta_title",
+  "old": "Archer Overall – Masculino Preto | Carbono",
+  "new": "Archer Overall – Masculino Preto | Carbon",
+  "digest": "661c4ebaef9813bb6d75ecd92404a36fccad410da1bd7afdcc9866cdd573cf73"
+ },
+ {
+  "id": "gid://shopify/Product/9217350795516",
+  "handle": "wayne-overall",
+  "key": "meta_title",
+  "old": "Jardineira Masculina Wayne – Carbono",
+  "new": "Jardineira Masculina Wayne | Carbon",
+  "digest": "e3f91099fc1557d3e59a4108f9b437f8d18c8f0a911dc13bf412f89babd4acf7"
+ },
+ {
+  "id": "gid://shopify/Product/9217351090428",
+  "handle": "trent-denim-shorts",
+  "key": "body_html",
+  "old": "<p>O Short Jeans Trent em lavagem cinza é focado nos detalhes. Com rasgos e fios desfiados na parte frontal, este short apresenta um design clássico de cinco bolsos e fechamento por botão e zíper. Passantes para cinto completam o visual.</p><p>Combine com uma camiseta estampada e tênis para um estilo descontraído.</p>",
+  "new": "<p>O Shorts Jeans Trent em lavagem cinza é focado nos detalhes. Com rasgos e fios desfiados na parte frontal, este short apresenta um design clássico de cinco bolsos e fechamento por botão e zíper. Passantes para cinto completam o visual.</p><p>Combine com uma camiseta estampada e tênis para um estilo descontraído.</p>",
+  "digest": "77f5b59d766a890dd8ecb83abb994ca7fedf00653625d0ab10d864edf12a6095"
+ },
+ {
+  "id": "gid://shopify/Product/9217351090428",
+  "handle": "trent-denim-shorts",
+  "key": "meta_title",
+  "old": "Shorts Jeans Trent – Masculino Rasgado | Carbono",
+  "new": "Shorts Jeans Trent – Masculino Rasgado | Carbon",
+  "digest": "855c2b2c08354c9b02a0fd968b3ade33461dc18a7fa837186a3951cf1ccbfe40"
+ },
+ {
+  "id": "gid://shopify/Product/9217351450876",
+  "handle": "jude-denim-shorts",
+  "key": "meta_title",
+  "old": "Shorts Jeans Jude – Masculino Destruído | Carbono",
+  "new": "Shorts Jeans Jude – Masculino Destruído | Carbon",
+  "digest": "25a2356ff0ff0cb9772ecfa813cd6bc659937a278e25e1875d1be105f2c0458d"
+ },
+ {
+  "id": "gid://shopify/Product/9217351745788",
+  "handle": "alex-denim-shorts",
+  "key": "meta_title",
+  "old": "Shorts Jeans Alex – Masculino Destruído | Carbono",
+  "new": "Shorts Jeans Alex – Masculino Destruído | Carbon",
+  "digest": "c121f6fd47c6893c1160d1ab47c3ef621592c89730294774d79c674ab3c6d00e"
+ },
+ {
+  "id": "gid://shopify/Product/9217352696060",
+  "handle": "blind-frame-bottom",
+  "key": "meta_title",
+  "old": "Parte Inferior da Armação Cega – Estampa Masculina | Carbono",
+  "new": "Parte Inferior da Armação Cega – Estampa Masculina | Carbon",
+  "digest": "ecb53a5c9f4bcf7f98a417f3fba128c416965eb23e095d23a1b3c74e851e8542"
+ },
+ {
+  "id": "gid://shopify/Product/9217353941244",
+  "handle": "furry-slippers",
+  "key": "meta_title",
+  "old": "Pantufas Peluciadas – Feminina Slip-On | Carbono",
+  "new": "Pantufas Peluciadas – Feminina Slip-On | Carbon",
+  "digest": "34d86d6b29e3074e96822af2723ae0ee99f80b77e6395cf32792fcb9a8e90ae8"
+ },
+ {
+  "id": "gid://shopify/Product/9217354105084",
+  "handle": "vera-suit-bottom",
+  "key": "meta_title",
+  "old": "Calcinha de Biquíni Vera – Com Cinto Feminina | Carbono",
+  "new": "Calcinha de Biquíni Vera – Com Cinto Feminina | Carbon",
+  "digest": "0dd3189e611a4df0155333fa7ae288d7f08dd47c35bdd34921e8571d303460e9"
+ },
+ {
+  "id": "gid://shopify/Product/9217355514108",
+  "handle": "rock-heels",
+  "key": "meta_title",
+  "old": "Salto Rock – Stiletto Feminino | Carbono",
+  "new": "Salto Rock – Stiletto Feminino | Carbon",
+  "digest": "831d22742a0acbd8c5ae43aea5b1c1ecc81f0aa51632b587d6c21d21657fba36"
+ },
+ {
+  "id": "gid://shopify/Product/9217355579644",
+  "handle": "diamond-heels",
+  "key": "meta_title",
+  "old": "Salto Diamante – Feminino Aberto | Carbono",
+  "new": "Salto Diamante – Feminino Aberto | Carbon",
+  "digest": "8b5d115a35ff36162e0401119bc080401e27201570ae0eee3eb81a8738806890"
+ },
+ {
+  "id": "gid://shopify/Product/9217355677948",
+  "handle": "skin-heels",
+  "key": "meta_title",
+  "old": "Sandálias de Salto Skin – Tiras Femininas | Carbono",
+  "new": "Sandálias de Salto Skin – Tiras Femininas | Carbon",
+  "digest": "196fb108c35bfa62e7fc9c9af09410813b71ce6825d00528a699b1da04b221ff"
+ },
+ {
+  "id": "gid://shopify/Product/9217355710716",
+  "handle": "classic-heels",
+  "key": "meta_title",
+  "old": "Scarpin Clássico – Salto Agulha Feminino | Carbono",
+  "new": "Scarpin Clássico – Salto Agulha Feminino | Carbon",
+  "digest": "c430f64975c5c97335bb55097da3f14153f1dcfe124190041e3579da1792bfe6"
+ },
+ {
+  "id": "gid://shopify/Product/9217355776252",
+  "handle": "star-mid-shoes",
+  "key": "meta_title",
+  "old": "Tênis Star Mid – Cano Médio Estampado | Carbono",
+  "new": "Tênis Star Mid – Cano Médio Estampado | Carbon",
+  "digest": "d34c3f7f8719e93f5d2e78cabec3aff508d8fa4937d8aef76a76a6f100152c87"
+ },
+ {
+  "id": "gid://shopify/Product/9217356005628",
+  "handle": "queen-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Queen – Feminino | Carbono",
+  "new": "Tênis Queen – Feminino | Carbon",
+  "digest": "2ef4cd4274e76eac0a0be00691bd343248fbf330e238b03a859e6330bac6e28f"
+ },
+ {
+  "id": "gid://shopify/Product/9217356169468",
+  "handle": "camel-flush-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Camel Flush – Cano Baixo Masculino | Carbono",
+  "new": "Tênis Camel Flush – Cano Baixo Masculino | Carbon",
+  "digest": "0f5d4b67d90a817f026256ba963a94cfa6c21e3def2137329e64a5f3ad7190f4"
+ },
+ {
+  "id": "gid://shopify/Product/9217356202236",
+  "handle": "johnny-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Johnny – Cano Baixo Masculino | Carbono",
+  "new": "Tênis Johnny – Cano Baixo Masculino | Carbon",
+  "digest": "4c6c1fdb776ee3335f66fcaa855ae9c0ad8974b0a2dc58a1b7daa8e1a908b3b7"
+ },
+ {
+  "id": "gid://shopify/Product/9217356267772",
+  "handle": "logo-sneakers",
+  "key": "meta_title",
+  "old": "Tênis com Logo – Masculino Cano Baixo | Carbono",
+  "new": "Tênis com Logo – Masculino Cano Baixo | Carbon",
+  "digest": "ecf13a068bcc5d1f7ed6a2de3d4d3c5b9638330d68f1a3a49d785c8228ae7cf0"
+ },
+ {
+  "id": "gid://shopify/Product/9217356333308",
+  "handle": "classic-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Clássicos – Cano Baixo Masculino | Carbono",
+  "new": "Tênis Clássicos – Cano Baixo Masculino | Carbon",
+  "digest": "cb39fa1afd224a0e40d5cb66873572abb081cef71bc8cbe2d26843c95ebbce09"
+ },
+ {
+  "id": "gid://shopify/Product/9217356464380",
+  "handle": "zipper-sneakers",
+  "key": "meta_title",
+  "old": "Tênis com Zíper – Masculino Cano Baixo | Carbono",
+  "new": "Tênis com Zíper – Masculino Cano Baixo | Carbon",
+  "digest": "9300e6cce3c2224f2353ce271f613857d3c39741477b7beacd121ef19f861b51"
+ },
+ {
+  "id": "gid://shopify/Product/9217356562684",
+  "handle": "shoes-ah",
+  "key": "meta_title",
+  "old": "Tênis AH – Masculino Cano Baixo | Carbono",
+  "new": "Tênis AH – Masculino Cano Baixo | Carbon",
+  "digest": "70fee9c79d8d5b7bfd6145beef792b50e8c35b69830f65c9c903383921d81061"
+ },
+ {
+  "id": "gid://shopify/Product/9217356628220",
+  "handle": "jeans-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Jeans – Masculino com Cadarço | Carbono",
+  "new": "Tênis Jeans – Masculino com Cadarço | Carbon",
+  "digest": "21501cb781deca1c42f39c4d786b547e4d150c1be82cbb261fdad0b8c0c880a1"
+ },
+ {
+  "id": "gid://shopify/Product/9217356890364",
+  "handle": "shoes-ak",
+  "key": "meta_title",
+  "old": "Tênis AK – Masculino Cano Baixo | Carbono",
+  "new": "Tênis AK – Masculino Cano Baixo | Carbon",
+  "digest": "e6785f5f421966b530c18e046c4047d8d947f21625d79a424f0c47d54e444ec2"
+ },
+ {
+  "id": "gid://shopify/Product/9217356988668",
+  "handle": "off-sneakers",
+  "key": "meta_title",
+  "old": "Tênis Off – Masculino Cano Baixo | Carbono",
+  "new": "Tênis Off – Masculino Cano Baixo | Carbon",
+  "digest": "dec5d86b331cb33bb69367cd8e68f3ea39131628d93318c39adc504e05e3dfe3"
+ },
+ {
+  "id": "gid://shopify/Product/9217357185276",
+  "handle": "adjustable-face-mask",
+  "key": "meta_title",
+  "old": "Máscara Facial Ajustável – Masculina Preta | Carbono",
+  "new": "Máscara Facial Ajustável – Masculina Preta | Carbon",
+  "digest": "ad932d031532c13dc1e2bf56b1d015e78e42e34bf9a40c78928413cc027db340"
+ },
+ {
+  "id": "gid://shopify/Product/9217359741180",
+  "handle": "don-t-care-mesh-hat",
+  "key": "meta_title",
+  "old": "Boné de Tela Don't Care – Aba Curva | Carbono",
+  "new": "Boné de Tela Don't Care – Aba Curva | Carbon",
+  "digest": "c42951c1d35a61c7954cbacae5319c5a720782d2b2101aad99d26d5660c4c645"
+ },
+ {
+  "id": "gid://shopify/Product/9217359806716",
+  "handle": "imagin-hat",
+  "key": "meta_title",
+  "old": "Imagin Hat – Boné Gráfico | Carbono",
+  "new": "Imagin Hat – Boné Gráfico | Carbon",
+  "digest": "fbe05e47c97d1a9bf4d2f4d2f38b0a046383d110b2e104ced335479e88c388fe"
+ },
+ {
+  "id": "gid://shopify/Product/9217360101628",
+  "handle": "summer-flip-flops",
+  "key": "meta_title",
+  "old": "Chinelos de Verão – Slide Masculino | Carbono",
+  "new": "Chinelos de Verão – Slide Masculino | Carbon",
+  "digest": "9f7a18801d9042cbb77edc491c98fdc11a5fad870071a531c5a49ceab2584c23"
+ },
+ {
+  "id": "gid://shopify/Product/9217360232700",
+  "handle": "vera-blazer",
+  "key": "meta_title",
+  "old": "Blazer Vera – Feminino com Cinto | Carbono",
+  "new": "Blazer Vera – Feminino com Cinto | Carbon",
+  "digest": "8aa0fa0ef3956e587f8df9358d077e8cf64d61dff86c960aba6475b221857f2a"
+ },
+ {
+  "id": "gid://shopify/Product/9217360298236",
+  "handle": "zuri-knit-cami-top",
+  "key": "meta_title",
+  "old": "Regata de Tricô Zuri – Biquíni Feminino | Carbono",
+  "new": "Regata de Tricô Zuri – Biquíni Feminino | Carbon",
+  "digest": "b4674ed570dd6cdffe990c91a4bf6f4ff42ca376d23e35dedce42693eee0c184"
+ },
+ {
+  "id": "gid://shopify/Product/9217360789756",
+  "handle": "bracelet-z",
+  "key": "meta_title",
+  "old": "Pulseira Z – Envolvente Masculina | Carbono",
+  "new": "Pulseira Z – Envolvente Masculina | Carbon",
+  "digest": "c7d6d5166a61239f7b946da93c9f126aedf4adf59b5fcd1bf2e5fc19328577bb"
+ },
+ {
+  "id": "gid://shopify/Product/9217361019132",
+  "handle": "freya-pant",
+  "key": "meta_title",
+  "old": "Calça Freya – Feminina Cropped | Carbono",
+  "new": "Calça Freya – Feminina Cropped | Carbon",
+  "digest": "0d1870f80f92f481ec4bc3400d33cfd5a891a11df4b39eb83a45e8e58f39bb49"
+ },
+ {
+  "id": "gid://shopify/Product/9217361084668",
+  "handle": "nora-flare-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Nora Flare – Feminino | Carbono",
+  "new": "Calça Jeans Nora Flare – Feminino | Carbon",
+  "digest": "2ed21db59757c621bf78fbab2ca170ebb534b24182573401039da5a0d7b7168b"
+ },
+ {
+  "id": "gid://shopify/Product/9217361182972",
+  "handle": "ada-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped Ada – Ombro a Ombro | Carbono",
+  "new": "Top Cropped Ada – Ombro a Ombro | Carbon",
+  "digest": "7363f05da0fe694a63d69168471faee307ae5871dafb7c5b31be796f31f49ad4"
+ },
+ {
+  "id": "gid://shopify/Product/9217361314044",
+  "handle": "callie-ruched-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto Franzido Callie – Feminino | Carbono",
+  "new": "Vestido Curto Franzido Callie – Feminino | Carbon",
+  "digest": "1a661cbb006495f32a8c257f55e503b1f8bf649bbfd964c002f478fb9f33ef1f"
+ },
+ {
+  "id": "gid://shopify/Product/9217361477884",
+  "handle": "bailey-crop-tank",
+  "key": "meta_title",
+  "old": "Regata Cropped Bailey – Feminina | Carbono",
+  "new": "Regata Cropped Bailey – Feminina | Carbon",
+  "digest": "2da783aed6f443fb099db22870a4145cd6038ddfe16d33d0898221c34d87343f"
+ },
+ {
+  "id": "gid://shopify/Product/9217361641724",
+  "handle": "eden-one-button-jacket",
+  "key": "meta_title",
+  "old": "Blazer Eden de Um Botão – Feminino Ajustado | Carbono",
+  "new": "Blazer Eden de Um Botão – Feminino Ajustado | Carbon",
+  "digest": "b85d58f6cc7901e7e8a45fa3b6f3a86a1c653d95865593e5b683ede06460d350"
+ },
+ {
+  "id": "gid://shopify/Product/9217362264316",
+  "handle": "ronald-pants",
+  "key": "meta_title",
+  "old": "Calça Ronald – Cargo Masculina | Carbono",
+  "new": "Calça Ronald – Cargo Masculina | Carbon",
+  "digest": "16b0cf6e9ce021c1ce2bd5395d2b767bf9dd9dc8cfc4b79c71ff061b4763e46a"
+ },
+ {
+  "id": "gid://shopify/Product/9217362428156",
+  "handle": "pablo-pants",
+  "key": "meta_title",
+  "old": "Calça Pablo – Masculina Noite | Carbono",
+  "new": "Calça Pablo – Masculina Noite | Carbon",
+  "digest": "216ad2f60a7febabe0b7ca49a2d241514fc58211b730fd8a4e5dad5e46e9a2e8"
+ },
+ {
+  "id": "gid://shopify/Product/9217362559228",
+  "handle": "didi-dress",
+  "key": "meta_title",
+  "old": "Vestido Didi – Longo Feminino | Carbono",
+  "new": "Vestido Didi – Longo Feminino | Carbon",
+  "digest": "2cc0811dfa670399afb014376e04d917aa131fef7ecc510b67317ea91c2fe96f"
+ },
+ {
+  "id": "gid://shopify/Product/9217362657532",
+  "handle": "daria-dress",
+  "key": "meta_title",
+  "old": "Vestido Daria – Mini Feminino | Carbono",
+  "new": "Vestido Daria – Mini Feminino | Carbon",
+  "digest": "c89a1c6926fb00d83d1caaab10ca771f2f2825d4c425a3a47855d5d0fcb39b17"
+ },
+ {
+  "id": "gid://shopify/Product/9217362723068",
+  "handle": "2-pieces-rorri-dress",
+  "key": "meta_title",
+  "old": "Vestido Rorri 2 Peças – Maxi Feminino | Carbono",
+  "new": "Vestido Rorri 2 Peças – Maxi Feminino | Carbon",
+  "digest": "d0a2a94de591634b58518d6f538fe5d26cc4aecc1650c6af714fc043cb5920b4"
+ },
+ {
+  "id": "gid://shopify/Product/9217362755836",
+  "handle": "amanda-dress",
+  "key": "meta_title",
+  "old": "Vestido Amanda – Mini Feminino | Carbono",
+  "new": "Vestido Amanda – Mini Feminino | Carbon",
+  "digest": "5fa7f38e578e2549d83a8cc785d28aa559cc498319b86fdf16aae68a39bdb8a5"
+ },
+ {
+  "id": "gid://shopify/Product/9217362919676",
+  "handle": "cathy-dress",
+  "key": "meta_title",
+  "old": "Vestido Cathy – Feminino Ombro a Ombro | Carbono",
+  "new": "Vestido Cathy – Feminino Ombro a Ombro | Carbon",
+  "digest": "fa682e4f19f698e4ab1283d83ca2253760d60fe66ec491c724a057f4a74875a1"
+ },
+ {
+  "id": "gid://shopify/Product/9217363050748",
+  "handle": "renne-dress",
+  "key": "meta_title",
+  "old": "Vestido Renne – Um Ombro Só Feminino | Carbono",
+  "new": "Vestido Renne – Um Ombro Só Feminino | Carbon",
+  "digest": "77da72712e9f10b6c936b37c6de8bdc704ff1f9c9fabfc9751694c1985f8721b"
+ },
+ {
+  "id": "gid://shopify/Product/9217363181820",
+  "handle": "norma-dress",
+  "key": "meta_title",
+  "old": "Vestido Norma – Mini Feminino | Carbono",
+  "new": "Vestido Norma – Mini Feminino | Carbon",
+  "digest": "0acfa00b29e380f3eda0b903eee0c02880358852aba21df5adcb1f1eefd79e5e"
+ },
+ {
+  "id": "gid://shopify/Product/9217363214588",
+  "handle": "riki-dress",
+  "key": "meta_title",
+  "old": "Vestido Riki – Mini Feminino | Carbono",
+  "new": "Vestido Riki – Mini Feminino | Carbon",
+  "digest": "3eb80ae121742b045c0869ea968c2f9132cf8650532b5b122bc85e74ae0370d2"
+ },
+ {
+  "id": "gid://shopify/Product/9217363280124",
+  "handle": "kelly-dress",
+  "key": "meta_title",
+  "old": "Vestido Kelly – Feminino Ombro a Ombro | Carbono",
+  "new": "Vestido Kelly – Feminino Ombro a Ombro | Carbon",
+  "digest": "6d5de59408c5b4952d62d59340e07f69b9839f44dd792ce7f8da2671bd1f0cf1"
+ },
+ {
+  "id": "gid://shopify/Product/9217363312892",
+  "handle": "chloe-dress",
+  "key": "meta_title",
+  "old": "Vestido Chloe – Mini Feminino | Carbono",
+  "new": "Vestido Chloe – Mini Feminino | Carbon",
+  "digest": "6ad1edd5fa0ba1b33d633e9eb851c4d2d3d83ac0fc70809fb8baf2be49feadb1"
+ },
+ {
+  "id": "gid://shopify/Product/9217363378428",
+  "handle": "isabel-dress",
+  "key": "meta_title",
+  "old": "Vestido Isabel – Mini Feminino | Carbono",
+  "new": "Vestido Isabel – Mini Feminino | Carbon",
+  "digest": "23170a4892b4aa81d6a4bb71e51eae33faa58e8e54ed51917da8a7195cc575ad"
+ },
+ {
+  "id": "gid://shopify/Product/9217363443964",
+  "handle": "martha-dress",
+  "key": "meta_title",
+  "old": "Vestido Martha – Um Ombro Só | Carbono",
+  "new": "Vestido Martha – Um Ombro Só | Carbon",
+  "digest": "dc3c3aae2b17d2afe0d65399cd5d350368c2d2fa005657f23c3db191dc751502"
+ },
+ {
+  "id": "gid://shopify/Product/9217363509500",
+  "handle": "lee-dress",
+  "key": "meta_title",
+  "old": "Vestido Lee – Recorte Feminino | Carbono",
+  "new": "Vestido Lee – Recorte Feminino | Carbon",
+  "digest": "49081ca9c1a6b86c177174fef53d3d7a1063f8864e31fb290cf1f595a98ccbe1"
+ },
+ {
+  "id": "gid://shopify/Product/9217363673340",
+  "handle": "olivia-dress",
+  "key": "meta_title",
+  "old": "Vestido Olivia – Floral Feminino | Carbono",
+  "new": "Vestido Olivia – Floral Feminino | Carbon",
+  "digest": "9b85a74c4c28228c1c7deaa8ffca1d0e513abbf7ae257080921de5c2e15d21a7"
+ },
+ {
+  "id": "gid://shopify/Product/9217363738876",
+  "handle": "emma-dress",
+  "key": "meta_title",
+  "old": "Vestido Emma – Um ombro só feminino | Carbono",
+  "new": "Vestido Emma – Um ombro só feminino | Carbon",
+  "digest": "f956cf47f9c3b0f09b4302e88367a6669cc97db66526d935d8dc11d1f9e9a2a7"
+ },
+ {
+  "id": "gid://shopify/Product/9217363771644",
+  "handle": "mia-dress",
+  "key": "meta_title",
+  "old": "Vestido Mia – Feminino Curto | Carbono",
+  "new": "Vestido Mia – Feminino Curto | Carbon",
+  "digest": "2ac1e093d4f34b5a3e3ccfffba8b6d6a6e3aa30b7324508a3506b78342dec665"
+ },
+ {
+  "id": "gid://shopify/Product/9217363837180",
+  "handle": "natalie-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Natalie – Cropped Feminino | Carbono",
+  "new": "Conjunto Natalie – Cropped Feminino | Carbon",
+  "digest": "852b62b57c71ea7d9e9dafa8f92ef6649d1f2ee650fccd1f96787c096c46ade6"
+ },
+ {
+  "id": "gid://shopify/Product/9217363935484",
+  "handle": "chris-maxi-skirt",
+  "key": "meta_title",
+  "old": "Saia Longa Chris – Fenda Alta Feminina | Carbono",
+  "new": "Saia Longa Chris – Fenda Alta Feminina | Carbon",
+  "digest": "81115877b911555523130ccba1c29243b21d69c01442ff0ba16c1abb994b62e2"
+ },
+ {
+  "id": "gid://shopify/Product/9217364001020",
+  "handle": "rose-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Rose – Estampa Feminina | Carbono",
+  "new": "Macaquinho Rose – Estampa Feminina | Carbon",
+  "digest": "58156e211b9aaefa360578fdbd99a552e55c4e565b007e228d084af97792cf8d"
+ },
+ {
+  "id": "gid://shopify/Product/9217364066556",
+  "handle": "queen-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Queen – Estampado Feminino | Carbono",
+  "new": "Macaquinho Queen – Estampado Feminino | Carbon",
+  "digest": "493482ba3602029d7db7dd24f3c44f7cb3b718269db789e6d9f9d1c68ee918d6"
+ },
+ {
+  "id": "gid://shopify/Product/9217364164860",
+  "handle": "cindy-bodysuit",
+  "key": "meta_title",
+  "old": "Body Cindy – Transparente Feminino | Carbono",
+  "new": "Body Cindy – Transparente Feminino | Carbon",
+  "digest": "01baf1c505aee7341ca4f51e328583e1ee1ae854f97c0b4157868e978d3b74da"
+ },
+ {
+  "id": "gid://shopify/Product/9217364263164",
+  "handle": "natalie-bottom-set",
+  "key": "meta_title",
+  "old": "Conjunto Natalie – Calça Jogger Feminina | Carbono",
+  "new": "Conjunto Natalie – Calça Jogger Feminina | Carbon",
+  "digest": "498b601e08abe6666880c832f045b20f72c6e6515c07fe34409df936cc9acbeb"
+ },
+ {
+  "id": "gid://shopify/Product/9217364394236",
+  "handle": "tommy-shorts",
+  "key": "meta_title",
+  "old": "Bermuda Cargo Masculina Tommy – Carbono",
+  "new": "Bermuda Cargo Masculina Tommy | Carbon",
+  "digest": "e63013e88886cdf40a34699fb4fe3169dee33ed76f553a90aece911d53b73655"
+ },
+ {
+  "id": "gid://shopify/Product/9217364656380",
+  "handle": "james-pants",
+  "key": "meta_title",
+  "old": "Calça James – Detalhe de Corrente Masculina | Carbono",
+  "new": "Calça James – Detalhe de Corrente Masculina | Carbon",
+  "digest": "73738fb1d79d2af811a230ba0dce484f91905815e111299332a69c0547b50115"
+ },
+ {
+  "id": "gid://shopify/Product/9217364721916",
+  "handle": "new-york-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta New York – Estampada | Carbono",
+  "new": "Camiseta New York – Estampada | Carbon",
+  "digest": "9320585b0b2fa0daacdd60bd6a068fcb1fc0ae7b5b15a87e9d636e97f06e9cce"
+ },
+ {
+  "id": "gid://shopify/Product/9217367015676",
+  "handle": "burning-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Burning – Estampada | Carbono",
+  "new": "Camiseta Burning – Estampada | Carbon",
+  "digest": "4791b3fdbef714e70f7814cbcca38eedfe460f27b14aed9d28ca19843dee3c7b"
+ },
+ {
+  "id": "gid://shopify/Product/9217370325244",
+  "handle": "more-love-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta More Love – Estampa | Carbono",
+  "new": "Camiseta More Love – Estampa | Carbon",
+  "digest": "a60f58f21b382f4cd3d1f8273978839545523267c74f5bdffc540c487e5ed100"
+ },
+ {
+  "id": "gid://shopify/Product/9217391132924",
+  "handle": "l-a-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped L.A. – Estampa Feminina | Carbono",
+  "new": "Top Cropped L.A. – Estampa Feminina | Carbon",
+  "digest": "8d3789c136c478684c63d17d83f3d0e92da7ddef737ac0cea43ab695b9f55094"
+ },
+ {
+  "id": "gid://shopify/Product/9217393918204",
+  "handle": "luna-tank-top",
+  "key": "meta_title",
+  "old": "Regata Luna – Cropped Feminino | Carbono",
+  "new": "Regata Luna – Cropped Feminino | Carbon",
+  "digest": "72c3b52da83fee151bec81edefdf4b302e0f7e14972e74ef2d95e882b602386a"
+ },
+ {
+  "id": "gid://shopify/Product/9217397489916",
+  "handle": "nova-string-top",
+  "key": "meta_title",
+  "old": "Top Nova String – Cropped Feminino | Carbono",
+  "new": "Top Nova String – Cropped Feminino | Carbon",
+  "digest": "73753e52510a0dc2986cd468b41fe6699b719631805e7120132799746aa8be00"
+ },
+ {
+  "id": "gid://shopify/Product/9217399849212",
+  "handle": "orlando-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped Orlando – Estampado | Carbono",
+  "new": "Top Cropped Orlando – Estampado | Carbon",
+  "digest": "f714c8edbfa99e19d8b0e6fef20078654edb58bfcd0330164a6ffc5424ab95ca"
+ },
+ {
+  "id": "gid://shopify/Product/9217401880828",
+  "handle": "leah-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped Leah – Feminino | Carbono",
+  "new": "Top Cropped Leah – Feminino | Carbon",
+  "digest": "178f866ef033bd410515a1933aaa0263058305ac84173e62a9255da3b49719a5"
+ },
+ {
+  "id": "gid://shopify/Product/9217403126012",
+  "handle": "lucy-side-string-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped com Amarração Lateral Lucy – Feminino Franzido | Carbono",
+  "new": "Top Cropped com Amarração Lateral Lucy – Feminino Franzido | Carbon",
+  "digest": "4a5b1015681a1e76625f2036a30a7016b1f2f64878064b34d2c4be66cdb104b7"
+ },
+ {
+  "id": "gid://shopify/Product/9217408172284",
+  "handle": "maya-padded-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped com Bojo Maya – Feminino | Carbono",
+  "new": "Top Cropped com Bojo Maya – Feminino | Carbon",
+  "digest": "05605e2238d6dfdb65a7846d43c693e6ce76993f1a66a39d8bcfac9eb1b7ac04"
+ },
+ {
+  "id": "gid://shopify/Product/9217410793724",
+  "handle": "yoga-crop-tank-top",
+  "key": "meta_title",
+  "old": "Regata Cropped de Yoga – Feminina Canelada | Carbono",
+  "new": "Regata Cropped de Yoga – Feminina Canelada | Carbon",
+  "digest": "615d9b81562125bfaebd7819743276d5e73e3521cc833754d57091da96a8d9b6"
+ },
+ {
+  "id": "gid://shopify/Product/9217415610620",
+  "handle": "sirena-dress",
+  "key": "meta_title",
+  "old": "Vestido Sirena – Maxi Feminino | Carbono",
+  "new": "Vestido Sirena – Maxi Feminino | Carbon",
+  "digest": "23865d6cae83a987b2852d496413fced4cabc2a9ca6b37ad33b8adba39d0cc30"
+ },
+ {
+  "id": "gid://shopify/Product/9217416790268",
+  "handle": "cutout-midi-dress",
+  "key": "meta_title",
+  "old": "Vestido Midi com Recortes – Feminino Sem Mangas | Carbono",
+  "new": "Vestido Midi com Recortes – Feminino Sem Mangas | Carbon",
+  "digest": "c34483384bc24d74458cff9d1814427c9b4f285eacf42b47facfd2b8c784f677"
+ },
+ {
+  "id": "gid://shopify/Product/9217418068220",
+  "handle": "midi-dress",
+  "key": "meta_title",
+  "old": "Vestido Midi – Feminino de Alças | Carbono",
+  "new": "Vestido Midi – Feminino de Alças | Carbon",
+  "digest": "d87d25746395c40783d6531d8dbb9c11a7c105b0f040006f495de91084123332"
+ },
+ {
+  "id": "gid://shopify/Product/9217419215100",
+  "handle": "cut-out-mini-dress",
+  "key": "meta_title",
+  "old": "Vestido Curto com Recortes – Feminino com Tiras | Carbono",
+  "new": "Vestido Curto com Recortes – Feminino com Tiras | Carbon",
+  "digest": "38686903133c44f84e7dd3dccd56c3bda1b40b306bee84a8e8563e223dcbab6f"
+ },
+ {
+  "id": "gid://shopify/Product/9217420460284",
+  "handle": "cut-out-dress",
+  "key": "meta_title",
+  "old": "Vestido com Recortes – Feminino na Altura do Joelho | Carbono",
+  "new": "Vestido com Recortes – Feminino na Altura do Joelho | Carbon",
+  "digest": "a9f23ffc0c6e8e6bdcba9888b9ca48a881c5643e3220bccea8111ed2e95a625e"
+ },
+ {
+  "id": "gid://shopify/Product/9217421639932",
+  "handle": "one-shoulder-sweatshirt",
+  "key": "meta_title",
+  "old": "Moletom de Um Ombro Só – Assimétrico Cropped | Carbono",
+  "new": "Moletom de Um Ombro Só – Assimétrico Cropped | Carbon",
+  "digest": "5a7c2b3ab127c6c013c65c48d8e9ff27f95a93a4dd1f1fc169d37ea014afbad7"
+ },
+ {
+  "id": "gid://shopify/Product/9217423868156",
+  "handle": "marne-tank-top",
+  "key": "meta_title",
+  "old": "Regata Marne – Canelada Feminina | Carbono",
+  "new": "Regata Marne – Canelada Feminina | Carbon",
+  "digest": "0fbed0091a0253eb4efc325777c6848d707c32deb45d507ff00bfe89f914fd3b"
+ },
+ {
+  "id": "gid://shopify/Product/9217425506556",
+  "handle": "erin-tank-top",
+  "key": "meta_title",
+  "old": "Regata Erin – Feminina Cropped | Carbono",
+  "new": "Regata Erin – Feminina Cropped | Carbon",
+  "digest": "52a1a0e89192518444af4d04c53e72616f6470e14f8d697bdf658690025478ed"
+ },
+ {
+  "id": "gid://shopify/Product/9217427046652",
+  "handle": "nice-top-set",
+  "key": "meta_title",
+  "old": "Top Nice – Assimétrico Feminino | Carbono",
+  "new": "Top Nice – Assimétrico Feminino | Carbon",
+  "digest": "9c18c89440fcce4f2e54a1990cb92dd81e7dcd83e4166f948c21103e44ceecdb"
+ },
+ {
+  "id": "gid://shopify/Product/9217428390140",
+  "handle": "fran-top",
+  "key": "meta_title",
+  "old": "Blusa Feminina Fran Top | Carbono",
+  "new": "Blusa Feminina Fran Top | Carbon",
+  "digest": "65fc7f81c40b6be89bd2139f7191d4f1929dab62de8d8e88ddff775bb9abad3e"
+ },
+ {
+  "id": "gid://shopify/Product/9217430192380",
+  "handle": "cutout-bodysuit",
+  "key": "meta_title",
+  "old": "Body com Recortes | Carbono",
+  "new": "Body com Recortes | Carbon",
+  "digest": "054a910e8f84013136d6914921f7a0aaf8dc58ccf4491b9a4bb902e52e8d9532"
+ },
+ {
+  "id": "gid://shopify/Product/9217432256764",
+  "handle": "verona-tee",
+  "key": "meta_title",
+  "old": "Camiseta Verona – Cropped Feminina | Carbono",
+  "new": "Camiseta Verona – Cropped Feminina | Carbon",
+  "digest": "112b2d65a5234580cbc1e6cc77a20cbed4fa8c9f57354133081d0566d606a4ee"
+ },
+ {
+  "id": "gid://shopify/Product/9217434288380",
+  "handle": "nice-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts Nice – Canelado Feminino | Carbono",
+  "new": "Conjunto de Shorts Nice – Canelado Feminino | Carbon",
+  "digest": "7e25e0b8bb361635b2d4396f6f9e2adc2ce9a0678087005e61d3f61a1630d8fa"
+ },
+ {
+  "id": "gid://shopify/Product/9217434321148",
+  "handle": "front-slit-legging",
+  "key": "meta_title",
+  "old": "Legging com Fenda Frontal – Feminina Sleek | Carbono",
+  "new": "Legging com Fenda Frontal – Feminina Sleek | Carbon",
+  "digest": "bc45f37145b6adfaad1db5a330a2d99c7cb6717dcb159a77430504d3f48a02c1"
+ },
+ {
+  "id": "gid://shopify/Product/9217434386684",
+  "handle": "drawstring-sweat-shorts",
+  "key": "meta_title",
+  "old": "Shorts de Moletom com Cordão – Casual Feminino | Carbono",
+  "new": "Shorts de Moletom com Cordão – Casual Feminino | Carbon",
+  "digest": "5b3da781016c721de9822cecfacedf9bc15b48b2371ee884181cf39dd6749987"
+ },
+ {
+  "id": "gid://shopify/Product/9217434517756",
+  "handle": "belted-creppe-pants",
+  "key": "meta_title",
+  "old": "Calça de Crepe com Cinto – Cintura Alta Feminina | Carbono",
+  "new": "Calça de Crepe com Cinto – Cintura Alta Feminina | Carbon",
+  "digest": "5bcb774cefab3fb52b3208526b80e4d85dc378323baf179e6048da1104fc0ed5"
+ },
+ {
+  "id": "gid://shopify/Product/9217434648828",
+  "handle": "padded-dress",
+  "key": "meta_title",
+  "old": "Vestido com Bojo – Feminino Sem Costas | Carbono",
+  "new": "Vestido com Bojo – Feminino Sem Costas | Carbon",
+  "digest": "9d39e8537c2baaf957d9f4e6cdf3dbaf332beca4cbd58f1e1c6f54eb2881426d"
+ },
+ {
+  "id": "gid://shopify/Product/9217434747132",
+  "handle": "padded-tee-sleeveless",
+  "key": "meta_title",
+  "old": "Regata com Ombreiras – Feminina | Carbono",
+  "new": "Regata com Ombreiras – Feminina | Carbon",
+  "digest": "5943ac8ad8e634cfdbab4165cfb1d2d86a41e5a6563228241e6074bbb0103e54"
+ },
+ {
+  "id": "gid://shopify/Product/9217434910972",
+  "handle": "ribbed-tie",
+  "key": "meta_title",
+  "old": "Top Curto com Amarração Canelado – Feminino | Carbono",
+  "new": "Top Curto com Amarração Canelado – Feminino | Carbon",
+  "digest": "b9ee286c6769ab837d27704923bf33c552c937cb0797a3bcfb7353d706833ed1"
+ },
+ {
+  "id": "gid://shopify/Product/9217435009276",
+  "handle": "ride-blazer",
+  "key": "meta_title",
+  "old": "Jaqueta Blazer – Feminina Cropped | Carbono",
+  "new": "Jaqueta Blazer – Feminina Cropped | Carbon",
+  "digest": "e0f091e930100eec9b6f6f4b06f94c54ea0166c93c33ec71db49e7e9cd1dd059"
+ },
+ {
+  "id": "gid://shopify/Product/9217435140348",
+  "handle": "river-top-set",
+  "key": "meta_title",
+  "old": "Conjunto River Top – Feminino Brilhante | Carbono",
+  "new": "Conjunto River Top – Feminino Brilhante | Carbon",
+  "digest": "95c576dc563d804faccea325cc41e93684401dcb909d229c61129eb329ce3558"
+ },
+ {
+  "id": "gid://shopify/Product/9217435894012",
+  "handle": "smile-tank-top",
+  "key": "meta_title",
+  "old": "Regata Smile – Estampada | Carbono",
+  "new": "Regata Smile – Estampada | Carbon",
+  "digest": "ff3e90a83caa2e1f65d745fe11f94c104b0656d87df929ace478721b756fa603"
+ },
+ {
+  "id": "gid://shopify/Product/9217436025084",
+  "handle": "popit-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Popit – Estampa Masculina | Carbono",
+  "new": "Camiseta Popit – Estampa Masculina | Carbon",
+  "digest": "d85359d29acda3889b74eab1ed2b2b6eb001034954b4461cc27d37097686ac1f"
+ },
+ {
+  "id": "gid://shopify/Product/9217436156156",
+  "handle": "tv-shirt",
+  "key": "meta_title",
+  "old": "Camiseta TV – Estampa | Carbono",
+  "new": "Camiseta TV – Estampa | Carbon",
+  "digest": "85af8adb3cecdf2e957705d365ced5bf80487e7840823f458e8234fbb7b9a308"
+ },
+ {
+  "id": "gid://shopify/Product/9217436254460",
+  "handle": "anne-skinny-belt",
+  "key": "meta_title",
+  "old": "Cinto Anne Skinny – Acessório Feminino | Carbono",
+  "new": "Cinto Anne Skinny – Acessório Feminino | Carbon",
+  "digest": "2f8a081195caa7b5242157bd175d7cf3b7d1d57cf88e14356020c1c4929a8c86"
+ },
+ {
+  "id": "gid://shopify/Product/9217436352764",
+  "handle": "hana-wide-belt",
+  "key": "meta_title",
+  "old": "Cinto Hana Wide – Acessório Feminino | Carbono",
+  "new": "Cinto Hana Wide – Acessório Feminino | Carbon",
+  "digest": "1d43ac9043252f32c30c967c6c542891722148c19a36df3c84e56f93add2947d"
+ },
+ {
+  "id": "gid://shopify/Product/9217436385532",
+  "handle": "paula-wide-belt",
+  "key": "meta_title",
+  "old": "Cinto Paula Wide – Feminino com Tachas | Carbono",
+  "new": "Cinto Paula Wide – Feminino com Tachas | Carbon",
+  "digest": "c6235ba4c83c4f5c785e17e468d2c3e36bc7a5a911f10528f8df783a6ad54fa8"
+ },
+ {
+  "id": "gid://shopify/Product/9217436418300",
+  "handle": "kelly-belt",
+  "key": "meta_title",
+  "old": "Cinto Kelly – Acessório Feminino | Carbono",
+  "new": "Cinto Kelly – Acessório Feminino | Carbon",
+  "digest": "7982cb33cfa1bd956205e3dc7c1cbc18a6f50441c7bdeb7626a81fe7715d6c1c"
+ },
+ {
+  "id": "gid://shopify/Product/9217436483836",
+  "handle": "goldie-wide-belt",
+  "key": "meta_title",
+  "old": "Cinto Largo Goldie – Acessório Feminino | Carbono",
+  "new": "Cinto Largo Goldie – Acessório Feminino | Carbon",
+  "digest": "12bd68b09380234365117f307e813b1ce67a97f4257071410a5012bede7d1a02"
+ },
+ {
+  "id": "gid://shopify/Product/9217436549372",
+  "handle": "lexie-skinny-belt",
+  "key": "meta_title",
+  "old": "Cinto Skinny Lexie – Acessório Feminino | Carbono",
+  "new": "Cinto Skinny Lexie – Acessório Feminino | Carbon",
+  "digest": "47146c5fdf7b1905a79a1ccd4d238fc3dcda9f685a4b98acd946de00e398edc6"
+ },
+ {
+  "id": "gid://shopify/Product/9217437532412",
+  "handle": "stringer-pride-tank-top",
+  "key": "meta_title",
+  "old": "Regata Stringer Pride – Estampada | Carbono",
+  "new": "Regata Stringer Pride – Estampada | Carbon",
+  "digest": "585346a7afd8ea3c4117c10b4ed3f784454775e52c844b2366929a5fb36e49ad"
+ },
+ {
+  "id": "gid://shopify/Product/9217437729020",
+  "handle": "sean-knit-sweater",
+  "key": "meta_title",
+  "old": "Suéter de Tricô Sean – Masculino Estilo Destroyed | Carbono",
+  "new": "Suéter de Tricô Sean – Masculino Estilo Destroyed | Carbon",
+  "digest": "13a42f4926b27284618e2631a06ff46c5e8037aa75485475735db78b7d7a9c3c"
+ },
+ {
+  "id": "gid://shopify/Product/9217437794556",
+  "handle": "stud-hoodie",
+  "key": "meta_title",
+  "old": "Moletom com Capuz Stud – Masculino com Tachas | Carbono",
+  "new": "Moletom com Capuz Stud – Masculino com Tachas | Carbon",
+  "digest": "8b3f42b54486d63a1e4160b7a49e9c7257878f9800d5549208d80cc25bed4cd3"
+ },
+ {
+  "id": "gid://shopify/Product/9217437860092",
+  "handle": "ian-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Ian – Calça de Moletom Masculina | Carbono",
+  "new": "Conjunto de Moletom Ian – Calça de Moletom Masculina | Carbon",
+  "digest": "771256f4467df7eaa981e8022e3047c7d827d95d3ed82ea4b9a17f65fb7a597e"
+ },
+ {
+  "id": "gid://shopify/Product/9217437958396",
+  "handle": "ian-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Ian – Masculino com Estampa | Carbono",
+  "new": "Conjunto de Moletom Ian – Masculino com Estampa | Carbon",
+  "digest": "2c363ab0ba1ae7c7bc6b7b950572eebc949a5b3ee37b446b288eb4975618ce3f"
+ },
+ {
+  "id": "gid://shopify/Product/9217438023932",
+  "handle": "gordon-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Gordon – Canelado Masculino | Carbono",
+  "new": "Conjunto de Calça Gordon – Canelado Masculino | Carbon",
+  "digest": "1f82deea14dcafcd5b098329218098e2de3cc1a74cf6acba532cafef20433269"
+ },
+ {
+  "id": "gid://shopify/Product/9217438155004",
+  "handle": "gordon-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Gordon – Masculino | Carbono",
+  "new": "Conjunto de Moletom Gordon – Masculino | Carbon",
+  "digest": "ab90789c79698f61204fafe672aa2034fe81e873f650153aec5d89b06913352a"
+ },
+ {
+  "id": "gid://shopify/Product/9217438220540",
+  "handle": "rostory-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Rostory – Calça de Moletom Masculina | Carbono",
+  "new": "Conjunto de Calça Rostory – Calça de Moletom Masculina | Carbon",
+  "digest": "47cc97122f05e9f1e0b50f9a9852d0518035c393c654123cec7eb714312e3877"
+ },
+ {
+  "id": "gid://shopify/Product/9217438318844",
+  "handle": "rostory-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom com Capuz Rostory – Streetwear Masculino | Carbono",
+  "new": "Conjunto de Moletom com Capuz Rostory – Streetwear Masculino | Carbon",
+  "digest": "b9d3268269740f948ae0a36c365a2b00280ae076c99c888358c2ead13fd557a2"
+ },
+ {
+  "id": "gid://shopify/Product/9217438482684",
+  "handle": "eric-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto Eric – Calça de Moletom Masculina | Carbono",
+  "new": "Conjunto Eric – Calça de Moletom Masculina | Carbon",
+  "digest": "353b7771fbb0ce66c2d27661e3773ea57a3e4f6523751329ecf294f015350771"
+ },
+ {
+  "id": "gid://shopify/Product/9217438646524",
+  "handle": "eric-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Eric – Masculino Texturizado | Carbono",
+  "new": "Conjunto de Moletom Eric – Masculino Texturizado | Carbon",
+  "digest": "8e68286669e321097a831b7124d0dc9190b44e8e166a7c8662d1779c7730906e"
+ },
+ {
+  "id": "gid://shopify/Product/9217438843132",
+  "handle": "thank-you-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Thank You – Calça de Moletom Masculina | Carbono",
+  "new": "Conjunto de Moletom Thank You – Calça de Moletom Masculina | Carbon",
+  "digest": "229d93f9916294bfa95d0f9254d63e9065a3f4025c1028ed659ce07fa92f9099"
+ },
+ {
+  "id": "gid://shopify/Product/9217439006972",
+  "handle": "thank-you-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Thank You – Estampa | Carbono",
+  "new": "Conjunto de Moletom Thank You – Estampa | Carbon",
+  "digest": "ce7dbc5ccc81e98bfda020832e118bbe4e4e8a00b44e8eb35eaf78e50946cecc"
+ },
+ {
+  "id": "gid://shopify/Product/9217439170812",
+  "handle": "enjoy-life-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Enjoy Life – Estampa Masculina | Carbono",
+  "new": "Moletom Enjoy Life – Estampa Masculina | Carbon",
+  "digest": "cfca5daafbb5e74cee463ec1521f0f965b675303ddab0a896e29052d4bb8f6ea"
+ },
+ {
+  "id": "gid://shopify/Product/9217439367420",
+  "handle": "trust-yourself-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Trust Yourself – Estampa | Carbono",
+  "new": "Moletom Trust Yourself – Estampa | Carbon",
+  "digest": "e5f4d252dabd66bc2cffec88235f451f00362e3ac388021621a0bdb93f189dad"
+ },
+ {
+  "id": "gid://shopify/Product/9217439498492",
+  "handle": "apology-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Apology – Pulôver Masculino | Carbono",
+  "new": "Moletom Apology – Pulôver Masculino | Carbon",
+  "digest": "baaece7fdbd16f064be4ff433ad4bea924a9143c634230ca57a3787fc167474c"
+ },
+ {
+  "id": "gid://shopify/Product/9217439695100",
+  "handle": "cube-hoodie",
+  "key": "meta_title",
+  "old": "Moletom com Capuz Cube – Estampa Masculina | Carbono",
+  "new": "Moletom com Capuz Cube – Estampa Masculina | Carbon",
+  "digest": "dabfda304baeb2cd53ee269c3b57e0177fdca3235cc2c49f3be725b67e16bc95"
+ },
+ {
+  "id": "gid://shopify/Product/9217439826172",
+  "handle": "smiley-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Smiley – Estampa Masculina | Carbono",
+  "new": "Moletom Smiley – Estampa Masculina | Carbon",
+  "digest": "6cd9a3540cbbf5948caa8ba66657f9b55bc9a7630e612659db766f81bfabffa5"
+ },
+ {
+  "id": "gid://shopify/Product/9217439990012",
+  "handle": "chaos-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Chaos – Calça de Moletom Estampada | Carbono",
+  "new": "Conjunto de Moletom Chaos – Calça de Moletom Estampada | Carbon",
+  "digest": "3eeb4bacb6b239c019cc9e3fb765f706a0872b29c172f0553950945aef89f2a8"
+ },
+ {
+  "id": "gid://shopify/Product/9217440219388",
+  "handle": "chaos-hoodie-set",
+  "key": "meta_title",
+  "old": "Conjunto de Moletom Chaos – Com Capuz | Carbono",
+  "new": "Conjunto de Moletom Chaos – Com Capuz | Carbon",
+  "digest": "00ad8ce0b1aaaca3d72d498291cef221553496e440ad7bd64fb4a12df0549fb8"
+ },
+ {
+  "id": "gid://shopify/Product/9217440383228",
+  "handle": "live-the-moment-pants",
+  "key": "meta_title",
+  "old": "Calça Live The Moment – Masculina com Estampa | Carbono",
+  "new": "Calça Live The Moment – Masculina com Estampa | Carbon",
+  "digest": "facc22128f0091fa3e38ee31149c1701acdf2c0313ade9ee44e8311f0ca9ecda"
+ },
+ {
+  "id": "gid://shopify/Product/9217440514300",
+  "handle": "love-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Love – Estampa | Carbono",
+  "new": "Moletom Love – Estampa | Carbon",
+  "digest": "e45c93a639a05cc54cbec07864d994b60c31003ff55e3f5bfa617c373d128412"
+ },
+ {
+  "id": "gid://shopify/Product/9217440645372",
+  "handle": "i-am-hoodie",
+  "key": "meta_title",
+  "old": "Moletom I AM – Estampa Masculina | Carbono",
+  "new": "Moletom I AM – Estampa Masculina | Carbon",
+  "digest": "52ad1811d84e1403322431b4360716c29d48d35737bc75b5f1d444919fd6ed01"
+ },
+ {
+  "id": "gid://shopify/Product/9217441366268",
+  "handle": "spyder-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Spyder – Estampado | Carbono",
+  "new": "Moletom Spyder – Estampado | Carbon",
+  "digest": "5232d284d0a9a3329ccf0dcb49ca3bb0307e02b93e55ce4ee7dcfd9f4c3fc553"
+ },
+ {
+  "id": "gid://shopify/Product/9217441530108",
+  "handle": "you-matter-shirt",
+  "key": "meta_title",
+  "old": "Moletom You Matter – Masculino | Carbono",
+  "new": "Moletom You Matter – Masculino | Carbon",
+  "digest": "735c307b9584fdc953336107e8e6642123f1bc5492fe1dad3ed609b149b47416"
+ },
+ {
+  "id": "gid://shopify/Product/9217441661180",
+  "handle": "lucas-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Lucas – Gola Careca | Carbono",
+  "new": "Camiseta Lucas – Gola Careca | Carbon",
+  "digest": "ee1926427d38e1aefa814ecf4502b1df5d3f111849b9e8f180d0702ffd51b02f"
+ },
+ {
+  "id": "gid://shopify/Product/9217441825020",
+  "handle": "not-now-pants",
+  "key": "meta_title",
+  "old": "Calça Not Now – Cargo Masculina | Carbono",
+  "new": "Calça Not Now – Cargo Masculina | Carbon",
+  "digest": "4ce2ab7391545e48075a023d1db2aa79276ba40e567acb4f92a49ad11170105f"
+ },
+ {
+  "id": "gid://shopify/Product/9217441988860",
+  "handle": "daniel-pants",
+  "key": "meta_title",
+  "old": "Calça Daniel – Cargo Masculina | Carbono",
+  "new": "Calça Daniel – Cargo Masculina | Carbon",
+  "digest": "908bec64f5e9e0a3581f99c99afe758d2e4d6591f3e27ffe0a231a38b98d1124"
+ },
+ {
+  "id": "gid://shopify/Product/9217442283772",
+  "handle": "benjamin-pants",
+  "key": "meta_title",
+  "old": "Calça Benjamin – Cargo Masculina | Carbono",
+  "new": "Calça Benjamin – Cargo Masculina | Carbon",
+  "digest": "f702000ad2b1f5566484301609e7bd3b5afde353863e67ed3d6a2bd292c044d5"
+ },
+ {
+  "id": "gid://shopify/Product/9217442480380",
+  "handle": "smile-more-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Smile More – Estampa | Carbono",
+  "new": "Moletom Smile More – Estampa | Carbon",
+  "digest": "199569af24c0ffe1738732bc692b51e57791ebf9d4a38b83d34a8e4c6574050f"
+ },
+ {
+  "id": "gid://shopify/Product/9217442709756",
+  "handle": "tom-denim-shirt",
+  "key": "meta_title",
+  "old": "Camisa Jeans Tom – Jaqueta Masculina | Carbono",
+  "new": "Camisa Jeans Tom – Jaqueta Masculina | Carbon",
+  "digest": "0b304128030aa04b6a479e4823b432278157592819fedf894f87f17ec10bb249"
+ },
+ {
+  "id": "gid://shopify/Product/9217443627260",
+  "handle": "paul-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Paul – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Paul – Masculina Rasgada | Carbon",
+  "digest": "9cbbc6a1866768bc6e5ce0fc816ee0ce5753c7cbfc6f2f8198935399505da7a5"
+ },
+ {
+  "id": "gid://shopify/Product/9217443954940",
+  "handle": "kaleb-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Kaleb – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Kaleb – Masculina Rasgada | Carbon",
+  "digest": "906ebb9bf458c664356a392448e4a373a45404687f5efe1f3911cdec1b5aae93"
+ },
+ {
+  "id": "gid://shopify/Product/9217444151548",
+  "handle": "zane-jeans",
+  "key": "meta_title",
+  "old": "Jeans Zane – Masculino Estonado | Carbono",
+  "new": "Jeans Zane – Masculino Estonado | Carbon",
+  "digest": "bbc6fb45f1b0210d77f49b0522cb68487b473c01f0eea81dcf82e90ed154b033"
+ },
+ {
+  "id": "gid://shopify/Product/9217444315388",
+  "handle": "simon-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Simon – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Simon – Masculina Rasgada | Carbon",
+  "digest": "7f3ba36338ae9d7a7e08dbdff454b97a0e89ac05767ad35e1c70f61c8b4bfce5"
+ },
+ {
+  "id": "gid://shopify/Product/9217444446460",
+  "handle": "rafael-jeans",
+  "key": "meta_title",
+  "old": "Jeans Rafael – Masculino Rasgado | Carbono",
+  "new": "Jeans Rafael – Masculino Rasgado | Carbon",
+  "digest": "960b8e7e5413de01a5c56bafeec5031eb6c69e8dfaf4b7677b481dfd73fd3716"
+ },
+ {
+  "id": "gid://shopify/Product/9217444577532",
+  "handle": "beckham-jeans",
+  "key": "meta_title",
+  "old": "Jeans Beckham – Masculino Destroyed | Carbono",
+  "new": "Jeans Beckham – Masculino Destroyed | Carbon",
+  "digest": "22e28782123c6d820cee1af0c5e65b1e308634565e9426d0e4d335a7a5b941a2"
+ },
+ {
+  "id": "gid://shopify/Product/9217444872444",
+  "handle": "tobias-pants",
+  "key": "meta_title",
+  "old": "Calça Tobias – Zíper Masculino | Carbono",
+  "new": "Calça Tobias – Zíper Masculino | Carbon",
+  "digest": "649eb37dcbb16310bef326ac15044c543de3bbcfdabff26f948045b29c55527a"
+ },
+ {
+  "id": "gid://shopify/Product/9217445363964",
+  "handle": "leon-jeans",
+  "key": "meta_title",
+  "old": "Jeans Leon – Masculino Estonado | Carbono",
+  "new": "Jeans Leon – Masculino Estonado | Carbon",
+  "digest": "dda1cbc846045991269b0ab6e1e96a7e18a67c9f2778e5524df6b5501846d41b"
+ },
+ {
+  "id": "gid://shopify/Product/9217445724412",
+  "handle": "juan-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Juan – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Juan – Masculina Rasgada | Carbon",
+  "digest": "c55ff430eadc25a4a3839a0b972864ff5735e9039a9522605378fbdf028fcbf5"
+ },
+ {
+  "id": "gid://shopify/Product/9217445921020",
+  "handle": "carlos-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Carlos – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Carlos – Masculina Rasgada | Carbon",
+  "digest": "feb02cd06f5d85438c4c8947d73972cf42204aede1f883271e547d5c23456fdb"
+ },
+ {
+  "id": "gid://shopify/Product/9217446281468",
+  "handle": "colin-evening-pants",
+  "key": "meta_title",
+  "old": "Calça Social Colin – Masculina | Carbono",
+  "new": "Calça Social Colin – Masculina | Carbon",
+  "digest": "100ea7882a3c7b8eb0d39b5e563370ab5ad5b9ca28324d81e994ca3fe22e66db"
+ },
+ {
+  "id": "gid://shopify/Product/9217446871292",
+  "handle": "romeo-turtleneck-sweater",
+  "key": "meta_title",
+  "old": "Suéter de Gola Alta Romeo – Masculino | Carbono",
+  "new": "Suéter de Gola Alta Romeo – Masculino | Carbon",
+  "digest": "97bf3115dd34d0cdf81d58d08d54ea9701426dbf39ffd50fa0558686578e2ae2"
+ },
+ {
+  "id": "gid://shopify/Product/9217447067900",
+  "handle": "tyson-sweater",
+  "key": "meta_title",
+  "old": "Suéter Tyson – Gola Alta Masculino | Carbono",
+  "new": "Suéter Tyson – Gola Alta Masculino | Carbon",
+  "digest": "20ffdf840560966d6374514d2cd7a2698e377684b47473ab31747e49b53a6ecb"
+ },
+ {
+  "id": "gid://shopify/Product/9217448706300",
+  "handle": "jerry-puffer-coat",
+  "key": "meta_title",
+  "old": "Jaqueta Puffer Jerry – Masculina | Carbono",
+  "new": "Jaqueta Puffer Jerry – Masculina | Carbon",
+  "digest": "4584c845f059c578b27c35e1c625360524746f05762cda69715cdb620f86acd0"
+ },
+ {
+  "id": "gid://shopify/Product/9217448870140",
+  "handle": "dennis-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Dennis – Bomber Masculina | Carbono",
+  "new": "Jaqueta Dennis – Bomber Masculina | Carbon",
+  "digest": "a65423271ba064ef6b5963d1b2725d53c3e6cbb1effc7230dc8c2b997c74efeb"
+ },
+ {
+  "id": "gid://shopify/Product/9217449033980",
+  "handle": "peter-puffer-vest",
+  "key": "meta_title",
+  "old": "Colete Peter Puffer – Masculino Acolchoado | Carbono",
+  "new": "Colete Peter Puffer – Masculino Acolchoado | Carbon",
+  "digest": "236daa9e44a037b10372269d40836f0113fa0862b6ad968ded82bec35c395642"
+ },
+ {
+  "id": "gid://shopify/Product/9217449099516",
+  "handle": "roy-puffer-vest",
+  "key": "meta_title",
+  "old": "Colete Acolchoado Roy – Masculino | Carbono",
+  "new": "Colete Acolchoado Roy – Masculino | Carbon",
+  "digest": "72a9f3bcbb2f20a95cae07befbed4c4e543f3997bb08d59e2bc6bd94f3a1a1a0"
+ },
+ {
+  "id": "gid://shopify/Product/9217449394428",
+  "handle": "kent-pants",
+  "key": "meta_title",
+  "old": "Calça Kent – Masculina com Zíper | Carbono",
+  "new": "Calça Kent – Masculina com Zíper | Carbon",
+  "digest": "7959cf6f5e8f995b4420335fbeb31ca7dcc9a38d502d3765505e90ca875b0c8d"
+ },
+ {
+  "id": "gid://shopify/Product/9217449525500",
+  "handle": "keep-on-moving-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Keep On Moving – Manga Longa com Estampa | Carbono",
+  "new": "Camiseta Keep On Moving – Manga Longa com Estampa | Carbon",
+  "digest": "58cf89b3302d7bbc76fbdcc74575c0b53c46acc8ecb4765f4f74d5b0ff4e2583"
+ },
+ {
+  "id": "gid://shopify/Product/9217450213628",
+  "handle": "keep-on-rising-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Keep On Rising – Manga Longa Estampada | Carbono",
+  "new": "Camiseta Keep On Rising – Manga Longa Estampada | Carbon",
+  "digest": "74731b793591fb346364198cf291158408f6e229dce96b9e46d287fdc72f7b67"
+ },
+ {
+  "id": "gid://shopify/Product/9217450311932",
+  "handle": "untimely-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Untimely – Manga Longa Estampada | Carbono",
+  "new": "Camiseta Untimely – Manga Longa Estampada | Carbon",
+  "digest": "197cff89252cd5ce5f8f6117edae43e21f33d3a9d46fab9f843d4abbe234ec87"
+ },
+ {
+  "id": "gid://shopify/Product/9217450410236",
+  "handle": "constantinopolis-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Constantinopolis – Manga Longa Estampada | Carbono",
+  "new": "Camiseta Constantinopolis – Manga Longa Estampada | Carbon",
+  "digest": "e1c5c1bab59214d2258054dbe7a8fd8df634f58d7993f32839df88895467535f"
+ },
+ {
+  "id": "gid://shopify/Product/9217450672380",
+  "handle": "superior-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Superior – Masculina Estampada | Carbono",
+  "new": "Camiseta Superior – Masculina Estampada | Carbon",
+  "digest": "0f5cbdf88b542c0a603c57a200853c0676d290ea2f3dde2c45e65a421307a81f"
+ },
+ {
+  "id": "gid://shopify/Product/9217450868988",
+  "handle": "heartbit-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Heartbit – Manga Longa Estampada | Carbono",
+  "new": "Camiseta Heartbit – Manga Longa Estampada | Carbon",
+  "digest": "58310b9f4082d89cda906124b8ea2fe969d68205aab0d99b3b8f8b724c83aaab"
+ },
+ {
+  "id": "gid://shopify/Product/9217451360508",
+  "handle": "paris-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Paris Top – Feminino Oversized | Carbono",
+  "new": "Conjunto Paris Top – Feminino Oversized | Carbon",
+  "digest": "3961d0afbb4ab5239b97dec9800f88e8c0f522800176f4d8c8abd290f02cd005"
+ },
+ {
+  "id": "gid://shopify/Product/9217451426044",
+  "handle": "paris-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calças Paris – Feminino Afunilado | Carbono",
+  "new": "Conjunto de Calças Paris – Feminino Afunilado | Carbon",
+  "digest": "3c985e4715f8b361c6c3343b2cbfd8378b9baa45a8422efb58f04bbcfc3f9d62"
+ },
+ {
+  "id": "gid://shopify/Product/9217451458812",
+  "handle": "fiona-jacket-set",
+  "key": "meta_title",
+  "old": "Conjunto de Jaqueta Fiona – Feminino | Carbono",
+  "new": "Conjunto de Jaqueta Fiona – Feminino | Carbon",
+  "digest": "541cba75e8d9e83c928892842bf4d280fe22c86cc1f60994ae12371b4c52dc5f"
+ },
+ {
+  "id": "gid://shopify/Product/9217452146940",
+  "handle": "lilith-sweater",
+  "key": "meta_title",
+  "old": "Suéter Lilith – Recortes Feminino | Carbono",
+  "new": "Suéter Lilith – Recortes Feminino | Carbon",
+  "digest": "77ac761835cbf0318d48bff618ff51539b0aaeb53a3c7003b48fadb7fcf91a71"
+ },
+ {
+  "id": "gid://shopify/Product/9217452179708",
+  "handle": "delaney-sweater",
+  "key": "meta_title",
+  "old": "Suéter Delaney – Feminino Oversized | Carbono",
+  "new": "Suéter Delaney – Feminino Oversized | Carbon",
+  "digest": "54b2dfa8027f82f50e6f995fbc6b400b17068f647088018cd2652acafffc7cb2"
+ },
+ {
+  "id": "gid://shopify/Product/9217452245244",
+  "handle": "brooke-sweater",
+  "key": "meta_title",
+  "old": "Suéter Brooke – Recortes Femininos | Carbono",
+  "new": "Suéter Brooke – Recortes Femininos | Carbon",
+  "digest": "330ac1d6760ab8e6900e0b4fcb695fd3fc5e1a9e1f04c684d9029807ca747207"
+ },
+ {
+  "id": "gid://shopify/Product/9217452278012",
+  "handle": "saylor-sweater",
+  "key": "meta_title",
+  "old": "Suéter Saylor – Tricô de Tranças Feminino | Carbono",
+  "new": "Suéter Saylor – Tricô de Tranças Feminino | Carbon",
+  "digest": "5f77427bc8ef6766f1b619e79aa8361677ed1220ae1f30ffa5dad5790389d1b0"
+ },
+ {
+  "id": "gid://shopify/Product/9217452474620",
+  "handle": "thea-coat",
+  "key": "meta_title",
+  "old": "Casaco Thea – Puffer Feminino | Carbono",
+  "new": "Casaco Thea – Puffer Feminino | Carbon",
+  "digest": "2b3beda195c70a273cbaf7cf93e63c89418ec32510aa31e4223dd41292480213"
+ },
+ {
+  "id": "gid://shopify/Product/9217452638460",
+  "handle": "destiny-sweater",
+  "key": "meta_title",
+  "old": "Suéter Destiny – Gola Alta Feminino | Carbono",
+  "new": "Suéter Destiny – Gola Alta Feminino | Carbon",
+  "digest": "38771b4ce754adbf438c81349f556fb7aa7ef9a4d463150ac459b74602f9551c"
+ },
+ {
+  "id": "gid://shopify/Product/9217452671228",
+  "handle": "alexis-sweater",
+  "key": "meta_title",
+  "old": "Suéter Alexis – Ombro Vazado Feminino | Carbono",
+  "new": "Suéter Alexis – Ombro Vazado Feminino | Carbon",
+  "digest": "85dac632c3ec0d9b65a17c6a9d4c0260114e43268c219850ac378b68254fd9d7"
+ },
+ {
+  "id": "gid://shopify/Product/9217452835068",
+  "handle": "mabel-sweater",
+  "key": "meta_title",
+  "old": "Suéter Mabel | Carbono",
+  "new": "Suéter Mabel | Carbon",
+  "digest": "4d4c452cec7c632bcad6ccb28a4c002e67b046f6e1f6526bb2cbb00b5afefdf4"
+ },
+ {
+  "id": "gid://shopify/Product/9217452933372",
+  "handle": "serena-sweater",
+  "key": "meta_title",
+  "old": "Suéter Serena – Tricô de Tranças Feminino | Carbono",
+  "new": "Suéter Serena – Tricô de Tranças Feminino | Carbon",
+  "digest": "12f8ff5895d3a6982ccd68d3e5b3deca6f80a1c5f959306657b334c162ef4365"
+ },
+ {
+  "id": "gid://shopify/Product/9217452998908",
+  "handle": "celine-sweater",
+  "key": "meta_title",
+  "old": "Suéter Celine – Gola Alta Feminina | Carbono",
+  "new": "Suéter Celine – Gola Alta Feminina | Carbon",
+  "digest": "807e6666a1cb76f199d46473399824406539cec73df27af892d4423290d41665"
+ },
+ {
+  "id": "gid://shopify/Product/9217465450748",
+  "handle": "bobby-jeans",
+  "key": "meta_title",
+  "old": "Jeans Bobby – Masculino Estonado | Carbono",
+  "new": "Jeans Bobby – Masculino Estonado | Carbon",
+  "digest": "e9e84ab63e63de7e1ae651dfbef8ffe1386d52fa5932352fc900232e6207b739"
+ },
+ {
+  "id": "gid://shopify/Product/9217465712892",
+  "handle": "neil-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Neil – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Neil – Masculina Rasgada | Carbon",
+  "digest": "7418d5e52f383df2e273428e2aa4646cb4569d7127843891c24682950ac66722"
+ },
+ {
+  "id": "gid://shopify/Product/9217466171644",
+  "handle": "louie-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts Louie – Canelado Masculino | Carbono",
+  "new": "Conjunto de Shorts Louie – Canelado Masculino | Carbon",
+  "digest": "a670e74f6188541a9b5da80c86840a46bbf216fcca33e5ef312e9cb4e50e5802"
+ },
+ {
+  "id": "gid://shopify/Product/9217467515132",
+  "handle": "sean-pants",
+  "key": "meta_title",
+  "old": "Calça Sean – Masculina Cargo | Carbono",
+  "new": "Calça Sean – Masculina Cargo | Carbon",
+  "digest": "6b1c91eaf6f73ec2530eac531fcaf92438fe565aa1b7af143b682c1aba90c77f"
+ },
+ {
+  "id": "gid://shopify/Product/9217467744508",
+  "handle": "les-benjamin-tee",
+  "key": "meta_title",
+  "old": "Camiseta Les Benjamin – Gola Careca Feminina | Carbono",
+  "new": "Camiseta Les Benjamin – Gola Careca Feminina | Carbon",
+  "digest": "26a1762563523b9a38470c00485e0bec2caa337758f1bcc3bd3d59fcb371e12e"
+ },
+ {
+  "id": "gid://shopify/Product/9217467810044",
+  "handle": "brave-tee",
+  "key": "meta_title",
+  "old": "Camiseta Brave – Estampa | Carbono",
+  "new": "Camiseta Brave – Estampa | Carbon",
+  "digest": "4a88668d5a6cc4e98bc95fab0b5c7aea17b2771657fa276c436ae11be18fb00d"
+ },
+ {
+  "id": "gid://shopify/Product/9217467875580",
+  "handle": "varsity-tee",
+  "key": "meta_title",
+  "old": "Camiseta Varsity – Silhueta Larga | Carbono",
+  "new": "Camiseta Varsity – Silhueta Larga | Carbon",
+  "digest": "d9f373a0c1cab56342aeea46eeb9fcb87a40390f49b3bf2f649d070cfd7470dc"
+ },
+ {
+  "id": "gid://shopify/Product/9217467973884",
+  "handle": "magnifique-tee",
+  "key": "meta_title",
+  "old": "Camiseta Magnifique – Estampada Feminina | Carbono",
+  "new": "Camiseta Magnifique – Estampada Feminina | Carbon",
+  "digest": "91646bd0186289caaf158ef5e80c5a3623b2ef9e15f005bc79d3c56866a43a92"
+ },
+ {
+  "id": "gid://shopify/Product/9217468104956",
+  "handle": "philadelphia-tee",
+  "key": "meta_title",
+  "old": "Camiseta Philadelphia – Estampa Feminina | Carbono",
+  "new": "Camiseta Philadelphia – Estampa Feminina | Carbon",
+  "digest": "c8a89d8b5d5b0f565450010550673d71ee01a0fe1f70540c785eff106f5a6196"
+ },
+ {
+  "id": "gid://shopify/Product/9217468137724",
+  "handle": "feel-and-heel-tee",
+  "key": "meta_title",
+  "old": "Camiseta Feel And Heel – Estampa | Carbono",
+  "new": "Camiseta Feel And Heel – Estampa | Carbon",
+  "digest": "b9e0f0886a7f0ccf6fefbcbff8e6e4ee7e3f1150aa4b73726fd27747a9374f0d"
+ },
+ {
+  "id": "gid://shopify/Product/9217468170492",
+  "handle": "vintage-tee",
+  "key": "meta_title",
+  "old": "Camiseta Vintage – Lavagem Ácida | Carbono",
+  "new": "Camiseta Vintage – Lavagem Ácida | Carbon",
+  "digest": "3b110aefedacd6014073c9f169539c7005a42cdc76cb051189d1b3ddefb2af3d"
+ },
+ {
+  "id": "gid://shopify/Product/9217468268796",
+  "handle": "brooklyn-tee",
+  "key": "meta_title",
+  "old": "Camiseta Brooklyn – Estampa Feminina | Carbono",
+  "new": "Camiseta Brooklyn – Estampa Feminina | Carbon",
+  "digest": "dcd042ed4a63de8714e985416e257d50389084a5cf9e32a778b7dca840441700"
+ },
+ {
+  "id": "gid://shopify/Product/9217468334332",
+  "handle": "love-tee",
+  "key": "meta_title",
+  "old": "Camiseta Love – Feminina Estampada | Carbono",
+  "new": "Camiseta Love – Feminina Estampada | Carbon",
+  "digest": "dd729e91dcabd44615ad5284d9a4524e83ec356bd3408ea38eb58263dab56821"
+ },
+ {
+  "id": "gid://shopify/Product/9217468432636",
+  "handle": "molly-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Molly – Skinny Feminina | Carbono",
+  "new": "Calça Jeans Molly – Skinny Feminina | Carbon",
+  "digest": "21cce6ff007263bb83879aaa17447d018f2e00afc12dc81ce0458cf7cc084f9e"
+ },
+ {
+  "id": "gid://shopify/Product/9217468530940",
+  "handle": "gemma-jeans",
+  "key": "meta_title",
+  "old": "Jeans Gemma – Feminino Rasgado | Carbono",
+  "new": "Jeans Gemma – Feminino Rasgado | Carbon",
+  "digest": "053d2d39db7e0fa61b2a321fc022cd50de655d2585f7f67971e23b8908f40ed6"
+ },
+ {
+  "id": "gid://shopify/Product/9217468760316",
+  "handle": "elsie-jeans",
+  "key": "meta_title",
+  "old": "Jeans Elsie – Feminino Estonado | Carbono",
+  "new": "Jeans Elsie – Feminino Estonado | Carbon",
+  "digest": "f6415a1570771b9bdb10a3ac9b5994db4fc784ddd4df46089697d19c42bade95"
+ },
+ {
+  "id": "gid://shopify/Product/9217469645052",
+  "handle": "greta-dress",
+  "key": "meta_title",
+  "old": "Vestido Greta – Tomara que caia feminino | Carbono",
+  "new": "Vestido Greta – Tomara que caia feminino | Carbon",
+  "digest": "fc355f71e6d3d533969ba88a6da941c7a5ecd180e3140b25799e062c6c54a210"
+ },
+ {
+  "id": "gid://shopify/Product/9217469710588",
+  "handle": "ivy-dress",
+  "key": "meta_title",
+  "old": "Vestido Ivy – Recorte Feminino | Carbono",
+  "new": "Vestido Ivy – Recorte Feminino | Carbon",
+  "digest": "f2705059c86ffa9d763c7f7baaffc4c2b5dae0539abd78d08251907249bdeae6"
+ },
+ {
+  "id": "gid://shopify/Product/9217469776124",
+  "handle": "fern-dress",
+  "key": "meta_title",
+  "old": "Vestido Fern – Corte Recorte Feminino | Carbono",
+  "new": "Vestido Fern – Corte Recorte Feminino | Carbon",
+  "digest": "51e9ff59823343bc5527beda7ed40bc9ea17e080d9fb0062a4f2a3237177aec6"
+ },
+ {
+  "id": "gid://shopify/Product/9217469841660",
+  "handle": "maia-dress",
+  "key": "meta_title",
+  "old": "Vestido Maia – Feminino em Tela | Carbono",
+  "new": "Vestido Maia – Feminino em Tela | Carbon",
+  "digest": "07b4cca65bab47696291ac9f6a90ce3801d48c99b2d65b3a95b7c7ada019ad0b"
+ },
+ {
+  "id": "gid://shopify/Product/9217469972732",
+  "handle": "thalia-dress",
+  "key": "meta_title",
+  "old": "Vestido Thalia – Longo de um ombro só | Carbono",
+  "new": "Vestido Thalia – Longo de um ombro só | Carbon",
+  "digest": "4d84aed580db038d1a85d07882f0e16031262bccc99162879af67e8645279f1e"
+ },
+ {
+  "id": "gid://shopify/Product/9217470005500",
+  "handle": "chantal-dress",
+  "key": "meta_title",
+  "old": "Vestido Chantal – Mini Feminino | Carbono",
+  "new": "Vestido Chantal – Mini Feminino | Carbon",
+  "digest": "923b70266134a41be95e17c7b926c45c8f9d8b3fcce8518b7fd554776e745555"
+ },
+ {
+  "id": "gid://shopify/Product/9217470071036",
+  "handle": "kiera-dress",
+  "key": "meta_title",
+  "old": "Vestido Kiera – Mini Feminino | Carbono",
+  "new": "Vestido Kiera – Mini Feminino | Carbon",
+  "digest": "6039f062770805ceb2979a7d2b297aa82d40c181884f94d9f41a8e78a1ffa497"
+ },
+ {
+  "id": "gid://shopify/Product/9217470169340",
+  "handle": "2-pieces-gyda",
+  "key": "meta_title",
+  "old": "Conjunto Gyda com 2 peças – Amarração | Carbono",
+  "new": "Conjunto Gyda com 2 peças – Amarração | Carbon",
+  "digest": "c8519812e8e638b24900b6ebe17cd353895ee600c7ee98a420870d1f6b5bb65f"
+ },
+ {
+  "id": "gid://shopify/Product/9217470300412",
+  "handle": "eleanor-dress",
+  "key": "meta_title",
+  "old": "Vestido Eleanor – Feminino Curto | Carbono",
+  "new": "Vestido Eleanor – Feminino Curto | Carbon",
+  "digest": "53c6d9cec9ee596f1de498553039c2e16c3d29157d4e0f95bcdf9d073c8e84d0"
+ },
+ {
+  "id": "gid://shopify/Product/9217470333180",
+  "handle": "luna-top",
+  "key": "meta_title",
+  "old": "Top Luna – Cropped Feminino | Carbono",
+  "new": "Top Luna – Cropped Feminino | Carbon",
+  "digest": "4cd893eea925d0b72c5fae3780ac1725f88f7c96a4a11932434334809c0dc11b"
+ },
+ {
+  "id": "gid://shopify/Product/9217470464252",
+  "handle": "b-and-w-skirt",
+  "key": "meta_title",
+  "old": "Saia P&B – Plissada | Carbono",
+  "new": "Saia P&B – Plissada | Carbon",
+  "digest": "dcdb61478af676337ba8000784c462a91519bcf65641535b3cec8a8b5b4bcbd9"
+ },
+ {
+  "id": "gid://shopify/Product/9217470595324",
+  "handle": "scarlet-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Scarlet – Transpassado Feminino | Carbono",
+  "new": "Macaquinho Scarlet – Transpassado Feminino | Carbon",
+  "digest": "84798648e49a93e0f31393d12c3f4b204b3e93a8ecb8ac1399abf5002bb4c040"
+ },
+ {
+  "id": "gid://shopify/Product/9217470628092",
+  "handle": "2-pieces-ann-set",
+  "key": "meta_title",
+  "old": "Conjunto Ann 2 Peças – Feminino Relaxed | Carbono",
+  "new": "Conjunto Ann 2 Peças – Feminino Relaxed | Carbon",
+  "digest": "591d56d462c7448df1765d5d7950da1f23117ad363804c7e2802c2126bce6dc9"
+ },
+ {
+  "id": "gid://shopify/Product/9217470726396",
+  "handle": "tori-top",
+  "key": "meta_title",
+  "old": "Blusa Tori – Halter Feminino | Carbono",
+  "new": "Blusa Tori – Halter Feminino | Carbon",
+  "digest": "c6879796821f8f65fb47d69a206a563c80591a453d8d664c76db8433957c4a80"
+ },
+ {
+  "id": "gid://shopify/Product/9217470791932",
+  "handle": "zoie-top",
+  "key": "meta_title",
+  "old": "Blusa Zoie – Renda Feminina | Carbono",
+  "new": "Blusa Zoie – Renda Feminina | Carbon",
+  "digest": "1743167c0381e39d4b5a1a7f0b9e6a6659cf7020c574dd0be65aeef214f24789"
+ },
+ {
+  "id": "gid://shopify/Product/9217471545596",
+  "handle": "adrian-cargo-pants",
+  "key": "meta_title",
+  "old": "Calça Cargo Adrian – Masculina | Carbono",
+  "new": "Calça Cargo Adrian – Masculina | Carbon",
+  "digest": "2d375b2aec0d7df3e30e696c80af2fb221d74d823957a6230b4695da16cc5e59"
+ },
+ {
+  "id": "gid://shopify/Product/9217471578364",
+  "handle": "kyle-cargo-pants",
+  "key": "meta_title",
+  "old": "Calça Cargo Kyle – Masculina | Carbono",
+  "new": "Calça Cargo Kyle – Masculina | Carbon",
+  "digest": "d1117b21c3a6839506150d7a30c13552f3ced59b25295778d848031724c5181c"
+ },
+ {
+  "id": "gid://shopify/Product/9217471742204",
+  "handle": "jesus-cargo-pants",
+  "key": "meta_title",
+  "old": "Calça Cargo Jesus – Masculina | Carbono",
+  "new": "Calça Cargo Jesus – Masculina | Carbon",
+  "digest": "1d005ae0f8b00278685efdffc9bdb64a2c2c36ae110727390203c09c744b408b"
+ },
+ {
+  "id": "gid://shopify/Product/9217471840508",
+  "handle": "melvin-cargo-pants",
+  "key": "meta_title",
+  "old": "Calça Cargo Melvin – Masculina | Carbono",
+  "new": "Calça Cargo Melvin – Masculina | Carbon",
+  "digest": "e17b6a8481d6cda0f40112063e4426235fd78cb9c9fe7df8c5d5099b76870f4b"
+ },
+ {
+  "id": "gid://shopify/Product/9217472069884",
+  "handle": "dreamin-top-set",
+  "key": "meta_title",
+  "old": "Moletom Masculino Dreamin Top Set | Carbono",
+  "new": "Moletom Masculino Dreamin Top Set | Carbon",
+  "digest": "332fa9597f3aed0352837abcd0fe00b9399e8fb4428140863edc343944685620"
+ },
+ {
+  "id": "gid://shopify/Product/9217472233724",
+  "handle": "dreamin-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto Dreamin – Cargo Masculina | Carbono",
+  "new": "Conjunto Dreamin – Cargo Masculina | Carbon",
+  "digest": "f1c087871b5fa3bd1b94f292bec759e3698bf839ab858614932c4f2278a8adb2"
+ },
+ {
+  "id": "gid://shopify/Product/9217472332028",
+  "handle": "cole-top-set",
+  "key": "meta_title",
+  "old": "Cole Top Set – Jaqueta Masculina | Carbono",
+  "new": "Cole Top Set – Jaqueta Masculina | Carbon",
+  "digest": "618594a4a2435fc838f14219d2fa1ed13cad6be2cd3a355316acd1336977f9b8"
+ },
+ {
+  "id": "gid://shopify/Product/9217472364796",
+  "handle": "cole-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Cole – Calça de Moletom Masculina | Carbono",
+  "new": "Conjunto de Calça Cole – Calça de Moletom Masculina | Carbon",
+  "digest": "28737e7efa71806fd118bdf987c005e1a2b5e39d35d27f3fdf71abcf8098b1b0"
+ },
+ {
+  "id": "gid://shopify/Product/9217472463100",
+  "handle": "no-risk-top-set",
+  "key": "meta_title",
+  "old": "Moletom com Capuz Graphic No Risk Top Set – Carbono",
+  "new": "Moletom com Capuz Graphic No Risk Top Set | Carbon",
+  "digest": "f1445fb6007c7b8ee0e980bae21e380ed541354a21a73d38941a678a4faabb58"
+ },
+ {
+  "id": "gid://shopify/Product/9217472626940",
+  "handle": "cool-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Estiloso – Masculino com Estampa | Carbono",
+  "new": "Moletom Estiloso – Masculino com Estampa | Carbon",
+  "digest": "d224aafdf63458c3441a940fac95e79a7f03c9634d6d19c90be72da4a48a134d"
+ },
+ {
+  "id": "gid://shopify/Product/9217472692476",
+  "handle": "charles-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Charles – Estampa | Carbono",
+  "new": "Moletom Charles – Estampa | Carbon",
+  "digest": "bf7448f1062cb48726af3a28e3f569d98c058faa52e1ef9ca134944aac03879a"
+ },
+ {
+  "id": "gid://shopify/Product/9217472758012",
+  "handle": "miles-top",
+  "key": "meta_title",
+  "old": "Moletom Masculino Miles Top | Carbono",
+  "new": "Moletom Masculino Miles Top | Carbon",
+  "digest": "9cca5eb45b0fb74d9f27d42207fd11ab98082990d20cf30c09d4e6a2238809c6"
+ },
+ {
+  "id": "gid://shopify/Product/9217472889084",
+  "handle": "only-human-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Only Human – Estampa | Carbono",
+  "new": "Moletom Only Human – Estampa | Carbon",
+  "digest": "c89c8395baeeab8e11404c3d69cfc1098bb20b6aa718de3561232e17a1ecccbf"
+ },
+ {
+  "id": "gid://shopify/Product/9217473118460",
+  "handle": "brooks-coat",
+  "key": "meta_title",
+  "old": "Casaco Brooks – Masculino Acolchoado | Carbono",
+  "new": "Casaco Brooks – Masculino Acolchoado | Carbon",
+  "digest": "ff33f49183d987e2b7feac5693a10430f663b430044d2d49b0bfa8ec51f8e5e8"
+ },
+ {
+  "id": "gid://shopify/Product/9217473151228",
+  "handle": "axel-coat",
+  "key": "meta_title",
+  "old": "Sobretudo Axel – Masculino Brilhante | Carbono",
+  "new": "Sobretudo Axel – Masculino Brilhante | Carbon",
+  "digest": "c51f5956ff65e42e01436b47398c25805df4e9a4039c530b73c7e84d29339f96"
+ },
+ {
+  "id": "gid://shopify/Product/9217473315068",
+  "handle": "philip-puffer-coat",
+  "key": "meta_title",
+  "old": "Jaqueta Puffer Philip – Masculina Acolchoada | Carbono",
+  "new": "Jaqueta Puffer Philip – Masculina Acolchoada | Carbon",
+  "digest": "5bf0caf984bddbcb8613bc57a42b459274793a2e6f065eab727b68857e6efe7c"
+ },
+ {
+  "id": "gid://shopify/Product/9217473380604",
+  "handle": "bradley-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Bradley – Masculina Azul-Escuro | Carbono",
+  "new": "Jaqueta Bradley – Masculina Azul-Escuro | Carbon",
+  "digest": "5de144313d9d4b1ea5462635f3db1ebf4100cfb083afec33b066c3628dc65b5d"
+ },
+ {
+  "id": "gid://shopify/Product/9217473446140",
+  "handle": "russell-jacket",
+  "key": "meta_title",
+  "old": "Jaqueta Russell – Motoqueiro Masculina | Carbono",
+  "new": "Jaqueta Russell – Motoqueiro Masculina | Carbon",
+  "digest": "5bb5bce843a8494d54e999db6e4073f830c9abc25849d5db5a6f6d353b83dac6"
+ },
+ {
+  "id": "gid://shopify/Product/9217473511676",
+  "handle": "vincent-puffer-vest",
+  "key": "meta_title",
+  "old": "Colete Acolchoado Vincent – Masculino | Carbono",
+  "new": "Colete Acolchoado Vincent – Masculino | Carbon",
+  "digest": "e0a1515f0bd3099bd44af3fbf4c455eece47fd7ab8cb780a9804a02d630a072e"
+ },
+ {
+  "id": "gid://shopify/Product/9217473609980",
+  "handle": "randy-puffer-vest",
+  "key": "meta_title",
+  "old": "Colete Acolchoado Masculino Randy – Carbono",
+  "new": "Colete Acolchoado Masculino Randy | Carbon",
+  "digest": "d4992f42dfe028724e69237506443adab537ad528bf53f5969369e6488c1a874"
+ },
+ {
+  "id": "gid://shopify/Product/9217475019004",
+  "handle": "dream-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Dream Top – Masculino Estampado | Carbono",
+  "new": "Conjunto Dream Top – Masculino Estampado | Carbon",
+  "digest": "9fc9e46326f5fa4f149ba0f25d86e25c859fa2ffe0714861fe38a4d9553eee63"
+ },
+ {
+  "id": "gid://shopify/Product/9217475084540",
+  "handle": "dream-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts Dream – Masculino Estampado | Carbono",
+  "new": "Conjunto de Shorts Dream – Masculino Estampado | Carbon",
+  "digest": "33fe63e77fb6ecdcd516d7dc34d1d4d0121e0ea0d55db304ea9bc26a93ca5c4e"
+ },
+ {
+  "id": "gid://shopify/Product/9217475903740",
+  "handle": "tim-swimwear",
+  "key": "meta_title",
+  "old": "Tim Swimwear – Listrado Masculino | Carbono",
+  "new": "Tim Swimwear – Listrado Masculino | Carbon",
+  "digest": "77744bff043cb9cc08a227de334e94c0ae12685689c1edbe2d28b658cd070280"
+ },
+ {
+  "id": "gid://shopify/Product/9217476231420",
+  "handle": "jaxon-swimwear",
+  "key": "meta_title",
+  "old": "Jaxon Swimwear – Masculino Estampado | Carbono",
+  "new": "Jaxon Swimwear – Masculino Estampado | Carbon",
+  "digest": "38517a153a99d7c92b97fcb90408d56148145ca253770ddc8802c9facf2e34f8"
+ },
+ {
+  "id": "gid://shopify/Product/9217476428028",
+  "handle": "damian-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Damian – Gola Careca Masculina | Carbono",
+  "new": "Camiseta Damian – Gola Careca Masculina | Carbon",
+  "digest": "f1ef424d8eaef6cc8087c1f4be7ffac73014a761760f7c270344ebd24d259722"
+ },
+ {
+  "id": "gid://shopify/Product/9217476657404",
+  "handle": "drake-shirt",
+  "key": "meta_title",
+  "old": "Camisa Drake – Masculina Listrada | Carbono",
+  "new": "Camisa Drake – Masculina Listrada | Carbon",
+  "digest": "16056caee73d26137ac0b271673174fe538e2850341078f4324782d50e5034af"
+ },
+ {
+  "id": "gid://shopify/Product/9217476886780",
+  "handle": "miami-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Miami – Estampa | Carbono",
+  "new": "Camiseta Miami – Estampa | Carbon",
+  "digest": "12bc2b78a1b74a3281275664722236bea2ab2835196fddc34638ece58c045a9c"
+ },
+ {
+  "id": "gid://shopify/Product/9217477050620",
+  "handle": "ryland-top-set",
+  "key": "meta_title",
+  "old": "Camisa de Botão Ryland Top Set – Estampada | Carbono",
+  "new": "Camisa de Botão Ryland Top Set – Estampada | Carbon",
+  "digest": "3d52cfcb5e47d7dcf143412ed0468dd1e813a59e44b691e181e94556709019ec"
+ },
+ {
+  "id": "gid://shopify/Product/9217478983932",
+  "handle": "survive-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Survive – Estampa Masculina | Carbono",
+  "new": "Camiseta Survive – Estampa Masculina | Carbon",
+  "digest": "24bf9eec33313edb062cab2dda8fa631fbd52028bee9f2497418560bcb0aeead"
+ },
+ {
+  "id": "gid://shopify/Product/9217481146620",
+  "handle": "brave-and-wild-short-set",
+  "key": "meta_title",
+  "old": "Conjunto Curto Brave And Wild – Estampado | Carbono",
+  "new": "Conjunto Curto Brave And Wild – Estampado | Carbon",
+  "digest": "2c4b26f84030de95300e7808a93a0cebae6ee9b10727f0cc67373c4623897063"
+ },
+ {
+  "id": "gid://shopify/Product/9217484390652",
+  "handle": "palm-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Palm Top – Masculino Estampado | Carbono",
+  "new": "Conjunto Palm Top – Masculino Estampado | Carbon",
+  "digest": "93f3d80713d8f8d59f5061ea635ec4e9e8dc05769a90eb548defd2bc84405bf2"
+ },
+ {
+  "id": "gid://shopify/Product/9217484456188",
+  "handle": "palm-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts com Estampa de Palmeiras – Masculino | Carbono",
+  "new": "Conjunto de Shorts com Estampa de Palmeiras – Masculino | Carbon",
+  "digest": "6ea2f202e3e87538e97453ad56e2d10880e00dd89ca4143fedfd05be28b68ad7"
+ },
+ {
+  "id": "gid://shopify/Product/9217484914940",
+  "handle": "felix-jeans",
+  "key": "meta_title",
+  "old": "Felix Jeans – Camuflado Masculino | Carbono",
+  "new": "Felix Jeans – Camuflado Masculino | Carbon",
+  "digest": "197ec0db38df700ccdad98d224342159e688cc86b0dc5f289a13936d7a1fbeb0"
+ },
+ {
+  "id": "gid://shopify/Product/9217484947708",
+  "handle": "gleann-jeans",
+  "key": "meta_title",
+  "old": "Gleann Jeans – Masculino Rasgado | Carbono",
+  "new": "Gleann Jeans – Masculino Rasgado | Carbon",
+  "digest": "e96f8ff918abe33d5ad445d76fb7ec255ca2b25cc71fa70f7939c4d9034d8ca4"
+ },
+ {
+  "id": "gid://shopify/Product/9217485144316",
+  "handle": "joel-jeans",
+  "key": "meta_title",
+  "old": "Jeans Joel – Masculino destroyed | Carbono",
+  "new": "Jeans Joel – Masculino destroyed | Carbon",
+  "digest": "ff000d56198523079c16609708cda63b68dc4074987fe2fd30e4518e25602fa1"
+ },
+ {
+  "id": "gid://shopify/Product/9217485209852",
+  "handle": "lewis-jeans",
+  "key": "meta_title",
+  "old": "Calça Cargo Masculina Lewis – Carbono",
+  "new": "Calça Cargo Masculina Lewis | Carbon",
+  "digest": "43edac9b63d790a0fb28730e78e316db9fe22385f722ffc80938d6f2847e15dd"
+ },
+ {
+  "id": "gid://shopify/Product/9217485242620",
+  "handle": "peace-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Peace – Estampa | Carbono",
+  "new": "Camiseta Peace – Estampa | Carbon",
+  "digest": "2456f32043087066285f82f6da1cfaf6eb2ffddbaa3ef0cc0efba54a40d931c0"
+ },
+ {
+  "id": "gid://shopify/Product/9217485603068",
+  "handle": "73-t-shirt-set",
+  "key": "meta_title",
+  "old": "Conjunto de Camisetas 73 – Estampada | Carbono",
+  "new": "Conjunto de Camisetas 73 – Estampada | Carbon",
+  "digest": "9506a202e7aaab6df70e525a8f29ee8fe43a86f1b425194514a9b7c1282c8a06"
+ },
+ {
+  "id": "gid://shopify/Product/9217485635836",
+  "handle": "73-shorts-set",
+  "key": "meta_title",
+  "old": "Conjunto de Shorts 73 – Gráfico Masculino | Carbono",
+  "new": "Conjunto de Shorts 73 – Gráfico Masculino | Carbon",
+  "digest": "169fffeb7579e6db053505da823369ec941196546d3e65ce0a400d90bb7824c4"
+ },
+ {
+  "id": "gid://shopify/Product/9217487503612",
+  "handle": "ricky-jeans",
+  "key": "meta_title",
+  "old": "Ricky Jeans – Strass | Carbono",
+  "new": "Ricky Jeans – Strass | Carbon",
+  "digest": "db801a36a5d1847cd9acf18cfaf7eba033841e1ccbb36b426b4287dddbd0853e"
+ },
+ {
+  "id": "gid://shopify/Product/9217487569148",
+  "handle": "derek-jeans",
+  "key": "meta_title",
+  "old": "Derek Jeans – Ilhós Masculino | Carbono",
+  "new": "Derek Jeans – Ilhós Masculino | Carbon",
+  "digest": "20b14f4245665f4d49358bf69538ed55c8bd284bf94c9800e6feca815b9f5b35"
+ },
+ {
+  "id": "gid://shopify/Product/9217487667452",
+  "handle": "luis-jeans",
+  "key": "meta_title",
+  "old": "Luis Jeans – Efeito Respingo de Tinta | Carbono",
+  "new": "Luis Jeans – Efeito Respingo de Tinta | Carbon",
+  "digest": "b977e349fa7458f7ef2c1087fa1f879a2af05f4776dd961980a3f15cd4c632d5"
+ },
+ {
+  "id": "gid://shopify/Product/9217487798524",
+  "handle": "troy-jeans",
+  "key": "meta_title",
+  "old": "Jeans Troy – Design Patchwork | Carbono",
+  "new": "Jeans Troy – Design Patchwork | Carbon",
+  "digest": "07e7c86cf3e1c417402ceeb5fad88fc9b5a557883b389e0855e6040726a63dff"
+ },
+ {
+  "id": "gid://shopify/Product/9217488191740",
+  "handle": "pedro-jeans",
+  "key": "meta_title",
+  "old": "Jeans Pedro – Masculino | Carbono",
+  "new": "Jeans Pedro – Masculino | Carbon",
+  "digest": "0b2b7f313f073537f5eeb712b15224b5e60593b7bdbad4bc1a25b02213cf20dd"
+ },
+ {
+  "id": "gid://shopify/Product/9217488453884",
+  "handle": "prospect-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Prospect – Estampa | Carbono",
+  "new": "Camiseta Prospect – Estampa | Carbon",
+  "digest": "826aa77532e9b44eb57f321719f528dcc8d0038a52bcf3a9be5cc63d21afc129"
+ },
+ {
+  "id": "gid://shopify/Product/9217488716028",
+  "handle": "angels-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Angels – Estampa | Carbono",
+  "new": "Camiseta Angels – Estampa | Carbon",
+  "digest": "5fc2d3022efb71809da2f8042940fc48e28b0675d7724214536cc21f2578edf8"
+ },
+ {
+  "id": "gid://shopify/Product/9217488781564",
+  "handle": "game-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Gamer – Estampada | Carbono",
+  "new": "Camiseta Gamer – Estampada | Carbon",
+  "digest": "8667a8a851ab550efad6921f9a7019616e0b7e91f7a08fcd6ca5ecafe1d169f2"
+ },
+ {
+  "id": "gid://shopify/Product/9217488912636",
+  "handle": "tiger-shirt",
+  "key": "meta_title",
+  "old": "Camisa Tiger – Botão Masculina | Carbono",
+  "new": "Camisa Tiger – Botão Masculina | Carbon",
+  "digest": "121f6da04413a22eac7cbb1934be95acf935d1f4f89b1d66f023596150e03818"
+ },
+ {
+  "id": "gid://shopify/Product/9217489043708",
+  "handle": "storm-shirt",
+  "key": "meta_title",
+  "old": "Camisa Storm – Masculina de Botão | Carbono",
+  "new": "Camisa Storm – Masculina de Botão | Carbon",
+  "digest": "f049ba20dab7fed08eac67bf6df9d034b52f40d3ef7ba1d22ef87327b983fe7a"
+ },
+ {
+  "id": "gid://shopify/Product/9217489109244",
+  "handle": "mykel-shirt",
+  "key": "meta_title",
+  "old": "Camisa Mykel – Masculina Xadrez | Carbono",
+  "new": "Camisa Mykel – Masculina Xadrez | Carbon",
+  "digest": "43b82717331f9232ceb5a86762fdc694f44f3e28ffba3bed6605a1e1858241d3"
+ },
+ {
+  "id": "gid://shopify/Product/9217489371388",
+  "handle": "challenge-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Challenge – Estampa | Carbono",
+  "new": "Camiseta Challenge – Estampa | Carbon",
+  "digest": "7a0206ca9b4d4fcdc9086f95d3a46487f02514346a9528ff05f2c28b42254f4b"
+ },
+ {
+  "id": "gid://shopify/Product/9217490321660",
+  "handle": "simplify-t-shirt",
+  "key": "meta_title",
+  "old": "Camiseta Simplify – Estampa | Carbono",
+  "new": "Camiseta Simplify – Estampa | Carbon",
+  "digest": "8efd3c3a12237a7c0de0309219a66857bea54adf7348407e6dad14af9ca4c659"
+ },
+ {
+  "id": "gid://shopify/Product/9217490387196",
+  "handle": "hunter-denim-shorts",
+  "key": "meta_title",
+  "old": "Short Jeans Hunter – Masculino Comprimento no Joelho | Carbon",
+  "new": "Shorts Jeans Hunter – Masculino Comprimento no Joelho | Carbon",
+  "digest": "39a14a1c028cb291797a43f71db538608c00cebfcf8dc355dc6f0e8595747ab1"
+ },
+ {
+  "id": "gid://shopify/Product/9217492451580",
+  "handle": "c-top",
+  "key": "meta_title",
+  "old": "C-Top – Moletom Feminino | Carbono",
+  "new": "C-Top – Moletom Feminino | Carbon",
+  "digest": "fcfa4fbdf51d3cec5e64c999b250b2d4317750852b25444f3b57eaac35bbb8b5"
+ },
+ {
+  "id": "gid://shopify/Product/9217492549884",
+  "handle": "fiona-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Fiona – Feminino Corte Reto | Carbono",
+  "new": "Conjunto de Calça Fiona – Feminino Corte Reto | Carbon",
+  "digest": "578960a9842ff66dd9c36b99182fdcbb6a06301fac2b2ed3d8664a5a1b6bac98"
+ },
+ {
+  "id": "gid://shopify/Product/9217492615420",
+  "handle": "kiara-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Kiara – Estampa | Carbono",
+  "new": "Moletom Kiara – Estampa | Carbon",
+  "digest": "ee23abee6c756de535f8b6c2a695495fd0908d97d8d69706430d96b358ae4f6e"
+ },
+ {
+  "id": "gid://shopify/Product/9217492713724",
+  "handle": "adriana-top",
+  "key": "meta_title",
+  "old": "Top Adriana – Feminino Assimétrico | Carbono",
+  "new": "Top Adriana – Feminino Assimétrico | Carbon",
+  "digest": "56f512a529bf0995fae96c7f0a45ef453be62effad3bd3a652fefe7e7f21707b"
+ },
+ {
+  "id": "gid://shopify/Product/9217492779260",
+  "handle": "ny-top",
+  "key": "meta_title",
+  "old": "NY-Top – Moletom Estampado | Carbono",
+  "new": "NY-Top – Moletom Estampado | Carbon",
+  "digest": "e41aed1911741b277eafc3a5d8c6303c7d02493fa9c31d3249f85ac2fa56c2c3"
+ },
+ {
+  "id": "gid://shopify/Product/9217492877564",
+  "handle": "nina-jacket-set",
+  "key": "meta_title",
+  "old": "Conjunto de Jaqueta Nina – Cropped Feminino | Carbono",
+  "new": "Conjunto de Jaqueta Nina – Cropped Feminino | Carbon",
+  "digest": "8a406408a970fd8ca4a52f9429ee20c779d4d2f05ab7aa18b25498850a70377e"
+ },
+ {
+  "id": "gid://shopify/Product/9217492975868",
+  "handle": "nina-skirt-set",
+  "key": "meta_title",
+  "old": "Conjunto Nina – Mini Saia Feminino | Carbono",
+  "new": "Conjunto Nina – Mini Saia Feminino | Carbon",
+  "digest": "d403ca6e07d47082ce06e103cd2157215e45f8bcb430f63f07bd597346aa27e9"
+ },
+ {
+  "id": "gid://shopify/Product/9217493074172",
+  "handle": "manhattan-top",
+  "key": "meta_title",
+  "old": "Moletom Estampado Manhattan Top – Carbono",
+  "new": "Moletom Estampado Manhattan Top | Carbon",
+  "digest": "3aa04a71799787edfe9bcd6268ed32f47fd18f481a41bfb854c1412f429d0940"
+ },
+ {
+  "id": "gid://shopify/Product/9217493139708",
+  "handle": "sailing-top",
+  "key": "meta_title",
+  "old": "Top de Vela – Estampa Feminina | Carbono",
+  "new": "Top de Vela – Estampa Feminina | Carbon",
+  "digest": "e0d4a6eba561dfb3f09004eae8d46b3a0b4a691b7d006176d9dd8707a06f9aac"
+ },
+ {
+  "id": "gid://shopify/Product/9217493172476",
+  "handle": "talk-top",
+  "key": "meta_title",
+  "old": "Talk Top – Moletom Estampado | Carbono",
+  "new": "Talk Top – Moletom Estampado | Carbon",
+  "digest": "c09fbb092a9c64dbff0320556bf2c6efa982a44a1409fda7673970b255cd0f40"
+ },
+ {
+  "id": "gid://shopify/Product/9217493336316",
+  "handle": "jolene-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Jolene – Ombro Vazado Feminino | Carbono",
+  "new": "Conjunto Jolene – Ombro Vazado Feminino | Carbon",
+  "digest": "10db30c9cd6accfe9edf8e4a87805843cddec4df02d95938374d7e9a4884f402"
+ },
+ {
+  "id": "gid://shopify/Product/9217493401852",
+  "handle": "jolene-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Jolene – Calça de Moletom Feminina | Carbono",
+  "new": "Conjunto de Calça Jolene – Calça de Moletom Feminina | Carbon",
+  "digest": "36e3880e3d93138a4cecef367c5ae4be5c59923dc5c2e044ca65c272b292b41d"
+ },
+ {
+  "id": "gid://shopify/Product/9217493500156",
+  "handle": "the-who-top",
+  "key": "meta_title",
+  "old": "Blusa Feminina The Who – Estampa | Carbono",
+  "new": "Blusa Feminina The Who – Estampa | Carbon",
+  "digest": "1f6e6cff99021d7b3d0279cbd5f9c3c694712c83ca3764edbbdbd8264b258ff4"
+ },
+ {
+  "id": "gid://shopify/Product/9217493696764",
+  "handle": "goldie-top",
+  "key": "meta_title",
+  "old": "Top Goldie – Corte Feminino | Carbono",
+  "new": "Top Goldie – Corte Feminino | Carbon",
+  "digest": "b982d0d71fc5fa5f6c5bdeda9a709f76de54c45224032d4fa4003fd5b19121cb"
+ },
+ {
+  "id": "gid://shopify/Product/9217493926140",
+  "handle": "blessed-top",
+  "key": "meta_title",
+  "old": "Top Blessed – Mini Feminino | Carbono",
+  "new": "Top Blessed – Mini Feminino | Carbon",
+  "digest": "7aee298bf23cc9c6988e96d4800016ee7af90db57ca3ee2621a1f867ae96a546"
+ },
+ {
+  "id": "gid://shopify/Product/9217493958908",
+  "handle": "faithful-top",
+  "key": "meta_title",
+  "old": "Regata Faithful – Estampa Feminina | Carbono",
+  "new": "Regata Faithful – Estampa Feminina | Carbon",
+  "digest": "d028c56948dcf22238863f4e31dcd9e50334d198613531a620bcf6c16ad74ac1"
+ },
+ {
+  "id": "gid://shopify/Product/9217494024444",
+  "handle": "sanatond-top",
+  "key": "meta_title",
+  "old": "Sanatond Top – Moletom com Capuz Gráfico | Carbono",
+  "new": "Sanatond Top – Moletom com Capuz Gráfico | Carbon",
+  "digest": "4b68ff541c6cbba730998fe772b463bfc7dc840ca1c08018241060de52a218d9"
+ },
+ {
+  "id": "gid://shopify/Product/9217494089980",
+  "handle": "alpes-top",
+  "key": "meta_title",
+  "old": "Alpes Top – Moletom Careca | Carbono",
+  "new": "Alpes Top – Moletom Careca | Carbon",
+  "digest": "f78d265ffd387e12805a522c8b761d904c1ec0ea43fa4bb073bdc2b82492fce7"
+ },
+ {
+  "id": "gid://shopify/Product/9217494155516",
+  "handle": "clan-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Top Clan – Cropped Estampado | Carbono",
+  "new": "Conjunto Top Clan – Cropped Estampado | Carbon",
+  "digest": "f87271843b3a00edeedaeb2c291541cbd8293b544b64ace5d2b52043efcf6b98"
+ },
+ {
+  "id": "gid://shopify/Product/9217494319356",
+  "handle": "naomi-dress",
+  "key": "meta_title",
+  "old": "Vestido Naomi – Recortes Feminino | Carbono",
+  "new": "Vestido Naomi – Recortes Feminino | Carbon",
+  "digest": "a5d7ccb20c4729adea062b4359dfd934cd3bcca4af39f9c95a48cfec1696bac5"
+ },
+ {
+  "id": "gid://shopify/Product/9217494352124",
+  "handle": "ruby-dress",
+  "key": "meta_title",
+  "old": "Vestido Ruby – Envelope Feminino | Carbono",
+  "new": "Vestido Ruby – Envelope Feminino | Carbon",
+  "digest": "346ffaac5dc6cd01c078bf85ea8a98e7916727826aedf9a3775180a4c013a4aa"
+ },
+ {
+  "id": "gid://shopify/Product/9217494450428",
+  "handle": "kennedy-dress",
+  "key": "meta_title",
+  "old": "Vestido Kennedy – Assimétrico Feminino | Carbono",
+  "new": "Vestido Kennedy – Assimétrico Feminino | Carbon",
+  "digest": "fe4f4774928fada8702eb32f5b4a21d07a9f1fa6cd828cdb71f7f81c1fe7c9fe"
+ },
+ {
+  "id": "gid://shopify/Product/9217494483196",
+  "handle": "caroline-dress",
+  "key": "meta_title",
+  "old": "Vestido Caroline – Midi Feminino | Carbono",
+  "new": "Vestido Caroline – Midi Feminino | Carbon",
+  "digest": "ad47a5a825cd226a8d64920311b753d6c1c8e847efbc18e6592dd7914ceb15aa"
+ },
+ {
+  "id": "gid://shopify/Product/9217494548732",
+  "handle": "riley-dress",
+  "key": "meta_title",
+  "old": "Vestido Riley – Um Ombro | Carbono",
+  "new": "Vestido Riley – Um Ombro | Carbon",
+  "digest": "d4c960abdff215a367b4603c02533bd1663af3dc4aabfef5e0b928e3726deb14"
+ },
+ {
+  "id": "gid://shopify/Product/9217494679804",
+  "handle": "sarah-dress",
+  "key": "meta_title",
+  "old": "Vestido Sarah – Corte Recorte Feminino | Carbono",
+  "new": "Vestido Sarah – Corte Recorte Feminino | Carbon",
+  "digest": "d5d86fd7bd9665c09a22571db860114402595ea69a290db0a225aa7ad7e63b1d"
+ },
+ {
+  "id": "gid://shopify/Product/9217494712572",
+  "handle": "nevaeh-dress",
+  "key": "meta_title",
+  "old": "Vestido Nevaeh – Feminino Curto | Carbono",
+  "new": "Vestido Nevaeh – Feminino Curto | Carbon",
+  "digest": "b641bfe9db07d3c02dc43bb078eda2c2fd3f36400cd25049c0b23cae1924d132"
+ },
+ {
+  "id": "gid://shopify/Product/9217494843644",
+  "handle": "valeria-dress",
+  "key": "meta_title",
+  "old": "Vestido Valeria – Feminino Assimétrico | Carbono",
+  "new": "Vestido Valeria – Feminino Assimétrico | Carbon",
+  "digest": "ee7438d6097c51f6376dccead861ac461e1b9893a40cf3f97b34fa67b8776cfa"
+ },
+ {
+  "id": "gid://shopify/Product/9217494909180",
+  "handle": "eden-dress-2-pieces",
+  "key": "meta_title",
+  "old": "Vestido Eden 2 Peças – Paetê Feminino | Carbono",
+  "new": "Vestido Eden 2 Peças – Paetê Feminino | Carbon",
+  "digest": "b67ba1bcb66253832ddb62dd0aaa71e84b61784909ca1a8b32e86cdd06fe3c2a"
+ },
+ {
+  "id": "gid://shopify/Product/9217494974716",
+  "handle": "bailey-dress",
+  "key": "meta_title",
+  "old": "Vestido Bailey – Recorte Feminino | Carbono",
+  "new": "Vestido Bailey – Recorte Feminino | Carbon",
+  "digest": "8643a58b14e45385dde5e3e21110aa9613f04e33f043075a4a8a486a24736e08"
+ },
+ {
+  "id": "gid://shopify/Product/9217495007484",
+  "handle": "ayla-dress",
+  "key": "meta_title",
+  "old": "Vestido Ayla – Midi de Uma Manga | Carbono",
+  "new": "Vestido Ayla – Midi de Uma Manga | Carbon",
+  "digest": "4c7d35dc4e443687d2cc42f9030a614cd2491e306c3130bf0ae43b34a503a01b"
+ },
+ {
+  "id": "gid://shopify/Product/9217495138556",
+  "handle": "adoreyou-hoodie",
+  "key": "meta_title",
+  "old": "Moletom Adoreyou – Feminino Estonado | Carbono",
+  "new": "Moletom Adoreyou – Feminino Estonado | Carbon",
+  "digest": "978d2dfacbe2642856a557c2039ca4fb13eb7df899cae71daa54872f2aa651a7"
+ },
+ {
+  "id": "gid://shopify/Product/9217495236860",
+  "handle": "lips-top",
+  "key": "meta_title",
+  "old": "Moletom com Capuz Lips – Feminino | Carbono",
+  "new": "Moletom com Capuz Lips – Feminino | Carbon",
+  "digest": "43c03df04c9c70d5cef5ccb38b957ba22e2c7cdb5770c7f9021d3d673f80f8aa"
+ },
+ {
+  "id": "gid://shopify/Product/9217495662844",
+  "handle": "eyes-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Eyes – Feminino Afunilado | Carbono",
+  "new": "Conjunto de Calça Eyes – Feminino Afunilado | Carbon",
+  "digest": "6140d98510b3e12f6b9189602fefb93a9b2d4d944564c22c23096df88b5b24de"
+ },
+ {
+  "id": "gid://shopify/Product/9217495761148",
+  "handle": "collar-top-set",
+  "key": "meta_title",
+  "old": "Conjunto de Blusa com Gola – Feminino com Abertura Gota | Carbono",
+  "new": "Conjunto de Blusa com Gola – Feminino com Abertura Gota | Carbon",
+  "digest": "96a2c9bb0e70940ce7bcb0b33501a0f0f27fc84825aa44d83958afbd8df983aa"
+ },
+ {
+  "id": "gid://shopify/Product/9217495826684",
+  "handle": "collar-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça com Gola – Feminino Afunilado | Carbono",
+  "new": "Conjunto de Calça com Gola – Feminino Afunilado | Carbon",
+  "digest": "6e1346bb515ba1f9f43a4cee446d24679d68e71ef42fd392c57ceab568a005c6"
+ },
+ {
+  "id": "gid://shopify/Product/9217495957756",
+  "handle": "furry-top-set",
+  "key": "meta_title",
+  "old": "Conjunto de Top com Pelinho – Feminino com Capuz | Carbono",
+  "new": "Conjunto de Top com Pelinho – Feminino com Capuz | Carbon",
+  "digest": "a1bab86d5705e5634bc42c0020a64beb2edbc73613ac471b39cce8b8d002a8fd"
+ },
+ {
+  "id": "gid://shopify/Product/9217496023292",
+  "handle": "furry-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Peluciada – Feminino Afunilado | Carbono",
+  "new": "Conjunto de Calça Peluciada – Feminino Afunilado | Carbon",
+  "digest": "814c891acd6cae256c624fc350332094f518366a8011e4b8ca8bad3201053949"
+ },
+ {
+  "id": "gid://shopify/Product/9217496383740",
+  "handle": "gem-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Gem – Manga Longa Feminino | Carbono",
+  "new": "Macaquinho Gem – Manga Longa Feminino | Carbon",
+  "digest": "669f6ec862707347de63b2a1e3a1654bf548bd133d26c58b95b5c08db5966fed"
+ },
+ {
+  "id": "gid://shopify/Product/9217496449276",
+  "handle": "lily-jacket-set",
+  "key": "meta_title",
+  "old": "Conjunto de Jaqueta Lily – Feminino com Capuz | Carbono",
+  "new": "Conjunto de Jaqueta Lily – Feminino com Capuz | Carbon",
+  "digest": "ddb00d82b4bc5b488809cd751a6ff95122d5d045f91ffd54868d88b4e206022b"
+ },
+ {
+  "id": "gid://shopify/Product/9217496547580",
+  "handle": "lily-top-set",
+  "key": "meta_title",
+  "old": "Conjunto Lily Top – Cropped Feminino | Carbono",
+  "new": "Conjunto Lily Top – Cropped Feminino | Carbon",
+  "digest": "c6e0380fcdf510c50c6020515d1cc73e4fe648df4ebacc06356f02ea0fc8b2fb"
+ },
+ {
+  "id": "gid://shopify/Product/9217496580348",
+  "handle": "lily-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto Lily – Jogger Feminino | Carbono",
+  "new": "Conjunto Lily – Jogger Feminino | Carbon",
+  "digest": "fb79245e6e110ad8923ab091430083590337a853665642c7138e6c00b7cab148"
+ },
+ {
+  "id": "gid://shopify/Product/9217496645884",
+  "handle": "sydney-dress",
+  "key": "meta_title",
+  "old": "Vestido Sydney – Feminino com Capuz | Carbono",
+  "new": "Vestido Sydney – Feminino com Capuz | Carbon",
+  "digest": "44cffbb61275eaa71b098d17d57bb21c2806bc186a59f7819ab44f3e774135e9"
+ },
+ {
+  "id": "gid://shopify/Product/9217496711420",
+  "handle": "freya-top-set",
+  "key": "meta_title",
+  "old": "Conjunto de Top Freya – Moletom Feminino | Carbono",
+  "new": "Conjunto de Top Freya – Moletom Feminino | Carbon",
+  "digest": "13d3e96fc131e21e7fca47aaf9f9cb4fe4ed5ec57697dd290513a7223e17e548"
+ },
+ {
+  "id": "gid://shopify/Product/9217496744188",
+  "handle": "freya-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Freya – Jogger Feminina | Carbono",
+  "new": "Conjunto de Calça Freya – Jogger Feminina | Carbon",
+  "digest": "204bc500bafdc66ada9d3d7e8a23d4db147d6b5c75426381559f04cea834a3ac"
+ },
+ {
+  "id": "gid://shopify/Product/9217496908028",
+  "handle": "finaley-romper",
+  "key": "meta_title",
+  "old": "Macaquinho Finaley – Manga Longa Feminino | Carbono",
+  "new": "Macaquinho Finaley – Manga Longa Feminino | Carbon",
+  "digest": "2e7ac8024c428093c90b3b028f40f2a51e76c36590e3daf357d5172aedd9c644"
+ },
+ {
+  "id": "gid://shopify/Product/9217497268476",
+  "handle": "remi-jacket-set",
+  "key": "meta_title",
+  "old": "Conjunto de Jaqueta Remi – Feminino com Capuz | Carbono",
+  "new": "Conjunto de Jaqueta Remi – Feminino com Capuz | Carbon",
+  "digest": "445d4004e8c3e4049da3fde2d81a341d233e68105bc86ccad64ae21d0a2dd139"
+ },
+ {
+  "id": "gid://shopify/Product/9217497432316",
+  "handle": "remi-bodysuit-set",
+  "key": "meta_title",
+  "old": "Conjunto Body Remi – Corte Recorte Feminino | Carbono",
+  "new": "Conjunto Body Remi – Corte Recorte Feminino | Carbon",
+  "digest": "571ff046814e976c53f3cf1f2a1156e6054d63d22c909be872ca9fb8f52e8a03"
+ },
+ {
+  "id": "gid://shopify/Product/9217497530620",
+  "handle": "remi-pants-set",
+  "key": "meta_title",
+  "old": "Conjunto de Calça Remi – Calça de Moletom Feminina | Carbono",
+  "new": "Conjunto de Calça Remi – Calça de Moletom Feminina | Carbon",
+  "digest": "c07a33a414f6de93c81baeb2dab7b4c6f7db71c528795d17b0aed85269ce203d"
+ },
+ {
+  "id": "gid://shopify/Product/9217497628924",
+  "handle": "eve-top",
+  "key": "meta_title",
+  "old": "Blusa Eve – Moletom com Estampa | Carbono",
+  "new": "Blusa Eve – Moletom com Estampa | Carbon",
+  "digest": "9995c64c7cb812374ddb8856380ef7c384293fd3f32f28a5d9bef5decd67e8a3"
+ },
+ {
+  "id": "gid://shopify/Product/9217497727228",
+  "handle": "ari-top",
+  "key": "meta_title",
+  "old": "Moletom Ari Top – Estampado | Carbono",
+  "new": "Moletom Ari Top – Estampado | Carbon",
+  "digest": "606a1a6f57bb8bf13b138fe56254d323b219266113ae907604fab358c3c877d9"
+ },
+ {
+  "id": "gid://shopify/Product/9217498022140",
+  "handle": "samuel-denim-shorts",
+  "key": "meta_title",
+  "old": "Short Jeans Samuel – Masculino Destroyed | Carbono",
+  "new": "Shorts Jeans Samuel – Masculino Destroyed | Carbon",
+  "digest": "850ddae153865e3d7a97f7863fdb46f4e99bddbf58ba06be4e1a8712fe8b01e2"
+ },
+ {
+  "id": "gid://shopify/Product/9217498382588",
+  "handle": "david-denim-shorts",
+  "key": "meta_title",
+  "old": "Bermuda Jeans David – Masculina Destroyed | Carbono",
+  "new": "Bermuda Jeans David – Masculina Destroyed | Carbon",
+  "digest": "e79ccb9ea6343b07ca8f8737e2e90d878bb7a3bcbfa566df415d065e14445d00"
+ },
+ {
+  "id": "gid://shopify/Product/9217499398396",
+  "handle": "texture-top",
+  "key": "meta_title",
+  "old": "Camiseta Texture – Masculina Geométrica | Carbono",
+  "new": "Camiseta Texture – Masculina Geométrica | Carbon",
+  "digest": "c502443b9a78d80832f95fd3ba717894b14972f0877ca6a77dd2ed57cc6252f1"
+ },
+ {
+  "id": "gid://shopify/Product/9217500414204",
+  "handle": "griffin-jeans",
+  "key": "meta_title",
+  "old": "Calça Jeans Griffin – Masculina Rasgada | Carbono",
+  "new": "Calça Jeans Griffin – Masculina Rasgada | Carbon",
+  "digest": "a73ec04af79c844a64f306b704cffd7a5e1280d2dba0adaba2d98e0a27354c79"
+ },
+ {
+  "id": "gid://shopify/Product/9217500578044",
+  "handle": "rye-jeans",
+  "key": "meta_title",
+  "old": "Jeans Rye – Masculino Preto | Carbono",
+  "new": "Jeans Rye – Masculino Preto | Carbon",
+  "digest": "f6310eca2653e732ecffa2d5428f0a6eeae0c7fe0d5fc7aa0ec4eb2bcaaef11b"
+ },
+ {
+  "id": "gid://shopify/Product/9217500676348",
+  "handle": "hanan-jeans",
+  "key": "meta_title",
+  "old": "Hanan Jeans – Masculina Rasgada | Carbono",
+  "new": "Hanan Jeans – Masculina Rasgada | Carbon",
+  "digest": "11c1b0b0fe428aed5f474cef7029653cd31114fd62557576d6ab73d3acd9ec23"
+ },
+ {
+  "id": "gid://shopify/Product/9249946370300",
+  "handle": "ella-sunglasses",
+  "key": "meta_title",
+  "old": "Óculos de Sol Ella – Retangular Degradê | Carbono",
+  "new": "Óculos de Sol Ella – Retangular Degradê | Carbon",
+  "digest": "7c6acaad678134104c48e54c618451be003187fe1e8190d4531e8ad45cc99410"
+ },
+ {
+  "id": "gid://shopify/Product/9250982920444",
+  "handle": "ryland-short-set",
+  "key": "meta_title",
+  "old": "Conjunto Curto Ryland – Estampa Masculina | Carbono",
+  "new": "Conjunto Curto Ryland – Estampa Masculina | Carbon",
+  "digest": "b0ee8328c3fde7ce5df743dce94d9d4f9640053b6283b144fb6d22a0278866c8"
+ },
+ {
+  "id": "gid://shopify/Product/9251192537340",
+  "handle": "phone-holder",
+  "key": "meta_title",
+  "old": "Suporte para Celular – Redondo Preto | Carbono",
+  "new": "Suporte para Celular – Redondo Preto | Carbon",
+  "digest": "7c475ed4b60e7fb239f625f8008f1661d7a949665ebe920e93a11cd51a3cef6e"
+ },
+ {
+  "id": "gid://shopify/Product/9438451859708",
+  "handle": "millie-dress",
+  "key": "meta_title",
+  "old": "Vestido Millie – Recorte Feminino | Carbono",
+  "new": "Vestido Millie – Recorte Feminino | Carbon",
+  "digest": "4c6210f577831d8457dc18af4420f18ec9a202406db202ab4822948fff3fd02a"
+ },
+ {
+  "id": "gid://shopify/Product/15400676819196",
+  "handle": "ridge-jeans",
+  "key": "meta_title",
+  "old": "Jeans Ridge – Masculino Estonado | Carbono",
+  "new": "Jeans Ridge – Masculino Estonado | Carbon",
+  "digest": "07bd770afe1d517350c88917de18aee2433c260e6c738c40d590ea6ab1efe9ae"
+ },
+ {
+  "id": "gid://shopify/Product/15402509140220",
+  "handle": "christy-crop-set",
+  "key": "meta_title",
+  "old": "Conjunto Christy – Um Ombro Só | Carbono",
+  "new": "Conjunto Christy – Um Ombro Só | Carbon",
+  "digest": "9050861f080e3b7cdc53fb4e472b72c62f68fff0ce2d112f7a2e6e648d772a0a"
+ },
+ {
+  "id": "gid://shopify/Product/15402509238524",
+  "handle": "brandi-crop-top",
+  "key": "meta_title",
+  "old": "Top Cropped Brandi – Um Ombro Só | Carbono",
+  "new": "Top Cropped Brandi – Um Ombro Só | Carbon",
+  "digest": "e1597bfb234f809e0f6315b807ab89af03ec61c553f2026fbc763a4ce0097db5"
+ },
+ {
+  "id": "gid://shopify/Metafield/190567435567356",
+  "handle": "men-swim-bottom-i",
+  "key": "value",
+  "old": "Esta sunga masculina apresenta uma estampa geométrica amarela marcante sobre fundo preto. O cós elástico com cordão ajustável oferece conveniência, enquanto dois bolsos laterais adicionam praticidade.",
+  "new": "Este short de banho masculino apresenta uma estampa geométrica amarela marcante sobre fundo preto. O cós elástico com cordão ajustável oferece conveniência, enquanto dois bolsos laterais adicionam praticidade.",
+  "digest": "51ac641f9cf9eb2b808da99630973689ea7c60ab83a3b6dd812ebf0575581bb0"
+ },
+ {
+  "id": "gid://shopify/Metafield/190567524303100",
+  "handle": "otto-denim-shorts",
+  "key": "value",
+  "old": "O Short Jeans Otto traz um toque robusto com lavagem azul e rasgos frontais. O design de cinco bolsos e o corte na altura do joelho completam o visual.\n\nUse-o com uma camiseta básica e tênis para um estilo descontraído.",
+  "new": "O Shorts Jeans Otto traz um toque robusto com lavagem azul e rasgos frontais. O design de cinco bolsos e o corte na altura do joelho completam o visual.\n\nUse-o com uma camiseta básica e tênis para um estilo descontraído.",
+  "digest": "ccaed03d2291af8b72934b65c9099a0758a4a55349bfd37ea730e4aed926dc11"
+ },
+ {
+  "id": "gid://shopify/Metafield/190567525155068",
+  "handle": "trent-denim-shorts",
+  "key": "value",
+  "old": "O short jeans Trent em cinza estonado foca nos detalhes. Com rasgos e desfiados na parte frontal, este short apresenta o clássico design de cinco bolsos e fechamento por botão e zíper. Passantes para cinto completam o visual.\n\nCombine com uma camiseta estampada e tênis para uma vibe descontraída.",
+  "new": "O shorts jeans Trent em cinza estonado foca nos detalhes. Com rasgos e desfiados na parte frontal, este short apresenta o clássico design de cinco bolsos e fechamento por botão e zíper. Passantes para cinto completam o visual.\n\nCombine com uma camiseta estampada e tênis para uma vibe descontraída.",
+  "digest": "b5b1e0a9ba322a9ccf89fbcc543013eefd3a675104fd9161a7c2b6feffb5207f"
+ },
+ {
+  "id": "gid://shopify/Product/9217495400700",
+  "handle": "eyes-top-set",
+  "key": "meta_title",
+  "old": "Top Cropped Eyes – Carbon",
+  "new": "Top Cropped Eyes | Carbon",
+  "digest": "795e0403f1418529304a7e109b067f7e339058eac89e100f6522fa430a4269ec"
+ }
+]

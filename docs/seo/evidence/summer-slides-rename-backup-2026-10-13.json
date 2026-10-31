@@ -1,0 +1,55 @@
+{
+ "product": {
+  "id": "gid://shopify/Product/9217360101628",
+  "title": "Summer Flip Flops",
+  "handle": "summer-flip-flops",
+  "seo": {
+   "title": "Summer Flip Flops – Men's Slide | Carbon",
+   "description": "Summer Flip Flops with bold strap design and text. Available in black, red, stone, and white."
+  }
+ },
+ "es": [
+  {
+   "key": "title",
+   "value": "Chanclas de verano"
+  },
+  {
+   "key": "body_html",
+   "value": "<p>Prepárate para el verano con estas sandalias de dedo veraniegas. Con texto en la tira, vienen en negro, rojo, piedra y blanco. La plantilla texturizada completa el diseño.</p><ul>\n\n<li>Sandalias de dedo</li>\n\n<li>Diseño de tira llamativo</li>\n\n<li>Texto en la tira</li>\n\n<li>Plantilla texturizada</li>\n\n\n</ul>"
+  },
+  {
+   "key": "product_type",
+   "value": "HOMBRES &gt;&gt; ZAPATOS"
+  },
+  {
+   "key": "meta_description",
+   "value": "Chanclas de verano con diseño de tira llamativa y texto. Disponibles en negro, rojo, piedra y blanco."
+  },
+  {
+   "key": "meta_title",
+   "value": "Sandalias de verano – Chanclas para hombre | Carbon"
+  }
+ ],
+ "pt": [
+  {
+   "key": "title",
+   "value": "Chinelos de Verão"
+  },
+  {
+   "key": "product_type",
+   "value": "HOMENS &gt;&gt; SAPATOS"
+  },
+  {
+   "key": "body_html",
+   "value": "<p>Entre no clima de verão com estes chinelos Summer Flip Flops. Com texto na tira, eles estão disponíveis nas cores preto, vermelho, bege e branco. A palmilha texturizada completa o visual.</p><ul>\n\n<li>Chinelo slide</li>\n\n<li>Design de tira marcante</li>\n\n<li>Texto na tira</li>\n\n<li>Palmilha texturizada</li>\n\n\n</ul>"
+  },
+  {
+   "key": "meta_title",
+   "value": "Chinelos de Verão – Slide Masculino | Carbon"
+  },
+  {
+   "key": "meta_description",
+   "value": "Chinelo de verão com design de tira ousado e texto. Disponível nas cores preta, vermelha, pedra e branca."
+  }
+ ]
+}

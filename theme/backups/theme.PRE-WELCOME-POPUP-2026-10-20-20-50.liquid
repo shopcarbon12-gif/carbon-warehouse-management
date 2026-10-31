@@ -1,0 +1,533 @@
+<!doctype html>
+{%- capture dir -%}
+	{%- case request.locale.iso_code -%}
+	  {%- when 'ae' or 'ar' or 'arc' or 'bcc' or 'bqi' or 'ckb' or 'dv' or 'fa' or 'glk' or 'ha' or 'he' or 'kwh' or 'ks' or 'ku' or 'mzn' or 'nqo' or 'pnb' or 'ps' or 'sd' or 'ug' or 'ur' or 'yi' -%}
+	    rtl
+	  {%- else -%}
+	    ltr
+	{%- endcase -%}
+{%- endcapture -%}
+<html class="no-js" lang="{{ request.locale.iso_code }}" dir="{{ dir }}">
+<head>
+  {% render 'carbon-shield' %}
+  {% render 'carbon-perf-fixes' %}<!-- SEOAnt Speed Up Script -->{%- if shop.metafields.seoantAppSiteSpeedUpV2.switch == 1 -%}{% include 'SEOAnt-SpeedUp' %}{%- endif -%}<!-- /SEOAnt Speed Up Script -->
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+	<meta name="theme-color" content="{{ settings.color_body_bg }}">
+	<link rel="canonical" href="{{ canonical_url }}">
+	<link rel="preconnect" href="https://cdn.shopify.com" crossorigin>
+	{% render 'head-preload' %}
+
+	{% if settings.favicon != blank -%}
+		<link rel="icon" type="image/png" href="{{ settings.favicon | image_url: width: 32, height: 32 }}">
+	{%- endif %}
+
+	<meta name="facebook-domain-verification" content="o1hrzuosbkkjwr6o0y9iwi0ceqpwet">
+
+	{%- comment -%}
+	  Place schema belongs on the store locator only. It previously rendered on every
+	  page of the site, and before <html> rather than inside <head>.
+	{%- endcomment -%}
+	{%- if page.handle == 'store-locator' or page.handle == 'retail-store-locator' -%}
+	<script type="application/ld+json">
+	{
+	  "@context": "https://schema.org",
+	  "@type": "ClothingStore",
+	  "name": "Carbon Showroom",
+	  "url": "https://shopcarbon.com/pages/retail-store-locator",
+	  "telephone": "+1-407-773-1399",
+	  "address": {
+	    "@type": "PostalAddress",
+	    "streetAddress": "6250 Edgewater Drive, Suite 100",
+	    "addressLocality": "Orlando",
+	    "addressRegion": "FL",
+	    "postalCode": "32810",
+	    "addressCountry": "US"
+	  },
+	  "openingHoursSpecification": [{
+	    "@type": "OpeningHoursSpecification",
+	    "dayOfWeek": ["Monday", "Tuesday", "Thursday", "Friday", "Saturday"],
+	    "opens": "12:00",
+	    "closes": "19:00"
+	  }],
+	  "parentOrganization": { "@type": "Organization", "name": "Carbon", "url": "https://shopcarbon.com" }
+	}
+	</script>
+	{%- endif -%}
+
+	{%- comment -%}
+	  /collections/all is Shopify's built-in virtual collection: its SEO title and
+	  description cannot be set in admin, so they are set here. This override used to
+	  sit outside the document head, which left that page with two competing title
+	  elements. Folding it into the normal title logic leaves exactly one.
+	{%- endcomment -%}
+	{%- liquid
+		assign seo_title = page_title
+		assign seo_description = page_description
+		if collection.url == '/collections/all'
+			assign seo_title = 'All Products | Trendy Men’s & Women’s Styles in the USA'
+			assign seo_description = 'Discover all products at Carbon in one place featuring trendy and affordable clothing, jeans, accessories, and seasonal styles for men and women’s fashion.'
+		endif
+	-%}
+
+	<title>
+  {{ seo_title }}
+  {% if current_tags %}
+    {% assign meta_tags = current_tags | join: ', ' %}
+    &ndash; {{ 'general.meta.tags' | t: tags: meta_tags }}
+  {% endif %}
+  {% if current_page != 1 %}
+    &ndash; {{ 'general.meta.page' | t: page: current_page }}
+  {% endif %}
+</title>
+
+	{% if seo_description %}
+	<meta name="description" content="{{ seo_description | escape }}">
+	{% endif %}
+
+	{%- unless settings.heading_font.system? and settings.body_font.system? -%}
+		<link rel="preconnect" href="https://fonts.shopifycdn.com" crossorigin>
+	{%- endunless -%}
+
+	{% render 'social-meta-tags' %}
+
+	{{ 'app.css' | asset_url | stylesheet_tag }}
+    {{ 'noman.css' | asset_url | stylesheet_tag }}
+
+	{% render 'head-variables' %}
+
+	<script>
+		window.theme = window.theme || {};
+		theme = {
+			settings: {
+				money_with_currency_format: {{- shop.money_format | json -}},
+				cart_drawer: {{- settings.cart_drawer -}},
+				product_id: {% if product %}{{ product.id }}{% else %}false{% endif %},
+			},
+			routes: {
+				root_url: '{{ routes.root_url }}',
+				cart_url: '{{ routes.cart_url }}',
+				cart_add_url: '{{ routes.cart_add_url }}',
+				search_url: '{{ routes.search_url }}',
+				cart_change_url: '{{ routes.cart_change_url }}',
+				cart_update_url: '{{ routes.cart_update_url }}',
+				predictive_search_url: '{{ routes.predictive_search_url }}',
+			},
+			variantStrings: {
+        addToCart: `{{ 'products.product.add_to_cart' | t }}`,
+        soldOut: `{{ 'products.product.sold_out' | t }}`,
+        unavailable: `{{ 'products.product.unavailable' | t }}`,
+        preOrder: `{{ 'products.product.pre_order' | t }}`,
+      },
+			strings: {
+				requiresTerms: `{{ 'sections.cart.terms_confirm' | t }}`,
+				shippingEstimatorNoResults: `{{ 'sections.cart.shipping_estimator.no_results' | t }}`,
+				shippingEstimatorOneResult: `{{ 'sections.cart.shipping_estimator.one_result' | t }}`,
+				shippingEstimatorMultipleResults: `{{ 'sections.cart.shipping_estimator.multiple_results' | t }}`,
+				shippingEstimatorError: `{{ 'sections.cart.shipping_estimator.error' | t }}`
+			}
+		};
+	</script>
+  {% render 'head-noindex' %}
+  {% render 'breadcrumb-schema' %}
+	
+	{%- comment -%} Google Tag Manager (GTM-WHVPQVSC) removed 2026-10-20 for speed: it sent Google Analytics a second time — GA4 + Google Ads run through the Google & YouTube app. Restore from theme/backups/theme.PRE-SPEED-2026-10-20.liquid {%- endcomment -%}
+	
+	{{ content_for_header }} <!-- Header hook for plugins -->
+
+	<script>document.documentElement.className = document.documentElement.className.replace('no-js', 'js');</script>
+	{{ settings.custom_html_head }}
+
+  <style>
+   .store_location_wrp {
+  display: flex;
+}
+.header.transparent--true:hover a.header__locator_link {
+  color: #000000;
+}
+a.header__locator_link {
+  color: #fff !important;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+a.header__locator_link svg path {
+  fill: #fff;
+}
+.header.transparent--true:hover a.header__locator_link svg path {
+  fill: #fff;
+}
+.is-sticky a.header__locator_link svg path {
+  fill: #fff;
+}
+.is-sticky a.header__locator_link {
+  color: #fff;
+}
+
+    .transparent--false a.header__locator_link {
+    color: #fff;
+}
+  .transparent--false a.header__locator_link svg path  {
+    fill: #fff;
+}
+.thb-secondary-area-item.thb-secondary-myaccount span {
+    line-height: normal !important;
+}
+@media (min-width: 1024px) {
+  .sub-menu.mega-menu-container {
+      background-color: #fff;
+  }
+   ul.mega-menu-columns a.thb-full-menu--link {
+      color: #000;
+      font-size: 15px;
+  }
+}
+
+.banner_row {
+  display: flex;
+  align-items: stretch;
+}
+.banner.relative {
+  position: relative;
+}
+.instagram-link.test {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 10px 15px;
+    display: inline-block;
+    z-index: 4;
+    font-size: 2rem;
+    color: #fff;
+}
+.banner.relative {
+    height: 100%;
+}
+
+.banner.relative img {
+    height: 100%;
+-webkit-transition: all .6s ease .15s;
+    -moz-transition: all .6s ease .15s;
+    -o-transition: all .6s ease .15s;
+    -ms-transition: all .6s ease .15s;
+    transition: all .6s ease .15s;
+}
+.banner.relative {
+    overflow: hidden;
+-webkit-transition: all .6s ease .15s;
+    -moz-transition: all .6s ease .15s;
+    -o-transition: all .6s ease .15s;
+    -ms-transition: all .6s ease .15s;
+    transition: all .6s ease .15s;
+}
+.banner:hover img {
+    transform: scale(1.1);
+}
+.instagram-link.test a.color-wh.lbold {
+    font-size: 2rem;
+    color: #fff;
+    font-weight: 500;
+}
+@media (max-width: 768px) {
+  a.header__locator_link {
+    font-size: 15px;
+  }
+      .banner_row {
+    display: block;
+    align-items: stretch;
+}
+        .store_location_wrp {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+      a.header__locator_link svg {
+    width: 16px;
+}
+a.header__locator_link {
+    display: flex !important;
+    align-items: center;
+    min-height: 60px;
+    padding: 5px 0;
+    font-size: 1.5rem !important;
+    letter-spacing: .05em;
+    border-bottom: 1px solid var(--color-header-border, var(--color-border));
+    color: var(--color-header-links, --color-accent);
+    margin-bottom: 18px;
+    margin-top: -15px;
+}
+a.thb-mobile-account-link {
+    display: flex !important;
+    align-items: center;
+    min-height: 60px;
+    padding: 5px 0 ;
+    font-size: 1.5rem !important;
+    letter-spacing: .05em;
+    border-bottom: 1px solid var(--color-header-border, var(--color-border));
+    color: var(--color-header-links, --color-accent);
+    margin-bottom: 18px;
+    margin-top: -15px;
+    gap: 11px;
+}
+  }
+</style>
+
+{%- comment -%}
+  Product names are stored in Title Case ("Nikita Dress") and shown in CAPS.
+
+  Google Merchant Center flags ALL-CAPS titles as "Excessive capitalization",
+  and screen readers often spell all-caps words out letter by letter. So the
+  DATA is Title Case — which is what Google, Googlebot, admin exports and
+  assistive tech read — while CSS does the shouting for human shoppers.
+  text-transform is purely visual and never reaches the DOM text.
+
+  The theme already uppercases four surfaces when settings.product_title_uppercase
+  is on: .product-card-title, .cart-product-link, .product-add-to-cart-sticky--title
+  and .thb-product-detail .product-title.uppercase--true. This block is the
+  top-up for the ones it misses — image hotspots, and any .product-title that
+  renders outside .thb-product-detail or without the uppercase--true class
+  (quick view, product recommendations, drawers, search results).
+
+  Remove this block and turn off the theme setting to show real Title Case.
+{%- endcomment -%}
+{%- if settings.product_title_uppercase -%}
+<style id="carbon-uppercase-titles">
+  .product-title-uppercase-true .product-title,
+  .product-title-uppercase-true .product-card-title,
+  .product-title-uppercase-true .cart-product-link,
+  .product-title-uppercase-true .thb-hotspot-product-title,
+  .product-title-uppercase-true .product-recommendations .product-title,
+  .product-title-uppercase-true .predictive-search .product-title {
+    text-transform: uppercase;
+  }
+
+  /* carbon-uppercase-breadcrumbs */
+  .product-title-uppercase-true .breadcrumbs {
+    text-transform: uppercase;
+  }
+</style>
+{%- endif -%}
+
+{% render 'carbon-overflow-x-fix' %}
+{%- comment -%}
+  Carbon wishlist store — owns the saved-items list for the whole site (the
+  heart button, the wishlist page and the header count all read through it).
+  Deferred: nothing needs it before DOMContentLoaded, and every consumer waits
+  for that event.
+{%- endcomment -%}
+<script src="{{ 'carbon-wishlist.js' | asset_url }}" defer="defer"></script>
+{%- render 'carbon-wishlist-global' -%}
+{%- render 'carbon-wishlist-drawer' -%}
+{%- render 'carbon-wishlist-sync' -%}
+</head>
+<body class="animations-{{ settings.animations }} button-uppercase-{{ settings.button_uppercase }} navigation-uppercase-{{ settings.navigation_uppercase }} product-title-uppercase-{{ settings.product_title_uppercase }}{% if customer %} customer-logged-in{% endif %} template-{{ template | replace: '.', ' ' | truncatewords: 1, '' | handle }} template-{{ template | replace: '.', '-' | handle }}" data-customer-logged-in="{% if customer %}true{% else %}false{% endif %}">
+
+
+	<a class="screen-reader-shortcut" href="#main-content">{{ 'accessibility.skip_to_text' | t }}</a>
+	<div id="wrapper">
+		{%- sections 'header-group' -%}
+		{%- sections 'overlay-group' -%}
+		<div role="main" id="main-content">
+			{{ content_for_layout }}
+		</div>
+		{% sections 'footer-group' %}
+		{% render 'cart-drawer' %}
+		{% render 'product-drawer' %}
+		{% render 'search-drawer' %}
+		<div class="click-capture"></div>
+	</div>
+  
+	{{ 'vendor.min.js' | asset_url | script_tag }}
+	{% if settings.animations %}
+		{{ 'animations.min.js' | asset_url | script_tag }}
+		<script>
+			gsap.defaults({
+				ease: Power4.easeOut
+			});
+			gsap.config({
+		    nullTargetWarn: false
+		  });
+			gsap.registerPlugin(ScrollTrigger);
+		</script>
+	{% endif %}
+	{{ 'slideshow.js' | asset_url | script_tag }}
+	{{ 'app.js' | asset_url | script_tag }}
+	{%- liquid
+		assign add_product_js = false
+		if settings.enable_quick_view or settings.enable_quick_add
+			assign add_product_js = true
+		endif
+
+		if cart != empty and settings.cart_recommendations
+			assign add_product_js = true
+		endif
+
+		comment
+			product.js is loaded from here and ONLY here. sections/main-product.liquid
+			used to emit it as well, so on a product page the browser executed the
+			file twice and bound every listener twice.
+
+			It has to load from this position rather than from the section: the
+			libraries above are synchronous, so a deferred tag here runs after them,
+			whereas the section's tag sits earlier in the document and would run
+			before gsap exists — product.js feature-detects gsap in a constructor and
+			would silently disable the sticky add-to-cart animation.
+		endcomment
+		if template.name == 'product'
+			assign add_product_js = true
+		endif
+	-%}	
+	{% if add_product_js %}
+		<script src="{{ 'product.js' | asset_url }}" defer="defer"></script>
+	{% endif %}
+	<script type="module" src="{{ 'scroll-shadow.js' | asset_url }}" defer="defer"></script>
+	<script src="{{ 'predictive-search.js' | asset_url }}" defer="defer"></script>
+	{%- if request.design_mode -%}
+		{{ 'theme-editor.js' | asset_url | script_tag }}
+		{% render 'customer-data' %}
+	{%- endif -%}
+	{%- if settings.free_shipping -%}
+		{{ 'free-shipping.js' | asset_url | script_tag }}
+		{{ 'free-shipping.css' | asset_url | stylesheet_tag }}
+	{%- endif -%}
+	{%- if settings.cart_recommendations -%}
+	<script src="{{ 'product-recommendations.js' | asset_url }}" defer="defer"></script>
+	{%- endif -%}
+	{%- if settings.cart_terms_conditions_enable -%}
+		<script src="{{ 'terms-checkbox.js' | asset_url }}" defer="defer"></script>
+	{%- endif -%}
+	{% render 'back-to-top' %}
+
+	{%- if settings.preload_links -%}
+		{%- unless request.design_mode -%}
+		<script type="module" src="{{ 'instant-page.js' | asset_url }}" defer="defer"></script>
+		{%- endunless -%}
+	{%- endif -%}
+
+{% render 'carbon-accessibility-widget' %}
+{% render 'carbon-scroll-reveal' %}
+{% render 'carbon-home-tweaks' %}
+{% render 'carbon-widget-align' %}
+
+<!-- Metricool tracking (Carbon WMS script) -->
+{% render 'carbon-set-cart' %}
+{% render 'carbon-set-cart-guard' %}
+{% render 'carbon-mega-menu' %}
+{% render 'carbon-sticky-atc' %}
+{% render 'carbon-buy-button-hover' %}
+{% render 'carbon-size-availability' %}
+  {%- render 'carbon-referral-capture' -%}
+  {%- render 'carbon-rewards-widget' -%}
+{% render 'carbon-tawk-delayed' %}
+</body>
+</html>
+<script src="{{ 'noman.js' | asset_url }}" defer="defer"></script>
+<script>
+/* Accessibility attributes for elements the theme and third-party widgets render
+   without them. Applied once after load, then again only when the DOM actually
+   changes (cart drawer, quick view, Instagram feed, chat widget).
+
+   Replaces a setInterval that re-ran ~40 jQuery writes every second for the whole
+   life of the page, re-bound click handlers on every tick, and appended a new
+   live-region div each time. No jQuery dependency. */
+(function () {
+  var ATTRS = [
+    ['svg', 'aria-label', 'SVG Icon'],
+    ['a[target="_blank"]', 'title', 'Open in a new window'],
+    ['a[target="_blank"]', 'aria-label', 'Open in a new window'],
+    ['.product-recommendations', 'aria-label', 'Product recommendations, you may also like'],
+    ['.product-recommendations', 'role', 'group'],
+    ['.product-recommendations', 'tabindex', '0'],
+    ['.eapps-instagram-feed-posts-slider-next', 'aria-label', 'Instagram feed post slider'],
+    ['.eapps-instagram-feed-posts-slider-next', 'role', 'button'],
+    ['.product-card-swatch', 'aria-label', 'Product card swatch'],
+    ['.product-card-swatch', 'role', 'button'],
+    ['.product-card-swatch', 'tabindex', '0'],
+    ['#kr-widget-launcher-button', 'aria-label', 'Widget launcher button'],
+    ['#kr-widget-launcher-button', 'role', 'button'],
+    ['#kr-widget-launcher-button', 'tabindex', '0'],
+    ['.swym-background-color', 'role', 'button'],
+    ['.product-card-quickview', 'tabindex', '0'],
+    ['.view-products', 'tabindex', '0'],
+    ['.thb-full-menu--link', 'aria-haspopup', 'true'],
+    ['#NewsletterForm--sections--18613012398332__footer', 'aria-required', 'true'],
+    ['#HeaderLocalization input', 'role', 'button'],
+    ['#FooterLocalization input', 'role', 'button'],
+    ['.testimonials__testimonial-inner p', 'role', 'heading'],
+    ['.thb-widget-menu', 'role', 'menu'],
+    ['.thb-widget-menu li', 'role', 'menuitem'],
+    ['.search-field', 'aria-label', 'Search field, search anything'],
+    ['.storepoint-address', 'tabindex', '0'],
+    ['.storepoint-name', 'tabindex', '0'],
+    ['.amount', 'tabindex', '0'],
+    ['.mega-menu-promotion img', 'alt', 'Menu item image'],
+    ['.gallery__item-content-link', 'aria-label', 'Gallery item link'],
+    ['.slideshow__slide-video-bg img', 'alt', 'Slideshow background'],
+    ['#Filter-Price-GTE', 'aria-label', 'Filter price, minimum'],
+    ['#Filter-Price-LTE', 'aria-label', 'Filter price, maximum'],
+    ['#Filter-Price-GTE-mobile', 'aria-label', 'Filter price, minimum'],
+    ['#Filter-Price-LTE-mobile', 'aria-label', 'Filter price, maximum']
+  ];
+
+  function apply() {
+    for (var i = 0; i < ATTRS.length; i++) {
+      var sel = ATTRS[i][0], attr = ATTRS[i][1], val = ATTRS[i][2], nodes;
+      try { nodes = document.querySelectorAll(sel); } catch (e) { continue; }
+      for (var j = 0; j < nodes.length; j++) {
+        /* never overwrite a value the theme is managing itself */
+        if (!nodes[j].hasAttribute(attr)) nodes[j].setAttribute(attr, val);
+      }
+    }
+
+    var sections = document.querySelectorAll('.product-section');
+    for (var s = 0; s < sections.length; s++) {
+      var titleEl = sections[s].querySelector('.product-title');
+      var name = titleEl ? titleEl.textContent.trim() : '';
+      var imgs = sections[s].querySelectorAll('.product-image-container img');
+      for (var k = 0; k < imgs.length; k++) {
+        if (!imgs[k].getAttribute('alt')) {
+          imgs[k].setAttribute('alt', ('Carbon ' + name + ' - photo ' + (k + 1)).replace(/\s+/g, ' ').trim());
+        }
+      }
+    }
+  }
+
+  var timer = null;
+  function schedule() {
+    if (timer) return;
+    timer = setTimeout(function () { timer = null; apply(); }, 250);
+  }
+
+  function start() {
+    apply();
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+</script>
+<style>
+  .badge {
+    font-size: 12px !important;
+  }
+.visually-hidden {
+    color: #fff !important;
+    background-color: #000 !important;
+  }
+  .breadcrumbs i{
+        opacity: 1 !important; 
+        color: #000 !important;
+  }
+  .out-of-stock {
+    background-color: #707070 !important;
+  }
+</style>
+

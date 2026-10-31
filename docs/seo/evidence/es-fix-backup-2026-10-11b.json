@@ -1,0 +1,74 @@
+[
+ {
+  "id": "gid://shopify/Product/9217350795516",
+  "handle": "wayne-overall",
+  "key": "meta_title",
+  "old": "Peto corto para hombre Wayne – Carbono",
+  "new": "Peto corto para hombre Wayne | Carbon",
+  "digest": "e3f91099fc1557d3e59a4108f9b437f8d18c8f0a911dc13bf412f89babd4acf7"
+ },
+ {
+  "id": "gid://shopify/Product/9217353941244",
+  "handle": "furry-slippers",
+  "key": "meta_title",
+  "old": "Pantuflas peludas – Modelo sin cordones para mujer | Color carbón",
+  "new": "Pantuflas peludas – Modelo sin cordones para mujer | Carbon",
+  "digest": "34d86d6b29e3074e96822af2723ae0ee99f80b77e6395cf32792fcb9a8e90ae8"
+ },
+ {
+  "id": "gid://shopify/Product/9217423868156",
+  "handle": "marne-tank-top",
+  "key": "body_html",
+  "old": "<p>La camiseta de tirantes Marne es un top de canalé con escote cuadrado y largo corto. Disponible en lavanda, negro, crudo y color champiñón.</p><p>Combínala con pantalones cortos de talle alto para un estilo desenfadado.</p><ul>\n\n<li>Escote cuadrado</li>\n\n<li>Textura de canalé</li>\n\n<li>Largo corto</li>\n\n\n</ul>",
+  "new": "<p>El tank top Marne es un top de canalé con escote cuadrado y largo corto. Disponible en lavanda, negro, crudo y color champiñón.</p><p>Combínala con pantalones cortos de talle alto para un estilo desenfadado.</p><ul>\n\n<li>Escote cuadrado</li>\n\n<li>Textura de canalé</li>\n\n<li>Largo corto</li>\n\n\n</ul>",
+  "digest": "a603aaffbc60d64fcb3f9d5608d8459d1e2014428978380a48c4daa5158e1798"
+ },
+ {
+  "id": "gid://shopify/Product/9217437532412",
+  "handle": "stringer-pride-tank-top",
+  "key": "body_html",
+  "old": "<p>La camiseta de tirantes Stringer Pride presenta un llamativo gráfico de arcoíris con el texto 'BE THE ELEMENT'. Disponible en blanco y negro.</p><p>Combínala con unos pantalones cortos desgastados para un look relajado.</p><ul>\n\n<li>Escote redondo</li>\n\n<li>Diseño de espalda nadadora</li>\n\n<li>Aberturas laterales</li>\n\n\n</ul>",
+  "new": "<p>El tank top Stringer Pride presenta un llamativo gráfico de arcoíris con el texto 'BE THE ELEMENT'. Disponible en blanco y negro.</p><p>Combínala con unos pantalones cortos desgastados para un look relajado.</p><ul>\n\n<li>Escote redondo</li>\n\n<li>Diseño de espalda nadadora</li>\n\n<li>Aberturas laterales</li>\n\n\n</ul>",
+  "digest": "b701c998def55cb7136cadf8e20dd9539f98a50b8c391e94f437bde83a54b881"
+ },
+ {
+  "id": "gid://shopify/Product/9217437532412",
+  "handle": "stringer-pride-tank-top",
+  "key": "product_type",
+  "old": "HOMBRES &gt;&gt; CAMISETA DE TIRANTES",
+  "new": "HOMBRES &gt;&gt; TANK TOP",
+  "digest": "7963bf369a1adb36ae8004529cfd16b83965b1d62af64ec2905c7b06c5264505"
+ },
+ {
+  "id": "gid://shopify/Product/9217472463100",
+  "handle": "no-risk-top-set",
+  "key": "meta_title",
+  "old": "Sudadera con capucha gráfica No Risk Top Set – Carbono",
+  "new": "Sudadera con capucha gráfica No Risk Top Set | Carbon",
+  "digest": "f1445fb6007c7b8ee0e980bae21e380ed541354a21a73d38941a678a4faabb58"
+ },
+ {
+  "id": "gid://shopify/Product/9217494024444",
+  "handle": "sanatond-top",
+  "key": "meta_title",
+  "old": "Sudadera con capucha gráfica Sanatond – Carbón",
+  "new": "Sudadera con capucha gráfica Sanatond | Carbon",
+  "digest": "4b68ff541c6cbba730998fe772b463bfc7dc840ca1c08018241060de52a218d9"
+ },
+ {
+  "id": "gid://shopify/Product/9217497628924",
+  "handle": "eve-top",
+  "key": "meta_title",
+  "old": "Sudadera Eve con gráfico – Carbono",
+  "new": "Sudadera Eve con gráfico | Carbon",
+  "digest": "9995c64c7cb812374ddb8856380ef7c384293fd3f32f28a5d9bef5decd67e8a3"
+ },
+ {
+  "id": "gid://shopify/Product/9217498382588",
+  "handle": "david-denim-shorts",
+  "key": "meta_title",
+  "old": "Pantalones cortos de mezclilla David – Estilo desgastado para hombre | Color carbón",
+  "new": "Pantalones cortos de mezclilla David – Estilo desgastado para hombre | Carbon",
+  "digest": "e79ccb9ea6343b07ca8f8737e2e90d878bb7a3bcbfa566df415d065e14445d00"
+ }
+]

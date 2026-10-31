@@ -1,0 +1,62 @@
+[
+ {
+  "description": "Band Bracelet E",
+  "upc": "1631949",
+  "sku": "C116319490711",
+  "active_id": "6c23685a-b41b-41b3-abe6-427dc1ffc882",
+  "arch_id": "67af2f1f-03a4-4fd8-8938-6e0f9195d91e",
+  "a_var": "gid://shopify/ProductVariant/67753835331836",
+  "a_inv": "gid://shopify/InventoryItem/69740370526460",
+  "b_var": "gid://shopify/ProductVariant/48688798564604",
+  "b_inv": "gid://shopify/InventoryItem/50804073529596",
+  "b_created": "2026-05-02T03:48:47.322Z"
+ },
+ {
+  "description": "Ride Blazer",
+  "upc": "2122208",
+  "sku": "2122208F804",
+  "active_id": "85857b2b-e675-4605-907a-208ad85fffe4",
+  "arch_id": "fc3609c7-3d98-440c-960d-25380e6b144a",
+  "a_var": "gid://shopify/ProductVariant/67770776387836",
+  "a_inv": "gid://shopify/InventoryItem/69757336125692",
+  "b_var": "gid://shopify/ProductVariant/68013884145916",
+  "b_inv": "gid://shopify/InventoryItem/70001320755452",
+  "b_created": "2026-10-27T09:08:42.335Z"
+ },
+ {
+  "description": "Ride Blazer",
+  "upc": "2122208",
+  "sku": "2122208F806",
+  "active_id": "1ef8e8fc-4d11-47d5-b5b1-133f1bad22c4",
+  "arch_id": "3a16fc7d-b709-43ca-8993-2ba59b5945af",
+  "a_var": "gid://shopify/ProductVariant/67770776420604",
+  "a_inv": "gid://shopify/InventoryItem/69757336158460",
+  "b_var": "gid://shopify/ProductVariant/68013884178684",
+  "b_inv": "gid://shopify/InventoryItem/70001320788220",
+  "b_created": "2026-10-27T09:08:42.390Z"
+ },
+ {
+  "description": "Ride Blazer",
+  "upc": "2122208",
+  "sku": "2122208F808",
+  "active_id": "5b1baa76-fa2f-4790-8029-723deba9b96a",
+  "arch_id": "e834a81f-ec38-426c-abc7-5a6fe2ddfd23",
+  "a_var": "gid://shopify/ProductVariant/67770776453372",
+  "a_inv": "gid://shopify/InventoryItem/69757336191228",
+  "b_var": "gid://shopify/ProductVariant/68013884211452",
+  "b_inv": "gid://shopify/InventoryItem/70001320820988",
+  "b_created": "2026-10-27T09:08:42.442Z"
+ },
+ {
+  "description": "Ride Blazer",
+  "upc": "2122208",
+  "sku": "2122208F810",
+  "active_id": "2678930b-47cd-4c82-8906-fa7964dbcecb",
+  "arch_id": "2608a2ea-17f2-420c-a717-cf119a5b3564",
+  "a_var": "gid://shopify/ProductVariant/48689301094652",
+  "a_inv": "gid://shopify/InventoryItem/50804526547196",
+  "b_var": "gid://shopify/ProductVariant/68013884244220",
+  "b_inv": "gid://shopify/InventoryItem/70001320853756",
+  "b_created": "2026-10-27T09:08:42.488Z"
+ }
+]
