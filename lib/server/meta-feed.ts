@@ -9,6 +9,11 @@
  *
  * Colour blocks follow the store's photo order: a colour's photos start at its
  * variant picture and run to the next colour's variant picture.
+ *
+ * Shop photos (owner 2026-11-03): the Facebook / Instagram Shop had one old
+ * picture per product, so every variant now also gets its colour's whole
+ * gallery (additional_image_link), and variants without a close-up get
+ * Shopify's own main picture, so Meta reloads them too.
  */
 import OpenAI from "openai";
 import type { Pool } from "pg";
@@ -21,6 +26,19 @@ import { signSession } from "@/lib/auth";
 const REBUILD_MS = 6 * 60 * 60_000;
 /** Photos looked at per colour when hunting for its close-up. */
 const LOOK_AHEAD = 4;
+/** Meta takes at most 20 additional pictures per item. */
+const GALLERY_MAX = 20;
+
+/**
+ * The square Shopify's Facebook & Instagram app sends as an item's picture
+ * (".../x.jpg?v=1" → ".../x_1080x1080_pad_ffffff.jpg.jpg?v=1").
+ */
+export function shopifyPadded(url: string): string {
+  const [path, query] = url.split("?");
+  const m = /^(.*)\.([a-z0-9]+)$/i.exec(path);
+  if (!m) return url;
+  return `${m[1]}_1080x1080_pad_ffffff.${m[2]}.jpg${query ? `?${query}` : ""}`;
+}
 
 type RawProduct = {
   id: string;
@@ -71,8 +89,8 @@ async function activeProducts(): Promise<RawProduct[]> {
   return out;
 }
 
-/** For each variant: the photos of its colour after its own picture, in order. */
-export function colourBlocks(p: RawProduct): Array<{ variantId: string; candidates: string[] }> {
+/** For each variant: its colour's photos in order, and the ones after its own picture (close-up candidates). */
+export function colourBlocks(p: RawProduct): Array<{ variantId: string; candidates: string[]; gallery: string[] }> {
   const media = p.media.nodes.map((m) => m.image?.url).filter((u): u is string => !!u);
   const keys = media.map(photoKey);
   const starts = [
@@ -86,7 +104,11 @@ export function colourBlocks(p: RawProduct): Array<{ variantId: string; candidat
     const at = v.image ? keys.indexOf(photoKey(v.image.url)) : 0;
     const start = at >= 0 ? at : 0;
     const end = starts.find((s) => s > start) ?? media.length;
-    return { variantId: num(v.id), candidates: media.slice(start + 1, end).slice(0, LOOK_AHEAD) };
+    return {
+      variantId: num(v.id),
+      candidates: media.slice(start + 1, end).slice(0, LOOK_AHEAD),
+      gallery: media.slice(start, end),
+    };
   });
 }
 
@@ -119,8 +141,19 @@ export async function buildMetaFeed(pool: Pool): Promise<{ products: number; var
   }
 
   const rows = blocks
-    .map((b) => ({ ...b, src: b.candidates.find((u) => known.get(photoKey(u)) === "front-close") }))
-    .filter((b): b is typeof b & { src: string } => !!b.src);
+    .filter((b) => b.gallery.length > 0)
+    .map((b) => {
+      const src = b.candidates.find((u) => known.get(photoKey(u)) === "front-close") ?? null;
+      return {
+        ...b,
+        src,
+        // No close-up: Shopify's own main picture, as its app sends it.
+        main: src ? null : shopifyPadded(b.gallery[0]),
+        // The rest of the colour's photos, without the one used as the main picture.
+        extra: b.gallery.filter((u) => u !== src).slice(src ? 0 : 1).slice(0, GALLERY_MAX),
+      };
+    });
+  const closeUps = rows.filter((r) => r.src).length;
 
   const client = await pool.connect();
   try {
@@ -129,14 +162,21 @@ export async function buildMetaFeed(pool: Pool): Promise<{ products: number; var
     for (let i = 0; i < rows.length; i += 500) {
       const part = rows.slice(i, i + 500);
       await client.query(
-        `INSERT INTO meta_feed_rows (variant_id, product_id, src)
-         SELECT * FROM unnest($1::text[], $2::text[], $3::text[])`,
-        [part.map((r) => r.variantId), part.map((r) => r.productId), part.map((r) => r.src)],
+        `INSERT INTO meta_feed_rows (variant_id, product_id, src, main, gallery)
+         SELECT v, p, s, m, ARRAY(SELECT json_array_elements_text(g::json))
+           FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[]) AS t(v, p, s, m, g)`,
+        [
+          part.map((r) => r.variantId),
+          part.map((r) => r.productId),
+          part.map((r) => r.src),
+          part.map((r) => r.main),
+          part.map((r) => JSON.stringify(r.extra)),
+        ],
       );
     }
     await client.query(
       `UPDATE meta_feed_state SET built_at = now(), products = $1, variants = $2, rows = $3, error = NULL WHERE id = 1`,
-      [products.length, blocks.length, rows.length],
+      [products.length, blocks.length, closeUps],
     );
     await client.query("COMMIT");
   } catch (e) {
@@ -145,7 +185,7 @@ export async function buildMetaFeed(pool: Pool): Promise<{ products: number; var
   } finally {
     client.release();
   }
-  return { products: products.length, variants: blocks.length, rows: rows.length };
+  return { products: products.length, variants: blocks.length, rows: closeUps };
 }
 
 let lastTick = 0;
