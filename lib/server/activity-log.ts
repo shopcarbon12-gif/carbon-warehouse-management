@@ -58,6 +58,8 @@ const SKIP_ROUTES = new Set<string>([
   // Email popup: shoppers' own signups / unsubscribes, recorded in welcome_signups (Shopify → Email Popup)
   "storefront/welcome-signup",
   "storefront/welcome-unsubscribe",
+  // Wholesale page: applicants' own submissions, recorded in wholesale_applications (Shopify → Wholesale)
+  "storefront/wholesale-apply",
 ]);
 
 const MAX_BODY_BYTES = 256 * 1024;

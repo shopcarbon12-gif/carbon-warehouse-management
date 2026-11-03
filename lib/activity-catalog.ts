@@ -108,6 +108,7 @@ const ROUTES: Record<string, Entry> = {
   "shopify/carbon-shield/rules/[id]": { module: "Shopify", label: "Removed a Carbon Shield rule" },
   "shopify/carbon-shield/refresh": { module: "Shopify", label: "Refreshed Carbon Shield IP data" },
   "shopify/welcome-popup/settings": { module: "Shopify", label: "Changed the email popup" },
+  "shopify/wholesale/[id]": { module: "Shopify", label: "Approved or declined a wholesale application" },
   "marketing/settings": { module: "Social", label: "Turned social publishing on or off" },
   "marketing/posts/[id]": { module: "Social", label: "Edited or decided a social post" },
   "marketing/import": { module: "Social", label: "Imported a campaign calendar" },

@@ -15,7 +15,10 @@
   The sign-in link uses routes.storefront_login_url, which returns the buyer to
   this page; an approved (B2B) buyer then sees a Shop wholesale link instead.
 
-  No JavaScript: the Apply buttons are in-page links to #wholesale-apply.
+  The Apply buttons are in-page links to #wholesale-apply (no JavaScript).
+  One small script sends a copy of a submitted application to CarbonWMS
+  (Shopify → Wholesale: list, phone alert, one-click approve); the form still
+  posts to Shopify either way, so a blocked script never loses an application.
 {% endcomment %}
 {%- liquid
   assign display_font = settings.heading_font | font_modify: 'weight', '700'
@@ -180,6 +183,7 @@
   .wad__field :is(input, select, textarea):focus { border-color: var(--wad-accent-text); }
   .wad__field :is(input, select, textarea):user-invalid,
   .wad__field :is(input, select, textarea)[aria-invalid='true'] { border-color: var(--wad-error); }
+  .wad__trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   .wad__hint { margin: 10px 0 0; font-size: 0.8125rem; color: var(--wad-muted); }
   .wad__submit { width: 100%; margin-top: 16px; }
   .wad__notice {
@@ -314,6 +318,12 @@
           </div>
         {%- endif -%}
 
+        {%- comment -%} Bot trap for the CarbonWMS copy: people never see or fill it. Not a contact[] field, so Shopify ignores it. {%- endcomment -%}
+        <div class="wad__trap" aria-hidden="true">
+          <label for="WholesaleCompanyFax-{{ section.id }}">Company fax</label>
+          <input type="text" id="WholesaleCompanyFax-{{ section.id }}" name="wad_fax" tabindex="-1" autocomplete="off">
+        </div>
+
         <div class="wad__grid">
           <div class="wad__field wad__field--half">
             <label for="WholesaleName-{{ section.id }}">{{ 'sections.contact.form.name' | t }}</label>
@@ -421,6 +431,41 @@
     </div>
   </div>
 </section>
+
+<script>
+  (() => {
+    const form = document.getElementById('WholesaleApplication');
+    if (!form || form.dataset.wmsCopy) return;
+    form.dataset.wmsCopy = '1';
+    let sent = false;
+    form.addEventListener('submit', () => {
+      if (sent) return;
+      sent = true;
+      const v = (name) => (form.elements[name] && form.elements[name].value) || '';
+      const body = {
+        n: v('contact[name]'),
+        e: v('contact[email]'),
+        ph: v('contact[phone]'),
+        b: v('contact[Business name]'),
+        c: v('contact[City and state]'),
+        w: v('contact[Website or Instagram]'),
+        s: v('contact[Type of store]'),
+        m: v('contact[body]'),
+        hp: v('wad_fax'),
+        t: Math.round(performance.now()),
+        p: location.pathname,
+      };
+      try {
+        fetch('https://wms.shopcarbon.com/api/storefront/wholesale-apply', {
+          method: 'POST',
+          mode: 'cors',
+          keepalive: true,
+          body: JSON.stringify(body),
+        }).catch(() => {});
+      } catch (e) {}
+    });
+  })();
+</script>
 
 {% schema %}
 {

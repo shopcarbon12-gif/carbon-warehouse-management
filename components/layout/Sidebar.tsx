@@ -51,6 +51,7 @@ import {
   ShoppingBag,
   ShieldCheck,
   MailPlus,
+  Store,
   Eye,
   Undo2,
   X,
@@ -73,7 +74,7 @@ type NavItem = {
   count?: CountKey;
 };
 
-type CountKey = "shopifyToFulfill" | "shopifyReturns";
+type CountKey = "shopifyToFulfill" | "shopifyReturns" | "shopifyWholesale";
 type Counts = Partial<Record<CountKey, number>>;
 
 type NavSection = {
@@ -118,6 +119,7 @@ const sections: NavSection[] = [
       { href: "/shopify/returns", label: "Returns", icon: Undo2, count: "shopifyReturns" },
       { href: "/shopify/carbon-shield", label: "Carbon Shield", icon: ShieldCheck },
       { href: "/shopify/email-popup", label: "Email Popup", icon: MailPlus },
+      { href: "/shopify/wholesale", label: "Wholesale", icon: Store, count: "shopifyWholesale" },
       { href: "/shopify/visitors", label: "Visitors", icon: Eye },
     ],
   },
@@ -363,12 +365,22 @@ function useMenuCounts(): Counts {
     },
     { refreshInterval: 120_000, revalidateOnFocus: true, shouldRetryOnError: false },
   );
+  // Wholesale applications waiting for approve / decline. Admin only, like Returns.
+  const { data: wholesale } = useSWR<{ count?: number }>(
+    "/api/shopify/wholesale?count=1",
+    async (u: string) => {
+      const r = await fetch(u, { cache: "no-store" });
+      return r.ok ? r.json() : {};
+    },
+    { refreshInterval: 120_000, revalidateOnFocus: true, shouldRetryOnError: false },
+  );
   return useMemo(
     () => ({
       ...(toFulfill ? { shopifyToFulfill: toFulfill.count } : {}),
       ...(typeof returns?.count === "number" ? { shopifyReturns: returns.count } : {}),
+      ...(typeof wholesale?.count === "number" ? { shopifyWholesale: wholesale.count } : {}),
     }),
-    [toFulfill, returns],
+    [toFulfill, returns, wholesale],
   );
 }
 
