@@ -43,7 +43,7 @@ const DIVISOR = 2.1;
 const DECREASE_PERCENT = Number(((1 - 1 / DIVISOR) * 100).toFixed(6)); // 52.380952
 const MIN_PER_VARIANT = 3;
 const MARKET_NAME = "Wholesale";
-const SHIPPING_DISCOUNT_TITLE = "Wholesale: shipping invoiced separately";
+const SHIPPING_DISCOUNT_TITLE = "Shipping billed separately after packing";
 
 function loadEnv() {
   const out = {};
