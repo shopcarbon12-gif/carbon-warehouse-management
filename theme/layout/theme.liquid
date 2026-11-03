@@ -418,9 +418,13 @@ a.thb-mobile-account-link {
 {% render 'carbon-sticky-atc' %}
 {% render 'carbon-buy-button-hover' %}
 {% render 'carbon-size-availability' %}
+{%- comment -%} Retail-only: wholesale (B2B) buyers get no referral, rewards or welcome popup. {%- endcomment -%}
+{%- unless customer.b2b? -%}
   {%- render 'carbon-referral-capture' -%}
   {%- render 'carbon-rewards-widget' -%}
+{%- endunless -%}
 {% render 'carbon-tawk-delayed' %}
+{%- unless customer.b2b? -%}{% render 'carbon-welcome-popup' %}{%- endunless -%}
 </body>
 </html>
 <script src="{{ 'noman.js' | asset_url }}" defer="defer"></script>

@@ -1,0 +1,256 @@
+{% comment %}
+  Wholesale order grid — replaces the buy buttons for B2B buyers (customer.b2b?).
+
+  Owner's rule (2026-11-03): wholesale is ordered in runs. A run is one of every
+  size of a colour; a buyer takes at least 3 runs of each colour they order and
+  need not take every colour. So the grid has one row per colour and the buyer
+  types the number of runs; adding puts runs × each size in the cart.
+
+  A size belongs to the run only if at least the minimum (3) is in stock, so a
+  run can always be filled; sizes below that are shown struck through and left
+  out. The most runs a colour allows is the lowest stock among its run sizes.
+
+  Prices are whatever Shopify gives this buyer — the Wholesale catalog's price
+  list (retail ÷ 2.1) — so nothing here computes a price. The quantity rule on
+  that price list (min 3 per variant) backs the grid up in the cart.
+
+  Adding uses the same cart sections as the theme's product form, so the cart
+  drawer and the header count update the way they do for retail.
+{% endcomment %}
+{%- liquid
+  assign color_index = nil
+  assign size_index = nil
+  for option in product.options_with_values
+    assign option_name = option.name | downcase
+    if option_name contains 'colo'
+      assign color_index = forloop.index0
+    elsif option_name contains 'size'
+      assign size_index = forloop.index0
+    endif
+  endfor
+
+  assign min_runs = product.selected_or_first_available_variant.quantity_rule.min | at_least: 3
+  if color_index == nil
+    assign colors = 'Default'
+  else
+    assign colors = product.options_with_values[color_index].values | join: '||'
+  endif
+  assign colors = colors | split: '||'
+-%}
+<div class="carbon-b2b" id="CarbonB2B-{{ section.id }}" data-min="{{ min_runs }}">
+  <p class="carbon-b2b__lead">
+    <strong>Wholesale</strong> · Order in runs of every size. Minimum {{ min_runs }} runs per colour; take only the colours you want.
+  </p>
+  <div class="carbon-b2b__table" role="table" aria-label="Wholesale order by colour">
+    <div class="carbon-b2b__row carbon-b2b__row--head" role="row">
+      <span role="columnheader">Colour</span>
+      <span role="columnheader">Sizes in a run</span>
+      <span role="columnheader">Runs</span>
+      <span role="columnheader" class="carbon-b2b__num">Subtotal</span>
+    </div>
+    {%- for color in colors -%}
+      {%- liquid
+        assign run_price = 0
+        assign max_runs = 999999
+        assign in_run = 0
+        assign sizes_html = ''
+        assign variant_data = ''
+        for variant in product.variants
+          if color_index != nil and variant.options[color_index] != color
+            continue
+          endif
+          assign size_label = variant.title
+          if size_index != nil
+            assign size_label = variant.options[size_index]
+          endif
+          assign stock = 999999
+          if variant.inventory_management == 'shopify' and variant.inventory_policy == 'deny'
+            assign stock = variant.inventory_quantity
+          endif
+          if variant.available and stock >= min_runs
+            assign in_run = in_run | plus: 1
+            assign run_price = run_price | plus: variant.price
+            if stock < max_runs
+              assign max_runs = stock
+            endif
+            assign variant_data = variant_data | append: variant.id | append: ','
+            assign sizes_html = sizes_html | append: '<span class="carbon-b2b__size">' | append: size_label | append: '</span>'
+          else
+            assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="Not enough stock for a run">' | append: size_label | append: '</s>'
+          endif
+        endfor
+      -%}
+      <div class="carbon-b2b__row" role="row" data-variants="{{ variant_data | remove_last: ',' }}" data-run-price="{{ run_price }}">
+        <span role="cell" class="carbon-b2b__color">{{ color }}</span>
+        <span role="cell" class="carbon-b2b__sizes">
+          {{ sizes_html }}
+          {%- if in_run > 0 -%}
+            <small>{{ run_price | money }} per run · {{ in_run }} pcs</small>
+          {%- endif -%}
+        </span>
+        <span role="cell">
+          {%- if in_run > 0 and max_runs >= min_runs -%}
+            <input
+              type="number"
+              class="carbon-b2b__runs"
+              inputmode="numeric"
+              min="0"
+              max="{{ max_runs }}"
+              step="1"
+              value="0"
+              aria-label="Runs of {{ color | escape }}"
+            >
+            {%- if max_runs < 999999 -%}<small>max {{ max_runs }}</small>{%- endif -%}
+          {%- else -%}
+            <small>Not available</small>
+          {%- endif -%}
+        </span>
+        <span role="cell" class="carbon-b2b__num carbon-b2b__subtotal">—</span>
+      </div>
+    {%- endfor -%}
+  </div>
+  <div class="carbon-b2b__foot">
+    <span class="carbon-b2b__total" aria-live="polite">0 pieces · {{ 0 | money }}</span>
+    <button type="button" class="button carbon-b2b__add" disabled>
+      <span>Add to cart</span>
+    </button>
+  </div>
+  <p class="carbon-b2b__error" role="alert" hidden></p>
+</div>
+
+<style>
+  /* The grid covers every size, so the Size picker would only confuse; Colour stays to switch the photos. */
+  body:has(.carbon-b2b) variant-selects [data-handle="size"] { display: none; }
+  .carbon-b2b { margin: 0 0 20px; }
+  .carbon-b2b__lead { margin: 0 0 12px; font-size: 0.875rem; }
+  .carbon-b2b__row {
+    display: grid;
+    grid-template-columns: minmax(70px, 1fr) minmax(0, 2fr) 84px 84px;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(var(--color-body-rgb, 0, 0, 0), 0.12);
+  }
+  .carbon-b2b__row--head { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0; }
+  .carbon-b2b__color { font-weight: 600; overflow-wrap: anywhere; }
+  .carbon-b2b__sizes { display: flex; flex-wrap: wrap; gap: 4px; }
+  .carbon-b2b__sizes small { flex-basis: 100%; opacity: 0.7; }
+  .carbon-b2b__size { font-size: 0.75rem; padding: 2px 6px; border: 1px solid currentColor; border-radius: 3px; }
+  .carbon-b2b__size--out { opacity: 0.4; }
+  .carbon-b2b__runs { width: 100%; min-height: 40px; padding: 0 8px; text-align: center; }
+  .carbon-b2b__runs[aria-invalid="true"] { outline: 2px solid #c0392b; }
+  .carbon-b2b__row small { display: block; font-size: 0.6875rem; opacity: 0.7; }
+  .carbon-b2b__num { text-align: right; }
+  .carbon-b2b__foot { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 14px; }
+  .carbon-b2b__add { flex: 0 0 auto; min-width: 160px; }
+  .carbon-b2b__error { color: #c0392b; margin: 10px 0 0; font-size: 0.875rem; }
+  @media (max-width: 480px) {
+    .carbon-b2b__row { grid-template-columns: minmax(0, 1fr) 72px 72px; }
+    .carbon-b2b__row > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+    .carbon-b2b__row--head > :nth-child(2) { display: none; }
+  }
+</style>
+
+<script>
+  (() => {
+    const root = document.getElementById('CarbonB2B-{{ section.id }}');
+    if (!root || root.dataset.ready) return;
+    root.dataset.ready = '1';
+    const min = Number(root.dataset.min);
+    const button = root.querySelector('.carbon-b2b__add');
+    const total = root.querySelector('.carbon-b2b__total');
+    const error = root.querySelector('.carbon-b2b__error');
+    const money = (cents) =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: {{ cart.currency.iso_code | default: 'USD' | json }} }).format(cents / 100);
+
+    const rows = () => [...root.querySelectorAll('.carbon-b2b__row[data-variants]')].filter((r) => r.querySelector('.carbon-b2b__runs'));
+
+    function refresh() {
+      let pieces = 0;
+      let cents = 0;
+      let invalid = false;
+      let any = false;
+      for (const row of rows()) {
+        const input = row.querySelector('.carbon-b2b__runs');
+        const runs = Math.max(0, Math.floor(Number(input.value) || 0));
+        const max = Number(input.max);
+        const bad = runs > 0 && (runs < min || runs > max);
+        input.setAttribute('aria-invalid', bad ? 'true' : 'false');
+        invalid ||= bad;
+        any ||= runs > 0;
+        const ids = row.dataset.variants.split(',').filter(Boolean);
+        const sub = runs * Number(row.dataset.runPrice);
+        row.querySelector('.carbon-b2b__subtotal').textContent = runs ? money(sub) : '—';
+        pieces += runs * ids.length;
+        cents += sub;
+      }
+      total.textContent = `${pieces} pieces · ${money(cents)}`;
+      error.hidden = !invalid;
+      error.textContent = invalid ? `Each colour you order needs at least ${min} runs (and no more than its max).` : '';
+      button.disabled = invalid || !any;
+    }
+
+    function renderCart(sections) {
+      const parse = (html, selector) => {
+        const el = new DOMParser().parseFromString(html, 'text/html').querySelector(selector);
+        return el ? el.innerHTML : null;
+      };
+      const drawer = document.getElementById('Cart-Drawer');
+      const drawerHtml = sections['cart-drawer'] && parse(sections['cart-drawer'], '.cart-drawer');
+      if (drawer && drawerHtml !== null) {
+        (drawer.querySelector('.cart-drawer') || drawer).innerHTML = drawerHtml;
+        drawer.notesToggle?.();
+        drawer.removeProductEvent?.();
+      }
+      const bubble = document.getElementById('cart-drawer-toggle');
+      const bubbleHtml = sections['cart-bubble'] && parse(sections['cart-bubble'], '.thb-item-count');
+      if (bubble && bubbleHtml !== null) (bubble.querySelector('.thb-item-count') || bubble).innerHTML = bubbleHtml;
+      if (drawer) {
+        drawer.classList.add('active');
+        document.body.classList.add('open-cart');
+        document.dispatchEvent(new CustomEvent('cart-drawer:open'));
+      } else {
+        window.location.href = {{ routes.cart_url | json }};
+      }
+    }
+
+    async function add() {
+      const items = [];
+      for (const row of rows()) {
+        const runs = Math.floor(Number(row.querySelector('.carbon-b2b__runs').value) || 0);
+        if (!runs) continue;
+        for (const id of row.dataset.variants.split(',').filter(Boolean)) items.push({ id: Number(id), quantity: runs });
+      }
+      if (!items.length) return;
+      button.disabled = true;
+      button.classList.add('loading');
+      try {
+        const res = await fetch({{ routes.cart_add_url | append: '.js' | json }}, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ items, sections: ['cart-drawer', 'cart-bubble'], sections_url: window.location.pathname }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.status) {
+          error.textContent = data.description || data.message || 'Could not add to cart.';
+          error.hidden = false;
+          return;
+        }
+        for (const input of root.querySelectorAll('.carbon-b2b__runs')) input.value = 0;
+        refresh();
+        if (data.sections) renderCart(data.sections);
+      } catch (e) {
+        error.textContent = 'Could not add to cart. Please try again.';
+        error.hidden = false;
+      } finally {
+        button.classList.remove('loading');
+        if (error.hidden) refresh();
+        else button.disabled = false;
+      }
+    }
+
+    root.addEventListener('input', refresh);
+    button.addEventListener('click', add);
+    refresh();
+  })();
+</script>

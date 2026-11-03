@@ -267,7 +267,12 @@
       </side-panel-links>
     {%- when 'buy_buttons' -%}
         {%- assign outline_button = block.settings.outline_button -%}
+        {%- if customer.b2b? -%}
+          {%- comment -%} Wholesale buyers order whole size runs per colour. {%- endcomment -%}
+          {% render 'carbon-b2b-order-grid', product: product, section: section %}
+        {%- else -%}
         {% render 'product-add-to-cart', product: product, form: form, product_form_id: product_form_id, block: block, pickup: pickup %}
+        {%- endif -%}
     {%- when 'share' -%}
         {% render 'social-share', share_label: false, share_title: product.title, share_permalink: product.url, share_image: product.featured_image %}
     {%- when 'specifications_tab' -%}
@@ -425,8 +430,8 @@
   {%- endcase -%}
   {% endfor %}
 </div>
-{%- if section.settings.enable_sticky_add_to_cart -%}
+{%- if section.settings.enable_sticky_add_to_cart -%}{%- unless customer.b2b? -%}
 {% render 'product-add-to-cart-sticky', product: product, media: first_image, color_picker: color_picker, picker_type: picker_type, form: form, is_disabled: is_disabled, outline_button: outline_button %}
-{%- endif -%}
+{%- endunless -%}{%- endif -%}
 
 {{ sizing_popup }}
