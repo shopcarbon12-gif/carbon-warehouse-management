@@ -14,6 +14,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
+/** TikTok's URL-prefix ownership files that are not in env (Production app, 2026-11-03). Public by design. */
+const TIKTOK_VERIFY_FILES: Record<string, string> = {
+  "tiktokD0yuGbEdm2XgmujljyoUCALIMQHj21dY.txt": "tiktok-developers-site-verification=D0yuGbEdm2XgmujljyoUCALIMQHj21dY",
+};
 const UUID_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(-cover|-tiktok)?(\.(jpg|jpeg|png|mp4))?$/i;
 
 export async function GET(_req: Request, { params }: Ctx) {
@@ -21,6 +25,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   // TikTok's URL-prefix ownership file (Social → TikTok; lib/server/marketing/tiktok.ts).
   const vf = process.env.TIKTOK_VERIFY_FILENAME?.trim();
   if (vf && id === vf) return new Response(process.env.TIKTOK_VERIFY_CONTENT ?? "", { headers: { "Content-Type": "text/plain" } });
+  if (Object.hasOwn(TIKTOK_VERIFY_FILES, id)) return new Response(TIKTOK_VERIFY_FILES[id], { headers: { "Content-Type": "text/plain" } });
   const m = UUID_RE.exec(id);
   const pool = getPool();
   if (!m || !pool) return new Response("Not found", { status: 404 });
