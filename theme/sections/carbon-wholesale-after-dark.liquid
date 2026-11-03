@@ -35,7 +35,8 @@
 
   #shopify-section-{{ section.id }} {
     --wad-bg: #070708;
-    --wad-panel: rgba(18, 18, 20, 0.94);
+    /* See-through over the photo (owner 2026-11-03); the blur keeps the form readable. */
+    --wad-panel: rgba(14, 14, 16, 0.4);
     --wad-line: #3d3d42;
     --wad-field: #8c8c94;
     --wad-text: #ffffff;
@@ -147,6 +148,8 @@
 
   .wad__panel {
     background: var(--wad-panel);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
     border: 1px solid var(--wad-line);
     padding: clamp(24px, 2.6vw, 44px);
     scroll-margin-top: 110px;
@@ -236,6 +239,20 @@
   }
   @media (min-width: 990px) {
     .wad__media-wrap { display: contents; }
+    /* Desktop (owner 2026-11-03): the whole picture at its own shape, slid left
+       so the woman is not behind the application; below it fades to black. */
+    .wad__media {
+      inset: 0 auto auto calc(var(--wad-shift, 25%) * -1);
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1672 / 941;
+    }
+    .wad__media img { object-position: 50% 50%; }
+    .wad__media::after {
+      background:
+        linear-gradient(90deg, rgba(7, 7, 8, 0) 0%, rgba(7, 7, 8, 0) 70%, rgba(7, 7, 8, 0.2) 85%, var(--wad-bg) 100%),
+        linear-gradient(180deg, rgba(7, 7, 8, 0.35) 0%, rgba(7, 7, 8, 0) 22%, rgba(7, 7, 8, 0) 62%, var(--wad-bg) 100%);
+    }
   }
   @media (max-width: 480px) {
     .wad__grid { grid-template-columns: minmax(0, 1fr); }
@@ -249,7 +266,7 @@
       {%- if image != blank -%}
         <div
           class="wad__media"
-          style="--wad-focal: {{ section.settings.position_x }}% {{ section.settings.position_y }}%; --wad-focal-mobile: {{ section.settings.mobile_position_x }}% {{ section.settings.mobile_position_y }}%;"
+          style="--wad-shift: {{ section.settings.desktop_shift }}%; --wad-focal-mobile: {{ section.settings.mobile_position_x }}% {{ section.settings.mobile_position_y }}%;"
         >
           <picture>
             <source
@@ -475,9 +492,8 @@
   "enabled_on": { "templates": ["page"] },
   "settings": [
     { "type": "header", "content": "Campaign image" },
-    { "type": "image_picker", "id": "image", "label": "Image", "info": "Use the position sliders below to keep both models in frame." },
-    { "type": "range", "id": "position_x", "label": "Desktop horizontal position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 92, "info": "Higher moves the models left, clear of the application." },
-    { "type": "range", "id": "position_y", "label": "Desktop vertical position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 20 },
+    { "type": "image_picker", "id": "image", "label": "Image", "info": "Use the shift and position sliders below to keep both models in frame." },
+    { "type": "range", "id": "desktop_shift", "label": "Desktop image shift left", "min": 0, "max": 40, "step": 1, "unit": "%", "default": 25, "info": "The whole picture is shown and slid left, so both models stay clear of the application." },
     { "type": "image_picker", "id": "image_mobile", "label": "Mobile and tablet image", "info": "Optional. Uses the main image when empty." },
     { "type": "range", "id": "mobile_position_x", "label": "Mobile horizontal position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 57 },
     { "type": "range", "id": "mobile_position_y", "label": "Mobile vertical position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 25 },
