@@ -1,0 +1,457 @@
+{% comment %}
+  Wholesale — "After Dark" (approved design, 2026-11-03). Renders /pages/wholesale
+  (template page.wholesale.json) as one section: night campaign hero on the left,
+  the wholesale application on the right; stacked on smaller screens.
+
+  The application is the same Shopify contact form the page used before — same
+  field names, required flags and Type of store choices — so submissions still
+  reach the store email exactly as they did, with Shopify's own spam protection.
+  Name, phone, website and message are optional, as they were; only the labels
+  marked * are required.
+
+  Nothing here shows prices or changes buying: approval is a company in Shopify
+  admin, prices come from the Wholesale catalog, and the run minimum is enforced
+  on product pages (carbon-b2b-order-grid) and by the catalog's quantity rules.
+  The sign-in link uses routes.storefront_login_url, which returns the buyer to
+  this page; an approved (B2B) buyer then sees a Shop wholesale link instead.
+
+  No JavaScript: the Apply buttons are in-page links to #wholesale-apply.
+{% endcomment %}
+{%- liquid
+  assign display_font = settings.heading_font | font_modify: 'weight', '700'
+  if display_font == blank
+    assign display_font = settings.heading_font
+  endif
+  assign image = section.settings.image
+  assign image_mobile = section.settings.image_mobile | default: image
+  assign store_types = section.settings.store_types | split: ','
+  assign heading_id = 'WholesaleHeading-' | append: section.id
+-%}
+<style>
+  {{ display_font | font_face: font_display: 'swap' }}
+
+  #shopify-section-{{ section.id }} {
+    --wad-bg: #070708;
+    --wad-panel: rgba(18, 18, 20, 0.94);
+    --wad-line: #3d3d42;
+    --wad-field: #8c8c94;
+    --wad-text: #ffffff;
+    --wad-muted: #d4d4d8;
+    --wad-cta: #164bff;
+    --wad-cta-hover: #3a66ff;
+    /* #164BFF is too dark for small text on near-black (3.3:1); the label uses a lighter cobalt (5:1). */
+    --wad-accent-text: #5279ff;
+    --wad-error: #ff8a80;
+    color-scheme: dark;
+  }
+  .wad {
+    position: relative;
+    isolation: isolate;
+    background: var(--wad-bg);
+    color: var(--wad-text);
+    overflow: hidden;
+  }
+  .wad__media {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+  }
+  .wad__media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: var(--wad-focal, 45% 30%);
+  }
+  .wad__media::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(7, 7, 8, 0.82) 0%, rgba(7, 7, 8, 0.25) 30%, rgba(7, 7, 8, 0) 50%, rgba(7, 7, 8, 0.55) 78%, rgba(7, 7, 8, 0.85) 100%),
+      linear-gradient(180deg, rgba(7, 7, 8, 0.35) 0%, rgba(7, 7, 8, 0) 22%, rgba(7, 7, 8, 0) 70%, rgba(7, 7, 8, 0.9) 100%);
+  }
+  .wad__inner {
+    display: grid;
+    grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+    gap: clamp(24px, 3vw, 48px);
+    align-items: center;
+    min-height: min(860px, calc(100svh - 120px));
+    padding: clamp(32px, 4.5vw, 64px) clamp(20px, 4vw, 64px);
+    max-width: 1680px;
+    margin: 0 auto;
+  }
+  .wad__intro { max-width: 34rem; }
+  .wad__label {
+    margin: 0 0 14px;
+    color: var(--wad-accent-text);
+    font-weight: 700;
+    font-size: 0.9375rem;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+  .wad__headline {
+    margin: 0 0 18px;
+    color: var(--wad-text);
+    font-family: {{ display_font.family }}, {{ display_font.fallback_families }};
+    font-weight: {{ display_font.weight }};
+    font-style: normal;
+    font-size: clamp(3.25rem, 7vw, 7rem);
+    line-height: 0.9;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    overflow-wrap: anywhere;
+  }
+  .wad__text {
+    margin: 0 0 28px;
+    font-size: clamp(1rem, 1.3vw, 1.25rem);
+    line-height: 1.5;
+    color: var(--wad-text);
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.6);
+  }
+  .wad__cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 12px 28px;
+    border: 0;
+    border-radius: 0;
+    background: var(--wad-cta);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.0625rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .wad__cta:hover { background: var(--wad-cta-hover); color: #fff; }
+  .wad__cta:focus-visible,
+  .wad__link:focus-visible,
+  .wad__field :is(input, select, textarea):focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 3px;
+  }
+  .wad__cta svg { flex: none; }
+  .wad__signin { margin: 22px 0 0; font-size: 1.0625rem; }
+  .wad__link {
+    color: var(--wad-text);
+    text-decoration: underline;
+    text-underline-offset: 4px;
+    display: inline-block;
+    padding: 6px 0;
+  }
+  .wad__link:hover { color: var(--wad-muted); }
+
+  .wad__panel {
+    background: var(--wad-panel);
+    border: 1px solid var(--wad-line);
+    padding: clamp(24px, 2.6vw, 44px);
+    scroll-margin-top: 110px;
+  }
+  .wad__panel:focus { outline: none; }
+  .wad__panel-title {
+    margin: 0 0 10px;
+    color: var(--wad-text);
+    font-weight: 700;
+    font-size: clamp(1.125rem, 1.5vw, 1.5rem);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .wad__panel-text { margin: 0 0 18px; color: var(--wad-muted); line-height: 1.5; }
+  .wad__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  .wad__field { display: flex; flex-direction: column; gap: 5px; grid-column: 1 / -1; }
+  .wad__field--half { grid-column: auto; }
+  .wad__field label { font-size: 0.875rem; color: var(--wad-muted); }
+  .wad__req { color: var(--wad-text); }
+  .wad__field :is(input, select, textarea) {
+    width: 100%;
+    min-height: 46px;
+    margin: 0;
+    padding: 9px 14px;
+    background: transparent;
+    border: 1px solid var(--wad-field);
+    border-radius: 0;
+    color: var(--wad-text);
+    font: inherit;
+    font-size: 1rem;
+  }
+  .wad__field select { appearance: auto; background: #121214; }
+  .wad__field textarea { min-height: 72px; resize: vertical; }
+  .wad__field :is(input, select, textarea):focus { border-color: var(--wad-accent-text); }
+  .wad__field :is(input, select, textarea):user-invalid,
+  .wad__field :is(input, select, textarea)[aria-invalid='true'] { border-color: var(--wad-error); }
+  .wad__hint { margin: 10px 0 0; font-size: 0.8125rem; color: var(--wad-muted); }
+  .wad__submit { width: 100%; margin-top: 16px; }
+  .wad__notice {
+    margin: 0 0 18px;
+    padding: 12px 14px;
+    border: 1px solid currentColor;
+    line-height: 1.45;
+  }
+  .wad__notice--error { color: var(--wad-error); }
+  .wad__notice--success { color: #9be7a8; }
+  .wad__terms {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--wad-line);
+    display: grid;
+    gap: 12px;
+  }
+  .wad__terms li { display: flex; gap: 12px; align-items: flex-start; line-height: 1.4; }
+  .wad__terms svg { flex: none; margin-top: 1px; }
+
+  /* Retail rewards launcher is fixed bottom-left, over the Sign in link; this page is for retailers. */
+  carbon-rewards-widget.crw { display: none; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html:has(#wholesale-apply) { scroll-behavior: smooth; }
+    .wad__cta, .wad__link { transition: background-color 0.15s ease, color 0.15s ease; }
+  }
+
+  /* Tablet and phone: campaign first (both models in frame), then the form. */
+  @media (max-width: 989px) {
+    .wad__inner {
+      grid-template-columns: minmax(0, 1fr);
+      min-height: 0;
+      padding: 0 0 clamp(24px, 5vw, 48px);
+      gap: 0;
+    }
+    .wad__media { position: relative; inset: auto; z-index: 0; aspect-ratio: 4 / 5; max-height: 78svh; width: 100%; }
+    .wad__media img { object-position: var(--wad-focal-mobile, var(--wad-focal, 52% 30%)); }
+    .wad__media::after {
+      background: linear-gradient(180deg, rgba(7, 7, 8, 0) 45%, rgba(7, 7, 8, 0.75) 78%, var(--wad-bg) 100%);
+    }
+    .wad__intro {
+      position: relative;
+      max-width: none;
+      margin-top: clamp(-220px, -30vw, -120px);
+      padding: 0 clamp(16px, 5vw, 40px);
+    }
+    .wad__panel { margin: 28px clamp(16px, 5vw, 40px) 0; }
+  }
+  @media (min-width: 990px) {
+    .wad__media-wrap { display: contents; }
+  }
+  @media (max-width: 480px) {
+    .wad__grid { grid-template-columns: minmax(0, 1fr); }
+    .wad__cta--hero { width: 100%; }
+  }
+</style>
+
+<section class="wad" aria-labelledby="{{ heading_id }}">
+  <div class="wad__inner">
+    <div class="wad__media-wrap">
+      {%- if image != blank -%}
+        <div
+          class="wad__media"
+          style="--wad-focal: {{ section.settings.position_x }}% {{ section.settings.position_y }}%; --wad-focal-mobile: {{ section.settings.mobile_position_x }}% {{ section.settings.mobile_position_y }}%;"
+        >
+          <picture>
+            <source
+              media="(max-width: 989px)"
+              srcset="
+                {{- image_mobile | image_url: width: 600 }} 600w,
+                {{ image_mobile | image_url: width: 900 }} 900w,
+                {{ image_mobile | image_url: width: 1200 }} 1200w
+              "
+              sizes="100vw"
+            >
+            {{
+              image
+              | image_url: width: 2400
+              | image_tag:
+                widths: '990, 1280, 1600, 1920, 2400',
+                sizes: '100vw',
+                loading: 'eager',
+                fetchpriority: 'high',
+                alt: ''
+            }}
+          </picture>
+        </div>
+      {%- endif -%}
+    </div>
+
+    <div class="wad__intro">
+      {%- if section.settings.label != blank -%}
+        <p class="wad__label">{{ section.settings.label | escape }}</p>
+      {%- endif -%}
+      <h1 class="wad__headline" id="{{ heading_id }}">{{ section.settings.heading | escape | newline_to_br }}</h1>
+      {%- if section.settings.intro != blank -%}
+        <p class="wad__text">{{ section.settings.intro | escape }}</p>
+      {%- endif -%}
+      <a class="wad__cta wad__cta--hero" href="#wholesale-apply">
+        {{- section.settings.cta_label | escape -}}
+        {%- render 'carbon-wholesale-arrow' -%}
+      </a>
+      <p class="wad__signin">
+        {%- if customer.b2b? -%}
+          Signed in as an approved retailer ·
+          <a class="wad__link" href="{{ routes.all_products_collection_url }}">{{ section.settings.shop_label | escape }}</a>
+        {%- elsif customer -%}
+          Signed in as {{ customer.email | escape }}. Approved retailers see wholesale pricing once their account is set up.
+        {%- else -%}
+          <a class="wad__link" href="{{ routes.storefront_login_url }}">{{ section.settings.signin_label | escape }}</a>
+        {%- endif -%}
+      </p>
+    </div>
+
+    <div class="wad__panel" id="wholesale-apply" tabindex="-1" aria-labelledby="WholesaleApplyTitle-{{ section.id }}">
+      <h2 class="wad__panel-title" id="WholesaleApplyTitle-{{ section.id }}">{{ section.settings.panel_heading | escape }}</h2>
+      {%- if section.settings.panel_intro != blank -%}
+        <p class="wad__panel-text">{{ section.settings.panel_intro | escape }}</p>
+      {%- endif -%}
+
+      {%- form 'contact', id: 'WholesaleApplication' -%}
+        {%- if form.posted_successfully? -%}
+          <p class="wad__notice wad__notice--success" role="status" tabindex="-1" autofocus>
+            {{ section.settings.success_text | escape }}
+          </p>
+        {%- elsif form.errors -%}
+          <div class="wad__notice wad__notice--error" role="alert" tabindex="-1" autofocus>
+            {{ 'sections.contact.form.error_heading' | t }}
+            {{ form.errors | default_errors }}
+          </div>
+        {%- endif -%}
+
+        <div class="wad__grid">
+          <div class="wad__field wad__field--half">
+            <label for="WholesaleName-{{ section.id }}">{{ 'sections.contact.form.name' | t }}</label>
+            <input
+              type="text"
+              id="WholesaleName-{{ section.id }}"
+              name="contact[name]"
+              autocomplete="name"
+              value="{{ form.name | default: customer.name | escape }}"
+            >
+          </div>
+          <div class="wad__field wad__field--half">
+            <label for="WholesaleEmail-{{ section.id }}">
+              {{- 'sections.contact.form.email' | t }} <span class="wad__req" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="email"
+              id="WholesaleEmail-{{ section.id }}"
+              name="contact[email]"
+              autocomplete="email"
+              spellcheck="false"
+              autocapitalize="off"
+              pattern="^([a-zA-Z0-9_\-\.]+)@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.)|(([a-zA-Z0-9\-]+\.)+))([a-zA-Z]{2,4}|[0-9]{1,10})(\]?)$"
+              value="{{ form.email | default: customer.email | escape }}"
+              required
+              {% if form.errors contains 'email' %}
+                aria-invalid="true"
+              {% endif %}
+            >
+          </div>
+          <div class="wad__field wad__field--half">
+            <label for="WholesalePhone-{{ section.id }}">{{ 'sections.contact.form.phone' | t }}</label>
+            <input
+              type="tel"
+              id="WholesalePhone-{{ section.id }}"
+              name="contact[phone]"
+              autocomplete="tel"
+              value="{{ form.phone | escape }}"
+            >
+          </div>
+          <div class="wad__field wad__field--half">
+            <label for="WholesaleBusiness-{{ section.id }}">Business name <span class="wad__req" aria-hidden="true">*</span></label>
+            <input
+              type="text"
+              id="WholesaleBusiness-{{ section.id }}"
+              name="contact[Business name]"
+              autocomplete="organization"
+              required
+            >
+          </div>
+          <div class="wad__field wad__field--half">
+            <label for="WholesaleCity-{{ section.id }}">City and state <span class="wad__req" aria-hidden="true">*</span></label>
+            <input
+              type="text"
+              id="WholesaleCity-{{ section.id }}"
+              name="contact[City and state]"
+              required
+            >
+          </div>
+          <div class="wad__field wad__field--half">
+            <label for="WholesaleWebsite-{{ section.id }}">Website or Instagram</label>
+            <input
+              type="text"
+              id="WholesaleWebsite-{{ section.id }}"
+              name="contact[Website or Instagram]"
+              autocomplete="url"
+              inputmode="url"
+              spellcheck="false"
+              autocapitalize="off"
+            >
+          </div>
+          <div class="wad__field">
+            <label for="WholesaleStoreType-{{ section.id }}">Type of store <span class="wad__req" aria-hidden="true">*</span></label>
+            <select id="WholesaleStoreType-{{ section.id }}" name="contact[Type of store]" required>
+              <option value="" disabled selected>Choose one</option>
+              {%- for value in store_types -%}
+                {%- assign trim_value = value | strip -%}
+                <option value="{{ trim_value | escape }}">{{ trim_value | escape }}</option>
+              {%- endfor -%}
+            </select>
+          </div>
+          <div class="wad__field">
+            <label for="WholesaleMessage-{{ section.id }}">{{ 'sections.contact.form.comment' | t }}</label>
+            <textarea id="WholesaleMessage-{{ section.id }}" name="contact[body]" rows="2">{{ form.body | escape }}</textarea>
+          </div>
+        </div>
+        <p class="wad__hint"><span aria-hidden="true">*</span> Required</p>
+
+        <button type="submit" class="wad__cta wad__submit">
+          {{- section.settings.submit_label | escape -}}
+          {%- render 'carbon-wholesale-arrow' -%}
+        </button>
+      {%- endform -%}
+
+      <ul class="wad__terms" aria-label="Ordering terms">
+        <li>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 12 10 5 10-5"/><path d="m2 16 10 5 10-5"/></svg>
+          <span>{{ section.settings.term_runs | escape }}</span>
+        </li>
+        <li>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><rect x="2.5" y="5" width="19" height="14" rx="1.5"/><path d="M2.5 10h19M6 15h4"/></svg>
+          <span>{{ section.settings.term_payment | escape }}</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Wholesale — After Dark",
+  "tag": "div",
+  "class": "section-wholesale-after-dark",
+  "enabled_on": { "templates": ["page"] },
+  "settings": [
+    { "type": "header", "content": "Campaign image" },
+    { "type": "image_picker", "id": "image", "label": "Image", "info": "Use the position sliders below to keep both models in frame." },
+    { "type": "range", "id": "position_x", "label": "Desktop horizontal position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 92, "info": "Higher moves the models left, clear of the application." },
+    { "type": "range", "id": "position_y", "label": "Desktop vertical position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 20 },
+    { "type": "image_picker", "id": "image_mobile", "label": "Mobile and tablet image", "info": "Optional. Uses the main image when empty." },
+    { "type": "range", "id": "mobile_position_x", "label": "Mobile horizontal position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 57 },
+    { "type": "range", "id": "mobile_position_y", "label": "Mobile vertical position", "min": 0, "max": 100, "step": 1, "unit": "%", "default": 25 },
+    { "type": "header", "content": "Campaign text" },
+    { "type": "text", "id": "label", "label": "Label", "default": "Wholesale" },
+    { "type": "textarea", "id": "heading", "label": "Heading", "default": "Stock\nCarbon" },
+    { "type": "textarea", "id": "intro", "label": "Intro", "default": "Contemporary streetwear built for today's retail. Apply for a wholesale account and stock CARBON in your store." },
+    { "type": "text", "id": "cta_label", "label": "Apply button", "default": "Apply for wholesale" },
+    { "type": "text", "id": "signin_label", "label": "Sign-in link", "default": "Approved retailer? Sign in" },
+    { "type": "text", "id": "shop_label", "label": "Link for signed-in approved retailers", "default": "Shop wholesale" },
+    { "type": "header", "content": "Application" },
+    { "type": "text", "id": "panel_heading", "label": "Heading", "default": "Wholesale application" },
+    { "type": "textarea", "id": "panel_intro", "label": "Intro", "default": "Tell us about your business. Once approved, sign in with your email to see wholesale pricing." },
+    { "type": "text", "id": "store_types", "label": "Type of store choices", "info": "Separate with commas.", "default": "Boutique / physical store, Online store, Both" },
+    { "type": "text", "id": "submit_label", "label": "Submit button", "default": "Apply for wholesale" },
+    { "type": "textarea", "id": "success_text", "label": "Sent message", "default": "Thanks — your application is in. We'll review it and email you once your wholesale account is ready." },
+    { "type": "text", "id": "term_runs", "label": "Runs term", "default": "Each run includes one of every size in a color. Minimum three runs per color." },
+    { "type": "text", "id": "term_payment", "label": "Payment term", "default": "Payment is taken at checkout." }
+  ],
+  "presets": [{ "name": "Wholesale — After Dark" }]
+}
+{% endschema %}

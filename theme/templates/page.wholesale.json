@@ -1,91 +1,26 @@
 {
   "sections": {
-    "wholesale_intro": {
-      "type": "rich-text",
-      "blocks": {
-        "wholesale_intro_heading": {
-          "type": "heading",
-          "settings": {
-            "text": "WHOLESALE",
-            "size": "h2"
-          }
-        },
-        "wholesale_intro_text": {
-          "type": "text",
-          "settings": {
-            "text": "<p>Stock Carbon in your store. Tell us about your business below and we'll get back to you. Once approved, you log in with your email and see wholesale prices on every product.</p><p>Orders are placed in runs: one of every size in a colour, with a minimum of 3 runs per colour. Payment is taken at checkout.</p>",
-            "size": "text-size-regular"
-          }
-        }
-      },
-      "block_order": [
-        "wholesale_intro_heading",
-        "wholesale_intro_text"
-      ],
+    "wholesale_after_dark": {
+      "type": "carbon-wholesale-after-dark",
       "settings": {
-        "section_width": "grid",
-        "text_width": "medium",
-        "text_position": "center",
-        "text_alignment": "center",
-        "color_bg": "rgba(0,0,0,0)",
-        "color_text": "#151515",
-        "color_links": "#151515",
-        "disable_top_spacing": false,
-        "disable_bottom_spacing": true
-      }
-    },
-    "wholesale_form": {
-      "type": "contact-form",
-      "blocks": {
-        "wholesale_business": {
-          "type": "text_field",
-          "settings": {
-            "title": "Business name",
-            "use_long_text": false,
-            "is_required": true
-          }
-        },
-        "wholesale_location": {
-          "type": "text_field",
-          "settings": {
-            "title": "City and state",
-            "use_long_text": false,
-            "is_required": true
-          }
-        },
-        "wholesale_website": {
-          "type": "text_field",
-          "settings": {
-            "title": "Website or Instagram",
-            "use_long_text": false,
-            "is_required": false
-          }
-        },
-        "wholesale_store_type": {
-          "type": "dropdown_field",
-          "settings": {
-            "title": "Type of store",
-            "values": "Boutique / physical store, Online store, Both"
-          }
-        }
-      },
-      "block_order": [
-        "wholesale_business",
-        "wholesale_location",
-        "wholesale_website",
-        "wholesale_store_type"
-      ],
-      "settings": {
-        "heading": "",
-        "description": "",
-        "show_phone_number": true,
-        "disable_top_spacing": false,
-        "disable_bottom_spacing": false
+        "image": "shopify://shop_images/carbon-wholesale-after-dark.webp",
+        "label": "Wholesale",
+        "heading": "Stock\nCarbon",
+        "intro": "Contemporary streetwear built for today's retail. Apply for a wholesale account and stock CARBON in your store.",
+        "cta_label": "Apply for wholesale",
+        "signin_label": "Approved retailer? Sign in",
+        "shop_label": "Shop wholesale",
+        "panel_heading": "Wholesale application",
+        "panel_intro": "Tell us about your business. Once approved, sign in with your email to see wholesale pricing.",
+        "store_types": "Boutique / physical store, Online store, Both",
+        "submit_label": "Apply for wholesale",
+        "success_text": "Thanks — your application is in. We'll review it and email you once your wholesale account is ready.",
+        "term_runs": "Each run includes one of every size in a color. Minimum three runs per color.",
+        "term_payment": "Payment is taken at checkout."
       }
     }
   },
   "order": [
-    "wholesale_intro",
-    "wholesale_form"
+    "wholesale_after_dark"
   ]
 }
