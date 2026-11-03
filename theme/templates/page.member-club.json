@@ -1,0 +1,11 @@
+{
+  "sections": {
+    "member_club": {
+      "type": "carbon-member-club",
+      "settings": {}
+    }
+  },
+  "order": [
+    "member_club"
+  ]
+}
