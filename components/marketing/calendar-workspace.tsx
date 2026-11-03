@@ -1123,6 +1123,26 @@ function postUrl(permalink: string): string {
   return permalink.startsWith("/") ? `https://www.facebook.com${permalink}` : permalink;
 }
 
+/** Colour words at the end of a catalog name ("Brooke Sweater Pink"). */
+const COLOUR_WORDS = new Set(
+  ("black white cream ivory beige tan camel brown chocolate coffee mocha taupe khaki olive green sage mint teal turquoise " +
+    "blue navy indigo denim sky cobalt royal red burgundy wine maroon pink rose blush fuchsia purple lilac lavender " +
+    "orange rust coral yellow mustard gold silver grey gray charcoal stone sand nude multi light dark off washed " +
+    "acid vintage bright pale deep").split(" "),
+);
+
+/**
+ * Facebook's "Tag product" search finds "Brooke Sweater" but not "Brooke Sweater Pink"
+ * (2026-11-03), so the card copies the name without its trailing colour words and
+ * shows the colour to pick from Facebook's list.
+ */
+function splitColour(label: string): { name: string; colour: string } {
+  const words = label.trim().split(/\s+/);
+  let i = words.length;
+  while (i > 1 && COLOUR_WORDS.has(words[i - 1].toLowerCase().replace(/[^a-z]/g, ""))) i--;
+  return { name: words.slice(0, i).join(" "), colour: words.slice(i).join(" ") };
+}
+
 /** A published Facebook post whose products still have to be tagged there by hand. */
 function needsFacebookTags(post: MarketingPost): boolean {
   const fb = post.targets.find((t) => t.provider === "facebook");
@@ -1133,6 +1153,8 @@ function needsFacebookTags(post: MarketingPost): boolean {
  * Facebook card (owner, 2026-10-29). Meta's API tags products on Instagram only,
  * so once a post is out on Facebook this card lists the same products, each with
  * a Copy button, links to the post and to Meta Business Suite, and a Done tick.
+ * Tagging works from the post on Facebook (Edit → Tag product); Business Suite's
+ * Edit reel screen has no product tagging (found 2026-11-03).
  */
 function FacebookTagsCard({ post, onDone }: { post: MarketingPost; onDone: (text: string) => Promise<void> }) {
   const fb = post.targets.find((t) => t.provider === "facebook");
@@ -1181,28 +1203,34 @@ function FacebookTagsCard({ post, onDone }: { post: MarketingPost; onDone: (text
       </div>
       {!done && (
         <p className="text-xs text-[var(--wms-muted)]">
-          Facebook does not let CarbonWMS tag products, so this one is by hand: open the post in Meta Business Suite, choose Edit, then Tag products, and paste each name below.
+          Facebook does not let CarbonWMS tag products, so this one is by hand: open the post on Facebook, choose {post.format === "reel" ? "Edit reel" : "Edit post"}, then Tag product. Paste each name below (Facebook finds it without the colour), then pick the colour shown here from Facebook&apos;s list. Any size is fine: the tag opens the product, where shoppers pick their size.
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <a className={`${btn} border-[var(--wms-border)]`} href={suite} target="_blank" rel="noreferrer">
-          Open Meta Business Suite
-        </a>
         {fb.permalink && (
-          <a className={`${btn} border-[var(--wms-border)]`} href={postUrl(fb.permalink)} target="_blank" rel="noreferrer">
+          <a className={`${btn} border-[var(--wms-accent)] text-[var(--wms-fg)]`} href={postUrl(fb.permalink)} target="_blank" rel="noreferrer">
             Open the post on Facebook
           </a>
         )}
+        <a className={`${btn} border-[var(--wms-border)]`} href={suite} target="_blank" rel="noreferrer">
+          Find it in Meta Business Suite
+        </a>
       </div>
       <ul className="flex flex-col gap-1">
-        {products.map((p) => (
-          <li key={p} className="flex items-center justify-between gap-2 text-xs text-[var(--wms-fg)]">
-            <span className="select-text">{p}</span>
-            <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={() => void copy(p)}>
-              {copied === p ? "Copied" : "Copy"}
-            </button>
-          </li>
-        ))}
+        {products.map((p) => {
+          const { name, colour } = splitColour(p);
+          return (
+            <li key={p} className="flex items-center justify-between gap-2 text-xs text-[var(--wms-fg)]">
+              <span className="select-text">
+                {name}
+                {colour && <span className="text-[var(--wms-muted)]"> · pick {colour}</span>}
+              </span>
+              <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={() => void copy(name)}>
+                {copied === name ? "Copied" : "Copy"}
+              </button>
+            </li>
+          );
+        })}
       </ul>
       <div className="flex flex-wrap items-center gap-2">
         {done ? (
