@@ -9,7 +9,7 @@
  *
  * Approve = the Shopify side of a wholesale account: a company named after the
  * business, one location, the applicant as its buyer (Location admin, main
- * contact), pay at checkout, then Shopify's customer account invite email.
+ * contact), tax-exempt, pay at checkout, then Shopify's customer account invite email.
  * Pricing and minimums need nothing here: the "Wholesale" B2B market covers
  * every company location, so the new company gets the B2B catalog (retail ÷
  * 2.1) and its quantity rules automatically (scripts/b2b-wholesale.mjs).
@@ -282,6 +282,8 @@ export async function approveApplication(pool: Pool, id: number, by: string | nu
               name: row.city_state,
               // Pay at checkout: no payment terms, orders not held as drafts.
               buyerExperienceConfiguration: { checkoutToDraft: false, editableShippingAddress: true },
+              // No sales tax: company to company, the buyer resells (owner 2026-11-03).
+              taxExempt: true,
             },
           },
         },

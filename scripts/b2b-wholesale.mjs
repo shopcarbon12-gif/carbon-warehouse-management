@@ -15,12 +15,20 @@
  *     (Plus only) — it goes through a B2B market. The "Wholesale" market covers
  *     ALL company locations, so every company the owner approves gets the
  *     catalog with no further step. Grow allows 3 catalog-to-market assignments.
+ *   - Tax (owner 2026-11-03): no sales tax on wholesale — company to company,
+ *     the buyer resells. Every company location is tax-exempt (`tax`; the WMS
+ *     Approve button sets it on new companies).
+ *   - Shipping (owner 2026-11-03): not charged at checkout — invoiced separately.
+ *     A free-shipping discount limited to the Wholesale market (`shipping`) —
+ *     blocked until Shopify support enables B2B discounts for the shop.
  *
  * Every step finds what already exists by name first, so re-running is safe.
  *
  * Usage:
  *   node scripts/b2b-wholesale.mjs setup   # market, catalog, price list
  *   node scripts/b2b-wholesale.mjs rules   # min-3 rule on every variant in the catalog
+ *   node scripts/b2b-wholesale.mjs tax      # every company location tax-exempt
+ *   node scripts/b2b-wholesale.mjs shipping # free-shipping discount, Wholesale market only (needs B2B discounts on)
  *   node scripts/b2b-wholesale.mjs status
  */
 import { readFileSync, existsSync } from "node:fs";
@@ -35,6 +43,7 @@ const DIVISOR = 2.1;
 const DECREASE_PERCENT = Number(((1 - 1 / DIVISOR) * 100).toFixed(6)); // 52.380952
 const MIN_PER_VARIANT = 3;
 const MARKET_NAME = "Wholesale";
+const SHIPPING_DISCOUNT_TITLE = "Wholesale: shipping invoiced separately";
 
 function loadEnv() {
   const out = {};
@@ -204,15 +213,79 @@ async function rules() {
   }
 }
 
+async function tax() {
+  let after = null;
+  let changed = 0;
+  let total = 0;
+  for (;;) {
+    const d = await gql(
+      `query($after:String){ companyLocations(first:100, after:$after){
+         pageInfo { hasNextPage endCursor }
+         nodes { id name company { name } taxSettings { taxExempt } }
+       } }`,
+      { after },
+    );
+    for (const l of d.companyLocations.nodes) {
+      total++;
+      if (l.taxSettings?.taxExempt) continue;
+      const r = await gql(
+        `mutation($id:ID!){ companyLocationTaxSettingsUpdate(companyLocationId:$id, taxExempt:true){
+           companyLocation { id } userErrors { field message } } }`,
+        { id: l.id },
+      );
+      check(r.companyLocationTaxSettingsUpdate, `tax-exempt ${l.company.name}`);
+      changed++;
+      console.log(`  tax-exempt: ${l.company.name} / ${l.name}`);
+    }
+    if (!d.companyLocations.pageInfo.hasNextPage) break;
+    after = d.companyLocations.pageInfo.endCursor;
+  }
+  console.log(`${total} company locations, ${changed} newly tax-exempt`);
+}
+
+async function shipping() {
+  const market = await findMarket();
+  if (!market) throw new Error("run setup first");
+  // Market-driven shipping and B2B discounts are both off for this shop (2026-11-03:
+  // "Discounts cannot be assigned to B2B markets. Contact Shopify support to enable
+  // B2B discounts."). Once Shopify support switches B2B discounts on, this creates
+  // the free-shipping discount for the Wholesale market only.
+  const d = await gql(
+    `query($q:String!){ automaticDiscountNodes(first:10, query:$q){ nodes { id automaticDiscount {
+       ... on DiscountAutomaticFreeShipping { title status } } } } }`,
+    { q: `title:'${SHIPPING_DISCOUNT_TITLE}'` },
+  );
+  const existing = d.automaticDiscountNodes.nodes.find((n) => n.automaticDiscount?.title === SHIPPING_DISCOUNT_TITLE);
+  if (existing) {
+    console.log(`free-shipping discount already there (${existing.automaticDiscount.status})`);
+    return;
+  }
+  const r = await gql(
+    `mutation($d: DiscountAutomaticFreeShippingInput!){ discountAutomaticFreeShippingCreate(freeShippingAutomaticDiscount:$d){
+       automaticDiscountNode { id } userErrors { field message code } } }`,
+    {
+      d: {
+        title: SHIPPING_DISCOUNT_TITLE,
+        startsAt: new Date().toISOString(),
+        context: { markets: { add: [market.id] } },
+        destination: { all: true },
+        combinesWith: { productDiscounts: true, orderDiscounts: true, shippingDiscounts: false },
+      },
+    },
+  );
+  const node = check(r.discountAutomaticFreeShippingCreate, "discountAutomaticFreeShippingCreate").automaticDiscountNode;
+  console.log(`free-shipping discount created for the Wholesale market: ${node.id}`);
+}
+
 async function status() {
   const [market, catalog] = [await findMarket(), await findCatalog()];
   console.log(JSON.stringify({ market, catalog }, null, 2));
 }
 
 const cmd = process.argv[2];
-const run = { setup, rules, status }[cmd];
+const run = { setup, rules, tax, shipping, status }[cmd];
 if (!run) {
-  console.error("usage: node scripts/b2b-wholesale.mjs setup|rules|status");
+  console.error("usage: node scripts/b2b-wholesale.mjs setup|rules|tax|shipping|status");
   process.exit(1);
 }
 run().catch((e) => {
