@@ -16,6 +16,7 @@ import {
 import { PosAccessPanel } from "./pos-access-panel";
 import { RewardsAccessPanel } from "./rewards-access-panel";
 import { MobileAccessPanel } from "./mobile-access-panel";
+import { CarbonBooksAccessPanel } from "./carbonbooks-access-panel";
 import { orlandoDate } from "@/lib/orlando-time";
 
 const fetcher = async (url: string) => {
@@ -45,7 +46,7 @@ function hydratePermissions(raw: unknown): PermissionsMap {
   return out;
 }
 
-type TopTab = "wms" | "pos" | "rewards" | "mobile";
+type TopTab = "wms" | "pos" | "rewards" | "mobile" | "carbonbooks";
 type WmsSubTab = "users" | "roles";
 
 export function UsersSettingsWorkspace() {
@@ -241,6 +242,15 @@ export function UsersSettingsWorkspace() {
         >
           WMS Mobile
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={topTab === "carbonbooks"}
+          onClick={() => setTopTab("carbonbooks")}
+          className={topTabBtnCls(topTab === "carbonbooks")}
+        >
+          CarbonBooks
+        </button>
       </div>
 
       {/* WMS sub-tabs: Users / User roles (only visible when WMS is the active scope) */}
@@ -277,6 +287,8 @@ export function UsersSettingsWorkspace() {
         <RewardsAccessPanel />
       ) : topTab === "mobile" ? (
         <MobileAccessPanel />
+      ) : topTab === "carbonbooks" ? (
+        <CarbonBooksAccessPanel />
       ) : tab === "users" ? (
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">

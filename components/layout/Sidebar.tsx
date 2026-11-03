@@ -18,6 +18,7 @@ import {
   FolderInput,
   Image as ImageIcon,
   LayoutDashboard,
+  BookOpen,
   Layers,
   Map,
   Package,
@@ -560,6 +561,7 @@ export function Sidebar({
               />
               Dashboard
             </Link>
+            <CarbonBooksLink />
           </div>
 
           <div className="px-2">
@@ -591,5 +593,26 @@ export function Sidebar({
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * The single CarbonBooks item. Shown only when CarbonBooks says this user has access
+ * (hidden for everyone else, and whenever CarbonBooks can't be reached). A plain <a>:
+ * /carbonbooks/open hands the user over to books.shopcarbon.com, a different site.
+ */
+function CarbonBooksLink() {
+  const { data } = useSWR<{ visible: boolean }>("/api/carbonbooks/visibility", (u: string) =>
+    fetch(u, { cache: "no-store" }).then((r) => (r.ok ? r.json() : { visible: false })),
+  { revalidateOnFocus: false, dedupingInterval: 60_000 });
+  if (!data?.visible) return null;
+  return (
+    <a
+      href="/carbonbooks/open"
+      className="mt-1 flex items-center gap-3 rounded-lg px-3 py-3 text-lg font-medium leading-snug text-[var(--wms-fg)]/85 transition-colors hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]"
+    >
+      <BookOpen className="h-6 w-6 text-[var(--wms-muted)]" strokeWidth={1.75} aria-hidden />
+      CarbonBooks
+    </a>
   );
 }
