@@ -108,7 +108,8 @@
     display: inline-flex; align-items: center; justify-content: center; gap: 14px; min-height: 52px; padding: 12px 22px;
     border: 2px solid var(--mc-blue); border-radius: 6px; background: #fff; color: var(--mc-blue-ink); cursor: pointer; text-decoration: none; font-weight: 600;
   }
-  .mc-btn--fill { background: var(--mc-blue); color: #fff; }
+  .mc-btn--fill, .mc a.mc-btn--fill { background: var(--mc-blue); color: #fff; }
+  .mc a.mc-btn:not(.mc-btn--fill) { color: var(--mc-blue-ink); }
   .mc-btn--fill:hover { background: var(--mc-blue-ink); }
   .mc-btn:not(.mc-btn--fill):hover { background: var(--mc-soft); }
   .mc-btn[disabled] { opacity: 0.55; cursor: progress; }
@@ -207,7 +208,7 @@
       <h1>Rewards</h1>
       <p>Sign in to see your points, redeem rewards and view your online and in-store purchases.</p>
       <p><a class="mc-btn mc-btn--fill" href="{{ routes.storefront_login_url }}">Sign in</a></p>
-      <p class="mc-note">New here? Sign in with your email to join — you earn points on every purchase.</p>
+      <p class="mc-note">New here? Sign in with your email to join — you earn points on every purchase. <a href="/pages/rewards">How Carbon Rewards works</a></p>
     </div>
   {%- endif -%}
 
