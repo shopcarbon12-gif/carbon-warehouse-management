@@ -19,7 +19,7 @@
  * Every step finds what already exists by name first, so re-running is safe.
  *
  * Usage:
- *   node scripts/b2b-wholesale.mjs setup   # price list, catalog, test company
+ *   node scripts/b2b-wholesale.mjs setup   # market, catalog, price list
  *   node scripts/b2b-wholesale.mjs rules   # min-3 rule on every variant in the catalog
  *   node scripts/b2b-wholesale.mjs status
  */
@@ -34,7 +34,6 @@ const PRICE_LIST_NAME = "Wholesale (retail ÷ 2.1)";
 const DIVISOR = 2.1;
 const DECREASE_PERCENT = Number(((1 - 1 / DIVISOR) * 100).toFixed(6)); // 52.380952
 const MIN_PER_VARIANT = 3;
-const TEST_COMPANY = "Carbon Wholesale TEST";
 const MARKET_NAME = "Wholesale";
 
 function loadEnv() {
@@ -91,46 +90,14 @@ async function findCatalog() {
     `query($id:ID!){ market(id:$id){ catalogs(first:10){ nodes { ${CATALOG_FIELDS} } } } }`,
     { id: market.id },
   );
-  return d.market.catalogs.nodes.find((c) => c.title === CATALOG_TITLE) ?? null;
-}
-
-async function findCompany() {
-  const d = await gql(
-    `query($q:String!){ companies(first:5, query:$q){ nodes { id name locations(first:5){ nodes { id name } } } } }`,
-    { q: `name:'${TEST_COMPANY}'` },
+  // The owner may rename the catalog in admin (it became "B2B"), so the
+  // wholesale price list identifies it first and the title is only a fallback.
+  const catalogs = d.market.catalogs.nodes;
+  return (
+    catalogs.find((c) => c.priceList?.name === PRICE_LIST_NAME) ??
+    catalogs.find((c) => c.title === CATALOG_TITLE) ??
+    null
   );
-  return d.companies.nodes.find((c) => c.name === TEST_COMPANY) ?? null;
-}
-
-async function ensureCompany() {
-  const existing = await findCompany();
-  if (existing) return existing;
-  const d = await gql(
-    `mutation($input: CompanyCreateInput!){ companyCreate(input:$input){
-       company { id name locations(first:5){ nodes { id name } } } userErrors { field message } } }`,
-    {
-      input: {
-        company: {
-          name: TEST_COMPANY,
-          note: "Test buyer for the wholesale theme. Add a contact you can log in as; delete when done.",
-        },
-        companyLocation: {
-          name: "Test location",
-          billingSameAsShipping: true,
-          shippingAddress: {
-            address1: "TEST",
-            city: "Miami",
-            zoneCode: "FL",
-            countryCode: "US",
-            zip: "33101",
-          },
-          // Pay at checkout: no payment terms, and orders are not held as drafts.
-          buyerExperienceConfiguration: { checkoutToDraft: false, editableShippingAddress: true },
-        },
-      },
-    },
-  );
-  return check(d.companyCreate, "companyCreate").company;
 }
 
 async function findMarket() {
@@ -155,8 +122,6 @@ async function ensureMarket() {
 }
 
 async function setup() {
-  const company = await ensureCompany();
-  console.log(`company: ${company.name} (${company.id})`);
   const market = await ensureMarket();
   console.log(`market: ${market.name} (${market.id}) ${market.status}`);
 
@@ -240,8 +205,8 @@ async function rules() {
 }
 
 async function status() {
-  const [market, catalog, company] = [await findMarket(), await findCatalog(), await findCompany()];
-  console.log(JSON.stringify({ market, catalog, company }, null, 2));
+  const [market, catalog] = [await findMarket(), await findCatalog()];
+  console.log(JSON.stringify({ market, catalog }, null, 2));
 }
 
 const cmd = process.argv[2];
