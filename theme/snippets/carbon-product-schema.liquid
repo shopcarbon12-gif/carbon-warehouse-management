@@ -1,0 +1,72 @@
+{%- comment -%}
+  CARBON product structured data (2026-11-03, SEO pass, schema skill). Replaces the spliced
+  `structured_data` filter output. Follows Google's product-variant + merchant-listing guidance:
+  ProductGroup with image, brand CARBON, variesBy, audience, material; every variant carries
+  colour, size, sku/mpn (= SKU, same as the Google feed), new condition, price, availability and
+  the store's real return policy (accessories final sale). Ratings only when Judge.me has reviews.
+{%- endcomment -%}
+{%- assign cp_url = shop.url | append: product.url -%}
+{%- assign cp_desc = page_description | default: product.description | strip_html | strip_newlines | replace: '&#39;', "'" | replace: '&quot;', '"' | replace: '&amp;', '&' | replace: '&lt;', '<' | replace: '&gt;', '>' | strip -%}
+{%- assign cp_type = product.type | downcase -%}
+{%- assign cp_color_idx = -1 -%}{%- assign cp_size_idx = -1 -%}
+{%- for o in product.options_with_values -%}
+  {%- assign on = o.name | downcase -%}
+  {%- if on == 'color' or on == 'colour' or on == 'cor' or on == 'colores' -%}{%- assign cp_color_idx = forloop.index0 -%}{%- endif -%}
+  {%- if on == 'size' or on == 'talla' or on == 'tamaño' or on == 'tamanho' or on == 'talle' -%}{%- assign cp_size_idx = forloop.index0 -%}{%- endif -%}
+{%- endfor -%}
+{%- assign cp_gender = '' -%}
+{%- assign cp_g = product.metafields.shopify['target-gender'].value.first.label | default: '' | downcase -%}
+{%- if cp_g == 'male' or cp_g == 'female' or cp_g == 'unisex' -%}{%- assign cp_gender = cp_g -%}
+{%- elsif cp_type contains 'women' -%}{%- assign cp_gender = 'female' -%}
+{%- elsif cp_type contains 'men' -%}{%- assign cp_gender = 'male' -%}{%- endif -%}
+{%- assign cp_final_sale = false -%}{%- if cp_type contains 'accessor' -%}{%- assign cp_final_sale = true -%}{%- endif -%}
+{%- capture cp_return -%}
+{%- if cp_final_sale -%}{"@type":"MerchantReturnPolicy","applicableCountry":["US","CA"],"returnPolicyCategory":"https://schema.org/MerchantReturnNotPermitted"}
+{%- else -%}{"@type":"MerchantReturnPolicy","applicableCountry":["US","CA"],"returnPolicyCategory":"https://schema.org/MerchantReturnFiniteReturnWindow","merchantReturnDays":14,"returnMethod":"https://schema.org/ReturnByMail","returnFees":"https://schema.org/ReturnFeesCustomerResponsibility","refundType":["https://schema.org/ExchangeRefund","https://schema.org/StoreCreditRefund"]}{%- endif -%}
+{%- endcapture -%}
+{%- assign cp_badge = product.metafields.judgeme.badge | default: '' -%}
+{%- assign cp_reviews = cp_badge | split: "data-number-of-reviews='" | last | split: "'" | first | plus: 0 -%}
+{%- assign cp_rating = cp_badge | split: "data-average-rating='" | last | split: "'" | first -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ProductGroup",
+  "@id": {{ cp_url | append: '#product' | json }},
+  "name": {{ product.title | json }},
+  "url": {{ cp_url | json }},
+  "description": {{ cp_desc | json }},
+  "brand": {"@type": "Brand", "name": "CARBON"},
+  "productGroupID": {{ product.id | append: '' | json }},
+  {%- if product.type != blank %}"category": {{ product.type | json }},{% endif %}
+  {%- if product.metafields.custom.fabric_composition != blank %}"material": {{ product.metafields.custom.fabric_composition.value | json }},{% endif %}
+  {%- if cp_gender != '' %}"audience": {"@type": "PeopleAudience", "suggestedGender": {{ cp_gender | json }}, "suggestedAge": {"@type": "QuantitativeValue", "minValue": 13, "unitCode": "ANN"}},{% endif %}
+  "image": [{%- for image in product.images limit: 6 -%}{%- unless forloop.first %},{% endunless %}{{ image | image_url: width: 1600 | prepend: 'https:' | json }}{%- endfor -%}],
+  "variesBy": [{%- if cp_color_idx > -1 %}"https://schema.org/color"{% endif %}{%- if cp_size_idx > -1 %}{% if cp_color_idx > -1 %},{% endif %}"https://schema.org/size"{% endif -%}],
+  {%- if cp_reviews > 0 %}"aggregateRating": {"@type": "AggregateRating", "ratingValue": {{ cp_rating | json }}, "reviewCount": {{ cp_reviews }}},{% endif %}
+  "hasVariant": [
+  {%- for v in product.variants -%}
+    {%- assign v_img = v.image | default: product.featured_image -%}
+    {%- unless forloop.first %},{% endunless %}
+    {
+      "@type": "Product",
+      "@id": {{ cp_url | append: '?variant=' | append: v.id | append: '#variant' | json }},
+      "name": {{ product.title | append: ' – ' | append: v.title | json }},
+      {%- if v.sku != blank %}"sku": {{ v.sku | json }}, "mpn": {{ v.sku | json }},{% endif %}
+      {%- if cp_color_idx > -1 %}"color": {{ v.options[cp_color_idx] | json }},{% endif %}
+      {%- if cp_size_idx > -1 %}"size": {{ v.options[cp_size_idx] | json }},{% endif %}
+      {%- if v_img %}"image": {{ v_img | image_url: width: 1600 | prepend: 'https:' | json }},{% endif %}
+      "offers": {
+        "@type": "Offer",
+        "url": {{ cp_url | append: '?variant=' | append: v.id | json }},
+        "price": {{ v.price | divided_by: 100.0 | json }},
+        "priceCurrency": {{ cart.currency.iso_code | json }},
+        "itemCondition": "https://schema.org/NewCondition",
+        "availability": {% if v.available %}"https://schema.org/InStock"{% else %}"https://schema.org/OutOfStock"{% endif %},
+        "seller": {"@id": {{ shop.url | append: '/#organization' | json }}},
+        "hasMerchantReturnPolicy": {{ cp_return }}
+      }
+    }
+  {%- endfor -%}
+  ]
+}
+</script>

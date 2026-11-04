@@ -1,0 +1,45 @@
+{%- comment -%}
+  CARBON site identity for Google (2026-11-03, SEO pass, schema skill).
+  - Brand is written CARBON; the black long logo (CARBON wordmark, no "Jeans") shows on Google's white background.
+  - sameAs lists only the social links that are filled in (empty strings are invalid).
+  - The return policy matches the store's Refund policy: exchange or store credit within 14 days,
+    customer pays return shipping, accessories are final sale (stated per product).
+  - The search-box action Google retired in Nov 2024 is not emitted; WebSite keeps the site name.
+{%- endcomment -%}
+{%- assign carbon_social = settings.social_facebook_link | append: '|' | append: settings.social_instagram_link | append: '|' | append: settings.social_tiktok_link | append: '|' | append: settings.social_youtube_link | append: '|' | append: settings.social_twitter_link | append: '|' | append: settings.social_pinterest_link | append: '|' | append: settings.social_linkedin_link | split: '|' -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "@id": {{ shop.url | append: '/#organization' | json }},
+  "name": "CARBON",
+  "alternateName": "Carbon",
+  "url": {{ shop.url | json }},
+  "logo": "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/CARBON_JEANS_BLACK_NEW_9df5cf7e-8273-4a78-a6b2-529247d7a8d2.png?v=1727558285&width=1200",
+  "sameAs": [{%- assign carbon_first = true -%}{%- for s in carbon_social -%}{%- assign s2 = s | strip -%}{%- if s2 != blank -%}{%- unless carbon_first %},{% endunless %}{{ s2 | json }}{%- assign carbon_first = false -%}{%- endif -%}{%- endfor -%}],
+  "contactPoint": {"@type": "ContactPoint", "contactType": "customer service", "email": "support@shopcarbon.com", "areaServed": ["US", "CA"], "availableLanguage": ["English", "Spanish", "Portuguese"]},
+  "hasMerchantReturnPolicy": {
+    "@type": "MerchantReturnPolicy",
+    "applicableCountry": ["US", "CA"],
+    "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+    "merchantReturnDays": 14,
+    "returnMethod": "https://schema.org/ReturnByMail",
+    "returnFees": "https://schema.org/ReturnFeesCustomerResponsibility",
+    "refundType": ["https://schema.org/ExchangeRefund", "https://schema.org/StoreCreditRefund"],
+    "merchantReturnLink": {{ shop.url | append: '/policies/refund-policy' | json }}
+  }
+}
+</script>
+{%- if request.page_type == 'index' -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": {{ shop.url | append: '/#website' | json }},
+  "name": "CARBON",
+  "alternateName": ["Carbon", "shopcarbon.com"],
+  "url": {{ shop.url | json }},
+  "publisher": {"@id": {{ shop.url | append: '/#organization' | json }}}
+}
+</script>
+{%- endif -%}
