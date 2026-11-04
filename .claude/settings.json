@@ -1,6 +1,14 @@
 {
   "permissions": {
     "allow": [
+      "Bash(npm run deploy:coolify)",
+      "Bash(npm run deploy:coolify -- *)",
+      "Bash(npm run deploy:coolify:worker)",
+      "Bash(npm run coolify:poll-deployment *)",
+      "Bash(node scripts/trigger-coolify-deploy.mjs)",
+      "Bash(node scripts/trigger-coolify-deploy.mjs *)",
+      "Bash(node scripts/trigger-coolify-worker-deploy.mjs)",
+      "Bash(node scripts/poll-coolify-deployment.mjs *)",
       "Bash(ssh -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 shopcarbon@192.168.1.219 \"sudo journalctl -u carbon-cdm-agent.service -f --no-pager -o cat 2>&1\")",
       "Bash(adb -s 192.168.1.183:38553 logcat -T 1)",
       "Read(//home/carbondev/CarbonWmsRelease/**)",
