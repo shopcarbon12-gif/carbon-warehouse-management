@@ -56,7 +56,13 @@
   .mc a { color: inherit; }
   .mc [hidden] { display: none !important; }
   .mc__wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 70vh; border-top: 1px solid var(--mc-line); }
-  .mc__side { background: var(--mc-side); border-right: 1px solid var(--mc-line); padding: 44px 24px; }
+  .mc__side { background: var(--mc-side); border-right: 1px solid var(--mc-line); padding: 44px 24px; display: flex; flex-direction: column; }
+  .mc__signout {
+    display: flex; align-items: center; gap: 14px; min-height: 48px; padding: 10px 16px; margin-top: auto;
+    border-radius: 6px; color: var(--mc-ink); font-size: 18px; text-decoration: none;
+  }
+  .mc__signout:hover { background: #e6eaf2; }
+  .mc__signout--phone { display: none; }
   .mc__eyebrow { font-family: var(--mc-brand); font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; margin: 0; }
   .mc__side h2 { font-family: var(--mc-brand); font-size: 30px; line-height: 1.1; margin: 6px 0 10px; -webkit-text-stroke: 0.6px currentColor; }
   .mc__side p { margin: 0 0 28px; color: var(--mc-ink); font-size: 15px; }
@@ -166,6 +172,7 @@
   @media (max-width: 899px) {
     .mc__wrap { grid-template-columns: minmax(0, 1fr); border-top: 0; }
     .mc__side { display: none; }
+    .mc__signout--phone { display: flex; margin-top: 32px; border-top: 1px solid var(--mc-line); border-radius: 0; padding: 18px 4px 0; }
     .mc__tabs { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 2px solid var(--mc-line); margin: 0 16px; }
     .mc__tabs button { justify-content: center; font-size: 18px; border-radius: 0; margin-bottom: -2px; border-bottom: 3px solid transparent; }
     .mc__tabs button[aria-current='page'] { color: var(--mc-blue-ink); border-bottom-color: var(--mc-blue); font-weight: 700; }
@@ -222,6 +229,7 @@
         <button type="button" data-tab="purchases">{% render 'carbon-member-club-icon', icon: 'box' %}Purchases</button>
         <button type="button" data-tab="settings">{% render 'carbon-member-club-icon', icon: 'gear' %}Settings</button>
       </nav>
+      <a class="mc__signout" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}Sign out</a>
     </aside>
     <nav class="mc__tabs" aria-label="Member Club">
       <button type="button" data-tab="rewards" aria-current="page">Rewards</button>
@@ -270,6 +278,8 @@
           <a href="{{ routes.account_logout_url }}">Sign out <span aria-hidden="true">→</span></a>
         </div>
       </div>
+
+      <a class="mc__signout mc__signout--phone" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}Sign out</a>
     </div>
   </div>
 </div>
