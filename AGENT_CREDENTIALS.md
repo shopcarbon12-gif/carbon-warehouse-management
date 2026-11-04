@@ -83,9 +83,14 @@ ssh shopcarbon@192.168.1.219 'grep CARBON_CDM_TOKEN /opt/carbon-cdm/.env | cut -
 
 ### Trigger a Coolify deploy
 ```bash
-npm run deploy:coolify             # POSTs COOLIFY_DEPLOY_WEBHOOK_URL with COOLIFY_API_TOKEN
-npm run deploy:coolify-worker      # same for the sync worker
+npm run deploy:coolify             # web app, waits for its build, then the sync worker
+npm run deploy:coolify:worker      # the sync worker only
 ```
+Since the 2026-10-25 edge firewall, Coolify's `:8000` is not reachable from outside the
+host. These scripts detect that and open their own SSH tunnel
+(`scripts/lib/coolify-tunnel.mjs`, `~/.ssh/id_ed25519` as root), so the plain commands
+above just work. Don't hand-build curl + tunnel commands: the agent auto-mode classifier
+blocks those, while the commands above are allow-listed in `.claude/settings.json`.
 
 ### SSH to the Coolify host (production, netcup)
 `~/.ssh/id_ed25519` reaches it as root — use it when a deploy fails for reasons

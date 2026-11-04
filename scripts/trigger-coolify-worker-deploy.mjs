@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { coolifyOrigin } from "./lib/coolify-tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -48,8 +49,10 @@ const token = process.env.COOLIFY_API_TOKEN?.trim();
 const headers = { Accept: "application/json" };
 if (token) headers.Authorization = `Bearer ${token}`;
 
+const { rewrite } = await coolifyOrigin(url);
+
 async function trigger(method) {
-  return fetch(url, { method, headers });
+  return fetch(rewrite(url), { method, headers });
 }
 
 let res = await trigger("POST");

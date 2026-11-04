@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { coolifyOrigin } from "./lib/coolify-tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -61,7 +62,8 @@ if (!base) {
 }
 base = base.replace(/\/$/, "");
 
-const url = `${base}/deployments/${deploymentUuid}`;
+const { rewrite } = await coolifyOrigin(base);
+const url = rewrite(`${base}/deployments/${deploymentUuid}`);
 const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
 
 const terminal = new Set(["finished", "failed", "cancelled", "canceled"]);

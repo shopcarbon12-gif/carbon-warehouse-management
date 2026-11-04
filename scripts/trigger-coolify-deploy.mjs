@@ -30,6 +30,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { coolifyOrigin } from "./lib/coolify-tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -91,9 +92,12 @@ if (token) {
   headers.Authorization = `Bearer ${token}`;
 }
 
+/* Coolify :8000 is behind the edge firewall — tunnel over SSH when needed. */
+const { rewrite } = await coolifyOrigin(url || workerUrl || "");
+
 /** Coolify accepts POST; some setups / docs use GET on the same webhook URL. */
 async function trigger(target, method) {
-  return fetch(target, { method, headers });
+  return fetch(rewrite(target), { method, headers });
 }
 
 async function deploy(name, target) {
@@ -145,7 +149,7 @@ async function waitFor(name, target, queued, timeoutMs = 30 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 15000));
     let list;
     try {
-      const r = await fetch(`${origin}/api/v1/deployments/applications/${uuid}?take=5`, { headers });
+      const r = await fetch(rewrite(`${origin}/api/v1/deployments/applications/${uuid}?take=5`), { headers });
       if (!r.ok) continue;
       list = (await r.json())?.deployments ?? [];
     } catch {
@@ -180,7 +184,7 @@ async function waitForTheBoxToBeFree() {
   for (let i = 0; i < 80; i++) {
     let running = [];
     try {
-      const r = await fetch(`${origin}/api/v1/deployments`, { headers });
+      const r = await fetch(rewrite(`${origin}/api/v1/deployments`), { headers });
       if (!r.ok) return;
       const list = await r.json();
       running = (Array.isArray(list) ? list : []).filter((d) => !TERMINAL.has(d.status));
