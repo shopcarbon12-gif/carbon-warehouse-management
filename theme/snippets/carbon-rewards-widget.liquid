@@ -1,0 +1,397 @@
+{%- comment -%}
+  Carbon Rewards — floating widget (bottom-left), styled after the Kangaroo
+  widget it replaces. Every page except the cart (which has its own rewards
+  box; checkout can't be themed).
+  Guest: "Welcome to our Loyalty Program" + ways-to-earn cards + Register/Login.
+  Member: points/tier header, tabs Earn · Rewards (redeem to cart) · Activity · Refer.
+  Data from rewards.shopcarbon.com via the app proxy (/apps/loyalty/program,
+  /balance); shared helpers in assets/carbon-rewards-core.js.
+  Rendered once from layout/theme.liquid.
+{%- endcomment -%}
+{%- unless template.name == 'cart' -%}
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<carbon-rewards-widget
+  class="crw"
+  data-signed-in="{% if customer %}1{% endif %}"
+  data-first-name="{{ customer.first_name | escape }}"
+  data-login-url="/customer_authentication/login?return_to=%2Fpages%2Fmy-account"
+  data-register-url="{{ routes.account_register_url }}"
+  data-rewards-url="/pages/my-account"
+  data-cart-url="{{ routes.cart_url }}"
+>
+  <button type="button" class="crw__launcher" aria-expanded="false" aria-controls="crw-panel">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg>
+    <span>Rewards</span>
+  </button>
+  <div class="crw__backdrop" data-crw-close hidden></div>
+  <section id="crw-panel" class="crw__panel" role="dialog" aria-modal="false" aria-label="Carbon Rewards" tabindex="-1" hidden>
+    <button type="button" class="crw__close" data-crw-close aria-label="Close rewards">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="13" cy="13" r="12"/><path d="M9 9l8 8M17 9l-8 8"/></svg>
+    </button>
+    <div class="crw__view" data-crw-view><p class="crw__loading">Loading…</p></div>
+  </section>
+</carbon-rewards-widget>
+
+<style>
+  .crw { position: fixed; left: 16px; bottom: 16px; z-index: 50; font-family: 'Montserrat', 'Helvetica Neue', Arial, sans-serif; line-height: 1.4; -webkit-font-smoothing: antialiased; }
+  .crw--open { z-index: 2147483647; }
+  .crw button { font-family: inherit; }
+  .crw__launcher {
+    display: inline-flex; align-items: center; gap: 10px; padding: 15px 22px; border: 0; border-radius: 40px; cursor: pointer;
+    background: #000; color: #fff; font-size: 14px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .3); transition: transform .2s ease;
+  }
+  .crw__launcher:hover { transform: translateY(-2px); }
+  .crw :focus-visible { outline: 2px solid #c9a227; outline-offset: 2px; }
+  .crw__backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, .5); z-index: -1; }
+  .crw__panel {
+    position: absolute; left: 0; bottom: calc(100% + 14px); width: 360px; max-height: min(640px, calc(100vh - 110px));
+    display: flex; flex-direction: column; background: #000; color: #fff; border-radius: 22px; overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+  }
+  .crw__panel:focus { outline: none; }
+  .crw__panel[hidden], .crw__backdrop[hidden] { display: none; }
+  .crw__close { position: absolute; top: 18px; right: 18px; z-index: 2; background: none; border: 0; color: #fff; opacity: .6; cursor: pointer; padding: 0; line-height: 0; }
+  .crw__close:hover { opacity: 1; }
+  .crw__view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+  .crw__loading { padding: 60px 24px; text-align: center; color: #aaa; margin: 0; }
+
+  /* Guest — "Welcome to our Loyalty Program" */
+  .crw__welcome { padding: 50px 20px 22px; text-align: center; overflow-y: auto; }
+  .crw__title { font-family: 'Montserrat', 'Helvetica Neue', Arial, sans-serif !important; font-size: 26px; font-weight: 600; line-height: 1.15; letter-spacing: normal; text-transform: none; margin: 0 0 22px; color: #fff; }
+  .crw__divider { height: 2px; margin: 0 16px 26px; background: linear-gradient(90deg, transparent, #6b6b6b, transparent); }
+  .crw__q { font-size: 16px; font-weight: 600; margin: 0 0 20px; }
+  .crw__slides { overflow: hidden; }
+  .crw__track { display: flex; transition: transform .35s ease; }
+  .crw__slide { flex: 0 0 100%; display: grid; gap: 18px; align-content: start; min-height: 182px; }
+  .crw__card { display: flex; align-items: center; gap: 16px; width: 100%; padding: 18px 16px; border: 0; border-radius: 12px; background: #2b2b2b; color: #fff; text-align: left; cursor: pointer; transition: background .2s ease; }
+  .crw__card:hover { background: #363636; }
+  .crw__back { position: absolute; top: 20px; left: 18px; display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; color: #fff; opacity: .7; cursor: pointer; font-size: 13px; padding: 0; }
+  .crw__back:hover { opacity: 1; }
+  .crw__ico--lg { width: 64px; height: 64px; margin: 0 auto 18px; }
+  .crw__ico--lg svg { width: 28px; height: 28px; }
+  .crw__dtext { font-size: 15px; line-height: 1.6; color: #ddd; margin: 0 0 22px; }
+  .crw__dtext b { color: #fff; }
+  .crw__dq { font-size: 14px; color: #bbb; margin: 0; }
+  .crw__wbtn { display: inline-block; padding: 12px 28px; border-radius: 4px; background: #fff; color: #000 !important; font-size: 15px; font-weight: 600; text-decoration: none; }
+  .crw__ico { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; background: #5c5c5c; display: grid; place-items: center; color: #fff; }
+  .crw__card b { display: block; font-size: 15px; font-weight: 600; }
+  .crw__card span { font-size: 13px; color: #ddd; }
+  .crw__card .crw__chev { margin-left: auto; flex: 0 0 auto; color: #bbb; }
+  .crw__dots { display: flex; justify-content: center; gap: 8px; margin: 22px 0; }
+  .crw__dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #5c5c5c; cursor: pointer; }
+  .crw__dots button[aria-current="true"] { background: #fff; }
+  .crw__actions { display: flex; justify-content: center; gap: 20px; }
+  .crw__gbtn { min-width: 100px; padding: 11px 16px; border-radius: 4px; background: #333; color: #fff !important; font-size: 16px; text-decoration: none; text-align: center; }
+  .crw__gbtn:hover { background: #444; }
+
+  /* Member — header + tabs */
+  .crw__head { padding: 22px 22px 18px; background: #0b0b0b; }
+  .crw__wb { font-size: 13px; color: #bbb; margin: 0; }
+  .crw__name { font-size: 18px; font-weight: 700; margin: 0 0 12px; padding-right: 36px; }
+  .crw__pts { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .crw__pts strong { font-size: 32px; font-weight: 700; line-height: 1; }
+  .crw__pts small { font-size: 12px; letter-spacing: .2em; margin-left: 8px; color: #ccc; }
+  .crw__worth { font-size: 13px; color: #ccc; }
+  .crw__worth b { color: #fff; }
+  .crw__tier { display: flex; justify-content: space-between; margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
+  .crw__tier .crw__gold { color: #c9a227; }
+  .crw__bar { height: 4px; background: #333; border-radius: 4px; overflow: hidden; }
+  .crw__bar span { display: block; height: 100%; background: #c9a227; }
+  .crw__tiernote { font-size: 12px; color: #bbb; margin: 8px 0 0; }
+  .crw__tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: #fff; border-bottom: 1px solid #eee; }
+  .crw__tabs button { padding: 14px 4px 12px; border: 0; border-bottom: 2px solid transparent; background: none; cursor: pointer; color: #888; font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .crw__tabs button[aria-selected="true"] { color: #000; border-bottom-color: #000; }
+  .crw__pane { background: #fff; color: #111; padding: 18px 16px; overflow-y: auto; flex: 1; min-height: 160px; }
+  .crw__label { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #888; font-weight: 600; margin: 0 0 12px; }
+  .crw__earn { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #eee; }
+  .crw__earn:last-child { border-bottom: 0; }
+  .crw__earn .crw__ico { width: 38px; height: 38px; background: #f1f1f1; color: #333; }
+  .crw__earn b { display: block; font-size: 14px; font-weight: 600; }
+  .crw__earn span { font-size: 12px; color: #777; }
+  .crw__earn em { margin-left: auto; font-style: normal; font-weight: 700; font-size: 13px; color: #1a8f43; white-space: nowrap; }
+  .crw__rw { display: flex; align-items: center; gap: 10px; padding: 14px 12px; margin-bottom: 10px; border: 1px solid #e6e6e6; border-radius: 8px; }
+  .crw__rw b { font-size: 14px; font-weight: 600; }
+  .crw__rw small { margin-left: auto; font-size: 13px; color: #555; white-space: nowrap; }
+  .crw__rbtn { padding: 8px 12px; border: 0; border-radius: 4px; background: #000; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .crw__rbtn--ghost { background: #fff; color: #000; border: 1px solid #000; }
+  .crw__rbtn[disabled] { background: #bbb; cursor: not-allowed; }
+  .crw__note { font-size: 12px; color: #777; margin: 6px 0 0; }
+  .crw__ok { font-size: 14px; font-weight: 600; color: #1a8f43; margin: 0 0 10px; }
+  .crw__msg { font-size: 13px; color: #b00020; margin: 8px 0 0; }
+  .crw__msg:empty { display: none; }
+  .crw__act { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+  .crw__act b { display: block; font-size: 14px; font-weight: 600; }
+  .crw__act span { font-size: 12px; color: #888; }
+  .crw__act em { font-style: normal; font-weight: 700; font-size: 14px; }
+  .crw__plus { color: #1a8f43; } .crw__minus { color: #c62828; }
+  .crw__refbox { border: 1px solid #eee; border-radius: 8px; padding: 14px; background: #fafafa; }
+  .crw__reflink { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; padding: 10px; border: 1px dashed #bbb; background: #fff; margin: 0 0 12px; }
+  .crw__more { display: block; text-align: center; padding: 12px; background: #fff; color: #000 !important; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; text-decoration: underline; border-top: 1px solid #eee; }
+
+  @media (max-width: 749px) {
+    .crw { left: 12px; bottom: 12px; }
+    .crw__launcher { padding: 12px 18px; font-size: 13px; }
+    .crw__panel { position: fixed; left: 0; right: 0; bottom: 0; width: auto; max-height: 88vh; border-radius: 22px 22px 0 0; }
+    /* keep the last buttons clear of floating icons in the bottom corners */
+    .crw__welcome, .crw__more { padding-bottom: 76px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .crw__launcher, .crw__track { transition: none; } }
+</style>
+<script src="{{ 'carbon-rewards-core.js' | asset_url }}" defer></script>
+<script>
+  (() => {
+    const ICON = {
+      bag: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 7V6a5 5 0 0 1 10 0v1h3l-1 14H5L4 7h3zm2 0h6V6a3 3 0 0 0-6 0v1z"/></svg>',
+      friends: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1v-1zm17.5-6c2.7.3 4.5 2 4.5 4.5V21h-4v-1c0-2.4-.9-4.5-2.5-6z"/></svg>',
+      cake: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 6a2 2 0 0 0 2-2c0-1.1-2-4-2-4s-2 2.9-2 4a2 2 0 0 0 2 2zm7 3H5a3 3 0 0 0-3 3v1.5c.8 0 1.5-.3 2-.8l1-1 1 1c1.1 1.1 2.9 1.1 4 0l1-1 1 1c1.1 1.1 2.9 1.1 4 0l1-1 1 1c.5.5 1.2.8 2 .8V12a3 3 0 0 0-3-3zm1.2 6.3c-1.8 0-2.6-1-3.2-1.6-.6.6-1.4 1.6-3.2 1.6s-2.6-1-3.2-1.6c-.6.6-1.4 1.6-3.2 1.6-.9 0-1.5-.2-2.2-.6V21a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-5.3c-.6.4-1.3.6-2 .6z"/></svg>',
+      star: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l3 6.9 7.5.6-5.7 4.9 1.8 7.4L12 17.8 5.4 21.8l1.8-7.4L1.5 9.5 9 8.9z"/></svg>',
+      back: '<svg width="9" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2L2 8l6 6"/></svg>',
+      chev: '<svg class="crw__chev" width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg>',
+    };
+    const REASON = { sale: 'Reward', redemption: 'Redeem', refund: 'Return (refund)', signup_bonus: 'Welcome bonus', birthday_bonus: 'Birthday bonus', referral_bonus: 'Referral bonus', manual: 'Adjustment', adjustment: 'Points returned', migration: 'Points transferred' };
+    const SOURCE = { pos: 'In store', shopify: 'Online', system: 'Carbon Rewards', admin: 'Carbon Rewards' };
+
+    const define = () => {
+      if (customElements.get('carbon-rewards-widget')) return;
+      const CR = window.CarbonRewards;
+      const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      const money = CR.money;
+
+      class CarbonRewardsWidget extends HTMLElement {
+        connectedCallback() {
+          this.tab = 'earn';
+          this.slide = 0;
+          this.btn = this.querySelector('.crw__launcher');
+          this.panel = this.querySelector('.crw__panel');
+          this.backdrop = this.querySelector('.crw__backdrop');
+          this.view = this.querySelector('[data-crw-view]');
+          this.btn.addEventListener('click', () => (this.panel.hidden ? this.open() : this.close()));
+          this.addEventListener('click', (e) => { if (e.target.closest('[data-crw-close]')) this.close(); });
+          document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !this.panel.hidden) { this.close(); this.btn.focus(); } });
+          this.view.addEventListener('click', (e) => this.onClick(e));
+          document.addEventListener('carbon-rewards:changed', () => { if (!this.panel.hidden && this.dataset.signedIn) this.load(); });
+        }
+        open() {
+          this.panel.hidden = false;
+          this.classList.add('crw--open');
+          this.backdrop.hidden = !window.matchMedia('(max-width: 749px)').matches;
+          this.btn.setAttribute('aria-expanded', 'true');
+          this.load();
+          this.panel.focus();
+        }
+        close() {
+          this.panel.hidden = true;
+          this.classList.remove('crw--open');
+          this.backdrop.hidden = true;
+          this.btn.setAttribute('aria-expanded', 'false');
+        }
+        async load() {
+          try {
+            if (!this.program) this.program = await CR.api('program');
+            if (this.dataset.signedIn) {
+              [this.data, this.cart] = await Promise.all([CR.api('balance'), CR.getCart()]);
+              if (this.data.linked) return this.renderMember();
+            }
+            this.renderGuest();
+          } catch (e) {
+            this.view.innerHTML = '<p class="crw__loading">Rewards are unavailable right now. Please try again in a moment.</p>';
+          }
+        }
+
+        // ---------------- Guest ----------------
+        renderGuest() {
+          const p = this.program, signedIn = !!this.dataset.signedIn;
+          const card = (icon, title, sub, key) => '<button type="button" class="crw__card" data-crw-detail="' + key + '"><span class="crw__ico">' + icon + '</span><div><b>' + title + '</b><span>' + sub + '</span></div>' + ICON.chev + '</button>';
+          const top = p.tiers[p.tiers.length - 1];
+          const slides = [
+            card(ICON.bag, 'Place an order', 'Every order earns you points.', 'order') + card(ICON.friends, 'Refer a Friend', 'Refer and earn.', 'refer'),
+            card(ICON.cake, 'Birthday bonus', p.birthday_bonus_points + ' points on your birthday.', 'birthday') +
+              card(ICON.star, 'Reach new tiers', 'Up to ' + (top ? top.multiplier : 1) + '× points per $1.', 'tiers'),
+          ];
+          this.view.innerHTML =
+            '<div class="crw__welcome">' +
+              '<h2 class="crw__title">Welcome to our<br>Loyalty Program</h2>' +
+              '<div class="crw__divider"></div>' +
+              '<p class="crw__q">Do you know that you can earn points to redeem your rewards?</p>' +
+              '<div class="crw__slides"><div class="crw__track" data-crw-track>' + slides.map((s) => '<div class="crw__slide">' + s + '</div>').join('') + '</div></div>' +
+              '<div class="crw__dots">' + slides.map((_, i) => '<button type="button" aria-label="Page ' + (i + 1) + '" data-crw-dot="' + i + '"></button>').join('') + '</div>' +
+              '<div class="crw__divider"></div>' +
+              (signedIn
+                ? '<p class="crw__q" style="font-weight:500;font-size:14px;margin:0">Your points will appear here after your first purchase.</p>'
+                : '<div class="crw__actions"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">Register</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">Login</a></div>') +
+            '</div>';
+          this.goSlide(this.slide);
+          // swipe between pages on touch screens
+          const track = this.view.querySelector('[data-crw-track]');
+          let x0 = null;
+          track.addEventListener('touchstart', (e) => (x0 = e.touches[0].clientX), { passive: true });
+          track.addEventListener('touchend', (e) => {
+            if (x0 == null) return;
+            const dx = e.changedTouches[0].clientX - x0;
+            if (Math.abs(dx) > 40) this.goSlide(this.slide + (dx < 0 ? 1 : -1));
+            x0 = null;
+          });
+        }
+        // Card detail — what the perk is and what to do next.
+        renderDetail(key) {
+          const p = this.program, signedIn = !!this.dataset.signedIn;
+          const join = signedIn ? '' :
+            '<div class="crw__actions" style="margin-top:22px"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">Register</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">Login</a></div>';
+          const D = {
+            order: [ICON.bag, 'Place an order',
+              'Earn <b>' + p.earn_rate_per_dollar + ' point for every $1</b> you spend — online or in any Carbon store. Every <b>100 points = ' + money(100 / p.redeem_points_per_dollar) + ' off</b>, up to ' + money(p.max_redeem_dollars_per_order) + ' per purchase.',
+              '<a class="crw__wbtn" href="/collections/all">Shop now</a>'],
+            refer: [ICON.friends, 'Refer a Friend',
+              'Share your personal link. When a friend makes their first purchase of ' + money(p.referral.min_purchase) + ' or more, <b>they get ' + p.referral.friend_gets + ' points</b> and <b>you get ' + p.referral.you_get + ' points</b>.',
+              signedIn ? '' : '<p class="crw__dq">Join or log in to get your referral link.</p>'],
+            birthday: [ICON.cake, 'Birthday bonus',
+              'Members get <b>' + p.birthday_bonus_points + ' points</b> on their birthday, every year. Share your birthday with us at checkout in any Carbon store to make sure you get it.',
+              ''],
+            tiers: [ICON.star, 'Reach new tiers',
+              'The more you shop, the more you earn on every purchase:<br>' + p.tiers.map((t) => '<b>' + esc(t.name) + '</b> ' + (t.threshold ? '$' + Number(t.threshold).toLocaleString('en-US') + '+ spent' : 'to start') + ' · ' + t.multiplier + '× points').join('<br>'),
+              ''],
+          }[key];
+          this.view.innerHTML =
+            '<div class="crw__welcome crw__detail">' +
+              '<button type="button" class="crw__back" data-crw-back aria-label="Back">' + ICON.back + ' Back</button>' +
+              '<span class="crw__ico crw__ico--lg">' + D[0] + '</span>' +
+              '<h2 class="crw__title" style="font-size:22px">' + D[1] + '</h2>' +
+              '<div class="crw__divider"></div>' +
+              '<p class="crw__dtext">' + D[2] + '</p>' + D[3] + join +
+            '</div>';
+        }
+        goSlide(i) {
+          const dots = this.view.querySelectorAll('[data-crw-dot]');
+          this.slide = Math.max(0, Math.min(dots.length - 1, i));
+          this.view.querySelector('[data-crw-track]').style.transform = 'translateX(-' + this.slide * 100 + '%)';
+          dots.forEach((d, j) => d.setAttribute('aria-current', j === this.slide ? 'true' : 'false'));
+        }
+
+        // ---------------- Member ----------------
+        renderMember() {
+          const d = this.data, t = d.tier;
+          const redeemable = CR.options(d, Infinity);
+          const worth = redeemable.length ? redeemable[redeemable.length - 1].dollars : 0;
+          const pct = t && t.next ? Math.min(100, Math.round(100 * t.progress / (t.progress + t.next.needed))) : 100;
+          const toNext = t && t.next
+            ? (t.metric === 'points' ? Math.ceil(t.next.needed) + ' points' : t.metric === 'visits' ? Math.ceil(t.next.needed) + ' purchases' : money(Math.ceil(t.next.needed))) + ' to ' + esc(t.next.name)
+            : 'You\'re at our top tier';
+          const tabs = [['earn', 'Earn'], ['rewards', 'Rewards'], ['activity', 'Activity'], ['refer', 'Refer']];
+          this.view.innerHTML =
+            '<div class="crw__head">' +
+              '<p class="crw__wb">Welcome back,</p>' +
+              '<p class="crw__name">' + esc(d.first_name || this.dataset.firstName || 'friend') + '</p>' +
+              '<div class="crw__pts"><div><strong>' + d.balance.toLocaleString() + '</strong><small>POINTS</small></div>' +
+                '<span class="crw__worth">≈ <b>' + money(worth) + '</b> off</span></div>' +
+              (t ? '<div class="crw__tier"><span class="crw__gold">★ ' + esc(t.name) + '</span><span>' + (t.next ? '→ ' + esc(t.next.name) : '') + '</span></div>' +
+                   '<div class="crw__bar"><span style="width:' + pct + '%"></span></div><p class="crw__tiernote">' + toNext + '</p>' : '') +
+            '</div>' +
+            '<div class="crw__tabs" role="tablist">' + tabs.map(([k, l]) =>
+              '<button type="button" role="tab" data-crw-tab="' + k + '" aria-selected="' + (this.tab === k) + '">' + l + '</button>').join('') + '</div>' +
+            '<div class="crw__pane" role="tabpanel">' + this.renderPane() + '</div>' +
+            '<a class="crw__more" href="' + esc(this.dataset.rewardsUrl) + '">See all your rewards →</a>';
+        }
+        renderPane() {
+          const d = this.data, p = this.program;
+          if (this.tab === 'earn') {
+            const row = (icon, title, sub, amt) => '<div class="crw__earn"><span class="crw__ico">' + icon + '</span><div><b>' + title + '</b><span>' + sub + '</span></div><em>' + amt + '</em></div>';
+            return '<p class="crw__label">Ways to earn</p>' +
+              row(ICON.bag, 'Place an order', p.earn_rate_per_dollar + ' pt per $1 spent (excl. tax)', 'EARN') +
+              (p.birthday_bonus_points ? row(ICON.cake, 'Birthday bonus', 'A gift on your birthday', '+' + p.birthday_bonus_points) : '') +
+              (d.referral ? row(ICON.friends, 'Refer a friend', 'When they buy ≥ ' + money(d.referral.min_purchase), '+' + d.referral.you_get) : '') +
+              (d.tier && d.tier.next ? row(ICON.star, 'Reach ' + esc(d.tier.next.name), d.tier.next.multiplier + '× points on every purchase', d.tier.next.multiplier + '×') : '');
+          }
+          if (this.tab === 'rewards') return this.renderRewards();
+          if (this.tab === 'activity') {
+            if (!d.activity.length) return '<p class="crw__label">Recent activity</p><p class="crw__note">No activity yet.</p>';
+            return '<p class="crw__label">Recent activity</p>' + d.activity.map((a) => {
+              const plus = a.delta_points >= 0;
+              return '<div class="crw__act"><div><b>' + esc(REASON[a.reason] || 'Activity') + '</b><span>' + new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(a.created_at)) + ' · ' + esc(SOURCE[a.source] || '') + '</span></div>' +
+                '<em class="' + (plus ? 'crw__plus' : 'crw__minus') + '">' + (plus ? '+' : '') + a.delta_points + '</em></div>';
+            }).join('');
+          }
+          if (!d.referral) return '<p class="crw__note">Referrals are unavailable right now.</p>';
+          return '<p class="crw__label">Refer a friend</p><div class="crw__refbox"><p class="crw__label" style="margin-bottom:8px">Your referral link</p>' +
+            '<p class="crw__reflink">' + esc(d.referral.url) + '</p><button type="button" class="crw__rbtn" data-crw-copy>Copy link</button></div>' +
+            '<p class="crw__note" style="margin-top:12px">When your friend makes their first purchase of ' + money(d.referral.min_purchase) + ' or more, they get <b>' + d.referral.friend_gets + ' points</b> and you get <b>' + d.referral.you_get + ' points</b>.</p>';
+        }
+        renderRewards() {
+          const d = this.data;
+          const subtotal = Number(this.cart.items_subtotal_price || 0) / 100;
+          const applied = CR.rewardCodeIn(this.cart);
+          const active = d.codes[0];
+          let html = '<p class="crw__label">Redeem your points</p>';
+          if (active && applied === active.code.toUpperCase()) {
+            html += '<p class="crw__ok">✓ ' + money(active.dollars) + ' off is applied to your cart</p>' +
+              '<div class="crw__rw"><b>' + money(active.dollars) + ' off any order</b><small>' + active.points + ' pts</small>' +
+              '<button type="button" class="crw__rbtn crw__rbtn--ghost" data-crw-cancel>Remove</button></div>' +
+              '<p class="crw__note">Removing returns your ' + active.points + ' points. <a href="' + esc(this.dataset.cartUrl) + '" style="color:#000">View cart</a></p>';
+          } else if (active) {
+            const enough = subtotal >= active.min_subtotal;
+            html += '<div class="crw__rw"><b>' + money(active.dollars) + ' off any order</b><small>ready</small>' +
+              '<button type="button" class="crw__rbtn" data-crw-apply' + (enough ? '' : ' disabled') + '>Apply</button></div>' +
+              '<p class="crw__note">' + (enough ? 'Applies to your cart · items only, not shipping.' : 'Add ' + money(active.min_subtotal - subtotal) + ' more in items to use it.') +
+              ' <button type="button" data-crw-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:#000">Cancel &amp; get points back</button></p>';
+          } else {
+            const r = d.rules, step = r.redeem_increment_points, list = [];
+            const cap = Math.floor(r.max_redeem_dollars_per_order * r.redeem_points_per_dollar / step) * step;
+            for (let pts = Math.max(step, r.min_redeem_points); pts <= cap; pts += step) {
+              const dollars = pts / r.redeem_points_per_dollar, min = CR.minFor(r, dollars);
+              const canAfford = d.balance >= pts, fits = subtotal >= min;
+              list.push('<div class="crw__rw"><b>' + money(dollars) + ' off any order</b><small>' + pts + ' pts</small>' +
+                '<button type="button" class="crw__rbtn" data-crw-redeem="' + pts + '"' + (canAfford ? '' : ' disabled') +
+                ' title="' + (!canAfford ? 'Not enough points yet' : fits ? 'Applies to your cart' : 'Use it on items totaling ' + money(min) + '+') + '">Redeem</button></div>');
+            }
+            html += list.join('') + '<p class="crw__note">Your code is applied to your cart automatically · items only, not shipping · each reward needs a minimum in your cart (' + money(CR.minFor(r, 10)) + '+ for $10).</p>';
+          }
+          return html + '<p class="crw__msg" data-crw-msg role="status"></p>';
+        }
+
+        async onClick(e) {
+          const det = e.target.closest('[data-crw-detail]');
+          if (det) return this.renderDetail(det.dataset.crwDetail);
+          if (e.target.closest('[data-crw-back]')) return this.renderGuest();
+          const dot = e.target.closest('[data-crw-dot]');
+          if (dot) return this.goSlide(Number(dot.dataset.crwDot));
+          const tab = e.target.closest('[data-crw-tab]');
+          if (tab) { this.tab = tab.dataset.crwTab; return this.renderMember(); }
+          const t = e.target.closest('button');
+          if (!t || t.disabled) return;
+          if (t.hasAttribute('data-crw-copy')) {
+            try { await navigator.clipboard.writeText(this.data.referral.url); } catch (err) { /* link stays visible to copy by hand */ }
+            t.textContent = 'Copied!';
+            setTimeout(() => (t.textContent = 'Copy link'), 1600);
+            return;
+          }
+          if (!t.matches('[data-crw-redeem],[data-crw-apply],[data-crw-cancel]')) return;
+          this.view.querySelectorAll('.crw__pane button').forEach((b) => (b.disabled = true));
+          try {
+            if (t.dataset.crwRedeem) {
+              const { coupon } = await CR.api('redeem', { points: Number(t.dataset.crwRedeem) });
+              // Only put it on the cart once the cart qualifies; until then it
+              // stays ready with an Apply button and "add $X more".
+              const subtotal = Number(this.cart.items_subtotal_price || 0) / 100;
+              if (subtotal >= coupon.min_subtotal) this.cart = await CR.setRewardCode(this.cart, coupon.code);
+            } else if (t.hasAttribute('data-crw-apply')) {
+              this.cart = await CR.setRewardCode(this.cart, this.data.codes[0].code);
+            } else {
+              await CR.api('cancel', { code: this.data.codes[0].code });
+              this.cart = await CR.setRewardCode(this.cart, '');
+            }
+            await this.load();
+          } catch (err) {
+            await this.load();
+            const m = this.view.querySelector('[data-crw-msg]');
+            if (m) m.textContent = err.message;
+          }
+        }
+      }
+      customElements.define('carbon-rewards-widget', CarbonRewardsWidget);
+    };
+    if (window.CarbonRewards) define();
+    else document.addEventListener('DOMContentLoaded', define);
+  })();
+</script>
+{%- endunless -%}

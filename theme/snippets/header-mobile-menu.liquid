@@ -270,12 +270,12 @@
             <div class="thb-account__link--container">
     			{%- if shop.customer_accounts_enabled -%}
     				{%- if customer -%}
-    				  {%- assign profile_link = routes.account_url -%}
+    				  {%- assign profile_link = '/pages/my-account' -%}
     				  {%- capture profile_text -%}
     				    {{ 'sections.header.my_account' | t }}
     				  {%- endcapture -%}
     				{%- else -%}
-    				  {%- assign profile_link = routes.account_login_url -%}
+    				  {%- assign profile_link = '/customer_authentication/login?return_to=%2Fpages%2Fmy-account' -%}
     				  {%- capture profile_text -%}
     				    {{ 'sections.header.login' | t }}
     				  {%- endcapture -%}
