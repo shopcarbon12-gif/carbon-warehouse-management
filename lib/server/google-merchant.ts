@@ -121,6 +121,15 @@ export async function listGmcListings(): Promise<GmcListing[]> {
 type ListingKey = Pick<GmcListing, "offerId" | "contentLanguage" | "feedLabel">;
 
 /**
+ * updateMask paths are proto field names. The API's own camel→snake mapping
+ * turns `customLabel0` into `custom_label0`, which Google rejects ("Invalid field
+ * paths"); the proto field is `custom_label_0`. Convert explicitly.
+ */
+export function maskFieldPath(field: string): string {
+  return field.replace(/([a-z])([A-Z0-9])/g, "$1_$2").toLowerCase();
+}
+
+/**
  * Field-scoped write into our supplemental data source.
  *
  * Several writers share this source — ad labels (Sync ads) and product details
@@ -135,7 +144,7 @@ async function patchSupplemental(
   fields: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   const id = `${l.contentLanguage}~${l.feedLabel}~${l.offerId}`;
-  const mask = fields.map((f) => `productAttributes.${f}`).join(",");
+  const mask = fields.map((f) => `productAttributes.${maskFieldPath(f)}`).join(",");
   const res = await gfetch(
     `${MERCHANT}/products/v1/accounts/${merchantId()}/productInputs/${encodeURIComponent(id)}?dataSource=${encodeURIComponent(labelsDataSource())}&updateMask=${encodeURIComponent(mask)}`,
     {
