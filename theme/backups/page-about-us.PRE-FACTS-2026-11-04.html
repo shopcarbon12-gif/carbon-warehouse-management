@@ -1,0 +1,826 @@
+<style>
+  /* =========================
+     REMOVE SHOPIFY DEFAULT ABOUT TITLE / GAP
+  ========================== */
+  #MainContent h1:not(.ca-hero-title),
+  main h1:not(.ca-hero-title),
+  .main-page-title,
+  .page-title,
+  .title-wrapper,
+  .title-wrapper-with-link,
+  .page-header,
+  .page-width--narrow > h1:first-child,
+  .page-width > h1:first-child {
+    display: none !important;
+  }
+
+  #MainContent .page-width:has(.carbon-about-final),
+  #MainContent .page-width--narrow:has(.carbon-about-final),
+  #MainContent .rte:has(.carbon-about-final),
+  #MainContent .main-page:has(.carbon-about-final),
+  #MainContent .shopify-section:has(.carbon-about-final),
+  #MainContent [class*="section-"]:has(.carbon-about-final) {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .carbon-about-final {
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+    margin-top: -208px !important;
+    background: #fff;
+    color: #111;
+    overflow: hidden;
+    font-family: inherit;
+    position: relative;
+    z-index: 5;
+  }
+
+  .carbon-about-final * {
+    box-sizing: border-box;
+  }
+
+  .ca-wrap {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 34px;
+  }
+
+  /* =========================
+     HERO
+  ========================== */
+  .ca-hero {
+    position: relative;
+    width: 100%;
+    min-height: 780px;
+    height: 55vw;
+    max-height: 880px;
+    background: #000;
+    overflow: hidden;
+  }
+
+  .ca-hero picture,
+  .ca-hero img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .ca-hero img {
+    object-fit: cover;
+    object-position: center 47%;
+    filter: brightness(1.2) contrast(1.04);
+  }
+
+  .ca-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(0,0,0,.64) 0%,
+        rgba(0,0,0,.54) 28%,
+        rgba(0,0,0,.23) 50%,
+        rgba(0,0,0,.05) 75%,
+        rgba(0,0,0,.04) 100%
+      );
+    z-index: 1;
+  }
+
+  .ca-hero-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .ca-hero-copy {
+    max-width: 760px;
+    padding-left: clamp(34px, 6vw, 92px);
+    padding-right: 24px;
+  }
+
+  .ca-eyebrow {
+    color: #fff;
+    font-size: 15px;
+    line-height: 1.3;
+    font-weight: 800;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+
+  .ca-hero-title {
+    display: block !important;
+    color: #fff;
+    font-size: clamp(58px, 5.2vw, 86px);
+    line-height: .95;
+    letter-spacing: -.045em;
+    text-transform: uppercase;
+    font-weight: 900;
+    margin: 0 0 22px;
+  }
+
+  .ca-hero-title span {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .ca-hero-text {
+    color: #fff;
+    max-width: 620px;
+    font-size: 21px;
+    line-height: 1.65;
+    margin: 0 0 30px;
+  }
+
+  .ca-buttons {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .ca-btn {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 220px;
+    min-height: 58px;
+    padding: 0 28px;
+    border: 1px solid #fff;
+    text-decoration: none !important;
+    text-transform: uppercase;
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: .03em;
+    text-align: center;
+  }
+
+  .ca-btn-white {
+    background: #fff;
+    color: #000 !important;
+  }
+
+  .ca-btn-outline {
+    background: transparent;
+    color: #fff !important;
+  }
+
+  .ca-btn-outline-dark {
+    background: transparent;
+    color: #111 !important;
+    border-color: #111;
+  }
+
+  /* =========================
+     OUR STORY + IMAGE GRID
+  ========================== */
+  .ca-story {
+    background: #fff;
+    padding: 92px 0 0;
+  }
+
+  .ca-story-grid {
+    display: grid;
+    grid-template-columns: 0.95fr 1.05fr;
+    gap: 84px;
+    align-items: center;
+  }
+
+  .ca-story h2,
+  .ca-values h2,
+  .ca-visit h2,
+  .ca-final h2 {
+    font-size: clamp(38px, 3.4vw, 58px);
+    line-height: 1.02;
+    letter-spacing: -.04em;
+    text-transform: uppercase;
+    font-weight: 900;
+    margin: 0 0 26px;
+  }
+
+  .ca-story p {
+    font-size: 19px;
+    line-height: 1.85;
+    color: #222;
+    margin: 0 0 20px;
+    max-width: 590px;
+  }
+
+  .ca-story-image {
+    width: 100%;
+    min-height: 520px;
+    background-image: url("https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_09_04_04_PM.png?v=1781312658");
+    background-size: cover;
+    background-position: center;
+    background-color: #111;
+  }
+
+  .ca-strip {
+    padding: 38px 0 78px;
+    background: #fff;
+  }
+
+  .ca-strip-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .ca-strip-img {
+    min-height: 360px;
+    background-size: cover;
+    background-position: center;
+    background-color: #111;
+  }
+
+  .ca-img-left {
+    background-image: url("https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_08_49_56_PM.png?v=1781311828");
+  }
+
+  .ca-img-middle {
+    background-image: url("https://cdn.shopify.com/s/files/1/0680/6572/2620/files/image_10_23c03a5f-148d-4609-b7b5-c4edd6c3da1a.png?v=1781294277");
+  }
+
+  .ca-img-right {
+    background-image: url("https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_12_30_10_AM.png?v=1781252368");
+  }
+
+  .ca-strip-caption {
+    text-align: center;
+    margin-top: 26px;
+    font-size: 22px;
+    line-height: 1.45;
+    color: #111;
+    font-weight: 500;
+  }
+
+  /* =========================
+     VALUES
+  ========================== */
+  .ca-values {
+    background: #f5f5f5;
+    padding: 82px 0 96px;
+    text-align: center;
+  }
+
+  .ca-values h2 {
+    font-size: clamp(42px, 4vw, 68px);
+    margin-bottom: 0;
+  }
+
+  .ca-values-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    margin-top: 48px;
+  }
+
+  .ca-value-card {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    padding: 58px 38px !important;
+    min-height: 360px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ca-value-icon {
+    width: 120px !important;
+    height: 120px !important;
+    margin: 0 auto 28px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ca-value-icon img {
+    width: 120px !important;
+    height: 120px !important;
+    display: block;
+    object-fit: contain !important;
+  }
+
+  .ca-value-card h3 {
+    margin: 0 0 18px;
+    font-size: 30px;
+    text-transform: uppercase;
+    font-weight: 900;
+    letter-spacing: .02em;
+    line-height: 1.1;
+  }
+
+  .ca-value-card p {
+    font-size: 26px !important;
+    line-height: 1.55 !important;
+    max-width: 420px !important;
+    margin: 0 auto;
+    color: #222;
+    font-weight: 600 !important;
+  }
+
+  /* =========================
+     VISIT
+  ========================== */
+  .ca-visit {
+    background: #fff;
+    padding: 0;
+  }
+
+  .ca-visit-grid {
+    display: grid;
+    grid-template-columns: .95fr 1.05fr;
+    min-height: 520px;
+  }
+
+  .ca-visit-copy {
+    padding: clamp(50px, 6vw, 90px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    align-items: center;
+  }
+
+  .ca-visit-copy h2 {
+    font-size: clamp(42px, 4vw, 66px);
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .ca-visit-copy p {
+    font-size: 22px;
+    line-height: 1.75;
+    max-width: 560px;
+    margin: 0 auto 34px;
+    color: #222;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .ca-visit-photo {
+    min-height: 520px;
+    background: #111;
+    background-image: url("https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_12_43_51_AM.png?v=1781252379");
+    background-size: cover;
+    background-position: center;
+  }
+
+  .ca-visit-copy .ca-buttons {
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .ca-visit-copy .ca-btn {
+    min-width: 220px;
+    min-height: 60px;
+    font-size: 16px;
+    font-weight: 900;
+    padding: 0 30px;
+  }
+
+  .ca-visit .ca-btn-outline-dark {
+    border-width: 1px;
+  }
+
+  /* =========================
+     FINAL CTA
+  ========================== */
+  .ca-final {
+    position: relative;
+    background: #030303;
+    color: #fff;
+    text-align: center;
+    padding: 74px 24px 82px;
+    overflow: hidden;
+  }
+
+  .ca-final::before {
+    content: "";
+    position: absolute;
+    left: -120px;
+    top: 20px;
+    width: 420px;
+    height: 420px;
+    border: 1px solid rgba(255,255,255,.055);
+    transform: rotate(30deg);
+  }
+
+  .ca-final h2 {
+    color: #fff;
+    margin-bottom: 18px;
+  }
+
+  .ca-final p {
+    max-width: 760px;
+    margin: 0 auto 28px;
+    color: #ddd;
+    font-size: 22px;
+    line-height: 1.75;
+    font-weight: 500;
+  }
+
+  .ca-final .ca-btn {
+    min-width: 220px;
+  }
+
+  /* =========================
+     MOBILE
+  ========================== */
+  @media screen and (max-width: 749px) {
+    .carbon-about-final {
+      margin-top: -132px !important;
+    }
+
+    .ca-wrap {
+      padding: 0 20px;
+    }
+
+    .ca-hero {
+      min-height: 900px;
+      height: 96vh;
+      max-height: 980px;
+    }
+
+    .ca-hero img {
+      object-position: center bottom;
+      filter: brightness(1.18) contrast(1.04);
+    }
+
+    .ca-hero::after {
+      background:
+        linear-gradient(
+          180deg,
+          rgba(0,0,0,.82) 0%,
+          rgba(0,0,0,.68) 25%,
+          rgba(0,0,0,.22) 54%,
+          rgba(0,0,0,.05) 76%,
+          rgba(0,0,0,.18) 100%
+        );
+    }
+
+    .ca-hero-content {
+      align-items: stretch;
+      height: 100%;
+    }
+
+    .ca-hero-copy {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      padding: 62px 16px 210px;
+      display: block;
+    }
+
+    .ca-eyebrow {
+      font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .ca-hero-title {
+      font-size: 48px;
+      line-height: .94;
+      letter-spacing: -.055em;
+      margin-bottom: 16px;
+      max-width: 340px;
+    }
+
+    .ca-hero-title span {
+      white-space: normal;
+    }
+
+    .ca-hero-text {
+      font-size: 19px;
+      line-height: 1.55;
+      max-width: 350px;
+      margin-bottom: 0;
+    }
+
+    .ca-hero .ca-buttons {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      bottom: 28px;
+      margin-top: 0;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+      width: auto;
+    }
+
+    .ca-hero .ca-btn {
+      width: 100%;
+      max-width: 275px;
+      min-width: 275px;
+      min-height: 58px;
+      font-size: 15px;
+      padding: 0 18px;
+    }
+
+    .ca-story {
+      padding: 58px 0 0;
+    }
+
+    .ca-story-grid {
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+
+    .ca-story h2,
+    .ca-values h2,
+    .ca-visit h2,
+    .ca-final h2 {
+      font-size: 32px;
+      line-height: 1.06;
+    }
+
+    .ca-story p {
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    /* Hide the single "Our Story" photo on mobile only (kept on desktop) */
+    .ca-story-image {
+      display: none !important;
+    }
+
+    .ca-strip {
+      padding: 22px 0 50px;
+    }
+
+    /* Image collage on mobile: two photos on top, one wide photo below */
+    .ca-strip-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .ca-strip-img {
+      min-height: 180px;
+    }
+
+    .ca-img-right {
+      grid-column: 1 / span 2;
+      min-height: 210px;
+    }
+
+    .ca-strip-caption {
+      font-size: 18px;
+      padding: 0 20px;
+      margin-top: 18px;
+    }
+
+    .ca-values {
+      padding: 52px 0 60px;
+    }
+
+    /* "What Carbon Stands For" on mobile: compact icon-list rows */
+    .ca-values-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 30px;
+    }
+
+    .ca-value-card {
+      display: grid !important;
+      grid-template-columns: 60px 1fr;
+      grid-template-areas:
+        "icon title"
+        "icon text";
+      column-gap: 16px;
+      row-gap: 4px;
+      align-items: center;
+      text-align: left !important;
+      padding: 18px 16px !important;
+      min-height: 0 !important;
+      border-radius: 14px;
+    }
+
+    .ca-value-icon {
+      grid-area: icon;
+      width: 60px !important;
+      height: 60px !important;
+      margin: 0 !important;
+      border-radius: 50%;
+      background: #f1f1f1;
+    }
+
+    .ca-value-icon img {
+      width: 42px !important;
+      height: 42px !important;
+    }
+
+    .ca-value-card h3 {
+      grid-area: title;
+      align-self: end;
+      margin: 0 !important;
+      font-size: 18px;
+    }
+
+    .ca-value-card p {
+      grid-area: text;
+      align-self: start;
+      margin: 0 !important;
+      font-size: 14px !important;
+      line-height: 1.45 !important;
+      max-width: none !important;
+      font-weight: 500 !important;
+      color: #555;
+    }
+
+    .ca-visit-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .ca-visit-copy {
+      padding: 52px 24px;
+    }
+
+    .ca-visit-copy p {
+      font-size: 18px;
+      line-height: 1.65;
+    }
+
+    .ca-visit-copy .ca-buttons {
+      justify-content: center;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .ca-visit-copy .ca-btn {
+      width: 100%;
+      max-width: 280px;
+      min-width: 280px;
+      min-height: 58px;
+      font-size: 15px;
+    }
+
+    .ca-visit-photo {
+      min-height: 340px;
+    }
+
+    .ca-final {
+      padding: 58px 20px 66px;
+    }
+
+    .ca-final p {
+      font-size: 18px;
+      line-height: 1.65;
+      max-width: 330px;
+    }
+  }
+</style>
+
+<div class="carbon-about-final">
+
+  <section class="ca-hero">
+    <picture>
+      <source media="(max-width: 749px)" srcset="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_03_57_17_AM.png?v=1781251065">
+      <img src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_03_53_58_AM.png?v=1781251036" alt="CARBON fashion models wearing modern streetwear"></picture>
+
+    <div class="ca-hero-content">
+      <div class="ca-hero-copy">
+        <div class="ca-eyebrow">About Carbon</div>
+
+        <h1 class="ca-hero-title">
+          <span>Built For</span>
+          <span>Individuality</span>
+        </h1>
+
+        <p class="ca-hero-text">
+          CARBON is a fashion destination for people who dress with confidence,
+          energy, and their own point of view.
+        </p>
+
+        <div class="ca-buttons">
+          <a class="ca-btn ca-btn-white" href="/collections/new-arrivals">
+            Shop New Arrivals
+          </a>
+
+          <a class="ca-btn ca-btn-outline" href="/pages/retail-store-locator">
+            Visit Our Store
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ca-story">
+    <div class="ca-wrap">
+      <div class="ca-story-grid">
+        <div>
+          <h2>Our Story</h2>
+
+          <p>
+            CARBON was created for people who do not want to blend in. Inspired by
+            European fashion, street culture, and everyday confidence, we bring
+            together trend-forward pieces, elevated basics, denim, statement looks,
+            and accessories designed to move with real life.
+          </p>
+
+          <p>
+            We believe fashion should feel current, bold, wearable, and personal —
+            something that helps you express who you are without trying too hard.
+          </p>
+        </div>
+
+        <div class="ca-story-image"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ca-strip">
+    <div class="ca-wrap">
+      <div class="ca-strip-grid">
+        <div class="ca-strip-img ca-img-left"></div>
+        <div class="ca-strip-img ca-img-middle"></div>
+        <div class="ca-strip-img ca-img-right"></div>
+      </div>
+
+      <div class="ca-strip-caption">
+        Everyday pieces. Statement energy. Your own style.
+      </div>
+    </div>
+  </section>
+
+  <section class="ca-values">
+    <div class="ca-wrap">
+      <h2>What Carbon Stands For</h2>
+
+      <div class="ca-values-grid">
+        <div class="ca-value-card">
+          <div class="ca-value-icon">
+            <img src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_08_13_36_PM_1.png?v=1781309859" alt="Individuality icon">
+          </div>
+          <h3>Individuality</h3>
+          <p>Style should feel personal, expressive, and true to you.</p>
+        </div>
+
+        <div class="ca-value-card">
+          <div class="ca-value-icon">
+            <img src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_08_13_36_PM_2.png?v=1781309833" alt="Confidence icon">
+          </div>
+          <h3>Confidence</h3>
+          <p>Every piece is selected to help you look sharp and feel your best.</p>
+        </div>
+
+        <div class="ca-value-card">
+          <div class="ca-value-icon">
+            <img src="https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_08_13_36_PM_3.png?v=1781309822" alt="Versatility icon">
+          </div>
+          <h3>Versatility</h3>
+          <p>From everyday denim to standout looks, CARBON is made for real life.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ca-visit">
+    <div class="ca-visit-grid">
+      <div class="ca-visit-copy">
+        <h2>Visit Us In Orlando</h2>
+
+        <p>
+          Experience CARBON in person at our Edgewater location in Orlando,
+          Florida. Explore the latest arrivals, try on your favorite fits,
+          and discover pieces that match your style.
+        </p>
+
+        <div class="ca-buttons">
+          <a class="ca-btn ca-btn-white" style="background:#000;color:#fff!important;border-color:#000;" href="/pages/retail-store-locator">
+            Find Our Store
+          </a>
+
+          <a class="ca-btn ca-btn-outline-dark" href="/collections/all">
+            Shop Online
+          </a>
+        </div>
+      </div>
+
+      <div class="ca-visit-photo"></div>
+    </div>
+  </section>
+
+  <section class="ca-final">
+    <h2>Define Your Style.<br>Wear It Your Way.</h2>
+
+    <p>
+      CARBON is more than a brand — it is a community built on confidence,
+      self-expression, and movement.
+    </p>
+
+    <a class="ca-btn ca-btn-white" href="/collections/all">
+      Shop Carbon
+    </a>
+  </section>
+
+</div>
