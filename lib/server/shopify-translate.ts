@@ -45,7 +45,7 @@ const SET_NOTE: Record<string, { src: string; alt: string }> = {
 };
 const SET_NOTE_RE = /<p class="carbon-set-note">[\s\S]*?<\/p>/;
 
-function setNoteBlock(locale: string, englishBlock: string): string {
+export function setNoteBlock(locale: string, englishBlock: string): string {
   const n = SET_NOTE[locale] || SET_NOTE[locale.split("-")[0]];
   if (!n) return englishBlock;
   return `<p class="carbon-set-note"><img src="${n.src}" alt="${n.alt}" loading="lazy" style="max-width:100%;height:auto;display:block;"></p>`;
@@ -62,7 +62,7 @@ const EXAMPLES: Record<string, string> = {
   pt: `"Successful Tank" → "Regata Successful"; "Time Never Shirt" → "Camisa Time Never"; "Kiera Dress" → "Vestido Kiera"; "London Dress" → "Vestido London"; "Make It Happen T-Shirt" → "Camiseta Make It Happen"; "Nash Swimsuit" → "Short de banho Nash"; "River Top Set" → "Conjunto River Top"; "River Bottom Set" → "Conjunto River Bottom"; "Chaos Pants Set" → "Conjunto Calça Chaos"; "2 Pieces Gyda" → "Conjunto Gyda 2 Peças"; "Peace Anklet" → "Tornozeleira Peace"; "Archer Overall" → "Macacão Archer"; "Leopard Dress" → "Vestido de oncinha"; "Classic Sneakers" → "Tênis clássicos".`,
 };
 
-function glossary(locale: string): string {
+export function glossary(locale: string): string {
   const g = GLOSSARY[locale] || GLOSSARY[locale.split("-")[0]] || "Translate garment words with the standard retail term.";
   const ex = EXAMPLES[locale] || EXAMPLES[locale.split("-")[0]];
   return ex ? `${g}\n\nApproved title examples (follow this pattern — garment word first, then the English name): ${ex}\nIn set names, "Top" and "Bottom" are part of the name and stay in English ("Conjunto River Bottom").` : g;

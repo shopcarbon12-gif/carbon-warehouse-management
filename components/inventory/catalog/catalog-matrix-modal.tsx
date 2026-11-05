@@ -34,6 +34,7 @@ import { scoreAll } from "@/lib/seo/deterministic";
 import type { SeoFields } from "@/lib/seo/types";
 import { useUrlParam } from "@/lib/use-url-param";
 import { sortSizes } from "@/lib/size-order";
+import { FullSeoPanel } from "@/components/inventory/catalog/full-seo-panel";
 
 /**
  * Lightspeed-style matrix EDITOR. Opens from CatalogItemDetailsModal's "Matrix"
@@ -2321,6 +2322,7 @@ export function CatalogMatrixModal({ matrixId, canManage, onClose, onMutated, on
                     </div>
                   ) : (
                     <>
+                      <FullSeoPanel matrixId={matrixId} canManage={canManage} />
                       <div className="flex flex-wrap items-center gap-3">
                         <button
                           type="button"

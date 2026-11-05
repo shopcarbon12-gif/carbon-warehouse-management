@@ -1,0 +1,173 @@
+[
+ {
+  "handle": "gordon-hoodie-set",
+  "seoTitle": "Gordon Hoodie Set – Men's Ribbed Pullover Hoodie | CARBON",
+  "metaDescription": "Men's pullover hoodie in a fine ribbed texture, with dropped shoulders, a kangaroo pocket and silver-tipped drawcords. In dark teal or white.",
+  "descriptionHtml": "<p>Fine vertical ribs run through the whole hoodie, from the hood to the cuffs. Dropped shoulders, a kangaroo pocket and drawcords finished with silver metal tips and eyelets.</p><p>Part of the Gordon set: pair it with the <a href=\"/products/gordon-pants-set\">Gordon Pants Set</a>. Or wear it with light-wash jeans and white sneakers.</p><ul><li>Fine ribbed texture</li><li>Drawstring hood with silver-tipped cords</li><li>Kangaroo pocket</li><li>Dropped shoulders, ribbed cuffs and hem</li><li>In dark teal or white</li></ul>",
+  "focus": "men's ribbed hoodie",
+  "secondary": [
+   "men's pullover hoodie",
+   "dark teal hoodie",
+   "white hoodie"
+  ],
+  "alts": {
+   "1": "Gordon Hoodie Set in Dark Teal – full-length front view with the matching pants",
+   "2": "Gordon Hoodie Set in Dark Teal – front view of the kangaroo pocket and drawcords",
+   "3": "Gordon Hoodie Set in Dark Teal – close-up of the ribbed hood and silver-tipped drawcords",
+   "4": "Gordon Hoodie Set in Dark Teal – full-length front view, walking",
+   "5": "Gordon Hoodie Set in Dark Teal – seated front view",
+   "6": "Gordon Hoodie Set in Dark Teal – back view over the shoulder",
+   "7": "Gordon Hoodie Set in Dark Teal – full-length back view with light-wash jeans",
+   "8": "Gordon Hoodie Set in White – full-length front view with the matching pants",
+   "9": "Gordon Hoodie Set in White – front view from the thighs up",
+   "10": "Gordon Hoodie Set in White – front view of the kangaroo pocket",
+   "11": "Gordon Hoodie Set in White – close-up of the ribbed hood and drawcords",
+   "12": "Gordon Hoodie Set in White – full-length front view",
+   "13": "Gordon Hoodie Set in White – seated front view",
+   "14": "Gordon Hoodie Set in White – back view over the shoulder",
+   "15": "Gordon Hoodie Set in White – full-length back view"
+  },
+  "attrs": {
+   "color-pattern": [
+    "turquoise",
+    "white"
+   ],
+   "neckline": [
+    "hooded"
+   ],
+   "sleeve-length-type": [
+    "long"
+   ],
+   "fabric": [
+    "polyester"
+   ]
+  },
+  "colourFix": [
+   {
+    "from": "TURQUOISE",
+    "to": "DARK TEAL",
+    "why": "Every TURQUOISE photo (#1-7) shows a deep dark teal, not bright turquoise.",
+    "photos": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ],
+    "partnerToo": "gordon-pants-set"
+   }
+  ],
+  "ownerNotes": "Old alts called #10/#11 'Light Grey' — they are white.",
+  "confidence": "high",
+  "tr": {
+   "es": {
+    "title": "Conjunto de Sudadera con Capucha Gordon",
+    "meta_title": "Conjunto Sudadera Gordon – Sudadera acanalada para hombre | CARBON",
+    "meta_description": "Sudadera con capucha para hombre en acanalado fino, con hombros caídos, bolsillo canguro y cordones con puntas plateadas. En verde azulado oscuro o blanco.",
+    "body": "<p>Un acanalado vertical fino recorre toda la sudadera, de la capucha a los puños. Hombros caídos, bolsillo canguro y cordones terminados en puntas y ojales metálicos plateados.</p><p>Parte del conjunto Gordon: combínala con el <a href=\"/products/gordon-pants-set\">Gordon Pants Set</a>. O llévala con jeans de lavado claro y tenis blancos.</p><ul><li>Textura acanalada fina</li><li>Capucha con cordones de puntas plateadas</li><li>Bolsillo canguro</li><li>Hombros caídos, puños y bajo acanalados</li><li>En verde azulado oscuro o blanco</li></ul>",
+    "alts": {
+     "1": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista frontal de cuerpo entero con el pantalón a juego",
+     "2": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista frontal del bolsillo canguro y los cordones",
+     "3": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – primer plano de la capucha acanalada y los cordones con puntas plateadas",
+     "4": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista frontal de cuerpo entero, caminando",
+     "5": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista frontal sentado",
+     "6": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista trasera, mirando sobre el hombro",
+     "7": "Conjunto de Sudadera con Capucha Gordon en verde azulado oscuro – vista trasera de cuerpo entero con jeans de lavado claro",
+     "8": "Conjunto de Sudadera con Capucha Gordon en blanco – vista frontal de cuerpo entero con el pantalón a juego",
+     "9": "Conjunto de Sudadera con Capucha Gordon en blanco – vista frontal de los muslos hacia arriba",
+     "10": "Conjunto de Sudadera con Capucha Gordon en blanco – vista frontal del bolsillo canguro",
+     "11": "Conjunto de Sudadera con Capucha Gordon en blanco – primer plano de la capucha acanalada y los cordones",
+     "12": "Conjunto de Sudadera con Capucha Gordon en blanco – vista frontal de cuerpo entero",
+     "13": "Conjunto de Sudadera con Capucha Gordon en blanco – vista frontal sentado",
+     "14": "Conjunto de Sudadera con Capucha Gordon en blanco – vista trasera, mirando sobre el hombro",
+     "15": "Conjunto de Sudadera con Capucha Gordon en blanco – vista trasera de cuerpo entero"
+    }
+   },
+   "pt": {
+    "title": "Conjunto de Moletom com Capuz Gordon",
+    "meta_title": "Conjunto Moletom Gordon – Moletom canelado masculino | CARBON",
+    "meta_description": "Moletom com capuz masculino em textura canelada fina, com ombros caídos, bolso canguru e cordões com ponteiras prateadas. Em verde-petróleo ou branco.",
+    "body": "<p>Um canelado vertical fino percorre todo o moletom, do capuz aos punhos. Ombros caídos, bolso canguru e cordões com ponteiras e ilhoses de metal prateado.</p><p>Parte do conjunto Gordon: combine com a <a href=\"/products/gordon-pants-set\">Gordon Pants Set</a>. Ou use com jeans de lavagem clara e tênis brancos.</p><ul><li>Textura canelada fina</li><li>Capuz com cordões de ponteiras prateadas</li><li>Bolso canguru</li><li>Ombros caídos, punhos e barra canelados</li><li>Em verde-petróleo ou branco</li></ul>",
+    "alts": {
+     "1": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista frontal de corpo inteiro com a calça combinando",
+     "2": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista frontal do bolso canguru e dos cordões",
+     "3": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – close do capuz canelado e dos cordões com ponteiras prateadas",
+     "4": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista frontal de corpo inteiro, caminhando",
+     "5": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista frontal sentado",
+     "6": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista de costas, olhando por cima do ombro",
+     "7": "Conjunto de Moletom com Capuz Gordon em verde-petróleo – vista de costas de corpo inteiro com jeans de lavagem clara",
+     "8": "Conjunto de Moletom com Capuz Gordon em branco – vista frontal de corpo inteiro com a calça combinando",
+     "9": "Conjunto de Moletom com Capuz Gordon em branco – vista frontal das coxas para cima",
+     "10": "Conjunto de Moletom com Capuz Gordon em branco – vista frontal do bolso canguru",
+     "11": "Conjunto de Moletom com Capuz Gordon em branco – close do capuz canelado e dos cordões",
+     "12": "Conjunto de Moletom com Capuz Gordon em branco – vista frontal de corpo inteiro",
+     "13": "Conjunto de Moletom com Capuz Gordon em branco – vista frontal sentado",
+     "14": "Conjunto de Moletom com Capuz Gordon em branco – vista de costas, olhando por cima do ombro",
+     "15": "Conjunto de Moletom com Capuz Gordon em branco – vista de costas de corpo inteiro"
+    }
+   }
+  }
+ },
+ {
+  "handle": "julian-jeans",
+  "seoTitle": "Julian Jeans – Men's Distressed Skinny Jeans | CARBON",
+  "metaDescription": "Men's skinny jeans in a faded vintage blue wash, with small rips and scuffs across the thighs and knees and a tapered ankle.",
+  "descriptionHtml": "<p>A faded vintage blue wash with a yellowed, tinted cast, broken up by small rips and scuffs across the thighs and knees. The leg stays skinny all the way down and tapers at the ankle.</p><p>Five pockets and clean back pockets, nothing extra. Wear them with a plain white tee and white sneakers.</p><ul><li>Skinny leg, tapered at the ankle</li><li>Faded vintage blue wash</li><li>Small rips and scuffs on the thighs and knees</li><li>Five-pocket design</li></ul>",
+  "focus": "men's distressed skinny jeans",
+  "secondary": [
+   "blue washed jeans",
+   "men's ripped skinny jeans",
+   "faded jeans"
+  ],
+  "alts": {
+   "1": "Julian Jeans in Blue Washed – full-length front view on a model",
+   "2": "Julian Jeans in Blue Washed – full-length front view, turned slightly",
+   "3": "Julian Jeans in Blue Washed – close-up of the front and the thigh rips",
+   "4": "Julian Jeans in Blue Washed – front view from the waist down with white sneakers",
+   "5": "Julian Jeans in Blue Washed – close-up of the faded wash and front pocket",
+   "6": "Julian Jeans in Blue Washed – seated view with white sneakers",
+   "7": "Julian Jeans in Blue Washed – back view of the back pockets",
+   "8": "Julian Jeans in Blue Washed – full-length back view"
+  },
+  "attrs": {},
+  "colourFix": [],
+  "ownerNotes": "Removed 'Button and zip closure' (fly not visible).",
+  "confidence": "high",
+  "tr": {
+   "es": {
+    "title": "Jeans Julian",
+    "meta_title": "Jeans Julian – Jeans skinny desgastados para hombre | CARBON",
+    "meta_description": "Jeans skinny para hombre en un lavado azul vintage desteñido, con pequeñas roturas y raspados en muslos y rodillas, y tobillo entallado.",
+    "body": "<p>Un lavado azul vintage desteñido con un tono amarillento, salpicado de pequeñas roturas y raspados en los muslos y las rodillas. La pierna es skinny de arriba abajo y se entalla en el tobillo.</p><p>Cinco bolsillos y bolsillos traseros limpios, nada más. Combínalos con una camiseta blanca lisa y tenis blancos.</p><ul><li>Pierna skinny, entallada en el tobillo</li><li>Lavado azul vintage desteñido</li><li>Pequeñas roturas y raspados en muslos y rodillas</li><li>Diseño de cinco bolsillos</li></ul>",
+    "alts": {
+     "1": "Jeans Julian en azul lavado – vista frontal de cuerpo entero en modelo",
+     "2": "Jeans Julian en azul lavado – vista frontal de cuerpo entero, ligeramente girado",
+     "3": "Jeans Julian en azul lavado – primer plano del frente y las roturas en los muslos",
+     "4": "Jeans Julian en azul lavado – vista frontal de la cintura hacia abajo con tenis blancos",
+     "5": "Jeans Julian en azul lavado – primer plano del lavado desteñido y el bolsillo delantero",
+     "6": "Jeans Julian en azul lavado – vista sentado con tenis blancos",
+     "7": "Jeans Julian en azul lavado – vista trasera de los bolsillos traseros",
+     "8": "Jeans Julian en azul lavado – vista trasera de cuerpo entero"
+    }
+   },
+   "pt": {
+    "title": "Jeans Julian",
+    "meta_title": "Jeans Julian – Calça jeans skinny destroyed masculina | CARBON",
+    "meta_description": "Calça jeans skinny masculina em lavagem azul vintage desbotada, com pequenos rasgos e puídos nas coxas e joelhos e barra afunilada.",
+    "body": "<p>Uma lavagem azul vintage desbotada com um tom amarelado, marcada por pequenos rasgos e puídos nas coxas e nos joelhos. A perna é skinny do começo ao fim e afunila no tornozelo.</p><p>Cinco bolsos e bolsos traseiros lisos, nada além disso. Use com uma camiseta branca lisa e tênis brancos.</p><ul><li>Perna skinny, afunilada no tornozelo</li><li>Lavagem azul vintage desbotada</li><li>Pequenos rasgos e puídos nas coxas e joelhos</li><li>Modelo de cinco bolsos</li></ul>",
+    "alts": {
+     "1": "Jeans Julian em azul lavado – vista frontal de corpo inteiro no modelo",
+     "2": "Jeans Julian em azul lavado – vista frontal de corpo inteiro, levemente virado",
+     "3": "Jeans Julian em azul lavado – close da frente e dos rasgos nas coxas",
+     "4": "Jeans Julian em azul lavado – vista frontal da cintura para baixo com tênis brancos",
+     "5": "Jeans Julian em azul lavado – close da lavagem desbotada e do bolso frontal",
+     "6": "Jeans Julian em azul lavado – vista sentado com tênis brancos",
+     "7": "Jeans Julian em azul lavado – vista de costas dos bolsos traseiros",
+     "8": "Jeans Julian em azul lavado – vista de costas de corpo inteiro"
+    }
+   }
+  }
+ }
+]

@@ -140,6 +140,8 @@ const ROUTES: Record<string, Entry> = {
   "shopify/sync/trigger": { module: "Shopify", label: "Started Shopify sync" },
   "shopify/seo/optimize": { module: "Shopify", label: "Wrote SEO with AI" },
   "shopify/seo/write": { module: "Shopify", label: "Saved SEO to Shopify" },
+  "shopify/seo/full": { module: "Shopify", label: "Started a full SEO run" },
+  "shopify/seo/full/colour": { module: "Shopify", label: "Applied a suggested colour rename" },
   "shopify/seo/audit": { module: "Shopify", label: "Ran SEO audit" },
   "shopify/set-banner": { module: "Shopify", label: "Set store banner" },
   "shopify/collections/create": { module: "Shopify", label: "Created Shopify collection" },

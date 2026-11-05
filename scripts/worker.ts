@@ -8,6 +8,7 @@ import { executeShopifyLinkAll } from "@/lib/server/shopify-link";
 import { executeShopifyInventorySync } from "@/lib/server/shopify-inventory-sync";
 import { executeShopifyTranslate } from "@/lib/server/shopify-translate";
 import { executeShopifyAdsSync } from "@/lib/server/shopify-ads-sync";
+import { executeSeoFull, maybeRunSeoWatch, SEO_FULL_JOB } from "@/lib/server/seo-full";
 import { signSession } from "@/lib/auth";
 import { nightlySendDue } from "@/lib/server/studio-batch";
 import { maybeRunShieldMaintenance } from "@/lib/server/shield/maintenance";
@@ -67,6 +68,7 @@ const SELF_TERMINAL_JOB_TYPES = new Set([
   "shopify_inventory_sync",
   "shopify_translate",
   "shopify_ads_sync",
+  SEO_FULL_JOB,
 ]);
 
 const REPORT_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -321,6 +323,11 @@ async function processStub(pool: Pool, job: JobRow): Promise<void> {
     /* Sets its own terminal status + result (every change, before → after). */
     return;
   }
+  if (job.job_type === SEO_FULL_JOB) {
+    await executeSeoFull(pool, job.id);
+    /* Sets its own terminal status + the seo_full_runs row. */
+    return;
+  }
   if (job.job_type === "shopify_ads_sync") {
     await executeShopifyAdsSync(pool, job.id);
     /* Sets its own terminal status + per-group report. */
@@ -392,6 +399,7 @@ async function main() {
       await maybeRunMetaFeed(pool);
       await maybeRunMarketing(pool);
       await maybeRunSocialAi(pool);
+      await maybeRunSeoWatch(pool);
       const job = await claimJob(pool);
       if (!job) {
         await sleep(800);
