@@ -317,6 +317,7 @@ async function drawNext(pool: Pool, turn: Msg, log: (m: string) => void): Promis
     if (done) continue;
     const inputs = await inputsFor(pool, turn, view, view === "mobile" ? turn.desktop_path : null);
     if (turn.mode === "fast") {
+      await pool.query(`UPDATE email_design_messages SET status = 'generating' WHERE id = $1::uuid`, [turn.id]);
       const b64 = await drawFast(inputs);
       const path = await savePicture(turn, view, b64);
       await pool.query(`UPDATE email_design_messages SET ${view}_path = $2 WHERE id = $1::uuid`, [turn.id, path]);
@@ -340,7 +341,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
   // 0. A turn cut off by a restart while planning / drawing fast.
   await pool.query(
     `UPDATE email_design_messages SET status = 'failed', error = 'Interrupted (the server restarted). Send the message again.', finished_at = now()
-      WHERE status = 'planning' AND batch_id IS NULL AND created_at < now() - interval '20 minutes'`,
+      WHERE status IN ('planning','generating') AND batch_id IS NULL AND batch_files IS NULL AND created_at < now() - interval '20 minutes'`,
   );
   // 1. New turns: plan, then draw (fast) or submit (batch).
   const queued = await pool.query<Msg>(

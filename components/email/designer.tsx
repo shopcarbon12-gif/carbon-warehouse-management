@@ -48,12 +48,16 @@ const TARGETS = [
   { id: "mobile", label: "Mobile only" },
 ] as const;
 
-const STATUS_TEXT: Record<string, string> = {
-  queued: "Waiting to start…",
-  planning: "Planning the design…",
-  generating: "Drawing (OpenAI batch, can take a while)…",
-  failed: "Failed",
-};
+/** What an unfinished AI turn is doing right now, in words. */
+function progressText(m: Msg): string {
+  if (m.status === "queued") return "Waiting to start (within a minute)…";
+  if (m.status === "planning" && !m.text) return "Planning the design…";
+  const which = m.target === "both" ? (m.desktop ? "the phone version" : "the desktop version") : m.target === "desktop" ? "the desktop version" : "the phone version";
+  const step = m.target === "both" ? (m.desktop ? " (2 of 2)" : " (1 of 2)") : "";
+  return m.mode === "fast"
+    ? `Drawing ${which}${step}. About 1 to 3 minutes per picture…`
+    : `Drawing ${which}${step} in the OpenAI batch. Usually minutes, can take up to an hour…`;
+}
 
 function useDesignParam(): [string | null, (id: string | null) => void] {
   const id = useSearchParams().get("design");
@@ -213,7 +217,10 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
       setRec(r);
       setTimeout(() => r.state === "recording" && r.stop(), 180_000);
     } catch {
-      setMsg({ text: "The microphone is not available. Allow microphone access for this site, or type instead.", err: true });
+      setMsg({
+        text: "This app can't use the microphone yet. Tap the text box and use the microphone key on your phone's keyboard instead (it types what you say). On a computer, allow microphone access for this site.",
+        err: true,
+      });
     }
   }
 
@@ -295,7 +302,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               {m.text && <p className="whitespace-pre-wrap text-sm text-[var(--wms-fg)]">{m.text}</p>}
               {m.status !== "done" && (
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
-                  {m.status === "failed" ? m.error ?? "Failed" : STATUS_TEXT[m.status] ?? m.status}
+                  {m.status === "failed" ? (m.error ?? "Failed") : progressText(m)}
                 </p>
               )}
               {(m.desktop || m.mobile || m.status === "done") && (

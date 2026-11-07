@@ -43,13 +43,26 @@ class WmsChromeClient(private val a: MainActivity, private val isPopup: Boolean)
         a.runOnUiThread {
             val sameOrigin = request.origin.host.equals(a.originHost, ignoreCase = true)
             val wantsCamera = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
-            if (sameOrigin && wantsCamera) {
-                a.withCameraPermission { granted ->
-                    if (granted) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else request.deny()
-                }
-            } else {
+            val wantsMic = request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+            if (!sameOrigin || (!wantsCamera && !wantsMic)) {
                 request.deny()
+                return@runOnUiThread
             }
+            // Only the WMS's own pages; camera (scanning, photos) and microphone (Email → AI Designer "Speak").
+            fun grantMic(alsoCamera: Boolean) {
+                if (!wantsMic) {
+                    if (alsoCamera) request.grant(arrayOf(PermissionRequest.RESOURCE_VIDEO_CAPTURE)) else request.deny()
+                    return
+                }
+                a.withMicPermission { micOk ->
+                    val res = buildList {
+                        if (alsoCamera) add(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                        if (micOk) add(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
+                    }
+                    if (res.isEmpty()) request.deny() else request.grant(res.toTypedArray())
+                }
+            }
+            if (wantsCamera) a.withCameraPermission { camOk -> grantMic(camOk) } else grantMic(false)
         }
     }
 

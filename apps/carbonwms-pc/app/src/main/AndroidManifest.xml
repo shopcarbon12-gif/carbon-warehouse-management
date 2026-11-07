@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- getUserMedia on the Studio hand-off page + "Take photo" in the file chooser -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Email → AI Designer "Speak" button (owner, 2026-11-07). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- OTA self-update: open the package installer for an APK downloaded from the WMS -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Biometric / screen-lock sign-in (saved login unlocked through BiometricPrompt) -->

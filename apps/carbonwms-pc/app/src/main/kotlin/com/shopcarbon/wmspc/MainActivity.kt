@@ -122,6 +122,24 @@ class MainActivity : AppCompatActivity() {
         pendingPermission = null
     }
 
+    // ---- microphone permission (Email → AI Designer "Speak") --------------------------------
+    private var pendingMicPermission: ((Boolean) -> Unit)? = null
+    private val micPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        Diag.log("microphone permission granted=$granted")
+        pendingMicPermission?.invoke(granted)
+        pendingMicPermission = null
+    }
+
+    fun withMicPermission(callback: (Boolean) -> Unit) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            callback(true)
+            return
+        }
+        pendingMicPermission?.invoke(false)
+        pendingMicPermission = callback
+        micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
     /** Notifications carry the "still generating" foreground service and the update banner. */
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
