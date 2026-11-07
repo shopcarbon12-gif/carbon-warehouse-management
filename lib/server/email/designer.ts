@@ -25,6 +25,9 @@ import OpenAI, { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { DESKTOP_SIZE, MOBILE_SIZE, imageModel, openai, textModel, transcribeModel } from "./config";
+import { catalogLines, inStockCatalog, logoReference, productPhoto, type CatalogProduct } from "./catalog";
+
+export type TurnProduct = { id: string; title: string; url: string; price: number; image: string | null };
 
 export type View = "desktop" | "mobile";
 export type Target = "both" | View;
@@ -45,6 +48,7 @@ type Msg = {
   batch_id: string | null;
   batch_files: Stage | null;
   error: string | null;
+  products: TurnProduct[] | null;
   created_at: Date;
 };
 
@@ -55,7 +59,8 @@ export const SAMPLE_NAME = "Maria";
 export const SAMPLE_CODE = "CB20-K7Q4XM";
 
 const BRAND = `CARBON is a fashion retailer in Orlando, Florida (store + shopcarbon.com): trendy streetwear and going-out looks for men and women.
-Brand look: clean black and white, lots of white space, bold sans-serif headings, the wordmark "CARBON" in wide-spaced capitals, fashion photography that fills the width.
+Brand look: clean black and white, lots of white space, bold sans-serif headings, fashion photography that fills the width.
+The logo is the official CARBON logo (a hexagon-cell mark followed by the word CARBON in a thin geometric sans-serif, wide letter-spacing). It is always given as a reference picture: reproduce exactly that logo, never redraw it in another font or style.
 Never mention other brands, never invent prices, discounts or dates the owner did not give, never write "Carbon Jeans".`;
 
 const VIEW_RULES: Record<View, string> = {
@@ -63,7 +68,7 @@ const VIEW_RULES: Record<View, string> = {
   mobile: `Show the email flat and full-length exactly as it renders on a PHONE (a 375-pixel-wide screen): one column that fills the ENTIRE image width, from the top of the email to the bottom. Stack side-by-side blocks vertically, make headings fit the narrow width, make buttons full-width and easy to tap, keep body text large enough to read on a phone. No phone frame, no status bar, no app chrome, no background around the email.`,
 };
 
-const COMMON_RULES = `Typography must be crisp and perfectly spelled, exactly the words given. Personal parts use sample values: the customer's first name is "${SAMPLE_NAME}" and a personal discount code (when there is one) is "${SAMPLE_CODE}" shown in a clearly separate box. Buttons are solid rectangles with their label inside. Photos are real-looking fashion photography with no words written on them. Leave out any unsubscribe line, legal footer or postal address (added automatically later). Nothing may be cut off at the edges.`;
+const COMMON_RULES = `Put the official CARBON logo (from its reference picture, exactly as given) at the top of the email, centred, unless the description places it elsewhere. Typography must be crisp and perfectly spelled, exactly the words given. Personal parts use sample values: the customer's first name is "${SAMPLE_NAME}" and a personal discount code (when there is one) is "${SAMPLE_CODE}" shown in a clearly separate box. Buttons are solid rectangles with their label inside. Photos are real-looking fashion photography with no words written on them. Leave out any unsubscribe line, legal footer or postal address (added automatically later). Nothing may be cut off at the edges.`;
 
 function sizeOf(v: View) {
   return v === "desktop" ? DESKTOP_SIZE : MOBILE_SIZE;
@@ -139,7 +144,24 @@ async function asDataUrl(path: string, maxW = 900): Promise<string> {
   return `data:image/jpeg;base64,${jpg.toString("base64")}`;
 }
 
-type Plan = { reply: string; title: string | null; subject: string | null; preheader: string | null; desktop_prompt: string | null; mobile_prompt: string | null };
+type Plan = {
+  reply: string;
+  title: string | null;
+  subject: string | null;
+  preheader: string | null;
+  desktop_prompt: string | null;
+  mobile_prompt: string | null;
+  products: TurnProduct[];
+};
+
+/** The products of the latest finished version before this turn. */
+async function previousProducts(pool: Pool, turn: Msg): Promise<TurnProduct[]> {
+  const r = await pool.query<{ products: TurnProduct[] | null }>(
+    `SELECT products FROM email_design_messages WHERE design_id = $1::uuid AND role = 'ai' AND status = 'done' AND created_at < $2 ORDER BY created_at DESC LIMIT 1`,
+    [turn.design_id, turn.created_at],
+  );
+  return r.rows[0]?.products ?? [];
+}
 
 const PLAN_SYSTEM = `You are the email designer inside CarbonWMS, working for the owner of CARBON.
 ${BRAND}
@@ -153,6 +175,13 @@ Write JSON with:
 - preheader: the inbox preview text (max 90 characters), or null to keep the previous one.
 - desktop_prompt: when the desktop view changes, a complete, self-contained description of the WHOLE desktop email from top to bottom: every section in order, the exact words of every heading, paragraph and button, the photos (what they show, which attached photo to use: "attached photo 1"…), colours, alignment and spacing. Never write "same as before": describe everything, carrying over what does not change. Null when the desktop view does not change.
 - mobile_prompt: the same for the phone view, when it changes (describe the narrow layout: stacked blocks, full-width buttons). Null when the mobile view does not change.
+- products: the catalog refs you use in this version, e.g. ["P12","P40"] (at most 6), or null to keep the previous version's products.
+
+CATALOG (the real CARBON products in stock right now, from the store's catalog) is listed in the message as: ref | name | type | men/women | colours | price | stock.
+- Whenever the email shows clothing, use ONLY real catalog products: never invent garments. Style real looks from them (e.g. a jacket + jeans + sneakers that go together) and pick by season, the owner's request, and stock (prefer stock 3 or more).
+- In desktop_prompt / mobile_prompt refer to each product as "catalog photo of <ref> (<name>)" and say where it goes; the picture model receives each chosen product's real photo.
+- Product names and prices shown in the email must be exactly the catalog's. Never show a price the catalog doesn't give.
+- The official logo is always supplied; describe where it sits, never how to draw it.
 
 Personal parts: the customer's first name appears as "${SAMPLE_NAME}", a personal code as "${SAMPLE_CODE}". Do not add an unsubscribe line or postal address (added automatically).`;
 
@@ -173,6 +202,21 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
   });
   if (views.desktop) content.push({ type: "image_url", image_url: { url: await asDataUrl(views.desktop), detail: "high" } });
   if (views.mobile) content.push({ type: "image_url", image_url: { url: await asDataUrl(views.mobile), detail: "high" } });
+  let catalog: CatalogProduct[] = [];
+  try {
+    catalog = await inStockCatalog();
+  } catch (e) {
+    console.warn("[email-ai] catalog unavailable:", e instanceof Error ? e.message : e);
+  }
+  const prevProducts = await previousProducts(pool, turn);
+  const refOf = (id: string) => catalog.find((c) => c.id === id)?.ref;
+  content.push({
+    type: "text",
+    text: catalog.length
+      ? `CATALOG (${catalog.length} products in stock):\n${catalogLines(catalog)}\n\n` +
+        (prevProducts.length ? `Products in the current version: ${prevProducts.map((p) => `${refOf(p.id) ?? "(no longer in stock)"} ${p.title}`).join(", ")}.` : "No products chosen yet.")
+      : "The catalog could not be read right now: do not show specific products; use attached photos only.",
+  });
   const atts = owner?.attachments ?? [];
   for (const [i, a] of atts.entries()) {
     content.push({ type: "text", text: `Attached photo ${i + 1} (${a.name}):` });
@@ -186,7 +230,7 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
       { role: "user", content },
     ],
   });
-  const j = JSON.parse(c.choices[0]?.message?.content ?? "{}") as Partial<Plan>;
+  const j = JSON.parse(c.choices[0]?.message?.content ?? "{}") as Partial<Plan> & { products?: unknown };
   const want = (v: View) => turn.target === "both" || turn.target === v;
   const out: Plan = {
     reply: String(j.reply ?? "Here is the new version.").slice(0, 1200),
@@ -195,6 +239,13 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
     preheader: j.preheader ? String(j.preheader).slice(0, 200) : null,
     desktop_prompt: want("desktop") ? String(j.desktop_prompt ?? owner?.text ?? "").slice(0, 8000) : null,
     mobile_prompt: want("mobile") ? String(j.mobile_prompt ?? j.desktop_prompt ?? owner?.text ?? "").slice(0, 8000) : null,
+    products: Array.isArray(j.products)
+      ? (j.products as unknown[])
+          .map((r) => catalog.find((c) => c.ref === String(r).trim().toUpperCase()))
+          .filter((p): p is CatalogProduct => !!p)
+          .slice(0, 6)
+          .map((p) => ({ id: p.id, title: p.title, url: p.url, price: p.price, image: p.image }))
+      : prevProducts,
   };
   return out;
 }
@@ -224,10 +275,27 @@ async function inputsFor(pool: Pool, turn: Msg, view: View, newDesktop: string |
   } else if (prev.mobile) {
     images.push(await load(prev.mobile));
   }
-  for (const a of atts) images.push(await load(a.path));
+  // Every reference after the base pictures is labelled, so the model knows which is which.
+  const labels: string[] = images.map((_, i) =>
+    view === "desktop" ? "the current desktop version (edit it)" : i === 0 && fromDesktop ? "the finished desktop version" : i === 0 ? "the current phone version (edit it)" : "the previous phone version (layout guide)",
+  );
+  images.push(await logoReference());
+  labels.push("the official CARBON logo (reference only: copy it exactly, do not edit this image)");
+  for (const [i, a] of atts.entries()) {
+    images.push(await load(a.path));
+    labels.push(`attached photo ${i + 1} (${a.name})`);
+  }
+  for (const p of (turn.products ?? []).slice(0, 6)) {
+    const cat: CatalogProduct = { ref: "", id: p.id, title: p.title, url: p.url, type: "", gender: "unisex", colors: [], sizes: [], price: p.price, compareAt: null, stock: 0, image: p.image };
+    const b = await productPhoto(cat);
+    if (!b) continue;
+    images.push(b);
+    labels.push(`catalog photo of ${p.title}: the real garment(s), keep them exactly (cut, colour, details)`);
+  }
   const plannerPrompt = (view === "desktop" ? turn.desktop_prompt : turn.mobile_prompt) ?? "";
-  const attNote = atts.length ? `\n\nThe last ${atts.length} image${atts.length > 1 ? "s are" : " is"} the owner's attached photo${atts.length > 1 ? "s" : ""} (attached photo 1${atts.length > 1 ? `…${atts.length}` : ""}): use them exactly where the description says, without changing the garments.` : "";
-  return { prompt: pictureFrame(view, plannerPrompt, fromDesktop) + attNote, size: sizeOf(view), images };
+  const legend = `\n\nThe input images, in order:\n${labels.map((l, i) => `${i + 1}. ${l}`).join("\n")}` +
+    (labels[0]?.startsWith("the official") ? "\nThere is no earlier version: create the whole email new; image 1 is only the logo." : "");
+  return { prompt: pictureFrame(view, plannerPrompt, fromDesktop) + legend, size: sizeOf(view), images };
 }
 
 async function toPng(b: Buffer): Promise<Buffer> {
@@ -353,8 +421,8 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
     try {
       const p = await plan(pool, turn);
       await pool.query(
-        `UPDATE email_design_messages SET text = $2, desktop_prompt = $3, mobile_prompt = $4 WHERE id = $1::uuid`,
-        [turn.id, p.reply, p.desktop_prompt, p.mobile_prompt],
+        `UPDATE email_design_messages SET text = $2, desktop_prompt = $3, mobile_prompt = $4, products = $5 WHERE id = $1::uuid`,
+        [turn.id, p.reply, p.desktop_prompt, p.mobile_prompt, JSON.stringify(p.products)],
       );
       await pool.query(
         `UPDATE email_designs SET title = CASE WHEN title = 'New email' AND $2::text IS NOT NULL THEN $2 ELSE title END,
@@ -364,6 +432,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       turn.text = p.reply;
       turn.desktop_prompt = p.desktop_prompt;
       turn.mobile_prompt = p.mobile_prompt;
+      turn.products = p.products;
       planned++;
       await drawNext(pool, turn, log);
     } catch (e) {

@@ -22,13 +22,14 @@ import { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { WMS_BASE, openai, textModel } from "./config";
-import { SAMPLE_CODE, SAMPLE_NAME } from "./designer";
+import { SAMPLE_CODE, SAMPLE_NAME, type TurnProduct } from "./designer";
+import { LOGO_URLS } from "./catalog";
 import { MERGE_TAGS, sanitizeEmailHtml, usedMergeTags } from "./rules";
 
 const MAX_FILES = 60;
 const MAX_UNZIPPED = 40 * 1024 * 1024;
 
-export function convertInstructions(desktopName: string, mobileName: string): string {
+export function convertInstructions(desktopName: string, mobileName: string, products: TurnProduct[] = []): string {
   return `You are turning a finished email DESIGN into a real, sendable HTML email package. Use the python tool.
 
 FILES in /mnt/data:
@@ -37,6 +38,19 @@ FILES in /mnt/data:
 
 STEP 1. Look at both pictures closely. List every section top to bottom: logo, headings, paragraphs, photos, buttons, code box, dividers, icons. Note exact words, colours (hex), font style (serif / sans, weight, letter-spacing), alignment and spacing in CSS pixels.
 
+THE LOGO: never cut the CARBON logo out of the pictures and never type it as text. Always use the official file as an <img> with an absolute URL:
+- black logo (on a light background): ${LOGO_URLS.longBlack}
+- white logo (on a dark background): ${LOGO_URLS.longWhite}
+The file is 1200 x 358 px: give it width="180" (or the width the design shows, in CSS px) and height:auto, alt="CARBON", linked to {{shop_url}}.
+${
+  products.length
+    ? `
+REAL PRODUCTS shown in this design (from the store's catalog). Link every picture or button that shows one of them to its own page, and use its exact name and price if the design shows them:
+${products.map((p) => `- ${p.title} · $${p.price} · ${p.url}${p.image ? ` · product photo: ${p.image}` : ""}`).join("\n")}
+For a picture that is simply that product's photo (a product tile), you may use the product photo URL instead of a cut-out (it is sharper); otherwise cut it from the design.
+`
+    : ""
+}
 STEP 2. Cut out every PHOTO and GRAPHIC (product / model photos, illustrations, icons, a graphic logo) with PIL, with exact pixel boxes. Cut from the DESKTOP picture (sharper) unless the phone view shows a different photo or a different crop; then also cut the phone version. Save photos as JPEG (quality 88) and graphics with flat colour or transparency as PNG, into package/images/ with short names (hero.jpg, look-1.jpg, logo.png …). Crops must not include text that is not part of the photo. Check each crop by re-opening it and looking at it; fix boxes that are off.
 
 STEP 3. Write package/email.html — ONE email that looks like the desktop design on a computer and like the phone design on a phone:
@@ -110,7 +124,7 @@ export async function runConversions(pool: Pool, log: (m: string) => void = cons
 }
 
 async function convertOne(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
-  const m = await pool.query<{ desktop_path: string; mobile_path: string }>(`SELECT desktop_path, mobile_path FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
+  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null }>(`SELECT desktop_path, mobile_path, products FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
   const row = m.rows[0];
   const ai = openai();
   const desk = Buffer.from((await downloadStorageObject(row.desktop_path)).body);
@@ -127,7 +141,7 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
         {
           role: "user",
           content: [
-            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png") },
+            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png", row.products ?? []) },
             { type: "input_image", file_id: fDesk.id, detail: "high" },
             { type: "input_image", file_id: fMob.id, detail: "high" },
           ],

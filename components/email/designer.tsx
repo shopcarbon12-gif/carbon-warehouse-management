@@ -27,6 +27,7 @@ type Msg = {
   attachments: { name: string; url: string | null }[];
   desktop: string | null;
   mobile: string | null;
+  products: { id: string; title: string; url: string; price: number; image: string | null }[];
 };
 type Design = {
   id: string;
@@ -268,7 +269,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
       <div className="flex min-w-0 flex-col gap-3">
         {messages.length === 0 && (
           <div className={`${card} text-xs text-[var(--wms-muted)]`}>
-            Tell the AI what the email is for, who it is for and what it should say. Example: &quot;A win-back email for past customers: $20 off one item with their own code, the new winter collection, a black and white look, a big photo of a woman in a bomber jacket, and a section asking them to follow us on Instagram.&quot; Attach product photos if you want them used.
+            Tell the AI what the email is for, who it is for and what it should say. It always uses the real CARBON logo and picks real in-stock products from the catalog by itself. Example: &quot;A win-back email for past customers: $20 off one item with their own code, the new winter collection, a black and white look, a big photo of a woman in a bomber jacket, and a section asking them to follow us on Instagram.&quot; Attach product photos if you want them used.
           </div>
         )}
         {messages.map((m) =>
@@ -304,6 +305,23 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
                   {m.status === "failed" ? (m.error ?? "Failed") : progressText(m)}
                 </p>
+              )}
+              {m.products.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className={label}>Real products in this version</span>
+                  <div className="flex flex-wrap gap-2">
+                    {m.products.map((p) => (
+                      <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex w-28 flex-col gap-0.5 text-[0.68rem] text-[var(--wms-fg)] max-md:w-24">
+                        {p.image && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={`${p.image}${p.image.includes("?") ? "&" : "?"}width=240`} alt={p.title} loading="lazy" className="aspect-[4/5] w-full rounded border border-[var(--wms-border)] object-cover" />
+                        )}
+                        <span className="truncate">{p.title}</span>
+                        <span className="text-[var(--wms-muted)]">${p.price}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               )}
               {(m.desktop || m.mobile || m.status === "done") && (
                 <div className="grid grid-cols-[5fr_3fr] items-start gap-2">
