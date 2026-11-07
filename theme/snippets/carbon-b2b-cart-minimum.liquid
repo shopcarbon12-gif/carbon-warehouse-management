@@ -2,7 +2,8 @@
   Wholesale order minimum (owner 2026-11-07): 3 runs PER ORDER, mixed any way.
   A run is one of every size of a colour, so the runs of one item's colour in
   the cart are the lowest quantity among that colour's lines (the order grid
-  adds the same number of each size). The order's runs are the sum over every
+  adds the same number of each size). A one-size colour's run is 3 pieces, so
+  its runs are its quantity ÷ 3 (rounded down). The order's runs are the sum over every
   item + colour in the cart.
 
   Rendered in the cart drawer and on the cart page, next to Checkout. For a
@@ -31,6 +32,7 @@
     assign total_runs = 0
     for key in keys
       assign key_runs = 999999
+      assign key_per = 1
       for item in cart.items
         assign colour = '—'
         for option in item.product.options_with_values
@@ -40,11 +42,25 @@
           endif
         endfor
         assign item_key = item.product_id | append: '~' | append: colour
-        if item_key == key and item.quantity < key_runs
-          assign key_runs = item.quantity
+        if item_key == key
+          if item.quantity < key_runs
+            assign key_runs = item.quantity
+          endif
+          assign colour_sizes = 0
+          for v in item.product.variants
+            if colour == '—'
+              assign colour_sizes = colour_sizes | plus: 1
+            elsif v.options contains colour
+              assign colour_sizes = colour_sizes | plus: 1
+            endif
+          endfor
+          if colour_sizes == 1
+            assign key_per = 3
+          endif
         endif
       endfor
       if key_runs < 999999
+        assign key_runs = key_runs | divided_by: key_per
         assign total_runs = total_runs | plus: key_runs
       endif
     endfor

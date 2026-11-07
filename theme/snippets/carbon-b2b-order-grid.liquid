@@ -12,6 +12,9 @@
   struck through and left out. The most runs a colour allows is the lowest stock
   among its run sizes.
 
+  One-size items (owner 2026-11-07): when a colour has a single size (OS), a run
+  is 3 pieces of it, so it needs 3 in stock and the max runs is stock ÷ 3.
+
   Prices are whatever Shopify gives this buyer — the Wholesale catalog's price
   list (retail ÷ 2.1) — so nothing here computes a price.
 
@@ -57,6 +60,16 @@
         assign in_run = 0
         assign sizes_html = ''
         assign variant_data = ''
+        assign colour_sizes = 0
+        for variant in product.variants
+          if color_index == nil or variant.options[color_index] == color
+            assign colour_sizes = colour_sizes | plus: 1
+          endif
+        endfor
+        assign per_size = 1
+        if colour_sizes == 1
+          assign per_size = 3
+        endif
         for variant in product.variants
           if color_index != nil and variant.options[color_index] != color
             continue
@@ -69,11 +82,13 @@
           if variant.inventory_management == 'shopify' and variant.inventory_policy == 'deny'
             assign stock = variant.inventory_quantity
           endif
-          if variant.available and stock >= 1
+          if variant.available and stock >= per_size
             assign in_run = in_run | plus: 1
-            assign run_price = run_price | plus: variant.price
-            if stock < max_runs
-              assign max_runs = stock
+            assign size_price = variant.price | times: per_size
+            assign run_price = run_price | plus: size_price
+            assign size_runs = stock | divided_by: per_size
+            if size_runs < max_runs
+              assign max_runs = size_runs
             endif
             assign variant_data = variant_data | append: variant.id | append: ','
             assign sizes_html = sizes_html | append: '<span class="carbon-b2b__size">' | append: size_label | append: '</span>'
@@ -82,12 +97,12 @@
           endif
         endfor
       -%}
-      <div class="carbon-b2b__row" role="row" data-variants="{{ variant_data | remove_last: ',' }}" data-run-price="{{ run_price }}">
+      <div class="carbon-b2b__row" role="row" data-variants="{{ variant_data | remove_last: ',' }}" data-run-price="{{ run_price }}" data-per="{{ per_size }}">
         <span role="cell" class="carbon-b2b__color">{{ color }}</span>
         <span role="cell" class="carbon-b2b__sizes">
           {{ sizes_html }}
           {%- if in_run > 0 -%}
-            <small>{{ run_price | money }} per run · {{ in_run }} pcs</small>
+            <small>{{ run_price | money }} per run · {{ in_run | times: per_size }} pcs</small>
           {%- endif -%}
         </span>
         <span role="cell">
@@ -182,7 +197,7 @@
         const ids = row.dataset.variants.split(',').filter(Boolean);
         const sub = runs * Number(row.dataset.runPrice);
         row.querySelector('.carbon-b2b__subtotal').textContent = runs ? money(sub) : '—';
-        pieces += runs * ids.length;
+        pieces += runs * ids.length * Number(row.dataset.per || 1);
         cents += sub;
       }
       total.textContent = `${pieces} pieces · ${money(cents)}`;
@@ -220,7 +235,8 @@
       for (const row of rows()) {
         const runs = Math.floor(Number(row.querySelector('.carbon-b2b__runs').value) || 0);
         if (!runs) continue;
-        for (const id of row.dataset.variants.split(',').filter(Boolean)) items.push({ id: Number(id), quantity: runs });
+        const per = Number(row.dataset.per || 1);
+        for (const id of row.dataset.variants.split(',').filter(Boolean)) items.push({ id: Number(id), quantity: runs * per });
       }
       if (!items.length) return;
       button.disabled = true;

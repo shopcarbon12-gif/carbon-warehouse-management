@@ -14,7 +14,8 @@
  *     the old per-variant min-3 rules so a single run can go in the cart.
  *   - Catalog (owner 2026-11-07): every CLOTHING product — any status, active,
  *     draft or archived (status is left as it is) — with at least one full run in
- *     stock: one colour where every size has stock ≥ 1. No shoes, no accessories
+ *     stock: one colour where every size has stock ≥ 1 (a one-size colour's run is
+ *     3 pieces, so it needs 3). No shoes, no accessories
  *     (sunglasses, belts, jewellery, hats, socks, tights…). `fill` lists the
  *     changes; `fill --apply` makes them (adds new, removes ones that no longer
  *     qualify).
@@ -232,7 +233,8 @@ function clothingCheck(p) {
   return null;
 }
 
-// A full run = one colour where every size has at least one in stock.
+// A full run = one colour where every size has at least one in stock. A
+// one-size colour's run is 3 pieces (owner 2026-11-07), so it needs 3.
 function fullRuns(p) {
   const groups = new Map();
   for (const v of p.variants.nodes) {
@@ -242,8 +244,9 @@ function fullRuns(p) {
   }
   const out = [];
   for (const [colour, vs] of groups) {
-    if (vs.every((v) => (v.inventoryQuantity ?? 0) >= 1)) {
-      out.push({ colour, runs: Math.min(...vs.map((v) => v.inventoryQuantity)), sizes: vs.length });
+    const per = vs.length === 1 ? 3 : 1;
+    if (vs.every((v) => (v.inventoryQuantity ?? 0) >= per)) {
+      out.push({ colour, runs: Math.floor(Math.min(...vs.map((v) => v.inventoryQuantity)) / per), sizes: vs.length });
     }
   }
   return out;
