@@ -7,10 +7,17 @@
  *     including ones added later — follows the formula without per-variant prices.
  *   - Payment: at checkout (no payment terms, no draft review), so a wholesale
  *     order fires orders/paid like a retail one and the WMS takes the stock.
- *   - Minimum: 3 runs of each colour ordered. The theme's order grid adds whole
- *     runs; the quantity rule here (min 3 per variant) stops the cart going under.
- *   - Catalog: a separate "Wholesale" catalog the owner fills by hand
- *     (Products → Catalogs → Wholesale). It starts empty.
+ *   - Minimum (owner 2026-11-07): 3 runs PER ORDER, mixed any way — one run of
+ *     one item/colour, one of another colour, one of another item. A run is one
+ *     of every size of a colour. Shopify quantity rules are per variant and can't
+ *     express that, so the theme enforces it (order grid + cart); `rules` clears
+ *     the old per-variant min-3 rules so a single run can go in the cart.
+ *   - Catalog (owner 2026-11-07): every CLOTHING product — any status, active,
+ *     draft or archived (status is left as it is) — with at least one full run in
+ *     stock: one colour where every size has stock ≥ 1. No shoes, no accessories
+ *     (sunglasses, belts, jewellery, hats, socks, tights…). `fill` lists the
+ *     changes; `fill --apply` makes them (adds new, removes ones that no longer
+ *     qualify).
  *   - Market: our plan (Grow) can't attach a catalog to a company directly
  *     (Plus only) — it goes through a B2B market. The "Wholesale" market covers
  *     ALL company locations, so every company the owner approves gets the
@@ -26,12 +33,13 @@
  *
  * Usage:
  *   node scripts/b2b-wholesale.mjs setup   # market, catalog, price list
- *   node scripts/b2b-wholesale.mjs rules   # min-3 rule on every variant in the catalog
+ *   node scripts/b2b-wholesale.mjs fill [--apply]  # clothing with a full run in stock → catalog
+ *   node scripts/b2b-wholesale.mjs rules   # clear per-variant quantity rules (3 runs/order is in the theme)
  *   node scripts/b2b-wholesale.mjs tax      # every company location tax-exempt
  *   node scripts/b2b-wholesale.mjs shipping # free-shipping discount, Wholesale market only (needs B2B discounts on)
  *   node scripts/b2b-wholesale.mjs status
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,7 +49,6 @@ const CATALOG_TITLE = "Wholesale";
 const PRICE_LIST_NAME = "Wholesale (retail ÷ 2.1)";
 const DIVISOR = 2.1;
 const DECREASE_PERCENT = Number(((1 - 1 / DIVISOR) * 100).toFixed(6)); // 52.380952
-const MIN_PER_VARIANT = 3;
 const MARKET_NAME = "Wholesale";
 const SHIPPING_DISCOUNT_TITLE = "Shipping billed separately after packing";
 
@@ -175,41 +182,133 @@ async function setup() {
   await status();
 }
 
-async function catalogVariantIds(catalog) {
+async function rules() {
+  const catalog = await findCatalog();
+  if (!catalog?.priceList || !catalog.publication) throw new Error("run setup first");
+  // The minimum is 3 runs per ORDER now (theme), so the old min-3-per-variant
+  // rules would wrongly block a single run of an item — clear them all.
   const ids = [];
   let after = null;
   for (;;) {
     const d = await gql(
-      `query($id:ID!, $after:String){ publication(id:$id){ products(first:50, after:$after){
-         pageInfo { hasNextPage endCursor }
-         nodes { variants(first:100){ nodes { id } } }
-       } } }`,
-      { id: catalog.publication.id, after },
+      `query($id:ID!, $after:String){ priceList(id:$id){ quantityRules(first:250, after:$after){
+         pageInfo { hasNextPage endCursor } nodes { originType minimum productVariant { id } } } } }`,
+      { id: catalog.priceList.id, after },
     );
-    const page = d.publication.products;
-    for (const p of page.nodes) for (const v of p.variants.nodes) ids.push(v.id);
-    if (!page.pageInfo.hasNextPage) return ids;
+    const page = d.priceList.quantityRules;
+    // The list also returns Shopify's implicit default (min 1) for every
+    // catalog variant; only FIXED rules were set by us and can be deleted.
+    for (const r of page.nodes) if (r.originType === "FIXED") ids.push(r.productVariant.id);
+    if (!page.pageInfo.hasNextPage) break;
     after = page.pageInfo.endCursor;
+  }
+  console.log(`${ids.length} fixed per-variant quantity rules on the wholesale price list`);
+  for (let i = 0; i < ids.length; i += 250) {
+    const batch = ids.slice(i, i + 250);
+    const d = await gql(
+      `mutation($pl:ID!, $ids:[ID!]!){ quantityRulesDelete(priceListId:$pl, variantIds:$ids){
+         deletedQuantityRulesVariantIds userErrors { field message code } } }`,
+      { pl: catalog.priceList.id, ids: batch },
+    );
+    check(d.quantityRulesDelete, "quantityRulesDelete");
+    console.log(`  cleared: ${Math.min(i + 250, ids.length)}/${ids.length}`);
   }
 }
 
-async function rules() {
+// Clothing only. Product type first (ACCESSORIES / SHOES / GIFT / GENERAL are
+// out), then Shopify's category must be under Clothing (socks and underwear
+// count as accessories here), then a title check for the odd one filed as
+// clothing. A product with no category is kept when its type is clothing.
+const NOT_CLOTHING_TITLE =
+  /\b(socks?|tights|belts?|sunglass(es)?|bracelets?|necklaces?|anklets?|hats?|caps?|beanies?|bags?|wallets?|rings?|earrings?|scarf|scarves|gloves?|mask|candle|cologne|perfume|gift card|tie)\b/i;
+function clothingCheck(p) {
+  const type = (p.productType || "").toUpperCase();
+  const category = p.category?.fullName || "";
+  if (/ACCESSOR|SHOE|GIFT|GENERAL/.test(type)) return `type "${p.productType}"`;
+  if (category && !category.startsWith("Apparel & Accessories > Clothing >")) return `category "${category}"`;
+  if (/Socks|Underwear|Undergarments|Hosiery|Tights/.test(category)) return `category "${category}"`;
+  if (!category && !type) return "no type or category";
+  if (NOT_CLOTHING_TITLE.test(p.title)) return "title";
+  return null;
+}
+
+// A full run = one colour where every size has at least one in stock.
+function fullRuns(p) {
+  const groups = new Map();
+  for (const v of p.variants.nodes) {
+    const colour = v.selectedOptions.find((o) => /colo/i.test(o.name))?.value ?? "—";
+    if (!groups.has(colour)) groups.set(colour, []);
+    groups.get(colour).push(v);
+  }
+  const out = [];
+  for (const [colour, vs] of groups) {
+    if (vs.every((v) => (v.inventoryQuantity ?? 0) >= 1)) {
+      out.push({ colour, runs: Math.min(...vs.map((v) => v.inventoryQuantity)), sizes: vs.length });
+    }
+  }
+  return out;
+}
+
+async function fill() {
+  const apply = process.argv.includes("--apply");
   const catalog = await findCatalog();
-  if (!catalog?.priceList || !catalog.publication) throw new Error("run setup first");
-  const ids = await catalogVariantIds(catalog);
-  console.log(`${ids.length} variants in the Wholesale catalog`);
-  for (let i = 0; i < ids.length; i += 100) {
-    const batch = ids.slice(i, i + 100);
+  if (!catalog?.publication) throw new Error("run setup first");
+  const pub = catalog.publication.id;
+  const products = [];
+  let after = null;
+  for (;;) {
     const d = await gql(
-      `mutation($pl:ID!, $rules:[QuantityRuleInput!]!){ quantityRulesAdd(priceListId:$pl, quantityRules:$rules){
-         quantityRules { minimum } userErrors { field message code } } }`,
-      {
-        pl: catalog.priceList.id,
-        rules: batch.map((variantId) => ({ variantId, minimum: MIN_PER_VARIANT, increment: 1 })),
-      },
+      `query($after:String, $pub:ID!){ products(first:50, after:$after){ pageInfo { hasNextPage endCursor }
+         nodes { id title handle status productType category { fullName } mediaCount { count }
+           onCatalog: publishedOnPublication(publicationId:$pub)
+           variants(first:100){ nodes { inventoryQuantity selectedOptions { name value } } } } } }`,
+      { after, pub },
     );
-    check(d.quantityRulesAdd, "quantityRulesAdd");
-    console.log(`  rules set: ${Math.min(i + 100, ids.length)}/${ids.length}`);
+    products.push(...d.products.nodes);
+    if (!d.products.pageInfo.hasNextPage) break;
+    after = d.products.pageInfo.endCursor;
+  }
+  const rows = products.map((p) => {
+    const excluded = clothingCheck(p);
+    const runs = excluded ? [] : fullRuns(p);
+    return {
+      id: p.id,
+      title: p.title,
+      handle: p.handle,
+      status: p.status,
+      type: p.productType,
+      photos: p.mediaCount?.count ?? 0,
+      excluded,
+      runs,
+      qualifies: !excluded && runs.length > 0,
+      onCatalog: p.onCatalog,
+    };
+  });
+  const toAdd = rows.filter((r) => r.qualifies && !r.onCatalog);
+  const toRemove = rows.filter((r) => !r.qualifies && r.onCatalog);
+  const byStatus = (list) => list.reduce((o, r) => ((o[r.status] = (o[r.status] || 0) + 1), o), {});
+  console.log(`${products.length} products; ${rows.filter((r) => r.qualifies).length} qualify`, byStatus(rows.filter((r) => r.qualifies)));
+  console.log(`add ${toAdd.length}, remove ${toRemove.length}${apply ? "" : " (dry run — pass --apply)"}`);
+  for (const r of toRemove) console.log(`  remove: ${r.title} (${r.excluded ?? "no full run in stock"})`);
+  const reportPath = process.env.B2B_REPORT || path.join(ROOT, ".tools", "b2b-catalog-report.json");
+  writeFileSync(reportPath, JSON.stringify(rows, null, 1));
+  console.log(`report: ${reportPath}`);
+  if (!apply) return;
+  for (let i = 0; i < toAdd.length; i += 50) {
+    const d = await gql(
+      `mutation($id:ID!, $input:PublicationUpdateInput!){ publicationUpdate(id:$id, input:$input){ userErrors { field message } } }`,
+      { id: pub, input: { publishablesToAdd: toAdd.slice(i, i + 50).map((r) => r.id) } },
+    );
+    check(d.publicationUpdate, "publicationUpdate add");
+    console.log(`  added: ${Math.min(i + 50, toAdd.length)}/${toAdd.length}`);
+  }
+  if (toRemove.length) {
+    const d = await gql(
+      `mutation($id:ID!, $input:PublicationUpdateInput!){ publicationUpdate(id:$id, input:$input){ userErrors { field message } } }`,
+      { id: pub, input: { publishablesToRemove: toRemove.map((r) => r.id) } },
+    );
+    check(d.publicationUpdate, "publicationUpdate remove");
+    console.log(`  removed: ${toRemove.length}`);
   }
 }
 
@@ -283,9 +382,9 @@ async function status() {
 }
 
 const cmd = process.argv[2];
-const run = { setup, rules, tax, shipping, status }[cmd];
+const run = { setup, fill, rules, tax, shipping, status }[cmd];
 if (!run) {
-  console.error("usage: node scripts/b2b-wholesale.mjs setup|rules|tax|shipping|status");
+  console.error("usage: node scripts/b2b-wholesale.mjs setup|fill [--apply]|rules|tax|shipping|status");
   process.exit(1);
 }
 run().catch((e) => {

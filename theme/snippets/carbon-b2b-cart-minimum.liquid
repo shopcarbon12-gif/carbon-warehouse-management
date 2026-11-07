@@ -1,0 +1,73 @@
+{%- comment -%}
+  Wholesale order minimum (owner 2026-11-07): 3 runs PER ORDER, mixed any way.
+  A run is one of every size of a colour, so the runs of one item's colour in
+  the cart are the lowest quantity among that colour's lines (the order grid
+  adds the same number of each size). The order's runs are the sum over every
+  item + colour in the cart.
+
+  Rendered in the cart drawer and on the cart page, next to Checkout. For a
+  wholesale (B2B) buyer below the minimum it shows how many runs are missing
+  and hides the Checkout and express-checkout buttons. Retail carts are untouched.
+  Shopify's own per-variant quantity rules cannot express "3 runs per order",
+  so this is where the rule lives.
+{%- endcomment -%}
+{%- if customer.b2b? and cart.item_count > 0 -%}
+  {%- liquid
+    assign order_min_runs = 3
+    assign keys = ''
+    for item in cart.items
+      assign colour = '—'
+      for option in item.product.options_with_values
+        assign option_name = option.name | downcase
+        if option_name contains 'colo'
+          assign colour = item.variant.options[forloop.index0]
+        endif
+      endfor
+      assign key = item.product_id | append: '~' | append: colour
+      assign keys = keys | append: key | append: '||'
+    endfor
+    assign keys = keys | split: '||' | uniq
+
+    assign total_runs = 0
+    for key in keys
+      assign key_runs = 999999
+      for item in cart.items
+        assign colour = '—'
+        for option in item.product.options_with_values
+          assign option_name = option.name | downcase
+          if option_name contains 'colo'
+            assign colour = item.variant.options[forloop.index0]
+          endif
+        endfor
+        assign item_key = item.product_id | append: '~' | append: colour
+        if item_key == key and item.quantity < key_runs
+          assign key_runs = item.quantity
+        endif
+      endfor
+      if key_runs < 999999
+        assign total_runs = total_runs | plus: key_runs
+      endif
+    endfor
+    assign missing = order_min_runs | minus: total_runs
+  -%}
+  {%- if missing > 0 -%}
+    <div class="carbon-b2b-min" role="alert">
+      <strong>Wholesale minimum: {{ order_min_runs }} runs per order.</strong>
+      Your cart has {{ total_runs }} {% if total_runs == 1 %}run{% else %}runs{% endif %} —
+      add {{ missing }} more {% if missing == 1 %}run{% else %}runs{% endif %} (any item, any colour) to check out.
+    </div>
+    <style>
+      /* Below the wholesale minimum: no way to checkout from the drawer or cart page. */
+      .checkout-button,
+      .additional-checkout-buttons,
+      .cart__dynamic-checkout-buttons { display: none !important; }
+    </style>
+  {%- else -%}
+    <p class="carbon-b2b-min carbon-b2b-min--ok">{{ total_runs }} runs in your order · wholesale minimum met.</p>
+  {%- endif -%}
+  <style>
+    .carbon-b2b-min { margin: 0 0 12px; padding: 10px 12px; font-size: 0.8125rem; line-height: 1.4; border: 1px solid #c0392b; border-radius: 4px; }
+    .carbon-b2b-min strong { display: block; }
+    .carbon-b2b-min--ok { border-color: rgba(var(--color-body-rgb, 0, 0, 0), 0.2); opacity: 0.85; }
+  </style>
+{%- endif -%}

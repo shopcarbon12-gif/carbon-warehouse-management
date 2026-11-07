@@ -11,7 +11,7 @@
 
   Nothing here shows prices or changes buying: approval is a company in Shopify
   admin, prices come from the Wholesale catalog, and the run minimum is enforced
-  on product pages (carbon-b2b-order-grid) and by the catalog's quantity rules.
+  in the cart (carbon-b2b-cart-minimum: 3 runs per order).
   The sign-in link uses routes.storefront_login_url, which returns the buyer to
   this page; an approved (B2B) buyer then sees a Shop wholesale link instead.
 
@@ -510,7 +510,7 @@
     { "type": "text", "id": "store_types", "label": "Type of store choices", "info": "Separate with commas.", "default": "Boutique / physical store, Online store, Both" },
     { "type": "text", "id": "submit_label", "label": "Submit button", "default": "Apply for wholesale" },
     { "type": "textarea", "id": "success_text", "label": "Sent message", "default": "Thanks — your application is in. We'll review it and email you once your wholesale account is ready." },
-    { "type": "text", "id": "term_runs", "label": "Runs term", "default": "Each run includes one of every size in a color. Minimum three runs per color." },
+    { "type": "text", "id": "term_runs", "label": "Runs term", "default": "Each run includes one of every size in a color. Minimum three runs per order — mix items and colors any way you like." },
     { "type": "text", "id": "term_payment", "label": "Payment term", "default": "Payment is taken at checkout. Shipping is billed separately after your order is packed." }
   ],
   "presets": [{ "name": "Wholesale — After Dark" }]

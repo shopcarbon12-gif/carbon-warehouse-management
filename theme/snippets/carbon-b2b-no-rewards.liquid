@@ -1,0 +1,18 @@
+{%- comment -%}
+  Shown to wholesale (B2B) buyers in place of the rewards, Member Club and
+  rewards-account pages (theme.liquid). Rewards, points, referral and retail
+  offers are for retail customers only (owner 2026-11-07).
+{%- endcomment -%}
+<div class="page-width carbon-b2b-no-rewards">
+  <h1>Wholesale account</h1>
+  <p>Carbon Rewards, points, referrals and retail offers are for retail customers. Wholesale accounts order at wholesale prices and don't earn or redeem points.</p>
+  <p>
+    <a class="button" href="{{ routes.account_url }}">Your orders</a>
+    <a class="button button--outline" href="{{ routes.all_products_collection_url }}">Shop wholesale</a>
+  </p>
+</div>
+<style>
+  .carbon-b2b-no-rewards { max-width: 640px; margin: 60px auto; padding: 0 16px; text-align: center; }
+  .carbon-b2b-no-rewards p { margin: 0 0 20px; }
+  .carbon-b2b-no-rewards .button { margin: 4px; }
+</style>

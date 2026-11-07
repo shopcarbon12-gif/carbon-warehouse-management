@@ -1,0 +1,146 @@
+{%- comment -%}
+  Carbon Rewards — "Use your points" box in the cart drawer and cart page.
+  Signed-in customers only. Talks to rewards.shopcarbon.com through the
+  Carbon_Studio app proxy (/apps/loyalty/*), which signs each request with
+  the logged-in customer. Redeeming creates a single-use code (100 pts =
+  $10, up to $30, items only) and applies it to the cart; the theme's
+  cart:refresh event then re-renders the totals.
+  Params: context — 'drawer' or 'page'.
+  Retail only: wholesale (B2B) buyers earn and redeem no points (owner 2026-11-07).
+{%- endcomment -%}
+{%- if customer and customer.b2b? == false -%}
+  <carbon-rewards-cart
+    class="carbon-rewards-cart carbon-rewards-cart--{{ context | default: 'page' }}"
+    data-account-url="https://account.shopcarbon.com/pages/01a10b52-0216-71b7-9eed-6d9ea4827972"
+    hidden
+  >
+    <div class="carbon-rewards-cart__head">
+      <span class="carbon-rewards-cart__title">Carbon Rewards</span>
+      <span class="carbon-rewards-cart__balance" data-crc-balance></span>
+    </div>
+    <div class="carbon-rewards-cart__body" data-crc-body></div>
+    <p class="carbon-rewards-cart__msg" data-crc-msg role="status" aria-live="polite"></p>
+  </carbon-rewards-cart>
+
+  <style>
+    .carbon-rewards-cart { display: block; margin: 0 0 16px; padding: 14px 16px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fafafa; line-height: 1.4; }
+    .carbon-rewards-cart[hidden] { display: none; }
+    .carbon-rewards-cart__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+    .carbon-rewards-cart__title { font-weight: 800; text-transform: uppercase; letter-spacing: .06em; font-size: 13px; }
+    .carbon-rewards-cart__balance { font-size: 13px; color: #555; }
+    .carbon-rewards-cart__row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .carbon-rewards-cart__btn {
+      flex: 1 1 auto; min-width: 84px; padding: 10px 12px; border: 0; border-radius: 4px; cursor: pointer;
+      font: inherit; font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: #fff;
+      background-image: url('https://cdn.shopify.com/s/files/1/0680/6572/2620/files/BUTTON.png'); background-size: cover; background-position: center; background-color: #7b2cff;
+    }
+    .carbon-rewards-cart__btn--ghost { background: transparent; color: #111; border: 1px solid #111; background-image: none; }
+    .carbon-rewards-cart__btn[disabled] { opacity: .45; cursor: not-allowed; }
+    .carbon-rewards-cart__note { margin: 8px 0 0; font-size: 12px; color: #666; }
+    .carbon-rewards-cart__ok { margin: 0; font-weight: 700; }
+    .carbon-rewards-cart__msg { margin: 8px 0 0; font-size: 13px; color: #b00020; }
+    .carbon-rewards-cart__msg:empty { display: none; }
+    .carbon-rewards-cart a { text-decoration: underline; }
+  </style>
+  <script src="{{ 'carbon-rewards-core.js' | asset_url }}" defer></script>
+  <script>
+    (() => {
+      const define = () => {
+      if (customElements.get('carbon-rewards-cart')) return;
+      const CR = window.CarbonRewards;
+      class CarbonRewardsCart extends HTMLElement {
+        connectedCallback() { this.load(); }
+        $(sel) { return this.querySelector(sel); }
+        setMsg(t) { this.$('[data-crc-msg]').textContent = t || ''; }
+        // Read the live cart every time — the page's server-rendered state goes
+        // stale as soon as a code is applied or removed.
+        async load() {
+          try {
+            [this.data, this.cart] = await Promise.all([CR.api('balance'), CR.getCart()]);
+          } catch (e) { return; } // signed out / unavailable — stay hidden
+          if (!this.data.linked || !this.data.rules.live) { this.hidden = true; return; }
+          // A reward code in the cart that's no longer active (cancelled or
+          // expired) would fail at checkout — take it out.
+          const inCart = CR.rewardCodeIn(this.cart);
+          const active = this.data.codes[0];
+          if (inCart && (!active || active.code.toUpperCase() !== inCart)) this.cart = await this.setCode('');
+          this.render();
+          this.hidden = false;
+        }
+        async setCode(code) {
+          const cart = await CR.setRewardCode(this.cart, code);
+          if (this.classList.contains('carbon-rewards-cart--page')) location.reload();
+          return cart;
+        }
+        busy(on) { this.querySelectorAll('button').forEach((b) => (b.disabled = on || b.dataset.locked === '1')); }
+        render() {
+          const d = this.data, r = d.rules, money = CR.money;
+          const subtotal = Number(this.cart.items_subtotal_price || 0) / 100;
+          const applied = CR.rewardCodeIn(this.cart);
+          const body = this.$('[data-crc-body]');
+          this.$('[data-crc-balance]').textContent = d.balance + ' points';
+          const active = d.codes[0];
+
+          if (active && applied === active.code.toUpperCase()) {
+            body.innerHTML = '<p class="carbon-rewards-cart__ok">✓ ' + money(active.dollars) + ' off applied with your points</p>' +
+              '<p class="carbon-rewards-cart__note">Items only — shipping not included. <button type="button" class="carbon-rewards-cart__link" data-crc-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:inherit">Remove &amp; return ' + active.points + ' points</button></p>';
+          } else if (active) {
+            const enough = subtotal >= active.min_subtotal;
+            body.innerHTML = '<div class="carbon-rewards-cart__row">' +
+              '<button type="button" class="carbon-rewards-cart__btn" data-crc-apply ' + (enough ? '' : 'data-locked="1" disabled') + '>Apply your ' + money(active.dollars) + ' reward</button>' +
+              '<button type="button" class="carbon-rewards-cart__btn carbon-rewards-cart__btn--ghost" data-crc-cancel>Cancel &amp; get points back</button></div>' +
+              '<p class="carbon-rewards-cart__note">' + (enough ? 'Items only — shipping not included.' : 'Add ' + money(active.min_subtotal - subtotal) + ' more in items to use it (needs ' + money(active.min_subtotal) + '+).') + '</p>';
+          } else {
+            const opts = CR.options(d, subtotal);
+            if (!opts.length) {
+              body.innerHTML = '<p class="carbon-rewards-cart__note" style="margin:0">' + Math.max(1, r.redeem_increment_points - d.balance) + ' more points to unlock $10 off. You earn 1 point per $1.</p>';
+              return;
+            }
+            body.innerHTML = '<div class="carbon-rewards-cart__row">' + opts.map((o) =>
+              '<button type="button" class="carbon-rewards-cart__btn" data-crc-redeem="' + o.points + '" ' + (o.ok ? '' : 'data-locked="1" disabled') + '>' + money(o.dollars) + ' off</button>'
+            ).join('') + '</div>' +
+              '<p class="carbon-rewards-cart__note">Use your points for up to ' + money(r.max_redeem_dollars_per_order) + ' off your items (not shipping). ' +
+              (opts.some((o) => !o.ok) ? 'Larger rewards need more in your cart.' : '') + '</p>';
+          }
+          this.onclick = (e) => this.onClick(e);
+        }
+        async onClick(e) {
+          const t = e.target.closest('button');
+          if (!t || t.disabled) return;
+          this.setMsg('');
+          this.busy(true);
+          try {
+            if (t.dataset.crcRedeem) {
+              const { coupon } = await CR.api('redeem', { points: Number(t.dataset.crcRedeem) });
+              this.cart = await this.setCode(coupon.code);
+            } else if (t.hasAttribute('data-crc-apply')) {
+              this.cart = await this.setCode(this.data.codes[0].code);
+            } else if (t.hasAttribute('data-crc-cancel')) {
+              await CR.api('cancel', { code: this.data.codes[0].code });
+              this.cart = await this.setCode('');
+            }
+            await this.load();
+          } catch (err) {
+            this.setMsg(err.message);
+            await this.load();
+          } finally {
+            this.busy(false);
+          }
+        }
+      }
+      customElements.define('carbon-rewards-cart', CarbonRewardsCart);
+      };
+      // The shared helpers load deferred; define once they're there.
+      if (window.CarbonRewards) define();
+      else document.addEventListener('DOMContentLoaded', define);
+      // Redeeming from the floating widget changes the cart too (listen once).
+      if (!window.__carbonRewardsCartListener) {
+        window.__carbonRewardsCartListener = true;
+        document.addEventListener('carbon-rewards:changed', (e) => {
+          if (e.detail && e.detail.from === 'cart') return;
+          document.querySelectorAll('carbon-rewards-cart').forEach((el) => el.load && el.load());
+        });
+      }
+    })();
+  </script>
+{%- endif -%}

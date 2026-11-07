@@ -1,0 +1,75 @@
+{%- comment -%}
+  Carbon Rewards — signed-in points balance.
+  Reads the loyalty.balance customer metafield, synced every minute from
+  rewards.shopcarbon.com. Rendered on /pages/rewards in place of the
+  Join / Sign in buttons when a customer is logged in.
+  Params: variant — 'hero' (default) or 'bottom'.
+  Redeemable in 100-point steps (100 = $10), at most $30 off per purchase —
+  mirrors loyalty_settings redeem_increment_points / max_redeem_dollars_per_order.
+{%- endcomment -%}
+{%- assign crb_points = customer.metafields.loyalty.balance.value | default: 0 -%}
+{%- assign crb_redeemable = crb_points | divided_by: 100 | times: 100 | at_most: 300 | at_least: 0 -%}
+{%- assign crb_cents = crb_redeemable | times: 10 -%}
+<div class="carbon-rewards-balance carbon-rewards-balance--{{ variant | default: 'hero' }}">
+  <p class="carbon-rewards-balance__hi">Hi {{ customer.first_name | default: 'there' | escape }}, you have</p>
+  <p class="carbon-rewards-balance__points">{{ crb_points | default: 0 }} <span>points</span></p>
+  <p class="carbon-rewards-balance__value">
+    {%- if crb_redeemable > 0 -%}
+      Worth {{ crb_cents | money_without_trailing_zeros }} off <span class="carbon-rewards-balance__nowrap">your next purchase</span>
+    {%- else -%}
+      {{ 100 | minus: crb_points | at_least: 1 }} more points to unlock $10 off
+    {%- endif -%}
+  </p>
+  {%- if variant == 'bottom' -%}
+    <a href="https://account.shopcarbon.com/pages/01a10b52-0216-71b7-9eed-6d9ea4827972" class="carbon-bottom-btn-primary">{% if crb_redeemable > 0 %}Redeem points{% else %}My rewards{% endif %} <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></a>
+  {%- else -%}
+    <a href="https://account.shopcarbon.com/pages/01a10b52-0216-71b7-9eed-6d9ea4827972" class="carbon-btn-primary">{% if crb_redeemable > 0 %}Redeem points{% else %}My rewards{% endif %} <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></a>
+  {%- endif -%}
+</div>
+<style>
+  .carbon-rewards-balance { width: 100%; line-height: normal; color: #fff; text-align: left; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+  .carbon-rewards-balance a { display: inline-flex; }
+  .carbon-rewards-balance .carbon-btn-primary { width: auto; min-width: calc(50% - 10px); padding-inline: 24px; white-space: nowrap; }
+  .carbon-rewards-balance .carbon-bottom-btn-primary { width: 100%; }
+  .carbon-rewards-balance p { margin: 0; }
+  .carbon-rewards-balance__hi { font-size: clamp(14px, 1.05vw, 24px); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+  .carbon-rewards-balance__points { font-size: clamp(28px, 2.4vw, 50px); font-weight: 800; letter-spacing: .02em; margin: 4px 0 !important; }
+  .carbon-rewards-balance__points span { font-size: .4em; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; }
+  .carbon-rewards-balance__value { font-size: clamp(14px, 1vw, 22px); font-weight: 700; opacity: .95; margin-bottom: clamp(10px, 0.9vw, 16px) !important; }
+  .carbon-rewards-balance--bottom { text-align: center; }
+  /* Desktop: the banner scales with the viewport but the page's buttons are
+     fixed px — sit a little lower and let the button shrink so the block
+     never runs into the REWARDS lettering on 1280–1440px screens. */
+  @media (min-width: 990px) {
+    .carbon-rewards-actions:has(.carbon-rewards-balance--hero) { bottom: 23%; }
+  }
+  @media (min-width: 990px) and (max-width: 1279px) {
+    .carbon-rewards-actions:has(.carbon-rewards-balance--hero) { bottom: 22%; }
+    .carbon-rewards-balance .carbon-btn-primary { padding-block: clamp(11px, 0.95vw, 18px); }
+  }
+  /* Tablet: page layout puts actions at bottom 20%; drop a little so the
+     taller member block clears REWARDS. */
+  @media (min-width: 750px) and (max-width: 989px) {
+    .carbon-rewards-actions:has(.carbon-rewards-balance--hero) { bottom: 18%; }
+  }
+  /* 750–1279px: least room between REWARDS and the icon row — compact. */
+  @media (min-width: 750px) and (max-width: 1279px) {
+    .carbon-rewards-balance--hero .carbon-rewards-balance__hi { font-size: 13px; }
+    .carbon-rewards-balance--hero .carbon-rewards-balance__points { font-size: 24px; margin: 2px 0 !important; }
+    .carbon-rewards-balance--hero .carbon-rewards-balance__value { font-size: 13px; margin-bottom: 8px !important; }
+    .carbon-rewards-balance--hero .carbon-btn-primary { padding-block: 8px; font-size: 13px; }
+  }
+  /* Mobile: the page centres .carbon-rewards-actions across the hero; for
+     members pin it left (as on desktop) so it clears the floating card. */
+  @media (max-width: 749px) {
+    .carbon-rewards-actions:has(.carbon-rewards-balance--hero) {
+      /* vertically centred in the empty space under REWARDS */
+      left: 7%; right: auto; bottom: 14%; transform: none; width: 52%; max-width: none;
+    }
+    .carbon-rewards-balance__hi { font-size: 15px; }
+    .carbon-rewards-balance__value { font-size: 15px; }
+    .carbon-rewards-balance__nowrap { display: block; }
+    .carbon-rewards-balance .carbon-btn-primary { width: 100%; }
+    .carbon-rewards-balance--bottom { text-align: center; }
+  }
+</style>

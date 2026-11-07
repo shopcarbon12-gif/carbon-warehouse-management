@@ -1,3 +1,12 @@
+/*
+ * ------------------------------------------------------------
+ * IMPORTANT: The contents of this file are auto-generated.
+ *
+ * This file may be updated by the Shopify admin theme editor
+ * or related systems. Please exercise caution as any changes
+ * made to this file may be overwritten.
+ * ------------------------------------------------------------
+ */
 {
   "sections": {
     "wholesale_after_dark": {
@@ -15,7 +24,7 @@
         "store_types": "Boutique / physical store, Online store, Both",
         "submit_label": "Apply for wholesale",
         "success_text": "Thanks — your application is in. We'll review it and email you once your wholesale account is ready.",
-        "term_runs": "Each run includes one of every size in a color. Minimum three runs per color.",
+        "term_runs": "Each run includes one of every size in a color. Minimum three runs per order — mix items and colors any way you like.",
         "term_payment": "Payment is taken at checkout. Shipping is billed separately after your order is packed."
       }
     }

@@ -60,16 +60,26 @@ export async function ensureThankYouCode(
     if (!ctx) return { status: "failed", reason: "Shopify is not connected" };
 
     const o = await runShopifyGraphql<{
-      order: { name: string; createdAt: string; cancelledAt: string | null; customer: { id: string } | null } | null;
+      order: {
+      name: string;
+      createdAt: string;
+      cancelledAt: string | null;
+      customer: { id: string } | null;
+      purchasingEntity: { __typename: string } | null;
+    } | null;
     }>({
       ...ctx,
-      query: `query ThankYouOrder($id: ID!) { order(id: $id) { name createdAt cancelledAt customer { id } } }`,
+      query: `query ThankYouOrder($id: ID!) { order(id: $id) { name createdAt cancelledAt customer { id } purchasingEntity { __typename } } }`,
       variables: { id: `gid://shopify/Order/${orderLegacyId}` },
     });
     const order = o.ok ? o.data?.order : null;
     if (!order) return { status: "failed", reason: "order not found" };
     if (order.cancelledAt) return { status: "skipped", reason: "order is cancelled" };
     if (!order.customer) return { status: "skipped", reason: "order has no customer" };
+    // Retail only (owner 2026-11-07): wholesale (B2B) orders get no retail offers.
+    if (order.purchasingEntity?.__typename === "PurchasingCompany") {
+      return { status: "skipped", reason: "wholesale order — thank-you codes are for retail customers" };
+    }
     const endsAt = new Date(Date.parse(order.createdAt) + THANK_YOU_VALID_DAYS * 86_400_000);
     if (endsAt.getTime() <= Date.now()) return { status: "skipped", reason: `order is older than ${THANK_YOU_VALID_DAYS} days` };
 
@@ -230,10 +240,16 @@ async function orderBasics(orderLegacyId: string) {
   const ctx = await resolveShopContext();
   if (!ctx) return null;
   const o = await runShopifyGraphql<{
-    order: { name: string; createdAt: string; cancelledAt: string | null; customer: { id: string } | null } | null;
+    order: {
+      name: string;
+      createdAt: string;
+      cancelledAt: string | null;
+      customer: { id: string } | null;
+      purchasingEntity: { __typename: string } | null;
+    } | null;
   }>({
     ...ctx,
-    query: `query ThankYouOrder($id: ID!) { order(id: $id) { name createdAt cancelledAt customer { id } } }`,
+    query: `query ThankYouOrder($id: ID!) { order(id: $id) { name createdAt cancelledAt customer { id } purchasingEntity { __typename } } }`,
     variables: { id: `gid://shopify/Order/${orderLegacyId}` },
   });
   return o.ok ? (o.data?.order ?? null) : null;
@@ -258,6 +274,7 @@ export async function getThankYouState(pool: Pool, orderLegacyId: string): Promi
   else if (!order) blocked = "Could not read the order from Shopify";
   else if (order.cancelledAt) blocked = "Order is cancelled";
   else if (!order.customer) blocked = "Order has no customer account";
+  else if (order.purchasingEntity?.__typename === "PurchasingCompany") blocked = "Wholesale order — no retail thank-you code";
   else if (!r && Date.parse(order.createdAt) + THANK_YOU_VALID_DAYS * 86_400_000 <= Date.now()) {
     blocked = `Order is older than ${THANK_YOU_VALID_DAYS} days`;
   }

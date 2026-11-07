@@ -269,7 +269,13 @@
 			</a>
             <div class="thb-account__link--container">
     			{%- if shop.customer_accounts_enabled -%}
-    				{%- if customer -%}
+    				{%- if customer.b2b? -%}
+    				  {%- comment -%} Wholesale buyers have no rewards account — straight to the Shopify account. {%- endcomment -%}
+    				  {%- assign profile_link = routes.account_url -%}
+    				  {%- capture profile_text -%}
+    				    {{ 'sections.header.my_account' | t }}
+    				  {%- endcapture -%}
+    				{%- elsif customer -%}
     				  {%- assign profile_link = '/pages/my-account' -%}
     				  {%- capture profile_text -%}
     				    {{ 'sections.header.my_account' | t }}

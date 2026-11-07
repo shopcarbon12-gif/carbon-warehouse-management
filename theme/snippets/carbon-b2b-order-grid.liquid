@@ -1,18 +1,19 @@
 {% comment %}
   Wholesale order grid — replaces the buy buttons for B2B buyers (customer.b2b?).
 
-  Owner's rule (2026-11-03): wholesale is ordered in runs. A run is one of every
-  size of a colour; a buyer takes at least 3 runs of each colour they order and
-  need not take every colour. So the grid has one row per colour and the buyer
-  types the number of runs; adding puts runs × each size in the cart.
+  Owner's rule (2026-11-07, replaces "3 runs per colour"): wholesale is ordered
+  in runs — a run is one of every size of a colour — and the minimum is 3 runs
+  PER ORDER, mixed any way (one run of one item's colour, one of another colour,
+  one of another item). So each colour row takes any number of runs from 1 up;
+  the 3-run order minimum is checked in the cart (carbon-b2b-cart-minimum),
+  which blocks checkout until the cart holds 3 runs.
 
-  A size belongs to the run only if at least the minimum (3) is in stock, so a
-  run can always be filled; sizes below that are shown struck through and left
-  out. The most runs a colour allows is the lowest stock among its run sizes.
+  A size belongs to the run only if it is in stock; sizes out of stock are shown
+  struck through and left out. The most runs a colour allows is the lowest stock
+  among its run sizes.
 
   Prices are whatever Shopify gives this buyer — the Wholesale catalog's price
-  list (retail ÷ 2.1) — so nothing here computes a price. The quantity rule on
-  that price list (min 3 per variant) backs the grid up in the cart.
+  list (retail ÷ 2.1) — so nothing here computes a price.
 
   Adding uses the same cart sections as the theme's product form, so the cart
   drawer and the header count update the way they do for retail.
@@ -29,7 +30,7 @@
     endif
   endfor
 
-  assign min_runs = product.selected_or_first_available_variant.quantity_rule.min | at_least: 3
+  assign order_min_runs = 3
   if color_index == nil
     assign colors = 'Default'
   else
@@ -37,9 +38,9 @@
   endif
   assign colors = colors | split: '||'
 -%}
-<div class="carbon-b2b" id="CarbonB2B-{{ section.id }}" data-min="{{ min_runs }}">
+<div class="carbon-b2b" id="CarbonB2B-{{ section.id }}">
   <p class="carbon-b2b__lead">
-    <strong>Wholesale</strong> · Order in runs of every size. Minimum {{ min_runs }} runs per colour; take only the colours you want.
+    <strong>Wholesale</strong> · Order in runs (one of every size in a colour). Minimum {{ order_min_runs }} runs per order — mix items and colours any way you like.
     Shipping is billed separately after your order is packed.
   </p>
   <div class="carbon-b2b__table" role="table" aria-label="Wholesale order by colour">
@@ -68,7 +69,7 @@
           if variant.inventory_management == 'shopify' and variant.inventory_policy == 'deny'
             assign stock = variant.inventory_quantity
           endif
-          if variant.available and stock >= min_runs
+          if variant.available and stock >= 1
             assign in_run = in_run | plus: 1
             assign run_price = run_price | plus: variant.price
             if stock < max_runs
@@ -77,7 +78,7 @@
             assign variant_data = variant_data | append: variant.id | append: ','
             assign sizes_html = sizes_html | append: '<span class="carbon-b2b__size">' | append: size_label | append: '</span>'
           else
-            assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="Not enough stock for a run">' | append: size_label | append: '</s>'
+            assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="Out of stock">' | append: size_label | append: '</s>'
           endif
         endfor
       -%}
@@ -90,7 +91,7 @@
           {%- endif -%}
         </span>
         <span role="cell">
-          {%- if in_run > 0 and max_runs >= min_runs -%}
+          {%- if in_run > 0 and max_runs >= 1 -%}
             <input
               type="number"
               class="carbon-b2b__runs"
@@ -157,7 +158,6 @@
     const root = document.getElementById('CarbonB2B-{{ section.id }}');
     if (!root || root.dataset.ready) return;
     root.dataset.ready = '1';
-    const min = Number(root.dataset.min);
     const button = root.querySelector('.carbon-b2b__add');
     const total = root.querySelector('.carbon-b2b__total');
     const error = root.querySelector('.carbon-b2b__error');
@@ -175,7 +175,7 @@
         const input = row.querySelector('.carbon-b2b__runs');
         const runs = Math.max(0, Math.floor(Number(input.value) || 0));
         const max = Number(input.max);
-        const bad = runs > 0 && (runs < min || runs > max);
+        const bad = runs > max;
         input.setAttribute('aria-invalid', bad ? 'true' : 'false');
         invalid ||= bad;
         any ||= runs > 0;
@@ -187,7 +187,7 @@
       }
       total.textContent = `${pieces} pieces · ${money(cents)}`;
       error.hidden = !invalid;
-      error.textContent = invalid ? `Each colour you order needs at least ${min} runs (and no more than its max).` : '';
+      error.textContent = invalid ? 'That is more runs than we have in stock for a colour — see its max.' : '';
       button.disabled = invalid || !any;
     }
 

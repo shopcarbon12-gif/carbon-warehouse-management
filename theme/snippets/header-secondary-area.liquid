@@ -1,5 +1,9 @@
 {%- liquid
-	if customer
+	if customer.b2b?
+		# Wholesale buyers have no rewards account — straight to the Shopify account (orders).
+		assign profile_link = routes.account_url
+		assign profile_text = 'sections.header.my_account' | t
+	elsif customer
   	assign profile_link = '/pages/my-account'
 		assign profile_text = 'sections.header.my_account' | t
 	else

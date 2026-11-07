@@ -122,6 +122,20 @@ async function findCustomer(ctx: Ctx, email: string) {
   return d.customerByIdentifier;
 }
 
+/** True when this email belongs to a Shopify B2B company contact. */
+async function isWholesaleBuyer(ctx: Ctx, email: string): Promise<boolean> {
+  const d = await welcomeGql<{
+    customerByIdentifier: { companyContactProfiles: { id: string }[] } | null;
+  }>(
+    ctx,
+    `query WelcomeB2B($e: String!) {
+      customerByIdentifier(identifier: { emailAddress: $e }) { companyContactProfiles { id } }
+    }`,
+    { e: email },
+  );
+  return (d.customerByIdentifier?.companyContactProfiles?.length ?? 0) > 0;
+}
+
 /** Subscribed Shopify customer for this email: { id, existed }. */
 async function ensureSubscribedCustomer(ctx: Ctx, email: string, locale: string | null): Promise<{ id: string; existed: boolean }> {
   let found = await findCustomer(ctx, email);
@@ -269,6 +283,13 @@ export async function runWelcomeSignup(pool: Pool, input: SignupInput): Promise<
     if (again.rows[0]) {
       await client.query("COMMIT");
       return answerExisting(pool, again.rows[0], email, settings.sendEmail);
+    }
+    // Retail only (owner 2026-11-07): a wholesale (B2B) buyer gets no welcome
+    // code. The theme already hides the popup for them; this covers a direct
+    // POST. Nothing is created or stored — the popup shows "already used".
+    if (await isWholesaleBuyer(ctx, email)) {
+      await client.query("COMMIT");
+      return { ok: true, status: "used", email };
     }
     const customer = await ensureSubscribedCustomer(ctx, email, locale);
     const percent = settings.percentOff;

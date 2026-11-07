@@ -330,7 +330,25 @@ a.thb-mobile-account-link {
 		{%- sections 'header-group' -%}
 		{%- sections 'overlay-group' -%}
 		<div role="main" id="main-content">
-			{{ content_for_layout }}
+			{%- comment -%}
+				Retail only (owner 2026-11-07): a wholesale (B2B) buyer earns and redeems no
+				points, so the rewards, Member Club and rewards-account pages show a short
+				note instead of the programme.
+			{%- endcomment -%}
+			{%- liquid
+				assign carbon_b2b_hide = false
+				if customer.b2b? and request.page_type == 'page'
+					case page.handle
+						when 'rewards', 'member-club', 'my-account'
+							assign carbon_b2b_hide = true
+					endcase
+				endif
+			-%}
+			{%- if carbon_b2b_hide -%}
+				{%- render 'carbon-b2b-no-rewards' -%}
+			{%- else -%}
+				{{ content_for_layout }}
+			{%- endif -%}
 		</div>
 		{% sections 'footer-group' %}
 		{% render 'cart-drawer' %}
