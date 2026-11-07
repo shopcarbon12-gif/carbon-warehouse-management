@@ -30,7 +30,7 @@
 {%- endcomment -%}
 
 {%- if customer -%}
-  {%- assign cw_secret = 'ea49beffe793fe8b48ced03d6b3e02bc3be8fac0bbc222dd295d5698b648942b' -%}
+  {%- assign cw_secret = '__CARBON_WISHLIST_SECRET__' -%}
   {%- assign cw_ts = 'now' | date: '%s' -%}
   {%- capture cw_payload -%}{{ customer.id }}.{{ cw_ts }}{%- endcapture -%}
   {%- assign cw_sig = cw_payload | hmac_sha256: cw_secret -%}
