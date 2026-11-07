@@ -22,7 +22,7 @@
 {%- endcomment -%}
 {%- unless request.design_mode -%}
 {%- if customer -%}
-  {%- assign cs_secret = '__CARBON_WISHLIST_SECRET__' -%}
+  {%- assign cs_secret = 'ea49beffe793fe8b48ced03d6b3e02bc3be8fac0bbc222dd295d5698b648942b' -%}
   {%- assign cs_ts = 'now' | date: '%s' -%}
   {%- capture cs_payload -%}{{ customer.id }}.{{ cs_ts }}{%- endcapture -%}
   {%- assign cs_sig = cs_payload | hmac_sha256: cs_secret -%}
