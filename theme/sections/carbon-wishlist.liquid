@@ -93,6 +93,15 @@
     var empty   = root.querySelector('[data-cw-empty]');
     var loading = root.querySelector('[data-cw-loading]');
     var countEl = root.querySelector('[data-cw-count]');
+    var T = {
+      remove_from_wishlist: {{ 'carbon.wishlist.remove_from_wishlist' | t | json }},
+      add_to_cart: {{ 'carbon.wishlist.add_to_cart' | t | json }},
+      sold_out: {{ 'carbon.wishlist.sold_out' | t | json }},
+      added: {{ 'carbon.wishlist.added' | t | json }},
+      unavailable: {{ 'carbon.wishlist.unavailable' | t | json }},
+      item_count_one: {{ 'carbon.wishlist.item_count_one' | t | json }},
+      item_count_other: {{ 'carbon.wishlist.item_count_other' | t | json }}
+    };
 
     var CURRENCY = {{ cart.currency.iso_code | json }};
     var money = function (cents) {
@@ -145,7 +154,7 @@
 
       li.innerHTML =
         '<div class="product-card">' +
-          '<button class="cw-remove" type="button" data-cw-rm="' + variant.id + '" aria-label="Remove from wishlist">' +
+          '<button class="cw-remove" type="button" data-cw-rm="' + variant.id + '" aria-label="' + T.remove_from_wishlist + '">' +
             '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">' +
               '<path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>' +
             '</svg>' +
@@ -161,8 +170,8 @@
             '<span class="price"><span class="amount">' + money(variant.price) + '</span></span>' +
             '<div class="cw-actions">' +
               (variant.available
-                ? '<button class="button accent cw-add" type="button" data-cw-add="' + variant.id + '">Add to cart</button>'
-                : '<span class="cw-sold-out">Sold out</span>') +
+                ? '<button class="button accent cw-add" type="button" data-cw-add="' + variant.id + '">' + T.add_to_cart + '</button>'
+                : '<span class="cw-sold-out">' + T.sold_out + '</span>') +
             '</div>' +
           '</div>' +
         '</div>';
@@ -222,7 +231,7 @@
           grid.hidden = shown === 0;
           empty.hidden = shown !== 0;
           countEl.hidden = shown === 0;
-          countEl.textContent = shown + (shown === 1 ? ' item' : ' items');
+          countEl.textContent = (shown === 1 ? T.item_count_one : T.item_count_other).replace('__COUNT__', String(shown));
           rendering = false;
         })
         .catch(function () {
@@ -249,12 +258,12 @@
           if (res && res.status) throw new Error(res.description || 'add failed');
           /* the event this theme's cart drawer listens for (assets/app.js) */
           document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
-          add.textContent = 'Added';
-          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+          add.textContent = T.added;
+          setTimeout(function () { add.textContent = T.add_to_cart; add.removeAttribute('disabled'); }, 2000);
         })
         .catch(function () {
-          add.textContent = 'Unavailable';
-          setTimeout(function () { add.textContent = 'Add to cart'; add.removeAttribute('disabled'); }, 2000);
+          add.textContent = T.unavailable;
+          setTimeout(function () { add.textContent = T.add_to_cart; add.removeAttribute('disabled'); }, 2000);
         });
     });
 

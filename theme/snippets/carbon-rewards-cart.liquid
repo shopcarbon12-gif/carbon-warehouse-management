@@ -45,6 +45,20 @@
   <script src="{{ 'carbon-rewards-core.js' | asset_url }}" defer></script>
   <script>
     (() => {
+      const T = {
+        n_points: {{ 'carbon.rewards.n_points' | t | json }},
+        applied_with_points: {{ 'carbon.rewards.applied_with_points' | t | json }},
+        items_only: {{ 'carbon.rewards.items_only' | t | json }},
+        remove_return: {{ 'carbon.rewards.remove_return' | t | json }},
+        apply_reward: {{ 'carbon.rewards.apply_reward' | t | json }},
+        cancel_get_back: {{ 'carbon.rewards.cancel_get_back' | t | json }},
+        add_more_needs: {{ 'carbon.rewards.add_more_needs' | t | json }},
+        more_to_unlock_earn: {{ 'carbon.rewards.more_to_unlock_earn' | t | json }},
+        amount_off: {{ 'carbon.rewards.amount_off' | t | json }},
+        use_up_to: {{ 'carbon.rewards.use_up_to' | t | json }},
+        larger_need_more: {{ 'carbon.rewards.larger_need_more' | t | json }}
+      };
+      const fill = (s, o) => String(s).replace(/__([A-Z]+)__/g, (m, k) => (k in o ? String(o[k]) : m));
       const define = () => {
       if (customElements.get('carbon-rewards-cart')) return;
       const CR = window.CarbonRewards;
@@ -78,29 +92,29 @@
           const subtotal = Number(this.cart.items_subtotal_price || 0) / 100;
           const applied = CR.rewardCodeIn(this.cart);
           const body = this.$('[data-crc-body]');
-          this.$('[data-crc-balance]').textContent = d.balance + ' points';
+          this.$('[data-crc-balance]').textContent = fill(T.n_points, { POINTS: d.balance });
           const active = d.codes[0];
 
           if (active && applied === active.code.toUpperCase()) {
-            body.innerHTML = '<p class="carbon-rewards-cart__ok">✓ ' + money(active.dollars) + ' off applied with your points</p>' +
-              '<p class="carbon-rewards-cart__note">Items only — shipping not included. <button type="button" class="carbon-rewards-cart__link" data-crc-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:inherit">Remove &amp; return ' + active.points + ' points</button></p>';
+            body.innerHTML = '<p class="carbon-rewards-cart__ok">✓ ' + fill(T.applied_with_points, { AMOUNT: money(active.dollars) }) + '</p>' +
+              '<p class="carbon-rewards-cart__note">' + T.items_only + ' <button type="button" class="carbon-rewards-cart__link" data-crc-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:inherit">' + fill(T.remove_return, { POINTS: active.points }) + '</button></p>';
           } else if (active) {
             const enough = subtotal >= active.min_subtotal;
             body.innerHTML = '<div class="carbon-rewards-cart__row">' +
-              '<button type="button" class="carbon-rewards-cart__btn" data-crc-apply ' + (enough ? '' : 'data-locked="1" disabled') + '>Apply your ' + money(active.dollars) + ' reward</button>' +
-              '<button type="button" class="carbon-rewards-cart__btn carbon-rewards-cart__btn--ghost" data-crc-cancel>Cancel &amp; get points back</button></div>' +
-              '<p class="carbon-rewards-cart__note">' + (enough ? 'Items only — shipping not included.' : 'Add ' + money(active.min_subtotal - subtotal) + ' more in items to use it (needs ' + money(active.min_subtotal) + '+).') + '</p>';
+              '<button type="button" class="carbon-rewards-cart__btn" data-crc-apply ' + (enough ? '' : 'data-locked="1" disabled') + '>' + fill(T.apply_reward, { AMOUNT: money(active.dollars) }) + '</button>' +
+              '<button type="button" class="carbon-rewards-cart__btn carbon-rewards-cart__btn--ghost" data-crc-cancel>' + T.cancel_get_back + '</button></div>' +
+              '<p class="carbon-rewards-cart__note">' + (enough ? T.items_only : fill(T.add_more_needs, { AMOUNT: money(active.min_subtotal - subtotal), MIN: money(active.min_subtotal) })) + '</p>';
           } else {
             const opts = CR.options(d, subtotal);
             if (!opts.length) {
-              body.innerHTML = '<p class="carbon-rewards-cart__note" style="margin:0">' + Math.max(1, r.redeem_increment_points - d.balance) + ' more points to unlock $10 off. You earn 1 point per $1.</p>';
+              body.innerHTML = '<p class="carbon-rewards-cart__note" style="margin:0">' + fill(T.more_to_unlock_earn, { POINTS: Math.max(1, r.redeem_increment_points - d.balance) }) + '</p>';
               return;
             }
             body.innerHTML = '<div class="carbon-rewards-cart__row">' + opts.map((o) =>
-              '<button type="button" class="carbon-rewards-cart__btn" data-crc-redeem="' + o.points + '" ' + (o.ok ? '' : 'data-locked="1" disabled') + '>' + money(o.dollars) + ' off</button>'
+              '<button type="button" class="carbon-rewards-cart__btn" data-crc-redeem="' + o.points + '" ' + (o.ok ? '' : 'data-locked="1" disabled') + '>' + fill(T.amount_off, { AMOUNT: money(o.dollars) }) + '</button>'
             ).join('') + '</div>' +
-              '<p class="carbon-rewards-cart__note">Use your points for up to ' + money(r.max_redeem_dollars_per_order) + ' off your items (not shipping). ' +
-              (opts.some((o) => !o.ok) ? 'Larger rewards need more in your cart.' : '') + '</p>';
+              '<p class="carbon-rewards-cart__note">' + fill(T.use_up_to, { AMOUNT: money(r.max_redeem_dollars_per_order) }) + ' ' +
+              (opts.some((o) => !o.ok) ? T.larger_need_more : '') + '</p>';
           }
           this.onclick = (e) => this.onClick(e);
         }

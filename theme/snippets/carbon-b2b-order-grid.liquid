@@ -40,18 +40,18 @@
     assign colors = product.options_with_values[color_index].values | join: '||'
   endif
   assign colors = colors | split: '||'
+  assign oos_title = 'carbon.b2b.grid.out_of_stock' | t | escape
 -%}
 <div class="carbon-b2b" id="CarbonB2B-{{ section.id }}">
   <p class="carbon-b2b__lead">
-    <strong>Wholesale</strong> · Order in runs (one of every size in a colour). Minimum {{ order_min_runs }} runs per order — mix items and colours any way you like.
-    Shipping is billed separately after your order is packed.
+    {{ 'carbon.b2b.grid.lead_html' | t: min: order_min_runs }}
   </p>
-  <div class="carbon-b2b__table" role="table" aria-label="Wholesale order by colour">
+  <div class="carbon-b2b__table" role="table" aria-label="{{ 'carbon.b2b.grid.table_label' | t | escape }}">
     <div class="carbon-b2b__row carbon-b2b__row--head" role="row">
-      <span role="columnheader">Colour</span>
-      <span role="columnheader">Sizes in a run</span>
-      <span role="columnheader">Runs</span>
-      <span role="columnheader" class="carbon-b2b__num">Subtotal</span>
+      <span role="columnheader">{{ 'carbon.b2b.grid.colour' | t }}</span>
+      <span role="columnheader">{{ 'carbon.b2b.grid.sizes_in_run' | t }}</span>
+      <span role="columnheader">{{ 'carbon.b2b.grid.runs' | t }}</span>
+      <span role="columnheader" class="carbon-b2b__num">{{ 'carbon.b2b.grid.subtotal' | t }}</span>
     </div>
     {%- for color in colors -%}
       {%- liquid
@@ -93,7 +93,7 @@
             assign variant_data = variant_data | append: variant.id | append: ','
             assign sizes_html = sizes_html | append: '<span class="carbon-b2b__size">' | append: size_label | append: '</span>'
           else
-            assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="Out of stock">' | append: size_label | append: '</s>'
+            assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="' | append: oos_title | append: '">' | append: size_label | append: '</s>'
           endif
         endfor
       -%}
@@ -102,7 +102,9 @@
         <span role="cell" class="carbon-b2b__sizes">
           {{ sizes_html }}
           {%- if in_run > 0 -%}
-            <small>{{ run_price | money }} per run · {{ in_run | times: per_size }} pcs</small>
+            {%- assign run_price_money = run_price | money -%}
+            {%- assign run_pieces = in_run | times: per_size -%}
+            <small>{{ 'carbon.b2b.grid.per_run_html' | t: price: run_price_money, pieces: run_pieces }}</small>
           {%- endif -%}
         </span>
         <span role="cell">
@@ -115,11 +117,11 @@
               max="{{ max_runs }}"
               step="1"
               value="0"
-              aria-label="Runs of {{ color | escape }}"
+              aria-label="{{ 'carbon.b2b.grid.runs_of_html' | t: colour: color | escape }}"
             >
-            {%- if max_runs < 999999 -%}<small>max {{ max_runs }}</small>{%- endif -%}
+            {%- if max_runs < 999999 -%}<small>{{ 'carbon.b2b.grid.max' | t: n: max_runs }}</small>{%- endif -%}
           {%- else -%}
-            <small>Not available</small>
+            <small>{{ 'carbon.b2b.grid.not_available' | t }}</small>
           {%- endif -%}
         </span>
         <span role="cell" class="carbon-b2b__num carbon-b2b__subtotal">—</span>
@@ -127,9 +129,10 @@
     {%- endfor -%}
   </div>
   <div class="carbon-b2b__foot">
-    <span class="carbon-b2b__total" aria-live="polite">0 pieces · {{ 0 | money }}</span>
+    {%- assign zero_money = 0 | money -%}
+    <span class="carbon-b2b__total" aria-live="polite">{{ 'carbon.b2b.grid.total_html' | t: pieces: 0, price: zero_money }}</span>
     <button type="button" class="button carbon-b2b__add" disabled>
-      <span>Add to cart</span>
+      <span>{{ 'carbon.product.add_to_cart' | t }}</span>
     </button>
   </div>
   <p class="carbon-b2b__error" role="alert" hidden></p>
@@ -179,6 +182,7 @@
     const money = (cents) =>
       new Intl.NumberFormat('en-US', { style: 'currency', currency: {{ cart.currency.iso_code | default: 'USD' | json }} }).format(cents / 100);
 
+    const TOTAL = {{ 'carbon.b2b.grid.total_html' | t: pieces: '__N__', price: '__PRICE__' | json }};
     const rows = () => [...root.querySelectorAll('.carbon-b2b__row[data-variants]')].filter((r) => r.querySelector('.carbon-b2b__runs'));
 
     function refresh() {
@@ -200,9 +204,9 @@
         pieces += runs * ids.length * Number(row.dataset.per || 1);
         cents += sub;
       }
-      total.textContent = `${pieces} pieces · ${money(cents)}`;
+      total.textContent = TOTAL.replace('__N__', () => String(pieces)).replace('__PRICE__', () => money(cents));
       error.hidden = !invalid;
-      error.textContent = invalid ? 'That is more runs than we have in stock for a colour — see its max.' : '';
+      error.textContent = invalid ? {{ 'carbon.b2b.grid.too_many_runs' | t | json }} : '';
       button.disabled = invalid || !any;
     }
 
@@ -249,7 +253,7 @@
         });
         const data = await res.json();
         if (!res.ok || data.status) {
-          error.textContent = data.description || data.message || 'Could not add to cart.';
+          error.textContent = data.description || data.message || {{ 'carbon.b2b.grid.add_failed' | t | json }};
           error.hidden = false;
           return;
         }
@@ -257,7 +261,7 @@
         refresh();
         if (data.sections) renderCart(data.sections);
       } catch (e) {
-        error.textContent = 'Could not add to cart. Please try again.';
+        error.textContent = {{ 'carbon.b2b.grid.add_failed_retry' | t | json }};
         error.hidden = false;
       } finally {
         button.classList.remove('loading');

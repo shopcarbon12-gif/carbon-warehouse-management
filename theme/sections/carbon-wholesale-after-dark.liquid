@@ -307,10 +307,11 @@
       </a>
       <p class="wad__signin">
         {%- if customer.b2b? -%}
-          Signed in as an approved retailer ·
+          {{ 'carbon.wholesale.signed_in_approved' | t }}
           <a class="wad__link" href="{{ routes.all_products_collection_url }}">{{ section.settings.shop_label | escape }}</a>
         {%- elsif customer -%}
-          Signed in as {{ customer.email | escape }}. Approved retailers see wholesale pricing once their account is set up.
+          {%- assign wad_email = customer.email | escape -%}
+          {{ 'carbon.wholesale.signed_in_as_html' | t: email: wad_email }}
         {%- else -%}
           <a class="wad__link" href="{{ routes.storefront_login_url }}">{{ section.settings.signin_label | escape }}</a>
         {%- endif -%}
@@ -382,7 +383,7 @@
             >
           </div>
           <div class="wad__field wad__field--half">
-            <label for="WholesaleBusiness-{{ section.id }}">Business name <span class="wad__req" aria-hidden="true">*</span></label>
+            <label for="WholesaleBusiness-{{ section.id }}">{{ 'carbon.wholesale.business_name' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
             <input
               type="text"
               id="WholesaleBusiness-{{ section.id }}"
@@ -392,7 +393,7 @@
             >
           </div>
           <div class="wad__field wad__field--half">
-            <label for="WholesaleCity-{{ section.id }}">City and state <span class="wad__req" aria-hidden="true">*</span></label>
+            <label for="WholesaleCity-{{ section.id }}">{{ 'carbon.wholesale.city_state' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
             <input
               type="text"
               id="WholesaleCity-{{ section.id }}"
@@ -401,7 +402,7 @@
             >
           </div>
           <div class="wad__field wad__field--half">
-            <label for="WholesaleWebsite-{{ section.id }}">Website or Instagram</label>
+            <label for="WholesaleWebsite-{{ section.id }}">{{ 'carbon.wholesale.website' | t }}</label>
             <input
               type="text"
               id="WholesaleWebsite-{{ section.id }}"
@@ -413,9 +414,9 @@
             >
           </div>
           <div class="wad__field">
-            <label for="WholesaleStoreType-{{ section.id }}">Type of store <span class="wad__req" aria-hidden="true">*</span></label>
+            <label for="WholesaleStoreType-{{ section.id }}">{{ 'carbon.wholesale.store_type' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
             <select id="WholesaleStoreType-{{ section.id }}" name="contact[Type of store]" required>
-              <option value="" disabled selected>Choose one</option>
+              <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
               {%- for value in store_types -%}
                 {%- assign trim_value = value | strip -%}
                 <option value="{{ trim_value | escape }}">{{ trim_value | escape }}</option>
@@ -427,7 +428,7 @@
             <textarea id="WholesaleMessage-{{ section.id }}" name="contact[body]" rows="2">{{ form.body | escape }}</textarea>
           </div>
         </div>
-        <p class="wad__hint"><span aria-hidden="true">*</span> Required</p>
+        <p class="wad__hint"><span aria-hidden="true">*</span> {{ 'carbon.wholesale.required' | t }}</p>
 
         <button type="submit" class="wad__cta wad__submit">
           {{- section.settings.submit_label | escape -}}
@@ -435,7 +436,7 @@
         </button>
       {%- endform -%}
 
-      <ul class="wad__terms" aria-label="Ordering terms">
+      <ul class="wad__terms" aria-label="{{ 'carbon.wholesale.ordering_terms' | t | escape }}">
         <li>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" focusable="false"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 12 10 5 10-5"/><path d="m2 16 10 5 10-5"/></svg>
           <span>{{ section.settings.term_runs | escape }}</span>

@@ -212,29 +212,29 @@
   {%- if customer == nil -%}
     <div class="mc-signin" data-mc-signed-out>
       <p class="mc-label">Carbon Member Club</p>
-      <h1>Rewards</h1>
-      <p>Sign in to see your points, redeem rewards and view your online and in-store purchases.</p>
-      <p><a class="mc-btn mc-btn--fill" href="{{ routes.storefront_login_url }}">Sign in</a></p>
-      <p class="mc-note">New here? Sign in with your email to join — you earn points on every purchase. <a href="/pages/rewards">How Carbon Rewards works</a></p>
+      <h1>{{ 'carbon.member_club.rewards' | t }}</h1>
+      <p>{{ 'carbon.member_club.signin_text' | t }}</p>
+      <p><a class="mc-btn mc-btn--fill" href="{{ routes.storefront_login_url }}">{{ 'carbon.member_club.sign_in' | t }}</a></p>
+      <p class="mc-note">{{ 'carbon.member_club.new_here' | t }} <a href="/pages/rewards">{{ 'carbon.member_club.how_it_works' | t }}</a></p>
     </div>
   {%- endif -%}
 
   <div class="mc__wrap" data-mc-app {% if customer == nil %}hidden{% endif %}>
-    <aside class="mc__side" aria-label="My account">
-      <p class="mc__eyebrow">My account</p>
+    <aside class="mc__side" aria-label="{{ 'carbon.member_club.my_account' | t | escape }}">
+      <p class="mc__eyebrow">{{ 'carbon.member_club.my_account' | t }}</p>
       <h2>Member Club</h2>
-      <p>Your CARBON rewards, orders, and account settings.</p>
+      <p>{{ 'carbon.member_club.side_text' | t }}</p>
       <nav class="mc__nav" aria-label="Member Club">
-        <button type="button" data-tab="rewards" aria-current="page">{% render 'carbon-member-club-icon', icon: 'gift' %}Rewards</button>
-        <button type="button" data-tab="purchases">{% render 'carbon-member-club-icon', icon: 'box' %}Purchases</button>
-        <button type="button" data-tab="settings">{% render 'carbon-member-club-icon', icon: 'gear' %}Settings</button>
+        <button type="button" data-tab="rewards" aria-current="page">{% render 'carbon-member-club-icon', icon: 'gift' %}{{ 'carbon.member_club.rewards' | t }}</button>
+        <button type="button" data-tab="purchases">{% render 'carbon-member-club-icon', icon: 'box' %}{{ 'carbon.member_club.purchases' | t }}</button>
+        <button type="button" data-tab="settings">{% render 'carbon-member-club-icon', icon: 'gear' %}{{ 'carbon.member_club.settings' | t }}</button>
       </nav>
-      <a class="mc__signout" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}Sign out</a>
+      <a class="mc__signout" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}{{ 'carbon.member_club.sign_out' | t }}</a>
     </aside>
     <nav class="mc__tabs" aria-label="Member Club">
-      <button type="button" data-tab="rewards" aria-current="page">Rewards</button>
-      <button type="button" data-tab="purchases">Purchases</button>
-      <button type="button" data-tab="settings">Settings</button>
+      <button type="button" data-tab="rewards" aria-current="page">{{ 'carbon.member_club.rewards' | t }}</button>
+      <button type="button" data-tab="purchases">{{ 'carbon.member_club.purchases' | t }}</button>
+      <button type="button" data-tab="settings">{{ 'carbon.member_club.settings' | t }}</button>
     </nav>
 
     <div class="mc__main">
@@ -243,43 +243,43 @@
         <div class="mc__grid">
           <div class="mc-bal">
             <p class="mc-label">Carbon Member Club</p>
-            <h1 class="mc-title">Rewards</h1>
-            <p class="mc-intro">Earn points, unlock member perks, and turn your loyalty into exclusive rewards.</p>
-            <p class="mc-points" aria-live="polite"><b data-mc-balance>…</b><span>points</span></p>
+            <h1 class="mc-title">{{ 'carbon.member_club.rewards' | t }}</h1>
+            <p class="mc-intro">{{ 'carbon.member_club.intro' | t }}</p>
+            <p class="mc-points" aria-live="polite"><b data-mc-balance>…</b><span>{{ 'carbon.member_club.points' | t }}</span></p>
             <p class="mc-upto" data-mc-upto></p>
           </div>
           <div class="mc-tier" data-mc-tier><div class="mc-skel"></div><div class="mc-skel"></div></div>
           <div class="mc-redeem" data-mc-redeem></div>
           <div class="mc-card mc-refer" data-mc-refer hidden></div>
-          <div class="mc-act" data-mc-activity><div class="mc-head"><h3>Points activity</h3></div><div class="mc-skel"></div></div>
-          <div class="mc-card mc-recent" data-mc-recent><div class="mc-head"><h3>Recent purchases</h3></div><div class="mc-skel"></div></div>
-          <div class="mc-card mc-store" data-mc-store><div class="mc-head"><h3>In-store receipt</h3></div><div class="mc-skel"></div></div>
-          <div class="mc-card mc-plist" data-mc-plist><div class="mc-head"><h3>Recent purchases</h3></div><div class="mc-skel"></div></div>
+          <div class="mc-act" data-mc-activity><div class="mc-head"><h3>{{ 'carbon.member_club.points_activity' | t }}</h3></div><div class="mc-skel"></div></div>
+          <div class="mc-card mc-recent" data-mc-recent><div class="mc-head"><h3>{{ 'carbon.member_club.recent_purchases' | t }}</h3></div><div class="mc-skel"></div></div>
+          <div class="mc-card mc-store" data-mc-store><div class="mc-head"><h3>{{ 'carbon.member_club.in_store_receipt' | t }}</h3></div><div class="mc-skel"></div></div>
+          <div class="mc-card mc-plist" data-mc-plist><div class="mc-head"><h3>{{ 'carbon.member_club.recent_purchases' | t }}</h3></div><div class="mc-skel"></div></div>
         </div>
       </div>
 
       <div data-panel="purchases" hidden>
-        <h1 class="mc-title">Purchases</h1>
+        <h1 class="mc-title">{{ 'carbon.member_club.purchases' | t }}</h1>
         <section class="mc-section" aria-labelledby="mc-online-h">
-          <div class="mc-head"><h3 id="mc-online-h">Online orders</h3><a class="mc-link" href="{{ routes.account_url }}">Order history →</a></div>
+          <div class="mc-head"><h3 id="mc-online-h">{{ 'carbon.member_club.online_orders' | t }}</h3><a class="mc-link" href="{{ routes.account_url }}">{{ 'carbon.member_club.order_history_link' | t }}</a></div>
           <div class="mc-rows" data-mc-online-all></div>
         </section>
         <section class="mc-section" aria-labelledby="mc-store-h">
-          <div class="mc-head"><h3 id="mc-store-h">In-store purchases</h3></div>
+          <div class="mc-head"><h3 id="mc-store-h">{{ 'carbon.member_club.in_store_purchases' | t }}</h3></div>
           <div class="mc-rows" data-mc-store-all><div class="mc-skel"></div></div>
         </section>
       </div>
 
       <div data-panel="settings" hidden>
-        <h1 class="mc-title">Settings</h1>
+        <h1 class="mc-title">{{ 'carbon.member_club.settings' | t }}</h1>
         <div class="mc-rows mc-settings">
-          <a href="https://account.shopcarbon.com/profile">Profile, addresses and email preferences <span aria-hidden="true">→</span></a>
-          <a href="{{ routes.account_url }}">Order history and returns <span aria-hidden="true">→</span></a>
-          <a href="{{ routes.account_logout_url }}">Sign out <span aria-hidden="true">→</span></a>
+          <a href="https://account.shopcarbon.com/profile">{{ 'carbon.member_club.settings_profile' | t }} <span aria-hidden="true">→</span></a>
+          <a href="{{ routes.account_url }}">{{ 'carbon.member_club.settings_orders' | t }} <span aria-hidden="true">→</span></a>
+          <a href="{{ routes.account_logout_url }}">{{ 'carbon.member_club.sign_out' | t }} <span aria-hidden="true">→</span></a>
         </div>
       </div>
 
-      <a class="mc__signout mc__signout--phone" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}Sign out</a>
+      <a class="mc__signout mc__signout--phone" href="{{ routes.account_logout_url }}">{% render 'carbon-member-club-icon', icon: 'signout' %}{{ 'carbon.member_club.sign_out' | t }}</a>
     </div>
   </div>
 </div>
@@ -340,6 +340,101 @@
       root.querySelector('[data-mc-app]').hidden = false;
     }
 
+    const T = {
+      error_generic: {{ 'carbon.member_club.error_generic' | t | json }},
+      progress_points: {{ 'carbon.member_club.progress_points' | t | json }},
+      progress_visits: {{ 'carbon.member_club.progress_visits' | t | json }},
+      progress_spent: {{ 'carbon.member_club.progress_spent' | t | json }},
+      to_next_points: {{ 'carbon.member_club.to_next_points' | t | json }},
+      to_next_visit: {{ 'carbon.member_club.to_next_visit' | t | json }},
+      to_next_visits: {{ 'carbon.member_club.to_next_visits' | t | json }},
+      to_next_spend: {{ 'carbon.member_club.to_next_spend' | t | json }},
+      n_points: {{ 'carbon.member_club.n_points' | t | json }},
+      n_to_tier: {{ 'carbon.member_club.n_to_tier' | t | json }},
+      n_purchase: {{ 'carbon.member_club.n_purchase' | t | json }},
+      n_purchases: {{ 'carbon.member_club.n_purchases' | t | json }},
+      n_spent: {{ 'carbon.member_club.n_spent' | t | json }},
+      reason_purchase: {{ 'carbon.member_club.reason_purchase' | t | json }},
+      reason_redeemed: {{ 'carbon.member_club.reason_redeemed' | t | json }},
+      reason_refund: {{ 'carbon.member_club.reason_refund' | t | json }},
+      reason_signup: {{ 'carbon.member_club.reason_signup' | t | json }},
+      reason_birthday: {{ 'carbon.member_club.reason_birthday' | t | json }},
+      reason_referral: {{ 'carbon.member_club.reason_referral' | t | json }},
+      reason_adjustment: {{ 'carbon.member_club.reason_adjustment' | t | json }},
+      reason_transferred: {{ 'carbon.member_club.reason_transferred' | t | json }},
+      code_returned: {{ 'carbon.member_club.code_returned' | t | json }},
+      online: {{ 'carbon.member_club.online' | t | json }},
+      in_store: {{ 'carbon.member_club.in_store' | t | json }},
+      activity: {{ 'carbon.member_club.activity' | t | json }},
+      status_canceled: {{ 'carbon.member_club.status_canceled' | t | json }},
+      status_refunded: {{ 'carbon.member_club.status_refunded' | t | json }},
+      status_partly_refunded: {{ 'carbon.member_club.status_partly_refunded' | t | json }},
+      status_voided: {{ 'carbon.member_club.status_voided' | t | json }},
+      status_pending: {{ 'carbon.member_club.status_pending' | t | json }},
+      order_name: {{ 'carbon.member_club.order_name' | t | json }},
+      plus_more: {{ 'carbon.member_club.plus_more' | t | json }},
+      in_store_purchase: {{ 'carbon.member_club.in_store_purchase' | t | json }},
+      up_to_off: {{ 'carbon.member_club.up_to_off' | t | json }},
+      more_to_unlock: {{ 'carbon.member_club.more_to_unlock' | t | json }},
+      ty_off: {{ 'carbon.member_club.ty_off' | t | json }},
+      ty_thanks: {{ 'carbon.member_club.ty_thanks' | t | json }},
+      tier_name: {{ 'carbon.member_club.tier_name' | t | json }},
+      current_tier: {{ 'carbon.member_club.current_tier' | t | json }},
+      progress_to: {{ 'carbon.member_club.progress_to' | t | json }},
+      top_tier: {{ 'carbon.member_club.top_tier' | t | json }},
+      code_ready: {{ 'carbon.member_club.code_ready' | t | json }},
+      code_meta: {{ 'carbon.member_club.code_meta' | t | json }},
+      one_code: {{ 'carbon.member_club.one_code' | t | json }},
+      cancel_code: {{ 'carbon.member_club.cancel_code' | t | json }},
+      redeem_aria: {{ 'carbon.member_club.redeem_aria' | t | json }},
+      getting_code: {{ 'carbon.member_club.getting_code' | t | json }},
+      redeem_off: {{ 'carbon.member_club.redeem_off' | t | json }},
+      getting_code_short: {{ 'carbon.member_club.getting_code_short' | t | json }},
+      off_for_points: {{ 'carbon.member_club.off_for_points' | t | json }},
+      one_time_code: {{ 'carbon.member_club.one_time_code' | t | json }},
+      refer_earn: {{ 'carbon.member_club.refer_earn' | t | json }},
+      refer_friend: {{ 'carbon.member_club.refer_friend' | t | json }},
+      refer_text: {{ 'carbon.member_club.refer_text' | t | json }},
+      get_referral_link: {{ 'carbon.member_club.get_referral_link' | t | json }},
+      show_less: {{ 'carbon.member_club.show_less' | t | json }},
+      view_all_arrow: {{ 'carbon.member_club.view_all_arrow' | t | json }},
+      pts: {{ 'carbon.member_club.pts' | t | json }},
+      points: {{ 'carbon.member_club.points' | t | json }},
+      no_activity: {{ 'carbon.member_club.no_activity' | t | json }},
+      points_activity: {{ 'carbon.member_club.points_activity' | t | json }},
+      copy_code: {{ 'carbon.member_club.copy_code' | t | json }},
+      apply_to_cart: {{ 'carbon.member_club.apply_to_cart' | t | json }},
+      recent_purchases: {{ 'carbon.member_club.recent_purchases' | t | json }},
+      view_all_purchases: {{ 'carbon.member_club.view_all_purchases' | t | json }},
+      n_item: {{ 'carbon.member_club.n_item' | t | json }},
+      n_items: {{ 'carbon.member_club.n_items' | t | json }},
+      placed: {{ 'carbon.member_club.placed' | t | json }},
+      canceled_on: {{ 'carbon.member_club.canceled_on' | t | json }},
+      buy_again: {{ 'carbon.member_club.buy_again' | t | json }},
+      view_order: {{ 'carbon.member_club.view_order' | t | json }},
+      no_online_orders: {{ 'carbon.member_club.no_online_orders' | t | json }},
+      in_store_receipt: {{ 'carbon.member_club.in_store_receipt' | t | json }},
+      refund_suffix: {{ 'carbon.member_club.refund_suffix' | t | json }},
+      store_failed: {{ 'carbon.member_club.store_failed' | t | json }},
+      carbon_store: {{ 'carbon.member_club.carbon_store' | t | json }},
+      purchased: {{ 'carbon.member_club.purchased' | t | json }},
+      no_store_purchases: {{ 'carbon.member_club.no_store_purchases' | t | json }},
+      view_all: {{ 'carbon.member_club.view_all' | t | json }},
+      no_purchases: {{ 'carbon.member_club.no_purchases' | t | json }},
+      store_failed_later: {{ 'carbon.member_club.store_failed_later' | t | json }},
+      total_receipt: {{ 'carbon.member_club.total_receipt' | t | json }},
+      no_store_purchases_long: {{ 'carbon.member_club.no_store_purchases_long' | t | json }},
+      view_item: {{ 'carbon.member_club.view_item' | t | json }},
+      copied: {{ 'carbon.member_club.copied' | t | json }},
+      copy_failed: {{ 'carbon.member_club.copy_failed' | t | json }},
+      added_to_cart: {{ 'carbon.member_club.added_to_cart' | t | json }},
+      apply_failed: {{ 'carbon.member_club.apply_failed' | t | json }},
+      share_text: {{ 'carbon.member_club.share_text' | t | json }},
+      not_linked: {{ 'carbon.member_club.not_linked' | t | json }},
+      sign_in_again: {{ 'carbon.member_club.sign_in_again' | t | json }},
+      load_failed: {{ 'carbon.member_club.load_failed' | t | json }}
+    };
+    const fill = (s, o) => String(s).replace(/__([A-Z]+)__/g, (m, k) => (k in o ? String(o[k]) : m));
     const $ = (s) => root.querySelector(s);
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     const money = (n) => `${Number(n) < 0 ? '-' : ''}$${Math.abs(Number(n) || 0).toFixed(2)}`;
@@ -396,7 +491,7 @@
         ? { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) }
         : { headers: { Accept: 'application/json' } });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw Object.assign(new Error(data.message || 'Something went wrong — please try again.'), { code: data.error });
+      if (!res.ok) throw Object.assign(new Error(data.message || T.error_generic), { code: data.error });
       return data;
     }
 
@@ -411,44 +506,44 @@
     const target = (t) => Number(t.progress) + Number(t.next.needed);
     function progressLabel(t) {
       const p = Math.floor(Number(t.progress)); const g = Math.ceil(target(t));
-      if (t.metric === 'points') return `${p.toLocaleString()} / ${g.toLocaleString()} points to ${t.next.name}`;
-      if (t.metric === 'visits') return `${p} / ${g} purchases toward ${t.next.name}`;
-      return `$${p.toLocaleString()} / $${g.toLocaleString()} spent toward ${t.next.name}`;
+      if (t.metric === 'points') return fill(T.progress_points, { P: p.toLocaleString(), G: g.toLocaleString(), TIER: t.next.name });
+      if (t.metric === 'visits') return fill(T.progress_visits, { P: p, G: g, TIER: t.next.name });
+      return fill(T.progress_spent, { P: p.toLocaleString(), G: g.toLocaleString(), TIER: t.next.name });
     }
     function toNext(t) {
       const n = Math.ceil(Number(t.next.needed));
-      if (t.metric === 'points') return `Earn ${n.toLocaleString()} more points to reach ${t.next.name}`;
-      if (t.metric === 'visits') return `Make ${n} more ${n === 1 ? 'purchase' : 'purchases'} to reach ${t.next.name}`;
-      return `Spend $${n.toLocaleString()} more to reach ${t.next.name}`;
+      if (t.metric === 'points') return fill(T.to_next_points, { N: n.toLocaleString(), TIER: t.next.name });
+      if (t.metric === 'visits') return fill(n === 1 ? T.to_next_visit : T.to_next_visits, { N: n, TIER: t.next.name });
+      return fill(T.to_next_spend, { N: n.toLocaleString(), TIER: t.next.name });
     }
     function ends(t) {
       const p = Math.floor(Number(t.progress)); const g = Math.ceil(target(t));
-      if (t.metric === 'points') return [`${p.toLocaleString()} points`, `${g.toLocaleString()} to ${t.next.name}`];
-      if (t.metric === 'visits') return [`${p} ${p === 1 ? 'purchase' : 'purchases'}`, `${g} to ${t.next.name}`];
-      return [`$${p.toLocaleString()} spent`, `$${g.toLocaleString()} to ${t.next.name}`];
+      if (t.metric === 'points') return [fill(T.n_points, { N: p.toLocaleString() }), fill(T.n_to_tier, { N: g.toLocaleString(), TIER: t.next.name })];
+      if (t.metric === 'visits') return [fill(p === 1 ? T.n_purchase : T.n_purchases, { N: p }), fill(T.n_to_tier, { N: g, TIER: t.next.name })];
+      return [fill(T.n_spent, { N: p.toLocaleString() }), fill(T.n_to_tier, { N: `$${g.toLocaleString()}`, TIER: t.next.name })];
     }
-    const REASON = { sale: 'Purchase', redemption: 'Reward redeemed', refund: 'Refund', signup_bonus: 'Member sign up', birthday_bonus: 'Birthday bonus', referral_bonus: 'Referral reward', manual: 'Adjustment', adjustment: 'Adjustment', migration: 'Points transferred' };
+    const REASON = { sale: T.reason_purchase, redemption: T.reason_redeemed, refund: T.reason_refund, signup_bonus: T.reason_signup, birthday_bonus: T.reason_birthday, referral_bonus: T.reason_referral, manual: T.reason_adjustment, adjustment: T.reason_adjustment, migration: T.reason_transferred };
     const ACT_ICON = { sale: 'bag', refund: 'undo', redemption: 'ticket', referral_bonus: 'people', signup_bonus: 'star', birthday_bonus: 'gift' };
     function actTitle(a) {
-      if (a.source === 'system' && a.reason === 'adjustment') return 'Code cancelled or expired — points returned';
-      const where = a.source === 'shopify' ? 'Online' : a.source === 'pos' ? 'In-store' : '';
+      if (a.source === 'system' && a.reason === 'adjustment') return T.code_returned;
+      const where = a.source === 'shopify' ? T.online : a.source === 'pos' ? T.in_store : '';
       if ((a.reason === 'sale' || a.reason === 'refund') && where) return `${REASON[a.reason]} (${where})`;
-      return REASON[a.reason] || 'Activity';
+      return REASON[a.reason] || T.activity;
     }
     function orderStatus(o) {
-      if (o.cancelled_at) return ['Canceled', 'mc-pill--bad'];
-      if (o.financial === 'refunded') return ['Refunded', 'mc-pill--ok'];
-      if (o.financial === 'partially_refunded') return ['Partly refunded', 'mc-pill--ok'];
-      if (o.financial === 'voided') return ['Voided', 'mc-pill--bad'];
-      if (o.financial === 'pending' || o.financial === 'authorized') return ['Payment pending', ''];
+      if (o.cancelled_at) return [T.status_canceled, 'mc-pill--bad'];
+      if (o.financial === 'refunded') return [T.status_refunded, 'mc-pill--ok'];
+      if (o.financial === 'partially_refunded') return [T.status_partly_refunded, 'mc-pill--ok'];
+      if (o.financial === 'voided') return [T.status_voided, 'mc-pill--bad'];
+      if (o.financial === 'pending' || o.financial === 'authorized') return [T.status_pending, ''];
       return null;
     }
     const pill = (s) => (s ? `<span class="mc-pill ${s[1]}">${esc(s[0])}</span>` : '');
     const orderPoints = (o) => purchases?.online_points?.[String(o.id)] ?? null;
-    const orderTitle = (o) => `${o.title || `Order ${o.name}`}${o.lines > 1 ? ` + ${o.lines - 1} more` : ''}`;
+    const orderTitle = (o) => `${o.title || fill(T.order_name, { NAME: o.name })}${o.lines > 1 ? ` ${fill(T.plus_more, { N: o.lines - 1 })}` : ''}`;
     const storeTitle = (p) => {
       const items = p.lines.filter((l) => l.type !== 'loyalty_redemption');
-      return items[0] ? `${items[0].description}${items.length > 1 ? ` + ${items.length - 1} more` : ''}` : 'In-store purchase';
+      return items[0] ? `${items[0].description}${items.length > 1 ? ` ${fill(T.plus_more, { N: items.length - 1 })}` : ''}` : T.in_store_purchase;
     };
 
     // ---------------- render ----------------
@@ -461,26 +556,26 @@
       const stepDollars = step / s.rules.redeem_points_per_dollar;
       $('[data-mc-balance]').textContent = Number(s.balance || 0).toLocaleString();
       $('[data-mc-upto]').textContent = opts.length
-        ? `Up to ${dollars(opts[opts.length - 1].dollars)} off your next purchase`
-        : `${Math.max(1, step - s.balance)} more points to unlock ${dollars(stepDollars)} off`;
+        ? fill(T.up_to_off, { AMOUNT: dollars(opts[opts.length - 1].dollars) })
+        : fill(T.more_to_unlock, { POINTS: Math.max(1, step - s.balance), AMOUNT: dollars(stepDollars) });
 
       let b = '';
       if (s.preview) b += `<div class="mc-banner">Sample data for design review — members see their own points and purchases.</div>`;
       for (const c of s.thank_you_codes || []) {
-        b += `<div class="mc-banner"><strong>${esc(c.percent_off)}% off your next order</strong> — thank you for order ${esc(c.order_name)} · one use · valid until ${esc(date(c.ends_at))}${codeRow(c.code)}</div>`;
+        b += `<div class="mc-banner"><strong>${fill(T.ty_off, { PCT: esc(c.percent_off) })}</strong> — ${fill(T.ty_thanks, { ORDER: esc(c.order_name), DATE: esc(date(c.ends_at)) })}${codeRow(c.code)}</div>`;
       }
       banners.innerHTML = b;
 
       // Tier
       const t = s.tier;
       $('[data-mc-tier]').innerHTML = t
-        ? `<div class="mc-tier__head">${badge(t.code)}<div><p class="mc-tier__name">${esc(t.name)} Tier</p><p class="mc-tier__sub">Current tier</p></div></div>
+        ? `<div class="mc-tier__head">${badge(t.code)}<div><p class="mc-tier__name">${fill(T.tier_name, { TIER: esc(t.name) })}</p><p class="mc-tier__sub">${T.current_tier}</p></div></div>
            <div>${t.next
               ? `<p class="mc-desk-text" style="margin:0;font-size:20px">${esc(progressLabel(t))}</p>
                  <p class="mc-phone-text" style="font-weight:400;font-size:18px">${esc(toNext(t))}</p>
-                 ${target(t) > 0 && Number(t.progress) >= 0 ? `<div class="mc-bar" role="progressbar" aria-label="Progress to ${esc(t.next.name)}" aria-valuemin="0" aria-valuemax="${Math.ceil(target(t))}" aria-valuenow="${Math.floor(Number(t.progress))}"><i style="width:${Math.min(100, (Number(t.progress) / target(t)) * 100).toFixed(1)}%"></i></div>` : ''}
+                 ${target(t) > 0 && Number(t.progress) >= 0 ? `<div class="mc-bar" role="progressbar" aria-label="${fill(T.progress_to, { TIER: esc(t.next.name) })}" aria-valuemin="0" aria-valuemax="${Math.ceil(target(t))}" aria-valuenow="${Math.floor(Number(t.progress))}"><i style="width:${Math.min(100, (Number(t.progress) / target(t)) * 100).toFixed(1)}%"></i></div>` : ''}
                  <div class="mc-ends"><span>${esc(ends(t)[0])}</span><span>${esc(ends(t)[1])}</span></div>`
-              : `<p style="margin:0;font-size:18px">You're at our top tier — thank you!</p>`}
+              : `<p style="margin:0;font-size:18px">${T.top_tier}</p>`}
              ${t.perks?.length ? `<ul class="mc-perks">${t.perks.map((p) => `<li>${ICON.check}${esc(p)}</li>`).join('')}</ul>` : ''}
            </div>`
         : '';
@@ -488,17 +583,17 @@
       // Redeem / active code
       const r = $('[data-mc-redeem]');
       if (s.codes?.length) {
-        r.innerHTML = s.codes.map((c) => `<div class="mc-card"><strong>Your ${dollars(c.dollars)} code is ready</strong>
-            <p class="mc-meta">For items totaling ${dollars(c.min_subtotal)} or more · shipping not included · expires ${esc(date(c.expires_at))}</p>
+        r.innerHTML = s.codes.map((c) => `<div class="mc-card"><strong>${fill(T.code_ready, { AMOUNT: dollars(c.dollars) })}</strong>
+            <p class="mc-meta">${fill(T.code_meta, { MIN: dollars(c.min_subtotal), DATE: esc(date(c.expires_at)) })}</p>
             ${codeRow(c.code, true)}
-            <p class="mc-note">One code at a time. <button type="button" class="mc-link" data-cancel="${esc(c.code)}">Cancel code &amp; return ${esc(c.points)} points</button></p></div>`).join('');
+            <p class="mc-note">${T.one_code} <button type="button" class="mc-link" data-cancel="${esc(c.code)}">${fill(T.cancel_code, { POINTS: esc(c.points) })}</button></p></div>`).join('');
       } else if (s.rules.live && opts.length) {
-        r.innerHTML = `<div class="mc-btns">${opts.map((o, i) => `<button type="button" class="mc-btn ${i === 0 ? 'mc-btn--fill' : ''}" data-redeem="${o.points}" ${busy ? 'disabled' : ''} aria-label="Redeem ${dollars(o.dollars)} off for ${o.points} points">
+        r.innerHTML = `<div class="mc-btns">${opts.map((o, i) => `<button type="button" class="mc-btn ${i === 0 ? 'mc-btn--fill' : ''}" data-redeem="${o.points}" ${busy ? 'disabled' : ''} aria-label="${fill(T.redeem_aria, { AMOUNT: dollars(o.dollars), POINTS: o.points })}">
               <span class="mc-redeem__icon">${ICON.ticket}</span>
-              <span class="mc-desk-text"><span class="mc-btn__big">${busy === o.points ? 'Getting your code…' : `Redeem ${dollars(o.dollars)} off`}</span><span class="mc-btn__small">${o.points} points</span></span>
-              <span class="mc-phone-text">${busy === o.points ? 'Getting code…' : `${dollars(o.dollars)} off / ${o.points} points`}</span>
+              <span class="mc-desk-text"><span class="mc-btn__big">${busy === o.points ? T.getting_code : fill(T.redeem_off, { AMOUNT: dollars(o.dollars) })}</span><span class="mc-btn__small">${fill(T.n_points, { N: o.points })}</span></span>
+              <span class="mc-phone-text">${busy === o.points ? T.getting_code_short : fill(T.off_for_points, { AMOUNT: dollars(o.dollars), POINTS: o.points })}</span>
             </button>`).join('')}</div>
-            <p class="mc-note mc-desk-text">One-time code · up to ${dollars(s.rules.max_redeem_dollars_per_order)} off per purchase</p>`;
+            <p class="mc-note mc-desk-text">${fill(T.one_time_code, { AMOUNT: dollars(s.rules.max_redeem_dollars_per_order) })}</p>`;
       } else {
         r.innerHTML = '';
       }
@@ -508,23 +603,23 @@
       if (s.referral) {
         ref.hidden = false;
         ref.innerHTML = `<span style="color:var(--mc-blue)">${ICON.people.replace('width="26" height="26"', 'width="48" height="48"')}</span>
-          <div><h3><span class="mc-desk-text">Refer a friend. Earn ${esc(s.referral.you_get)} points.</span><span class="mc-phone-text" style="font-size:22px">Refer a friend</span></h3>
-          <p>Your friend earns ${esc(s.referral.friend_gets)} points, and you earn ${esc(s.referral.you_get)} points after their first ${dollars(s.referral.min_purchase)}+ purchase.</p>
+          <div><h3><span class="mc-desk-text">${fill(T.refer_earn, { POINTS: esc(s.referral.you_get) })}</span><span class="mc-phone-text" style="font-size:22px">${T.refer_friend}</span></h3>
+          <p>${fill(T.refer_text, { FRIEND: esc(s.referral.friend_gets), YOU: esc(s.referral.you_get), MIN: dollars(s.referral.min_purchase) })}</p>
           <p class="mc-status" data-mc-ref-status role="status"></p></div>
-          <button type="button" class="mc-btn" data-share>${ICON.link}<span class="mc-desk-text">Get referral link</span><span class="mc-phone-text">Refer a friend</span></button>`;
+          <button type="button" class="mc-btn" data-share>${ICON.link}<span class="mc-desk-text">${T.get_referral_link}</span><span class="mc-phone-text">${T.refer_friend}</span></button>`;
       } else ref.hidden = true;
 
       // Activity
       const act = s.activity || [];
       const shown = showAllActivity ? act : act.slice(0, window.matchMedia('(max-width: 899px)').matches ? 3 : 4);
-      $('[data-mc-activity]').innerHTML = `<div class="mc-head"><h3>Points activity</h3>${act.length > shown.length || showAllActivity ? `<button type="button" class="mc-link" data-more>${showAllActivity ? 'Show less' : 'View all →'}</button>` : ''}</div>
+      $('[data-mc-activity]').innerHTML = `<div class="mc-head"><h3>${T.points_activity}</h3>${act.length > shown.length || showAllActivity ? `<button type="button" class="mc-link" data-more>${showAllActivity ? T.show_less : T.view_all_arrow}</button>` : ''}</div>
         <div class="mc-card mc-rows" style="padding:4px 18px">${act.length ? shown.map((a) => `<div class="mc-row">${ICON[ACT_ICON[a.reason] || 'star']}
           <div><strong>${esc(actTitle(a))}</strong><small>${esc(date(a.created_at))}</small></div>
-          <span class="mc-pts ${a.delta_points < 0 ? 'mc-pts--neg' : ''}">${a.delta_points > 0 ? '+' : ''}${esc(a.delta_points)} <span class="mc-unit-desk">pts</span><span class="mc-unit-phone">points</span></span></div>`).join('') : '<p class="mc-empty">No points activity yet.</p>'}</div>`;
+          <span class="mc-pts ${a.delta_points < 0 ? 'mc-pts--neg' : ''}">${a.delta_points > 0 ? '+' : ''}${esc(a.delta_points)} <span class="mc-unit-desk">${T.pts}</span><span class="mc-unit-phone">${T.points}</span></span></div>`).join('') : `<p class="mc-empty">${T.no_activity}</p>`}</div>`;
     }
 
     function codeRow(code, withCart) {
-      return `<div class="mc-code"><code>${esc(code)}</code><button type="button" class="mc-btn" data-copy="${esc(code)}">Copy code</button>${withCart ? `<button type="button" class="mc-btn mc-btn--fill" data-apply="${esc(code)}">Apply to my cart</button>` : ''}<span class="mc-status" role="status"></span></div>`;
+      return `<div class="mc-code"><code>${esc(code)}</code><button type="button" class="mc-btn" data-copy="${esc(code)}">${T.copy_code}</button>${withCart ? `<button type="button" class="mc-btn mc-btn--fill" data-apply="${esc(code)}">${T.apply_to_cart}</button>` : ''}<span class="mc-status" role="status"></span></div>`;
     }
 
     function renderPurchases() {
@@ -533,50 +628,50 @@
       const receipt = storeList[0];
       const storeFailed = purchases === null;
 
-      $('[data-mc-recent]').innerHTML = `<div class="mc-head"><h3>Recent purchases</h3><button type="button" class="mc-link" data-tab="purchases">View all purchases →</button></div>
-        ${latest ? `<div class="mc-buy"><a class="mc-thumb" href="${esc(latest.url)}" style="${latest.image ? `background-image:url('${esc(latest.image)}')` : ''}" aria-label="Order ${esc(latest.name)}">${latest.image ? '' : ICON.bag}</a>
-          <div><strong style="font-size:20px">Order ${esc(latest.name)}</strong> ${pill(orderStatus(latest))}
-          <p class="mc-meta">${esc(latest.items)} ${latest.items === 1 ? 'item' : 'items'} · ${money(latest.total)}</p>
-          <p class="mc-meta">Placed ${esc(date(latest.at))}${latest.cancelled_at ? ` · Canceled ${esc(date(latest.cancelled_at))}` : ''}</p></div>
-          ${latest.again ? `<a class="mc-btn" href="${esc(latest.again)}">${ICON.reorder}Buy again</a>` : `<a class="mc-btn" href="${esc(latest.url)}">View order</a>`}</div>`
-        : '<p class="mc-empty">No online orders yet.</p>'}`;
+      $('[data-mc-recent]').innerHTML = `<div class="mc-head"><h3>${T.recent_purchases}</h3><button type="button" class="mc-link" data-tab="purchases">${T.view_all_purchases}</button></div>
+        ${latest ? `<div class="mc-buy"><a class="mc-thumb" href="${esc(latest.url)}" style="${latest.image ? `background-image:url('${esc(latest.image)}')` : ''}" aria-label="${fill(T.order_name, { NAME: esc(latest.name) })}">${latest.image ? '' : ICON.bag}</a>
+          <div><strong style="font-size:20px">${fill(T.order_name, { NAME: esc(latest.name) })}</strong> ${pill(orderStatus(latest))}
+          <p class="mc-meta">${fill(latest.items === 1 ? T.n_item : T.n_items, { N: esc(latest.items) })} · ${money(latest.total)}</p>
+          <p class="mc-meta">${fill(T.placed, { DATE: esc(date(latest.at)) })}${latest.cancelled_at ? ` · ${fill(T.canceled_on, { DATE: esc(date(latest.cancelled_at)) })}` : ''}</p></div>
+          ${latest.again ? `<a class="mc-btn" href="${esc(latest.again)}">${ICON.reorder}${T.buy_again}</a>` : `<a class="mc-btn" href="${esc(latest.url)}">${T.view_order}</a>`}</div>`
+        : `<p class="mc-empty">${T.no_online_orders}</p>`}`;
 
-      $('[data-mc-store]').innerHTML = `<div class="mc-head"><h3>In-store receipt${receipt?.status === 'refunded' ? ' (refund)' : ''}</h3></div>
-        ${purchases === undefined ? '<div class="mc-skel"></div>' : storeFailed ? '<p class="mc-empty">In-store purchases can\'t be shown right now.</p>'
+      $('[data-mc-store]').innerHTML = `<div class="mc-head"><h3>${T.in_store_receipt}${receipt?.status === 'refunded' ? ` ${T.refund_suffix}` : ''}</h3></div>
+        ${purchases === undefined ? '<div class="mc-skel"></div>' : storeFailed ? `<p class="mc-empty">${T.store_failed}</p>`
         : receipt ? `<div class="mc-buy" style="grid-template-columns:auto minmax(0,1fr)"><span class="mc-thumb mc-thumb--sm">${ICON.store}</span>
-          <div><strong>${esc(receipt.store || 'Carbon store')} — In-store purchase</strong>
+          <div><strong>${esc(receipt.store || T.carbon_store)} — ${T.in_store_purchase}</strong>
           <p class="mc-meta">${esc(storeTitle(receipt))} · ${money(receipt.total)}</p>
-          <p class="mc-meta">Purchased ${esc(date(receipt.placed_at))}${receipt.status === 'refunded' ? ' · <span class="mc-pill mc-pill--ok">Refunded</span>' : ''}</p></div></div>`
-        : '<p class="mc-empty">No in-store purchases yet.</p>'}`;
+          <p class="mc-meta">${fill(T.purchased, { DATE: esc(date(receipt.placed_at)) })}${receipt.status === 'refunded' ? ` · <span class="mc-pill mc-pill--ok">${T.status_refunded}</span>` : ''}</p></div></div>`
+        : `<p class="mc-empty">${T.no_store_purchases}</p>`}`;
 
       // Phone: one list, newest first.
       const merged = [
-        ...orders.map((o) => ({ at: o.at, title: orderTitle(o), where: 'Online', total: o.total, image: o.image, href: o.url, points: orderPoints(o), status: orderStatus(o) })),
-        ...storeList.map((p) => ({ at: p.placed_at, title: storeTitle(p), where: 'In-store', total: p.total, image: null, href: null, points: p.points, status: p.status === 'refunded' ? ['Refunded', 'mc-pill--ok'] : null })),
+        ...orders.map((o) => ({ at: o.at, title: orderTitle(o), where: T.online, total: o.total, image: o.image, href: o.url, points: orderPoints(o), status: orderStatus(o) })),
+        ...storeList.map((p) => ({ at: p.placed_at, title: storeTitle(p), where: T.in_store, total: p.total, image: null, href: null, points: p.points, status: p.status === 'refunded' ? [T.status_refunded, 'mc-pill--ok'] : null })),
       ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 3);
-      $('[data-mc-plist]').innerHTML = `<div class="mc-head"><h3>Recent purchases</h3><button type="button" class="mc-link" data-tab="purchases">View all</button></div>
-        <div class="mc-rows">${merged.length ? merged.map(purchaseRow).join('') : purchases === undefined ? '<div class="mc-skel"></div>' : '<p class="mc-empty">No purchases yet.</p>'}</div>
-        ${storeFailed ? '<p class="mc-note">In-store purchases can\'t be shown right now.</p>' : ''}`;
+      $('[data-mc-plist]').innerHTML = `<div class="mc-head"><h3>${T.recent_purchases}</h3><button type="button" class="mc-link" data-tab="purchases">${T.view_all}</button></div>
+        <div class="mc-rows">${merged.length ? merged.map(purchaseRow).join('') : purchases === undefined ? '<div class="mc-skel"></div>' : `<p class="mc-empty">${T.no_purchases}</p>`}</div>
+        ${storeFailed ? `<p class="mc-note">${T.store_failed}</p>` : ''}`;
 
       // Purchases tab
       $('[data-mc-online-all]').innerHTML = orders.length
-        ? orders.map((o) => `${purchaseRow({ at: o.at, title: orderTitle(o), where: `Online · Order ${o.name}`, total: o.total, image: o.image, href: o.url, points: orderPoints(o), status: orderStatus(o), again: o.again })}`).join('')
-        : '<p class="mc-empty">No online orders yet.</p>';
+        ? orders.map((o) => `${purchaseRow({ at: o.at, title: orderTitle(o), where: `${T.online} · ${fill(T.order_name, { NAME: o.name })}`, total: o.total, image: o.image, href: o.url, points: orderPoints(o), status: orderStatus(o), again: o.again })}`).join('')
+        : `<p class="mc-empty">${T.no_online_orders}</p>`;
       $('[data-mc-store-all]').innerHTML = purchases === undefined ? '<div class="mc-skel"></div>' : storeFailed
-        ? '<p class="mc-empty">In-store purchases can\'t be shown right now. Please try again later.</p>'
+        ? `<p class="mc-empty">${T.store_failed_later}</p>`
         : storeList.length ? storeList.map((p) => `<div style="padding:14px 2px">
-            <div class="mc-head" style="margin:0 0 6px"><strong>${esc(date(p.placed_at))} · ${esc(p.store || 'Carbon store')} ${p.status === 'refunded' ? '<span class="mc-pill mc-pill--ok">Refunded</span>' : ''}</strong>${p.points ? `<span class="mc-pts">+${esc(p.points)} points</span>` : ''}</div>
+            <div class="mc-head" style="margin:0 0 6px"><strong>${esc(date(p.placed_at))} · ${esc(p.store || T.carbon_store)} ${p.status === 'refunded' ? `<span class="mc-pill mc-pill--ok">${T.status_refunded}</span>` : ''}</strong>${p.points ? `<span class="mc-pts">+${fill(T.n_points, { N: esc(p.points) })}</span>` : ''}</div>
             ${p.lines.map((l) => `<div class="mc-head" style="margin:0;font-size:15px"><span${l.type === 'loyalty_redemption' ? ' class="mc-empty"' : ''}>${l.type === 'loyalty_redemption' ? 'Carbon Rewards' : esc(l.description)}${l.quantity > 1 ? ` × ${esc(l.quantity)}` : ''}</span><span>${money(l.total)}</span></div>`).join('')}
-            <div class="mc-head" style="margin:6px 0 0"><strong>Total · Receipt ${esc(p.number)}</strong><strong>${money(p.total)}</strong></div></div>`).join('')
-        : '<p class="mc-empty">No in-store purchases yet. Give your phone number or email at checkout to see them here.</p>';
+            <div class="mc-head" style="margin:6px 0 0"><strong>${fill(T.total_receipt, { NUMBER: esc(p.number) })}</strong><strong>${money(p.total)}</strong></div></div>`).join('')
+        : `<p class="mc-empty">${T.no_store_purchases_long}</p>`;
     }
 
     function purchaseRow(p) {
-      const thumb = p.image ? `<span class="mc-thumb mc-thumb--sm" style="background-image:url('${esc(p.image)}')"></span>` : `<span class="mc-thumb mc-thumb--sm">${p.where.startsWith('In-store') ? ICON.store : ICON.bag}</span>`;
+      const thumb = p.image ? `<span class="mc-thumb mc-thumb--sm" style="background-image:url('${esc(p.image)}')"></span>` : `<span class="mc-thumb mc-thumb--sm">${p.where.startsWith(T.in_store) ? ICON.store : ICON.bag}</span>`;
       const body = `<div><strong>${esc(p.title)}</strong><small>${esc(p.where)} · ${esc(date(p.at))}</small><div>${money(p.total)} ${pill(p.status)}</div>
-        ${p.again ? `<a class="mc-link" href="${esc(p.again)}">Buy again</a>` : ''}</div>`;
-      return `<div class="mc-row" style="grid-template-columns:72px minmax(0,1fr) auto">${p.href ? `<a href="${esc(p.href)}" aria-label="View ${esc(p.title)}">${thumb}</a>` : thumb}${body}
-        <span class="mc-pts">${p.points ? `+${esc(p.points)} points` : ''}</span></div>`;
+        ${p.again ? `<a class="mc-link" href="${esc(p.again)}">${T.buy_again}</a>` : ''}</div>`;
+      return `<div class="mc-row" style="grid-template-columns:72px minmax(0,1fr) auto">${p.href ? `<a href="${esc(p.href)}" aria-label="${fill(T.view_item, { TITLE: esc(p.title) })}">${thumb}</a>` : thumb}${body}
+        <span class="mc-pts">${p.points ? `+${fill(T.n_points, { N: esc(p.points) })}` : ''}</span></div>`;
     }
 
     // ---------------- actions ----------------
@@ -592,10 +687,10 @@
     async function copy(text, status) {
       try {
         await navigator.clipboard.writeText(text);
-        status.textContent = 'Copied';
+        status.textContent = T.copied;
         status.classList.remove('mc-status--err');
       } catch (e) {
-        status.textContent = `Couldn't copy — select it: ${text}`;
+        status.textContent = fill(T.copy_failed, { TEXT: text });
         status.classList.add('mc-status--err');
       }
     }
@@ -611,14 +706,14 @@
         try {
           if (!window.CarbonRewards) throw new Error();
           await window.CarbonRewards.setRewardCode(await window.CarbonRewards.getCart(), t.dataset.apply);
-          status.textContent = 'Added to your cart';
-        } catch (err) { status.textContent = 'Copy the code and enter it at checkout instead.'; status.classList.add('mc-status--err'); }
+          status.textContent = T.added_to_cart;
+        } catch (err) { status.textContent = T.apply_failed; status.classList.add('mc-status--err'); }
         return;
       }
       if (t.dataset.share !== undefined) {
         const url = summary.referral.url; const status = $('[data-mc-ref-status]');
         if (navigator.share && window.matchMedia('(max-width: 899px)').matches) {
-          try { await navigator.share({ title: 'Carbon', text: 'Shop Carbon with my link:', url }); return; } catch (err) { /* cancelled → copy instead */ }
+          try { await navigator.share({ title: 'Carbon', text: T.share_text, url }); return; } catch (err) { /* cancelled → copy instead */ }
         }
         copy(url, status);
         return;
@@ -658,12 +753,12 @@
       .then((s) => {
         summary = s;
         if (!s.linked) {
-          $('[data-mc-banners]').innerHTML = '<div class="mc-banner">Your points will appear here after your first purchase online or in store.</div>';
+          $('[data-mc-banners]').innerHTML = `<div class="mc-banner">${T.not_linked}</div>`;
           s.balance = s.balance ?? 0;
         }
         renderRewards();
       })
-      .catch((err) => showError(err.code === 'not_logged_in' ? 'Please sign in again to see your points.' : "We couldn't load your rewards right now. Please refresh in a moment."));
+      .catch((err) => showError(err.code === 'not_logged_in' ? T.sign_in_again : T.load_failed));
     api('purchases')
       .then((p) => { purchases = p; })
       .catch(() => { purchases = null; })

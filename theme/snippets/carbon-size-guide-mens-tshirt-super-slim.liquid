@@ -272,62 +272,62 @@
   <div class="csg-top">
     <p class="csg-wordmark">Carbon</p>
     <h2 class="csg-title">
-      <span class="csg-title-fit">Men&rsquo;s Super Slim Fit T-Shirts</span><span class="csg-title-sub">Size Guide</span>
+      <span class="csg-title-fit">{{ 'carbon.size_guide.titles.mens_super_slim_tshirts' | t }}</span><span class="csg-title-sub">{{ 'carbon.size_guide.headings.size_guide' | t }}</span>
     </h2>
     <span class="csg-rule" aria-hidden="true"></span>
   </div>
 
-  <div class="csg-units" role="group" aria-label="Measurement units">
+  <div class="csg-units" role="group" aria-label="{{ 'carbon.size_guide.labels.measurement_units' | t | escape }}">
     <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
     <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
   </div>
 
-  <p class="csg-subtitle">All measurements are taken with the garment laid flat.</p>
+  <p class="csg-subtitle">{{ 'carbon.size_guide.subtitles.laid_flat' | t }}</p>
 
   <figure class="csg-overview">
-    <img src="{{ 'carbon-tshirt-measure-overview.webp' | asset_url }}" alt="A T-shirt laid flat, labelled with all four measurements: shoulder width, chest width, sleeve length and body length"
+    <img src="{{ 'carbon-tshirt-measure-overview.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.tshirt_overview' | t | escape }}"
          width="1020" height="1203" loading="lazy" decoding="async">
   </figure>
 
-  <section class="csg-chart" aria-label="Size chart">
+  <section class="csg-chart" aria-label="{{ 'carbon.size_guide.labels.size_chart' | t | escape }}">
     <table class="csg-table">
-      <thead><tr><th scope="col">Size</th><th scope="col"><span>Chest Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Shoulder Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Sleeve Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Body Length</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
+      <thead><tr><th scope="col">{{ 'carbon.size_guide.labels.size' | t }}</th><th scope="col"><span>{{ 'carbon.size_guide.labels.chest_width' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>{{ 'carbon.size_guide.labels.shoulder_width' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>{{ 'carbon.size_guide.labels.sleeve_length' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>{{ 'carbon.size_guide.labels.body_length' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
       <tbody><tr data-csg-row="S" data-cm-chest="44.5" data-cm-shoulder="41" data-cm-sleeve="18" data-cm-length="69.5" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="M" data-cm-chest="46.5" data-cm-shoulder="42" data-cm-sleeve="18.5" data-cm-length="71" aria-selected="true" tabindex="0"><th scope="row">M</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="L" data-cm-chest="48.5" data-cm-shoulder="43" data-cm-sleeve="19" data-cm-length="73" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XL" data-cm-chest="50.5" data-cm-shoulder="44" data-cm-sleeve="19.5" data-cm-length="74.5" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr><tr data-csg-row="XXL" data-cm-chest="52.5" data-cm-shoulder="45" data-cm-sleeve="20" data-cm-length="76.5" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="chest">&mdash;</td><td data-csg-cell="shoulder">&mdash;</td><td data-csg-cell="sleeve">&mdash;</td><td data-csg-cell="length">&mdash;</td></tr></tbody>
     </table>
   </section>
 
   <div class="csg-mob">
-    <p class="csg-mob-label" id="carbon-size-guide-mens-tshirt-super-slim-sizes">Select a size</p>
+    <p class="csg-mob-label" id="carbon-size-guide-mens-tshirt-super-slim-sizes">{{ 'carbon.size_guide.labels.select_a_size' | t }}</p>
     <div class="csg-sizes" role="group" aria-labelledby="carbon-size-guide-mens-tshirt-super-slim-sizes"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
     <div class="csg-sel">
-      <p class="csg-sel-h">Size <span data-csg-sel-size>M</span> measurements</p>
-      <div class="csg-sel-grid"><div><span class="csg-sel-k">Chest Width</span><span class="csg-sel-v" data-csg-sel="chest">&mdash;</span></div><div><span class="csg-sel-k">Shoulder Width</span><span class="csg-sel-v" data-csg-sel="shoulder">&mdash;</span></div><div><span class="csg-sel-k">Sleeve Length</span><span class="csg-sel-v" data-csg-sel="sleeve">&mdash;</span></div><div><span class="csg-sel-k">Body Length</span><span class="csg-sel-v" data-csg-sel="length">&mdash;</span></div></div>
+      <p class="csg-sel-h">{{ 'carbon.size_guide.labels.size_measurements_html' | t: size: '<span data-csg-sel-size>M</span>' }}</p>
+      <div class="csg-sel-grid"><div><span class="csg-sel-k">{{ 'carbon.size_guide.labels.chest_width' | t }}</span><span class="csg-sel-v" data-csg-sel="chest">&mdash;</span></div><div><span class="csg-sel-k">{{ 'carbon.size_guide.labels.shoulder_width' | t }}</span><span class="csg-sel-v" data-csg-sel="shoulder">&mdash;</span></div><div><span class="csg-sel-k">{{ 'carbon.size_guide.labels.sleeve_length' | t }}</span><span class="csg-sel-v" data-csg-sel="sleeve">&mdash;</span></div><div><span class="csg-sel-k">{{ 'carbon.size_guide.labels.body_length' | t }}</span><span class="csg-sel-v" data-csg-sel="length">&mdash;</span></div></div>
     </div>
   </div>
 
   <details class="csg-measure" open>
     <summary>
-      <h3 class="csg-h3">How to measure</h3>
+      <h3 class="csg-h3">{{ 'carbon.size_guide.headings.how_to_measure' | t }}</h3>
       <svg class="csg-chev" width="18" height="11" viewBox="0 0 18 11" aria-hidden="true" focusable="false"><path d="M1.5 1.5L9 9l7.5-7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </summary>
-    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">Chest Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-chest.webp' | asset_url }}" alt="A T-shirt laid flat with an arrow running straight across the chest from one armhole to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the T-shirt flat. Measure straight across from armpit to armpit just below the armholes. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">Shoulder Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-shoulder.webp' | asset_url }}" alt="The top of a T-shirt laid flat with an arrow running from one shoulder seam to the other" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure straight across from one shoulder seam to the other shoulder seam.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">Sleeve Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-sleeve.webp' | asset_url }}" alt="A T-shirt sleeve with an arrow running from the shoulder seam down to the sleeve opening" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the shoulder seam to the end of the sleeve.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">4</span><span class="csg-card-name">Body Length</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-body-length.webp' | asset_url }}" alt="A T-shirt laid flat with a vertical arrow from the high point of the shoulder down to the bottom hem" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the high point of shoulder (HPS) straight down to the bottom hem.</p></article></div>
+    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.chest_width' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-chest.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.tshirt_chest' | t | escape }}" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.tshirt_chest' | t }}</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.shoulder_width' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-shoulder.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.tshirt_shoulder' | t | escape }}" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.tshirt_shoulder' | t }}</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.sleeve_length' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-sleeve.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.tshirt_sleeve' | t | escape }}" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.tshirt_sleeve' | t }}</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">4</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.body_length' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-tshirt-measure-body-length.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.tshirt_body_length' | t | escape }}" width="1200" height="624" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.tshirt_body_length' | t }}</p></article></div>
   </details>
 
   <div class="csg-note-wrap">
     <p class="csg-note">
       <span class="csg-note-icon" aria-hidden="true">i</span>
-      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal production and finishing. For the most accurate fit comparison, measure a T-shirt you already own while it is laid flat.</span>
+      <span>{{ 'carbon.size_guide.notes.helpful_tshirt_html' | t }}</span>
     </p>
   </div>
 
-  <section class="csg-tips-card" aria-label="Tips for the best fit">
+  <section class="csg-tips-card" aria-label="{{ 'carbon.size_guide.tips.title' | t | escape }}">
     <div class="csg-tips-head">
       <span class="csg-tips-icon" aria-hidden="true">
         <img src="{{ 'carbon-size-guide-tape-icon.png' | asset_url }}" alt="" width="68" height="69" loading="lazy" decoding="async">
       </span>
-      <h3 class="csg-h3">Tips for the best fit</h3>
+      <h3 class="csg-h3">{{ 'carbon.size_guide.tips.title' | t }}</h3>
     </div>
-    <ol class="csg-tips-steps"><li><span>Choose a T-shirt you already own that fits you well.</span></li><li><span>Lay it flat on a clean surface and smooth out wrinkles.</span></li><li><span>Measure Chest, Shoulder, Sleeve and Body Length as shown.</span></li><li><span>Compare those measurements with the CARBON size chart.</span></li></ol>
+    <ol class="csg-tips-steps"><li><span>{{ 'carbon.size_guide.tips.tshirt_choose' | t }}</span></li><li><span>{{ 'carbon.size_guide.tips.tshirt_lay_flat' | t }}</span></li><li><span>{{ 'carbon.size_guide.tips.tshirt_measure' | t }}</span></li><li><span>{{ 'carbon.size_guide.tips.compare_size_chart' | t }}</span></li></ol>
   </section>
 
 </div>

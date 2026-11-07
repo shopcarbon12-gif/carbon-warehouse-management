@@ -268,45 +268,45 @@
   <div class="csg-top">
     <p class="csg-wordmark">Carbon</p>
     <h2 class="csg-title">
-      <span class="csg-title-fit">Men&rsquo;s Swim Shorts</span><span class="csg-title-sub">Size Guide</span>
+      <span class="csg-title-fit">{{ 'carbon.size_guide.titles.mens_swim_shorts' | t }}</span><span class="csg-title-sub">{{ 'carbon.size_guide.headings.size_guide' | t }}</span>
     </h2>
     <span class="csg-rule" aria-hidden="true"></span>
   </div>
 
-  <div class="csg-units" role="group" aria-label="Measurement units">
+  <div class="csg-units" role="group" aria-label="{{ 'carbon.size_guide.labels.measurement_units' | t | escape }}">
     <button type="button" class="csg-unit" data-csg-unit="in" aria-pressed="true">In</button>
     <button type="button" class="csg-unit" data-csg-unit="cm" aria-pressed="false">CM</button>
   </div>
 
   <div class="csg-left">
-    <p class="csg-subtitle">All measurements are taken with the garment laid flat.</p>
+    <p class="csg-subtitle">{{ 'carbon.size_guide.subtitles.laid_flat' | t }}</p>
 
-    <section class="csg-chart" aria-label="Size chart">
+    <section class="csg-chart" aria-label="{{ 'carbon.size_guide.labels.size_chart' | t | escape }}">
       <table class="csg-table">
-        <thead><tr><th scope="col">Size</th><th scope="col"><span>Waist Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Hip Width</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>Inseam</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
+        <thead><tr><th scope="col">{{ 'carbon.size_guide.labels.size' | t }}</th><th scope="col"><span>{{ 'carbon.size_guide.labels.waist_width' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>{{ 'carbon.size_guide.labels.hip_width' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th><th scope="col"><span>{{ 'carbon.size_guide.labels.inseam' | t }}</span><span class="csg-th-unit" data-csg-unitlabel>(in)</span></th></tr></thead>
         <tbody><tr data-csg-row="S" data-cm-waist="35" data-cm-hip="54" data-cm-inseam="12" aria-selected="false" tabindex="0"><th scope="row">S</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="M" data-cm-waist="37" data-cm-hip="56" data-cm-inseam="12" aria-selected="true" tabindex="0"><th scope="row">M</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="L" data-cm-waist="39" data-cm-hip="58" data-cm-inseam="12" aria-selected="false" tabindex="0"><th scope="row">L</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="XL" data-cm-waist="41" data-cm-hip="60" data-cm-inseam="13" aria-selected="false" tabindex="0"><th scope="row">XL</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr><tr data-csg-row="XXL" data-cm-waist="43" data-cm-hip="62" data-cm-inseam="13" aria-selected="false" tabindex="0"><th scope="row">XXL</th><td data-csg-cell="waist">&mdash;</td><td data-csg-cell="hip">&mdash;</td><td data-csg-cell="inseam">&mdash;</td></tr></tbody>
       </table>
     </section>
   </div>
 
   <div class="csg-mob">
-    <p class="csg-mob-label" id="carbon-size-guide-mens-swim-shorts-sizes">Select a size</p>
+    <p class="csg-mob-label" id="carbon-size-guide-mens-swim-shorts-sizes">{{ 'carbon.size_guide.labels.select_a_size' | t }}</p>
     <div class="csg-sizes" role="group" aria-labelledby="carbon-size-guide-mens-swim-shorts-sizes"><button type="button" class="csg-size" data-csg-size="S" aria-pressed="false">S</button><button type="button" class="csg-size" data-csg-size="M" aria-pressed="true">M</button><button type="button" class="csg-size" data-csg-size="L" aria-pressed="false">L</button><button type="button" class="csg-size" data-csg-size="XL" aria-pressed="false">XL</button><button type="button" class="csg-size" data-csg-size="XXL" aria-pressed="false">XXL</button></div>
     <div class="csg-sel">
-      <p class="csg-sel-h">Size <span data-csg-sel-size>M</span> measurements</p>
-      <div class="csg-sel-row"><span class="csg-sel-k">Waist Width</span><span class="csg-sel-v" data-csg-sel="waist">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">Hip Width</span><span class="csg-sel-v" data-csg-sel="hip">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">Inseam</span><span class="csg-sel-v" data-csg-sel="inseam">&mdash;</span></div>
+      <p class="csg-sel-h">{{ 'carbon.size_guide.labels.size_measurements_html' | t: size: '<span data-csg-sel-size>M</span>' }}</p>
+      <div class="csg-sel-row"><span class="csg-sel-k">{{ 'carbon.size_guide.labels.waist_width' | t }}</span><span class="csg-sel-v" data-csg-sel="waist">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">{{ 'carbon.size_guide.labels.hip_width' | t }}</span><span class="csg-sel-v" data-csg-sel="hip">&mdash;</span></div><div class="csg-sel-row"><span class="csg-sel-k">{{ 'carbon.size_guide.labels.inseam' | t }}</span><span class="csg-sel-v" data-csg-sel="inseam">&mdash;</span></div>
     </div>
   </div>
 
   <details class="csg-measure" open>
     <summary>
-      <h3 class="csg-h3">How to measure</h3>
+      <h3 class="csg-h3">{{ 'carbon.size_guide.headings.how_to_measure' | t }}</h3>
       <svg class="csg-chev" width="18" height="11" viewBox="0 0 18 11" aria-hidden="true" focusable="false"><path d="M1.5 1.5L9 9l7.5-7.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </summary>
-    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">Waist Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-waist.webp' | asset_url }}" alt="Navy swim shorts laid flat, a tape measure held across the top of the waistband from edge to edge" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the swim shorts flat. Measure straight across the top of the waistband from edge to edge. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">Hip Width</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-hip.webp' | asset_url }}" alt="Navy swim shorts laid flat, an arrow spanning the widest part of the shorts below the waistband" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Lay the swim shorts flat. Measure straight across the widest part of the shorts. Do not double the measurement.</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">Inseam</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-inseam.webp' | asset_url }}" alt="Navy swim shorts laid flat, an arrow running from the crotch seam down the inner leg to the hem" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">Measure from the crotch seam straight down the inner leg to the hem.</p></article></div>
+    <div class="csg-cards"><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">1</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.waist_width' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-waist.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.swim_waist' | t | escape }}" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.swim_waist' | t }}</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">2</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.hip_width' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-hip.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.swim_hip' | t | escape }}" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.swim_hip' | t }}</p></article><article class="csg-card"><p class="csg-card-head"><span class="csg-badge">3</span><span class="csg-card-name">{{ 'carbon.size_guide.labels.inseam' | t }}</span></p><figure class="csg-figure"><img class="csg-photo" src="{{ 'carbon-swim-measure-inseam.webp' | asset_url }}" alt="{{ 'carbon.size_guide.alt.swim_inseam' | t | escape }}" width="1100" height="825" loading="lazy" decoding="async"></figure><p class="csg-card-text">{{ 'carbon.size_guide.measure.swim_inseam' | t }}</p></article></div>
     <p class="csg-note">
       <span class="csg-note-icon" aria-hidden="true">i</span>
-      <span><strong>Helpful note:</strong> Garment measurements may vary slightly due to normal production and finishing. For the most accurate comparison, measure a pair of swim shorts you already own while they are laid flat.</span>
+      <span>{{ 'carbon.size_guide.notes.helpful_swim_html' | t }}</span>
     </p>
   </details>
 
@@ -314,9 +314,9 @@
     <span class="csg-tips-icon" aria-hidden="true">
       <img src="{{ 'carbon-size-guide-tape-icon.png' | asset_url }}" alt="" width="68" height="69" loading="lazy" decoding="async">
     </span>
-    <h3 class="csg-tips-title">Tips for the best fit</h3>
-    <ul class="csg-tips-list"><li><span class="csg-step" aria-hidden="true">1</span><span>Choose a pair of swim shorts you already own that fits you well.</span></li><li><span class="csg-step" aria-hidden="true">2</span><span>Lay them flat and smooth out wrinkles.</span></li><li><span class="csg-step" aria-hidden="true">3</span><span>Measure Waist, Hip and Inseam as shown.</span></li><li><span class="csg-step" aria-hidden="true">4</span><span>Compare those measurements with the CARBON size chart.</span></li></ul>
-    <p class="csg-tagline">Built different.<br>Made for everyone.</p>
+    <h3 class="csg-tips-title">{{ 'carbon.size_guide.tips.title' | t }}</h3>
+    <ul class="csg-tips-list"><li><span class="csg-step" aria-hidden="true">1</span><span>{{ 'carbon.size_guide.tips.swim_choose_pair' | t }}</span></li><li><span class="csg-step" aria-hidden="true">2</span><span>{{ 'carbon.size_guide.tips.swim_lay_flat' | t }}</span></li><li><span class="csg-step" aria-hidden="true">3</span><span>{{ 'carbon.size_guide.tips.swim_measure' | t }}</span></li><li><span class="csg-step" aria-hidden="true">4</span><span>{{ 'carbon.size_guide.tips.compare_size_chart' | t }}</span></li></ul>
+    <p class="csg-tagline">{{ 'carbon.size_guide.tagline_html' | t }}</p>
   </footer>
 
 </div>

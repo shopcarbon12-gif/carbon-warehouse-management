@@ -310,25 +310,25 @@
       close: "Fechar", prevImg: "Imagem anterior", nextImg: "Próxima imagem"
     },
     en: {
-      together: "Complete set — added together",
-      thisItem: "This item",
-      viewing: " — the item you are viewing",
-      single: "Sold as an individual item",
-      noSpare: "No spare ",
-      availIn: " is available in ",
-      thisColour: "this colour",
-      reserved: " — the remaining stock is reserved to keep other sets complete. This piece will be added <strong>on its own</strong>, at its own price.",
-      chooseSize: "Choose a size for the matching piece",
-      notInSize: " is not available in your size. These sizes are in stock in ",
-      orAlone: ", or you can buy this piece on its own.",
-      buyOnly: "Buy this piece only",
-      autoAdded: " — added to your cart automatically",
-      change: "Change",
-      pickSize: " \u2022 choose a size",
-      full: "View full details",
-      atCheckout: "Added with your set at checkout.",
-      oos: " — out of stock",
-      close: "Close", prevImg: "Previous image", nextImg: "Next image"
+      together: {{ 'carbon.sets.together' | t | json }},
+      thisItem: {{ 'carbon.sets.this_item' | t | json }},
+      viewing: {{ 'carbon.sets.viewing' | t | json }},
+      single: {{ 'carbon.sets.single' | t | json }},
+      noSpare: {{ 'carbon.sets.no_spare' | t | json }},
+      availIn: {{ 'carbon.sets.avail_in' | t | json }},
+      thisColour: {{ 'carbon.sets.this_colour' | t | json }},
+      reserved: {{ 'carbon.sets.reserved_html' | t | json }},
+      chooseSize: {{ 'carbon.sets.choose_size' | t | json }},
+      notInSize: {{ 'carbon.sets.not_in_size' | t | json }},
+      orAlone: {{ 'carbon.sets.or_alone' | t | json }},
+      buyOnly: {{ 'carbon.sets.buy_only' | t | json }},
+      autoAdded: {{ 'carbon.sets.auto_added' | t | json }},
+      change: {{ 'carbon.sets.change' | t | json }},
+      pickSize: {{ 'carbon.sets.pick_size' | t | json }},
+      full: {{ 'carbon.sets.full_details' | t | json }},
+      atCheckout: {{ 'carbon.sets.at_checkout' | t | json }},
+      oos: {{ 'carbon.sets.oos' | t | json }},
+      close: {{ 'carbon.sets.close' | t | json }}, prevImg: {{ 'carbon.sets.prev_image' | t | json }}, nextImg: {{ 'carbon.sets.next_image' | t | json }}
     }
   };
   var T = WORDS[LANG] || WORDS.en;
@@ -989,7 +989,7 @@
     /* Split on the separator: after a re-render we may be reading our own
        output back, and appending to that gives "Add to cart • $101 • $101". */
     text = text.split("\u2022")[0].trim();
-    btn.__carbonSetBase = text || "Add to cart";
+    btn.__carbonSetBase = text || {{ 'carbon.product.add_to_cart' | t | json }};
     return btn.__carbonSetBase;
   }
 

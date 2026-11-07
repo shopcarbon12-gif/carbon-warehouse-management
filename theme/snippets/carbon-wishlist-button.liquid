@@ -32,7 +32,7 @@
 <button
   type="button"
   class="carbon-wishlist-btn button outline"
-  aria-label="Add to wishlist"
+  aria-label="{{ 'carbon.wishlist.add_to_wishlist' | t | escape }}"
   aria-pressed="false"
   data-product-id="{{ product.id }}"
   data-handle="{{ product.handle }}"
@@ -153,7 +153,7 @@
       var on = store.has(variantId());
       el.classList.toggle('is-saved', on);
       el.setAttribute('aria-pressed', on ? 'true' : 'false');
-      el.setAttribute('aria-label', on ? 'Remove from wishlist' : 'Add to wishlist');
+      el.setAttribute('aria-label', on ? {{ 'carbon.wishlist.remove_from_wishlist' | t | json }} : {{ 'carbon.wishlist.add_to_wishlist' | t | json }});
     }
 
     el.addEventListener('click', function (e) {

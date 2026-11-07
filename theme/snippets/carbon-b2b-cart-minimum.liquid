@@ -68,9 +68,9 @@
   -%}
   {%- if missing > 0 -%}
     <div class="carbon-b2b-min" role="alert">
-      <strong>Wholesale minimum: {{ order_min_runs }} runs per order.</strong>
-      Your cart has {{ total_runs }} {% if total_runs == 1 %}run{% else %}runs{% endif %} —
-      add {{ missing }} more {% if missing == 1 %}run{% else %}runs{% endif %} (any item, any colour) to check out.
+      <strong>{{ 'carbon.b2b.cart_min.heading' | t: min: order_min_runs }}</strong>
+      {% if total_runs == 1 %}{{ 'carbon.b2b.cart_min.cart_has_one' | t: n: total_runs }}{% else %}{{ 'carbon.b2b.cart_min.cart_has_other' | t: n: total_runs }}{% endif %}
+      {% if missing == 1 %}{{ 'carbon.b2b.cart_min.add_more_one' | t: n: missing }}{% else %}{{ 'carbon.b2b.cart_min.add_more_other' | t: n: missing }}{% endif %}
     </div>
     <style>
       /* Below the wholesale minimum: no way to checkout from the drawer or cart page. */
@@ -79,7 +79,7 @@
       .cart__dynamic-checkout-buttons { display: none !important; }
     </style>
   {%- else -%}
-    <p class="carbon-b2b-min carbon-b2b-min--ok">{{ total_runs }} runs in your order · wholesale minimum met.</p>
+    <p class="carbon-b2b-min carbon-b2b-min--ok">{{ 'carbon.b2b.cart_min.met' | t: n: total_runs }}</p>
   {%- endif -%}
   <style>
     .carbon-b2b-min { margin: 0 0 12px; padding: 10px 12px; font-size: 0.8125rem; line-height: 1.4; border: 1px solid #c0392b; border-radius: 4px; }

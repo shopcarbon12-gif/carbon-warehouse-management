@@ -22,14 +22,14 @@
 >
   <button type="button" class="crw__launcher" aria-expanded="false" aria-controls="crw-panel">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"/></svg>
-    <span>Rewards</span>
+    <span>{{ 'carbon.rewards.rewards' | t }}</span>
   </button>
   <div class="crw__backdrop" data-crw-close hidden></div>
   <section id="crw-panel" class="crw__panel" role="dialog" aria-modal="false" aria-label="Carbon Rewards" tabindex="-1" hidden>
-    <button type="button" class="crw__close" data-crw-close aria-label="Close rewards">
+    <button type="button" class="crw__close" data-crw-close aria-label="{{ 'carbon.rewards.close_rewards' | t | escape }}">
       <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="13" cy="13" r="12"/><path d="M9 9l8 8M17 9l-8 8"/></svg>
     </button>
-    <div class="crw__view" data-crw-view><p class="crw__loading">Loading…</p></div>
+    <div class="crw__view" data-crw-view><p class="crw__loading">{{ 'carbon.rewards.loading' | t }}</p></div>
   </section>
 </carbon-rewards-widget>
 
@@ -150,8 +150,90 @@
       back: '<svg width="9" height="14" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 2L2 8l6 6"/></svg>',
       chev: '<svg class="crw__chev" width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 2l6 6-6 6"/></svg>',
     };
-    const REASON = { sale: 'Reward', redemption: 'Redeem', refund: 'Return (refund)', signup_bonus: 'Welcome bonus', birthday_bonus: 'Birthday bonus', referral_bonus: 'Referral bonus', manual: 'Adjustment', adjustment: 'Points returned', migration: 'Points transferred' };
-    const SOURCE = { pos: 'In store', shopify: 'Online', system: 'Carbon Rewards', admin: 'Carbon Rewards' };
+    const T = {
+      reason_sale: {{ 'carbon.rewards.reason_sale' | t | json }},
+      redeem: {{ 'carbon.rewards.redeem' | t | json }},
+      reason_refund: {{ 'carbon.rewards.reason_refund' | t | json }},
+      welcome_bonus: {{ 'carbon.rewards.welcome_bonus' | t | json }},
+      birthday_bonus: {{ 'carbon.rewards.birthday_bonus' | t | json }},
+      referral_bonus: {{ 'carbon.rewards.referral_bonus' | t | json }},
+      adjustment: {{ 'carbon.rewards.adjustment' | t | json }},
+      points_returned: {{ 'carbon.rewards.points_returned' | t | json }},
+      points_transferred: {{ 'carbon.rewards.points_transferred' | t | json }},
+      in_store: {{ 'carbon.rewards.in_store' | t | json }},
+      online: {{ 'carbon.rewards.online' | t | json }},
+      unavailable: {{ 'carbon.rewards.unavailable' | t | json }},
+      place_order: {{ 'carbon.rewards.place_order' | t | json }},
+      every_order_earns: {{ 'carbon.rewards.every_order_earns' | t | json }},
+      refer_a_friend_title: {{ 'carbon.rewards.refer_a_friend_title' | t | json }},
+      refer_and_earn: {{ 'carbon.rewards.refer_and_earn' | t | json }},
+      points_on_birthday: {{ 'carbon.rewards.points_on_birthday' | t | json }},
+      reach_new_tiers: {{ 'carbon.rewards.reach_new_tiers' | t | json }},
+      up_to_multiplier: {{ 'carbon.rewards.up_to_multiplier' | t | json }},
+      welcome_title_html: {{ 'carbon.rewards.welcome_title_html' | t | json }},
+      earn_question: {{ 'carbon.rewards.earn_question' | t | json }},
+      page_n: {{ 'carbon.rewards.page_n' | t | json }},
+      points_after_first: {{ 'carbon.rewards.points_after_first' | t | json }},
+      register: {{ 'carbon.rewards.register' | t | json }},
+      login: {{ 'carbon.rewards.login' | t | json }},
+      detail_order_html: {{ 'carbon.rewards.detail_order_html' | t | json }},
+      shop_now: {{ 'carbon.rewards.shop_now' | t | json }},
+      detail_refer_html: {{ 'carbon.rewards.detail_refer_html' | t | json }},
+      join_for_referral: {{ 'carbon.rewards.join_for_referral' | t | json }},
+      detail_birthday_html: {{ 'carbon.rewards.detail_birthday_html' | t | json }},
+      detail_tiers_intro_html: {{ 'carbon.rewards.detail_tiers_intro_html' | t | json }},
+      tier_spent: {{ 'carbon.rewards.tier_spent' | t | json }},
+      tier_start: {{ 'carbon.rewards.tier_start' | t | json }},
+      tier_multiplier: {{ 'carbon.rewards.tier_multiplier' | t | json }},
+      back: {{ 'carbon.rewards.back' | t | json }},
+      n_points: {{ 'carbon.rewards.n_points' | t | json }},
+      n_purchases: {{ 'carbon.rewards.n_purchases' | t | json }},
+      to_next: {{ 'carbon.rewards.to_next' | t | json }},
+      top_tier: {{ 'carbon.rewards.top_tier' | t | json }},
+      tab_earn: {{ 'carbon.rewards.tab_earn' | t | json }},
+      rewards: {{ 'carbon.rewards.rewards' | t | json }},
+      activity: {{ 'carbon.rewards.activity' | t | json }},
+      tab_refer: {{ 'carbon.rewards.tab_refer' | t | json }},
+      welcome_back: {{ 'carbon.rewards.welcome_back' | t | json }},
+      friend: {{ 'carbon.rewards.friend' | t | json }},
+      points_caps: {{ 'carbon.rewards.points_caps' | t | json }},
+      worth_off_html: {{ 'carbon.rewards.worth_off_html' | t | json }},
+      see_all_rewards: {{ 'carbon.rewards.see_all_rewards' | t | json }},
+      ways_to_earn: {{ 'carbon.rewards.ways_to_earn' | t | json }},
+      pt_per_dollar: {{ 'carbon.rewards.pt_per_dollar' | t | json }},
+      earn_caps: {{ 'carbon.rewards.earn_caps' | t | json }},
+      birthday_gift: {{ 'carbon.rewards.birthday_gift' | t | json }},
+      refer_a_friend: {{ 'carbon.rewards.refer_a_friend' | t | json }},
+      when_they_buy: {{ 'carbon.rewards.when_they_buy' | t | json }},
+      reach_tier: {{ 'carbon.rewards.reach_tier' | t | json }},
+      mult_every_purchase: {{ 'carbon.rewards.mult_every_purchase' | t | json }},
+      recent_activity: {{ 'carbon.rewards.recent_activity' | t | json }},
+      no_activity: {{ 'carbon.rewards.no_activity' | t | json }},
+      referrals_unavailable: {{ 'carbon.rewards.referrals_unavailable' | t | json }},
+      your_referral_link: {{ 'carbon.rewards.your_referral_link' | t | json }},
+      copy_link: {{ 'carbon.rewards.copy_link' | t | json }},
+      referral_terms_html: {{ 'carbon.rewards.referral_terms_html' | t | json }},
+      redeem_your_points: {{ 'carbon.rewards.redeem_your_points' | t | json }},
+      applied_to_cart: {{ 'carbon.rewards.applied_to_cart' | t | json }},
+      off_any_order: {{ 'carbon.rewards.off_any_order' | t | json }},
+      n_pts: {{ 'carbon.rewards.n_pts' | t | json }},
+      remove: {{ 'carbon.rewards.remove' | t | json }},
+      removing_returns: {{ 'carbon.rewards.removing_returns' | t | json }},
+      view_cart: {{ 'carbon.rewards.view_cart' | t | json }},
+      ready: {{ 'carbon.rewards.ready' | t | json }},
+      apply: {{ 'carbon.rewards.apply' | t | json }},
+      applies_items_only: {{ 'carbon.rewards.applies_items_only' | t | json }},
+      add_more_items: {{ 'carbon.rewards.add_more_items' | t | json }},
+      cancel_get_back: {{ 'carbon.rewards.cancel_get_back' | t | json }},
+      not_enough_points: {{ 'carbon.rewards.not_enough_points' | t | json }},
+      applies_to_cart: {{ 'carbon.rewards.applies_to_cart' | t | json }},
+      use_on_items: {{ 'carbon.rewards.use_on_items' | t | json }},
+      code_auto_applied: {{ 'carbon.rewards.code_auto_applied' | t | json }},
+      copied: {{ 'carbon.rewards.copied' | t | json }}
+    };
+    const fill = (s, o) => String(s).replace(/__([A-Z]+)__/g, (m, k) => (k in o ? String(o[k]) : m));
+    const REASON = { sale: T.reason_sale, redemption: T.redeem, refund: T.reason_refund, signup_bonus: T.welcome_bonus, birthday_bonus: T.birthday_bonus, referral_bonus: T.referral_bonus, manual: T.adjustment, adjustment: T.points_returned, migration: T.points_transferred };
+    const SOURCE = { pos: T.in_store, shopify: T.online, system: 'Carbon Rewards', admin: 'Carbon Rewards' };
 
     const define = () => {
       if (customElements.get('carbon-rewards-widget')) return;
@@ -196,7 +278,7 @@
             }
             this.renderGuest();
           } catch (e) {
-            this.view.innerHTML = '<p class="crw__loading">Rewards are unavailable right now. Please try again in a moment.</p>';
+            this.view.innerHTML = '<p class="crw__loading">' + T.unavailable + '</p>';
           }
         }
 
@@ -206,21 +288,21 @@
           const card = (icon, title, sub, key) => '<button type="button" class="crw__card" data-crw-detail="' + key + '"><span class="crw__ico">' + icon + '</span><div><b>' + title + '</b><span>' + sub + '</span></div>' + ICON.chev + '</button>';
           const top = p.tiers[p.tiers.length - 1];
           const slides = [
-            card(ICON.bag, 'Place an order', 'Every order earns you points.', 'order') + card(ICON.friends, 'Refer a Friend', 'Refer and earn.', 'refer'),
-            card(ICON.cake, 'Birthday bonus', p.birthday_bonus_points + ' points on your birthday.', 'birthday') +
-              card(ICON.star, 'Reach new tiers', 'Up to ' + (top ? top.multiplier : 1) + '× points per $1.', 'tiers'),
+            card(ICON.bag, T.place_order, T.every_order_earns, 'order') + card(ICON.friends, T.refer_a_friend_title, T.refer_and_earn, 'refer'),
+            card(ICON.cake, T.birthday_bonus, fill(T.points_on_birthday, { POINTS: p.birthday_bonus_points }), 'birthday') +
+              card(ICON.star, T.reach_new_tiers, fill(T.up_to_multiplier, { MULT: (top ? top.multiplier : 1) }), 'tiers'),
           ];
           this.view.innerHTML =
             '<div class="crw__welcome">' +
-              '<h2 class="crw__title">Welcome to our<br>Loyalty Program</h2>' +
+              '<h2 class="crw__title">' + T.welcome_title_html + '</h2>' +
               '<div class="crw__divider"></div>' +
-              '<p class="crw__q">Do you know that you can earn points to redeem your rewards?</p>' +
+              '<p class="crw__q">' + T.earn_question + '</p>' +
               '<div class="crw__slides"><div class="crw__track" data-crw-track>' + slides.map((s) => '<div class="crw__slide">' + s + '</div>').join('') + '</div></div>' +
-              '<div class="crw__dots">' + slides.map((_, i) => '<button type="button" aria-label="Page ' + (i + 1) + '" data-crw-dot="' + i + '"></button>').join('') + '</div>' +
+              '<div class="crw__dots">' + slides.map((_, i) => '<button type="button" aria-label="' + fill(T.page_n, { N: i + 1 }) + '" data-crw-dot="' + i + '"></button>').join('') + '</div>' +
               '<div class="crw__divider"></div>' +
               (signedIn
-                ? '<p class="crw__q" style="font-weight:500;font-size:14px;margin:0">Your points will appear here after your first purchase.</p>'
-                : '<div class="crw__actions"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">Register</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">Login</a></div>') +
+                ? '<p class="crw__q" style="font-weight:500;font-size:14px;margin:0">' + T.points_after_first + '</p>'
+                : '<div class="crw__actions"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">' + T.register + '</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">' + T.login + '</a></div>') +
             '</div>';
           this.goSlide(this.slide);
           // swipe between pages on touch screens
@@ -238,24 +320,24 @@
         renderDetail(key) {
           const p = this.program, signedIn = !!this.dataset.signedIn;
           const join = signedIn ? '' :
-            '<div class="crw__actions" style="margin-top:22px"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">Register</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">Login</a></div>';
+            '<div class="crw__actions" style="margin-top:22px"><a class="crw__gbtn" href="' + esc(this.dataset.registerUrl) + '">' + T.register + '</a><a class="crw__gbtn" href="' + esc(this.dataset.loginUrl) + '">' + T.login + '</a></div>';
           const D = {
-            order: [ICON.bag, 'Place an order',
-              'Earn <b>' + p.earn_rate_per_dollar + ' point for every $1</b> you spend — online or in any Carbon store. Every <b>100 points = ' + money(100 / p.redeem_points_per_dollar) + ' off</b>, up to ' + money(p.max_redeem_dollars_per_order) + ' per purchase.',
-              '<a class="crw__wbtn" href="/collections/all">Shop now</a>'],
-            refer: [ICON.friends, 'Refer a Friend',
-              'Share your personal link. When a friend makes their first purchase of ' + money(p.referral.min_purchase) + ' or more, <b>they get ' + p.referral.friend_gets + ' points</b> and <b>you get ' + p.referral.you_get + ' points</b>.',
-              signedIn ? '' : '<p class="crw__dq">Join or log in to get your referral link.</p>'],
-            birthday: [ICON.cake, 'Birthday bonus',
-              'Members get <b>' + p.birthday_bonus_points + ' points</b> on their birthday, every year. Share your birthday with us at checkout in any Carbon store to make sure you get it.',
+            order: [ICON.bag, T.place_order,
+              fill(T.detail_order_html, { RATE: p.earn_rate_per_dollar, AMOUNT: money(100 / p.redeem_points_per_dollar), MAX: money(p.max_redeem_dollars_per_order) }),
+              '<a class="crw__wbtn" href="/collections/all">' + T.shop_now + '</a>'],
+            refer: [ICON.friends, T.refer_a_friend_title,
+              fill(T.detail_refer_html, { MIN: money(p.referral.min_purchase), FRIEND: p.referral.friend_gets, YOU: p.referral.you_get }),
+              signedIn ? '' : '<p class="crw__dq">' + T.join_for_referral + '</p>'],
+            birthday: [ICON.cake, T.birthday_bonus,
+              fill(T.detail_birthday_html, { POINTS: p.birthday_bonus_points }),
               ''],
-            tiers: [ICON.star, 'Reach new tiers',
-              'The more you shop, the more you earn on every purchase:<br>' + p.tiers.map((t) => '<b>' + esc(t.name) + '</b> ' + (t.threshold ? '$' + Number(t.threshold).toLocaleString('en-US') + '+ spent' : 'to start') + ' · ' + t.multiplier + '× points').join('<br>'),
+            tiers: [ICON.star, T.reach_new_tiers,
+              T.detail_tiers_intro_html + p.tiers.map((t) => '<b>' + esc(t.name) + '</b> ' + (t.threshold ? fill(T.tier_spent, { AMOUNT: '$' + Number(t.threshold).toLocaleString('en-US') }) : T.tier_start) + ' · ' + fill(T.tier_multiplier, { MULT: t.multiplier })).join('<br>'),
               ''],
           }[key];
           this.view.innerHTML =
             '<div class="crw__welcome crw__detail">' +
-              '<button type="button" class="crw__back" data-crw-back aria-label="Back">' + ICON.back + ' Back</button>' +
+              '<button type="button" class="crw__back" data-crw-back aria-label="' + T.back + '">' + ICON.back + ' ' + T.back + '</button>' +
               '<span class="crw__ico crw__ico--lg">' + D[0] + '</span>' +
               '<h2 class="crw__title" style="font-size:22px">' + D[1] + '</h2>' +
               '<div class="crw__divider"></div>' +
@@ -276,75 +358,75 @@
           const worth = redeemable.length ? redeemable[redeemable.length - 1].dollars : 0;
           const pct = t && t.next ? Math.min(100, Math.round(100 * t.progress / (t.progress + t.next.needed))) : 100;
           const toNext = t && t.next
-            ? (t.metric === 'points' ? Math.ceil(t.next.needed) + ' points' : t.metric === 'visits' ? Math.ceil(t.next.needed) + ' purchases' : money(Math.ceil(t.next.needed))) + ' to ' + esc(t.next.name)
-            : 'You\'re at our top tier';
-          const tabs = [['earn', 'Earn'], ['rewards', 'Rewards'], ['activity', 'Activity'], ['refer', 'Refer']];
+            ? fill(T.to_next, { AMOUNT: (t.metric === 'points' ? fill(T.n_points, { POINTS: Math.ceil(t.next.needed) }) : t.metric === 'visits' ? fill(T.n_purchases, { N: Math.ceil(t.next.needed) }) : money(Math.ceil(t.next.needed))), TIER: esc(t.next.name) })
+            : T.top_tier;
+          const tabs = [['earn', T.tab_earn], ['rewards', T.rewards], ['activity', T.activity], ['refer', T.tab_refer]];
           this.view.innerHTML =
             '<div class="crw__head">' +
-              '<p class="crw__wb">Welcome back,</p>' +
-              '<p class="crw__name">' + esc(d.first_name || this.dataset.firstName || 'friend') + '</p>' +
-              '<div class="crw__pts"><div><strong>' + d.balance.toLocaleString() + '</strong><small>POINTS</small></div>' +
-                '<span class="crw__worth">≈ <b>' + money(worth) + '</b> off</span></div>' +
+              '<p class="crw__wb">' + T.welcome_back + '</p>' +
+              '<p class="crw__name">' + esc(d.first_name || this.dataset.firstName || T.friend) + '</p>' +
+              '<div class="crw__pts"><div><strong>' + d.balance.toLocaleString() + '</strong><small>' + T.points_caps + '</small></div>' +
+                '<span class="crw__worth">' + fill(T.worth_off_html, { AMOUNT: money(worth) }) + '</span></div>' +
               (t ? '<div class="crw__tier"><span class="crw__gold">★ ' + esc(t.name) + '</span><span>' + (t.next ? '→ ' + esc(t.next.name) : '') + '</span></div>' +
                    '<div class="crw__bar"><span style="width:' + pct + '%"></span></div><p class="crw__tiernote">' + toNext + '</p>' : '') +
             '</div>' +
             '<div class="crw__tabs" role="tablist">' + tabs.map(([k, l]) =>
               '<button type="button" role="tab" data-crw-tab="' + k + '" aria-selected="' + (this.tab === k) + '">' + l + '</button>').join('') + '</div>' +
             '<div class="crw__pane" role="tabpanel">' + this.renderPane() + '</div>' +
-            '<a class="crw__more" href="' + esc(this.dataset.rewardsUrl) + '">See all your rewards →</a>';
+            '<a class="crw__more" href="' + esc(this.dataset.rewardsUrl) + '">' + T.see_all_rewards + '</a>';
         }
         renderPane() {
           const d = this.data, p = this.program;
           if (this.tab === 'earn') {
             const row = (icon, title, sub, amt) => '<div class="crw__earn"><span class="crw__ico">' + icon + '</span><div><b>' + title + '</b><span>' + sub + '</span></div><em>' + amt + '</em></div>';
-            return '<p class="crw__label">Ways to earn</p>' +
-              row(ICON.bag, 'Place an order', p.earn_rate_per_dollar + ' pt per $1 spent (excl. tax)', 'EARN') +
-              (p.birthday_bonus_points ? row(ICON.cake, 'Birthday bonus', 'A gift on your birthday', '+' + p.birthday_bonus_points) : '') +
-              (d.referral ? row(ICON.friends, 'Refer a friend', 'When they buy ≥ ' + money(d.referral.min_purchase), '+' + d.referral.you_get) : '') +
-              (d.tier && d.tier.next ? row(ICON.star, 'Reach ' + esc(d.tier.next.name), d.tier.next.multiplier + '× points on every purchase', d.tier.next.multiplier + '×') : '');
+            return '<p class="crw__label">' + T.ways_to_earn + '</p>' +
+              row(ICON.bag, T.place_order, fill(T.pt_per_dollar, { RATE: p.earn_rate_per_dollar }), T.earn_caps) +
+              (p.birthday_bonus_points ? row(ICON.cake, T.birthday_bonus, T.birthday_gift, '+' + p.birthday_bonus_points) : '') +
+              (d.referral ? row(ICON.friends, T.refer_a_friend, fill(T.when_they_buy, { AMOUNT: money(d.referral.min_purchase) }), '+' + d.referral.you_get) : '') +
+              (d.tier && d.tier.next ? row(ICON.star, fill(T.reach_tier, { TIER: esc(d.tier.next.name) }), fill(T.mult_every_purchase, { MULT: d.tier.next.multiplier }), d.tier.next.multiplier + '×') : '');
           }
           if (this.tab === 'rewards') return this.renderRewards();
           if (this.tab === 'activity') {
-            if (!d.activity.length) return '<p class="crw__label">Recent activity</p><p class="crw__note">No activity yet.</p>';
-            return '<p class="crw__label">Recent activity</p>' + d.activity.map((a) => {
+            if (!d.activity.length) return '<p class="crw__label">' + T.recent_activity + '</p><p class="crw__note">' + T.no_activity + '</p>';
+            return '<p class="crw__label">' + T.recent_activity + '</p>' + d.activity.map((a) => {
               const plus = a.delta_points >= 0;
-              return '<div class="crw__act"><div><b>' + esc(REASON[a.reason] || 'Activity') + '</b><span>' + new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(a.created_at)) + ' · ' + esc(SOURCE[a.source] || '') + '</span></div>' +
+              return '<div class="crw__act"><div><b>' + esc(REASON[a.reason] || T.activity) + '</b><span>' + new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(a.created_at)) + ' · ' + esc(SOURCE[a.source] || '') + '</span></div>' +
                 '<em class="' + (plus ? 'crw__plus' : 'crw__minus') + '">' + (plus ? '+' : '') + a.delta_points + '</em></div>';
             }).join('');
           }
-          if (!d.referral) return '<p class="crw__note">Referrals are unavailable right now.</p>';
-          return '<p class="crw__label">Refer a friend</p><div class="crw__refbox"><p class="crw__label" style="margin-bottom:8px">Your referral link</p>' +
-            '<p class="crw__reflink">' + esc(d.referral.url) + '</p><button type="button" class="crw__rbtn" data-crw-copy>Copy link</button></div>' +
-            '<p class="crw__note" style="margin-top:12px">When your friend makes their first purchase of ' + money(d.referral.min_purchase) + ' or more, they get <b>' + d.referral.friend_gets + ' points</b> and you get <b>' + d.referral.you_get + ' points</b>.</p>';
+          if (!d.referral) return '<p class="crw__note">' + T.referrals_unavailable + '</p>';
+          return '<p class="crw__label">' + T.refer_a_friend + '</p><div class="crw__refbox"><p class="crw__label" style="margin-bottom:8px">' + T.your_referral_link + '</p>' +
+            '<p class="crw__reflink">' + esc(d.referral.url) + '</p><button type="button" class="crw__rbtn" data-crw-copy>' + T.copy_link + '</button></div>' +
+            '<p class="crw__note" style="margin-top:12px">' + fill(T.referral_terms_html, { MIN: money(d.referral.min_purchase), FRIEND: d.referral.friend_gets, YOU: d.referral.you_get }) + '</p>';
         }
         renderRewards() {
           const d = this.data;
           const subtotal = Number(this.cart.items_subtotal_price || 0) / 100;
           const applied = CR.rewardCodeIn(this.cart);
           const active = d.codes[0];
-          let html = '<p class="crw__label">Redeem your points</p>';
+          let html = '<p class="crw__label">' + T.redeem_your_points + '</p>';
           if (active && applied === active.code.toUpperCase()) {
-            html += '<p class="crw__ok">✓ ' + money(active.dollars) + ' off is applied to your cart</p>' +
-              '<div class="crw__rw"><b>' + money(active.dollars) + ' off any order</b><small>' + active.points + ' pts</small>' +
-              '<button type="button" class="crw__rbtn crw__rbtn--ghost" data-crw-cancel>Remove</button></div>' +
-              '<p class="crw__note">Removing returns your ' + active.points + ' points. <a href="' + esc(this.dataset.cartUrl) + '" style="color:#000">View cart</a></p>';
+            html += '<p class="crw__ok">✓ ' + fill(T.applied_to_cart, { AMOUNT: money(active.dollars) }) + '</p>' +
+              '<div class="crw__rw"><b>' + fill(T.off_any_order, { AMOUNT: money(active.dollars) }) + '</b><small>' + fill(T.n_pts, { POINTS: active.points }) + '</small>' +
+              '<button type="button" class="crw__rbtn crw__rbtn--ghost" data-crw-cancel>' + T.remove + '</button></div>' +
+              '<p class="crw__note">' + fill(T.removing_returns, { POINTS: active.points }) + ' <a href="' + esc(this.dataset.cartUrl) + '" style="color:#000">' + T.view_cart + '</a></p>';
           } else if (active) {
             const enough = subtotal >= active.min_subtotal;
-            html += '<div class="crw__rw"><b>' + money(active.dollars) + ' off any order</b><small>ready</small>' +
-              '<button type="button" class="crw__rbtn" data-crw-apply' + (enough ? '' : ' disabled') + '>Apply</button></div>' +
-              '<p class="crw__note">' + (enough ? 'Applies to your cart · items only, not shipping.' : 'Add ' + money(active.min_subtotal - subtotal) + ' more in items to use it.') +
-              ' <button type="button" data-crw-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:#000">Cancel &amp; get points back</button></p>';
+            html += '<div class="crw__rw"><b>' + fill(T.off_any_order, { AMOUNT: money(active.dollars) }) + '</b><small>' + T.ready + '</small>' +
+              '<button type="button" class="crw__rbtn" data-crw-apply' + (enough ? '' : ' disabled') + '>' + T.apply + '</button></div>' +
+              '<p class="crw__note">' + (enough ? T.applies_items_only : fill(T.add_more_items, { AMOUNT: money(active.min_subtotal - subtotal) })) +
+              ' <button type="button" data-crw-cancel style="background:none;border:0;padding:0;text-decoration:underline;cursor:pointer;font:inherit;color:#000">' + T.cancel_get_back + '</button></p>';
           } else {
             const r = d.rules, step = r.redeem_increment_points, list = [];
             const cap = Math.floor(r.max_redeem_dollars_per_order * r.redeem_points_per_dollar / step) * step;
             for (let pts = Math.max(step, r.min_redeem_points); pts <= cap; pts += step) {
               const dollars = pts / r.redeem_points_per_dollar, min = CR.minFor(r, dollars);
               const canAfford = d.balance >= pts, fits = subtotal >= min;
-              list.push('<div class="crw__rw"><b>' + money(dollars) + ' off any order</b><small>' + pts + ' pts</small>' +
+              list.push('<div class="crw__rw"><b>' + fill(T.off_any_order, { AMOUNT: money(dollars) }) + '</b><small>' + fill(T.n_pts, { POINTS: pts }) + '</small>' +
                 '<button type="button" class="crw__rbtn" data-crw-redeem="' + pts + '"' + (canAfford ? '' : ' disabled') +
-                ' title="' + (!canAfford ? 'Not enough points yet' : fits ? 'Applies to your cart' : 'Use it on items totaling ' + money(min) + '+') + '">Redeem</button></div>');
+                ' title="' + (!canAfford ? T.not_enough_points : fits ? T.applies_to_cart : fill(T.use_on_items, { AMOUNT: money(min) })) + '">' + T.redeem + '</button></div>');
             }
-            html += list.join('') + '<p class="crw__note">Your code is applied to your cart automatically · items only, not shipping · each reward needs a minimum in your cart (' + money(CR.minFor(r, 10)) + '+ for $10).</p>';
+            html += list.join('') + '<p class="crw__note">' + fill(T.code_auto_applied, { AMOUNT: money(CR.minFor(r, 10)) }) + '</p>';
           }
           return html + '<p class="crw__msg" data-crw-msg role="status"></p>';
         }
@@ -361,8 +443,8 @@
           if (!t || t.disabled) return;
           if (t.hasAttribute('data-crw-copy')) {
             try { await navigator.clipboard.writeText(this.data.referral.url); } catch (err) { /* link stays visible to copy by hand */ }
-            t.textContent = 'Copied!';
-            setTimeout(() => (t.textContent = 'Copy link'), 1600);
+            t.textContent = T.copied;
+            setTimeout(() => (t.textContent = T.copy_link), 1600);
             return;
           }
           if (!t.matches('[data-crw-redeem],[data-crw-apply],[data-crw-cancel]')) return;

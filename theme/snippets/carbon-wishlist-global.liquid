@@ -72,7 +72,7 @@
         var on = store.has(h.dataset.variantId);
         h.classList.toggle('is-saved', on);
         h.setAttribute('aria-pressed', on ? 'true' : 'false');
-        h.setAttribute('aria-label', on ? 'Remove from wishlist' : 'Add to wishlist');
+        h.setAttribute('aria-label', on ? {{ 'carbon.wishlist.remove_from_wishlist' | t | json }} : {{ 'carbon.wishlist.add_to_wishlist' | t | json }});
       }
     }
 

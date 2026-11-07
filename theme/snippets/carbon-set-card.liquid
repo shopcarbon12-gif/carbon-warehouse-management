@@ -79,14 +79,15 @@
       assign set_name = set_name | append: w | append: ' '
     endunless
   endfor
-  assign set_name = set_name | strip | append: ' Set'
+  assign set_name = set_name | strip
+  assign set_name = 'carbon.sets.set_name_html' | t: name: set_name
   if name_words.size == 1
     assign set_name = lead.title
   endif
 -%}
 <product-card class="product-card carbon-set-card text-{{ settings.product_content_alignment }}">
   <figure class="product-featured-image{% if second %} thb-hover{% endif %}">
-    <span class="carbon-set-badge">{{ piece_count }}-piece set</span>
+    <span class="carbon-set-badge">{{ 'carbon.sets.piece_badge' | t: n: piece_count }}</span>
     <a href="{{ lead.url }}" title="{{ set_name | escape }}" class="product-featured-image-link aspect-ratio aspect-ratio--{{ settings.product_aspect_ratio }}" style="--padding-bottom: 125%;">
       {%- if second and second.featured_image -%}
         {%- render 'responsive-image', class: 'product-secondary-image', image: second.featured_image, sizes: '375x0,770x0', priority: 'low', defer: true, loading: 'lazy' -%}
@@ -123,6 +124,6 @@
         <a href="{{ q.url }}">{{ qw | last }} {{ q.price | money }}</a>{% unless forloop.last %}<span> + </span>{% endunless %}
       {%- endfor -%}
     </p>
-    <div class="product-price carbon-set-total"><span class="price"><span class="amount">Set {{ total | money }}</span></span></div>
+    <div class="product-price carbon-set-total"><span class="price"><span class="amount">{%- assign set_total_money = total | money -%}{{ 'carbon.sets.set_total_html' | t: price: set_total_money }}</span></span></div>
   </div>
 </product-card>
