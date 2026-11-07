@@ -1,0 +1,86 @@
+{%- comment -%}
+  Wholesale homepage band (owner 2026-11-07) — sits under the hero on the
+  wholesale market's homepage (templates/index.context.wholesale.json).
+  The terms a buyer needs before ordering, and quick links. Every text is a
+  section setting so it can be translated (ES / PT) like the rest of the page.
+  Shows only to a signed-in wholesale (B2B) buyer; anyone else sees nothing.
+  Product sections below it are ordinary collection sections: in the wholesale
+  market Shopify only lists products in the wholesale catalog, and the catalog
+  holds only clothing with a full run in stock (scripts/b2b-wholesale.mjs fill).
+{%- endcomment -%}
+{%- if customer.b2b? or request.design_mode -%}
+<section class="carbon-b2b-intro" aria-label="{{ section.settings.heading | escape }}">
+  <div class="carbon-b2b-intro__inner">
+    <div class="carbon-b2b-intro__head">
+      {%- if section.settings.eyebrow != blank -%}<p class="carbon-b2b-intro__eyebrow">{{ section.settings.eyebrow }}</p>{%- endif -%}
+      <h2 class="carbon-b2b-intro__title">
+        {{ section.settings.heading }}{% if customer.current_company %}<span>{{ customer.current_company.name }}</span>{% endif %}
+      </h2>
+    </div>
+    <ul class="carbon-b2b-intro__terms" role="list">
+      {%- for block in section.blocks -%}
+        <li class="carbon-b2b-intro__term" {{ block.shopify_attributes }}>
+          <strong>{{ block.settings.title }}</strong>
+          <span>{{ block.settings.text }}</span>
+        </li>
+      {%- endfor -%}
+    </ul>
+    <div class="carbon-b2b-intro__actions">
+      {%- if section.settings.button_1_label != blank -%}
+        <a class="button" href="{{ section.settings.button_1_link | default: routes.all_products_collection_url }}">{{ section.settings.button_1_label }}</a>
+      {%- endif -%}
+      {%- if section.settings.button_2_label != blank -%}
+        <a class="button button--outline" href="{{ section.settings.button_2_link | default: routes.all_products_collection_url }}">{{ section.settings.button_2_label }}</a>
+      {%- endif -%}
+      {%- if section.settings.orders_label != blank -%}
+        <a class="carbon-b2b-intro__orders" href="{{ routes.account_url }}">{{ section.settings.orders_label }}</a>
+      {%- endif -%}
+    </div>
+  </div>
+</section>
+<style>
+  .carbon-b2b-intro { background: #151515; color: #fff; padding: 44px 16px; }
+  .carbon-b2b-intro__inner { max-width: 1200px; margin: 0 auto; }
+  .carbon-b2b-intro__eyebrow { margin: 0 0 6px; font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.7; }
+  .carbon-b2b-intro__title { margin: 0 0 24px; color: #fff; text-transform: uppercase; letter-spacing: 0.04em; }
+  .carbon-b2b-intro__title span { display: block; margin-top: 6px; font-size: 0.55em; letter-spacing: 0.08em; opacity: 0.7; }
+  .carbon-b2b-intro__terms { list-style: none; margin: 0 0 28px; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .carbon-b2b-intro__term { border-top: 1px solid rgba(255, 255, 255, 0.25); padding-top: 14px; }
+  .carbon-b2b-intro__term strong { display: block; margin-bottom: 6px; font-size: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .carbon-b2b-intro__term span { display: block; font-size: 0.875rem; line-height: 1.5; opacity: 0.8; }
+  .carbon-b2b-intro__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .carbon-b2b-intro .button { background: #fff; color: #151515; border-color: #fff; }
+  .carbon-b2b-intro .button--outline { background: transparent; color: #fff; }
+  .carbon-b2b-intro__orders { color: #fff; font-size: 0.875rem; text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
+  @media (max-width: 989px) { .carbon-b2b-intro__terms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 479px) { .carbon-b2b-intro { padding: 32px 16px; } .carbon-b2b-intro__terms { grid-template-columns: 1fr; } }
+</style>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Wholesale intro",
+  "tag": "div",
+  "class": "carbon-b2b-intro-section",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Small heading", "default": "Carbon wholesale" },
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Welcome back" },
+    { "type": "text", "id": "button_1_label", "label": "Button 1 label", "default": "Shop women" },
+    { "type": "url", "id": "button_1_link", "label": "Button 1 link" },
+    { "type": "text", "id": "button_2_label", "label": "Button 2 label", "default": "Shop men" },
+    { "type": "url", "id": "button_2_link", "label": "Button 2 link" },
+    { "type": "text", "id": "orders_label", "label": "Orders link label", "default": "Your orders" }
+  ],
+  "blocks": [
+    {
+      "type": "term",
+      "name": "Term",
+      "settings": [
+        { "type": "text", "id": "title", "label": "Title" },
+        { "type": "textarea", "id": "text", "label": "Text" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Wholesale intro" }]
+}
+{% endschema %}
