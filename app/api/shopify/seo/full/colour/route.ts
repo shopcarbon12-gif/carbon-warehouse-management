@@ -65,6 +65,11 @@ async function POST_handler(req: Request) {
       if (!u.rowCount) continue;
       await c.query(`UPDATE studio_color_runs SET color=$3 WHERE matrix_id=$1::uuid AND color=$2`, [g.id, from, to]);
       await c.query(`UPDATE matrices SET shopify_sync_status='pending' WHERE id=$1::uuid`, [g.id]);
+      // Social tags on the old colour follow this log to the new one (marketing/tag-refresh.ts).
+      await c.query(
+        `INSERT INTO colour_renames (tenant_id, matrix_id, shopify_product_id, from_colour, to_colour, source) VALUES ($1::uuid, $2::uuid, $3, $4, $5, 'seo_apply')`,
+        [session.tid, g.id, g.shopify_product_id, from, to],
+      );
       const j = await c.query<{ id: string }>(
         `INSERT INTO sync_jobs (tenant_id, location_id, job_type, status, idempotency_key, payload)
          VALUES ($1::uuid, $2::uuid, 'shopify_product_push', 'queued', $3, $4::jsonb) RETURNING id::text`,

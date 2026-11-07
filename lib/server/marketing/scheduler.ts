@@ -16,10 +16,13 @@ import { publishGoogleBusiness } from "./google-business";
 import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
 import { writeAltTexts } from "@/lib/seo/alt-text";
+import { refreshStaleTags } from "./tag-refresh";
 
 const TICK_MS = 60_000;
 const RESULTS_EVERY_MS = 3 * 3600_000;
 let lastResults = 0;
+const TAGS_EVERY_MS = 3600_000;
+let lastTags = 0;
 const LATE_LIMIT_MS = 6 * 3600_000;
 const MAX_ATTEMPTS = 3;
 let lastTick = 0;
@@ -32,6 +35,14 @@ export async function maybeRunMarketing(pool: Pool): Promise<void> {
   running = true;
   try {
     await runDuePosts(pool);
+    if (metaPublishConfigured() && now - lastTags >= TAGS_EVERY_MS) {
+      lastTags = now;
+      const t = await refreshStaleTags(pool).catch((e) => {
+        console.warn(`[worker] social tag check failed: ${e instanceof Error ? e.message : e}`);
+        return null;
+      });
+      if (t && (t.fixed.length || t.stuck.length)) console.log(`[worker] social tags: ${t.fixed.length} moved to the renamed colour, ${t.stuck.length} need a person`);
+    }
     if (now - lastResults >= RESULTS_EVERY_MS) {
       lastResults = now;
       const r = await refreshResults(pool);
@@ -108,6 +119,18 @@ export async function ensureAltTexts(pool: Pool, post: MarketingPost): Promise<v
 }
 
 async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): Promise<boolean> {
+  // A colour renamed since the post was tagged leaves its tag on a hidden Meta
+  // item, and Instagram then refuses the whole post: move such tags first.
+  if (post.tags.length && post.targets.some((t) => t.provider === "instagram" && t.status !== "published" && t.status !== "skipped")) {
+    const r = await refreshStaleTags(pool, { postIds: [post.id] }).catch((e) => {
+      console.warn(`[marketing] tag check for ${post.id}: ${e instanceof Error ? e.message : e}`);
+      return null;
+    });
+    if (r?.fixed.length) {
+      const [fresh] = await listPosts(pool, tenantId, { ids: [post.id] });
+      if (fresh) post = { ...post, tags: fresh.tags };
+    }
+  }
   // Alt text is a nice-to-have: a failure here never stops the post.
   await ensureAltTexts(pool, post).catch((e) => console.warn(`[marketing] alt text for ${post.id}: ${e instanceof Error ? e.message : e}`));
   const media: MediaItem[] = post.media.map((m) => ({

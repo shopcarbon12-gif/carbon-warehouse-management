@@ -94,12 +94,34 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   }
 
   try {
+    const before =
+      d.color_code !== undefined
+        ? (
+            await pool.query<{ color_code: string | null; matrix_id: string | null; shopify_product_id: string | null }>(
+              `SELECT cs.color_code, cs.matrix_id::text, m.shopify_product_id
+                 FROM custom_skus cs LEFT JOIN matrices m ON m.id = cs.matrix_id WHERE cs.id = $1::uuid`,
+              [id],
+            )
+          ).rows[0]
+        : undefined;
     const r = await pool.query(
       `UPDATE custom_skus SET ${sets.join(", ")} WHERE id = $1::uuid`,
       vals,
     );
     if (r.rowCount === 0) {
       return NextResponse.json({ error: "Custom SKU not found" }, { status: 404 });
+    }
+    // A colour rename: Social tags on the old colour follow this log (marketing/tag-refresh.ts).
+    if (before?.color_code && d.color_code && before.color_code.trim().toUpperCase() !== d.color_code.trim().toUpperCase()) {
+      await pool
+        .query(
+          `INSERT INTO colour_renames (tenant_id, matrix_id, shopify_product_id, from_colour, to_colour, source)
+           SELECT $1::uuid, $2::uuid, $3, $4, $5, 'sku_edit'
+            WHERE NOT EXISTS (SELECT 1 FROM colour_renames WHERE matrix_id = $2::uuid AND from_colour = $4 AND to_colour = $5
+                                AND created_at > now() - interval '1 day')`,
+          [session.tid, before.matrix_id, before.shopify_product_id, before.color_code, d.color_code],
+        )
+        .catch((e) => console.warn("[custom-skus] colour rename log:", e instanceof Error ? e.message : e));
     }
     return NextResponse.json({ ok: true, updated: r.rowCount });
   } catch (e) {

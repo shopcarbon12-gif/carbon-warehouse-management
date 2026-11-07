@@ -313,3 +313,41 @@ export async function untaggableProducts(ids: string[]): Promise<{ id: string; w
   }
   return bad;
 }
+
+/* ------------------------------------------------------ catalog tag items */
+
+export type CatalogItem = { id: string; name: string; color: string; size: string; visibility: string; availability: string; groupId: string | null };
+
+const ITEM_FIELDS = "id,name,color,size,visibility,availability,retailer_product_group_id";
+type RawItem = { id: string; name?: string; color?: string; size?: string; visibility?: string; availability?: string; retailer_product_group_id?: string };
+const toItem = (p: RawItem): CatalogItem => ({
+  id: p.id,
+  name: p.name ?? "",
+  color: p.color ?? "",
+  size: p.size ?? "",
+  visibility: p.visibility ?? "",
+  availability: p.availability ?? "",
+  groupId: p.retailer_product_group_id ?? null,
+});
+
+/** One Meta catalog item (a Shopify variant), or null when Meta no longer has it. */
+export async function catalogItem(id: string): Promise<CatalogItem | null> {
+  try {
+    return toItem(await graph<RawItem>(id, "GET", { fields: ITEM_FIELDS }));
+  } catch (e) {
+    if (e instanceof MetaPublishError && (e.code === 100 || e.code === 803)) return null;
+    throw e;
+  }
+}
+
+/** Every catalog item of one Shopify product (group id = Shopify product id). */
+export async function catalogGroupItems(groupId: string): Promise<CatalogItem[]> {
+  const catalog = process.env.META_CATALOG_ID?.trim();
+  if (!catalog) throw new MetaPublishError("META_CATALOG_ID is not set");
+  const j = await graph<{ data?: RawItem[] }>(`${catalog}/products`, "GET", {
+    filter: JSON.stringify({ retailer_product_group_id: { eq: groupId } }),
+    fields: ITEM_FIELDS,
+    limit: 250,
+  });
+  return (j.data ?? []).map(toItem);
+}

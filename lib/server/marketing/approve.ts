@@ -13,6 +13,7 @@
 import type { Pool } from "pg";
 import { enqueueAiJob } from "./ai-jobs";
 import { untaggableProducts } from "./meta";
+import { refreshStaleTags } from "./tag-refresh";
 import { listPosts, type MarketingPost } from "./store";
 
 export type ApproveOutcome = { id: string; title: string; when: string | null; result: "approved" | "checking" | "blocked"; reason?: string };
@@ -46,6 +47,12 @@ export async function approvePost(pool: Pool, tenantId: string, post: MarketingP
   if (missing.length) return out("blocked", `${missing.join(" and ")} is not connected`);
   if (post.format === "reel" && !post.media.some((m) => m.kind === "video")) return out("blocked", "a Reel needs its video");
   if (targets.includes("instagram") && post.tags.length) {
+    // Tags left on a renamed colour move to the new one before the check.
+    const moved = await refreshStaleTags(pool, { postIds: [post.id] }).catch(() => null);
+    if (moved?.fixed.length) {
+      const [fresh] = await listPosts(pool, tenantId, { ids: [post.id] });
+      if (fresh) post = { ...post, tags: fresh.tags };
+    }
     const bad = await untaggableProducts(post.tags.map((t) => t.metaProductId)).catch(() => []);
     if (bad.length) {
       const names = bad.map((b) => post.tags.find((t) => t.metaProductId === b.id)?.label ?? b.id);
