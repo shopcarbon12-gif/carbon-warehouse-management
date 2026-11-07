@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "helvetica",
+        "createdAt": "2026-11-07T21:28:57.392Z",
+        "reason": "Claude: HTML email footer needs an email-safe system font stack (web fonts don't load in most mail apps); matches the existing Carbon welcome email (lib/server/welcome/email.ts)"
+      }
+    ]
+  }
+}

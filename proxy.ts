@@ -50,6 +50,12 @@ function isPublicPath(pathname: string): boolean {
      when a post is published. Random UUID per file; only post media is served. */
   if (pathname.startsWith("/api/public/marketing-media/")) return true;
   if (pathname === "/api/storefront/welcome-unsubscribe") return true;
+  /* CarbonWMS Email: the unsubscribe link in every marketing email (random
+     per-contact token), Amazon SNS delivery events (signature-checked against
+     Amazon's certificate), and the pictures inside sent emails. */
+  if (pathname === "/api/public/email/unsubscribe") return true;
+  if (pathname === "/api/public/email/sns") return true;
+  if (pathname.startsWith("/api/public/email-media/")) return true;
   /* Meta catalog close-up feed and its square pictures: Meta's crawler fetches
      them with no session; they hold only photos already public on the store. */
   if (pathname === "/api/storefront/meta-feed" || pathname === "/api/storefront/meta-feed/image") return true;

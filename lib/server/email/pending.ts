@@ -1,0 +1,19 @@
+/** CarbonWMS Email — what the worker checks before calling the web app's tick (no SDKs loaded here). */
+import type { Pool } from "pg";
+
+/** Anything for the tick to do? (the worker only calls the web app when so). */
+export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string; requested_by: string | null }[]> {
+  const r = await pool.query<{ tenant_id: string; requested_by: string | null }>(
+    `SELECT tenant_id::text, max(created_by) AS requested_by FROM (
+       SELECT tenant_id, created_by FROM email_campaigns WHERE status IN ('scheduled','sending') AND send_at <= now() + interval '1 minute'
+       UNION ALL
+       SELECT d.tenant_id, d.created_by FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.status IN ('queued','planning','generating')
+       UNION ALL
+       SELECT tenant_id, created_by FROM email_designs WHERE status = 'converting'
+       UNION ALL
+       SELECT tenant_id, created_by FROM email_campaigns WHERE offer IS NOT NULL AND status IN ('sending','sent','paused','cancelled') AND started_at IS NOT NULL
+          AND (results_at IS NULL OR results_at < now() - interval '3 hours') AND (offer->>'endsAt')::timestamptz > now() - interval '3 days'
+     ) x GROUP BY tenant_id`,
+  );
+  return r.rows;
+}

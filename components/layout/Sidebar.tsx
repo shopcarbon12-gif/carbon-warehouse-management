@@ -59,6 +59,7 @@ import {
   Clock,
   Megaphone,
   BarChart3,
+  Mail,
 } from "lucide-react";
 import useSWR from "swr";
 import { LocationSwitcher } from "@/components/location-switcher";
@@ -131,6 +132,7 @@ const sections: NavSection[] = [
       { href: "/marketing/calendar", label: "Calendar", icon: CalendarDays },
       { href: "/marketing/best-time", label: "Best time", icon: Clock },
       { href: "/marketing/results", label: "Results", icon: BarChart3 },
+      { href: "/marketing/email", label: "Email", icon: Mail },
       { href: "/marketing/ads", label: "Ads", icon: Megaphone },
       { href: "/marketing/merchant", label: "Merchant Center", icon: ShoppingBag },
       { href: "/integrations/social", label: "Social channels", icon: Megaphone },

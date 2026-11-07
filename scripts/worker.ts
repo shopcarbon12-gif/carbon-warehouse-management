@@ -16,6 +16,7 @@ import { maybeRunMetaFeed } from "@/lib/server/meta-feed";
 import { maybeRunMarketing } from "@/lib/server/marketing/scheduler";
 import { marketingAiPending } from "@/lib/server/marketing/ai-changes";
 import { aiJobsPending } from "@/lib/server/marketing/ai-jobs";
+import { emailWorkPending } from "@/lib/server/email/pending";
 
 loadEnvConfig(process.cwd());
 
@@ -377,6 +378,40 @@ async function maybeRunSocialAi(pool: Pool): Promise<void> {
   }
 }
 
+/**
+ * CarbonWMS Email: campaign sends, AI Designer turns, conversions and code
+ * results run in the WEB app (it has the AWS, OpenAI and Shopify keys); the
+ * worker calls /api/email/tick every minute while any of them is due.
+ */
+const EMAIL_TICK_MS = 60_000;
+let lastEmailTickAt = 0;
+async function maybeRunEmail(pool: Pool): Promise<void> {
+  const now = Date.now();
+  if (now - lastEmailTickAt < EMAIL_TICK_MS) return;
+  lastEmailTickAt = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
+  try {
+    for (const t of await emailWorkPending(pool)) {
+      const u = await pool.query<{ sub: string; email: string; role: string; lid: string | null }>(
+        `SELECT u.id::text AS sub, u.email, m.role,
+                (SELECT l.id::text FROM locations l WHERE l.tenant_id = m.tenant_id ORDER BY l.created_at LIMIT 1) AS lid
+           FROM memberships m JOIN users u ON u.id = m.user_id
+          WHERE m.tenant_id = $1::uuid AND m.role = 'admin'
+          ORDER BY (u.email = $2) DESC, u.created_at LIMIT 1`,
+        [t.tenant_id, t.requested_by ?? ""],
+      );
+      const a = u.rows[0];
+      if (!a?.lid) continue;
+      const token = await signSession({ sub: a.sub, email: a.email, tid: t.tenant_id, lid: a.lid, role: a.role });
+      const res = await fetch(`${base}/api/email/tick`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+      if (res.status !== 202) console.error(`[worker] email tick → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+  } catch (e) {
+    console.error("[worker] email tick failed", e);
+  }
+}
+
 async function main() {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   console.log("WMS worker started (Ctrl+C to stop)");
@@ -399,6 +434,7 @@ async function main() {
       await maybeRunMetaFeed(pool);
       await maybeRunMarketing(pool);
       await maybeRunSocialAi(pool);
+      await maybeRunEmail(pool);
       await maybeRunSeoWatch(pool);
       const job = await claimJob(pool);
       if (!job) {
