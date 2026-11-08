@@ -9,9 +9,10 @@
   which blocks checkout until the cart holds 3 runs.
 
   A run needs EVERY size of the colour (owner 2026-11-07, Ryan Polo Peach
-  missing M): if any size is out of stock the colour can't be ordered — the
-  missing size is shown struck through and the row says "Not available". The
-  most runs a full colour allows is the lowest stock among its sizes.
+  missing M). A colour missing any size is NOT shown at all: no row here, and
+  the script below removes it from the product's colour picker too (owner:
+  "literally not show the colour"). The most runs a full colour allows is the
+  lowest stock among its sizes.
 
   One-size items (owner 2026-11-07): when a colour has a single size (OS), a run
   is 3 pieces of it, so it needs 3 in stock and the max runs is stock ÷ 3.
@@ -54,6 +55,7 @@
       <span role="columnheader">{{ 'carbon.b2b.grid.runs' | t }}</span>
       <span role="columnheader" class="carbon-b2b__num">{{ 'carbon.b2b.grid.subtotal' | t }}</span>
     </div>
+    {%- assign hidden_colours = '' -%}
     {%- for color in colors -%}
       {%- liquid
         assign run_price = 0
@@ -97,19 +99,20 @@
             assign sizes_html = sizes_html | append: '<s class="carbon-b2b__size carbon-b2b__size--out" title="' | append: oos_title | append: '">' | append: size_label | append: '</s>'
           endif
         endfor
+        unless in_run > 0 and in_run == colour_sizes and max_runs >= 1
+          assign hidden_colours = hidden_colours | append: color | append: '||'
+          continue
+        endunless
       -%}
       <div class="carbon-b2b__row" role="row" data-variants="{{ variant_data | remove_last: ',' }}" data-run-price="{{ run_price }}" data-per="{{ per_size }}">
         <span role="cell" class="carbon-b2b__color">{{ color }}</span>
         <span role="cell" class="carbon-b2b__sizes">
           {{ sizes_html }}
-          {%- if in_run > 0 and in_run == colour_sizes -%}
-            {%- assign run_price_money = run_price | money -%}
-            {%- assign run_pieces = in_run | times: per_size -%}
-            <small>{{ 'carbon.b2b.grid.per_run_html' | t: price: run_price_money, pieces: run_pieces }}</small>
-          {%- endif -%}
+          {%- assign run_price_money = run_price | money -%}
+          {%- assign run_pieces = in_run | times: per_size -%}
+          <small>{{ 'carbon.b2b.grid.per_run_html' | t: price: run_price_money, pieces: run_pieces }}</small>
         </span>
         <span role="cell">
-          {%- if in_run > 0 and in_run == colour_sizes and max_runs >= 1 -%}
             <input
               type="number"
               class="carbon-b2b__runs"
@@ -121,14 +124,12 @@
               aria-label="{{ 'carbon.b2b.grid.runs_of_html' | t: colour: color | escape }}"
             >
             {%- if max_runs < 999999 -%}<small>{{ 'carbon.b2b.grid.max' | t: n: max_runs }}</small>{%- endif -%}
-          {%- else -%}
-            <small>{{ 'carbon.b2b.grid.not_available' | t }}</small>
-          {%- endif -%}
         </span>
         <span role="cell" class="carbon-b2b__num carbon-b2b__subtotal">—</span>
       </div>
     {%- endfor -%}
   </div>
+  <script type="application/json" class="carbon-b2b__hidden">{{ hidden_colours | split: '||' | json }}</script>
   <div class="carbon-b2b__foot">
     {%- assign zero_money = 0 | money -%}
     <span class="carbon-b2b__total" aria-live="polite">{{ 'carbon.b2b.grid.total_html' | t: pieces: 0, price: zero_money }}</span>
@@ -177,6 +178,52 @@
     const root = document.getElementById('CarbonB2B-{{ section.id }}');
     if (!root || root.dataset.ready) return;
     root.dataset.ready = '1';
+
+    /* Colours without every size are not sold wholesale: take them out of the
+       product's colour picker (dropdown or swatches) as well. */
+    const hidden = JSON.parse(root.querySelector('.carbon-b2b__hidden')?.textContent || '[]');
+    const hideColours = () => {
+      const picker = document.getElementById('variant-selects-{{ section.id }}');
+      if (!picker) return;
+      picker.querySelectorAll('fieldset[data-handle]').forEach((fs) => {
+        if (!/colo/i.test(fs.dataset.handle || '')) return;
+        /* The theme's picker (assets/product.js) rebuilds its option list from
+           the variant JSON inside <variant-selects>, so drop those variants
+           there too (and in its cached copy) before touching the inputs. */
+        const key = fs.dataset.index; // "option1" / "option2"
+        const json = picker.querySelector('[type="application/json"]');
+        if (json && key) {
+          try {
+            const kept = JSON.parse(json.textContent).filter((v) => !hidden.includes(v[key]));
+            json.textContent = JSON.stringify(kept);
+            if (picker.variantData) picker.variantData = kept;
+          } catch (e) {}
+        }
+        let lostSelected = false;
+        fs.querySelectorAll('select option').forEach((o) => {
+          if (hidden.includes(o.value)) { if (o.selected) lostSelected = true; o.remove(); }
+        });
+        fs.querySelectorAll('input[type="radio"]').forEach((i) => {
+          if (!hidden.includes(i.value)) return;
+          if (i.checked) lostSelected = true;
+          fs.querySelector(`label[for="${CSS.escape(i.id)}"]`)?.remove();
+          i.remove();
+        });
+        if (lostSelected) {
+          const sel = fs.querySelector('select');
+          const first = sel || fs.querySelector('input[type="radio"]');
+          if (first) {
+            if (!sel) first.checked = true;
+            first.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      });
+    };
+    if (hidden.length) {
+      /* after the theme's deferred product.js has set the picker up */
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideColours);
+      else hideColours();
+    }
     const button = root.querySelector('.carbon-b2b__add');
     const total = root.querySelector('.carbon-b2b__total');
     const error = root.querySelector('.carbon-b2b__error');
