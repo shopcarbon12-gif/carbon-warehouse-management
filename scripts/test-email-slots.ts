@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "../lib/server/email/slots";
+import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "../lib/server/email/slots";
 
 const out = process.argv[2];
 const solid = (w: number, h: number, c: { r: number; g: number; b: number }) => sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
@@ -95,6 +95,27 @@ const MAG = { r: 255, g: 0, b: 255 };
   const withLogo = await placeLogoOnTop(plain, { black: async () => logoBlack, white: async () => logoWhite });
   const { data: lp } = await sharp(withLogo).extract({ left: 600, top: 100, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
   assert.ok(lp[0] < 60, "a BLACK logo placed at the top centre of a light page");
+  // A washed-out pink box is not a magenta box, but is found as a pale one (a pink sweater photo is not).
+  const palePage = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 240, g: 232, b: 218 } } })
+    .composite([
+      { input: await solid(300, 200, { r: 242, g: 214, b: 224 }), left: 60, top: 60 },
+      { input: await solid(200, 300, { r: 230, g: 40, b: 140 }), left: 500, top: 200 },
+    ])
+    .png()
+    .toBuffer();
+  assert.equal((await findLabelledBoxes(palePage)).length, 0);
+  const pales = await findPaleBoxes(palePage);
+  assert.equal(pales.length, 1, JSON.stringify(pales));
+  assert.ok(near(pales[0].x, 60) && near(pales[0].w, 300), JSON.stringify(pales[0]));
+  // A tall photo pasted into a WIDE box keeps its top (heads), never the bottom.
+  const tall = await sharp({ create: { width: 400, height: 600, channels: 3, background: { r: 0, g: 0, b: 220 } } })
+    .composite([{ input: await solid(400, 150, { r: 220, g: 0, b: 0 }), left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+  const wide = await pasteAssigned(await solid(800, 300, MAG), [{ box: { x: 0, y: 0, w: 800, h: 200 }, slot: slots[3] }], async () => tall, { black: async () => logoBlack, white: async () => logoWhite });
+  const { data: tp } = await sharp(wide.png).extract({ left: 400, top: 10, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+  assert.ok(tp[0] > 150 && tp[2] < 80, `the top of the photo is kept (${tp[0]},${tp[1]},${tp[2]})`);
+  console.log("ok  pale pink boxes found separately; wide crops keep the top of the photo");
   if (out) {
     await sharp(png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-before.jpg`);
     await sharp(r.png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-after.jpg`);

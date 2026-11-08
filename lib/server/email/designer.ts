@@ -49,7 +49,7 @@ import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleText } from "./style";
-import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "./slots";
+import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
 import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
 import { freshStyles, styleBrief, styleName, STRUCTURES, type Style } from "./styles";
@@ -661,7 +661,17 @@ async function withRealPictures(pool: Pool, turn: Msg, step: Step, png0: Buffer,
       const a = atts[Number(s.key.slice(1)) - 1];
       return a ? load(a.path) : null;
     }
-    if (s.kind === "shot") return s.path ? load(s.path) : null;
+    if (s.kind === "shot") {
+      if (s.path) return load(s.path);
+      // The photo could not be made (e.g. refused by OpenAI's safety check): the real catalog photo of
+      // that look's main piece stands in, so a box is never left empty.
+      const shot = (turn.shots ?? []).find((x) => x.id === s.key);
+      const ids = shot?.people?.length ? shot.people.flatMap((p) => p.products) : (shot?.products ?? []);
+      const first = ids
+        .map((id) => (turn.products ?? []).find((x) => x.id === id))
+        .find((x) => x?.image);
+      return first?.image ? referencePhoto(first.image, 1600) : null;
+    }
     return s.url ? referencePhoto(s.url, 1600) : null;
   };
   const logos = { black: () => logoFile("black"), white: () => logoFile("white") };
@@ -671,7 +681,19 @@ async function withRealPictures(pool: Pool, turn: Msg, step: Step, png0: Buffer,
     const boxes = await findLabelledBoxes(pic);
     const labels = await readLabels(pic, boxes, codes);
     const assigned = assignBoxes(boxes, labels, slots);
-    return { assigned, missing: slots.filter((x) => !assigned.some((a) => a.slot.key === x.key)) };
+    let missing = slots.filter((x) => !assigned.some((a) => a.slot.key === x.key));
+    if (missing.length) {
+      // Washed-out pink boxes: only those whose label names a missing spot.
+      const pale = (await findPaleBoxes(pic)).filter((p) => !boxes.some((b) => p.x < b.x + b.w && b.x < p.x + p.w && p.y < b.y + b.h && b.y < p.y + p.h));
+      const pl = await readLabels(pic, pale, missing.map((x) => x.code));
+      pale.forEach((b, i) => {
+        const code = (pl[i] ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const slot = missing.find((x) => x.code === code);
+        if (slot) assigned.push({ box: b, slot });
+      });
+      missing = slots.filter((x) => !assigned.some((a) => a.slot.key === x.key));
+    }
+    return { assigned, missing };
   };
   let found = await locate(png);
   if (found.missing.length) {

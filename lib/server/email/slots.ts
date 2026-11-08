@@ -111,7 +111,7 @@ export function assignBoxes(boxes: FoundBox[], labels: (string | null)[], slots:
 type Box = { x: number; y: number; w: number; h: number };
 
 /** Find the solid boxes of each colour (connected regions that fill most of their bounding box). */
-export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Promise<Map<string, Box[]>> {
+export async function findBoxes(png: Buffer, colors: readonly SlotColor[], pale = false): Promise<Map<string, Box[]>> {
   const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width;
   const H = info.height;
@@ -129,6 +129,10 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
+      if (pale) {
+        if (isPale(r, g, b)) label[gy * gw + gx] = 0;
+        continue;
+      }
       let best = -1;
       let bestD = TOL;
       for (let c = 0; c < colors.length; c++) {
@@ -175,6 +179,7 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
     const bw = maxX - minX + 1;
     const bh = maxY - minY + 1;
     if (bw * S < 36 || bh * S < 24) continue;
+    if (pale && (n / (bw * bh) < 0.8 || bw < 60 || bh < 40)) continue;
     // A FRAME (the model sometimes draws a coloured border with something inside instead of a solid
     // box): the colour runs along all four sides. Its whole outer rectangle is the spot.
     if (n / (bw * bh) < 0.72) {
@@ -208,6 +213,7 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
     const hit = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= W || y >= H) return false;
       const i = (y * W + x) * 3;
+      if (pale) return isPale(data[i], data[i + 1], data[i + 2]);
       return (data[i] - cr) ** 2 + (data[i + 1] - cg) ** 2 + (data[i + 2] - cb) ** 2 < TOL;
     };
     const ys = [0.25, 0.5, 0.75].map((f) => Math.round((minY + (maxY - minY) * f) * S + 1));
@@ -268,6 +274,20 @@ export async function findLabelledBoxes(png: Buffer): Promise<FoundBox[]> {
   return list.sort((a, b) => (Math.abs(a.y - b.y) < 24 ? a.x - b.x : a.y - b.y));
 }
 
+/** A washed-out magenta (pale pink / lilac) the model sometimes paints instead of #FF00FF. */
+function isPale(r: number, g: number, b: number): boolean {
+  return r >= 195 && b >= 180 && r - g >= 14 && b - g >= 8 && Math.abs(r - b) <= 45;
+}
+
+/**
+ * Flat PALE-pink boxes (2026-11-08: a footer "LOGO" box and an "L2" box were drawn light pink and never
+ * found). Only used for spots still missing, and a box only counts when its label is read as one of them.
+ */
+export async function findPaleBoxes(png: Buffer): Promise<FoundBox[]> {
+  const list = (await findBoxes(png, [BOX], true)).get(BOX.hex) ?? [];
+  return list.sort((a, b) => (Math.abs(a.y - b.y) < 24 ? a.x - b.x : a.y - b.y));
+}
+
 /** Paste every original into its assigned boxes. */
 export async function pasteAssigned(
   png: Buffer,
@@ -302,7 +322,13 @@ export async function pasteAssigned(
         missing.push(s.key);
         continue;
       }
-      const fill = await sharp(src).rotate().flatten({ background: "#ffffff" }).resize({ width: b.w, height: b.h, fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
+      // A photo cut to a box WIDER than itself loses height: keep the top, so heads are never cut off
+      // (2026-11-08: "attention" kept the bright sneakers and cut both heads off a hero).
+      const sm = await sharp(src).rotate().metadata();
+      const sw = (sm.autoOrient?.width ?? sm.width) || 1;
+      const sh = (sm.autoOrient?.height ?? sm.height) || 1;
+      const position = b.w / b.h > sw / sh ? "north" : sharp.strategy.attention;
+      const fill = await sharp(src).rotate().flatten({ background: "#ffffff" }).resize({ width: b.w, height: b.h, fit: "cover", position }).png().toBuffer();
       layers.push({ input: fill, left: b.x, top: b.y });
     }
   }

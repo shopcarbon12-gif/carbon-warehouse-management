@@ -91,6 +91,26 @@ async function inputs(s: Shot, products: TurnProduct[]): Promise<{ prompt: strin
   return { prompt: shotPrompt(s, products, labels), images };
 }
 
+/**
+ * Draw a shot; when OpenAI's safety check refuses it (2026-11-08: a seated, low-angle look with a mini
+ * skirt and heels was refused as "sexual"), draw it again once as a plain standing street portrait.
+ */
+async function drawShot(model: string, s: Shot, products: TurnProduct[], extra = ""): Promise<string> {
+  const inp = await inputs(s, products);
+  try {
+    return await draw(model, inp.prompt + extra, s.size, inp.images);
+  } catch (e) {
+    if (!/safety/i.test(e instanceof Error ? e.message : String(e))) throw e;
+    const who = (s.people ?? []).map((p) => p.who).join("; ") || "a newly cast adult";
+    const safe: Shot = {
+      ...s,
+      prompt: `${s.kind === "hero" ? "A full-body street portrait of" : "One"} ${who}, standing upright at eye level on a quiet Orlando sidewalk in soft natural daylight, a relaxed natural standing pose, the whole outfit visible from head to shoes. A modest, fully clothed fashion catalogue photo.`,
+    };
+    const again = await inputs(safe, products);
+    return draw(model, again.prompt, s.size, again.images);
+  }
+}
+
 async function draw(model: string, prompt: string, size: string, images: Buffer[]): Promise<string> {
   const common = { model, prompt, size: size as "1024x1024", quality: "high" as const, n: 1 };
   const r = images.length
@@ -143,8 +163,7 @@ async function finish(o: { designId: string; turnId: string; imageModel: string;
   if (problems.length) {
     log(`[email-shots] ${o.turnId} ${s.id}: redrawing (${problems.join("; ")})`);
     try {
-      const inp = await inputs(s, products);
-      pic = await draw(o.imageModel, `${inp.prompt}\n\nA FIRST ATTEMPT HAD THESE FAULTS — fix every one:\n- ${problems.join("\n- ")}`, s.size, inp.images);
+      pic = await drawShot(o.imageModel, s, products, `\n\nA FIRST ATTEMPT HAD THESE FAULTS — fix every one:\n- ${problems.join("\n- ")}`);
       problems = await check(o.creativeModel, pic, s, products).catch(() => [] as string[]);
     } catch (e) {
       log(`[email-shots] ${o.turnId} ${s.id}: redraw failed: ${e instanceof Error ? e.message : e}`);
@@ -159,8 +178,7 @@ export async function drawShotsFast(o: { designId: string; turnId: string; image
     shots.map(async (s) => {
       if (s.path) return s;
       try {
-        const inp = await inputs(s, products);
-        return await finish(o, s, await draw(o.imageModel, inp.prompt, s.size, inp.images), products, log);
+        return await finish(o, s, await drawShot(o.imageModel, s, products), products, log);
       } catch (e) {
         return { ...s, error: e instanceof Error ? e.message.slice(0, 300) : String(e) };
       }
@@ -216,10 +234,7 @@ export async function collectShots(o: { designId: string; turnId: string; imageM
     shots.map(async (s) => {
       if (s.path) return s;
       try {
-        const b64 = got.get(s.id) ?? (await (async () => {
-          const inp = await inputs(s, products);
-          return draw(o.imageModel, inp.prompt, s.size, inp.images);
-        })());
+        const b64 = got.get(s.id) ?? (await drawShot(o.imageModel, s, products));
         return await finish(o, s, b64, products, log);
       } catch (e) {
         return { ...s, error: e instanceof Error ? e.message.slice(0, 300) : String(e) };
