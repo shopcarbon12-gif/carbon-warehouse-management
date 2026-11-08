@@ -104,7 +104,7 @@ function progressText(m: Msg): string {
       ? `Making ${n} banner${n === 1 ? "" : "s"} and checking each against the real product photos (about 2 to 6 minutes)…`
       : `Making ${n} banner${n === 1 ? "" : "s"} in the OpenAI batch (usually minutes, up to an hour), then checking them…`;
   }
-  if (m.status === "planning") return m.text ? "Getting ready to draw…" : m.variantNo && m.variantNo > 1 ? "Waiting for direction 1's items, then planning this direction…" : "Choosing the items and planning the design…";
+  if (m.status === "planning") return m.text ? "Getting ready to draw…" : m.variantNo && m.variantNo > 1 ? "Writing this direction's own concept (after the one before it, so it is different)…" : "Choosing the items and planning the design…";
   if (m.status === "approved" || m.status === "approved-planning") return "Approved. Planning the pictures around your items…";
   const order = m.target === "both" ? ["desktop", "mobile-top", "mobile-bottom"] : m.target === "desktop" ? ["desktop"] : ["mobile-top", "mobile-bottom"];
   const at = Math.max(0, order.indexOf(m.step ?? order[0]));
@@ -521,7 +521,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                 )}
               </div>
               {m.direction && <p className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Direction: {m.direction}</p>}
-              {m.concept && (!m.variantNo || m.variantNo === 1) && (
+              {m.concept && (
                 <details className="rounded border border-[var(--wms-border)] p-2 text-xs text-[var(--wms-fg)]" open={m.status === "review"}>
                   <summary className="cursor-pointer font-semibold">
                     The concept{m.creativeModel ? ` · by ${m.creativeModel}` : ""}
@@ -550,7 +550,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                   </div>
                 </details>
               )}
-              {m.status !== "review" && (!m.variantNo || m.variantNo === 1) && m.shots.some((x) => x.url || x.error) && (
+              {m.status !== "review" && m.shots.some((x) => x.url || x.error) && (
                 <div className="flex flex-col gap-1">
                   <span className={label}>Campaign photos made for this email</span>
                   <div className="flex flex-wrap gap-2">

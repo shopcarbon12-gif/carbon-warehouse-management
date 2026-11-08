@@ -842,9 +842,7 @@ export async function approveItems(pool: Pool, designId: string, messageId: stri
       .map((m) => ({ id: m.id, url: m.url, width: m.width, height: m.height, kind: m.kind, description: m.description }));
     const same = JSON.stringify(concept) === JSON.stringify(row.concept_data) && JSON.stringify((row.media ?? []).map((m) => m.id).sort()) === JSON.stringify(media.map((m) => m.id).sort());
     const shots = shotsFor(concept, (id) => [id], row.shots);
-    const ids = row.variant_group
-      ? (await pool.query<{ id: string }>(`SELECT id::text FROM email_design_messages WHERE variant_group = $1::uuid AND status IN ('review','queued')`, [row.variant_group])).rows.map((x) => x.id)
-      : [messageId];
+    const ids = [messageId]; // each direction has its own concept and outfits (owner, 2026-11-08)
     await pool.query(
       `UPDATE email_design_messages SET products = $2, media = $3, needs_review = false, concept_data = CASE WHEN id = $4::uuid THEN $6::jsonb ELSE concept_data END,
               shots = CASE WHEN id = $4::uuid THEN $7::jsonb ELSE shots END,
@@ -870,9 +868,7 @@ export async function approveItems(pool: Pool, designId: string, messageId: stri
     JSON.stringify((row.products ?? []).map((p) => p.id).sort()) === JSON.stringify(products.map((p) => p.id).sort()) &&
     JSON.stringify((row.media ?? []).map((m) => m.id).sort()) === JSON.stringify(media.map((m) => m.id).sort());
   // Changed items: the briefs are rewritten around exactly these (prompts cleared → re-planned).
-  const ids = row.variant_group
-    ? (await pool.query<{ id: string }>(`SELECT id::text FROM email_design_messages WHERE variant_group = $1::uuid AND status IN ('review','queued')`, [row.variant_group])).rows.map((x) => x.id)
-    : [messageId];
+  const ids = [messageId];
   await pool.query(
     `UPDATE email_design_messages SET products = $2, media = $3, needs_review = false,
             status = CASE WHEN id = $4::uuid THEN 'approved' ELSE status END,
@@ -935,7 +931,7 @@ async function stored(path: string, w = 900): Promise<Buffer> {
 }
 
 /** Step 1: the editorial concept (creative-director model). Locked items = the owner approved changed items. */
-async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | null): Promise<{ concept: Concept; keep: boolean; reply: string; title: string | null; subject: string | null; preheader: string | null; direction: string | null; products: TurnProduct[]; model: string }> {
+async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | null, siblings: Concept[] = []): Promise<{ concept: Concept; keep: boolean; reply: string; title: string | null; subject: string | null; preheader: string | null; direction: string | null; products: TurnProduct[]; model: string }> {
   const settings = await getEmailSettings(pool, await tenantOf(pool, turn.design_id));
   const history = await pool.query<{ role: string; text: string; target: string; attachments: { path: string; name: string }[] }>(
     `SELECT m.role, m.text, m.target, m.attachments FROM email_design_messages m
@@ -968,6 +964,14 @@ async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | n
     return p ? `${p.ref} ${p.title}` : "(no longer in stock)";
   };
   if (prev?.concept_data) parts.push(txt(`THE CURRENT CONCEPT:\n${conceptText(prev.concept_data, nameOf)}`));
+  // Owner, 2026-11-08: each of the 3 directions is a completely different idea with its own outfits and photos.
+  if (turn.variant_no)
+    parts.push(
+      txt(
+        `THIS IS DIRECTION ${turn.variant_no} OF 3 for the owner's last message — a COMPLETELY DIFFERENT IDEA from the other directions: a different story, different places and time of day, different people, and different outfits (different pieces).` +
+          (siblings.length ? `\nThe other directions already are:\n${siblings.map((c, i) => `${i + 1}. ${conceptText(c, nameOf)}`).join("\n\n")}` : ""),
+      ),
+    );
   const others = recent.rows.map((r) => r.concept_data).filter((c) => !prev?.concept_data || c.story !== prev.concept_data.story);
   if (others.length)
     parts.push(
@@ -1010,24 +1014,12 @@ async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | n
  * Step 1 for a turn. False = stopped (waiting for the owner's approval).
  * Directions 2–3 take direction 1's concept, items and photos.
  */
-async function conceptStep(pool: Pool, turn: Msg, log: (m: string) => void): Promise<boolean> {
-  if (turn.variant_no && turn.variant_no > 1) {
-    const v1 = await pool.query<{ products: TurnProduct[] | null; media: TurnMedia[] | null; concept_data: Concept | null; shots: Shot[] | null; creative_model: string | null; image_model: string | null }>(
-      `SELECT products, media, concept_data, shots, creative_model, image_model FROM email_design_messages WHERE variant_group = $1::uuid AND variant_no = 1`,
-      [turn.variant_group],
-    );
-    const v = v1.rows[0];
-    Object.assign(turn, { products: v?.products ?? [], media: v?.media ?? [], concept_data: v?.concept_data ?? null, shots: v?.shots ?? null, creative_model: v?.creative_model ?? null, image_model: v?.image_model ?? null });
-    await pool.query(`UPDATE email_design_messages SET products = $2, media = $3, concept_data = $4, shots = $5, creative_model = $6, image_model = $7 WHERE id = $1::uuid`, [
-      turn.id, JSON.stringify(turn.products), JSON.stringify(turn.media), JSON.stringify(turn.concept_data), JSON.stringify(turn.shots), turn.creative_model, turn.image_model,
-    ]);
-    return true;
-  }
+async function conceptStep(pool: Pool, turn: Msg, log: (m: string) => void, siblings: Concept[] = []): Promise<boolean> {
   if (turn.concept_data) return true;
   const approved = turn.status === "approved-planning";
   await pool.query(`UPDATE email_design_messages SET status = 'planning', concept = 'concept', step_at = now() WHERE id = $1::uuid`, [turn.id]);
   const settings = await getEmailSettings(pool, await tenantOf(pool, turn.design_id));
-  const c = await makeConcept(pool, turn, approved ? (turn.products ?? []) : null);
+  const c = await makeConcept(pool, turn, approved ? (turn.products ?? []) : null, siblings);
   const base = await pool.query<{ shots: Shot[] | null; media: TurnMedia[] | null }>(
     `SELECT m.shots, m.media FROM email_design_messages m WHERE m.design_id = $1::uuid AND m.role = 'ai' AND m.status = 'done' AND m.created_at < $2 AND ${CHOSEN} ORDER BY m.created_at DESC LIMIT 1`,
     [turn.design_id, turn.created_at],
@@ -1042,7 +1034,7 @@ async function conceptStep(pool: Pool, turn: Msg, log: (m: string) => void): Pro
     image_model: settings.imageModel,
     direction: c.direction,
   });
-  const review = !!turn.needs_review && !approved && !c.keep && (!turn.variant_no || turn.variant_no === 1);
+  const review = !!turn.needs_review && !approved && !c.keep;
   await pool.query(
     `UPDATE email_design_messages SET text = $2, concept_data = $3, products = $4, media = $5, shots = $6, creative_model = $7, image_model = $8, direction = $9, status = $10 WHERE id = $1::uuid`,
     [turn.id, c.reply, JSON.stringify(c.concept), JSON.stringify(c.products), JSON.stringify(turn.media), JSON.stringify(turn.shots), c.model, settings.imageModel, c.direction, review ? "review" : "planning"],
@@ -1059,33 +1051,37 @@ async function conceptStep(pool: Pool, turn: Msg, log: (m: string) => void): Pro
 }
 
 async function runPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void): Promise<void> {
-  if (!(await conceptStep(pool, turn, log))) return;
-  // Owner, 2026-11-08: "whether it's one picture or three, they all run at the same time". Direction 1
-  // starts directions 2–3 now; all briefs are written side by side; then the 4 campaign photos and every
-  // picture of every direction are drawn at once (one batch, or all in parallel in Fast mode).
-  const turns: Msg[] = [turn];
-  if (turn.variant_group && turn.variant_no === 1) {
+  // Owner, 2026-11-08: each of the 3 directions is a completely different idea with its own outfits and
+  // photos. Direction 1 starts directions 2–3 at once; their concepts are written one after another so
+  // each can differ from the ones before; then every direction (or each one as soon as the owner approves
+  // it) draws its own photos and pictures — all at the same time, nobody waits for anybody.
+  const group: Msg[] = [turn];
+  if (turn.variant_group && turn.variant_no === 1 && !turn.concept_data) {
     const sibs = await pool.query<Msg>(
       `UPDATE email_design_messages SET status = 'planning', step_at = now() WHERE variant_group = $1::uuid AND variant_no > 1 AND status = 'queued' RETURNING *`,
       [turn.variant_group],
     );
-    for (const sib of sibs.rows) await conceptStep(pool, sib, log);
-    turns.push(...sibs.rows);
+    group.push(...sibs.rows.sort((a, b) => (a.variant_no ?? 0) - (b.variant_no ?? 0)));
   }
-  const planned = await Promise.all(
-    turns.map((t) =>
-      planPictureTurn(pool, t, log).then(
-        (ok) => (ok ? t : null),
-        async (e) => {
-          await fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
-          return null;
-        },
-      ),
-    ),
+  const made: Concept[] = [];
+  const ready: Msg[] = [];
+  for (const t of group) {
+    try {
+      if (await conceptStep(pool, t, log, made)) ready.push(t);
+      if (t.concept_data) made.push(t.concept_data);
+    } catch (e) {
+      await fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  await Promise.all(
+    ready.map(async (t) => {
+      try {
+        if (await planPictureTurn(pool, t, log)) await drawAll(pool, t, [t], log);
+      } catch (e) {
+        await fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }),
   );
-  const ready = planned.filter((t): t is Msg => !!t);
-  if (!ready.length) return;
-  await drawAll(pool, turn, ready, log);
 }
 
 const shotOpts = (t: Msg) => ({ designId: t.design_id, turnId: t.id, imageModel: t.image_model ?? imageModel(), creativeModel: t.creative_model?.split(" ")[0] ?? "gpt-6-astra" });
