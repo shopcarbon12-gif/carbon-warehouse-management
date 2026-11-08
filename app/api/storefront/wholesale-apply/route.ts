@@ -14,7 +14,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse, after } from "next/server";
 import { getPool } from "@/lib/db";
 import { extractPublicIp } from "@/lib/server/request-public-ip";
-import { alertNewApplication, submitApplication } from "@/lib/server/wholesale/applications";
+import { MAX_CERTIFICATE_BYTES, alertNewApplication, submitApplication, submitDetailedApplication } from "@/lib/server/wholesale/applications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +49,42 @@ async function POST_handler(req: Request) {
   if (origin && !ALLOWED_ORIGINS.has(origin)) return NextResponse.json({ ok: false, error: "try_again" }, { status: 403, headers });
   const pool = getPool();
   if (!pool) return NextResponse.json({ ok: false, error: "server" }, { status: 503, headers });
+
+  // Traefik (Coolify) sets x-real-ip to the connecting address; prefer it over x-forwarded-for.
+  const ipEarly = req.headers.get("x-real-ip")?.trim() || extractPublicIp(req);
+
+  // The detailed form (owner 2026-11-08): multipart with the resale certificate.
+  // multipart/form-data is a CORS "simple" request, so no preflight either.
+  if ((req.headers.get("content-type") ?? "").toLowerCase().startsWith("multipart/form-data")) {
+    const len = Number(req.headers.get("content-length") ?? 0);
+    if (len > MAX_CERTIFICATE_BYTES + 200_000) {
+      return NextResponse.json({ ok: false, error: "invalid", field: "certificate" }, { status: 413, headers });
+    }
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      return NextResponse.json({ ok: false, error: "invalid", field: "form" }, { status: 400, headers });
+    }
+    const fields: Record<string, unknown> = {};
+    let file: { name: string; bytes: Uint8Array } | null = null;
+    for (const [k, v] of form.entries()) {
+      if (typeof v === "string") fields[k] = v.slice(0, 4000);
+      else if (k === "certificate" && v.size > 0) file = { name: v.name, bytes: new Uint8Array(await v.arrayBuffer()) };
+    }
+    try {
+      const answer = await submitDetailedApplication(pool, { fields, file, ip: ipEarly, ua: req.headers.get("user-agent") ?? "" });
+      if (answer.ok && answer.isNew && answer.id) {
+        const id = answer.id;
+        after(() => alertNewApplication(pool, id));
+      }
+      if (answer.ok) return NextResponse.json({ ok: true }, { headers });
+      return NextResponse.json(answer, { status: answer.error === "invalid" ? 400 : 429, headers });
+    } catch (e) {
+      console.error("[wholesale-apply detailed]", e);
+      return NextResponse.json({ ok: false, error: "server" }, { status: 500, headers });
+    }
+  }
 
   let body: Record<string, unknown> = {};
   try {

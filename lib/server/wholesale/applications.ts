@@ -46,6 +46,27 @@ export type WholesaleApplication = {
   shopifyCompanyGid: string | null;
   welcomeEmailSent: boolean;
   lastError: string | null;
+  /** Detailed form (owner 2026-11-08); empty on older applications. */
+  tradeName: string | null;
+  contactTitle: string | null;
+  yearsInBusiness: string | null;
+  ein: string | null;
+  resalePermitNumber: string | null;
+  resalePermitState: string | null;
+  street: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  country: string | null;
+  physicalStore: string | null;
+  socialLinks: string[];
+  otherLinks: string | null;
+  orderSize: string | null;
+  brandsCarried: string | null;
+  heardFrom: string | null;
+  agreedTerms: boolean;
+  consentVerify: boolean;
+  certificate: { filename: string; mime: string; sizeBytes: number } | null;
 };
 
 type Row = {
@@ -66,6 +87,28 @@ type Row = {
   shopify_customer_gid: string | null;
   welcome_email_sent: boolean;
   last_error: string | null;
+  trade_name?: string | null;
+  contact_title?: string | null;
+  years_in_business?: string | null;
+  ein?: string | null;
+  resale_permit_number?: string | null;
+  resale_permit_state?: string | null;
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  physical_store?: string | null;
+  social_links?: string[] | null;
+  other_links?: string | null;
+  order_size?: string | null;
+  brands_carried?: string | null;
+  heard_from?: string | null;
+  agreed_terms?: boolean | null;
+  consent_verify?: boolean | null;
+  cert_filename?: string | null;
+  cert_mime?: string | null;
+  cert_size?: number | null;
 };
 
 function toApp(r: Row): WholesaleApplication {
@@ -86,7 +129,82 @@ function toApp(r: Row): WholesaleApplication {
     shopifyCompanyGid: r.shopify_company_gid,
     welcomeEmailSent: r.welcome_email_sent,
     lastError: r.last_error,
+    tradeName: r.trade_name ?? null,
+    contactTitle: r.contact_title ?? null,
+    yearsInBusiness: r.years_in_business ?? null,
+    ein: r.ein ?? null,
+    resalePermitNumber: r.resale_permit_number ?? null,
+    resalePermitState: r.resale_permit_state ?? null,
+    street: r.street ?? null,
+    city: r.city ?? null,
+    state: r.state ?? null,
+    zip: r.zip ?? null,
+    country: r.country ?? null,
+    physicalStore: r.physical_store ?? null,
+    socialLinks: r.social_links ?? [],
+    otherLinks: r.other_links ?? null,
+    orderSize: r.order_size ?? null,
+    brandsCarried: r.brands_carried ?? null,
+    heardFrom: r.heard_from ?? null,
+    agreedTerms: Boolean(r.agreed_terms),
+    consentVerify: Boolean(r.consent_verify),
+    certificate: r.cert_filename ? { filename: r.cert_filename, mime: r.cert_mime ?? "", sizeBytes: Number(r.cert_size ?? 0) } : null,
   };
+}
+
+/** Social sites accepted as "direct links to current social accounts". */
+const SOCIAL_HOSTS = [
+  "instagram.com", "facebook.com", "fb.com", "tiktok.com", "x.com", "twitter.com", "linkedin.com",
+  "pinterest.com", "youtube.com", "threads.net", "snapchat.com",
+];
+
+/**
+ * Split the social-links box (one per line, or commas) into profile URLs on a
+ * known social site with a path (a profile, not just the home page).
+ * Returns null when any entry is not such a link.
+ */
+export function parseSocialLinks(raw: unknown): string[] | null {
+  if (typeof raw !== "string") return [];
+  const parts = raw.split(/[\n,]+/).map((x) => x.trim()).filter(Boolean).slice(0, 8);
+  const out: string[] = [];
+  for (const p of parts) {
+    let u: URL;
+    try {
+      u = new URL(/^https?:\/\//i.test(p) ? p : `https://${p}`);
+    } catch {
+      return null;
+    }
+    const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, "");
+    if (!SOCIAL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return null;
+    if (u.pathname.replace(/\/+$/, "").length < 2) return null;
+    out.push(`https://${host}${u.pathname.replace(/\/+$/, "")}`.slice(0, 300));
+  }
+  return out;
+}
+
+/** EIN: 9 digits, shown as 12-3456789. Null when it is not 9 digits. */
+export function normalizeEin(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const d = raw.replace(/\D/g, "");
+  return d.length === 9 ? `${d.slice(0, 2)}-${d.slice(2)}` : null;
+}
+
+export const MAX_CERTIFICATE_BYTES = 10 * 1024 * 1024;
+
+/** PDF / JPEG / PNG / HEIC / WEBP by their first bytes (never trust the browser's type). */
+export function sniffCertificate(bytes: Uint8Array): string | null {
+  const b = bytes;
+  if (b.length < 12) return null;
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "application/pdf";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return "image/webp";
+  const ftyp = String.fromCharCode(b[4], b[5], b[6], b[7]);
+  if (ftyp === "ftyp") {
+    const brand = String.fromCharCode(b[8], b[9], b[10], b[11]).toLowerCase();
+    if (/^(heic|heix|hevc|mif1|msf1|heim|heis)$/.test(brand)) return "image/heic";
+  }
+  return null;
 }
 
 /** Trimmed text, cut to `max`; empty → null. */
@@ -174,6 +292,122 @@ export async function submitApplication(pool: Pool, input: ApplyInput): Promise<
   return { ok: true, id: Number(r.rows[0].id), isNew: true };
 }
 
+export type DetailedApplyInput = {
+  fields: Record<string, unknown>;
+  file: { name: string; bytes: Uint8Array } | null;
+  ip: string | null;
+  ua: string;
+};
+
+export type DetailedApplyAnswer =
+  | { ok: true; id: number | null; isNew: boolean }
+  | { ok: false; error: "invalid"; field: string }
+  | { ok: false; error: "too_many" | "busy" | "server" };
+
+/**
+ * The detailed Wholesale form (owner 2026-11-08). Everything below is required
+ * unless marked optional; the answer names the first field that is wrong so
+ * the page can point at it. Returns before writing anything when it fails.
+ */
+export async function submitDetailedApplication(pool: Pool, input: DetailedApplyInput): Promise<DetailedApplyAnswer> {
+  const f = input.fields;
+  if (screenRequest({ honeypot: f.hp, openMs: f.t, ua: input.ua }) || isAutomationUa(input.ua)) {
+    return { ok: true, id: null, isNew: false };
+  }
+  const bad = (field: string): DetailedApplyAnswer => ({ ok: false, error: "invalid", field });
+
+  const contactName = text(f.name, 120);
+  if (!contactName) return bad("name");
+  const email = normalizeEmail(f.email);
+  if (!email) return bad("email");
+  const phone = text(f.phone, 40);
+  if (!phone || phone.replace(/\D/g, "").length < 7) return bad("phone");
+  const businessName = text(f.business, 160);
+  if (!businessName) return bad("business");
+  const storeType = text(f.store_type, 80);
+  if (!storeType) return bad("store_type");
+  const ein = normalizeEin(f.ein);
+  if (!ein) return bad("ein");
+  const permitNumber = text(f.permit_number, 60);
+  if (!permitNumber) return bad("permit_number");
+  const permitState = text(f.permit_state, 60);
+  if (!permitState) return bad("permit_state");
+  const street = text(f.street, 200);
+  if (!street) return bad("street");
+  const city = text(f.city, 100);
+  if (!city) return bad("city");
+  const state = text(f.state, 60);
+  if (!state) return bad("state");
+  const zip = text(f.zip, 20);
+  if (!zip) return bad("zip");
+  const country = text(f.country, 60) ?? "United States";
+  const social = parseSocialLinks(f.social);
+  if (!social || social.length === 0) return bad("social");
+  if (f.agree_terms !== "on" && f.agree_terms !== "true") return bad("agree_terms");
+  if (f.consent_verify !== "on" && f.consent_verify !== "true") return bad("consent_verify");
+  if (!input.file || input.file.bytes.length === 0) return bad("certificate");
+  if (input.file.bytes.length > MAX_CERTIFICATE_BYTES) return bad("certificate");
+  const mime = sniffCertificate(input.file.bytes);
+  if (!mime) return bad("certificate");
+
+  const limits = await pool.query<{ ip_day: string; hour: string }>(
+    `SELECT count(*) FILTER (WHERE ip = $1 AND created_at > now() - interval '24 hours') AS ip_day,
+            count(*) FILTER (WHERE created_at > now() - interval '1 hour') AS hour
+       FROM wholesale_applications`,
+    [input.ip],
+  );
+  if (input.ip && Number(limits.rows[0]?.ip_day ?? 0) >= MAX_APPLICATIONS_PER_IP_PER_DAY) return { ok: false, error: "too_many" };
+  if (Number(limits.rows[0]?.hour ?? 0) >= MAX_APPLICATIONS_PER_HOUR) return { ok: false, error: "busy" };
+
+  const message = typeof f.message === "string" ? f.message.trim().slice(0, 2000) || null : null;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await client.query<{ id: string }>(
+      `INSERT INTO wholesale_applications
+         (business_name, contact_name, email, phone, city_state, website, store_type, message, source_path, ip, user_agent,
+          trade_name, contact_title, years_in_business, ein, resale_permit_number, resale_permit_state,
+          street, city, state, zip, country, physical_store, social_links, other_links, order_size,
+          brands_carried, heard_from, agreed_terms, consent_verify)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+               $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, true, true)
+       RETURNING id`,
+      [
+        businessName, contactName, email, phone, `${city}, ${state}`, text(f.website, 200), storeType, message,
+        text(f.p, 200), input.ip, input.ua.slice(0, 300),
+        text(f.trade_name, 160), text(f.title, 80), text(f.years, 40), ein, permitNumber, permitState,
+        street, city, state, zip, country, text(f.physical_store, 20), social,
+        typeof f.other_links === "string" ? f.other_links.trim().slice(0, 1000) || null : null,
+        text(f.order_size, 60), text(f.brands, 300), text(f.heard_from, 120),
+      ],
+    );
+    const id = Number(r.rows[0].id);
+    const safeName = (input.file.name || "certificate").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+    await client.query(
+      `INSERT INTO wholesale_application_files (application_id, kind, filename, mime, size_bytes, data)
+       VALUES ($1, 'resale_certificate', $2, $3, $4, $5)`,
+      [id, safeName, mime, input.file.bytes.length, Buffer.from(input.file.bytes)],
+    );
+    await client.query("COMMIT");
+    return { ok: true, id, isNew: true };
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/** The uploaded resale certificate for an application (admins only — see the route). */
+export async function getCertificate(pool: Pool, id: number): Promise<{ filename: string; mime: string; data: Buffer } | null> {
+  const r = await pool.query<{ filename: string; mime: string; data: Buffer }>(
+    `SELECT filename, mime, data FROM wholesale_application_files
+      WHERE application_id = $1 AND kind = 'resale_certificate' ORDER BY id DESC LIMIT 1`,
+    [id],
+  );
+  return r.rows[0] ?? null;
+}
+
 /** The phone alert for a new application. Never throws. */
 export async function alertNewApplication(pool: Pool, id: number): Promise<void> {
   try {
@@ -198,11 +432,13 @@ export async function alertNewApplication(pool: Pool, id: number): Promise<void>
 
 export async function listApplications(pool: Pool): Promise<{ applications: WholesaleApplication[]; counts: Record<WholesaleStatus, number> }> {
   const r = await pool.query<Row>(
-    `SELECT id, status, business_name, contact_name, email, phone, city_state, website, store_type, message,
-            created_at, decided_at, decided_by_email, shopify_company_gid, shopify_customer_gid,
-            welcome_email_sent, last_error
-       FROM wholesale_applications
-      ORDER BY (status = 'new') DESC, created_at DESC
+    `SELECT a.*, f.filename AS cert_filename, f.mime AS cert_mime, f.size_bytes AS cert_size
+       FROM wholesale_applications a
+       LEFT JOIN LATERAL (
+         SELECT filename, mime, size_bytes FROM wholesale_application_files
+          WHERE application_id = a.id AND kind = 'resale_certificate' ORDER BY id DESC LIMIT 1
+       ) f ON true
+      ORDER BY (a.status = 'new') DESC, a.created_at DESC
       LIMIT 500`,
   );
   const counts: Record<WholesaleStatus, number> = { new: 0, approved: 0, declined: 0 };
@@ -263,13 +499,31 @@ export async function approveApplication(pool: Pool, id: number, by: string | nu
     if (!companyId) {
       const note = [
         `Wholesale application #${row.id} (CarbonWMS)`,
+        row.trade_name ? `Store: ${row.trade_name}` : null,
         row.city_state,
         row.store_type,
+        row.ein ? `EIN ${row.ein}` : null,
+        row.resale_permit_number ? `Resale permit ${row.resale_permit_number}${row.resale_permit_state ? ` (${row.resale_permit_state})` : ""}` : null,
         row.website,
+        ...(row.social_links ?? []),
         row.phone ? `Phone ${row.phone}` : null,
       ]
         .filter(Boolean)
-        .join(" · ");
+        .join(" · ")
+        .slice(0, 5000);
+      // The detailed form gives a full address: the location ships and bills there.
+      const address =
+        row.street && row.city && row.zip
+          ? {
+              recipient: row.trade_name || row.business_name,
+              address1: row.street,
+              city: row.city,
+              zip: row.zip,
+              countryCode: /^(us|usa|united states)/i.test(row.country ?? "United States") ? "US" : undefined,
+              ...(row.state && /^[A-Za-z]{2}$/.test(row.state) ? { zoneCode: row.state.toUpperCase() } : {}),
+              ...(row.phone ? { phone: row.phone } : {}),
+            }
+          : null;
       const c = await welcomeGql<{ companyCreate: { company: { id: string } | null; userErrors: UserError[] } }>(
         ctx,
         `mutation WholesaleCompany($input: CompanyCreateInput!) {
@@ -284,6 +538,8 @@ export async function approveApplication(pool: Pool, id: number, by: string | nu
               buyerExperienceConfiguration: { checkoutToDraft: false, editableShippingAddress: true },
               // No sales tax: company to company, the buyer resells (owner 2026-11-03).
               taxExempt: true,
+              ...(row.resale_permit_number ? { taxRegistrationId: row.resale_permit_number.slice(0, 50) } : {}),
+              ...(address && address.countryCode ? { shippingAddress: address, billingSameAsShipping: true } : {}),
             },
           },
         },

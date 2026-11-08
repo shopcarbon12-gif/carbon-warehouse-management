@@ -53,6 +53,13 @@ function companyUrl(gid: string): string {
   return `https://admin.shopify.com/store/shopcarbon1/companies/${id}`;
 }
 
+/** Two-letter US state → OpenCorporates jurisdiction code (us_fl); otherwise all US. */
+function ocJurisdiction(state: string | null): string {
+  return state && /^[A-Za-z]{2}$/.test(state.trim()) ? `us_${state.trim().toLowerCase()}` : "";
+}
+
+const link = "text-[var(--wms-accent)] underline-offset-2 hover:underline";
+
 function websiteHref(w: string): string | null {
   const t = w.trim();
   if (/^https?:\/\//i.test(t)) return t;
@@ -235,6 +242,163 @@ export function WholesaleWorkspace() {
                       )}
                     </dd>
                   </div>
+                  {a.ein || a.socialLinks.length > 0 ? (
+                    <>
+                      <div className="min-w-0 sm:col-span-2 lg:col-span-3 border-t border-[var(--wms-border)] pt-2">
+                        <dt className={label}>Business &amp; tax</dt>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Store / trade name</dt>
+                        <dd className="break-words text-sm text-[var(--wms-fg)]">{a.tradeName || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Contact title</dt>
+                        <dd className="break-words text-sm text-[var(--wms-fg)]">{a.contactTitle || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Years in business</dt>
+                        <dd className="text-sm text-[var(--wms-fg)]">{a.yearsInBusiness || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>EIN</dt>
+                        <dd className="select-all font-mono text-sm text-[var(--wms-fg)]">{a.ein || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Resale permit</dt>
+                        <dd className="select-all break-words font-mono text-sm text-[var(--wms-fg)]">
+                          {a.resalePermitNumber || "—"}
+                          {a.resalePermitState ? ` · ${a.resalePermitState}` : ""}
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Resale certificate</dt>
+                        <dd className="text-sm">
+                          {a.certificate ? (
+                            <>
+                              <a className={link} href={`/api/shopify/wholesale/${a.id}/certificate`} target="_blank" rel="noreferrer">
+                                View
+                              </a>
+                              {" · "}
+                              <a className={link} href={`/api/shopify/wholesale/${a.id}/certificate?download=1`}>
+                                Download
+                              </a>
+                              <span className="ml-1 font-mono text-[0.68rem] text-[var(--wms-muted)]">
+                                {a.certificate.filename} ({Math.max(1, Math.round(a.certificate.sizeBytes / 1024))} KB)
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[var(--wms-status-danger-fg)]">Missing</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2">
+                        <dt className={label}>Business address</dt>
+                        <dd className="break-words text-sm text-[var(--wms-fg)]">
+                          {[a.street, a.city, [a.state, a.zip].filter(Boolean).join(" "), a.country].filter(Boolean).join(", ") || "—"}
+                          {a.street ? (
+                            <a
+                              className={`${link} ml-2 font-mono text-[0.68rem]`}
+                              href={`https://www.google.com/maps/search/${encodeURIComponent([a.street, a.city, a.state, a.zip].filter(Boolean).join(", "))}`}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              Map
+                            </a>
+                          ) : null}
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Physical storefront</dt>
+                        <dd className="text-sm text-[var(--wms-fg)]">{a.physicalStore || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Expected order size</dt>
+                        <dd className="text-sm text-[var(--wms-fg)]">{a.orderSize || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Brands carried</dt>
+                        <dd className="break-words text-sm text-[var(--wms-fg)]">{a.brandsCarried || "—"}</dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Heard about Carbon</dt>
+                        <dd className="break-words text-sm text-[var(--wms-fg)]">{a.heardFrom || "—"}</dd>
+                      </div>
+
+                      <div className="min-w-0 sm:col-span-2 lg:col-span-3 border-t border-[var(--wms-border)] pt-2">
+                        <dt className={label}>Verification</dt>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2">
+                        <dt className={label}>Social accounts (current)</dt>
+                        <dd className="text-sm">
+                          {a.socialLinks.length ? (
+                            <ul className="flex flex-col gap-0.5">
+                              {a.socialLinks.map((u) => (
+                                <li key={u} className="break-all">
+                                  <a className={link} href={u} target="_blank" rel="noreferrer noopener">
+                                    {u.replace(/^https:\/\//, "")}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-[var(--wms-status-danger-fg)]">None given</span>
+                          )}
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className={label}>Other links</dt>
+                        <dd className="whitespace-pre-wrap break-all text-sm text-[var(--wms-fg)]">{a.otherLinks || "—"}</dd>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+                        <dt className={label}>Background check</dt>
+                        <dd className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                          <a
+                            className={link}
+                            href={`https://opencorporates.com/companies${ocJurisdiction(a.state) ? `/${ocJurisdiction(a.state)}` : ""}?q=${encodeURIComponent(a.businessName)}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            State business registry (OpenCorporates)
+                          </a>
+                          <a
+                            className={link}
+                            href={`https://www.google.com/search?q=${encodeURIComponent(`"${a.businessName}" ${a.city ?? ""} ${a.state ?? ""}`.trim())}`}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            Google the business
+                          </a>
+                          {a.tradeName ? (
+                            <a
+                              className={link}
+                              href={`https://www.google.com/search?q=${encodeURIComponent(`"${a.tradeName}" ${a.city ?? ""}`.trim())}`}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              Google the store name
+                            </a>
+                          ) : null}
+                          {a.resalePermitState ? (
+                            <a
+                              className={link}
+                              href={`https://www.google.com/search?q=${encodeURIComponent(`${a.resalePermitState} verify resale certificate sales tax permit lookup`)}`}
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            >
+                              {a.resalePermitState} permit lookup
+                            </a>
+                          ) : null}
+                        </dd>
+                      </div>
+                      <div className="min-w-0 sm:col-span-2 lg:col-span-3">
+                        <dt className={label}>Agreements</dt>
+                        <dd className="text-sm text-[var(--wms-fg)]">
+                          {a.agreedTerms ? "Accepted wholesale terms" : "Terms not accepted"} ·{" "}
+                          {a.consentVerify ? "Consented to verification" : "No verification consent"}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null}
                   {a.message ? (
                     <div className="min-w-0 sm:col-span-2 lg:col-span-3">
                       <dt className={label}>Comment</dt>

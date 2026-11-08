@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { NewOrdersNotice } from "@/components/dashboard/new-orders-notice";
+import { NeedsAttention } from "@/components/dashboard/needs-attention";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -598,6 +599,7 @@ export function CommandCenter() {
 
       {/* Only when Shopify has orders waiting — renders nothing at zero. */}
       <NewOrdersNotice />
+      <NeedsAttention />
 
       {/* Shortcuts — the pages people jump to most from the dashboard */}
       <section aria-label="Shortcuts">
