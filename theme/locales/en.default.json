@@ -768,7 +768,7 @@
       "wholesale_account": "Wholesale account",
       "your_orders": "Your orders",
       "grid": {
-        "lead_html": "<strong>Wholesale</strong> · Order in runs (one of every size in a colour). Minimum {{ min }} runs per order — mix items and colours any way you like. Shipping is billed separately after your order is packed.",
+        "lead_html": "<strong>Wholesale</strong> · Order in runs (one of every size in a colour). Minimum {{ min }} runs per order — mix items and colours any way you like. Shipping is not included — it is billed on a separate invoice after packing (pay within 24 hours).",
         "table_label": "Wholesale order by colour",
         "colour": "Colour",
         "sizes_in_run": "Sizes in a run",
@@ -784,7 +784,10 @@
         "add_failed": "Could not add to cart.",
         "add_failed_retry": "Could not add to cart. Please try again."
       },
+      "shipping_policy_html": "<strong>Shipping is billed separately.</strong> Your checkout total does not include shipping. The shipping cost is calculated after your order is packed and sent to you on a separate invoice. Invoices not paid within 24 hours are cancelled and the items released — we do not hold or reserve stock for individual customers.",
       "cart_min": {
+        "broken_heading": "Incomplete run removed.",
+        "broken_text": "Wholesale is sold in complete runs only (one of every size in a colour). Updating your cart…",
         "heading": "Wholesale minimum: {{ min }} runs per order.",
         "cart_has_one": "Your cart has {{ n }} run —",
         "cart_has_other": "Your cart has {{ n }} runs —",

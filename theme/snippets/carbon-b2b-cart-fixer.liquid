@@ -1,0 +1,42 @@
+{%- comment -%}
+  Wholesale only (rendered from layout/theme.liquid for customer.b2b?).
+  carbon-b2b-cart-minimum marks a cart with a broken run (a size removed or
+  changed) with data-carbon-b2b-fix = the /cart/update.js body that sets every
+  line of that colour back to its complete runs. This applies it — on page
+  load and whenever the cart drawer / cart page is re-rendered — then
+  refreshes the cart. After the update the cart is consistent, so it settles.
+{%- endcomment -%}
+<script>
+  (() => {
+    if (window.__carbonB2bFixer) return;
+    window.__carbonB2bFixer = true;
+    let busy = false;
+    const isCartPage = () => location.pathname.replace(/\/$/, '').endsWith({{ routes.cart_url | json }});
+    const run = () => {
+      if (busy) return;
+      const box = document.querySelector('[data-carbon-b2b-fix]');
+      if (!box) return;
+      let body;
+      try { body = JSON.parse(box.dataset.carbonB2bFix); } catch (e) { return; }
+      busy = true;
+      box.removeAttribute('data-carbon-b2b-fix');
+      fetch({{ routes.cart_update_url | append: '.js' | json }}, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(body),
+      })
+        .then(() => {
+          if (isCartPage()) { location.reload(); return; }
+          document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+        })
+        .catch(() => {})
+        .finally(() => { setTimeout(() => { busy = false; run(); }, 800); });
+    };
+    const start = () => {
+      run();
+      new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  })();
+</script>

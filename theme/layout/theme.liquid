@@ -443,6 +443,7 @@ a.thb-mobile-account-link {
 {%- endunless -%}
 {% render 'carbon-tawk-delayed' %}
 {%- unless customer.b2b? -%}{% render 'carbon-welcome-popup' %}{%- endunless -%}
+{%- if customer.b2b? -%}{% render 'carbon-b2b-cart-fixer' %}{%- endif -%}
 </body>
 </html>
 <script src="{{ 'noman.js' | asset_url }}" defer="defer"></script>

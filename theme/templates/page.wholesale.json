@@ -25,7 +25,7 @@
         "submit_label": "Apply for wholesale",
         "success_text": "Thanks — your application is in. We'll review it and email you once your wholesale account is ready.",
         "term_runs": "Each run includes one of every size in a color. Minimum three runs per order — mix items and colors any way you like.",
-        "term_payment": "Payment is taken at checkout. Shipping is billed separately after your order is packed."
+        "term_payment": "Payment for the items is taken at checkout. Shipping is not included in your checkout total. The shipping cost is calculated after your order is packed and sent to you on a separate invoice. Invoices not paid within 24 hours are cancelled and the items released — we do not hold or reserve stock for individual customers."
       }
     }
   },

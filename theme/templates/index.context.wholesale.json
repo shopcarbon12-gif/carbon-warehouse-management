@@ -577,8 +577,8 @@
         "term_ship": {
           "type": "term",
           "settings": {
-            "title": "Tax-exempt · shipping after packing",
-            "text": "No sales tax for resellers. Shipping is billed separately after your order is packed."
+            "title": "Tax-exempt · shipping invoiced",
+            "text": "No sales tax for resellers. Shipping is not included: it is invoiced separately after packing and must be paid within 24 hours, or the order is cancelled and the items released."
           }
         }
       },
