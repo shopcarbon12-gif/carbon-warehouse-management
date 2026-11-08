@@ -12,7 +12,7 @@ import { STORE_MEDIA } from "../lib/server/email/brand";
 import { offerLabel } from "../lib/server/email/campaigns";
 import { parseOffer } from "../lib/server/email/validate";
 import { addOwnerMessage, pickDirection } from "../lib/server/email/designer";
-import type { CatalogProduct } from "../lib/server/email/catalog";
+import { catalogLines, catalogSets, type CatalogProduct } from "../lib/server/email/catalog";
 
 const url = process.env.TEST_DB ?? "";
 if (!/127\.0\.0\.1:55499|localhost:55499/.test(url)) throw new Error("TEST_DB must point at the throwaway test Postgres on :55499");
@@ -32,6 +32,8 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   compareAt: null,
   stock: 5,
   image: `https://cdn.shopify.com/item-${n}.jpg`,
+  handle: `item-${n}`,
+  setPartners: [],
 });
 
 (async () => {
@@ -60,6 +62,21 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   assert.match(back, /\{\{img:P7:4x5\}\}/);
   assert.match(back, /\{\{img:S1\}\}/);
   console.log("ok  slots survive catalog renumbering");
+
+  // Matching sets: one card like the homepage (tops first, combined price), X-ref = the top's picture/link.
+  const pc = (n: number, ref: string, title: string, price: number, partners: string[]): CatalogProduct => ({ ...prod(n, ref), title, price, handle: `h${n}`, setPartners: partners });
+  const cat = [pc(1, "P1", "Elodie Jogger Set", 49, ["h2"]), pc(2, "P2", "Elodie Hoodie Set", 52, ["h1"]), pc(3, "P3", "Mara Top Set", 30, ["h9"]), prod(4, "P4")];
+  const sets = catalogSets(cat);
+  assert.equal(sets.length, 1, "a set with a sold-out piece is not offered");
+  assert.equal(sets[0].name, "Elodie Set");
+  assert.equal(sets[0].piecesLine, "Hoodie $52 + Jogger $49");
+  assert.equal(sets[0].total, 101);
+  assert.equal(sets[0].lead.ref, "P2");
+  assert.match(catalogLines(cat, sets), /X1 \| Elodie Set \| Hoodie \$52 \+ Jogger \$49 \| Set \$101 \| P2 \+ P1/);
+  assert.match(catalogLines(cat, sets), /P1 \| Elodie Jogger Set .*piece of set X1/);
+  const smaps = buildMaps(cat, lib, [], sets);
+  assert.match(toKeys(`<img src="{{img:X1}}"><a href="{{link:X1}}">`, smaps).html, /\{\{img:p2\}\}.*\{\{link:p2\}\}/);
+  console.log("ok  matching sets: one card, combined price, top's picture");
 
   // Render: banners + real photos; a missing picture's <img> is removed; logo files.
   const design = await pool.query<{ id: string }>(`INSERT INTO email_designs (tenant_id, title) VALUES ($1, 'Layout test') RETURNING id::text`, [T]);

@@ -35,6 +35,24 @@ export type CatalogProduct = {
   compareAt: number | null;
   stock: number;
   image: string | null;
+  handle: string;
+  /** Matching-set partners (handles, from the carbon_set.partners metafield CarbonWMS writes). */
+  setPartners: string[];
+};
+
+/**
+ * A matching set, shown the way the homepage set card shows it (theme
+ * snippets/carbon-set-card.liquid): one card named "<Name> Set", a piece badge,
+ * the pieces line "Hoodie $52 + Jogger $49" (tops first, bottoms last), the
+ * total "Set $101", the top's photo, linked to the top's page.
+ */
+export type CatalogSet = {
+  ref: string; // X1, X2 …
+  name: string;
+  pieces: CatalogProduct[]; // tops first, bottoms last
+  piecesLine: string;
+  total: number;
+  lead: CatalogProduct;
 };
 
 export const LOGO_URLS = {
@@ -66,6 +84,7 @@ type Node = {
   compareAtPriceRange: { minVariantCompareAtPrice: { amount: string } } | null;
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
   options: { name: string; values: string[] }[];
+  partners: { value: string } | null;
 };
 
 /** Every active, in-stock product (refs P1, P2 … stable for one listing). */
@@ -82,7 +101,8 @@ export async function inStockCatalog(): Promise<CatalogProduct[]> {
          pageInfo { hasNextPage endCursor }
          nodes { id title handle productType tags totalInventory onlineStoreUrl
                  priceRangeV2 { minVariantPrice { amount } } compareAtPriceRange { minVariantCompareAtPrice { amount } }
-                 featuredMedia { preview { image { url } } } options { name values } } } }`,
+                 featuredMedia { preview { image { url } } } options { name values }
+                 partners: metafield(namespace: "carbon_set", key: "partners") { value } } } }`,
       { after },
     );
     nodes.push(...d.products.nodes);
@@ -106,17 +126,64 @@ export async function inStockCatalog(): Promise<CatalogProduct[]> {
         compareAt: compare > 0 ? compare : null,
         stock: n.totalInventory ?? 0,
         image: n.featuredMedia?.preview?.image?.url ?? null,
+        handle: n.handle,
+        setPartners: partnersOf(n.partners?.value),
       };
     });
   cache = { at: Date.now(), items };
   return items;
 }
 
-/** One line per product for the planner (short: ~600 products ≈ 6k tokens). */
-export function catalogLines(items: CatalogProduct[]): string {
-  return items
-    .map((p) => `${p.ref} | ${p.title} | ${p.type || "item"} | ${p.gender} | ${p.colors.join("/") || "-"} | $${p.price}${p.compareAt && p.compareAt > p.price ? ` (was $${p.compareAt})` : ""} | stock ${p.stock}`)
-    .join("\n");
+function partnersOf(v: string | null | undefined): string[] {
+  try {
+    const a = JSON.parse(v || "[]") as unknown;
+    return Array.isArray(a) ? a.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Same rule as the homepage set card: a piece whose last word (without " Set") is one of these is a bottom. */
+const BOTTOMS = new Set(["Pants", "Jogger", "Joggers", "Skirt", "Shorts", "Short", "Leggings", "Legging", "Trousers", "Trouser"]);
+const pieceWord = (title: string) => title.replace(/ Set$/i, "").trim().split(/\s+/).pop() ?? title;
+
+/** Matching sets whose pieces are all in stock (X-refs), like the homepage set cards. */
+export function catalogSets(items: CatalogProduct[]): CatalogSet[] {
+  const byHandle = new Map(items.map((p) => [p.handle, p]));
+  const seen = new Set<string>();
+  const sets: CatalogSet[] = [];
+  for (const p of items) {
+    if (!p.setPartners.length || seen.has(p.handle)) continue;
+    const all = [p, ...p.setPartners.map((h) => byHandle.get(h))];
+    if (all.some((x) => !x)) continue; // a piece is sold out: no set card
+    const pieces = (all as CatalogProduct[]).filter((x, i, a) => a.findIndex((y) => y.handle === x.handle) === i);
+    if (pieces.length < 2) continue;
+    pieces.forEach((x) => seen.add(x.handle));
+    const ordered = [...pieces.filter((x) => !BOTTOMS.has(pieceWord(x.title))), ...pieces.filter((x) => BOTTOMS.has(pieceWord(x.title)))];
+    const lead = ordered[0];
+    const words = lead.title.replace(/ Set$/i, "").trim().split(/\s+/);
+    const name = words.length > 1 ? `${words.slice(0, -1).join(" ")} Set` : lead.title;
+    const money = (n: number) => `$${n % 1 ? n.toFixed(2) : n}`;
+    const total = Math.round(ordered.reduce((s, x) => s + x.price, 0) * 100) / 100;
+    sets.push({ ref: `X${sets.length + 1}`, name, pieces: ordered, piecesLine: ordered.map((x) => `${pieceWord(x.title)} ${money(x.price)}`).join(" + "), total, lead });
+  }
+  return sets;
+}
+
+/** One line per product for the planner (short: ~600 products ≈ 6k tokens), then the sets. */
+export function catalogLines(items: CatalogProduct[], sets: CatalogSet[] = catalogSets(items)): string {
+  const setOf = new Map<string, string>();
+  for (const s of sets) for (const p of s.pieces) setOf.set(p.id, s.ref);
+  const lines = items.map(
+    (p) =>
+      `${p.ref} | ${p.title} | ${p.type || "item"} | ${p.gender} | ${p.colors.join("/") || "-"} | $${p.price}${p.compareAt && p.compareAt > p.price ? ` (was $${p.compareAt})` : ""} | stock ${p.stock}${setOf.has(p.id) ? ` | piece of set ${setOf.get(p.id)}` : ""}`,
+  );
+  if (!sets.length) return lines.join("\n");
+  return (
+    lines.join("\n") +
+    `\n\nMATCHING SETS (${sets.length}) — ref | set name | pieces line | set total | pieces (top first):\n` +
+    sets.map((s) => `${s.ref} | ${s.name} | ${s.piecesLine} | Set $${s.total % 1 ? s.total.toFixed(2) : s.total} | ${s.pieces.map((p) => p.ref).join(" + ")}`).join("\n")
+  );
 }
 
 /** A product photo, ready as a picture-model reference (1024 px, JPEG). */

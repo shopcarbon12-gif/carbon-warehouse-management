@@ -34,7 +34,7 @@ import OpenAI, { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { WMS_BASE, imageModel, openai, textModel } from "./config";
-import { LOGO_URLS, catalogLines, inStockCatalog, logoReference, productGallery, referencePhoto, type CatalogProduct } from "./catalog";
+import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, logoReference, productGallery, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE, STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleRefs, styleText } from "./style";
 import { MERGE_TAGS, sanitizeEmailHtml } from "./rules";
@@ -112,7 +112,7 @@ type Maps = {
   keyToRef: (key: string) => string | null; // stable key → current ref
 };
 
-export function buildMaps(catalog: CatalogProduct[], library: MediaItem[], attachments: Attachment[]): Maps {
+export function buildMaps(catalog: CatalogProduct[], library: MediaItem[], attachments: Attachment[], sets: CatalogSet[] = []): Maps {
   const byRef = new Map<string, string>();
   const byKey = new Map<string, string>();
   for (const p of catalog) {
@@ -120,6 +120,8 @@ export function buildMaps(catalog: CatalogProduct[], library: MediaItem[], attac
     byRef.set(p.ref, k);
     byKey.set(k, p.ref);
   }
+  // A set's picture and link are its top's (like the homepage set card).
+  for (const s of sets) byRef.set(s.ref, `p${gnum(s.lead.id)}`);
   for (const m of library) {
     const k = m.kind === "store" ? m.ref.toLowerCase() : `m${gnum(m.id)}`;
     byRef.set(m.ref, k);
@@ -183,7 +185,7 @@ const LAYOUT_RULES = `HOW TO WRITE THE EMAIL (html):
 - Phone: the same email re-flowed by the @media rules (stack columns with .m-stack, full-width buttons, bigger text). A phone-only picture or block: wrap it in a <div class="m-show" style="display:none;max-height:0;overflow:hidden;mso-hide:all"> and give .m-show {display:block !important;max-height:none !important;overflow:visible !important}; hide desktop-only blocks on phones with .m-hide {display:none !important}.`;
 
 const BANNER_RULES = `BANNERS (generated pictures, at most ${MAX_BANNERS}):
-- For each {{img:B#}} you use, order it in "banners": {"id":"B1","view":"both|desktop|mobile","size":one of ${SIZES.join(" ")},"products":["P12",…] (the real products the people wear, at most 6),"text":"exact words drawn on the picture, or null","logo":false,"prompt":"…","keep":false}.
+- For each {{img:B#}} you use, order it in "banners": {"id":"B1","view":"both|desktop|mobile","size":one of ${SIZES.join(" ")},"products":["P12","X3",…] (the real products the people wear, at most 6 pieces; a set X-ref = all its pieces),"text":"exact words drawn on the picture, or null","logo":false,"prompt":"…","keep":false}.
 - prompt = a photographer's brief: who (new models: age, look, hair, make-up, how many), what each wears (name the products), where (any location that fits the season and the campaign look: streets, rooftops, parking decks, waterfront, studio…), light, time of day, camera, pose, mood, composition and where empty space is left for any words.
 - The real products are given to the picture model as photos; the garments and shoes must look exactly like them. Never ask for other brands.
 - Words drawn on a banner ("text") are allowed for big graphic headlines only: short, exact, and repeated in the alt text. Everything else is live HTML text.
@@ -214,6 +216,7 @@ Write JSON:
 CREATIVE RULES:
 - Be a top fashion creative. Build complete outfits (top + bottom + outer layer + shoes + accessory where the catalog has them), styled by season and the owner's ask, from real in-stock catalog products only (prefer stock 3+). Never invent garments.
 - Product names and prices shown must be exactly the catalog's.
+- MATCHING SETS (X-refs, listed after the catalog) are shown exactly like the store's homepage shows them: ONE card per set, never as separate products with separate prices. The card shows the set's top photo {{img:X3}} (optionally its other pieces' photos next to it), a small badge "2-piece set" / "3-piece set", the set name exactly ("Elodie Set"), the pieces line exactly as given ("Hoodie $52 + Jogger $49"), and the total as "Set $101", all linking to {{link:X3}}. A look that uses a set lists the set as one line ("Elodie Set — Set $101"), then the other pieces of the look. List the set's X ref in "products".
 - Make the layout earn attention: strong rhythm, contrast between big and small, real graphic ideas from the campaign look. Do not fall back on: logo, nav, big photo, heading, button, two cards, black code panel, footer — unless the owner asks for exactly that.
 - "layout":"new" when there is no version yet, or the owner asks for a different / more creative / new layout or look: then design from a blank page in a direction clearly DIFFERENT from every earlier direction listed — different structure, rhythm, colour use and typography, not the same sections re-skinned.
 - "layout":"edit" for changes to the current version: change what was asked, keep everything else in the html exactly as it is (copy it), keep:true on banners that do not change.
@@ -276,7 +279,8 @@ export async function planLayout(pool: Pool, turn: LayoutTurn): Promise<PlanOut>
     mediaLibrary(pool),
     styleGuide(pool, turn.tenant_id),
   ]);
-  const maps = buildMaps(catalog, library, attachments);
+  const sets = catalogSets(catalog);
+  const maps = buildMaps(catalog, library, attachments, sets);
   const base = await baseVersion(pool, turn.design_id, turn.created_at);
   const earlier = [...new Set(history.rows.map((h) => h.direction).filter((d): d is string => !!d))];
 
@@ -304,7 +308,7 @@ export async function planLayout(pool: Pool, turn: LayoutTurn): Promise<PlanOut>
   content.push({
     type: "text",
     text: catalog.length
-      ? `CATALOG (${catalog.length} products in stock) — ref | name | type | men/women | colours | price | stock:\n${catalogLines(catalog)}`
+      ? `CATALOG (${catalog.length} products in stock) — ref | name | type | men/women | colours | price | stock:\n${catalogLines(catalog, sets)}`
       : "The catalog could not be read right now: do not show specific products.",
   });
   content.push({ type: "text", text: `BRAND PICTURES — ref | kind | shape | description (S1/S2 are the real store photos):\n${mediaLines(library)}` });
@@ -328,7 +332,9 @@ export async function planLayout(pool: Pool, turn: LayoutTurn): Promise<PlanOut>
 
   // Products: the ones listed + any used in the html; at most MAX_PRODUCTS.
   const refsUsed = [...rawHtml.matchAll(SLOT)].map((m) => m[2].toUpperCase());
-  const wantRefs = [...new Set([...(Array.isArray(j.products) ? (j.products as unknown[]).map((x) => String(x).trim().toUpperCase()) : []), ...refsUsed.filter((r) => /^P\d+$/.test(r))])];
+  const listed = [...(Array.isArray(j.products) ? (j.products as unknown[]).map((x) => String(x).trim().toUpperCase()) : []), ...refsUsed.filter((r) => /^[PX]\d+$/.test(r))];
+  // A set (X-ref) stands for all its pieces.
+  const wantRefs = [...new Set(listed.flatMap((r) => (r.startsWith("X") ? (sets.find((s) => s.ref === r)?.pieces.map((p) => p.ref) ?? []) : [r])))];
   const products = wantRefs
     .map((r) => catalog.find((p) => p.ref === r))
     .filter((p): p is CatalogProduct => !!p)
@@ -355,7 +361,11 @@ export async function planLayout(pool: Pool, turn: LayoutTurn): Promise<PlanOut>
     const size = SIZES.includes(String(raw.size) as (typeof SIZES)[number]) ? String(raw.size) : "1536x1024";
     const view = raw.view === "desktop" || raw.view === "mobile" ? raw.view : "both";
     const prods = (Array.isArray(raw.products) ? (raw.products as unknown[]) : [])
-      .map((r) => catalog.find((p) => p.ref === String(r).trim().toUpperCase())?.id)
+      .flatMap((r) => {
+        const ref = String(r).trim().toUpperCase();
+        return ref.startsWith("X") ? (sets.find((s) => s.ref === ref)?.pieces.map((p) => p.ref) ?? []) : [ref];
+      })
+      .map((r) => catalog.find((p) => p.ref === r)?.id)
       .filter((x): x is string => !!x)
       .slice(0, 6);
     const text = raw.text ? String(raw.text).slice(0, 80) : null;

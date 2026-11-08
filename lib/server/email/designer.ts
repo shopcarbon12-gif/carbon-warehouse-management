@@ -352,7 +352,7 @@ async function inputsFor(pool: Pool, turn: Msg, view: View, newDesktop: string |
   }
   for (const p of (turn.products ?? []).slice(0, 6)) {
     if (images.length >= MAX_REFS) break;
-    const cat: CatalogProduct = { ref: "", id: p.id, title: p.title, url: p.url, type: "", gender: "unisex", colors: [], sizes: [], price: p.price, compareAt: null, stock: 0, image: p.image };
+    const cat: CatalogProduct = { ref: "", id: p.id, title: p.title, url: p.url, type: "", gender: "unisex", colors: [], sizes: [], price: p.price, compareAt: null, stock: 0, image: p.image, handle: "", setPartners: [] };
     const b = await productPhoto(cat);
     if (!b) continue;
     images.push(b);
