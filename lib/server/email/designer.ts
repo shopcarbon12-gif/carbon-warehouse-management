@@ -710,6 +710,39 @@ async function storePlan(pool: Pool, turn: Msg, p: Plan, status: string): Promis
 
 /** One picture turn: plan (or re-plan around approved items), stop for review, or draw. */
 async function runPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void): Promise<void> {
+  if (!(await planPictureTurn(pool, turn, log))) return;
+  // Direction 1 has its items: start directions 2 and 3 right now (not on the next tick), plan them side by
+  // side, then all three draw at the same time (owner, 2026-11-08: "why doesn't it generate all 3 at once?").
+  if (turn.variant_group && turn.variant_no === 1) {
+    const sibs = await pool.query<Msg>(
+      `UPDATE email_design_messages SET status = 'planning', step_at = now() WHERE variant_group = $1::uuid AND variant_no > 1 AND status = 'queued' RETURNING *`,
+      [turn.variant_group],
+    );
+    const ready = await Promise.all(
+      sibs.rows.map((s) =>
+        planPictureTurn(pool, s, log).then(
+          (ok) => (ok ? s : null),
+          async (e) => {
+            await fail(pool, s.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
+            return null;
+          },
+        ),
+      ),
+    );
+    await Promise.all(
+      [turn, ...ready.filter((s): s is Msg => !!s)].map((t) =>
+        drawNext(pool, t, log).catch(async (e) => {
+          await fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
+        }),
+      ),
+    );
+    return;
+  }
+  await drawNext(pool, turn, log);
+}
+
+/** Plan a picture turn. True when it is ready to draw (false: waiting for the owner's approval). */
+async function planPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void): Promise<boolean> {
   // Directions 2 and 3 share direction 1's items.
   if (turn.variant_no && turn.variant_no > 1 && !turn.products) {
     const v1 = await pool.query<{ products: TurnProduct[] | null; media: TurnMedia[] | null }>(
@@ -722,19 +755,16 @@ async function runPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void): 
   const approvedAlready = turn.status === "approved-planning";
   const locked = turn.products && (approvedAlready || (turn.variant_no ?? 0) > 1) ? { products: turn.products, media: turn.media ?? [] } : null;
   // An approved turn whose items did not change keeps its briefs.
-  if (approvedAlready && (turn.desktop_prompt || turn.mobile_prompt)) {
-    await drawNext(pool, turn, log);
-    return;
-  }
+  if (approvedAlready && (turn.desktop_prompt || turn.mobile_prompt)) return true;
   await pool.query(`UPDATE email_design_messages SET status = 'planning' WHERE id = $1::uuid`, [turn.id]);
   const p = await plan(pool, turn, locked);
   const review = !!turn.needs_review && !locked && (!turn.variant_no || turn.variant_no === 1);
   await storePlan(pool, turn, p, review ? "review" : "planning");
   if (review) {
     log(`[email-ai] turn ${turn.id}: waiting for the owner to approve ${p.products.length} item(s)`);
-    return;
+    return false;
   }
-  await drawNext(pool, turn, log);
+  return true;
 }
 
 /** Called by the tick. */
@@ -754,8 +784,10 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
         SELECT q.id FROM email_design_messages q
          WHERE (q.status = 'approved'
             OR (q.status = 'queued' AND (q.variant_no IS NULL OR q.variant_no = 1
+                -- Directions 2-3 are started by direction 1's own run (so all three draw together);
+                -- this is only the fallback when that run is gone.
                 OR EXISTS (SELECT 1 FROM email_design_messages v WHERE v.variant_group = q.variant_group AND v.variant_no = 1
-                             AND (v.status IN ('approved','approved-planning','generating','done') OR (v.status = 'planning' AND v.needs_review IS NOT TRUE AND v.products IS NOT NULL))))))
+                             AND v.status IN ('generating','done','failed') AND COALESCE(v.step_at, v.created_at) < now() - interval '3 minutes'))))
          ORDER BY q.created_at LIMIT 6 FOR UPDATE SKIP LOCKED)
       RETURNING m.*`,
   );
