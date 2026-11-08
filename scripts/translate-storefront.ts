@@ -17,6 +17,7 @@
  *   npx tsx scripts/translate-storefront.ts            # dry run: what is missing
  *   npx tsx scripts/translate-storefront.ts --apply    # translate + register
  *   npx tsx scripts/translate-storefront.ts --apply --types=COLLECTION,LINK
+ *   npx tsx scripts/translate-storefront.ts --apply --types=ONLINE_STORE_THEME_LOCALE_CONTENT --force-keys=carbon.wholesale.g_tax
  */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -81,6 +82,10 @@ async function main() {
   const apply = process.argv.includes("--apply");
   const typesArg = process.argv.find((a) => a.startsWith("--types="));
   const types = typesArg ? typesArg.slice(8).split(",") : Object.keys(TYPES);
+  // Shopify does not always mark a theme locale string outdated when its English
+  // changes; --force-keys=carbon.wholesale.g_tax,… re-translates those keys anyway.
+  const forceArg = process.argv.find((a) => a.startsWith("--force-keys="));
+  const forceKeys = new Set(forceArg ? forceArg.slice(13).split(",").filter(Boolean) : []);
   const ctx = await resolveShopContext();
   if (!ctx) throw new Error("Shopify is not connected");
 
@@ -155,7 +160,7 @@ async function main() {
           if (!c.value || !wanted(c.key) || skipValue(c.value)) continue;
           for (const [loc, list] of [["es", n.es], ["pt-BR", n.pt]] as const) {
             const t = list.find((x) => x.key === c.key);
-            if (t && !t.outdated) continue;
+            if (t && !t.outdated && !forceKeys.has(c.key)) continue;
             todo.push({ id: n.resourceId, key: c.key, value: c.value, digest: c.digest, locale: loc });
             count++;
           }
