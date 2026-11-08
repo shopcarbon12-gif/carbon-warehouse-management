@@ -69,10 +69,13 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   const sets = catalogSets(cat);
   assert.equal(sets.length, 1, "a set with a sold-out piece is not offered");
   assert.equal(sets[0].name, "Elodie Set");
-  assert.equal(sets[0].piecesLine, "Hoodie $52 + Jogger $49");
+  assert.equal(sets[0].piecesLine, "Hoodie $52.00 + Jogger $49.00");
   assert.equal(sets[0].total, 101);
   assert.equal(sets[0].lead.ref, "P2");
-  assert.match(catalogLines(cat, sets), /X1 \| Elodie Set \| Hoodie \$52 \+ Jogger \$49 \| Set \$101 \| P2 \+ P1/);
+  assert.match(catalogLines(cat, sets), /X1 \| Elodie Set \| Hoodie \$52\.00 \+ Jogger \$49\.00 \| Set \$101\.00 \| P2 \+ P1/);
+  // The real Cole set (live catalog, 2026-11-08) reads like its homepage card.
+  const cole = catalogSets([pc(5, "P5", "Cole Top Set", 67, ["h6"]), pc(6, "P6", "Cole Pants Set", 65, ["h5"])])[0];
+  assert.deepEqual([cole.name, cole.piecesLine, cole.total.toFixed(2)], ["Cole Set", "Top $67.00 + Pants $65.00", "132.00"]);
   assert.match(catalogLines(cat, sets), /P1 \| Elodie Jogger Set .*piece of set X1/);
   const smaps = buildMaps(cat, lib, [], sets);
   assert.match(toKeys(`<img src="{{img:X1}}"><a href="{{link:X1}}">`, smaps).html, /\{\{img:p2\}\}.*\{\{link:p2\}\}/);

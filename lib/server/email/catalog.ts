@@ -163,7 +163,7 @@ export function catalogSets(items: CatalogProduct[]): CatalogSet[] {
     const lead = ordered[0];
     const words = lead.title.replace(/ Set$/i, "").trim().split(/\s+/);
     const name = words.length > 1 ? `${words.slice(0, -1).join(" ")} Set` : lead.title;
-    const money = (n: number) => `$${n % 1 ? n.toFixed(2) : n}`;
+    const money = (n: number) => `$${n.toFixed(2)}`; // "$67.00", as the homepage shows it
     const total = Math.round(ordered.reduce((s, x) => s + x.price, 0) * 100) / 100;
     sets.push({ ref: `X${sets.length + 1}`, name, pieces: ordered, piecesLine: ordered.map((x) => `${pieceWord(x.title)} ${money(x.price)}`).join(" + "), total, lead });
   }
@@ -182,7 +182,7 @@ export function catalogLines(items: CatalogProduct[], sets: CatalogSet[] = catal
   return (
     lines.join("\n") +
     `\n\nMATCHING SETS (${sets.length}) — ref | set name | pieces line | set total | pieces (top first):\n` +
-    sets.map((s) => `${s.ref} | ${s.name} | ${s.piecesLine} | Set $${s.total % 1 ? s.total.toFixed(2) : s.total} | ${s.pieces.map((p) => p.ref).join(" + ")}`).join("\n")
+    sets.map((s) => `${s.ref} | ${s.name} | ${s.piecesLine} | Set $${s.total.toFixed(2)} | ${s.pieces.map((p) => p.ref).join(" + ")}`).join("\n")
   );
 }
 
