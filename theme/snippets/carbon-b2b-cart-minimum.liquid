@@ -117,8 +117,10 @@
     </style>
   {%- endif -%}
   <style>
-    .carbon-b2b-min { margin: 0 0 12px; padding: 10px 12px; font-size: 0.8125rem; line-height: 1.4; border: 1px solid #c0392b; border-radius: 4px; }
+    .carbon-b2b-min { margin: 0 0 14px; padding: 12px 14px; font-size: 0.9375rem; line-height: 1.5; border: 1px solid #c0392b; border-radius: 4px; }
     .carbon-b2b-min strong { display: block; }
+    /* the wholesale shipping policy that replaces 'shipping calculated at checkout' */
+    .cart-policy-text { font-size: 0.9375rem; line-height: 1.5; }
     .carbon-b2b-min--ok { border-color: rgba(var(--color-body-rgb, 0, 0, 0), 0.2); opacity: 0.85; }
   </style>
   {%- comment -%} The fix itself runs in snippets/carbon-b2b-cart-fixer.liquid (layout), because the drawer is re-rendered with innerHTML and scripts in it would not run. {%- endcomment -%}

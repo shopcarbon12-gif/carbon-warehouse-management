@@ -144,30 +144,31 @@
   /* The grid covers every size, so the Size picker would only confuse; Colour stays to switch the photos. */
   body:has(.carbon-b2b) variant-selects [data-handle="size"] { display: none; }
   .carbon-b2b { margin: 0 0 20px; }
-  .carbon-b2b__lead { margin: 0 0 12px; font-size: 0.875rem; }
+  .carbon-b2b__lead { margin: 0 0 16px; font-size: 1rem; line-height: 1.55; }
   .carbon-b2b__row {
     display: grid;
-    grid-template-columns: minmax(70px, 1fr) minmax(0, 2fr) 84px 84px;
-    gap: 10px;
+    grid-template-columns: minmax(80px, 1fr) minmax(0, 2fr) 96px 104px;
+    gap: 12px;
     align-items: center;
-    padding: 10px 0;
+    padding: 14px 0;
     border-bottom: 1px solid rgba(var(--color-body-rgb, 0, 0, 0), 0.12);
   }
-  .carbon-b2b__row--head { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0; }
-  .carbon-b2b__color { font-weight: 600; overflow-wrap: anywhere; }
-  .carbon-b2b__sizes { display: flex; flex-wrap: wrap; gap: 4px; }
+  .carbon-b2b__row--head { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0; }
+  .carbon-b2b__color { font-size: 1.0625rem; font-weight: 600; overflow-wrap: anywhere; }
+  .carbon-b2b__sizes { display: flex; flex-wrap: wrap; gap: 6px; }
   .carbon-b2b__sizes small { flex-basis: 100%; opacity: 0.7; }
-  .carbon-b2b__size { font-size: 0.75rem; padding: 2px 6px; border: 1px solid currentColor; border-radius: 3px; }
+  .carbon-b2b__size { font-size: 0.9375rem; padding: 4px 9px; border: 1px solid currentColor; border-radius: 3px; }
   .carbon-b2b__size--out { opacity: 0.4; }
-  .carbon-b2b__runs { width: 100%; min-height: 40px; padding: 0 8px; text-align: center; }
+  .carbon-b2b__runs { width: 100%; min-height: 48px; padding: 0 8px; text-align: center; font-size: 1.0625rem; }
   .carbon-b2b__runs[aria-invalid="true"] { outline: 2px solid #c0392b; }
-  .carbon-b2b__row small { display: block; font-size: 0.6875rem; opacity: 0.7; }
-  .carbon-b2b__num { text-align: right; }
+  .carbon-b2b__row small { display: block; font-size: 0.875rem; line-height: 1.4; opacity: 0.75; }
+  .carbon-b2b__num { text-align: right; font-size: 1rem; }
+  .carbon-b2b__total { font-size: 1.125rem; font-weight: 600; }
   .carbon-b2b__foot { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-top: 14px; }
   .carbon-b2b__add { flex: 0 0 auto; min-width: 160px; }
-  .carbon-b2b__error { color: #c0392b; margin: 10px 0 0; font-size: 0.875rem; }
+  .carbon-b2b__error { color: #c0392b; margin: 12px 0 0; font-size: 1rem; }
   @media (max-width: 480px) {
-    .carbon-b2b__row { grid-template-columns: minmax(0, 1fr) 72px 72px; }
+    .carbon-b2b__row { grid-template-columns: minmax(0, 1fr) 84px 88px; }
     .carbon-b2b__row > :nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
     .carbon-b2b__row--head > :nth-child(2) { display: none; }
   }
