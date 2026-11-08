@@ -2,7 +2,8 @@ import { withActivity } from "@/lib/server/activity-log";
 /**
  * POST /api/email/designs/<id>/messages — the owner's chat message to the AI
  * Designer (multipart): text, target = both | desktop | mobile, mode = batch |
- * fast, directions = 1 for three different versions to pick from, and up to
+ * fast, directions = 1 for three different versions, review = 0 to draw without
+ * stopping for the owner to approve the chosen items, and up to
  * 6 photos (file). The AI answers in the background.
  */
 import { NextResponse } from "next/server";
@@ -38,6 +39,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
   const target: Target = targetRaw === "desktop" || targetRaw === "mobile" ? targetRaw : "both";
   const mode = String(form.get("mode") ?? "batch") === "fast" ? "fast" : "batch";
   const directions = String(form.get("directions") ?? "") === "1";
+  const review = String(form.get("review") ?? "1") !== "0";
   const files = form.getAll("file").filter((f): f is File => typeof f === "object" && f !== null && "arrayBuffer" in f).slice(0, MAX_FILES);
   if (!text && !files.length) return NextResponse.json({ error: "Write (or say) what the email should be" }, { status: 400 });
   const attachments: { path: string; name: string }[] = [];
@@ -51,7 +53,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
     attachments.push({ path, name: f.name.slice(0, 80) });
   }
   try {
-    const r = await addOwnerMessage(g.pool, { designId: id, text: text || "Use these photos.", attachments, target, mode, by: g.session.email ?? null, directions });
+    const r = await addOwnerMessage(g.pool, { designId: id, text: text || "Use these photos.", attachments, target, mode, by: g.session.email ?? null, directions, review });
     return NextResponse.json(r);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 409 });

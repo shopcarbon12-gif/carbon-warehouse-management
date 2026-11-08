@@ -11,7 +11,7 @@ import { buildMaps, renderLayout, toKeys, toRefs, type LayoutTurn } from "../lib
 import { STORE_MEDIA } from "../lib/server/email/brand";
 import { offerLabel } from "../lib/server/email/campaigns";
 import { parseOffer } from "../lib/server/email/validate";
-import { addOwnerMessage, pickDirection } from "../lib/server/email/designer";
+import { addOwnerMessage, approveItems, pickDirection } from "../lib/server/email/designer";
 import { catalogLines, catalogSets, type CatalogProduct } from "../lib/server/email/catalog";
 
 const url = process.env.TEST_DB ?? "";
@@ -37,7 +37,7 @@ const prod = (n: number, ref: string): CatalogProduct => ({
 });
 
 (async () => {
-  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql"]) {
+  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql"]) {
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
   }
@@ -117,20 +117,45 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   assert.deepEqual(r.missing, ["b2"]);
   console.log("ok  render: banners, original photos, links, logo, missing pictures removed");
 
-  // 3 directions: three layout turns; the owner must pick before chatting on.
+  // 3 directions (drawn pictures again, 2026-11-08): grouped, new layouts, items reviewed once; picking is optional.
   const sent = await addOwnerMessage(pool, { designId, text: "AW2026 launch", attachments: [], target: "both", mode: "fast", by: "t@x", directions: true });
   assert.equal(sent.aiIds.length, 3);
-  const rows = await pool.query<{ engine: string; variant_no: number; variant_group: string }>(`SELECT engine, variant_no, variant_group::text FROM email_design_messages WHERE id = ANY($1::uuid[]) ORDER BY variant_no`, [sent.aiIds]);
-  assert.deepEqual(rows.rows.map((x) => [x.engine, x.variant_no]), [["layout", 1], ["layout", 2], ["layout", 3]]);
+  const rows = await pool.query<{ engine: string; variant_no: number; variant_group: string; fresh: boolean; needs_review: boolean }>(
+    `SELECT engine, variant_no, variant_group::text, fresh, needs_review FROM email_design_messages WHERE id = ANY($1::uuid[]) ORDER BY variant_no`,
+    [sent.aiIds],
+  );
+  assert.deepEqual(rows.rows.map((x) => [x.engine, x.variant_no, x.fresh, x.needs_review]), [["picture", 1, true, true], ["picture", 2, true, true], ["picture", 3, true, true]]);
   assert.equal(new Set(rows.rows.map((x) => x.variant_group)).size, 1);
-  await pool.query(`UPDATE email_design_messages SET status = 'done', html = '<table></table>' WHERE id = ANY($1::uuid[])`, [sent.aiIds]);
-  await assert.rejects(addOwnerMessage(pool, { designId, text: "more", attachments: [], target: "both", mode: "fast", by: null }), /Pick one of the 3 directions/);
+  await pool.query(`UPDATE email_design_messages SET status = 'done', desktop_path = 'd-' || variant_no, mobile_path = 'm-' || variant_no WHERE id = ANY($1::uuid[])`, [sent.aiIds]);
+  // No pick needed: a plain message continues (from direction 1), keeping its "mobile only" choice.
+  const next = await addOwnerMessage(pool, { designId, text: "bigger buttons on the phone", attachments: [], target: "mobile", mode: "fast", by: null });
+  assert.equal(next.aiIds.length, 1);
+  assert.equal((await pool.query<{ target: string }>(`SELECT target FROM email_design_messages WHERE id = $1::uuid`, [next.aiId])).rows[0].target, "mobile");
+  // ... and another 3 directions can follow right away.
+  await pool.query(`UPDATE email_design_messages SET status = 'failed' WHERE id = $1::uuid`, [next.aiId]);
+  const again = await addOwnerMessage(pool, { designId, text: "three more", attachments: [], target: "mobile", mode: "fast", by: null, directions: true });
+  assert.equal(again.aiIds.length, 3);
+  await pool.query(`UPDATE email_design_messages SET status = 'failed' WHERE id = ANY($1::uuid[])`, [again.aiIds]);
+  // Continuing from another direction is still possible.
   await pickDirection(pool, designId, sent.aiIds[1]);
   const picked = await pool.query<{ picked: boolean }>(`SELECT picked FROM email_design_messages WHERE id = ANY($1::uuid[]) ORDER BY variant_no`, [sent.aiIds]);
   assert.deepEqual(picked.rows.map((x) => x.picked), [false, true, false]);
-  const next = await addOwnerMessage(pool, { designId, text: "add 6 more items", attachments: [], target: "mobile", mode: "fast", by: null });
-  assert.equal(next.aiIds.length, 1);
-  console.log("ok  3 directions: grouped, must pick, then chat continues");
+  console.log("ok  3 directions: no forced pick, chat continues, 3 more any time");
+
+  // Review step: the turn waits; the owner's message is blocked; approving with the same items keeps the briefs.
+  const rv = await addOwnerMessage(pool, { designId, text: "winter looks", attachments: [], target: "both", mode: "fast", by: null });
+  const items = [{ id: "gid://shopify/Product/222", title: "Item 222", url: "u", price: 50, image: null, set: null }];
+  await pool.query(`UPDATE email_design_messages SET status = 'review', products = $2, media = '[]', desktop_prompt = 'D', mobile_prompt = 'M' WHERE id = $1::uuid`, [rv.aiId, JSON.stringify(items)]);
+  await assert.rejects(addOwnerMessage(pool, { designId, text: "x", attachments: [], target: "both", mode: "fast", by: null }), /approve/);
+  await approveItems(pool, designId, rv.aiId, ["gid://shopify/Product/222"], []);
+  const ap = await pool.query<{ status: string; desktop_prompt: string | null }>(`SELECT status, desktop_prompt FROM email_design_messages WHERE id = $1::uuid`, [rv.aiId]);
+  assert.deepEqual([ap.rows[0].status, ap.rows[0].desktop_prompt], ["approved", "D"]);
+  // Removing an item clears the briefs (they are rewritten around the approved items).
+  await pool.query(`UPDATE email_design_messages SET status = 'review' WHERE id = $1::uuid`, [rv.aiId]);
+  await approveItems(pool, designId, rv.aiId, [], []);
+  const ap2 = await pool.query<{ status: string; desktop_prompt: string | null; products: unknown[] }>(`SELECT status, desktop_prompt, products FROM email_design_messages WHERE id = $1::uuid`, [rv.aiId]);
+  assert.deepEqual([ap2.rows[0].status, ap2.rows[0].desktop_prompt, ap2.rows[0].products.length], ["approved", null, 0]);
+  console.log("ok  review: waits, blocks new messages, approve keeps or rewrites the briefs");
 
   // Percent-off offers.
   const o = parseOffer({ amount: 10, endsAt: new Date(Date.now() + 9 * 86400_000).toISOString(), kind: "percent", prefix: "AW" });

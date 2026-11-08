@@ -109,12 +109,18 @@ export const textModel = () => (process.env.EMAIL_AI_MODEL || process.env.SIZE_G
 export const imageModel = () => (process.env.EMAIL_IMAGE_MODEL || process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-sunburst").trim();
 export const transcribeModel = () => (process.env.EMAIL_TRANSCRIBE_MODEL || "gpt-4o-transcribe").trim();
 /**
- * The design pictures, top to bottom of the whole email:
- *  desktop — the 600 px email column at ~2.1× (1280 = 600 px);
- *  mobile  — a 375 px phone screen at ~2.7× (1024 = 375 px).
+ * The design pictures at the size a customer sees them (owner, 2026-11-08):
+ *  desktop — the 600 px email column at 2× (1200 px wide; 3584 tall = 1,792 email px,
+ *            the picture model's 3:1 limit);
+ *  mobile  — a 375 px phone screen at ~3× (1120 px wide), drawn as a TOP part and a
+ *            BOTTOM part of 1120x3344 each, joined into one 1120x6688 phone picture
+ *            (about 2,240 phone px of email).
  */
-export const DESKTOP_SIZE = (process.env.EMAIL_DESKTOP_SIZE || "1280x2560").trim();
-export const MOBILE_SIZE = (process.env.EMAIL_MOBILE_SIZE || "1024x2560").trim();
+export const DESKTOP_SIZE = (process.env.EMAIL_DESKTOP_SIZE || "1200x3584").trim();
+export const MOBILE_SIZE = (process.env.EMAIL_MOBILE_SIZE || "1120x3344").trim();
+/** Email (CSS) pixels per picture pixel, for the prompts. */
+export const DESKTOP_SCALE = 2;
+export const MOBILE_SCALE = 1120 / 375;
 
 /* --------------------------------------------------------------------- SES */
 

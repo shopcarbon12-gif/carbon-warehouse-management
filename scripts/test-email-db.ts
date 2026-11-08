@@ -22,7 +22,7 @@ async function main() {
   await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
   // Idempotent: the migrations run again on every deploy.
   for (let pass = 0; pass < 2; pass++)
-    for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql"]) await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
+    for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql"]) await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
   console.log("ok  migrations apply twice");
 
   const add = (email: string, o: Record<string, unknown> = {}) =>

@@ -5,18 +5,21 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { btn, card, fetcher, field, label, send } from "@/components/marketing/marketing-shared";
 import { EmailPreviewFrames } from "./preview-frame";
+import { ReviewItems } from "./review-items";
 
 /**
- * Email → AI Designer. One chat per design. Every AI turn is a real email
- * layout (layout engine, 2026-11-08): the real store and product photos as
- * they are, generated banners checked against the real products, a desktop
- * and a phone view of the same email. The owner picks what a message changes
- * (both / desktop / mobile), Batch (half price, slower) or Fast, can attach
- * photos, speak, ask for 3 different directions and pick one, and open any
- * version on the phone through a link. Older versions are drawn pictures.
+ * Email → AI Designer. One chat per design. Every AI turn DRAWS the email at
+ * the size a customer sees it (desktop 600 px column, phone 375 px), shown
+ * here at that real size. Before drawing, the AI shows the items it chose
+ * (products, matching sets, CARBON pictures) for the owner to remove, swap,
+ * add and approve (can be switched off). The owner picks what a message
+ * changes (both / desktop / mobile), Batch (half price) or Fast, can attach
+ * photos, speak, and ask for 3 different directions (continuing from the
+ * picked one, or direction 1). "Convert to email" turns a version into code.
+ * Versions made by the short-lived layout engine still show as real emails.
  */
 
-type DesignRow = { id: string; title: string; status: string; updated_at: string; has_html: boolean; versions: number; working: boolean };
+type DesignRow = { id: string; title: string; status: string; updated_at: string; has_html: boolean; versions: number; working: boolean; waiting?: boolean };
 type Msg = {
   id: string;
   role: "owner" | "ai";
@@ -29,8 +32,11 @@ type Msg = {
   attachments: { name: string; url: string | null }[];
   desktop: string | null;
   mobile: string | null;
-  products: { id: string; title: string; url: string; price: number; image: string | null }[];
-  media: { url: string; description: string }[];
+  products: { id: string; title: string; url: string; price: number; image: string | null; set?: { name: string; line: string; total: number } | null }[];
+  media: { id: string; url: string; description: string }[];
+  step: string | null;
+  hasMobileTop: boolean;
+  needsReview: boolean | null;
   engine: "picture" | "layout";
   hasEmail: boolean;
   direction: string | null;
@@ -53,6 +59,8 @@ type Design = {
   updated_at: string;
 };
 
+const WORKING = ["queued", "planning", "generating", "approved", "approved-planning"];
+
 const TARGETS = [
   { id: "both", label: "Both" },
   { id: "desktop", label: "Desktop only" },
@@ -69,12 +77,13 @@ function progressText(m: Msg): string {
       ? `Making ${n} banner${n === 1 ? "" : "s"} and checking each against the real product photos (about 2 to 6 minutes)…`
       : `Making ${n} banner${n === 1 ? "" : "s"} in the OpenAI batch (usually minutes, up to an hour), then checking them…`;
   }
-  if (m.status === "planning" && !m.text) return "Planning the design…";
-  const which = m.target === "both" ? (m.desktop ? "the phone version" : "the desktop version") : m.target === "desktop" ? "the desktop version" : "the phone version";
-  const step = m.target === "both" ? (m.desktop ? " (2 of 2)" : " (1 of 2)") : "";
-  return m.mode === "fast"
-    ? `Drawing ${which}${step}. About 1 to 3 minutes per picture…`
-    : `Drawing ${which}${step} in the OpenAI batch. Usually minutes, can take up to an hour…`;
+  if (m.status === "planning") return m.text ? "Getting ready to draw…" : m.variantNo && m.variantNo > 1 ? "Waiting for direction 1's items, then planning this direction…" : "Choosing the items and planning the design…";
+  if (m.status === "approved" || m.status === "approved-planning") return "Approved. Planning the pictures around your items…";
+  const order = m.target === "both" ? ["desktop", "mobile-top", "mobile-bottom"] : m.target === "desktop" ? ["desktop"] : ["mobile-top", "mobile-bottom"];
+  const at = Math.max(0, order.indexOf(m.step ?? order[0]));
+  const name: Record<string, string> = { desktop: "the desktop picture", "mobile-top": "the phone picture (top part)", "mobile-bottom": "the phone picture (bottom part)" };
+  const which = `${name[order[at]] ?? "the picture"}${order.length > 1 ? ` (${at + 1} of ${order.length})` : ""}`;
+  return m.mode === "fast" ? `Drawing ${which}. About 1 to 3 minutes per picture…` : `Drawing ${which} in the OpenAI batch. Usually minutes, can take up to an hour…`;
 }
 
 function useDesignParam(): [string | null, (id: string | null) => void] {
@@ -126,7 +135,7 @@ export function EmailDesigner() {
           <button key={d.id} type="button" onClick={() => setOpenId(d.id)} className={`${card} text-left hover:border-[var(--wms-fg)]`}>
             <span className="block truncate text-sm font-semibold text-[var(--wms-fg)]">{d.title}</span>
             <span className="block text-xs text-[var(--wms-muted)]">
-              {d.versions} version{d.versions === 1 ? "" : "s"} · {d.working ? "AI working…" : d.status === "ready" ? "Email ready" : d.status === "converting" ? "Converting…" : d.status === "failed" ? "Conversion failed" : "Drafting"}
+              {d.versions} version{d.versions === 1 ? "" : "s"} · {d.waiting ? "Waiting for your approval" : d.working ? "AI working…" : d.status === "ready" ? "Email ready" : d.status === "converting" ? "Converting…" : d.status === "failed" ? "Conversion failed" : "Drafting"}
             </span>
             <span className="block text-[0.68rem] text-[var(--wms-muted)]">{new Date(d.updated_at).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })}</span>
           </button>
@@ -138,7 +147,7 @@ export function EmailDesigner() {
 }
 
 function Picture({ src, alt, onOpen }: { src: string | null; alt: string; onOpen: (s: string) => void }) {
-  if (!src) return <div className="flex aspect-[1/2] items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[0.68rem] text-[var(--wms-muted)]">—</div>;
+  if (!src) return <div className="flex h-40 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[0.68rem] text-[var(--wms-muted)]">—</div>;
   return (
     <button type="button" onClick={() => onOpen(src)} className="block overflow-hidden rounded border border-[var(--wms-border)] bg-white" title="Open full size">
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -149,11 +158,12 @@ function Picture({ src, alt, onOpen }: { src: string | null; alt: string; onOpen
 
 function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
   const { data, error, mutate } = useSWR<{ design: Design; messages: Msg[] }>(`/api/email/designs/${id}`, fetcher, {
-    refreshInterval: (d) => (d && (d.messages.some((m) => ["queued", "planning", "generating"].includes(m.status)) || d.design.status === "converting") ? 4000 : 0),
+    refreshInterval: (d) => (d && (d.messages.some((m) => WORKING.includes(m.status)) || d.design.status === "converting") ? 4000 : 0),
   });
   const [text, setText] = useState("");
   const [target, setTarget] = useState<"both" | "desktop" | "mobile">("both");
   const [mode, setMode] = useState<"batch" | "fast">("batch");
+  const [review, setReview] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
@@ -163,7 +173,8 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
   const endRef = useRef<HTMLDivElement>(null);
   const design = data?.design;
   const messages = data?.messages ?? [];
-  const working = messages.some((m) => ["queued", "planning", "generating"].includes(m.status));
+  const working = messages.some((m) => WORKING.includes(m.status));
+  const reviewing = messages.some((m) => m.status === "review");
   const hasViews = messages.some((m) => m.role === "ai" && m.status === "done");
 
   useEffect(() => {
@@ -182,8 +193,8 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
     }
   }
 
-  const lastDone = [...messages].reverse().find((m) => m.role === "ai" && m.status === "done");
-  const mustPick = !!lastDone?.variantGroup && !messages.some((m) => m.variantGroup === lastDone.variantGroup && m.picked);
+  /** For 3 directions: the one the chat continues from (picked, else direction 1). */
+  const isCurrent = (m: Msg) => !!m.variantGroup && (m.picked === true || (m.variantNo === 1 && !messages.some((x) => x.variantGroup === m.variantGroup && x.picked)));
 
   const sendMessage = (directions = false) =>
     run(directions ? "directions" : "send", async () => {
@@ -191,6 +202,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
       fd.set("text", text);
       fd.set("target", directions ? "both" : target);
       fd.set("mode", mode);
+      fd.set("review", review ? "1" : "0");
       if (directions) fd.set("directions", "1");
       for (const f of files) fd.append("file", f);
       const r = await fetch(`/api/email/designs/${id}/messages`, { method: "POST", body: fd });
@@ -205,7 +217,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
     run("pick", async () => {
       await send(`/api/email/designs/${id}/pick`, "POST", { messageId });
       await mutate();
-      setMsg({ text: "Picked. Keep chatting to change this one, or convert it to an email." });
+      setMsg({ text: "The chat now continues from this direction." });
     });
 
   const phoneLink = (messageId: string) =>
@@ -336,13 +348,13 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className={label}>
                   {m.variantNo ? `Direction ${m.variantNo} of 3 · ` : ""}AI · {m.mode === "fast" ? "Fast" : "Batch"} · {TARGETS.find((t) => t.id === m.target)?.label ?? m.target}
-                  {m.variantGroup && m.picked ? " · ✓ picked" : ""}
+                  {isCurrent(m) ? " · the chat continues from this one" : ""}
                 </span>
                 {m.status === "done" && (
                   <div className="flex flex-wrap gap-2">
-                    {m.variantGroup && !m.picked && (
+                    {m.variantGroup && !isCurrent(m) && (
                       <button type="button" className={`${btn} border-[var(--wms-fg)]`} disabled={!!busy} onClick={() => pick(m.id)}>
-                        Use this one
+                        Continue from this one
                       </button>
                     )}
                     {m.hasEmail && (
@@ -350,7 +362,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                         {busy === "share" ? "Making link…" : "Copy phone link"}
                       </button>
                     )}
-                    {(!m.variantGroup || m.picked) && (
+                    {(
                       <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || design.status === "converting" || working} onClick={() => convert(m.id)}>
                         {design.chosen_message === m.id && design.status === "ready" ? "Use again" : m.engine === "layout" ? "Use this email" : "Convert to email"}
                       </button>
@@ -360,12 +372,13 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               </div>
               {m.direction && <p className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Direction: {m.direction}</p>}
               {m.text && <p className="whitespace-pre-wrap text-sm text-[var(--wms-fg)]">{m.text}</p>}
-              {m.status !== "done" && (
+              {m.status !== "done" && m.status !== "review" && (
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
                   {m.status === "failed" ? (m.error ?? "Failed") : progressText(m)}
                 </p>
               )}
-              {m.media?.length > 0 && (
+              {m.status === "review" && <ReviewItems designId={id} messageId={m.id} products={m.products} media={m.media} onDone={() => void mutate()} />}
+              {m.status !== "review" && m.media?.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <span className={label}>CARBON pictures in this version</span>
                   <div className="flex flex-wrap gap-2">
@@ -378,20 +391,22 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                   </div>
                 </div>
               )}
-              {m.products.length > 0 && (
+              {m.status !== "review" && m.products.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <span className={label}>Real products in this version</span>
                   <div className="flex flex-wrap gap-2">
-                    {m.products.map((p) => (
-                      <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex w-28 flex-col gap-0.5 text-[0.68rem] text-[var(--wms-fg)] max-md:w-24">
-                        {p.image && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={`${p.image}${p.image.includes("?") ? "&" : "?"}width=240`} alt={p.title} loading="lazy" className="aspect-[4/5] w-full rounded border border-[var(--wms-border)] object-cover" />
-                        )}
-                        <span className="truncate">{p.title}</span>
-                        <span className="text-[var(--wms-muted)]">${p.price}</span>
-                      </a>
-                    ))}
+                    {m.products
+                      .filter((p, i, all) => !p.set || all.findIndex((x) => x.set?.name === p.set!.name) === i)
+                      .map((p) => (
+                        <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="flex w-28 flex-col gap-0.5 text-[0.68rem] text-[var(--wms-fg)] max-md:w-24">
+                          {p.image && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={`${p.image}${p.image.includes("?") ? "&" : "?"}width=240`} alt={p.title} loading="lazy" className="aspect-[4/5] w-full rounded border border-[var(--wms-border)] object-cover" />
+                          )}
+                          <span className="truncate">{p.set ? p.set.name : p.title}</span>
+                          <span className="text-[var(--wms-muted)]">{p.set ? `${p.set.line} · Set $${p.set.total.toFixed(2)}` : `$${p.price.toFixed(2)}`}</span>
+                        </a>
+                      ))}
                   </div>
                 </div>
               )}
@@ -409,14 +424,14 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               {m.engine === "layout" && m.status === "done" && m.error && <p className="text-xs text-amber-700 dark:text-amber-300">{m.error}</p>}
               {m.engine === "layout" && m.status === "done" && m.hasEmail && <EmailPreviewFrames designId={id} messageId={m.id} height={900} />}
               {m.engine !== "layout" && (m.desktop || m.mobile || m.status === "done") && (
-                <div className="grid grid-cols-[5fr_3fr] items-start gap-2">
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <span className={label}>Desktop</span>
+                <div className="flex items-start gap-3 overflow-x-auto pb-1">
+                  <div className="flex shrink-0 flex-col gap-1" style={{ width: 600, maxWidth: "62vw" }}>
+                    <span className={label}>Desktop · real size (600 px)</span>
                     <Picture src={m.desktop} alt="Desktop version" onOpen={setZoom} />
                   </div>
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <span className={label}>Mobile</span>
-                    <Picture src={m.mobile} alt="Mobile version" onOpen={setZoom} />
+                  <div className="flex shrink-0 flex-col gap-1" style={{ width: 375, maxWidth: "40vw" }}>
+                    <span className={label}>Phone · real size (375 px)</span>
+                    <Picture src={m.mobile} alt="Phone version" onOpen={setZoom} />
                   </div>
                 </div>
               )}
@@ -434,7 +449,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && (text.trim() || files.length) && !working && !mustPick) sendMessage();
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && (text.trim() || files.length) && !working && !reviewing) sendMessage();
           }}
         />
         {files.length > 0 && (
@@ -490,7 +505,11 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
             {rec ? "■ Stop recording" : busy === "voice" ? "Listening…" : "🎤 Speak"}
           </button>
           <span className="flex-1" />
-          {working ? (
+          <label className="flex items-center gap-1.5 text-xs text-[var(--wms-fg)] max-md:min-h-11">
+            <input id="email-design-review" type="checkbox" className="max-md:h-5 max-md:w-5" checked={review} onChange={(e) => setReview(e.target.checked)} />
+            Approve items first
+          </label>
+          {working || reviewing ? (
             <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy === "stop"} onClick={stop}>
               Stop the AI
             </button>
@@ -499,22 +518,22 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               <button
                 type="button"
                 className={`${btn} border-[var(--wms-fg)]`}
-                disabled={!!busy || mustPick || (!text.trim() && !files.length)}
+                disabled={!!busy || reviewing || (!text.trim() && !files.length)}
                 onClick={() => sendMessage(true)}
                 title="Three versions in completely different directions; you pick one"
               >
                 {busy === "directions" ? "Sending…" : "Show me 3 directions"}
               </button>
-              <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || mustPick || (!text.trim() && !files.length)} onClick={() => sendMessage()}>
+              <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || reviewing || (!text.trim() && !files.length)} onClick={() => sendMessage()}>
                 {busy === "send" ? "Sending…" : "Send"}
               </button>
             </>
           )}
         </div>
         <p className="text-[0.68rem] text-[var(--wms-muted)]">
-          {mustPick
-            ? "Pick one of the 3 directions above (Use this one) to keep going."
-            : "Store and product photos are always used as they are; only the banners are generated, and each is checked against the real products. Batch costs half (minutes to an hour); Fast takes a few minutes. 3 directions makes three versions at once (three times the banners)."}
+          {reviewing
+            ? "The AI is waiting for you to approve its items (above)."
+            : "Pictures are drawn at the real email size (desktop 600 px, phone 375 px). With “Approve items first” the AI shows its products before drawing. Batch costs half (minutes to an hour); Fast takes a few minutes per picture. 3 directions makes three versions (three times the pictures); the chat continues from the one you choose, or direction 1."}
         </p>
       </div>
 

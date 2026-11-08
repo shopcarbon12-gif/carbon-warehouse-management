@@ -134,6 +134,7 @@ const ROUTES: Record<string, Entry> = {
   "email/designs/[id]/convert": { module: "Email", label: "Converted a design to an email" },
   "email/designs/[id]/package": { module: "Email", label: "Uploaded an email package" },
   "email/designs/[id]/pick": { module: "Email", label: "Picked one of three AI email directions" },
+  "email/designs/[id]/approve": { module: "Email", label: "Approved the items for an AI email design" },
   "email/designs/[id]/share": { module: "Email", label: "Made a phone link for an email version" },
   "email/transcribe": { module: "Email", label: "Spoke a message to the AI Designer" },
   "email/campaigns": { module: "Email", label: "Made a new email campaign" },

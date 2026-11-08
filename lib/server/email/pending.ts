@@ -7,7 +7,7 @@ export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string;
     `SELECT tenant_id::text, max(created_by) AS requested_by FROM (
        SELECT tenant_id, created_by FROM email_campaigns WHERE status IN ('scheduled','sending') AND send_at <= now() + interval '1 minute'
        UNION ALL
-       SELECT d.tenant_id, d.created_by FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.status IN ('queued','planning','generating')
+       SELECT d.tenant_id, d.created_by FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.status IN ('queued','planning','generating','approved','approved-planning')
        UNION ALL
        SELECT tenant_id, created_by FROM email_designs WHERE status = 'converting'
        UNION ALL

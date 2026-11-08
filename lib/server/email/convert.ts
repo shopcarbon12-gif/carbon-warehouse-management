@@ -47,8 +47,9 @@ ${
   products.length
     ? `
 REAL PRODUCTS shown in this design (from the store's catalog). Link every picture or button that shows one of them to its own page, and use its exact name and price if the design shows them:
-${products.map((p) => `- ${p.title} · $${p.price} · ${p.url}${p.image ? ` · product photo: ${p.image}` : ""}`).join("\n")}
-For a picture that is simply that product's photo (a product tile), you may use the product photo URL instead of a cut-out (it is sharper); otherwise cut it from the design.
+${products.map((p) => `- ${p.title} · $${p.price.toFixed(2)} · ${p.url}${p.image ? ` · product photo: ${p.image}` : ""}${p.set ? ` · piece of the matching set "${p.set.name}" (${p.set.line}, Set $${p.set.total.toFixed(2)})` : ""}`).join("\n")}
+For a picture that is simply that product's photo (a product tile), use the product photo URL instead of a cut-out (it is the real photo, sharper); otherwise cut it from the design.
+A matching set is ONE card, like the store's homepage: the set's photo with a black "2-PIECE SET" label, the set name, the pieces line and "Set $…" exactly as listed, linked to the set's first piece.
 `
     : ""
 }

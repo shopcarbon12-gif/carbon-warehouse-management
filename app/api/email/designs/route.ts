@@ -16,7 +16,8 @@ export async function GET(req: Request) {
     `SELECT d.id, d.title, d.status, d.updated_at, d.created_by, d.html IS NOT NULL AS has_html,
             (SELECT m.id FROM email_design_messages m WHERE m.design_id = d.id AND m.role = 'ai' AND m.status = 'done' ORDER BY m.created_at DESC LIMIT 1) AS latest,
             (SELECT count(*) FROM email_design_messages m WHERE m.design_id = d.id AND m.role = 'ai' AND m.status = 'done')::int AS versions,
-            EXISTS (SELECT 1 FROM email_design_messages m WHERE m.design_id = d.id AND m.status IN ('queued','planning','generating')) AS working
+            EXISTS (SELECT 1 FROM email_design_messages m WHERE m.design_id = d.id AND m.status IN ('queued','planning','generating','approved','approved-planning')) AS working,
+            EXISTS (SELECT 1 FROM email_design_messages m WHERE m.design_id = d.id AND m.status = 'review') AS waiting
        FROM email_designs d WHERE d.tenant_id = $1::uuid AND d.archived_at IS NULL ORDER BY d.updated_at DESC LIMIT 100`,
     [g.session.tid],
   );
