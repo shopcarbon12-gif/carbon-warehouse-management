@@ -517,7 +517,7 @@ async function half(path: string, which: "top" | "bottom"): Promise<Buffer> {
 }
 
 /** What one picture (desktop, phone top or phone bottom) is drawn from. */
-async function inputsFor(pool: Pool, turn: Msg, step: Step): Promise<Inputs> {
+async function inputsFor(pool: Pool, turn: Msg, step: Step, topPng?: Buffer): Promise<Inputs> {
   const prev = await baseVersion(pool, turn.design_id, turn.created_at);
   const owner = await pool.query<{ attachments: { path: string; name: string }[] }>(
     `SELECT attachments FROM email_design_messages WHERE design_id = $1::uuid AND role = 'owner' AND created_at < $2 ORDER BY created_at DESC LIMIT 1`,
@@ -545,8 +545,8 @@ async function inputsFor(pool: Pool, turn: Msg, step: Step): Promise<Inputs> {
       labels.push(desktopNow ? "the previous phone version's top part (keep its layout choices unless the brief changes them)" : "the current phone version's top part (edit it)");
     }
   } else {
-    if (turn.mobile_top_path) {
-      images.push(await load(turn.mobile_top_path));
+    if (topPng || turn.mobile_top_path) {
+      images.push(topPng ?? (await load(turn.mobile_top_path!)));
       labels.push("the TOP PART of this phone email, already finished: continue exactly below it");
       lead = "Draw the BOTTOM PART of the phone email whose top part is image 1.";
     } else {
@@ -1225,11 +1225,26 @@ async function drawAll(pool: Pool, lead: Msg, turns: Msg[], log: (m: string) => 
     turns.map(async (t) => {
       try {
         const pics = new Map<Step, string>();
-        await Promise.all(
-          stepsToDraw(t).map(async (step) => {
-            pics.set(step, await drawFast(await inputsFor(pool, t, step), model));
-          }),
-        );
+        const steps = stepsToDraw(t);
+        // The phone BOTTOM waits for the phone top and is drawn from it (2026-11-08: drawn at the same
+        // time it came out at another scale and width, and the join showed). Everything else is parallel.
+        const chained = steps.includes("mobile-top") && steps.includes("mobile-bottom");
+        await Promise.all([
+          ...steps
+            .filter((step) => !(chained && (step === "mobile-top" || step === "mobile-bottom")))
+            .map(async (step) => {
+              pics.set(step, await drawFast(await inputsFor(pool, t, step), model));
+            }),
+          ...(chained
+            ? [
+                (async () => {
+                  const top = await drawFast(await inputsFor(pool, t, "mobile-top"), model);
+                  pics.set("mobile-top", top);
+                  pics.set("mobile-bottom", await drawFast(await inputsFor(pool, t, "mobile-bottom", Buffer.from(top, "base64")), model));
+                })(),
+              ]
+            : []),
+        ]);
         return { t, pics, error: null as string | null };
       } catch (e) {
         return { t, pics: new Map<Step, string>(), error: e instanceof Error ? e.message : String(e) };
