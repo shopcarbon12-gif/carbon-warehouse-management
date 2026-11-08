@@ -810,7 +810,17 @@
         "terms": "Wholesale terms",
         "term_runs": "Order in runs (one of every size in a color). Minimum 3 runs per order — mix items and colors any way you like.",
         "term_shipping": "Shipping is not included at checkout. It is calculated after your order is packed and sent on a separate invoice.",
-        "term_24h": "Invoices not paid within 24 hours are cancelled and the items released — we don't hold stock for individual customers."
+        "term_24h": "Invoices not paid within 24 hours are cancelled and the items released — we don't hold stock for individual customers.",
+        "shipping_address": "Shipping address",
+        "billing_address": "Billing address",
+        "no_address": "No address on file yet.",
+        "address_help": "To change a company address, contact us and we'll update it for you.",
+        "your_details": "Your details",
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "edit_help": "Need to change your name or email?",
+        "edit_details": "Edit your details"
       },
       "cart_min": {
         "broken_heading": "Incomplete run removed.",

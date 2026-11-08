@@ -86,6 +86,15 @@
   .wa-terms li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 7px; height: 7px; border-radius: 50%; background: var(--wa-blue); }
   .wa-addr { font-style: normal; font-size: 16px; line-height: 1.5; margin: 0; }
   .wa-company { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .wa-panel[hidden] { display: none !important; }
+  .wa-panel > .wa-col { max-width: 900px; }
+  .wa-muted { color: var(--wa-muted); font-size: 15px; margin: 0 0 14px; }
+  .wa-sub { font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--wa-muted); margin: 0 0 6px; }
+  .wa-addrs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; margin-bottom: 14px; }
+  .wa-help { color: var(--wa-muted); font-size: 15px; margin: 12px 0 0; }
+  .wa-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 24px; margin: 0; font-size: 17px; }
+  .wa-dl dt { color: var(--wa-muted); }
+  .wa-dl dd { margin: 0; overflow-wrap: anywhere; }
   .wa-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
   .wa-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 26px; border: 2px solid var(--wa-blue); border-radius: 6px; font-size: 17px; font-weight: 600; text-decoration: none; color: var(--wa-blue-ink); background: #fff; }
   .wa-btn--fill { background: var(--wa-blue); color: #fff; }
@@ -110,9 +119,9 @@
       <h2>{% if company %}{{ company.name }}{% else %}{{ 'carbon.b2b.wholesale_account' | t }}{% endif %}</h2>
       <p>{{ 'carbon.b2b.account.side_text' | t }}</p>
       <nav class="wa__nav" aria-label="{{ 'carbon.b2b.account.my_account' | t | escape }}">
-        <a href="#wa-orders" aria-current="page">{{ 'carbon.b2b.account.orders' | t }}</a>
-        <a href="#wa-company">{{ 'carbon.b2b.account.company' | t }}</a>
-        <a href="https://account.shopcarbon.com/profile">{{ 'carbon.b2b.account.settings' | t }}</a>
+        <a href="#orders" data-wa-tab="orders" aria-current="page">{{ 'carbon.b2b.account.orders' | t }}</a>
+        <a href="#company" data-wa-tab="company">{{ 'carbon.b2b.account.company' | t }}</a>
+        <a href="#settings" data-wa-tab="settings">{{ 'carbon.b2b.account.settings' | t }}</a>
       </nav>
       <a class="wa__signout" href="{{ routes.account_logout_url }}">{{ 'carbon.b2b.account.sign_out' | t }}</a>
     </aside>
@@ -122,7 +131,7 @@
       <h1 class="wa-title">{{ 'carbon.b2b.account.welcome' | t: name: customer.first_name }}</h1>
       <p class="wa-intro">{{ 'carbon.b2b.account.intro' | t }}</p>
 
-      <div class="wa-grid">
+      <div class="wa-panel" data-wa-panel="orders">
         <div class="wa-col">
           {%- if due_count > 0 -%}
             <section class="wa-card wa-card--due" aria-labelledby="wa-due-h">
@@ -181,18 +190,30 @@
             {%- endif -%}
           </section>
         </div>
+      </div>
 
+      <div class="wa-panel wa-grid" data-wa-panel="company" hidden>
         <div class="wa-col">
           <section class="wa-card" id="wa-company" aria-labelledby="wa-company-h">
             <div class="wa-head"><h3 id="wa-company-h">{{ 'carbon.b2b.account.company' | t }}</h3></div>
             {%- if company -%}<p class="wa-company">{{ company.name }}</p>{%- endif -%}
             {%- if loc -%}
-              <p class="wa-row__label"><small>{{ 'carbon.b2b.account.location' | t }}: {{ loc.name }}</small></p>
-              {%- if loc.shipping_address -%}
-                <address class="wa-addr">{{ loc.shipping_address | format_address }}</address>
-              {%- endif -%}
+              <p class="wa-muted">{{ 'carbon.b2b.account.location' | t }}: {{ loc.name }}</p>
+              <div class="wa-addrs">
+                <div>
+                  <p class="wa-sub">{{ 'carbon.b2b.account.shipping_address' | t }}</p>
+                  {%- if loc.shipping_address -%}<address class="wa-addr">{{ loc.shipping_address | format_address }}</address>{%- else -%}<p class="wa-empty">{{ 'carbon.b2b.account.no_address' | t }}</p>{%- endif -%}
+                </div>
+                <div>
+                  <p class="wa-sub">{{ 'carbon.b2b.account.billing_address' | t }}</p>
+                  {%- if loc.billing_address -%}<address class="wa-addr">{{ loc.billing_address | format_address }}</address>{%- else -%}<p class="wa-empty">{{ 'carbon.b2b.account.no_address' | t }}</p>{%- endif -%}
+                </div>
+              </div>
+              <p class="wa-help">{{ 'carbon.b2b.account.address_help' | t }}</p>
             {%- endif -%}
           </section>
+        </div>
+        <div class="wa-col">
 
           <section class="wa-card" aria-labelledby="wa-terms-h">
             <div class="wa-head"><h3 id="wa-terms-h">{{ 'carbon.b2b.account.terms' | t }}</h3></div>
@@ -205,6 +226,22 @@
         </div>
       </div>
 
+      <div class="wa-panel" data-wa-panel="settings" hidden>
+        <section class="wa-card" aria-labelledby="wa-settings-h">
+          <div class="wa-head"><h3 id="wa-settings-h">{{ 'carbon.b2b.account.your_details' | t }}</h3></div>
+          <dl class="wa-dl">
+            <dt>{{ 'carbon.b2b.account.name' | t }}</dt><dd>{{ customer.name }}</dd>
+            <dt>{{ 'carbon.b2b.account.email' | t }}</dt><dd>{{ customer.email }}</dd>
+            {%- if customer.phone -%}<dt>{{ 'carbon.b2b.account.phone' | t }}</dt><dd>{{ customer.phone }}</dd>{%- endif -%}
+            {%- if company -%}<dt>{{ 'carbon.b2b.account.company' | t }}</dt><dd>{{ company.name }}{% if loc %} · {{ loc.name }}{% endif %}</dd>{%- endif -%}
+          </dl>
+          <p class="wa-help">{{ 'carbon.b2b.account.edit_help' | t }} <a class="wa-link" href="https://account.shopcarbon.com/profile">{{ 'carbon.b2b.account.edit_details' | t }}</a></p>
+        </section>
+        <div class="wa-btns">
+          <a class="wa-btn" href="{{ routes.account_logout_url }}">{{ 'carbon.b2b.account.sign_out' | t }}</a>
+        </div>
+      </div>
+
       <div class="wa-btns">
         <a class="wa-btn wa-btn--fill" href="{{ routes.root_url }}">{{ 'carbon.b2b.shop_wholesale' | t }}</a>
         <a class="wa-btn" href="{{ routes.account_url }}">{{ 'carbon.b2b.account.all_orders' | t }}</a>
@@ -212,3 +249,27 @@
     </div>
   </div>
 </div>
+
+<script>
+  (function () {
+    var root = document.querySelector('.wa');
+    if (!root) return;
+    var tabs = root.querySelectorAll('[data-wa-tab]');
+    var panels = root.querySelectorAll('[data-wa-panel]');
+    function show(name) {
+      var found = false;
+      panels.forEach(function (p) { var on = p.getAttribute('data-wa-panel') === name; p.hidden = !on; if (on) found = true; });
+      if (!found) return show('orders');
+      tabs.forEach(function (t) { if (t.getAttribute('data-wa-tab') === name) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current'); });
+    }
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function (e) {
+        e.preventDefault();
+        var name = t.getAttribute('data-wa-tab');
+        show(name);
+        try { history.replaceState(null, '', '#' + name); } catch (err) {}
+      });
+    });
+    show((location.hash || '#orders').slice(1));
+  })();
+</script>
