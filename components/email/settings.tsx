@@ -29,6 +29,9 @@ type Ses = {
   error?: string;
 };
 
+type MediaStatus = { total: number; described: number; usable: number; listedAt: string | null };
+type Store = { name: string; address: string; hours: string; phone: string; directionsUrl: string; locatorUrl: string };
+
 const nf = new Intl.NumberFormat("en-US");
 
 function Check({ ok, warn, children }: { ok: boolean; warn?: boolean; children: React.ReactNode }) {
@@ -46,7 +49,7 @@ function copy(text: string) {
 }
 
 export function EmailSettingsPanel() {
-  const { data, error, mutate } = useSWR<{ settings: Settings; ses: Ses }>("/api/email/settings", fetcher);
+  const { data, error, mutate } = useSWR<{ settings: Settings; ses: Ses; media: MediaStatus | null; store: Store }>("/api/email/settings", fetcher);
   const [form, setForm] = useState<Settings | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ text: string; err?: boolean } | null>(null);
@@ -100,6 +103,26 @@ export function EmailSettingsPanel() {
     <div className="flex min-w-0 flex-col gap-3">
       {msg && <p className={`text-xs ${msg.err ? "text-[var(--wms-status-danger-fg)]" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.text}</p>}
       {error && <p className="text-xs text-[var(--wms-status-danger-fg)]">{error.message}</p>}
+
+      {data && (
+        <section className={card}>
+          <span className={`${label} block pb-2`}>What the AI Designer knows (from shopcarbon.com)</span>
+          <ul className="flex flex-col gap-1.5">
+            <Check ok>Real CARBON logo, always used as the official file.</Check>
+            <Check ok>Every in-stock product from the catalog, with real photos, names and prices.</Check>
+            <Check ok>
+              The store ({data.store.address} · {data.store.hours} · {data.store.phone}) with its outside and inside photos, and a Google Maps “Get directions” link.
+            </Check>
+            <Check ok={!!data.media && data.media.total > 0 && data.media.described >= data.media.total} warn={!data.media || data.media.described < data.media.total}>
+              {!data.media || data.media.total === 0
+                ? "CARBON pictures from Shopify: the worker is reading Shopify Files (starts within a minute)."
+                : data.media.described < data.media.total
+                  ? `CARBON pictures from Shopify: ${nf.format(data.media.described)} of ${nf.format(data.media.total)} looked at so far, ${nf.format(data.media.usable)} usable in emails (a few every minute).`
+                  : `CARBON pictures from Shopify: ${nf.format(data.media.usable)} usable in emails out of ${nf.format(data.media.total)}. New Shopify files are added once a day.`}
+            </Check>
+          </ul>
+        </section>
+      )}
 
       <section className={card}>
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2">

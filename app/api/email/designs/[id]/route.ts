@@ -36,6 +36,7 @@ export async function GET(req: Request, { params }: Ctx) {
     desktop: file(m.desktop_path),
     mobile: file(m.mobile_path),
     products: m.products ?? [],
+    media: (m.media ?? []).map((x: { url: string; description: string }) => ({ url: x.url, description: x.description })),
   }));
   const row = d.rows[0];
   return NextResponse.json({

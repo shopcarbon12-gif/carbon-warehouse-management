@@ -24,12 +24,13 @@ import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvid
 import { WMS_BASE, openai, textModel } from "./config";
 import { SAMPLE_CODE, SAMPLE_NAME, type TurnProduct } from "./designer";
 import { LOGO_URLS } from "./catalog";
+import { STORE, type TurnMedia } from "./brand";
 import { MERGE_TAGS, sanitizeEmailHtml, usedMergeTags } from "./rules";
 
 const MAX_FILES = 60;
 const MAX_UNZIPPED = 40 * 1024 * 1024;
 
-export function convertInstructions(desktopName: string, mobileName: string, products: TurnProduct[] = []): string {
+export function convertInstructions(desktopName: string, mobileName: string, products: TurnProduct[] = [], media: TurnMedia[] = []): string {
   return `You are turning a finished email DESIGN into a real, sendable HTML email package. Use the python tool.
 
 FILES in /mnt/data:
@@ -51,6 +52,16 @@ For a picture that is simply that product's photo (a product tile), you may use 
 `
     : ""
 }
+${
+  media.length
+    ? `
+CARBON'S OWN PICTURES used in this design (real files from its store). When a photo in the design is one of these, use the real file's URL as the <img> src instead of a cut-out (sharper), cropped with the same framing only if the design crops it hard (then cut it from the design instead):
+${media.map((m) => `- ${m.description} · ${m.width}x${m.height} · ${m.url}${m.url.includes("?") ? "&" : "?"}width=1200`).join("\n")}
+`
+    : ""
+}
+THE STORE: any store address, hours or phone in the design must read exactly: ${STORE.address} · ${STORE.hours} · ${STORE.phone}. A "Get directions" / "Directions" button or link goes to ${STORE.directionsUrl} ; "Visit the store" / "Find our store" goes to ${STORE.locatorUrl}.
+
 STEP 2. Cut out every PHOTO and GRAPHIC (product / model photos, illustrations, icons, a graphic logo) with PIL, with exact pixel boxes. Cut from the DESKTOP picture (sharper) unless the phone view shows a different photo or a different crop; then also cut the phone version. Save photos as JPEG (quality 88) and graphics with flat colour or transparency as PNG, into package/images/ with short names (hero.jpg, look-1.jpg, logo.png …). Crops must not include text that is not part of the photo. Check each crop by re-opening it and looking at it; fix boxes that are off.
 
 STEP 3. Write package/email.html — ONE email that looks like the desktop design on a computer and like the phone design on a phone:
@@ -124,7 +135,7 @@ export async function runConversions(pool: Pool, log: (m: string) => void = cons
 }
 
 async function convertOne(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
-  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null }>(`SELECT desktop_path, mobile_path, products FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
+  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null }>(`SELECT desktop_path, mobile_path, products, media FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
   const row = m.rows[0];
   const ai = openai();
   const desk = Buffer.from((await downloadStorageObject(row.desktop_path)).body);
@@ -141,7 +152,7 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
         {
           role: "user",
           content: [
-            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png", row.products ?? []) },
+            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png", row.products ?? [], row.media ?? []) },
             { type: "input_image", file_id: fDesk.id, detail: "high" },
             { type: "input_image", file_id: fMob.id, detail: "high" },
           ],

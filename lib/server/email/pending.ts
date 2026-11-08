@@ -11,6 +11,11 @@ export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string;
        UNION ALL
        SELECT tenant_id, created_by FROM email_designs WHERE status = 'converting'
        UNION ALL
+       -- brand media library (lib/server/email/brand.ts): new Shopify files once a day, then describe what is new
+       SELECT t.tenant_id, NULL FROM (SELECT DISTINCT tenant_id FROM email_designs) t
+        WHERE EXISTS (SELECT 1 FROM email_media_sync WHERE id = 1 AND (listed_at IS NULL OR listed_at < now() - interval '1 day'))
+           OR EXISTS (SELECT 1 FROM email_media WHERE described_at IS NULL)
+       UNION ALL
        SELECT tenant_id, created_by FROM email_campaigns WHERE offer IS NOT NULL AND status IN ('sending','sent','paused','cancelled') AND started_at IS NOT NULL
           AND (results_at IS NULL OR results_at < now() - interval '3 hours') AND (offer->>'endsAt')::timestamptz > now() - interval '3 days'
      ) x GROUP BY tenant_id`,

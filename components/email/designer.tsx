@@ -28,6 +28,7 @@ type Msg = {
   desktop: string | null;
   mobile: string | null;
   products: { id: string; title: string; url: string; price: number; image: string | null }[];
+  media: { url: string; description: string }[];
 };
 type Design = {
   id: string;
@@ -269,7 +270,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
       <div className="flex min-w-0 flex-col gap-3">
         {messages.length === 0 && (
           <div className={`${card} text-xs text-[var(--wms-muted)]`}>
-            Tell the AI what the email is for, who it is for and what it should say. It always uses the real CARBON logo and picks real in-stock products from the catalog by itself. Example: &quot;A win-back email for past customers: $20 off one item with their own code, the new winter collection, a black and white look, a big photo of a woman in a bomber jacket, and a section asking them to follow us on Instagram.&quot; Attach product photos if you want them used.
+            Tell the AI what the email is for, who it is for and what it should say. It always uses the real CARBON logo, picks real in-stock products from the catalog, and uses CARBON&apos;s own pictures (store photos, campaign shots) and the real store address, hours and directions by itself. Example: &quot;A win-back email for past customers: $20 off one item with their own code, the new winter collection, a black and white look, a big photo of a woman in a bomber jacket, and a section asking them to follow us on Instagram.&quot; Attach product photos if you want them used.
           </div>
         )}
         {messages.map((m) =>
@@ -305,6 +306,19 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
                   {m.status === "failed" ? (m.error ?? "Failed") : progressText(m)}
                 </p>
+              )}
+              {m.media?.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <span className={label}>CARBON pictures in this version</span>
+                  <div className="flex flex-wrap gap-2">
+                    {m.media.map((x) => (
+                      <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.description} className="w-40 max-md:w-32">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`${x.url}${x.url.includes("?") ? "&" : "?"}width=400`} alt={x.description} loading="lazy" className="aspect-[4/3] w-full rounded border border-[var(--wms-border)] object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
               )}
               {m.products.length > 0 && (
                 <div className="flex flex-col gap-1">

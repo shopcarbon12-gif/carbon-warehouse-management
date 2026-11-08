@@ -26,6 +26,7 @@ import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { DESKTOP_SIZE, MOBILE_SIZE, imageModel, openai, textModel, transcribeModel } from "./config";
 import { catalogLines, inStockCatalog, logoReference, productPhoto, type CatalogProduct } from "./catalog";
+import { STORE_TEXT, mediaLibrary, mediaLines, mediaPhoto, type MediaItem, type TurnMedia } from "./brand";
 
 export type TurnProduct = { id: string; title: string; url: string; price: number; image: string | null };
 
@@ -49,6 +50,7 @@ type Msg = {
   batch_files: Stage | null;
   error: string | null;
   products: TurnProduct[] | null;
+  media: TurnMedia[] | null;
   created_at: Date;
 };
 
@@ -61,7 +63,8 @@ export const SAMPLE_CODE = "CB20-K7Q4XM";
 const BRAND = `CARBON is a fashion retailer in Orlando, Florida (store + shopcarbon.com): trendy streetwear and going-out looks for men and women.
 Brand look: clean black and white, lots of white space, bold sans-serif headings, fashion photography that fills the width.
 The logo is the official CARBON logo (a hexagon-cell mark followed by the word CARBON in a thin geometric sans-serif, wide letter-spacing). It is always given as a reference picture: reproduce exactly that logo, never redraw it in another font or style.
-Never mention other brands, never invent prices, discounts or dates the owner did not give, never write "Carbon Jeans".`;
+Never mention other brands, never invent prices, discounts or dates the owner did not give, never write "Carbon Jeans".
+${STORE_TEXT}`;
 
 const VIEW_RULES: Record<View, string> = {
   desktop: `Show the email flat and full-length exactly as it renders in a DESKTOP email client: one 600-pixel-wide email column that fills the ENTIRE image width, from the top of the email to the bottom. No browser, no inbox window, no device frame, no desk, no shadow, no background around the email.`,
@@ -152,7 +155,17 @@ type Plan = {
   desktop_prompt: string | null;
   mobile_prompt: string | null;
   products: TurnProduct[];
+  media: TurnMedia[];
 };
+
+/** The brand pictures of the latest finished version before this turn. */
+async function previousMedia(pool: Pool, turn: Msg): Promise<TurnMedia[]> {
+  const r = await pool.query<{ media: TurnMedia[] | null }>(
+    `SELECT media FROM email_design_messages WHERE design_id = $1::uuid AND role = 'ai' AND status = 'done' AND created_at < $2 ORDER BY created_at DESC LIMIT 1`,
+    [turn.design_id, turn.created_at],
+  );
+  return r.rows[0]?.media ?? [];
+}
 
 /** The products of the latest finished version before this turn. */
 async function previousProducts(pool: Pool, turn: Msg): Promise<TurnProduct[]> {
@@ -182,6 +195,12 @@ CATALOG (the real CARBON products in stock right now, from the store's catalog) 
 - In desktop_prompt / mobile_prompt refer to each product as "catalog photo of <ref> (<name>)" and say where it goes; the picture model receives each chosen product's real photo.
 - Product names and prices shown in the email must be exactly the catalog's. Never show a price the catalog doesn't give.
 - The official logo is always supplied; describe where it sits, never how to draw it.
+- media: the BRAND MEDIA refs you use in this version, e.g. ["S1","M7"] (at most 4), or null to keep the previous version's pictures.
+
+BRAND MEDIA (CARBON's own pictures from its Shopify store: store photos S1/S2, campaign banners and lifestyle shots M1…) is listed as: ref | kind | shape | description.
+- For any big photo (hero banner, store section, lifestyle strip) prefer a fitting BRAND MEDIA picture over inventing one. In the prompts refer to it as "brand photo <ref> (<short description>)" and say where it goes and how it is cropped; the picture model receives the real picture.
+- When the email mentions the store, a visit, opening hours or directions, use the exact store facts above and show the store photo (S1 outside or S2 inside); a "Get directions" button goes to Google Maps.
+- Pick wide banners for wide spots and tall pictures for tall spots; never stretch them.
 
 Personal parts: the customer's first name appears as "${SAMPLE_NAME}", a personal code as "${SAMPLE_CODE}". Do not add an unsubscribe line or postal address (added automatically).`;
 
@@ -217,6 +236,15 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
         (prevProducts.length ? `Products in the current version: ${prevProducts.map((p) => `${refOf(p.id) ?? "(no longer in stock)"} ${p.title}`).join(", ")}.` : "No products chosen yet.")
       : "The catalog could not be read right now: do not show specific products; use attached photos only.",
   });
+  const library: MediaItem[] = await mediaLibrary(pool);
+  const prevMedia = await previousMedia(pool, turn);
+  const mediaRef = (id: string) => library.find((m) => m.id === id)?.ref;
+  content.push({
+    type: "text",
+    text:
+      `BRAND MEDIA (${library.length} pictures):\n${mediaLines(library)}\n\n` +
+      (prevMedia.length ? `Brand pictures in the current version: ${prevMedia.map((m) => mediaRef(m.id) ?? "(removed)").join(", ")}.` : "No brand pictures chosen yet."),
+  });
   const atts = owner?.attachments ?? [];
   for (const [i, a] of atts.entries()) {
     content.push({ type: "text", text: `Attached photo ${i + 1} (${a.name}):` });
@@ -230,7 +258,7 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
       { role: "user", content },
     ],
   });
-  const j = JSON.parse(c.choices[0]?.message?.content ?? "{}") as Partial<Plan> & { products?: unknown };
+  const j = JSON.parse(c.choices[0]?.message?.content ?? "{}") as Omit<Partial<Plan>, "products" | "media"> & { products?: unknown; media?: unknown };
   const want = (v: View) => turn.target === "both" || turn.target === v;
   const out: Plan = {
     reply: String(j.reply ?? "Here is the new version.").slice(0, 1200),
@@ -246,6 +274,13 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
           .slice(0, 6)
           .map((p) => ({ id: p.id, title: p.title, url: p.url, price: p.price, image: p.image }))
       : prevProducts,
+    media: Array.isArray(j.media)
+      ? (j.media as unknown[])
+          .map((r) => library.find((m) => m.ref === String(r).trim().toUpperCase()))
+          .filter((m): m is MediaItem => !!m)
+          .slice(0, 4)
+          .map((m) => ({ id: m.id, url: m.url, width: m.width, height: m.height, kind: m.kind, description: m.description }))
+      : prevMedia,
   };
   return out;
 }
@@ -253,6 +288,9 @@ async function plan(pool: Pool, turn: Msg): Promise<Plan> {
 /* ------------------------------------------------------------------ pictures */
 
 type Inputs = { prompt: string; size: string; images: Buffer[] };
+
+/** The picture model takes at most 16 input images. */
+const MAX_REFS = 16;
 
 /** What one view's picture is drawn from. */
 async function inputsFor(pool: Pool, turn: Msg, view: View, newDesktop: string | null): Promise<Inputs> {
@@ -286,11 +324,19 @@ async function inputsFor(pool: Pool, turn: Msg, view: View, newDesktop: string |
     labels.push(`attached photo ${i + 1} (${a.name})`);
   }
   for (const p of (turn.products ?? []).slice(0, 6)) {
+    if (images.length >= MAX_REFS) break;
     const cat: CatalogProduct = { ref: "", id: p.id, title: p.title, url: p.url, type: "", gender: "unisex", colors: [], sizes: [], price: p.price, compareAt: null, stock: 0, image: p.image };
     const b = await productPhoto(cat);
     if (!b) continue;
     images.push(b);
     labels.push(`catalog photo of ${p.title}: the real garment(s), keep them exactly (cut, colour, details)`);
+  }
+  for (const m of (turn.media ?? []).slice(0, 4)) {
+    if (images.length >= MAX_REFS) break;
+    const b = await mediaPhoto(m);
+    if (!b) continue;
+    images.push(b);
+    labels.push(`brand photo (${m.description.slice(0, 120)}): CARBON's own picture, use it as the photo in the spot the description gives (crop to fit, keep people, clothes and place the same, do not redraw)`);
   }
   const plannerPrompt = (view === "desktop" ? turn.desktop_prompt : turn.mobile_prompt) ?? "";
   const legend = `\n\nThe input images, in order:\n${labels.map((l, i) => `${i + 1}. ${l}`).join("\n")}` +
@@ -421,8 +467,8 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
     try {
       const p = await plan(pool, turn);
       await pool.query(
-        `UPDATE email_design_messages SET text = $2, desktop_prompt = $3, mobile_prompt = $4, products = $5 WHERE id = $1::uuid`,
-        [turn.id, p.reply, p.desktop_prompt, p.mobile_prompt, JSON.stringify(p.products)],
+        `UPDATE email_design_messages SET text = $2, desktop_prompt = $3, mobile_prompt = $4, products = $5, media = $6 WHERE id = $1::uuid`,
+        [turn.id, p.reply, p.desktop_prompt, p.mobile_prompt, JSON.stringify(p.products), JSON.stringify(p.media)],
       );
       await pool.query(
         `UPDATE email_designs SET title = CASE WHEN title = 'New email' AND $2::text IS NOT NULL THEN $2 ELSE title END,
@@ -433,6 +479,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       turn.desktop_prompt = p.desktop_prompt;
       turn.mobile_prompt = p.mobile_prompt;
       turn.products = p.products;
+      turn.media = p.media;
       planned++;
       await drawNext(pool, turn, log);
     } catch (e) {

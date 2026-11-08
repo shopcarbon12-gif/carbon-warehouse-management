@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
 import { getEmailSettings, sesStatus } from "@/lib/server/email/config";
+import { STORE, mediaStatus } from "@/lib/server/email/brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const g = await marketingAdminGuard(req);
   if ("error" in g) return g.error;
-  const [settings, ses] = await Promise.all([getEmailSettings(g.pool, g.session.tid), sesStatus(g.pool, g.session.tid)]);
-  return NextResponse.json({ settings, ses });
+  const [settings, ses, media] = await Promise.all([getEmailSettings(g.pool, g.session.tid), sesStatus(g.pool, g.session.tid), mediaStatus(g.pool).catch(() => null)]);
+  return NextResponse.json({ settings, ses, media, store: STORE });
 }
 
 const schema = z
