@@ -52,6 +52,7 @@ import { styleGuide, styleText } from "./style";
 import { BOX_RULES, SLOT_COLORS, TOKEN, briefWithBoxes, findBoxes, pasteReal, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
 import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
+import { freshStyles, styleBrief, styleName, STRUCTURES, type Style } from "./styles";
 import { collectBanners, drawBannersFast, planLayout, renderLayout, submitBanners, type Banner, type LayoutStage, type LayoutTurn } from "./layout";
 
 /** A product in a version; pieces of a matching set carry the set (shown as one card). */
@@ -96,6 +97,7 @@ type Msg = {
   shots: Shot[] | null;
   creative_model: string | null;
   image_model: string | null;
+  style: Style | null;
   created_at: Date;
 };
 
@@ -203,11 +205,14 @@ export async function addOwnerMessage(
   const n = input.directions ? 3 : 1;
   const group = input.directions ? crypto.randomUUID() : null;
   const aiIds: string[] = [];
+  // A fresh style for every version (structure × type × colours), never one the store's recent emails used.
+  const tenant = await pool.query<{ tenant_id: string }>(`SELECT tenant_id::text FROM email_designs WHERE id = $1::uuid`, [input.designId]);
+  const styles = await freshStyles(pool, tenant.rows[0]?.tenant_id ?? "", input.designId, n);
   for (let i = 1; i <= n; i++) {
     const a = await pool.query<{ id: string }>(
-      `INSERT INTO email_design_messages (design_id, role, target, mode, status, engine, variant_group, variant_no, fresh, needs_review, created_at)
-       VALUES ($1::uuid, 'ai', $2, $3, 'queued', 'picture', $4::uuid, $5, $6, $7, now() + ($8 || ' milliseconds')::interval) RETURNING id`,
-      [input.designId, target, input.mode, group, group ? i : null, group ? true : null, input.review !== false, String(i)],
+      `INSERT INTO email_design_messages (design_id, role, target, mode, status, engine, variant_group, variant_no, fresh, needs_review, style, created_at)
+       VALUES ($1::uuid, 'ai', $2, $3, 'queued', 'picture', $4::uuid, $5, $6, $7, $9, now() + ($8 || ' milliseconds')::interval) RETURNING id`,
+      [input.designId, target, input.mode, group, group ? i : null, group ? true : null, input.review !== false, String(i), JSON.stringify(styles[i - 1])],
     );
     aiIds.push(a.rows[0].id);
   }
@@ -328,8 +333,8 @@ CREATIVE RULES:
 - When the email mentions the store, a visit, hours or directions, use the exact store facts and the store photo tokens; "Get directions" goes to Google Maps.
 - Personal parts: the customer's first name appears as "${SAMPLE_NAME}", a personal code as "${SAMPLE_CODE}". No unsubscribe line or postal address (added automatically).
 
-Page structures to choose from for a "new" layout (or go beyond):
-${SKELETONS.map((d, i) => `${i + 1}. ${d}`).join("\n")}`;
+Page structures (a "new" layout normally gets one assigned — use it):
+${Object.values(STRUCTURES).map((d, i) => `${i + 1}. ${d}`).join("\n")}`;
 }
 
 async function tenantOf(pool: Pool, designId: string): Promise<string> {
@@ -370,9 +375,12 @@ async function plan(pool: Pool, turn: Msg, locked: { products: TurnProduct[]; me
   const mediaRef = (id: string) => library.find((m) => m.id === id)?.ref;
 
   const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+  const vStyle = turn.style;
   const variant = turn.variant_no
-    ? `\n\nTHIS IS DIRECTION ${turn.variant_no} OF 3 for the owner's last message: layout "new", built on THIS page structure (follow it, it is what makes the three directions different): ${SKELETONS[(hash(turn.variant_group ?? "") + turn.variant_no) % SKELETONS.length]} The other two directions use completely different page structures.`
-    : "";
+    ? `\n\nTHIS IS DIRECTION ${turn.variant_no} OF 3 for the owner's last message: layout "new", in THIS style — follow all three parts, they are what makes the three directions different (the other two use completely different structures, type and colours):\n${vStyle ? styleBrief(vStyle) : SKELETONS[(hash(turn.variant_group ?? "") + turn.variant_no) % SKELETONS.length]}`
+    : vStyle
+      ? `\n\nTHE STYLE FOR THIS VERSION (the owner wants a different style every time): if this is a "new" layout — a new email, or the owner asks for a different / new / more creative look — build it in exactly this style, whatever earlier versions looked like:\n${styleBrief(vStyle)}\nIf the owner only asks for small changes to the current version ("edit"), keep the current style instead.`
+      : "";
   content.push({
     type: "text",
     text:
@@ -939,6 +947,13 @@ async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | n
     [turn.design_id, turn.created_at],
   );
   const prev = base.rows[0];
+  // Owner, 2026-11-08: a new idea every time — the creative director sees the store's recent concepts.
+  const recent = await pool.query<{ concept_data: Concept }>(
+    `SELECT DISTINCT ON (m.concept_data->>'story') m.concept_data FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id
+      WHERE d.tenant_id = (SELECT tenant_id FROM email_designs WHERE id = $1::uuid) AND m.concept_data IS NOT NULL AND m.id <> $2::uuid
+      ORDER BY m.concept_data->>'story', m.created_at DESC LIMIT 8`,
+    [turn.design_id, turn.id],
+  );
   const catalog = await inStockCatalog().catch(() => [] as CatalogProduct[]);
   const sets = catalogSets(catalog);
   const refOf = (id: string) => sets.find((x) => x.pieces.some((p) => p.id === id))?.ref ?? catalog.find((c) => c.id === id)?.ref ?? id;
@@ -953,6 +968,15 @@ async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | n
     return p ? `${p.ref} ${p.title}` : "(no longer in stock)";
   };
   if (prev?.concept_data) parts.push(txt(`THE CURRENT CONCEPT:\n${conceptText(prev.concept_data, nameOf)}`));
+  const others = recent.rows.map((r) => r.concept_data).filter((c) => !prev?.concept_data || c.story !== prev.concept_data.story);
+  if (others.length)
+    parts.push(
+      txt(
+        `RECENT CARBON EMAILS (do NOT repeat them — when you make a new concept, choose a different idea, different places, a different time of day, light and mood, different people and different pieces):\n${others
+          .map((c, i) => `${i + 1}. ${c.story} | hero: ${c.hero.scene.slice(0, 160)} | looks: ${c.looks.map((l) => `${l.name} (${l.scene.slice(0, 90)})`).join("; ")}`)
+          .join("\n")}`,
+      ),
+    );
   if (prev?.desktop_path) parts.push(txt("The current desktop picture:"), img(await stored(prev.desktop_path), "low"));
   if (lockedItems?.length)
     parts.push(txt(`THE ITEMS ARE FIXED (the owner approved exactly these): build the hero and the three looks from them only, using every one:\n${[...new Set(lockedItems.map((p) => refOf(p.id)))].map((r) => `- ${r}`).join("\n")}`));
@@ -1269,6 +1293,7 @@ async function planPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void):
   const review = !!turn.needs_review && !locked && !turn.concept_data && (!turn.variant_no || turn.variant_no === 1);
   // The concept's reply stays the message text; the designer's reply is only used without a concept.
   if (turn.concept_data) p.reply = turn.text || p.reply;
+  if (turn.style && p.fresh) p.direction = `${styleName(turn.style)}${p.direction ? ` — ${p.direction}` : ""}`.slice(0, 200);
   await storePlan(pool, turn, p, review ? "review" : "planning");
   if (review) {
     log(`[email-ai] turn ${turn.id}: waiting for the owner to approve ${p.products.length} item(s)`);

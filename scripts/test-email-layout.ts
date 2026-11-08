@@ -14,6 +14,7 @@ import { fillMergeTags, wrapEmail } from "../lib/server/email/rules";
 import { parseOffer } from "../lib/server/email/validate";
 import { addOwnerMessage, approveItems, pickDirection } from "../lib/server/email/designer";
 import { catalogLines, catalogSets, type CatalogProduct } from "../lib/server/email/catalog";
+import { freshStyles } from "../lib/server/email/styles";
 
 const url = process.env.TEST_DB ?? "";
 if (!/127\.0\.0\.1:55499|localhost:55499/.test(url)) throw new Error("TEST_DB must point at the throwaway test Postgres on :55499");
@@ -38,7 +39,7 @@ const prod = (n: number, ref: string): CatalogProduct => ({
 });
 
 (async () => {
-  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql"]) {
+  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql"]) {
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
   }
@@ -199,6 +200,29 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   assert.match(filled, /\/api\/public\/email\/web\/11111111-1111-1111-1111-111111111111\/tok123456\/en/);
   assert.ok(!/LEE ESTE|READ THIS/.test(wrapEmail({ designHtml: "<table></table>", subject: "s", preheader: "p", postalAddress: "A" })), "no bar without translations");
   console.log("ok  language bar: bold links to the other languages, translated footer, per-person web links");
+
+  // A different style every time (owner, 2026-11-08): never a style emailed in the last 14 days, never one
+  // already shown in this design, three directions always different.
+  const sd = await pool.query<{ id: string }>(`INSERT INTO email_designs (tenant_id, title) VALUES ($1, 'Style test') RETURNING id::text`, [T]);
+  const shownStyle = { structure: "mosaic", type: "editorial-serif", colour: "after-dark" };
+  await pool.query(`INSERT INTO email_design_messages (design_id, role, target, status, engine, style) VALUES ($1::uuid, 'ai', 'both', 'done', 'picture', $2)`, [sd.rows[0].id, JSON.stringify(shownStyle)]);
+  // Another design whose chosen version was emailed 3 days ago.
+  const sentD = await pool.query<{ id: string }>(`INSERT INTO email_designs (tenant_id, title) VALUES ($1, 'Sent one') RETURNING id::text`, [T]);
+  const sentM = await pool.query<{ id: string }>(
+    `INSERT INTO email_design_messages (design_id, role, target, status, engine, style) VALUES ($1::uuid, 'ai', 'both', 'done', 'picture', $2) RETURNING id::text`,
+    [sentD.rows[0].id, JSON.stringify({ structure: "letter", type: "condensed-caps", colour: "black-white" })],
+  );
+  await pool.query(`UPDATE email_designs SET chosen_message = $2::uuid WHERE id = $1::uuid`, [sentD.rows[0].id, sentM.rows[0].id]);
+  await pool.query(`INSERT INTO email_campaigns (tenant_id, name, design_id, subject, status, started_at) VALUES ($1, 'Sent', $2::uuid, 's', 'sent', now() - interval '3 days')`, [T, sentD.rows[0].id]);
+  for (let run = 0; run < 25; run++) {
+    const three = await freshStyles(pool, T, sd.rows[0].id, 3);
+    assert.equal(new Set(three.map((x) => x.structure)).size, 3, "3 different structures");
+    assert.equal(new Set(three.map((x) => x.colour)).size, 3, "3 different colour schemes");
+    assert.equal(new Set(three.map((x) => x.type)).size, 3, "3 different type styles");
+    assert.ok(!three.some((x) => x.structure === "mosaic" || x.structure === "letter"), "not shown in this design, not emailed in 14 days");
+    assert.ok(!three.some((x) => x.colour === "after-dark" || x.colour === "black-white"));
+  }
+  console.log("ok  styles: never one emailed in 14 days or already shown here; 3 directions all different");
 
   // Percent-off offers.
   const o = parseOffer({ amount: 10, endsAt: new Date(Date.now() + 9 * 86400_000).toISOString(), kind: "percent", prefix: "AW" });
