@@ -1152,7 +1152,10 @@ async function finishTurn(pool: Pool, t: Msg, pics: Map<Step, string>, log: (m: 
   for (const step of ["desktop", "mobile-top", "mobile-bottom"] as Step[]) {
     if (!stepsToDraw(t).includes(step)) continue;
     let b64 = pics.get(step);
-    if (!b64) b64 = await drawFast(await inputsFor(pool, t, step), t.image_model ?? imageModel()); // missing from the batch: draw it now
+    // Missing (the batch never draws the phone bottom): draw it now. The phone bottom is drawn from the
+    // phone top just drawn, so both halves share one width, margin and text size (2026-11-08).
+    const top = step === "mobile-bottom" ? pics.get("mobile-top") : undefined;
+    if (!b64) b64 = await drawFast(await inputsFor(pool, t, step, top ? Buffer.from(top, "base64") : undefined), t.image_model ?? imageModel());
     const saved = await savePicture(pool, t, step, b64);
     await pool.query(`UPDATE email_design_messages SET ${saved.column} = $2 WHERE id = $1::uuid`, [t.id, saved.path]);
     setPath(t, saved.column, saved.path);
@@ -1207,6 +1210,9 @@ async function drawAll(pool: Pool, lead: Msg, turns: Msg[], log: (m: string) => 
     }
     for (const t of turns)
       for (const step of stepsToDraw(t)) {
+        // The phone bottom waits for the phone top: it is drawn when the batch comes back, from that top
+        // (2026-11-08: drawn blind in the same batch it came out at another scale and the join showed).
+        if (step === "mobile-bottom" && stepsToDraw(t).includes("mobile-top")) continue;
         const inp = await inputsFor(pool, t, step);
         // The edits endpoint needs at least one picture: a blank page when a step has none.
         const imgs = inp.images.length ? inp.images : [await sharp({ create: { width: 64, height: 64, channels: 3, background: "#ffffff" } }).png().toBuffer()];
