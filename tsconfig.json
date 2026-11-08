@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "remotion"]
+  "exclude": ["node_modules", "remotion", "apps/carbon-b2b-shipping-rules"]
 }

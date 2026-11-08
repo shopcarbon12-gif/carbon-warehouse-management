@@ -1,0 +1,73 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "buyerIdentity": {
+          "purchasingCompany": {
+            "company": {
+              "id": "gid://shopify/Company/1"
+            }
+          }
+        },
+        "deliveryGroups": [
+          {
+            "id": "gid://shopify/CartDeliveryGroup/1",
+            "deliveryOptions": [
+              {
+                "handle": "std",
+                "title": "Standard",
+                "deliveryMethodType": "SHIPPING",
+                "cost": {
+                  "amount": "0.0"
+                }
+              },
+              {
+                "handle": "ups-saver",
+                "title": "UPS\u00ae Ground Saver",
+                "deliveryMethodType": "SHIPPING",
+                "cost": {
+                  "amount": "16.86"
+                }
+              },
+              {
+                "handle": "ups-ground",
+                "title": "UPS\u00ae Ground",
+                "deliveryMethodType": "SHIPPING",
+                "cost": {
+                  "amount": "16.91"
+                }
+              },
+              {
+                "handle": "pickup",
+                "title": "Apopka showroom",
+                "deliveryMethodType": "PICK_UP",
+                "cost": {
+                  "amount": "0.0"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "deliveryCustomization": {
+        "metafield": null
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "ups-saver"
+          }
+        },
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "ups-ground"
+          }
+        }
+      ]
+    }
+  }
+}

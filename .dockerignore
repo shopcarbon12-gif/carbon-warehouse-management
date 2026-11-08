@@ -16,3 +16,6 @@ playwright-report
 test-results
 .cursor
 coverage
+
+# Separate Shopify app (Carbon B2B Shipping Rules) — its own Coolify app builds it.
+apps/carbon-b2b-shipping-rules

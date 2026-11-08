@@ -18,6 +18,8 @@ const eslintConfig = defineConfig([
     "mobile/carbon_wms/.dart_tool/**",
     "mobile/carbon_wms/android/.gradle/**",
     "coverage/**",
+    // Separate Shopify app (own package.json, build and lint).
+    "apps/carbon-b2b-shipping-rules/**",
   ]),
 ]);
 
