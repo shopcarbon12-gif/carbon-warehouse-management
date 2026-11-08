@@ -49,7 +49,7 @@ import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleText } from "./style";
-import { BOX_RULES, SLOT_COLORS, TOKEN, briefWithBoxes, findBoxes, pasteReal, slotKeysIn, type Slot } from "./slots";
+import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
 import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
 import { freshStyles, styleBrief, styleName, STRUCTURES, type Style } from "./styles";
@@ -331,6 +331,7 @@ CREATIVE RULES:
 - Product names and prices shown must be exactly the catalog's.
 - MATCHING SETS (X-refs, listed after the catalog) are ONE card like the store's homepage: the set photo token [[PHOTO:X3]] with a small black label in its top-left corner, white bold uppercase letter-spaced "2-PIECE SET" (or "3-PIECE SET"); a tiny grey uppercase "CARBON"; the set name in bold uppercase ("COLE SET"); the pieces line in small grey text exactly as given ("Top $67.00 + Pants $65.00"); the total in bold, "Set $132.00". Never as separate pieces with separate prices.
 - When the email mentions the store, a visit, hours or directions, use the exact store facts and the store photo tokens; "Get directions" goes to Google Maps.
+- Never use magenta, pink or fuchsia anywhere in the design (they are reserved for the picture boxes); pick another accent colour.
 - Personal parts: the customer's first name appears as "${SAMPLE_NAME}", a personal code as "${SAMPLE_CODE}". No unsubscribe line or postal address (added automatically).
 
 Page structures (a "new" layout normally gets one assigned — use it):
@@ -579,35 +580,58 @@ async function inputsFor(pool: Pool, turn: Msg, step: Step): Promise<Inputs> {
 function turnSlots(turn: Msg): Slot[] {
   const gidOf = (id: string) => id.split("/").pop() ?? id;
   const out: Slot[] = [];
+  let p = 0;
+  let m = 0;
+  const color = BOX;
   for (const key of slotKeysIn(turn.desktop_prompt, turn.mobile_prompt)) {
-    if (out.length >= SLOT_COLORS.length) break;
-    const color = SLOT_COLORS[out.length];
+    if (out.length >= 16) break;
     if (key === "logo") {
-      out.push({ key, kind: "logo", label: "the CARBON logo (wide and short)", color });
+      out.push({ key, kind: "logo", code: "LOGO", label: "the CARBON logo (wide and short)", color });
       continue;
     }
     if (key === "s1" || key === "s2") {
       const st = STORE_MEDIA[key === "s1" ? 0 : 1];
-      out.push({ key, kind: "store", label: key === "s1" ? "the store photo (outside)" : "the store photo (inside)", color, url: st.url });
+      out.push({ key, kind: "store", code: key.toUpperCase(), label: key === "s1" ? "the store photo (outside)" : "the store photo (inside)", color, url: st.url });
       continue;
     }
     if (key.startsWith("p")) {
-      const p = (turn.products ?? []).find((x) => `p${gidOf(x.id)}` === key);
-      if (p) out.push({ key, kind: "product", label: p.set ? `the photo of the ${p.set.name}` : `the photo of ${p.title}`, color, url: p.image });
+      const prod = (turn.products ?? []).find((x) => `p${gidOf(x.id)}` === key);
+      if (prod) out.push({ key, kind: "product", code: `P${++p}`, label: prod.set ? `the photo of the ${prod.set.name}` : `the photo of ${prod.title}`, color, url: prod.image });
       continue;
     }
     if (key.startsWith("m")) {
-      const m = (turn.media ?? []).find((x) => `m${gidOf(x.id)}` === key);
-      if (m) out.push({ key, kind: "brand", label: `a CARBON picture (${m.description.slice(0, 60)})`, color, url: m.url });
+      const md = (turn.media ?? []).find((x) => `m${gidOf(x.id)}` === key);
+      if (md) out.push({ key, kind: "brand", code: `M${++m}`, label: `a CARBON picture (${md.description.slice(0, 60)})`, color, url: md.url });
       continue;
     }
-    if (/^a\d+$/.test(key)) out.push({ key, kind: "attachment", label: `attached photo ${key.slice(1)}`, color, path: null });
+    if (/^a\d+$/.test(key)) out.push({ key, kind: "attachment", code: key.toUpperCase(), label: `attached photo ${key.slice(1)}`, color, path: null });
+    // The campaign photos are drawn at the same time as the comps: their spot exists before the photo does
+    // (the path is filled in when the photos are ready, before pasting).
     if (/^(h1|l[1-3])$/.test(key)) {
       const shot = (turn.shots ?? []).find((x) => x.id === key);
-      if (shot?.path) out.push({ key, kind: "shot", label: key === "h1" ? "the campaign hero photo" : `the photo of look ${key.slice(1)}`, color, path: shot.path });
+      if (shot) out.push({ key, kind: "shot", code: key.toUpperCase(), label: key === "h1" ? "the campaign hero photo" : `the photo of look ${key.slice(1)}`, color, path: shot.path });
     }
   }
   return out;
+}
+
+/** Read the label written inside each magenta box (vision model). */
+async function readLabels(png: Buffer, boxes: { x: number; y: number; w: number; h: number }[], codes: string[]): Promise<(string | null)[]> {
+  if (!boxes.length) return [];
+  const parts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+    { type: "text", text: `Each picture below is a magenta placeholder box from an email design, in order. Read the short label written inside each one. Possible labels: ${codes.join(", ")}. Answer JSON {"labels": ["…" or null for each box, in the same order]}.` },
+  ];
+  for (const [i, b] of boxes.entries()) {
+    const crop = await sharp(png).extract({ left: b.x, top: b.y, width: b.w, height: b.h }).resize({ width: 320, height: 320, fit: "inside" }).jpeg({ quality: 80 }).toBuffer();
+    parts.push({ type: "text", text: `Box ${i + 1}:` }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${crop.toString("base64")}`, detail: "low" } });
+  }
+  try {
+    const c = await openai().chat.completions.create({ model: textModel(), response_format: { type: "json_object" }, messages: [{ role: "user", content: parts }] });
+    const j = JSON.parse(c.choices[0]?.message?.content ?? "{}") as { labels?: unknown[] };
+    return boxes.map((_, i) => (j.labels?.[i] ? String(j.labels[i]) : null));
+  } catch {
+    return boxes.map(() => null);
+  }
 }
 
 /** Paste the original pictures into their boxes in a freshly drawn picture. */
@@ -641,30 +665,37 @@ async function withRealPictures(pool: Pool, turn: Msg, step: Step, png0: Buffer,
     return s.url ? referencePhoto(s.url, 1600) : null;
   };
   const logos = { black: () => logoFile("black"), white: () => logoFile("white") };
-  const missingBoxes = async (pic: Buffer) => {
-    const found = await findBoxes(pic, slots.map((x) => x.color));
-    return slots.filter((x) => !(found.get(x.color.hex) ?? []).length);
+  const codes = slots.map((x) => x.code);
+  // Find every magenta box and read its label; the original goes into the box with its label.
+  const locate = async (pic: Buffer) => {
+    const boxes = await findLabelledBoxes(pic);
+    const labels = await readLabels(pic, boxes, codes);
+    const assigned = assignBoxes(boxes, labels, slots);
+    return { assigned, missing: slots.filter((x) => !assigned.some((a) => a.slot.key === x.key)) };
   };
-  const missing = await missingBoxes(png);
-  if (missing.length) {
-    log(`[email-ai] turn ${turn.id} ${step}: boxes not drawn for ${missing.map((x) => x.key).join(", ")} — repairing`);
+  let found = await locate(png);
+  if (found.missing.length) {
+    log(`[email-ai] turn ${turn.id} ${step}: no box for ${found.missing.map((x) => x.code).join(", ")} — repairing`);
     try {
       const prompt = [
-        "Edit image 1, an email design. Cover each element listed below with ONE perfectly flat, solid rectangle of exactly the given colour, exactly over that element's area (a photo: its whole photo area; the logo: the logo's area). Change NOTHING else — every other pixel, word, colour and position stays exactly the same.",
-        ...missing.map((x) => `- ${x.label} → solid ${x.color.hex} (${x.color.name})`),
-        "The rectangles are solid colour edge to edge: no outline, no frame, nothing inside them.",
+        "Edit image 1, an email design. Cover each element listed below with ONE perfectly flat, solid magenta (#FF00FF) rectangle exactly over that element's area (a photo: its whole photo area; the logo: the logo's area), with the given label written large in the centre in bold black capitals. Change NOTHING else — every other pixel, word, colour, box and position stays exactly the same.",
+        ...found.missing.map((x) => `- ${x.label} → magenta box labelled "${x.code}"`),
+        "The rectangles are solid magenta edge to edge: no outline, no frame, nothing inside them but the label.",
       ].join("\n");
       const meta = await sharp(png).metadata();
       const repaired = await drawFast({ prompt, size: `${meta.width}x${meta.height}`, images: [png] }, turn.image_model ?? imageModel());
       const pic = await sharp(Buffer.from(repaired, "base64")).resize({ width: meta.width, height: meta.height, fit: "fill" }).png().toBuffer();
-      const still = await missingBoxes(pic);
-      if (still.length < missing.length) png = pic;
-      if (still.length) log(`[email-ai] turn ${turn.id} ${step}: still no box for ${still.map((x) => x.key).join(", ")}`);
+      const again = await locate(pic);
+      if (again.missing.length < found.missing.length) {
+        png = pic;
+        found = again;
+      }
+      if (found.missing.length) log(`[email-ai] turn ${turn.id} ${step}: still no box for ${found.missing.map((x) => x.code).join(", ")}`);
     } catch (e) {
       log(`[email-ai] turn ${turn.id} ${step}: repair failed: ${e instanceof Error ? e.message : e}`);
     }
   }
-  const r = await pasteReal(png, slots, loader, logos);
+  const r = await pasteAssigned(png, found.assigned, loader, logos);
   return r.png;
 }
 

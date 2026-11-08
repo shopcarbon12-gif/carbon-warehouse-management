@@ -55,7 +55,7 @@ export const TYPES: Record<string, string> = {
 export const COLOURS: Record<string, string> = {
   "black-white": "black and white with plenty of white space",
   "cream-espresso": "warm cream background with espresso brown and black text",
-  "after-dark": "the whole email on black or charcoal with white text and one sharp accent colour",
+  "after-dark": "the whole email on black or charcoal with white text and one sharp accent colour (never pink or magenta)",
   "campaign-blocks": "full-width colour blocks in the campaign palette alternating behind sections",
   "stone-olive": "stone grey with deep olive and off-white",
   "navy-sand": "deep navy with sand and white",

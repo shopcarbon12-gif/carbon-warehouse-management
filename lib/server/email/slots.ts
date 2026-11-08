@@ -8,10 +8,15 @@
  *   [[LOGO]] · [[PHOTO:P12]] (product) · [[PHOTO:X3]] (matching set) ·
  *   [[PHOTO:S1]] (store) · [[PHOTO:M7]] (CARBON picture) · [[PHOTO:A1]] (attached) ·
  *   [[PHOTO:H1]] / [[PHOTO:L1]] … (the campaign photos made for this email: hero, looks)
- * — stored with stable keys (logo, p<gid>, s1, m<gid>, a1). For each picture,
- * every key gets its own flat colour; the model draws a solid box of exactly
- * that colour; CarbonWMS then finds each box and pastes the ORIGINAL file into
- * it (cropped to the box: the only change ever made to a real photo). The
+ * — stored with stable keys (logo, p<gid>, s1, m<gid>, a1).
+ *
+ * Every spot is drawn as the SAME flat magenta box with a short LABEL written
+ * large inside it (LOGO, H1, L1–L3, P1…, S1/S2, M1…, A1…). (2026-11-08: one
+ * colour per spot failed — the picture model swaps twelve colours and paints
+ * shades that match none.) CarbonWMS finds every magenta box, a vision model
+ * reads each label, and the ORIGINAL file goes into the box with that label —
+ * cropped to the box, the only change ever made to a real photo. A box whose
+ * label cannot be read takes the remaining spot whose shape fits best. The
  * logo goes in black or white depending on the background around its box.
  */
 import sharp from "sharp";
@@ -33,8 +38,11 @@ export const SLOT_COLORS = [
 export type SlotColor = (typeof SLOT_COLORS)[number];
 
 export type SlotKind = "logo" | "product" | "store" | "brand" | "attachment" | "shot";
-/** One real picture to paste: what it is and where its original comes from. */
-export type Slot = { key: string; kind: SlotKind; label: string; color: SlotColor; url?: string | null; path?: string | null };
+/** One real picture to paste: what it is, the label written in its box, and where its original comes from. */
+export type Slot = { key: string; kind: SlotKind; label: string; code: string; color: SlotColor; url?: string | null; path?: string | null };
+
+/** The one box colour (pure magenta, rare in photos, easy to find). */
+export const BOX = SLOT_COLORS[0];
 
 /** [[LOGO]] or [[PHOTO:<ref or key>]] (an optional ":4x5" style shape note is allowed and ignored here). */
 export const TOKEN = /\[\[\s*(LOGO|PHOTO\s*:\s*([A-Za-z0-9]+))(?:\s*:\s*[0-9]+x[0-9]+)?\s*\]\]/gi;
@@ -56,14 +64,49 @@ export function briefWithBoxes(brief: string, slots: Slot[]): string {
     const k = what.toUpperCase() === "LOGO" ? "logo" : (key ?? "").toLowerCase();
     const s = slots.find((x) => x.key === k);
     if (!s) return "";
-    return `[a PLACEHOLDER BOX: one perfectly flat solid rectangle filled with exactly ${s.color.hex} (${s.color.name}) — the spot for ${s.label}]`;
+    return `[a PLACEHOLDER BOX labelled "${s.code}": one perfectly flat solid magenta (#FF00FF) rectangle with "${s.code}" written large in the centre in bold black capitals — the spot for ${s.label}]`;
   });
 }
 
 export const BOX_RULES = (slots: Slot[]) =>
   slots.length
-    ? `PLACEHOLDER BOXES (the most important rule): the real ${slots.some((s) => s.kind === "logo") ? "logo and the real " : ""}photos are pasted in later, so you must NOT draw them. Every placeholder box in the brief is ONE perfectly flat, solid rectangle in exactly its colour (${slots.map((s) => `${s.color.hex} = ${s.label}`).join("; ")}): no gradient, no texture, no shadow, no border, no rounded corners, no text, logo, person or object inside or over it, nothing overlapping it. Fill each box SOLID with its colour from edge to edge — never an outline, frame or border around a picture, never a photo or drawing inside it. Draw each box at the size and shape the brief gives (a product tile is usually portrait 4:5; a logo box is wide and short, about 3.4 times wider than tall). Use these colours ONLY for the boxes — nowhere else in the picture.`
+    ? `PLACEHOLDER BOXES (the most important rule): the real ${slots.some((s) => s.kind === "logo") ? "logo and the real " : ""}photos are pasted in later, so you must NOT draw them. Every placeholder box in the brief is ONE perfectly flat, solid MAGENTA (#FF00FF) rectangle — all boxes the same magenta — with its label written large in the centre in bold black capitals (${slots.map((s) => `"${s.code}" = ${s.label}`).join("; ")}). Fill each box SOLID magenta from edge to edge: no gradient, no shadow, no border, no rounded corners, never an outline or frame around a picture, never a photo, person or drawing inside it — only its label. Draw each box at the size and shape the brief gives (a product tile is usually portrait 4:5; the hero landscape; a look photo portrait; a logo box wide and short, about 3.4 times wider than tall). Magenta, pink and fuchsia are reserved for the boxes: never use them anywhere else in the picture — not for accents, buttons, lines, text or outlines.`
     : "";
+
+/** A found box with its shape. */
+export type FoundBox = { x: number; y: number; w: number; h: number };
+
+/** Shape of a box or spot: logo (very wide), landscape, square, portrait. */
+function shapeOf(w: number, h: number): number {
+  return w / Math.max(1, h);
+}
+const expectedShape = (s: Slot) => (s.kind === "logo" ? 3.4 : s.kind === "store" || s.code === "H1" ? 1.5 : s.kind === "product" ? 0.8 : s.kind === "shot" ? 0.67 : 1);
+
+/**
+ * Which slot goes in which box: first by the label read inside the box; boxes whose label could not be
+ * read take the remaining slots, best shape first (reading order breaks ties). A slot can fill several
+ * boxes when the label repeats (the logo at the top and the bottom).
+ */
+export function assignBoxes(boxes: FoundBox[], labels: (string | null)[], slots: Slot[]): { box: FoundBox; slot: Slot }[] {
+  const out: { box: FoundBox; slot: Slot }[] = [];
+  const free: FoundBox[] = [];
+  boxes.forEach((b, i) => {
+    const l = (labels[i] ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const slot = slots.find((s) => s.code === l);
+    if (slot) out.push({ box: b, slot });
+    else free.push(b);
+  });
+  const left = slots.filter((s) => !out.some((o) => o.slot.key === s.key));
+  for (const b of free) {
+    if (!left.length) break;
+    const r = shapeOf(b.w, b.h);
+    left.sort((a, c) => Math.abs(Math.log(expectedShape(a) / r)) - Math.abs(Math.log(expectedShape(c) / r)));
+    // Only a clear fit (shape within ~1.6×, not tiny): a pink-outlined button never becomes a photo spot.
+    if (Math.abs(Math.log(expectedShape(left[0]) / r)) > Math.log(1.6) || b.w * b.h < 120 * 90) continue;
+    out.push({ box: b, slot: left.shift()! });
+  }
+  return out;
+}
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -219,29 +262,28 @@ async function surround(png: Buffer, b: Box, W: number, H: number): Promise<[num
 
 export type Loader = (slot: Slot) => Promise<Buffer | null>;
 
-/** Paste every original into its boxes. Returns the new picture and which slots were found. */
-export async function pasteReal(
+/** Every magenta box in a picture, in reading order (top to bottom, then left to right). */
+export async function findLabelledBoxes(png: Buffer): Promise<FoundBox[]> {
+  const list = (await findBoxes(png, [BOX])).get(BOX.hex) ?? [];
+  return list.sort((a, b) => (Math.abs(a.y - b.y) < 24 ? a.x - b.x : a.y - b.y));
+}
+
+/** Paste every original into its assigned boxes. */
+export async function pasteAssigned(
   png: Buffer,
-  slots: Slot[],
+  assigned: { box: FoundBox; slot: Slot }[],
   load: Loader,
   logos: { black: () => Promise<Buffer>; white: () => Promise<Buffer> },
 ): Promise<{ png: Buffer; found: string[]; missing: string[] }> {
-  if (!slots.length) return { png, found: [], missing: [] };
   const meta = await sharp(png).metadata();
   const W = meta.width ?? 0;
   const H = meta.height ?? 0;
-  const boxes = await findBoxes(png, slots.map((s) => s.color));
   const layers: sharp.OverlayOptions[] = [];
   const found: string[] = [];
   const missing: string[] = [];
-  for (const s of slots) {
-    const list = boxes.get(s.color.hex) ?? [];
-    if (!list.length) {
-      missing.push(s.key);
-      continue;
-    }
-    found.push(s.key);
-    for (const b of list) {
+  for (const { box: b, slot: s } of assigned) {
+    if (!found.includes(s.key)) found.push(s.key);
+    {
       if (s.kind === "logo") {
         const [r, g, bl] = await surround(png, b, W, H);
         const dark = 0.2126 * r + 0.7152 * g + 0.0722 * bl < 128;
