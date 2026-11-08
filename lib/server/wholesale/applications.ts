@@ -326,10 +326,12 @@ export async function submitDetailedApplication(pool: Pool, input: DetailedApply
   if (!businessName) return bad("business");
   const storeType = text(f.store_type, 80);
   if (!storeType) return bad("store_type");
-  const ein = normalizeEin(f.ein);
-  if (!ein) return bad("ein");
+  // Tax proof (owner 2026-11-08): any ONE of EIN, resale permit number or the
+  // certificate file is enough. A typed EIN must still be a real 9-digit EIN.
+  const einRaw = text(f.ein, 20);
+  const ein = einRaw ? normalizeEin(einRaw) : null;
+  if (einRaw && !ein) return bad("ein");
   const permitNumber = text(f.permit_number, 60);
-  if (!permitNumber) return bad("permit_number");
   const permitState = text(f.permit_state, 60);
   if (!permitState) return bad("permit_state");
   const street = text(f.street, 200);
@@ -345,10 +347,11 @@ export async function submitDetailedApplication(pool: Pool, input: DetailedApply
   if (!social || social.length === 0) return bad("social");
   if (f.agree_terms !== "on" && f.agree_terms !== "true") return bad("agree_terms");
   if (f.consent_verify !== "on" && f.consent_verify !== "true") return bad("consent_verify");
-  if (!input.file || input.file.bytes.length === 0) return bad("certificate");
-  if (input.file.bytes.length > MAX_CERTIFICATE_BYTES) return bad("certificate");
-  const mime = sniffCertificate(input.file.bytes);
-  if (!mime) return bad("certificate");
+  const file = input.file && input.file.bytes.length > 0 ? input.file : null;
+  if (file && file.bytes.length > MAX_CERTIFICATE_BYTES) return bad("certificate");
+  const mime = file ? sniffCertificate(file.bytes) : null;
+  if (file && !mime) return bad("certificate");
+  if (!ein && !permitNumber && !file) return bad("tax_proof");
 
   const limits = await pool.query<{ ip_day: string; hour: string }>(
     `SELECT count(*) FILTER (WHERE ip = $1 AND created_at > now() - interval '24 hours') AS ip_day,
@@ -382,12 +385,14 @@ export async function submitDetailedApplication(pool: Pool, input: DetailedApply
       ],
     );
     const id = Number(r.rows[0].id);
-    const safeName = (input.file.name || "certificate").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
-    await client.query(
-      `INSERT INTO wholesale_application_files (application_id, kind, filename, mime, size_bytes, data)
-       VALUES ($1, 'resale_certificate', $2, $3, $4, $5)`,
-      [id, safeName, mime, input.file.bytes.length, Buffer.from(input.file.bytes)],
-    );
+    if (file && mime) {
+      const safeName = (file.name || "certificate").replace(/[^\w.\- ]+/g, "_").slice(0, 120);
+      await client.query(
+        `INSERT INTO wholesale_application_files (application_id, kind, filename, mime, size_bytes, data)
+         VALUES ($1, 'resale_certificate', $2, $3, $4, $5)`,
+        [id, safeName, mime, file.bytes.length, Buffer.from(file.bytes)],
+      );
+    }
     await client.query("COMMIT");
     return { ok: true, id, isNew: true };
   } catch (e) {
