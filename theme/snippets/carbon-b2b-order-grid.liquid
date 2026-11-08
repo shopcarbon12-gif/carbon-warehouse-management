@@ -8,9 +8,10 @@
   the 3-run order minimum is checked in the cart (carbon-b2b-cart-minimum),
   which blocks checkout until the cart holds 3 runs.
 
-  A size belongs to the run only if it is in stock; sizes out of stock are shown
-  struck through and left out. The most runs a colour allows is the lowest stock
-  among its run sizes.
+  A run needs EVERY size of the colour (owner 2026-11-07, Ryan Polo Peach
+  missing M): if any size is out of stock the colour can't be ordered — the
+  missing size is shown struck through and the row says "Not available". The
+  most runs a full colour allows is the lowest stock among its sizes.
 
   One-size items (owner 2026-11-07): when a colour has a single size (OS), a run
   is 3 pieces of it, so it needs 3 in stock and the max runs is stock ÷ 3.
@@ -101,14 +102,14 @@
         <span role="cell" class="carbon-b2b__color">{{ color }}</span>
         <span role="cell" class="carbon-b2b__sizes">
           {{ sizes_html }}
-          {%- if in_run > 0 -%}
+          {%- if in_run > 0 and in_run == colour_sizes -%}
             {%- assign run_price_money = run_price | money -%}
             {%- assign run_pieces = in_run | times: per_size -%}
             <small>{{ 'carbon.b2b.grid.per_run_html' | t: price: run_price_money, pieces: run_pieces }}</small>
           {%- endif -%}
         </span>
         <span role="cell">
-          {%- if in_run > 0 and max_runs >= 1 -%}
+          {%- if in_run > 0 and in_run == colour_sizes and max_runs >= 1 -%}
             <input
               type="number"
               class="carbon-b2b__runs"
