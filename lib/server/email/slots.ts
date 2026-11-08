@@ -245,25 +245,30 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[], pale 
 
 /** The average colour just outside a box (the background a logo sits on). */
 async function surround(png: Buffer, b: Box, W: number, H: number): Promise<[number, number, number]> {
+  // The MOST COMMON colour around the box (a mean mixed a thin dark line into a grey patch, 2026-11-08).
   const m = 10;
   const areas = [
     { left: b.x, top: Math.max(0, b.y - m), width: b.w, height: Math.min(m, b.y) },
     { left: b.x, top: Math.min(H - 1, b.y + b.h), width: b.w, height: Math.min(m, H - (b.y + b.h)) },
+    { left: Math.max(0, b.x - m), top: b.y, width: Math.min(m, b.x), height: b.h },
+    { left: Math.min(W - 1, b.x + b.w), top: b.y, width: Math.min(m, W - (b.x + b.w)), height: b.h },
   ].filter((a) => a.width > 0 && a.height > 0);
-  let r = 0;
-  let g = 0;
-  let bl = 0;
-  let n = 0;
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
   for (const a of areas) {
-    // stats() reads the input image, not the result of extract(): cut the strip out first.
-    const strip = await sharp(png).extract(a).png().toBuffer();
-    const st = await sharp(strip).stats();
-    r += st.channels[0].mean;
-    g += st.channels[1].mean;
-    bl += st.channels[2].mean;
-    n++;
+    const { data } = await sharp(png).extract(a).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    for (let i = 0; i < data.length; i += 3) {
+      const k = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+      const e = buckets.get(k) ?? { n: 0, r: 0, g: 0, b: 0 };
+      e.n++;
+      e.r += data[i];
+      e.g += data[i + 1];
+      e.b += data[i + 2];
+      buckets.set(k, e);
+    }
   }
-  return n ? [r / n, g / n, bl / n] : [255, 255, 255];
+  let best: { n: number; r: number; g: number; b: number } | null = null;
+  for (const e of buckets.values()) if (!best || e.n > best.n) best = e;
+  return best ? [best.r / best.n, best.g / best.n, best.b / best.n] : [255, 255, 255];
 }
 
 export type Loader = (slot: Slot) => Promise<Buffer | null>;
@@ -379,20 +384,29 @@ export async function pasteAssigned(
     }
   }
   const pasted = layers.length ? await sharp(png).composite(layers).png({ compressionLevel: 9 }).toBuffer() : png;
-  return { png: await cleanMagenta(pasted), found, missing };
+  return { png: await cleanMagenta(pasted, assigned.map((a) => a.box)), found, missing };
 }
 
 /**
  * Any magenta left after pasting (a sliver beside a label the model wrote across a box, a box nobody
  * claimed) is painted in the colour around it, so no pink is ever left in a picture.
  */
-export async function cleanMagenta(png: Buffer): Promise<Buffer> {
+export async function cleanMagenta(png: Buffer, boxes: FoundBox[] = []): Promise<Buffer> {
   const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width;
   const H = info.height;
   const TOL = 90 * 90;
   const [mr, mg, mb] = BOX.rgb;
-  const isMag = (i: number) => (data[i] - mr) ** 2 + (data[i + 1] - mg) ** 2 + (data[i + 2] - mb) ** 2 < TOL;
+  // Washed-out pink counts too, but only in a thin ring just around a pasted box (a lilac sliver beside
+  // a "2-PIECE SET" label, 2026-11-08) — never inside a photo, where pink sneakers are real.
+  const RING = 16;
+  const inRing = (p: number) => {
+    const x = p % W;
+    const y = (p - x) / W;
+    return boxes.some((b) => x >= b.x - RING && x < b.x + b.w + RING && y >= b.y - RING && y < b.y + b.h + RING && !(x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h));
+  };
+  const isMag = (i: number) =>
+    (data[i] - mr) ** 2 + (data[i + 1] - mg) ** 2 + (data[i + 2] - mb) ** 2 < TOL || (boxes.length > 0 && isPale(data[i], data[i + 1], data[i + 2]) && inRing(i / 3));
   const seen = new Uint8Array(W * H);
   let changed = false;
   for (let start = 0; start < W * H; start++) {
@@ -419,19 +433,25 @@ export async function cleanMagenta(png: Buffer): Promise<Buffer> {
       }
     }
     if (pts.length < 6) continue;
-    // The average colour of a 4 px ring around it (not magenta).
-    let r = 0, g = 0, b = 0, n = 0;
+    // The most common colour in a 4 px ring around it (not magenta, not inside a pasted photo).
+    const inBox = (x: number, y: number) => boxes.some((q) => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h);
+    const buckets = new Map<number, number[]>();
     for (let y = Math.max(0, minY - 4); y <= Math.min(H - 1, maxY + 4); y++)
       for (let x = Math.max(0, minX - 4); x <= Math.min(W - 1, maxX + 4); x++) {
         if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
         const i = (y * W + x) * 3;
-        if (isMag(i)) continue;
-        r += data[i];
-        g += data[i + 1];
-        b += data[i + 2];
-        n++;
+        if (isMag(i) || inBox(x, y)) continue;
+        const k = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+        const e = buckets.get(k) ?? [0, 0, 0, 0];
+        e[0]++;
+        e[1] += data[i];
+        e[2] += data[i + 1];
+        e[3] += data[i + 2];
+        buckets.set(k, e);
       }
-    const fill = n ? [r / n, g / n, b / n] : [255, 255, 255];
+    let top: number[] | null = null;
+    for (const e of buckets.values()) if (!top || e[0] > top[0]) top = e;
+    const fill = top ? [top[1] / top[0], top[2] / top[0], top[3] / top[0]] : [255, 255, 255];
     for (const p of pts) {
       data[p * 3] = fill[0];
       data[p * 3 + 1] = fill[1];

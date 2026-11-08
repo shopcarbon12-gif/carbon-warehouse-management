@@ -132,6 +132,24 @@ const MAG = { r: 255, g: 0, b: 255 };
     .toBuffer();
   assert.equal((await sharp(await trimFrame(plainPage)).metadata()).width, 1120, "a plain margin is kept");
   console.log("ok  an outer frame around a phone part is cut; a plain page margin is kept");
+  // A lilac sliver just outside a pasted box is painted over; the logo sits on the page colour, not grey.
+  const lilac = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 255, g: 255, b: 255 } } })
+    .composite([
+      { input: await solid(300, 300, MAG), left: 100, top: 120 },
+      { input: await solid(80, 10, { r: 226, g: 212, b: 236 }), left: 300, top: 108 },
+      { input: await solid(440, 90, MAG), left: 220, top: 10 },
+      { input: await solid(800, 4, { r: 0, g: 0, b: 0 }), left: 0, top: 118 },
+    ])
+    .png()
+    .toBuffer();
+  const lb = await findLabelledBoxes(lilac);
+  const done = await pasteAssigned(lilac, [{ box: lb[0], slot: slots[0] }, { box: lb[1], slot: slots[1] }], async () => solid(400, 500, { r: 30, g: 30, b: 200 }), { black: async () => logoBlack, white: async () => logoWhite });
+  const at = async (x: number, y: number) => (await sharp(done.png).extract({ left: x, top: y, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true })).data;
+  const sl = await at(340, 110);
+  assert.ok(!(sl[2] > sl[1] + 15), `the lilac sliver is gone (${sl[0]},${sl[1]},${sl[2]})`);
+  const bgc = await at(lb[0].x + 6, lb[0].y + 45);
+  assert.ok(bgc[0] > 245 && bgc[1] > 245, `the logo sits on white, not grey (${bgc[0]},${bgc[1]},${bgc[2]})`);
+  console.log("ok  lilac sliver beside a box painted over; logo background is the page colour");
   if (out) {
     await sharp(png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-before.jpg`);
     await sharp(r.png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-after.jpg`);
