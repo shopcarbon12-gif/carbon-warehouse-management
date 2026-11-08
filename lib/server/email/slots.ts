@@ -274,6 +274,51 @@ export async function findLabelledBoxes(png: Buffer): Promise<FoundBox[]> {
   return list.sort((a, b) => (Math.abs(a.y - b.y) < 24 ? a.x - b.x : a.y - b.y));
 }
 
+/**
+ * Remove an outer FRAME the model sometimes draws around a phone part (a grey page with the email as a
+ * smaller card inside, 2026-11-08), so the part is the email edge to edge and both parts join at the
+ * same width and text size. A plain page margin (the email's own background) is never cut: the strip
+ * only counts when the column just inside it is a different colour over most of its height.
+ */
+export async function trimFrame(png: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width;
+  const H = info.height;
+  const px = (x: number, y: number) => {
+    const i = (y * W + x) * 3;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+  const near = (a: number[], c: number[]) => (a[0] - c[0]) ** 2 + (a[1] - c[1]) ** 2 + (a[2] - c[2]) ** 2 < 14 * 14;
+  const share = (x: number, c: number[]) => {
+    let n = 0;
+    for (let y = 0; y < H; y += 2) if (near(px(x, y), c)) n++;
+    return n / Math.ceil(H / 2);
+  };
+  const side = (from: number, step: number): number => {
+    const c = px(from, Math.floor(H / 2));
+    let k = 0;
+    while (k < W * 0.15 && share(from + step * k, c) >= 0.97) k++;
+    if (k < W * 0.02 || k >= W * 0.15) return 0;
+    return share(from + step * (k + 2), c) <= 0.4 ? k : 0;
+  };
+  const L = side(0, 1);
+  const R = side(W - 1, -1);
+  if (!L || !R) return png;
+  // The same frame colour above and below the card is cut too.
+  const c = px(0, Math.floor(H / 2));
+  const rowIs = (y: number) => {
+    let n = 0;
+    let t = 0;
+    for (let x = L; x < W - R; x += 2, t++) if (near(px(x, y), c)) n++;
+    return n / t >= 0.97;
+  };
+  let T = 0;
+  while (T < H * 0.2 && rowIs(T)) T++;
+  let B = 0;
+  while (B < H * 0.2 && rowIs(H - 1 - B)) B++;
+  return sharp(png).extract({ left: L, top: T, width: W - L - R, height: H - T - B }).png({ compressionLevel: 9 }).toBuffer();
+}
+
 /** A washed-out magenta (pale pink / lilac) the model sometimes paints instead of #FF00FF. */
 function isPale(r: number, g: number, b: number): boolean {
   return r >= 195 && b >= 180 && r - g >= 14 && b - g >= 8 && Math.abs(r - b) <= 45;
@@ -327,7 +372,8 @@ export async function pasteAssigned(
       const sm = await sharp(src).rotate().metadata();
       const sw = (sm.autoOrient?.width ?? sm.width) || 1;
       const sh = (sm.autoOrient?.height ?? sm.height) || 1;
-      const position = b.w / b.h > sw / sh ? "north" : sharp.strategy.attention;
+      // (A store photo keeps "attention": its top is sky and roof.)
+      const position = s.kind !== "store" && b.w / b.h > sw / sh ? "north" : sharp.strategy.attention;
       const fill = await sharp(src).rotate().flatten({ background: "#ffffff" }).resize({ width: b.w, height: b.h, fit: "cover", position }).png().toBuffer();
       layers.push({ input: fill, left: b.x, top: b.y });
     }

@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "../lib/server/email/slots";
+import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, trimFrame, type Slot } from "../lib/server/email/slots";
 
 const out = process.argv[2];
 const solid = (w: number, h: number, c: { r: number; g: number; b: number }) => sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
@@ -116,6 +116,22 @@ const MAG = { r: 255, g: 0, b: 255 };
   const { data: tp } = await sharp(wide.png).extract({ left: 400, top: 10, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
   assert.ok(tp[0] > 150 && tp[2] < 80, `the top of the photo is kept (${tp[0]},${tp[1]},${tp[2]})`);
   console.log("ok  pale pink boxes found separately; wide crops keep the top of the photo");
+  // A phone part drawn as a cream card on a grey page is cut to the card; a plain page margin is kept.
+  const card = await sharp({ create: { width: 1120, height: 1600, channels: 3, background: { r: 222, g: 219, b: 212 } } })
+    .composite([
+      { input: await solid(960, 1500, { r: 246, g: 242, b: 233 }), left: 80, top: 40 },
+      { input: await solid(700, 80, { r: 20, g: 20, b: 20 }), left: 200, top: 300 },
+    ])
+    .png()
+    .toBuffer();
+  const cut = await sharp(await trimFrame(card)).metadata();
+  assert.ok(near(cut.width ?? 0, 960) && near(cut.height ?? 0, 1500), `card ${cut.width}x${cut.height}`);
+  const plainPage = await sharp({ create: { width: 1120, height: 1600, channels: 3, background: { r: 246, g: 242, b: 233 } } })
+    .composite([{ input: await solid(900, 80, { r: 20, g: 20, b: 20 }), left: 110, top: 300 }])
+    .png()
+    .toBuffer();
+  assert.equal((await sharp(await trimFrame(plainPage)).metadata()).width, 1120, "a plain margin is kept");
+  console.log("ok  an outer frame around a phone part is cut; a plain page margin is kept");
   if (out) {
     await sharp(png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-before.jpg`);
     await sharp(r.png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-after.jpg`);

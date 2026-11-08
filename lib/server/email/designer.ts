@@ -49,7 +49,7 @@ import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleText } from "./style";
-import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "./slots";
+import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, findPaleBoxes, pasteAssigned, placeLogoOnTop, trimFrame, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
 import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
 import { freshStyles, styleBrief, styleName, STRUCTURES, type Style } from "./styles";
@@ -551,7 +551,7 @@ async function inputsFor(pool: Pool, turn: Msg, step: Step): Promise<Inputs> {
       lead = "Draw the BOTTOM PART of the phone email whose top part is image 1.";
     } else {
       // Drawn at the same time as the top part: continue it from the brief alone.
-      lead = "Draw the BOTTOM PART of a phone email. Its top part (drawn separately) ends exactly where this brief begins: start right at the first section described, with the same page background, margins, fonts and colours the brief gives, so the two parts join seamlessly.";
+      lead = "Draw the BOTTOM PART of a phone email. Its top part (drawn separately) ends exactly where this brief begins: start right at the first section described, with the same page background, margins, fonts and colours the brief gives, so the two parts join seamlessly. The email fills the picture's whole width edge to edge: NO outer page background, frame, card edge or shadow around it (the desktop picture's surroundings are not part of the phone email).";
     }
     if (desktopNow) {
       images.push(await load(desktopNow));
@@ -733,7 +733,9 @@ async function toPng(b: Buffer): Promise<Buffer> {
 
 /** Save a drawn picture; the phone bottom part is joined under the top part into one phone picture. */
 async function savePicture(pool: Pool, turn: Msg, step: Step, b64: string): Promise<{ column: "desktop_path" | "mobile_top_path" | "mobile_path"; path: string }> {
-  const png = await withRealPictures(pool, turn, step, await sharp(Buffer.from(b64, "base64")).png({ compressionLevel: 9 }).toBuffer());
+  const drawn = await withRealPictures(pool, turn, step, await sharp(Buffer.from(b64, "base64")).png({ compressionLevel: 9 }).toBuffer());
+  // A phone part drawn as a smaller card on a page background is cut to the card and widened again.
+  const png = step === "desktop" ? drawn : await sharp(await trimFrame(drawn)).resize({ width: (await sharp(drawn).metadata()).width }).png({ compressionLevel: 9 }).toBuffer();
   if (step === "desktop" || step === "mobile-top") {
     const path = `email/designs/${turn.design_id}/${turn.id}-${step}.png`;
     await uploadBytesToStorage({ path, bytes: png, contentType: "image/png" });
