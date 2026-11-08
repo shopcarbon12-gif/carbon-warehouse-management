@@ -23,20 +23,34 @@ import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
 import { WMS_BASE, openai, textModel } from "./config";
 import { SAMPLE_CODE, SAMPLE_NAME, type TurnProduct } from "./designer";
-import { LOGO_URLS } from "./catalog";
-import { STORE, type TurnMedia } from "./brand";
+import { LOGO_URLS, referencePhoto } from "./catalog";
+import { STORE, STORE_MEDIA, type TurnMedia } from "./brand";
 import { MERGE_TAGS, sanitizeEmailHtml, usedMergeTags } from "./rules";
 
 const MAX_FILES = 60;
 const MAX_UNZIPPED = 40 * 1024 * 1024;
 
-export function convertInstructions(desktopName: string, mobileName: string, products: TurnProduct[] = [], media: TurnMedia[] = []): string {
+/** An original photo handed to the converter as a file (owner, 2026-11-08: the real pictures go into the email, never cut-outs of the AI's drawing). */
+export type Original = { file: string; what: string };
+
+export function convertInstructions(desktopName: string, mobileName: string, products: TurnProduct[] = [], media: TurnMedia[] = [], originals: Original[] = []): string {
   return `You are turning a finished email DESIGN into a real, sendable HTML email package. Use the python tool.
 
 FILES in /mnt/data:
 - ${desktopName}: the DESKTOP view (a 600 px email column; the picture's full width = 600 px).
 - ${mobileName}: the PHONE view (a 375 px screen; the picture's full width = 375 px).
-
+${originals.map((o) => `- ${o.file}: ORIGINAL photo — ${o.what}`).join("\n")}
+${
+  originals.length
+    ? `
+THE ORIGINAL PHOTOS ARE THE MOST IMPORTANT RULE. The design pictures were drawn by an AI, so the store photos, CARBON pictures and product photos in them are only AI copies. Every spot in the design that shows one of the ORIGINAL photos above (the same store, the same place, the same product photo, even if the AI copy looks a little different) MUST use the ORIGINAL file, never a cut-out from the design pictures:
+- open the original with PIL; crop it to the exact shape (aspect ratio) of that spot in the design, keeping the same part of the picture the design shows (the subject centred as in the design); resize it to twice the spot's width in CSS px (at most 1200 px wide); save it as JPEG quality 90 in package/images/ as orig-<short name>.jpg;
+- only cropping and resizing — no retouching, no filters, no colour changes, no text on it;
+- in manifest.json give that image "original": "<the original file name>".
+Only pictures that are NOT one of the originals (AI-made banners and lifestyle shots with new models, graphics) are cut out of the design pictures.
+`
+    : ""
+}
 STEP 1. Look at both pictures closely. List every section top to bottom: logo, headings, paragraphs, photos, buttons, code box, dividers, icons. Note exact words, colours (hex), font style (serif / sans, weight, letter-spacing), alignment and spacing in CSS pixels.
 
 THE LOGO: never cut the CARBON logo out of the pictures and never type it as text. Always use the official file as an <img> with an absolute URL:
@@ -48,7 +62,7 @@ ${
     ? `
 REAL PRODUCTS shown in this design (from the store's catalog). Link every picture or button that shows one of them to its own page, and use its exact name and price if the design shows them:
 ${products.map((p) => `- ${p.title} · $${p.price.toFixed(2)} · ${p.url}${p.image ? ` · product photo: ${p.image}` : ""}${p.set ? ` · piece of the matching set "${p.set.name}" (${p.set.line}, Set $${p.set.total.toFixed(2)})` : ""}`).join("\n")}
-For a picture that is simply that product's photo (a product tile), use the product photo URL instead of a cut-out (it is the real photo, sharper); otherwise cut it from the design.
+A product tile uses that product's ORIGINAL photo file (listed in FILES) when one is given; otherwise its product photo URL; never a cut-out of the AI copy.
 A matching set is ONE card, like the store's homepage: the set's photo with a black "2-PIECE SET" label, the set name, the pieces line and "Set $…" exactly as listed, linked to the set's first piece.
 `
     : ""
@@ -56,7 +70,7 @@ A matching set is ONE card, like the store's homepage: the set's photo with a bl
 ${
   media.length
     ? `
-CARBON'S OWN PICTURES used in this design (real files from its store). When a photo in the design is one of these, use the real file's URL as the <img> src instead of a cut-out (sharper), cropped with the same framing only if the design crops it hard (then cut it from the design instead):
+CARBON'S OWN PICTURES used in this design (real files from its store; their ORIGINAL files are in FILES when given — use those, cropped to the spot):
 ${media.map((m) => `- ${m.description} · ${m.width}x${m.height} · ${m.url}${m.url.includes("?") ? "&" : "?"}width=1200`).join("\n")}
 `
     : ""
@@ -78,7 +92,7 @@ STEP 3. Write package/email.html — ONE email that looks like the desktop desig
 STEP 4. Write package/manifest.json:
 {"subject": "...", "preheader": "...", "colors": {...}, "fonts": [...],
  "sections": [{"type": "logo|hero|heading|text|image|button|code|divider|grid|social", "text": "...", "image": "images/..."}],
- "images": [{"file": "images/hero.jpg", "alt": "...", "from": "desktop|mobile", "box": [x, y, w, h]}],
+ "images": [{"file": "images/hero.jpg", "alt": "...", "from": "desktop|mobile|original", "original": "orig-… file name, for an original photo", "box": [x, y, w, h]}],
  "merge_tags": ["greeting_name", ...], "notes": "anything you could not reproduce exactly"}
 
 STEP 5. Zip the package folder (email.html, manifest.json, images/…) as /mnt/data/email-package.zip and print its file list. Answer with one line: DONE.`;
@@ -138,24 +152,50 @@ export async function runConversions(pool: Pool, log: (m: string) => void = cons
 async function convertOne(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
   const eng = await pool.query<{ engine: string }>(`SELECT engine FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
   if (eng.rows[0]?.engine === "layout") return packageLayout(pool, designId, messageId, log);
-  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null }>(`SELECT desktop_path, mobile_path, products, media FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
+  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null; desktop_prompt: string | null; mobile_prompt: string | null }>(
+    `SELECT desktop_path, mobile_path, products, media, desktop_prompt, mobile_prompt FROM email_design_messages WHERE id = $1::uuid`,
+    [messageId],
+  );
   const row = m.rows[0];
+  // A design that shows the store always gets both real store photos, even if the AI did not list them.
+  if (/\bS[12]\b|store photo|storefront|showroom|the store from|inside the store/i.test(`${row.desktop_prompt ?? ""} ${row.mobile_prompt ?? ""}`)) {
+    const have = new Set((row.media ?? []).map((x) => x.id));
+    row.media = [...(row.media ?? []), ...STORE_MEDIA.filter((s) => !have.has(s.id)).map((s) => ({ id: s.id, url: s.url, width: s.width, height: s.height, kind: s.kind, description: s.description }))];
+  }
   const ai = openai();
   const desk = Buffer.from((await downloadStorageObject(row.desktop_path)).body);
   const mob = Buffer.from((await downloadStorageObject(row.mobile_path)).body);
   const fDesk = await ai.files.create({ file: await toFile(desk, "design-desktop.png", { type: "image/png" }), purpose: "user_data" });
   const fMob = await ai.files.create({ file: await toFile(mob, "design-mobile.png", { type: "image/png" }), purpose: "user_data" });
+  // The original photos (store, CARBON pictures, product photos) go in as files, so the email uses them, not AI copies.
+  const originals: (Original & { id: string; key: string })[] = [];
+  const addOriginal = async (key: string, file: string, url: string | null, what: string) => {
+    if (!url || originals.length >= 16 || originals.some((o) => o.key === key)) return;
+    const jpg = await referencePhoto(url, 1600).catch(() => null);
+    if (!jpg) return;
+    const f = await ai.files.create({ file: await toFile(jpg, file, { type: "image/jpeg" }), purpose: "user_data" });
+    originals.push({ id: f.id, key, file, what });
+  };
+  for (const [i, m] of (row.media ?? []).entries()) {
+    const name = m.kind === "store" ? `orig-store-${m.id.replace(/[^a-z0-9]+/gi, "-").slice(0, 20)}.jpg` : `orig-carbon-picture-${i + 1}.jpg`;
+    await addOriginal(`m:${m.id}`, name, m.url, `${m.kind === "store" ? "the REAL CARBON store photo" : "a CARBON picture"}: ${m.description}`);
+  }
+  for (const [i, p] of (row.products ?? []).entries()) {
+    // A matching set shows its first piece's photo (the model wears the whole set).
+    if (p.set && (row.products ?? []).findIndex((x) => x.set?.name === p.set!.name) !== i) continue;
+    await addOriginal(`p:${p.id}`, `orig-product-${i + 1}.jpg`, p.image, p.set ? `the product photo of the matching set "${p.set.name}"` : `the product photo of "${p.title}"`);
+  }
   try {
     log(`[email-convert] ${designId}: OpenAI is cutting the pictures and writing the email`);
     const resp = await ai.responses.create({
       model: textModel(),
-      tools: [{ type: "code_interpreter", container: { type: "auto", file_ids: [fDesk.id, fMob.id], memory_limit: "4g" } }],
+      tools: [{ type: "code_interpreter", container: { type: "auto", file_ids: [fDesk.id, fMob.id, ...originals.map((o) => o.id)], memory_limit: "4g" } }],
       tool_choice: "required",
       input: [
         {
           role: "user",
           content: [
-            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png", row.products ?? [], row.media ?? []) },
+            { type: "input_text", text: convertInstructions("design-desktop.png", "design-mobile.png", row.products ?? [], row.media ?? [], originals) },
             { type: "input_image", file_id: fDesk.id, detail: "high" },
             { type: "input_image", file_id: fMob.id, detail: "high" },
           ],
@@ -171,10 +211,29 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
     const res = await ai.containers.files.content.retrieve(zipFile.id, { container_id: containerId });
     const zipBytes = Buffer.from(await res.arrayBuffer());
     await ingestPackage(pool, designId, zipBytes, log);
+    await checkOriginals(pool, designId, originals, log);
   } finally {
     await ai.files.delete(fDesk.id).catch(() => {});
     await ai.files.delete(fMob.id).catch(() => {});
+    for (const o of originals) await ai.files.delete(o.id).catch(() => {});
   }
+}
+
+/**
+ * After converting: were the store / CARBON pictures used from their ORIGINAL
+ * files? If one was not, the owner sees it in the notes (and can convert again).
+ */
+async function checkOriginals(pool: Pool, designId: string, originals: Original[], log: (m: string) => void): Promise<void> {
+  const want = originals.filter((o) => o.file.startsWith("orig-store") || o.file.startsWith("orig-carbon-picture"));
+  if (!want.length) return;
+  const r = await pool.query<{ manifest: Manifest | null }>(`SELECT manifest FROM email_designs WHERE id = $1::uuid`, [designId]);
+  const man = r.rows[0]?.manifest;
+  const used = new Set((man?.images ?? []).map((i) => String((i as { original?: string }).original ?? "")).filter(Boolean));
+  const missing = want.filter((o) => !used.has(o.file));
+  if (!missing.length) return;
+  const note = `Check: ${missing.map((o) => o.what.split(":")[0]).join(", ")} may be the AI's copy instead of the original photo. Convert again if it looks different from the real one.`;
+  await pool.query(`UPDATE email_designs SET manifest = jsonb_set(COALESCE(manifest, '{}'::jsonb), '{notes}', to_jsonb(trim(both ' ' from COALESCE(manifest->>'notes', '') || ' ' || $2::text))) WHERE id = $1::uuid`, [designId, note]);
+  log(`[email-convert] ${designId}: originals not confirmed: ${missing.map((o) => o.file).join(", ")}`);
 }
 
 /**
@@ -294,7 +353,7 @@ export async function ingestPackage(pool: Pool, designId: string, zipBytes: Buff
     `UPDATE email_designs SET status = 'ready', html = $2, manifest = $3, package_path = $4, convert_error = NULL,
             subject_hint = COALESCE(NULLIF($5, ''), subject_hint), preheader_hint = COALESCE(NULLIF($6, ''), preheader_hint), updated_at = now()
       WHERE id = $1::uuid`,
-    [designId, html, JSON.stringify({ ...manifest, notes, merge_tags: usedMergeTags(html), images: hosted.size / 2 }), zipPath, String(manifest.subject ?? "").slice(0, 120), String(manifest.preheader ?? "").slice(0, 200)],
+    [designId, html, JSON.stringify({ ...manifest, notes, merge_tags: usedMergeTags(html), image_count: hosted.size / 2 }), zipPath, String(manifest.subject ?? "").slice(0, 120), String(manifest.preheader ?? "").slice(0, 200)],
   );
   log(`[email-convert] ${designId}: ready (${hosted.size / 2} pictures)`);
   return { images: hosted.size / 2, notes };

@@ -53,7 +53,7 @@ type Design = {
   html: string | null;
   subject_hint: string | null;
   preheader_hint: string | null;
-  manifest: { notes?: string | null; merge_tags?: string[]; images?: number } | null;
+  manifest: { notes?: string | null; merge_tags?: string[]; image_count?: number } | null;
   convert_error: string | null;
   package_url: string | null;
   updated_at: string;
