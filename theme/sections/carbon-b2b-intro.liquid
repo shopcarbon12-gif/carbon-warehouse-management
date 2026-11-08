@@ -27,10 +27,10 @@
     </ul>
     <div class="carbon-b2b-intro__actions">
       {%- if section.settings.button_1_label != blank -%}
-        <a class="button" href="{{ section.settings.button_1_link | default: routes.all_products_collection_url }}">{{ section.settings.button_1_label }}</a>
+        <a class="button" href="{{ section.settings.button_1_link | default: routes.all_products_collection_url }}"><span>{{ section.settings.button_1_label }}</span></a>
       {%- endif -%}
       {%- if section.settings.button_2_label != blank -%}
-        <a class="button button--outline" href="{{ section.settings.button_2_link | default: routes.all_products_collection_url }}">{{ section.settings.button_2_label }}</a>
+        <a class="button outline white" href="{{ section.settings.button_2_link | default: routes.all_products_collection_url }}"><span>{{ section.settings.button_2_label }}</span></a>
       {%- endif -%}
       {%- if section.settings.orders_label != blank -%}
         <a class="carbon-b2b-intro__orders" href="{{ routes.account_url }}">{{ section.settings.orders_label }}</a>
@@ -49,8 +49,10 @@
   .carbon-b2b-intro__term strong { display: block; margin-bottom: 6px; font-size: 0.875rem; letter-spacing: 0.06em; text-transform: uppercase; }
   .carbon-b2b-intro__term span { display: block; font-size: 0.875rem; line-height: 1.5; opacity: 0.8; }
   .carbon-b2b-intro__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-  .carbon-b2b-intro .button { background: #fff; color: #151515; border-color: #fff; }
-  .carbon-b2b-intro .button--outline { background: transparent; color: #fff; }
+  .carbon-b2b-intro .button:not(.outline) { background: #fff; color: #151515; border-color: #fff; }
+  .carbon-b2b-intro .button:not(.outline):before { background: #151515; }
+  @media (hover: hover) { .carbon-b2b-intro .button:not(.outline):hover { color: #fff; } }
+  .carbon-b2b-intro .button:not(.outline):focus-visible { color: #fff; }
   .carbon-b2b-intro__orders { color: #fff; font-size: 0.875rem; text-decoration: underline; text-underline-offset: 3px; margin-left: 4px; }
   @media (max-width: 989px) { .carbon-b2b-intro__terms { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 479px) { .carbon-b2b-intro { padding: 32px 16px; } .carbon-b2b-intro__terms { grid-template-columns: 1fr; } }

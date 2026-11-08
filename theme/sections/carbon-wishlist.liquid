@@ -32,7 +32,7 @@
         <p>{{ section.settings.empty_text | escape }}</p>
         {%- if section.settings.empty_link != blank -%}
           <a class="button accent" href="{{ section.settings.empty_link }}">
-            {{ section.settings.empty_link_label | escape }}
+            <span>{{ section.settings.empty_link_label | escape }}</span>
           </a>
         {%- endif -%}
       </div>
@@ -170,7 +170,7 @@
             '<span class="price"><span class="amount">' + money(variant.price) + '</span></span>' +
             '<div class="cw-actions">' +
               (variant.available
-                ? '<button class="button accent cw-add" type="button" data-cw-add="' + variant.id + '">' + T.add_to_cart + '</button>'
+                ? '<button class="button accent cw-add" type="button" data-cw-add="' + variant.id + '"><span>' + T.add_to_cart + '</span></button>'
                 : '<span class="cw-sold-out">' + T.sold_out + '</span>') +
             '</div>' +
           '</div>' +
@@ -244,6 +244,7 @@
       var rm = ev.target.closest('[data-cw-rm]');
       if (rm) { store.remove(rm.getAttribute('data-cw-rm')); return; }
 
+      function label(btn, text) { var sp = btn.querySelector('span') || btn; sp.textContent = text; }
       var add = ev.target.closest('[data-cw-add]');
       if (!add) return;
 
@@ -258,12 +259,12 @@
           if (res && res.status) throw new Error(res.description || 'add failed');
           /* the event this theme's cart drawer listens for (assets/app.js) */
           document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
-          add.textContent = T.added;
-          setTimeout(function () { add.textContent = T.add_to_cart; add.removeAttribute('disabled'); }, 2000);
+          label(add, T.added);
+          setTimeout(function () { label(add, T.add_to_cart); add.removeAttribute('disabled'); }, 2000);
         })
         .catch(function () {
-          add.textContent = T.unavailable;
-          setTimeout(function () { add.textContent = T.add_to_cart; add.removeAttribute('disabled'); }, 2000);
+          label(add, T.unavailable);
+          setTimeout(function () { label(add, T.add_to_cart); add.removeAttribute('disabled'); }, 2000);
         });
     });
 
