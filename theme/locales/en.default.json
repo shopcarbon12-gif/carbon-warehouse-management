@@ -785,6 +785,33 @@
         "add_failed_retry": "Could not add to cart. Please try again."
       },
       "shipping_policy_html": "<strong>Shipping is billed separately.</strong> Your checkout total does not include shipping. The shipping cost is calculated after your order is packed and sent to you on a separate invoice. Invoices not paid within 24 hours are cancelled and the items released — we do not hold or reserve stock for individual customers.",
+      "account": {
+        "my_account": "My account",
+        "side_text": "Your wholesale orders, company details and terms.",
+        "orders": "Orders",
+        "company": "Company",
+        "settings": "Settings",
+        "sign_out": "Sign out",
+        "label": "Carbon wholesale",
+        "welcome": "Welcome, {{ name }}",
+        "intro": "Your wholesale orders and company details. Shipping is invoiced separately after each order is packed.",
+        "payment_due": "Payment due",
+        "payment_due_text": "These orders have a payment waiting, usually the shipping invoice sent after packing. Please pay within 24 hours or the order is cancelled and the items are released.",
+        "pay_now": "Pay now",
+        "recent_orders": "Recent orders",
+        "all_orders": "All orders",
+        "no_orders": "No orders yet. Your wholesale orders will show here.",
+        "pieces": {
+          "one": "{{ count }} piece",
+          "other": "{{ count }} pieces"
+        },
+        "cancelled": "Cancelled",
+        "location": "Location",
+        "terms": "Wholesale terms",
+        "term_runs": "Order in runs (one of every size in a color). Minimum 3 runs per order — mix items and colors any way you like.",
+        "term_shipping": "Shipping is not included at checkout. It is calculated after your order is packed and sent on a separate invoice.",
+        "term_24h": "Invoices not paid within 24 hours are cancelled and the items released — we don't hold stock for individual customers."
+      },
       "cart_min": {
         "broken_heading": "Incomplete run removed.",
         "broken_text": "Wholesale is sold in complete runs only (one of every size in a colour). Updating your cart…",

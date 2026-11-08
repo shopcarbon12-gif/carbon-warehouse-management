@@ -270,8 +270,8 @@
             <div class="thb-account__link--container">
     			{%- if shop.customer_accounts_enabled -%}
     				{%- if customer.b2b? -%}
-    				  {%- comment -%} Wholesale buyers have no rewards account — straight to the Shopify account. {%- endcomment -%}
-    				  {%- assign profile_link = routes.account_url -%}
+    				  {%- comment -%} Wholesale buyers: the wholesale account page (same look as the Member Club, no rewards). {%- endcomment -%}
+    				  {%- assign profile_link = '/pages/my-account?view=account' -%}
     				  {%- capture profile_text -%}
     				    {{ 'sections.header.my_account' | t }}
     				  {%- endcapture -%}

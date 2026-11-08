@@ -344,7 +344,10 @@ a.thb-mobile-account-link {
 					endcase
 				endif
 			-%}
-			{%- if carbon_b2b_hide -%}
+			{%- if carbon_b2b_hide and page.handle == 'my-account' -%}
+				{%- comment -%} Wholesale account page (owner 2026-11-08): same look as the Member Club, no rewards; lands on the homepage after login. {%- endcomment -%}
+				{%- render 'carbon-b2b-account' -%}
+			{%- elsif carbon_b2b_hide -%}
 				{%- render 'carbon-b2b-no-rewards' -%}
 			{%- else -%}
 				{{ content_for_layout }}

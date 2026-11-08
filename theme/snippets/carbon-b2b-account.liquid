@@ -1,0 +1,214 @@
+{%- comment -%}
+  Wholesale account (owner 2026-11-08) — what a B2B buyer sees on /pages/my-account
+  instead of the retail Member Club (rendered from layout/theme.liquid).
+  Same look as the Member Club (Carbon Neuzeit, sidebar, cards), no rewards.
+
+  Routing:
+   - Logging in returns to /pages/my-account. A wholesale buyer who arrives
+     there WITHOUT ?view=account is sent to the homepage (owner: land on the
+     homepage after login). Retail buyers are not affected.
+   - The header account icon links wholesale buyers to
+     /pages/my-account?view=account, which shows this page.
+
+  Data is Shopify's own (Liquid): the company and location the buyer is
+  ordering for, and this customer's orders. "Payment due" = an order whose
+  payment is still open (pending / partially paid) — e.g. after the shipping
+  charge is added once the order is packed.
+{%- endcomment -%}
+<script>
+  (function () {
+    try {
+      if (!/[?&]view=account(&|$)/.test(location.search)) location.replace({{ routes.root_url | json }});
+    } catch (e) {}
+  })();
+</script>
+{%- liquid
+  assign company = customer.current_company
+  assign loc = customer.current_location
+  assign due_count = 0
+  for order in customer.orders limit: 50
+    if order.cancelled == false
+      if order.financial_status == 'pending' or order.financial_status == 'partially_paid'
+        assign due_count = due_count | plus: 1
+      endif
+    endif
+  endfor
+-%}
+<style>
+  @font-face {
+    font-family: 'Carbon Neuzeit';
+    src: url('{{ 'carbon-neuzeit-grotesk-w01-regular.otf' | asset_url }}') format('opentype');
+    font-weight: 400;
+    font-display: swap;
+  }
+  .wa {
+    --wa-blue: #164bff; --wa-blue-ink: #1240d8; --wa-ink: #0b0c10; --wa-muted: #5b6070;
+    --wa-line: #dfe3ea; --wa-side: #f3f5f9; --wa-soft: #eef3ff; --wa-warn: #a4370a; --wa-warn-bg: #fff4ec;
+    --wa-brand: 'Carbon Neuzeit', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--wa-ink); font-family: var(--wa-brand); background: #fff;
+  }
+  .wa h1, .wa h2, .wa h3, .wa p, .wa a, .wa li, .wa small, .wa strong { font-family: var(--wa-brand); }
+  .wa__wrap { display: grid; grid-template-columns: 280px minmax(0, 1fr); min-height: 70vh; border-top: 1px solid var(--wa-line); }
+  .wa__side { background: var(--wa-side); border-right: 1px solid var(--wa-line); padding: 44px 24px; display: flex; flex-direction: column; }
+  .wa__eyebrow { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; margin: 0; }
+  .wa__side h2 { font-size: 30px; line-height: 1.1; margin: 6px 0 10px; -webkit-text-stroke: 0.6px currentColor; overflow-wrap: anywhere; }
+  .wa__side p { margin: 0 0 28px; font-size: 15px; }
+  .wa__nav { display: grid; gap: 6px; }
+  .wa__nav a, .wa__signout { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 6px; color: var(--wa-ink); font-size: 18px; text-decoration: none; }
+  .wa__nav a:hover, .wa__signout:hover { background: #e6eaf2; }
+  .wa__nav a[aria-current='page'] { background: var(--wa-blue); color: #fff; }
+  .wa__signout { margin-top: auto; }
+  .wa a:focus-visible { outline: 2px solid var(--wa-blue); outline-offset: 2px; }
+  .wa__main { padding: 44px clamp(20px, 3vw, 48px) 56px; min-width: 0; }
+  .wa-label { color: var(--wa-blue); font-size: 16px; letter-spacing: 0.24em; text-transform: uppercase; margin: 0 0 6px; }
+  .wa h1.wa-title { font-size: clamp(40px, 5vw, 60px); line-height: 1; margin: 0 0 14px; letter-spacing: -0.01em; -webkit-text-stroke: 1.4px currentColor; }
+  .wa-intro { font-size: 19px; margin: 0 0 28px; max-width: 34em; }
+  .wa-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .wa-col { display: grid; gap: 24px; min-width: 0; }
+  .wa-card { border: 1px solid var(--wa-line); border-radius: 6px; background: #fff; padding: 20px 22px; min-width: 0; scroll-margin-top: 120px; }
+  .wa-card--due { border-color: #f1c4a8; background: var(--wa-warn-bg); }
+  .wa-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .wa-head h3 { font-size: 22px; margin: 0; }
+  .wa-link { color: var(--wa-blue-ink); text-decoration: none; font-weight: 600; white-space: nowrap; }
+  .wa-link:hover { text-decoration: underline; }
+  .wa-rows > * + * { border-top: 1px solid var(--wa-line); }
+  .wa-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 2px; color: var(--wa-ink); text-decoration: none; }
+  a.wa-row:hover strong { text-decoration: underline; }
+  .wa-row strong { display: block; font-weight: 600; font-size: 17px; }
+  .wa-row small { color: var(--wa-muted); font-size: 14px; }
+  .wa-row__amt { text-align: right; font-size: 17px; }
+  .wa-pill { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 99px; font-size: 13px; background: var(--wa-soft); color: var(--wa-blue-ink); }
+  .wa-pill--due { background: #ffe1cf; color: var(--wa-warn); font-weight: 600; }
+  .wa-empty { color: var(--wa-muted); font-size: 16px; margin: 4px 0; }
+  .wa-due-text { font-size: 16px; margin: 0 0 8px; }
+  .wa-terms { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 16px; line-height: 1.45; }
+  .wa-terms li { padding-left: 18px; position: relative; }
+  .wa-terms li::before { content: ''; position: absolute; left: 0; top: 0.55em; width: 7px; height: 7px; border-radius: 50%; background: var(--wa-blue); }
+  .wa-addr { font-style: normal; font-size: 16px; line-height: 1.5; margin: 0; }
+  .wa-company { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .wa-btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+  .wa-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 52px; padding: 0 26px; border: 2px solid var(--wa-blue); border-radius: 6px; font-size: 17px; font-weight: 600; text-decoration: none; color: var(--wa-blue-ink); background: #fff; }
+  .wa-btn--fill { background: var(--wa-blue); color: #fff; }
+  .wa-btn--fill:hover { background: var(--wa-blue-ink); }
+  .wa-btn:not(.wa-btn--fill):hover { background: var(--wa-soft); }
+  @media (max-width: 899px) {
+    .wa__wrap { grid-template-columns: 1fr; }
+    .wa__side { padding: 28px 16px 20px; border-right: 0; border-bottom: 1px solid var(--wa-line); }
+    .wa__side p { margin-bottom: 16px; }
+    .wa__nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .wa__nav a { justify-content: center; font-size: 16px; padding: 10px 6px; }
+    .wa__signout { margin-top: 12px; font-size: 16px; }
+    .wa__main { padding: 28px 16px 40px; }
+    .wa-grid { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wa">
+  <div class="wa__wrap">
+    <aside class="wa__side" aria-label="{{ 'carbon.b2b.account.my_account' | t | escape }}">
+      <p class="wa__eyebrow">{{ 'carbon.b2b.account.my_account' | t }}</p>
+      <h2>{% if company %}{{ company.name }}{% else %}{{ 'carbon.b2b.wholesale_account' | t }}{% endif %}</h2>
+      <p>{{ 'carbon.b2b.account.side_text' | t }}</p>
+      <nav class="wa__nav" aria-label="{{ 'carbon.b2b.account.my_account' | t | escape }}">
+        <a href="#wa-orders" aria-current="page">{{ 'carbon.b2b.account.orders' | t }}</a>
+        <a href="#wa-company">{{ 'carbon.b2b.account.company' | t }}</a>
+        <a href="https://account.shopcarbon.com/profile">{{ 'carbon.b2b.account.settings' | t }}</a>
+      </nav>
+      <a class="wa__signout" href="{{ routes.account_logout_url }}">{{ 'carbon.b2b.account.sign_out' | t }}</a>
+    </aside>
+
+    <div class="wa__main">
+      <p class="wa-label">{{ 'carbon.b2b.account.label' | t }}</p>
+      <h1 class="wa-title">{{ 'carbon.b2b.account.welcome' | t: name: customer.first_name }}</h1>
+      <p class="wa-intro">{{ 'carbon.b2b.account.intro' | t }}</p>
+
+      <div class="wa-grid">
+        <div class="wa-col">
+          {%- if due_count > 0 -%}
+            <section class="wa-card wa-card--due" aria-labelledby="wa-due-h">
+              <div class="wa-head"><h3 id="wa-due-h">{{ 'carbon.b2b.account.payment_due' | t }}</h3></div>
+              <p class="wa-due-text">{{ 'carbon.b2b.account.payment_due_text' | t }}</p>
+              <div class="wa-rows">
+                {%- for order in customer.orders limit: 50 -%}
+                  {%- if order.cancelled == false -%}
+                    {%- if order.financial_status == 'pending' or order.financial_status == 'partially_paid' -%}
+                      <a class="wa-row" href="{{ order.customer_url }}">
+                        <span><strong>{{ order.name }}</strong><small>{{ order.created_at | date: '%b %d, %Y' }}</small></span>
+                        <span class="wa-row__amt">{{ order.total_price | money }}<br><span class="wa-pill wa-pill--due">{{ 'carbon.b2b.account.pay_now' | t }}</span></span>
+                      </a>
+                    {%- endif -%}
+                  {%- endif -%}
+                {%- endfor -%}
+              </div>
+            </section>
+          {%- endif -%}
+
+          <section class="wa-card" id="wa-orders" aria-labelledby="wa-orders-h">
+            <div class="wa-head"><h3 id="wa-orders-h">{{ 'carbon.b2b.account.recent_orders' | t }}</h3><a class="wa-link" href="{{ routes.account_url }}">{{ 'carbon.b2b.account.all_orders' | t }}</a></div>
+            {%- if customer.orders.size == 0 -%}
+              <p class="wa-empty">{{ 'carbon.b2b.account.no_orders' | t }}</p>
+            {%- else -%}
+              <div class="wa-rows">
+                {%- for order in customer.orders limit: 10 -%}
+                  {%- liquid
+                    assign pieces = 0
+                    for li in order.line_items
+                      assign pieces = pieces | plus: li.quantity
+                    endfor
+                    assign due = false
+                    if order.cancelled == false
+                      if order.financial_status == 'pending' or order.financial_status == 'partially_paid'
+                        assign due = true
+                      endif
+                    endif
+                  -%}
+                  <a class="wa-row" href="{{ order.customer_url }}">
+                    <span>
+                      <strong>{{ order.name }}</strong>
+                      <small>{{ order.created_at | date: '%b %d, %Y' }} · {{ 'carbon.b2b.account.pieces' | t: count: pieces }}</small><br>
+                      {%- if order.cancelled -%}
+                        <span class="wa-pill">{{ 'carbon.b2b.account.cancelled' | t }}</span>
+                      {%- elsif due -%}
+                        <span class="wa-pill wa-pill--due">{{ 'carbon.b2b.account.payment_due' | t }}</span>
+                      {%- else -%}
+                        <span class="wa-pill">{{ order.fulfillment_status_label }}</span>
+                      {%- endif -%}
+                    </span>
+                    <span class="wa-row__amt">{{ order.total_price | money }}</span>
+                  </a>
+                {%- endfor -%}
+              </div>
+            {%- endif -%}
+          </section>
+        </div>
+
+        <div class="wa-col">
+          <section class="wa-card" id="wa-company" aria-labelledby="wa-company-h">
+            <div class="wa-head"><h3 id="wa-company-h">{{ 'carbon.b2b.account.company' | t }}</h3></div>
+            {%- if company -%}<p class="wa-company">{{ company.name }}</p>{%- endif -%}
+            {%- if loc -%}
+              <p class="wa-row__label"><small>{{ 'carbon.b2b.account.location' | t }}: {{ loc.name }}</small></p>
+              {%- if loc.shipping_address -%}
+                <address class="wa-addr">{{ loc.shipping_address | format_address }}</address>
+              {%- endif -%}
+            {%- endif -%}
+          </section>
+
+          <section class="wa-card" aria-labelledby="wa-terms-h">
+            <div class="wa-head"><h3 id="wa-terms-h">{{ 'carbon.b2b.account.terms' | t }}</h3></div>
+            <ul class="wa-terms">
+              <li>{{ 'carbon.b2b.account.term_runs' | t }}</li>
+              <li>{{ 'carbon.b2b.account.term_shipping' | t }}</li>
+              <li>{{ 'carbon.b2b.account.term_24h' | t }}</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+
+      <div class="wa-btns">
+        <a class="wa-btn wa-btn--fill" href="{{ routes.root_url }}">{{ 'carbon.b2b.shop_wholesale' | t }}</a>
+        <a class="wa-btn" href="{{ routes.account_url }}">{{ 'carbon.b2b.account.all_orders' | t }}</a>
+      </div>
+    </div>
+  </div>
+</div>
