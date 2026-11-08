@@ -363,6 +363,18 @@ export async function approveApplication(pool: Pool, id: number, by: string | nu
       contact.customer.id,
     ]);
 
+    // Tag the buyer "wholesale" (owner 2026-11-08): the ShipRight checkout rule
+    // hides every carrier (UPS/FedEx/DHL) for customers with this tag — shipping
+    // is invoiced after packing. tagsAdd is idempotent, so a retry is fine.
+    const tagged = await welcomeGql<{ tagsAdd: { userErrors: UserError[] } }>(
+      ctx,
+      `mutation WholesaleTag($id: ID!) { tagsAdd(id: $id, tags: ["wholesale"]) { userErrors { field message } } }`,
+      { id: contact.customer.id },
+    );
+    if (tagged.tagsAdd.userErrors.length) {
+      await fail(`Shopify did not tag the buyer "wholesale": ${userErrorText(tagged.tagsAdd.userErrors)}`);
+    }
+
     // 3. Ordering rights on the location + main contact. Shopify refuses a role
     //    the contact already has; that is fine on a retry.
     const role = await welcomeGql<{ companyContactAssignRole: { userErrors: UserError[] } }>(
