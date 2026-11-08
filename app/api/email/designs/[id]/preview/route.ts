@@ -26,12 +26,18 @@ export async function GET(req: Request, { params }: Ctx) {
     const html = await versionPreview(g.pool, g.session.tid, { messageId: message });
     return page(html ?? "<p style='font:14px sans-serif;padding:20px'>This version is not ready yet.</p>");
   }
-  const d = await g.pool.query<{ html: string | null; subject_hint: string | null; preheader_hint: string | null }>(
-    `SELECT html, subject_hint, preheader_hint FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+  const d = await g.pool.query<{ html: string | null; html_es: string | null; html_pt: string | null; subject_hint: string | null; preheader_hint: string | null }>(
+    `SELECT html, html_es, html_pt, subject_hint, preheader_hint FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`,
     [id, g.session.tid],
   );
   const row = d.rows[0];
   if (!row?.html) return page("<p style='font:14px sans-serif;padding:20px'>Not converted yet.</p>");
+  // ?lang=es|pt shows a translation; the language bar is shown as customers will see it.
+  const l = new URL(req.url).searchParams.get("lang");
+  const lang = l === "es" || l === "pt" ? l : "en";
+  const body = lang === "es" ? row.html_es : lang === "pt" ? row.html_pt : row.html;
+  if (!body) return page("<p style='font:14px sans-serif;padding:20px'>This translation is not ready yet.</p>");
+  const languages = ["en" as const, ...(row.html_es ? (["es"] as const) : []), ...(row.html_pt ? (["pt"] as const) : [])];
   const s = await getEmailSettings(g.pool, g.session.tid);
-  return page(previewHtml({ html: row.html, subject: row.subject_hint ?? "", preheader: row.preheader_hint ?? "", postalAddress: s.postalAddress }));
+  return page(previewHtml({ html: body, subject: row.subject_hint ?? "", preheader: row.preheader_hint ?? "", postalAddress: s.postalAddress, lang, languages }));
 }

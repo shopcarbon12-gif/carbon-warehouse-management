@@ -19,6 +19,7 @@ import { renderEmail } from "./render";
 import { fixHtml, review, type Issue } from "./creative";
 import { sanitizeEmailHtml } from "./rules";
 import { STORE } from "./brand";
+import { translateDesign } from "./translate";
 import type { TurnProduct } from "./designer";
 
 export type CheckRound = { round: number; pass: boolean; score: number; summary: string; issues: Issue[]; desktop: string | null; phone: string | null; model: string; at: string; fixed?: boolean; error?: string };
@@ -101,7 +102,9 @@ export async function checkDesign(pool: Pool, designId: string, log: (m: string)
     rounds.push({ round: rounds.length + 1, pass: false, score: 0, summary: "The visual check could not run.", issues: [], desktop: null, phone: null, model: "", at: new Date().toISOString(), error: msg.slice(0, 400) });
     log(`[email-check] ${designId}: check could not run: ${msg}`);
   }
-  await pool.query(`UPDATE email_designs SET status = 'ready', check_status = $2, check_rounds = $3, updated_at = now() WHERE id = $1::uuid`, [designId, status, JSON.stringify(rounds)]);
+  await pool.query(`UPDATE email_designs SET status = 'ready', check_status = $2, check_rounds = $3, translate_status = 'running', updated_at = now() WHERE id = $1::uuid`, [designId, status, JSON.stringify(rounds)]);
+  // Owner, 2026-11-08: every finished email also in Spanish and Portuguese (from the final, checked HTML).
+  await translateDesign(pool, designId, log).catch((e) => log(`[email-translate] ${designId}: ${e instanceof Error ? e.message : e}`));
 }
 
 /** Designs whose owner pressed "Check again" (check_status 'queued'), one at a time (called by the tick). */

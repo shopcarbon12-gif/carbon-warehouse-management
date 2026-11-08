@@ -20,7 +20,7 @@ import { productGallery, referencePhoto } from "./catalog";
 import { PHOTO_STYLE, creativeJson, img, txt, type Concept } from "./creative";
 import type { TurnProduct } from "./designer";
 
-export type Shot = { id: string; kind: "hero" | "look"; size: string; prompt: string; products: string[]; path: string | null; qa: string | null; error?: string | null };
+export type Shot = { id: string; kind: "hero" | "look"; size: string; prompt: string; products: string[]; people?: { who: string; products: string[] }[]; path: string | null; qa: string | null; error?: string | null };
 export type ShotStage = { view: "shots"; batchId: string; inputFileId: string; refFileIds: string[] };
 
 const NO_BLUR = /\b(hat|cap|beanie|bucket|sunglass|glasses|earring|necklace|chain|jewel|ring|bracelet|scarf|balaclava)/i;
@@ -37,17 +37,20 @@ async function faceless(b: Buffer, title: string): Promise<Buffer> {
 /** The four photos of a concept; a photo whose brief and products did not change keeps its picture. */
 export function shotsFor(c: Concept, idOf: (ref: string) => string[], previous: Shot[] | null): Shot[] {
   const want: Omit<Shot, "path" | "qa">[] = [
-    { id: "h1", kind: "hero", size: "1536x1024", prompt: c.hero.scene, products: c.hero.products.flatMap(idOf) },
-    ...c.looks.map((l) => ({ id: `l${l.id.slice(1)}`, kind: "look" as const, size: "1024x1536", prompt: l.scene, products: l.products.flatMap(idOf) })),
+    { id: "h1", kind: "hero", size: "1536x1024", prompt: c.hero.scene, products: c.hero.products.flatMap(idOf), people: c.hero.people?.map((x) => ({ who: x.who, products: x.products.flatMap(idOf) })) },
+    ...c.looks.map((l) => ({ id: `l${l.id.slice(1)}`, kind: "look" as const, size: "1024x1536", prompt: l.scene, products: l.products.flatMap(idOf), people: l.people?.map((x) => ({ who: x.who, products: x.products.flatMap(idOf) })) })),
   ];
   return want.map((w) => {
-    const prev = previous?.find((p) => p.id === w.id && p.prompt === w.prompt && JSON.stringify(p.products) === JSON.stringify(w.products) && p.path);
+    const prev = previous?.find((p) => p.id === w.id && p.prompt === w.prompt && JSON.stringify(p.people ?? p.products) === JSON.stringify(w.people ?? w.products) && p.path);
     return prev ? { ...prev } : { ...w, path: null, qa: null };
   });
 }
 
 function shotPrompt(s: Shot, products: TurnProduct[], labels: string[]): string {
-  const names = s.products.map((id) => products.find((p) => p.id === id)?.title).filter(Boolean).join(", ");
+  const title = (id: string) => products.find((p) => p.id === id)?.title;
+  const names = s.people?.length
+    ? s.people.map((x, i) => `PERSON ${i + 1} (${x.who}) wears: ${x.products.map(title).filter(Boolean).join(", ")}`).join(". ")
+    : s.products.map(title).filter(Boolean).join(", ");
   return [
     `A ${s.kind === "hero" ? "landscape campaign hero" : "portrait look"} photograph for CARBON, an Orlando streetwear and going-out store.`,
     PHOTO_STYLE,
@@ -60,6 +63,10 @@ function shotPrompt(s: Shot, products: TurnProduct[], labels: string[]): string 
       : "Composition: portrait; the whole outfit visible from head to shoes, the person centred with room around them so the photo can be cropped a little.",
     `Reference photos, in order:\n${labels.map((l, i) => `${i + 1}. ${l}`).join("\n")}`,
   ].join("\n\n");
+}
+
+export async function shotInputs(s: Shot, products: TurnProduct[]): Promise<{ prompt: string; images: Buffer[] }> {
+  return inputs(s, products);
 }
 
 async function inputs(s: Shot, products: TurnProduct[]): Promise<{ prompt: string; images: Buffer[] }> {
@@ -121,6 +128,10 @@ async function save(designId: string, turnId: string, s: Shot, b64: string): Pro
 }
 
 /** Check a drawn photo, redraw it once (fast) with the problems if needed, save it. */
+export async function finishShot(o: { designId: string; turnId: string; imageModel: string; creativeModel: string }, s: Shot, b64: string, products: TurnProduct[], log: (m: string) => void): Promise<Shot> {
+  return finish(o, s, b64, products, log);
+}
+
 async function finish(o: { designId: string; turnId: string; imageModel: string; creativeModel: string }, s: Shot, b64: string, products: TurnProduct[], log: (m: string) => void): Promise<Shot> {
   let pic = b64;
   let problems = await check(o.creativeModel, pic, s, products).catch(() => [] as string[]);

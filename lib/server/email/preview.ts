@@ -3,14 +3,14 @@ import type { Pool } from "pg";
 import { getEmailSettings } from "./config";
 import { mergeValuesFor } from "./campaigns";
 import { SAMPLE_CODE, SAMPLE_NAME } from "./designer";
-import { fillMergeTags, wrapEmail } from "./rules";
+import { fillMergeTags, wrapEmail, type EmailLang } from "./rules";
 
 export const PREVIEW_CSP = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
-export function previewHtml(input: { html: string; subject: string; preheader: string; postalAddress: string }): string {
-  const html = wrapEmail({ designHtml: input.html, subject: input.subject, preheader: input.preheader, postalAddress: input.postalAddress });
+export function previewHtml(input: { html: string; subject: string; preheader: string; postalAddress: string; lang?: EmailLang; languages?: EmailLang[] }): string {
+  const html = wrapEmail({ designHtml: input.html, subject: input.subject, preheader: input.preheader, postalAddress: input.postalAddress, lang: input.lang, languages: input.languages });
   const ends = new Date(Date.now() + 21 * 86400_000).toISOString();
-  return fillMergeTags(html, mergeValuesFor({ firstName: SAMPLE_NAME, code: SAMPLE_CODE, offer: { amount: 20, endsAt: ends, minSubtotal: null, prefix: "CB20" }, unsubToken: "preview" }));
+  return fillMergeTags(html, mergeValuesFor({ firstName: SAMPLE_NAME, code: SAMPLE_CODE, offer: { amount: 20, endsAt: ends, minSubtotal: null, prefix: "CB20" }, unsubToken: "preview", lang: input.lang }));
 }
 
 /** A version (layout engine) of a design, ready to show; null when it has no email yet. */

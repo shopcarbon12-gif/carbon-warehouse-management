@@ -78,6 +78,12 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   const b = p.data;
   const r = await g.pool.query(
     `UPDATE email_designs SET title = COALESCE($3, title), html = COALESCE($4, html),
+            -- edited code: check it again, then translate it again (Spanish + Portuguese)
+            check_status = CASE WHEN $4::text IS NULL THEN check_status ELSE 'queued' END,
+            check_override = CASE WHEN $4::text IS NULL THEN check_override ELSE false END,
+            html_es = CASE WHEN $4::text IS NULL THEN html_es ELSE NULL END,
+            html_pt = CASE WHEN $4::text IS NULL THEN html_pt ELSE NULL END,
+            translate_status = CASE WHEN $4::text IS NULL THEN translate_status ELSE NULL END,
             archived_at = CASE WHEN $5::boolean IS NULL THEN archived_at WHEN $5 THEN now() ELSE NULL END, updated_at = now()
       WHERE id = $1::uuid AND tenant_id = $2::uuid AND status <> 'converting'`,
     [id, g.session.tid, b.title ?? null, b.html !== undefined ? sanitizeEmailHtml(b.html) : null, b.archived ?? null],

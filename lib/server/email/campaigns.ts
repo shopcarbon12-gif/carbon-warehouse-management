@@ -66,17 +66,28 @@ export function codeUrl(code: string): string {
   return `${SHOP_URL}/discount/${encodeURIComponent(code)}?redirect=%2F`;
 }
 
-export function mergeValuesFor(input: { firstName: string | null; code: string | null; offer: Offer | null; unsubToken: string }): MergeValues {
+/** This person's email as a web page in one language (the language bar's links). */
+export function webUrl(campaignId: string, unsubToken: string, lang: "en" | "es" | "pt"): string {
+  return `${WMS_BASE}/api/public/email/web/${campaignId}/${encodeURIComponent(unsubToken)}/${lang}`;
+}
+
+export function mergeValuesFor(input: { firstName: string | null; code: string | null; offer: Offer | null; unsubToken: string; campaignId?: string; lang?: "en" | "es" | "pt" }): MergeValues {
+  const lang = input.lang ?? "en";
+  const web = (l: "en" | "es" | "pt") => (input.campaignId ? webUrl(input.campaignId, input.unsubToken, l) : "#");
   return {
     first_name: input.firstName ?? "",
-    greeting_name: input.firstName ?? "there",
+    // "Hi there" in English; Spanish / Portuguese simply say "Hola," / "Olá," (cleaned up after filling).
+    greeting_name: input.firstName ?? (lang === "en" ? "there" : ""),
     code: input.code ?? "",
     code_url: input.code ? codeUrl(input.code) : SHOP_URL,
     offer_amount: input.offer ? offerLabel(input.offer) : "",
-    offer_ends: input.offer ? longDay(input.offer.endsAt) : "",
+    offer_ends: input.offer ? longDay(input.offer.endsAt, lang) : "",
     shop_url: SHOP_URL,
     instagram_url: INSTAGRAM_URL,
     unsubscribe_url: unsubscribeUrl(input.unsubToken),
+    web_en_url: web("en"),
+    web_es_url: web("es"),
+    web_pt_url: web("pt"),
   };
 }
 
@@ -245,16 +256,22 @@ export async function approveCampaign(pool: Pool, tenantId: string, id: string, 
   const s = await getEmailSettings(pool, tenantId);
   const problems = await approvalProblems(pool, tenantId, c, s);
   if (problems.length) throw new Error(problems.join(" "));
-  const d = await pool.query<{ html: string }>(`SELECT html FROM email_designs WHERE id = $1::uuid`, [c.design_id]);
-  const html = wrapEmail({ designHtml: d.rows[0].html, subject: c.subject, preheader: c.preheader, postalAddress: s.postalAddress });
+  const d = await pool.query<{ html: string; html_es: string | null; html_pt: string | null }>(`SELECT html, html_es, html_pt FROM email_designs WHERE id = $1::uuid`, [c.design_id]);
+  const dd = d.rows[0];
+  // Owner, 2026-11-08: every email offers Spanish and Portuguese (a bold bar on top links to them).
+  const languages: ("en" | "es" | "pt")[] = ["en", ...(dd.html_es ? (["es"] as const) : []), ...(dd.html_pt ? (["pt"] as const) : [])];
+  const wrap = (designHtml: string, lang: "en" | "es" | "pt") => wrapEmail({ designHtml, subject: c.subject, preheader: c.preheader, postalAddress: s.postalAddress, lang, languages });
+  const html = wrap(dd.html, "en");
+  const htmlEs = dd.html_es ? wrap(dd.html_es, "es") : null;
+  const htmlPt = dd.html_pt ? wrap(dd.html_pt, "pt") : null;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const recipients = await snapshotRecipients(client, tenantId, id, c.audience);
     await client.query(
-      `UPDATE email_campaigns SET html = $2, status = 'scheduled', approved_by = $3, approved_at = now(),
+      `UPDATE email_campaigns SET html = $2, html_es = $5, html_pt = $6, status = 'scheduled', approved_by = $3, approved_at = now(),
               send_at = COALESCE($4::timestamptz, now()), pause_reason = NULL, updated_at = now() WHERE id = $1::uuid`,
-      [id, html, by, sendAt],
+      [id, html, by, sendAt, htmlEs, htmlPt],
     );
     await client.query("COMMIT");
     return { recipients };
@@ -299,10 +316,11 @@ export async function sendTest(pool: Pool, tenantId: string, input: { campaignId
   const s = await getEmailSettings(pool, tenantId);
   const v = await senderReady(s);
   if (!v.ok) throw new Error(v.why ?? "Amazon SES is not ready");
-  const d = c.design_id ? await pool.query<{ html: string | null }>(`SELECT html FROM email_designs WHERE id = $1::uuid`, [c.design_id]) : null;
+  const d = c.design_id ? await pool.query<{ html: string | null; html_es: string | null; html_pt: string | null }>(`SELECT html, html_es, html_pt FROM email_designs WHERE id = $1::uuid`, [c.design_id]) : null;
   const designHtml = c.html ? null : d?.rows[0]?.html;
   if (!c.html && !designHtml) throw new Error("The design has not been converted to an email yet");
-  const html = c.html ?? wrapEmail({ designHtml: designHtml!, subject: c.subject, preheader: c.preheader, postalAddress: s.postalAddress });
+  const languages: ("en" | "es" | "pt")[] = ["en", ...(d?.rows[0]?.html_es ? (["es"] as const) : []), ...(d?.rows[0]?.html_pt ? (["pt"] as const) : [])];
+  const html = c.html ?? wrapEmail({ designHtml: designHtml!, subject: c.subject, preheader: c.preheader, postalAddress: s.postalAddress, languages });
   const contact = await pool.query<{ first_name: string | null; unsub_token: string }>(
     `SELECT first_name, unsub_token FROM email_contacts WHERE tenant_id = $1::uuid AND email = $2`,
     [tenantId, input.to.toLowerCase()],
@@ -310,7 +328,7 @@ export async function sendTest(pool: Pool, tenantId: string, input: { campaignId
   const first = contact.rows[0]?.first_name ?? "Maria";
   const token = contact.rows[0]?.unsub_token ?? "test";
   const sample = c.offer ? `${c.offer.prefix}-TEST00` : null;
-  const mail = renderFor({ subject: `[TEST] ${c.subject}`, html }, mergeValuesFor({ firstName: first, code: sample, offer: c.offer, unsubToken: token }));
+  const mail = renderFor({ subject: `[TEST] ${c.subject}`, html }, mergeValuesFor({ firstName: first, code: sample, offer: c.offer, unsubToken: token, campaignId: c.id }));
   return sendOne(s, { to: input.to, ...mail, unsub: unsubscribeUrl(token), tags: [{ name: "campaign", value: c.id }, { name: "kind", value: "test" }] });
 }
 
@@ -395,7 +413,7 @@ export async function runEmailSends(pool: Pool, log: (m: string) => void = conso
             code = made.code;
             await pool.query(`UPDATE email_campaign_recipients SET code = $2, discount_gid = $3 WHERE id = $1::bigint`, [r.id, made.code, made.gid]);
           }
-          const mail = renderFor({ subject: c.subject, html: c.html ?? "" }, mergeValuesFor({ firstName: r.first_name, code, offer: c.offer, unsubToken: ok.rows[0].unsub_token }));
+          const mail = renderFor({ subject: c.subject, html: c.html ?? "" }, mergeValuesFor({ firstName: r.first_name, code, offer: c.offer, unsubToken: ok.rows[0].unsub_token, campaignId: c.id }));
           const rid = await sendOne(s, {
             to: r.email,
             ...mail,

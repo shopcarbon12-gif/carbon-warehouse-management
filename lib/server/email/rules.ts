@@ -64,6 +64,10 @@ export const MERGE_TAGS = [
   "shop_url",
   "instagram_url",
   "unsubscribe_url",
+  // the language bar: this person's email as a web page in English / Spanish / Portuguese
+  "web_en_url",
+  "web_es_url",
+  "web_pt_url",
 ] as const;
 export type MergeTag = (typeof MERGE_TAGS)[number];
 export type MergeValues = Partial<Record<MergeTag, string>>;
@@ -130,30 +134,60 @@ export function headStyles(html: string): string {
 
 export const FOOTER_MARK = "<!--carbon-footer-->";
 
+export type EmailLang = "en" | "es" | "pt";
+
+const FOOTER_TEXT: Record<EmailLang, { why: string; unsub: string }> = {
+  en: { why: "You're getting this because you've shopped with Carbon.", unsub: "Unsubscribe" },
+  es: { why: "Recibes este correo porque compraste en Carbon.", unsub: "Darse de baja" },
+  pt: { why: "Você recebe este e-mail porque comprou na Carbon.", unsub: "Cancelar inscrição" },
+};
+
+/**
+ * The language bar at the very top (owner, 2026-11-08: "bold enough for people to see it so they can
+ * translate the email immediately"): black strip, white bold capitals, links to the other languages.
+ */
+export function languageBar(lang: EmailLang, available: EmailLang[]): string {
+  const others = available.filter((l) => l !== lang);
+  if (!others.length) return "";
+  const label: Record<EmailLang, string> = {
+    en: "READ THIS EMAIL IN ENGLISH",
+    es: "LEE ESTE CORREO EN ESPAÑOL",
+    pt: "LEIA ESTE E-MAIL EM PORTUGUÊS",
+  };
+  const links = others
+    .map((l) => `<a href="{{web_${l}_url}}" style="color:#ffffff;font-weight:800;text-decoration:underline;letter-spacing:1px;">${label[l]}</a>`)
+    .join(`<span style="color:#9a9a9a;padding:0 10px;">·</span>`);
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111111;"><tr><td align="center" style="padding:12px 16px;font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.7;color:#ffffff;font-weight:800;">🌎&nbsp; ${links}</td></tr></table>`;
+}
+
 /**
  * The finished email: the design's body inside a standard shell, a hidden
- * preheader, and Carbon's own footer (unsubscribe + postal address + why).
+ * preheader, the language bar (when translations exist), and Carbon's own
+ * footer (unsubscribe + postal address + why) in the email's language.
  * Merge tags are NOT filled here (that is per person).
  */
-export function wrapEmail(input: { designHtml: string; subject: string; preheader: string; postalAddress: string }): string {
+export function wrapEmail(input: { designHtml: string; subject: string; preheader: string; postalAddress: string; lang?: EmailLang; languages?: EmailLang[] }): string {
+  const lang = input.lang ?? "en";
   const safe = sanitizeEmailHtml(input.designHtml);
   const body = bodyOf(safe).replace(FOOTER_MARK, "");
   const styles = headStyles(safe);
   const pre = input.preheader.trim();
+  const foot = FOOTER_TEXT[lang];
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting">
+<html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting">
 <meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
 <title>${esc(input.subject)}</title>
 ${styles}
 </head>
 <body style="margin:0;padding:0;background:#ffffff;">
 ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(pre)}${"&#8199;&#65279;&#847; ".repeat(40)}</div>` : ""}
+${languageBar(lang, input.languages ?? [])}
 ${body}
 ${FOOTER_MARK}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 16px 32px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:Helvetica,Arial,sans-serif;">
 <tr><td style="border-top:1px solid #e5e5e5;padding-top:16px;font-size:13px;line-height:1.6;color:#5f5f5f;text-align:center;">
-You're getting this because you've shopped with Carbon. <a href="{{unsubscribe_url}}" style="color:#5f5f5f;text-decoration:underline;">Unsubscribe</a><br>${esc(input.postalAddress)}
+${foot.why} <a href="{{unsubscribe_url}}" style="color:#5f5f5f;text-decoration:underline;">${foot.unsub}</a><br>${esc(input.postalAddress)}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;
@@ -196,6 +230,7 @@ export function shouldPause(input: { sent: number; bounced: number; complained: 
 }
 
 /** "Sunday, November 29" in Eastern time. */
-export function longDay(iso: string | Date): string {
-  return new Date(iso).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" });
+export function longDay(iso: string | Date, lang: "en" | "es" | "pt" = "en"): string {
+  const locale = lang === "es" ? "es-US" : lang === "pt" ? "pt-BR" : "en-US";
+  return new Date(iso).toLocaleDateString(locale, { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric" });
 }

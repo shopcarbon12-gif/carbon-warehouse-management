@@ -9,7 +9,8 @@ import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { buildMaps, renderLayout, toKeys, toRefs, type LayoutTurn } from "../lib/server/email/layout";
 import { STORE_MEDIA } from "../lib/server/email/brand";
-import { offerLabel } from "../lib/server/email/campaigns";
+import { mergeValuesFor, offerLabel } from "../lib/server/email/campaigns";
+import { fillMergeTags, wrapEmail } from "../lib/server/email/rules";
 import { parseOffer } from "../lib/server/email/validate";
 import { addOwnerMessage, approveItems, pickDirection } from "../lib/server/email/designer";
 import { catalogLines, catalogSets, type CatalogProduct } from "../lib/server/email/catalog";
@@ -37,7 +38,7 @@ const prod = (n: number, ref: string): CatalogProduct => ({
 });
 
 (async () => {
-  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql"]) {
+  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql"]) {
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
   }
@@ -156,6 +157,48 @@ const prod = (n: number, ref: string): CatalogProduct => ({
   const ap2 = await pool.query<{ status: string; desktop_prompt: string | null; products: unknown[] }>(`SELECT status, desktop_prompt, products FROM email_design_messages WHERE id = $1::uuid`, [rv.aiId]);
   assert.deepEqual([ap2.rows[0].status, ap2.rows[0].desktop_prompt, ap2.rows[0].products.length], ["approved", null, 0]);
   console.log("ok  review: waits, blocks new messages, approve keeps or rewrites the briefs");
+
+  // Outfit review (owner, 2026-11-08): each person's outfit is edited in its own row; the concept keeps them,
+  // and only the photo whose outfit changed is drawn again.
+  await pool.query(`UPDATE email_design_messages SET status = 'failed' WHERE design_id = $1::uuid AND status <> 'done' AND role = 'ai'`, [designId]);
+  const ov = await addOwnerMessage(pool, { designId, text: "outfits", attachments: [], target: "both", mode: "fast", by: null });
+  const P = (n: number) => `gid://shopify/Product/${n}`;
+  const concept = {
+    story: "s", photo_style: "x",
+    hero: { scene: "hero", headline: "H", products: [P(1), P(2)], people: [{ who: "man", products: [P(1)] }, { who: "woman", products: [P(2)] }] },
+    looks: [{ id: "l1", name: "One", scene: "a", mood: "m", copy: "c", products: [P(1)], people: [{ who: "man", products: [P(1)] }] }],
+    offer: { headline: "o", text: "t" }, showroom: { headline: "s", text: "t" },
+  };
+  const shots0 = [
+    { id: "h1", kind: "hero", size: "1536x1024", prompt: "hero", products: [P(1), P(2)], people: [{ who: "man", products: [P(1)] }, { who: "woman", products: [P(2)] }], path: "h.jpg", qa: null },
+    { id: "l1", kind: "look", size: "1024x1536", prompt: "a", products: [P(1)], people: [{ who: "man", products: [P(1)] }], path: "l1.jpg", qa: null },
+  ];
+  const prods = [1, 2, 3].map((n) => ({ id: P(n), title: `Item ${n}`, url: "u", price: 10, image: null, set: null }));
+  await pool.query(`UPDATE email_design_messages SET status = 'review', concept_data = $2, shots = $3, products = $4, media = '[]' WHERE id = $1::uuid`, [ov.aiId, JSON.stringify(concept), JSON.stringify(shots0), JSON.stringify(prods)]);
+  // The woman in the hero gets item 3 instead of item 2 (item 3 is not in the test catalog, but was picked before).
+  await approveItems(pool, designId, ov.aiId, [P(1), P(3)], [], [
+    { key: "h1", person: 0, productIds: [P(1)] },
+    { key: "h1", person: 1, productIds: [P(3)] },
+    { key: "l1", person: 0, productIds: [P(1)] },
+  ]);
+  const after = (await pool.query<{ status: string; concept_data: typeof concept; shots: typeof shots0 }>(`SELECT status, concept_data, shots FROM email_design_messages WHERE id = $1::uuid`, [ov.aiId])).rows[0];
+  assert.equal(after.status, "approved");
+  assert.deepEqual(after.concept_data.hero.people[1].products, [P(3)], "the woman's outfit is the owner's");
+  assert.deepEqual(after.concept_data.hero.products.sort(), [P(1), P(3)].sort());
+  assert.equal(after.shots.find((x) => x.id === "h1")!.path, null, "the hero (outfit changed) is drawn again");
+  assert.equal(after.shots.find((x) => x.id === "l1")!.path, "l1.jpg", "look 1 (unchanged) keeps its photo");
+  console.log("ok  outfit review: per-person edits kept, only changed photos redrawn");
+
+  // Spanish + Portuguese: a bold language bar on top, links to this person's web pages, translated footer.
+  const wrapped = wrapEmail({ designHtml: "<table><tr><td>Hola</td></tr></table>", subject: "s", preheader: "p", postalAddress: "Addr", lang: "es", languages: ["en", "es", "pt"] });
+  assert.match(wrapped, /READ THIS EMAIL IN ENGLISH/);
+  assert.match(wrapped, /LEIA ESTE E-MAIL EM PORTUGUÊS/);
+  assert.ok(!/LEE ESTE CORREO EN ESPAÑOL/.test(wrapped), "no link to the language you are reading");
+  assert.match(wrapped, /Darse de baja/);
+  const filled = fillMergeTags(wrapped, mergeValuesFor({ firstName: null, code: "X-1", offer: null, unsubToken: "tok123456", campaignId: "11111111-1111-1111-1111-111111111111", lang: "es" }));
+  assert.match(filled, /\/api\/public\/email\/web\/11111111-1111-1111-1111-111111111111\/tok123456\/en/);
+  assert.ok(!/LEE ESTE|READ THIS/.test(wrapEmail({ designHtml: "<table></table>", subject: "s", preheader: "p", postalAddress: "A" })), "no bar without translations");
+  console.log("ok  language bar: bold links to the other languages, translated footer, per-person web links");
 
   // Percent-off offers.
   const o = parseOffer({ amount: 10, endsAt: new Date(Date.now() + 9 * 86400_000).toISOString(), kind: "percent", prefix: "AW" });

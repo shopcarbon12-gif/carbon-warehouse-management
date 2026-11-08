@@ -48,11 +48,14 @@ export async function creativeJson(model: string, instructions: string, parts: P
 
 /* ------------------------------------------------------------------- concept */
 
-export type Look = { id: string; name: string; scene: string; mood: string; products: string[]; copy: string };
+/** One person in a photo and their complete outfit (owner, 2026-11-08: approve each person's look in its own row). */
+export type Person = { who: string; products: string[] };
+/** products = every piece in the photo (all people together). */
+export type Look = { id: string; name: string; scene: string; mood: string; products: string[]; copy: string; people: Person[] };
 export type Concept = {
   story: string;
   photo_style: string;
-  hero: { scene: string; products: string[]; headline: string };
+  hero: { scene: string; products: string[]; headline: string; people: Person[] };
   looks: Look[];
   offer: { headline: string; text: string };
   showroom: { headline: string; text: string };
@@ -70,6 +73,8 @@ The shape of every CARBON email (unless the owner explicitly asks for something 
 
 Photos: ${PHOTO_STYLE}
 
+EVERY PERSON wears a COMPLETE outfit of real catalog pieces: top, bottom, an outer layer where it fits the season, shoes, and an accessory if the catalog has one. List each person separately ("people"), in the order they stand in the photo.
+
 Rules: real in-stock catalog products only (refs from the CATALOG; a matching set is one X-ref), styled by season and the owner's ask, prefer stock 3+; each look built from DIFFERENT pieces (repeat a piece only if the catalog leaves no choice; the hero may combine pieces from the looks); never name a real venue, business, street or neighbourhood in a photo brief — describe the kind of place ("a palm-lined downtown sidewalk"); product names, prices and store facts exactly as given; never other brands; never write "Carbon Jeans"; never invent discounts or dates; the personal discount is shown as the customer's own code (the designer handles it). Copy voice: short, confident, warm, no hype words, no em dashes.
 
 Answer JSON:
@@ -80,8 +85,8 @@ Answer JSON:
  "direction": "the concept in under 10 words",
  "change": "new" | "keep" | "update"   (keep = the current concept stays exactly as it is because the owner only asked for design / layout changes; update = small changes; new = a new idea),
  "story": "2-3 sentences: the idea and the feeling",
- "hero": {"scene": "the hero photo as a photographer's brief: who (how many people, age range, look), what they wear, where in Orlando, light, camera, pose, mood, where empty space is left for the headline", "products": ["P12", "X3"], "headline": "max 6 words"},
- "looks": [ {"name": "short look name", "scene": "photographer's brief as above, VERY different from the other two looks and the hero", "mood": "3-5 words", "products": ["P12","P40","X3"], "copy": "one short sentence"} × 3 ],
+ "hero": {"scene": "the hero photo as a photographer's brief: who (how many people, age range, look), where in Orlando, light, camera, pose, mood, where empty space is left for the headline", "headline": "max 6 words", "people": [{"who": "e.g. man, late 20s, short dark hair", "products": ["P12", "P40", "P3", "P7"]}, …]},
+ "looks": [ {"name": "short look name", "scene": "photographer's brief as above, VERY different from the other two looks and the hero", "mood": "3-5 words", "copy": "one short sentence", "people": [{"who": "…", "products": ["P12","X3","P9"]}]} × 3 ],
  "offer": {"headline": "max 6 words", "text": "one sentence; say 'your code' — never a number you were not given"},
  "showroom": {"headline": "max 6 words", "text": "one sentence"},
  "products": ["every catalog ref used above"]}`;
@@ -89,18 +94,29 @@ Answer JSON:
 /** Make sure a concept has the shape we need (3 looks, strings everywhere). */
 export function cleanConcept(j: Record<string, unknown>): Concept {
   const s = (v: unknown, n = 1500) => String(v ?? "").slice(0, n);
-  const refs = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[PX]\d+$/.test(x)).slice(0, 6) : []);
+  const refs = (v: unknown, max = 6) => (Array.isArray(v) ? v.map((x) => String(x).trim().toUpperCase()).filter((x) => /^[PX]\d+$/.test(x)).slice(0, max) : []);
+  const people = (o: Record<string, unknown>): Person[] => {
+    const list = (Array.isArray(o.people) ? o.people : []).slice(0, 4).map((x) => {
+      const q = (x ?? {}) as Record<string, unknown>;
+      return { who: s(q.who, 120) || "person", products: refs(q.products, 7) };
+    });
+    // Older answers without "people": one person wearing everything listed.
+    return list.length ? list : refs(o.products).length ? [{ who: "person", products: refs(o.products) }] : [];
+  };
+  const union = (ps: Person[]) => [...new Set(ps.flatMap((x) => x.products))];
   const hero = (j.hero ?? {}) as Record<string, unknown>;
+  const heroPeople = people(hero);
   const looks = (Array.isArray(j.looks) ? j.looks : []).slice(0, 3).map((l, i) => {
     const o = (l ?? {}) as Record<string, unknown>;
-    return { id: `l${i + 1}`, name: s(o.name, 80), scene: s(o.scene), mood: s(o.mood, 80), products: refs(o.products), copy: s(o.copy, 300) };
+    const ps = people(o);
+    return { id: `l${i + 1}`, name: s(o.name, 80), scene: s(o.scene), mood: s(o.mood, 80), products: union(ps), copy: s(o.copy, 300), people: ps };
   });
   const offer = (j.offer ?? {}) as Record<string, unknown>;
   const showroom = (j.showroom ?? {}) as Record<string, unknown>;
   return {
     story: s(j.story, 800),
     photo_style: PHOTO_STYLE,
-    hero: { scene: s(hero.scene), products: refs(hero.products), headline: s(hero.headline, 80) },
+    hero: { scene: s(hero.scene), products: union(heroPeople), headline: s(hero.headline, 80), people: heroPeople },
     looks,
     offer: { headline: s(offer.headline, 80), text: s(offer.text, 300) },
     showroom: { headline: s(showroom.headline, 80), text: s(showroom.text, 300) },
@@ -110,10 +126,12 @@ export function cleanConcept(j: Record<string, unknown>): Concept {
 /** The concept as the designer (and the owner) reads it, with product names instead of refs. */
 export function conceptText(c: Concept, name: (ref: string) => string): string {
   const list = (r: string[]) => [...new Set(r.map(name))].join(", ");
+  const who = (ps: Person[] | undefined, all: string[]) =>
+    ps?.length ? ps.map((x, i) => `person ${i + 1} (${x.who}) wears ${list(x.products)}`).join("; ") : `wearing ${list(all)}`;
   return [
     `STORY: ${c.story}`,
-    `HERO (campaign photo H1, headline "${c.hero.headline}"): ${c.hero.scene} — wearing ${list(c.hero.products)}`,
-    ...c.looks.map((l, i) => `LOOK ${i + 1} "${l.name}" (photo L${i + 1}, mood: ${l.mood}): ${l.copy} — pieces: ${list(l.products)}. Photo: ${l.scene}`),
+    `HERO (campaign photo H1, headline "${c.hero.headline}"): ${c.hero.scene} — ${who(c.hero.people, c.hero.products)}`,
+    ...c.looks.map((l, i) => `LOOK ${i + 1} "${l.name}" (photo L${i + 1}, mood: ${l.mood}): ${l.copy} — ${who(l.people, l.products)}. Photo: ${l.scene}`),
     `OFFER: "${c.offer.headline}" — ${c.offer.text}`,
     `SHOWROOM: "${c.showroom.headline}" — ${c.showroom.text}`,
   ].join("\n");

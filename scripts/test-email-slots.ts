@@ -36,6 +36,9 @@ const solid = (w: number, h: number, c: { r: number; g: number; b: number }) => 
       { input: await solid(320, 400, { r: 0, g: 255, b: 255 }), left: 100, top: 400 },
       { input: await solid(600, 400, { r: 0, g: 255, b: 0 }), left: 500, top: 900 },
       { input: await sharp(noise, { raw: { width: 300, height: 300, channels: 3 } }).png().toBuffer(), left: 800, top: 300 },
+      // a FRAME instead of a solid box (lime-ish frame 8 px thick around a grey "drawing"), store photo 2
+      { input: await solid(300, 200, { r: 128, g: 0, b: 255 }), left: 60, top: 1250 },
+      { input: await solid(284, 184, { r: 120, g: 120, b: 120 }), left: 68, top: 1258 },
     ])
     .blur(1.2) // soft edges like a generated picture
     .jpeg({ quality: 72 }) // compression noise
@@ -52,6 +55,8 @@ const solid = (w: number, h: number, c: { r: number; g: number; b: number }) => 
   const lg = one("#FF00FF");
   const pr = one("#00FFFF");
   const st = one("#00FF00");
+  const [fr] = (await findBoxes(png, [SLOT_COLORS[7]])).get("#8000FF") ?? [];
+  assert.ok(fr && near(fr.x, 60) && near(fr.y, 1250) && near(fr.w, 300) && near(fr.h, 200), `a frame counts as its whole rectangle ${JSON.stringify(fr)}`);
   assert.ok(near(lg.x, 420) && near(lg.y, 57) && near(lg.w, 360) && near(lg.h, 106), `logo box ${JSON.stringify(lg)}`);
   assert.ok(near(pr.x, 100) && near(pr.y, 400) && near(pr.w, 320) && near(pr.h, 400), `product box ${JSON.stringify(pr)}`);
   assert.ok(near(st.x, 500) && near(st.y, 900) && near(st.w, 600) && near(st.h, 400), `store box ${JSON.stringify(st)}`);

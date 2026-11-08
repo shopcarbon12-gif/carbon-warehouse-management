@@ -62,7 +62,7 @@ export function briefWithBoxes(brief: string, slots: Slot[]): string {
 
 export const BOX_RULES = (slots: Slot[]) =>
   slots.length
-    ? `PLACEHOLDER BOXES (the most important rule): the real ${slots.some((s) => s.kind === "logo") ? "logo and the real " : ""}photos are pasted in later, so you must NOT draw them. Every placeholder box in the brief is ONE perfectly flat, solid rectangle in exactly its colour (${slots.map((s) => `${s.color.hex} = ${s.label}`).join("; ")}): no gradient, no texture, no shadow, no border, no rounded corners, no text, logo, person or object inside or over it, nothing overlapping it. Draw each box at the size and shape the brief gives (a product tile is usually portrait 4:5; a logo box is wide and short, about 3.4 times wider than tall). Use these colours ONLY for the boxes — nowhere else in the picture.`
+    ? `PLACEHOLDER BOXES (the most important rule): the real ${slots.some((s) => s.kind === "logo") ? "logo and the real " : ""}photos are pasted in later, so you must NOT draw them. Every placeholder box in the brief is ONE perfectly flat, solid rectangle in exactly its colour (${slots.map((s) => `${s.color.hex} = ${s.label}`).join("; ")}): no gradient, no texture, no shadow, no border, no rounded corners, no text, logo, person or object inside or over it, nothing overlapping it. Fill each box SOLID with its colour from edge to edge — never an outline, frame or border around a picture, never a photo or drawing inside it. Draw each box at the size and shape the brief gives (a product tile is usually portrait 4:5; a logo box is wide and short, about 3.4 times wider than tall). Use these colours ONLY for the boxes — nowhere else in the picture.`
     : "";
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -72,25 +72,31 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
   const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const W = info.width;
   const H = info.height;
-  const S = 3; // work on a 1/3 grid (fast), refine edges at full size
+  const S = 1; // every pixel: frames the model draws can be only 1-3 px wide
   const gw = Math.floor(W / S);
   const gh = Math.floor(H / S);
   const label = new Int8Array(gw * gh).fill(-1);
-  const TOL = 62 * 62;
+  // The model's "lime" or "cyan" is rarely the exact value: accept anything close, and take the NEAREST
+  // box colour (the colours are at least ~127 apart, so neighbours cannot be confused).
+  const TOL = 90 * 90;
+  const off = Math.floor(S / 2);
   for (let gy = 0; gy < gh; gy++)
     for (let gx = 0; gx < gw; gx++) {
-      const i = ((gy * S + 1) * W + gx * S + 1) * 3;
+      const i = ((gy * S + off) * W + gx * S + off) * 3;
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
+      let best = -1;
+      let bestD = TOL;
       for (let c = 0; c < colors.length; c++) {
         const [cr, cg, cb] = colors[c].rgb;
         const d = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2;
-        if (d < TOL) {
-          label[gy * gw + gx] = c;
-          break;
+        if (d < bestD) {
+          bestD = d;
+          best = c;
         }
       }
+      if (best >= 0) label[gy * gw + gx] = best;
     }
   const seen = new Uint8Array(gw * gh);
   const out = new Map<string, Box[]>();
@@ -103,6 +109,7 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
     let maxX = 0;
     let maxY = 0;
     let n = 0;
+    const pts: number[] = [];
     stack.push(start);
     seen[start] = 1;
     while (stack.length) {
@@ -110,6 +117,7 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
       const x = p % gw;
       const y = (p - x) / gw;
       n++;
+      pts.push(p);
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
       if (y < minY) minY = y;
@@ -123,8 +131,34 @@ export async function findBoxes(png: Buffer, colors: readonly SlotColor[]): Prom
     }
     const bw = maxX - minX + 1;
     const bh = maxY - minY + 1;
-    // A real box: at least ~36x24 px and mostly filled (a photo's stray pixels are neither).
-    if (bw * S < 36 || bh * S < 24 || n / (bw * bh) < 0.72) continue;
+    if (bw * S < 36 || bh * S < 24) continue;
+    // A FRAME (the model sometimes draws a coloured border with something inside instead of a solid
+    // box): the colour runs along all four sides. Its whole outer rectangle is the spot.
+    if (n / (bw * bh) < 0.72) {
+      const band = 3;
+      const top = new Set<number>();
+      const bottom = new Set<number>();
+      const left = new Set<number>();
+      const right = new Set<number>();
+      for (const p of pts) {
+        const x = p % gw;
+        const y = (p - x) / gw;
+        if (y - minY < band) top.add(x);
+        if (maxY - y < band) bottom.add(x);
+        if (x - minX < band) left.add(y);
+        if (maxX - x < band) right.add(y);
+      }
+      const frame = top.size >= bw * 0.75 && bottom.size >= bw * 0.75 && left.size >= bh * 0.75 && right.size >= bh * 0.75;
+      if (!frame) continue;
+      const pad = S + 1;
+      const box = { x: Math.max(0, minX * S - pad), y: Math.max(0, minY * S - pad), w: 0, h: 0 };
+      box.w = Math.min(W, (maxX + 1) * S + pad) - box.x;
+      box.h = Math.min(H, (maxY + 1) * S + pad) - box.y;
+      const list = out.get(colors[c].hex) ?? [];
+      list.push(box);
+      out.set(colors[c].hex, list);
+      continue;
+    }
     // Exact edges at full size: walk outward from the grid box along three lines across it while
     // the box colour continues (majority of the lines), then add 2 px for soft edges.
     const [cr, cg, cb] = colors[c].rgb;

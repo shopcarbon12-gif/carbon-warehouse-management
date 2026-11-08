@@ -13,8 +13,8 @@ const text = async (u: string) => {
   return r.text();
 };
 
-export function EmailPreviewFrames({ designId, version, messageId, height = 720 }: { designId: string; version?: string; messageId?: string; height?: number }) {
-  const q = messageId ? `?message=${messageId}` : version ? `?v=${encodeURIComponent(version)}` : "";
+export function EmailPreviewFrames({ designId, version, messageId, lang, height = 720 }: { designId: string; version?: string; messageId?: string; lang?: "en" | "es" | "pt"; height?: number }) {
+  const q = messageId ? `?message=${messageId}` : `?v=${encodeURIComponent(version ?? "")}${lang && lang !== "en" ? `&lang=${lang}` : ""}`;
   const { data, error } = useSWR(`/api/email/designs/${designId}/preview${q}`, text);
   if (error) return <p className="text-xs text-[var(--wms-status-danger-fg)]">Preview failed: {error.message}</p>;
   if (data === undefined) return <p className="text-xs text-[var(--wms-muted)]">Loading preview…</p>;

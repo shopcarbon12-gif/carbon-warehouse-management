@@ -61,6 +61,9 @@ type Design = {
   convert_error: string | null;
   check_status: "running" | "queued" | "passed" | "failed" | "error" | null;
   check_override: boolean;
+  html_es: string | null;
+  html_pt: string | null;
+  translate_status: "running" | "done" | "failed" | null;
   check_rounds: { round: number; pass: boolean; score: number; summary: string; issues: { severity: string; view: string; where: string; problem: string; fix: string }[]; desktop: string | null; phone: string | null; model: string; fixed?: boolean; error?: string }[];
   package_url: string | null;
   updated_at: string;
@@ -68,8 +71,8 @@ type Design = {
 
 type Concept = {
   story: string;
-  hero: { scene: string; headline: string };
-  looks: { id: string; name: string; mood: string; copy: string }[];
+  hero: { scene: string; headline: string; people?: { who: string; products: string[] }[] };
+  looks: { id: string; name: string; mood: string; copy: string; people?: { who: string; products: string[] }[] }[];
   offer: { headline: string; text: string };
   showroom: { headline: string; text: string };
 };
@@ -86,6 +89,10 @@ const TARGETS = [
 function progressText(m: Msg): string {
   if (m.status === "queued") return "Waiting to start (within a minute)…";
   if (m.step === "concept" && m.status === "planning") return "The creative director is writing the concept (the idea, the hero, three looks)…";
+  if (m.step === "all")
+    return m.mode === "fast"
+      ? "Drawing everything at once: the 4 campaign photos and the desktop + phone pictures of every direction (about 3 to 6 minutes), then pasting in the real photos and logo…"
+      : "Everything is in one OpenAI batch: the 4 campaign photos and the desktop + phone pictures of every direction (usually minutes, up to an hour). Then the real photos and logo are pasted in…";
   if (m.step === "shots")
     return m.mode === "fast"
       ? "Making the 4 campaign photos (hero + 3 looks) and checking each against the real products (about 2 to 4 minutes)…"
@@ -162,6 +169,47 @@ export function EmailDesigner() {
         ))}
         {data && !data.designs.length && <p className="text-xs text-[var(--wms-muted)]">No designs yet.</p>}
       </div>
+    </div>
+  );
+}
+
+/** The converted email in English, Spanish or Portuguese (as customers see it, with the language bar). */
+function LanguagePreview({ design, designId }: { design: Design; designId: string }) {
+  const [lang, setLang] = useState<"en" | "es" | "pt">("en");
+  const has = { en: true, es: !!design.html_es, pt: !!design.html_pt };
+  const status =
+    design.translate_status === "running"
+      ? "Translating into Spanish and Portuguese…"
+      : design.translate_status === "failed"
+        ? "A translation could not be made safely (links or personal fields did not match). Press Check again to retry."
+        : !design.html_es && !design.html_pt
+          ? "Spanish and Portuguese are made after the visual check."
+          : "Every customer gets a bold bar on top of the email to read it in Spanish or Portuguese.";
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-md border border-[var(--wms-border)]" role="group" aria-label="Language">
+          {(
+            [
+              ["en", "English"],
+              ["es", "Español"],
+              ["pt", "Português"],
+            ] as const
+          ).map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              disabled={!has[k]}
+              onClick={() => setLang(k)}
+              className={`px-2.5 py-1 font-mono text-[0.68rem] uppercase disabled:opacity-40 max-md:min-h-11 ${lang === k ? "bg-[var(--wms-fg)] text-[var(--wms-bg)]" : "text-[var(--wms-fg)]"}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-[var(--wms-muted)]">{status}</span>
+      </div>
+      <EmailPreviewFrames designId={designId} version={design.updated_at} lang={has[lang] ? lang : "en"} />
     </div>
   );
 }
@@ -248,7 +296,7 @@ function Picture({ src, alt, onOpen }: { src: string | null; alt: string; onOpen
 
 function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
   const { data, error, mutate } = useSWR<{ design: Design; messages: Msg[] }>(`/api/email/designs/${id}`, fetcher, {
-    refreshInterval: (d) => (d && (d.messages.some((m) => WORKING.includes(m.status)) || d.design.status === "converting" || d.design.status === "checking" || d.design.check_status === "running" || d.design.check_status === "queued") ? 4000 : 0),
+    refreshInterval: (d) => (d && (d.messages.some((m) => WORKING.includes(m.status)) || d.design.status === "converting" || d.design.status === "checking" || d.design.check_status === "running" || d.design.check_status === "queued" || d.design.translate_status === "running") ? 4000 : 0),
   });
   const [text, setText] = useState("");
   const [target, setTarget] = useState<"both" | "desktop" | "mobile">("both");
@@ -529,7 +577,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                   {m.status === "failed" ? (m.error ?? "Failed") : progressText(m)}
                 </p>
               )}
-              {m.status === "review" && <ReviewItems designId={id} messageId={m.id} products={m.products} media={m.media} onDone={() => void mutate()} />}
+              {m.status === "review" && <ReviewItems designId={id} messageId={m.id} products={m.products} media={m.media} concept={m.concept} onDone={() => void mutate()} />}
               {m.status !== "review" && m.media?.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <span className={label}>CARBON pictures in this version</span>
@@ -730,7 +778,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                   </div>
                 </div>
               ) : (
-                <EmailPreviewFrames designId={id} version={design.updated_at} />
+                <LanguagePreview design={design} designId={id} />
               )}
             </>
           )}

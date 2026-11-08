@@ -20,6 +20,7 @@ const body = z
     messageId: z.string().regex(UUID_RE),
     productIds: z.array(z.string().max(80)).max(40),
     mediaIds: z.array(z.string().max(80)).max(10),
+    outfits: z.array(z.object({ key: z.enum(["h1", "l1", "l2", "l3"]), person: z.number().int().min(0).max(5), productIds: z.array(z.string().max(80)).max(12) }).strict()).max(20).optional(),
   })
   .strict();
 
@@ -33,7 +34,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
   const d = await g.pool.query(`SELECT 1 FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`, [id, g.session.tid]);
   if (!d.rowCount) return NextResponse.json({ error: "Not found" }, { status: 404 });
   try {
-    await approveItems(g.pool, id, p.data.messageId, p.data.productIds, p.data.mediaIds);
+    await approveItems(g.pool, id, p.data.messageId, p.data.productIds, p.data.mediaIds, p.data.outfits);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 409 });

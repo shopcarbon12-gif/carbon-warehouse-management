@@ -49,9 +49,9 @@ import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleText } from "./style";
-import { BOX_RULES, SLOT_COLORS, TOKEN, briefWithBoxes, pasteReal, slotKeysIn, type Slot } from "./slots";
+import { BOX_RULES, SLOT_COLORS, TOKEN, briefWithBoxes, findBoxes, pasteReal, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
-import { collectShots, drawShotsFast, shotsFor, submitShots, type Shot, type ShotStage } from "./assets";
+import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
 import { collectBanners, drawBannersFast, planLayout, renderLayout, submitBanners, type Banner, type LayoutStage, type LayoutTurn } from "./layout";
 
 /** A product in a version; pieces of a matching set carry the set (shown as one card). */
@@ -100,7 +100,13 @@ type Msg = {
 };
 
 /** Where a turn's pictures are: which step is being drawn and which OpenAI files to clean up. */
-type Stage = { view: Step; batchId?: string; inputFileId?: string; refFileIds?: string[] } | ShotStage;
+type Stage =
+  | { view: Step; batchId?: string; inputFileId?: string; refFileIds?: string[] }
+  | ShotStage
+  /** Everything of a message in ONE batch (photos + every picture of every direction), on direction 1 / the single turn. */
+  | { view: "all"; batchId: string; inputFileId: string; refFileIds: string[]; turnIds: string[] }
+  /** A direction whose pictures are in another turn's "all" batch. */
+  | { view: "member"; lead: string; batchId?: undefined };
 
 export const SAMPLE_NAME = "Maria";
 export const SAMPLE_CODE = "CB20-K7Q4XM";
@@ -530,10 +536,14 @@ async function inputsFor(pool: Pool, turn: Msg, step: Step): Promise<Inputs> {
       labels.push(desktopNow ? "the previous phone version's top part (keep its layout choices unless the brief changes them)" : "the current phone version's top part (edit it)");
     }
   } else {
-    if (!turn.mobile_top_path) throw new Error("the phone top part is missing");
-    images.push(await load(turn.mobile_top_path));
-    labels.push("the TOP PART of this phone email, already finished: continue exactly below it");
-    lead = "Draw the BOTTOM PART of the phone email whose top part is image 1.";
+    if (turn.mobile_top_path) {
+      images.push(await load(turn.mobile_top_path));
+      labels.push("the TOP PART of this phone email, already finished: continue exactly below it");
+      lead = "Draw the BOTTOM PART of the phone email whose top part is image 1.";
+    } else {
+      // Drawn at the same time as the top part: continue it from the brief alone.
+      lead = "Draw the BOTTOM PART of a phone email. Its top part (drawn separately) ends exactly where this brief begins: start right at the first section described, with the same page background, margins, fonts and colours the brief gives, so the two parts join seamlessly.";
+    }
     if (desktopNow) {
       images.push(await load(desktopNow));
       labels.push("the finished DESKTOP version of this email (the same content)");
@@ -593,28 +603,60 @@ function turnSlots(turn: Msg): Slot[] {
 }
 
 /** Paste the original pictures into their boxes in a freshly drawn picture. */
-async function withRealPictures(pool: Pool, turn: Msg, png: Buffer, log: (m: string) => void = console.log): Promise<Buffer> {
-  const slots = turnSlots(turn);
-  if (!slots.length) return png;
+/** The brief of one picture of a turn. */
+function briefOf(turn: Msg, step: Step): string {
+  return step === "desktop" ? (turn.desktop_prompt ?? "") : ((turn.mobile_prompt ?? "").split(BOTTOM_MARK)[step === "mobile-top" ? 0 : 1] ?? "");
+}
+
+/**
+ * Paste the original pictures into their boxes in a freshly drawn picture. If the model drew some of
+ * them itself instead of leaving the box (it sometimes draws a photo with a coloured line on one edge),
+ * the picture goes back once as an EDIT: "cover these elements with solid boxes, change nothing else".
+ */
+async function withRealPictures(pool: Pool, turn: Msg, step: Step, png0: Buffer, log: (m: string) => void = console.log): Promise<Buffer> {
+  const all = turnSlots(turn);
+  const expected = new Set(slotKeysIn(briefOf(turn, step)));
+  const slots = all.filter((x) => expected.has(x.key));
+  if (!slots.length) return png0;
+  let png = png0;
   const owner = await pool.query<{ attachments: { path: string; name: string }[] }>(
     `SELECT attachments FROM email_design_messages WHERE design_id = $1::uuid AND role = 'owner' AND created_at < $2 ORDER BY created_at DESC LIMIT 1`,
     [turn.design_id, turn.created_at],
   );
   const atts = owner.rows[0]?.attachments ?? [];
-  const r = await pasteReal(
-    png,
-    slots,
-    async (s) => {
-      if (s.kind === "attachment") {
-        const a = atts[Number(s.key.slice(1)) - 1];
-        return a ? load(a.path) : null;
-      }
-      if (s.kind === "shot") return s.path ? load(s.path) : null;
-      return s.url ? referencePhoto(s.url, 1600) : null;
-    },
-    { black: () => logoFile("black"), white: () => logoFile("white") },
-  );
-  if (r.missing.length) log(`[email-ai] turn ${turn.id}: boxes not found for ${r.missing.join(", ")}`);
+  const loader = async (s: Slot) => {
+    if (s.kind === "attachment") {
+      const a = atts[Number(s.key.slice(1)) - 1];
+      return a ? load(a.path) : null;
+    }
+    if (s.kind === "shot") return s.path ? load(s.path) : null;
+    return s.url ? referencePhoto(s.url, 1600) : null;
+  };
+  const logos = { black: () => logoFile("black"), white: () => logoFile("white") };
+  const missingBoxes = async (pic: Buffer) => {
+    const found = await findBoxes(pic, slots.map((x) => x.color));
+    return slots.filter((x) => !(found.get(x.color.hex) ?? []).length);
+  };
+  const missing = await missingBoxes(png);
+  if (missing.length) {
+    log(`[email-ai] turn ${turn.id} ${step}: boxes not drawn for ${missing.map((x) => x.key).join(", ")} — repairing`);
+    try {
+      const prompt = [
+        "Edit image 1, an email design. Cover each element listed below with ONE perfectly flat, solid rectangle of exactly the given colour, exactly over that element's area (a photo: its whole photo area; the logo: the logo's area). Change NOTHING else — every other pixel, word, colour and position stays exactly the same.",
+        ...missing.map((x) => `- ${x.label} → solid ${x.color.hex} (${x.color.name})`),
+        "The rectangles are solid colour edge to edge: no outline, no frame, nothing inside them.",
+      ].join("\n");
+      const meta = await sharp(png).metadata();
+      const repaired = await drawFast({ prompt, size: `${meta.width}x${meta.height}`, images: [png] }, turn.image_model ?? imageModel());
+      const pic = await sharp(Buffer.from(repaired, "base64")).resize({ width: meta.width, height: meta.height, fit: "fill" }).png().toBuffer();
+      const still = await missingBoxes(pic);
+      if (still.length < missing.length) png = pic;
+      if (still.length) log(`[email-ai] turn ${turn.id} ${step}: still no box for ${still.map((x) => x.key).join(", ")}`);
+    } catch (e) {
+      log(`[email-ai] turn ${turn.id} ${step}: repair failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  const r = await pasteReal(png, slots, loader, logos);
   return r.png;
 }
 
@@ -624,7 +666,7 @@ async function toPng(b: Buffer): Promise<Buffer> {
 
 /** Save a drawn picture; the phone bottom part is joined under the top part into one phone picture. */
 async function savePicture(pool: Pool, turn: Msg, step: Step, b64: string): Promise<{ column: "desktop_path" | "mobile_top_path" | "mobile_path"; path: string }> {
-  const png = await withRealPictures(pool, turn, await sharp(Buffer.from(b64, "base64")).png({ compressionLevel: 9 }).toBuffer());
+  const png = await withRealPictures(pool, turn, step, await sharp(Buffer.from(b64, "base64")).png({ compressionLevel: 9 }).toBuffer());
   if (step === "desktop" || step === "mobile-top") {
     const path = `email/designs/${turn.design_id}/${turn.id}-${step}.png`;
     await uploadBytesToStorage({ path, bytes: png, contentType: "image/png" });
@@ -691,7 +733,8 @@ async function submitBatch(turn: Msg, step: Step, inputs: Inputs): Promise<Stage
 }
 
 async function cleanup(ai: OpenAI, st: Stage | null, ...more: (string | null | undefined)[]) {
-  for (const f of [st?.inputFileId, ...(st?.refFileIds ?? []), ...more]) if (f) await ai.files.delete(f).catch(() => {});
+  const s = st && st.view !== "member" ? st : null;
+  for (const f of [s?.inputFileId, ...(s?.refFileIds ?? []), ...more]) if (f) await ai.files.delete(f).catch(() => {});
 }
 
 async function fail(pool: Pool, id: string, why: string) {
@@ -747,16 +790,64 @@ async function drawNext(pool: Pool, turn: Msg, log: (m: string) => void): Promis
 
 /* -------------------------------------------------------- review (approval) */
 
-/** The owner's approved items: products (ids; a set piece brings its set) and CARBON pictures (ids). */
-export async function approveItems(pool: Pool, designId: string, messageId: string, productIds: string[], mediaIds: string[]): Promise<void> {
-  const r = await pool.query<{ variant_group: string | null; products: TurnProduct[] | null; media: TurnMedia[] | null }>(
-    `SELECT variant_group::text, products, media FROM email_design_messages WHERE id = $1::uuid AND design_id = $2::uuid AND role = 'ai' AND status = 'review'`,
+/** One person's outfit as the owner approved it (owner, 2026-11-08: approve each person's look in its own row). */
+export type OutfitEdit = { key: string; person: number; productIds: string[] };
+
+/**
+ * The owner's approved items: products (ids; a set piece brings its set) and CARBON pictures (ids).
+ * With `outfits` (the review shown per person), the concept is updated directly — the swapped / added /
+ * removed pieces go into that person's outfit, the concept stays, and only the photos whose outfits
+ * changed are drawn again.
+ */
+export async function approveItems(pool: Pool, designId: string, messageId: string, productIds: string[], mediaIds: string[], outfits?: OutfitEdit[]): Promise<void> {
+  const r = await pool.query<{ variant_group: string | null; products: TurnProduct[] | null; media: TurnMedia[] | null; concept_data: Concept | null; shots: Shot[] | null }>(
+    `SELECT variant_group::text, products, media, concept_data, shots FROM email_design_messages WHERE id = $1::uuid AND design_id = $2::uuid AND role = 'ai' AND status = 'review'`,
     [messageId, designId],
   );
   const row = r.rows[0];
   if (!row) throw new Error("This version is not waiting for approval");
   const catalog = await inStockCatalog().catch(() => [] as CatalogProduct[]);
   const sets = catalogSets(catalog);
+  if (outfits?.length && row.concept_data) {
+    const known = new Map((row.products ?? []).map((p) => [p.id, p]));
+    const expand = (ids: string[]) => {
+      const fromCat = turnProducts(ids.filter((id) => catalog.some((c) => c.id === id)), catalog, sets);
+      return [...fromCat, ...ids.filter((id) => !fromCat.some((p) => p.id === id) && known.has(id)).map((id) => known.get(id)!)];
+    };
+    const concept: Concept = JSON.parse(JSON.stringify(row.concept_data));
+    const sections = [{ key: "h1", part: concept.hero }, ...concept.looks.map((l, i) => ({ key: `l${i + 1}`, part: l }))];
+    const all: TurnProduct[] = [];
+    for (const o of outfits) {
+      const sec = sections.find((x) => x.key === o.key);
+      const person = sec?.part.people?.[o.person];
+      if (!sec || !person) continue;
+      const items = expand(o.productIds.slice(0, 12));
+      person.products = items.map((p) => p.id);
+      for (const p of items) if (!all.some((x) => x.id === p.id)) all.push(p);
+    }
+    for (const sec of sections) sec.part.products = [...new Set((sec.part.people ?? []).flatMap((x) => x.products))];
+    const library = await mediaLibrary(pool, 400);
+    const media = mediaIds
+      .map((id) => (row.media ?? []).find((m) => m.id === id) ?? library.find((m) => m.id === id))
+      .filter((m): m is TurnMedia => !!m)
+      .slice(0, MAX_MEDIA)
+      .map((m) => ({ id: m.id, url: m.url, width: m.width, height: m.height, kind: m.kind, description: m.description }));
+    const same = JSON.stringify(concept) === JSON.stringify(row.concept_data) && JSON.stringify((row.media ?? []).map((m) => m.id).sort()) === JSON.stringify(media.map((m) => m.id).sort());
+    const shots = shotsFor(concept, (id) => [id], row.shots);
+    const ids = row.variant_group
+      ? (await pool.query<{ id: string }>(`SELECT id::text FROM email_design_messages WHERE variant_group = $1::uuid AND status IN ('review','queued')`, [row.variant_group])).rows.map((x) => x.id)
+      : [messageId];
+    await pool.query(
+      `UPDATE email_design_messages SET products = $2, media = $3, needs_review = false, concept_data = CASE WHEN id = $4::uuid THEN $6::jsonb ELSE concept_data END,
+              shots = CASE WHEN id = $4::uuid THEN $7::jsonb ELSE shots END,
+              status = CASE WHEN id = $4::uuid THEN 'approved' ELSE status END,
+              desktop_prompt = CASE WHEN $5 AND id = $4::uuid THEN desktop_prompt ELSE NULL END,
+              mobile_prompt = CASE WHEN $5 AND id = $4::uuid THEN mobile_prompt ELSE NULL END
+        WHERE id = ANY($1::uuid[])`,
+      [ids, JSON.stringify(same ? (row.products ?? all) : all), JSON.stringify(media), messageId, same, JSON.stringify(concept), JSON.stringify(shots)],
+    );
+    return;
+  }
   const known = new Map((row.products ?? []).map((p) => [p.id, p]));
   const fromCatalog = turnProducts(productIds.filter((id) => catalog.some((c) => c.id === id)), catalog, sets);
   // Items the AI chose that left the catalog meanwhile stay if the owner kept them.
@@ -817,7 +908,7 @@ export async function searchCatalog(q: string): Promise<{ id: string; title: str
 async function storePlan(pool: Pool, turn: Msg, p: Plan, status: string): Promise<void> {
   await pool.query(
     `UPDATE email_design_messages SET text = $2, desktop_prompt = $3, mobile_prompt = $4, products = $5, media = $6, direction = $7, fresh = $8, status = $9
-      WHERE id = $1::uuid AND status IN ('planning')`,
+      WHERE id = $1::uuid AND status IN ('planning', 'approved-planning', 'generating')`,
     [turn.id, p.reply, p.desktop_prompt, p.mobile_prompt, JSON.stringify(p.products), JSON.stringify(p.media), p.direction, p.fresh, status],
   );
   if (!turn.variant_group || turn.variant_no === 1)
@@ -881,7 +972,11 @@ async function makeConcept(pool: Pool, turn: Msg, lockedItems: TurnProduct[] | n
   };
   if (!keep) {
     concept.hero.products = concept.hero.products.flatMap(idOf);
-    for (const l of concept.looks) l.products = l.products.flatMap(idOf);
+    for (const ps of concept.hero.people ?? []) ps.products = ps.products.flatMap(idOf);
+    for (const l of concept.looks) {
+      l.products = l.products.flatMap(idOf);
+      for (const ps of l.people ?? []) ps.products = ps.products.flatMap(idOf);
+    }
   }
   const str = (v: unknown, n: number) => (v ? String(v).slice(0, n) : null);
   return { concept, keep, reply: String(json.reply ?? "Here is the idea.").slice(0, 1200), title: str(json.title, 80), subject: str(json.subject, 120), preheader: str(json.preheader, 200), direction: str(json.direction, 160), products, model };
@@ -939,29 +1034,184 @@ async function conceptStep(pool: Pool, turn: Msg, log: (m: string) => void): Pro
   return !review;
 }
 
-/** Step 3: the campaign photos (once per concept). False = sent to a batch (the tick continues later). */
-async function shotsStep(pool: Pool, turn: Msg, log: (m: string) => void): Promise<boolean> {
-  const shots = turn.shots ?? [];
-  if (!shots.length || shots.every((x) => x.path)) return true;
-  const o = { designId: turn.design_id, turnId: turn.id, imageModel: turn.image_model ?? imageModel(), creativeModel: turn.creative_model?.split(" ")[0] ?? "gpt-6-astra" };
-  if (turn.mode !== "fast") {
-    const st = await submitShots(o, shots, turn.products ?? []);
-    if (st) {
-      await pool.query(`UPDATE email_design_messages SET status = 'generating', concept = 'shots', batch_id = $2, batch_files = $3, step_at = now() WHERE id = $1::uuid`, [turn.id, st.batchId, JSON.stringify(st)]);
-      log(`[email-ai] turn ${turn.id}: ${shots.filter((x) => !x.path).length} campaign photo(s) sent to the OpenAI batch ${st.batchId}`);
-      return false;
-    }
-  }
-  await pool.query(`UPDATE email_design_messages SET status = 'generating', concept = 'shots', step_at = now() WHERE id = $1::uuid`, [turn.id]);
-  turn.shots = await drawShotsFast(o, shots, turn.products ?? [], log);
-  await pool.query(`UPDATE email_design_messages SET shots = $2 WHERE id = $1::uuid`, [turn.id, JSON.stringify(turn.shots)]);
-  return true;
-}
-
 async function runPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void): Promise<void> {
   if (!(await conceptStep(pool, turn, log))) return;
-  if (!(turn.variant_no && turn.variant_no > 1) && !(await shotsStep(pool, turn, log))) return;
-  await afterShots(pool, turn, log);
+  // Owner, 2026-11-08: "whether it's one picture or three, they all run at the same time". Direction 1
+  // starts directions 2–3 now; all briefs are written side by side; then the 4 campaign photos and every
+  // picture of every direction are drawn at once (one batch, or all in parallel in Fast mode).
+  const turns: Msg[] = [turn];
+  if (turn.variant_group && turn.variant_no === 1) {
+    const sibs = await pool.query<Msg>(
+      `UPDATE email_design_messages SET status = 'planning', step_at = now() WHERE variant_group = $1::uuid AND variant_no > 1 AND status = 'queued' RETURNING *`,
+      [turn.variant_group],
+    );
+    for (const sib of sibs.rows) await conceptStep(pool, sib, log);
+    turns.push(...sibs.rows);
+  }
+  const planned = await Promise.all(
+    turns.map((t) =>
+      planPictureTurn(pool, t, log).then(
+        (ok) => (ok ? t : null),
+        async (e) => {
+          await fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`);
+          return null;
+        },
+      ),
+    ),
+  );
+  const ready = planned.filter((t): t is Msg => !!t);
+  if (!ready.length) return;
+  await drawAll(pool, turn, ready, log);
+}
+
+const shotOpts = (t: Msg) => ({ designId: t.design_id, turnId: t.id, imageModel: t.image_model ?? imageModel(), creativeModel: t.creative_model?.split(" ")[0] ?? "gpt-6-astra" });
+
+/** Save a turn's drawn pictures in order (desktop, phone top, phone bottom — the bottom is joined under the top), then finish it. */
+async function finishTurn(pool: Pool, t: Msg, pics: Map<Step, string>, log: (m: string) => void): Promise<void> {
+  for (const step of ["desktop", "mobile-top", "mobile-bottom"] as Step[]) {
+    if (!stepsToDraw(t).includes(step)) continue;
+    let b64 = pics.get(step);
+    if (!b64) b64 = await drawFast(await inputsFor(pool, t, step), t.image_model ?? imageModel()); // missing from the batch: draw it now
+    const saved = await savePicture(pool, t, step, b64);
+    await pool.query(`UPDATE email_design_messages SET ${saved.column} = $2 WHERE id = $1::uuid`, [t.id, saved.path]);
+    setPath(t, saved.column, saved.path);
+  }
+  await complete(pool, t);
+  log(`[email-ai] turn ${t.id}: done`);
+}
+
+/** Campaign photos to every turn of the message (they share them). */
+async function shareShots(pool: Pool, turns: Msg[], shots: Shot[]): Promise<void> {
+  for (const t of turns) {
+    t.shots = shots;
+    await pool.query(`UPDATE email_design_messages SET shots = $2 WHERE id = $1::uuid`, [t.id, JSON.stringify(shots)]);
+  }
+}
+
+/** Steps 2 + 3 together: the campaign photos and every picture of every turn, all at once. */
+async function drawAll(pool: Pool, lead: Msg, turns: Msg[], log: (m: string) => void): Promise<void> {
+  const o = shotOpts(lead);
+  const shots = lead.shots ?? [];
+  const model = lead.image_model ?? imageModel();
+  for (const t of turns)
+    await pool.query(`UPDATE email_design_messages SET status = 'generating', concept = 'all', step_at = now(), batch_id = NULL, batch_files = $2 WHERE id = $1::uuid`, [
+      t.id,
+      t.id === lead.id || lead.mode === "fast" ? null : JSON.stringify({ view: "member", lead: lead.id }),
+    ]);
+  if (lead.mode !== "fast") {
+    // ONE OpenAI batch with everything (half price).
+    const ai = openai();
+    const refFileIds: string[] = [];
+    const lines: string[] = [];
+    const upload = async (images: Buffer[], tag: string) => {
+      const ids: string[] = [];
+      for (const [i, b] of images.entries()) {
+        const jpg = await sharp(b).rotate().flatten({ background: "#ffffff" }).jpeg({ quality: 92 }).toBuffer();
+        const f = await ai.files.create({ file: await toFile(jpg, `email-${tag}-${i}.jpg`, { type: "image/jpeg" }), purpose: "vision" });
+        ids.push(f.id);
+      }
+      refFileIds.push(...ids);
+      return ids;
+    };
+    const line = (custom_id: string, prompt: string, size: string, ids: string[]) =>
+      JSON.stringify({
+        custom_id,
+        method: "POST",
+        url: "/v1/images/edits",
+        body: { model, prompt, size, quality: "high", moderation: "low", n: 1, images: ids.map((file_id) => ({ file_id })) },
+      });
+    for (const s of shots.filter((x) => !x.path)) {
+      const inp = await shotInputs(s, lead.products ?? []);
+      lines.push(line(`${lead.id}:shot:${s.id}`, inp.prompt, s.size, await upload(inp.images, `${lead.id}-${s.id}`)));
+    }
+    for (const t of turns)
+      for (const step of stepsToDraw(t)) {
+        const inp = await inputsFor(pool, t, step);
+        // The edits endpoint needs at least one picture: a blank page when a step has none.
+        const imgs = inp.images.length ? inp.images : [await sharp({ create: { width: 64, height: 64, channels: 3, background: "#ffffff" } }).png().toBuffer()];
+        lines.push(line(`${t.id}:pic:${step}`, inp.prompt, inp.size, await upload(imgs, `${t.id}-${step}`)));
+      }
+    const input = await ai.files.create({ file: await toFile(Buffer.from(lines.join("\n") + "\n"), `email-${lead.id}-all.jsonl`, { type: "application/jsonl" }), purpose: "batch" });
+    const batch = await ai.batches.create({ input_file_id: input.id, endpoint: "/v1/images/edits", completion_window: "24h", metadata: { email_design_turn: lead.id, kind: "all" } });
+    const st = { view: "all" as const, batchId: batch.id, inputFileId: input.id, refFileIds, turnIds: turns.map((t) => t.id) };
+    await pool.query(`UPDATE email_design_messages SET batch_id = $2, batch_files = $3 WHERE id = $1::uuid`, [lead.id, batch.id, JSON.stringify(st)]);
+    log(`[email-ai] ${lead.id}: ${lines.length} picture(s) (photos + ${turns.length} version(s)) sent to the OpenAI batch ${batch.id}`);
+    return;
+  }
+  // Fast: everything in parallel.
+  const shotsP = shots.some((x) => !x.path) ? drawShotsFast(o, shots, lead.products ?? [], log) : Promise.resolve(shots);
+  const picsP = Promise.all(
+    turns.map(async (t) => {
+      try {
+        const pics = new Map<Step, string>();
+        await Promise.all(
+          stepsToDraw(t).map(async (step) => {
+            pics.set(step, await drawFast(await inputsFor(pool, t, step), model));
+          }),
+        );
+        return { t, pics, error: null as string | null };
+      } catch (e) {
+        return { t, pics: new Map<Step, string>(), error: e instanceof Error ? e.message : String(e) };
+      }
+    }),
+  );
+  const [doneShots, drawn] = await Promise.all([shotsP, picsP]);
+  await shareShots(pool, turns, doneShots);
+  await Promise.all(
+    drawn.map(async ({ t, pics, error }) => {
+      if (error) return fail(pool, t.id, `The AI could not make this version: ${error}`);
+      await finishTurn(pool, t, pics, log).catch((e) => fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`));
+    }),
+  );
+}
+
+/** The one batch of a message came back: check the photos, paste them into every picture, finish every version. */
+async function collectAll(pool: Pool, lead: Msg, st: Extract<Stage, { view: "all" }>, log: (m: string) => void): Promise<boolean> {
+  const ai = openai();
+  const b = await ai.batches.retrieve(st.batchId);
+  if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) return false;
+  const got = new Map<string, string>();
+  if (b.output_file_id) {
+    const text = await (await ai.files.content(b.output_file_id)).text();
+    for (const l of text.split("\n").filter(Boolean)) {
+      const j = JSON.parse(l) as { custom_id: string; response?: { body?: { data?: { b64_json?: string }[] } } };
+      const b64 = j.response?.body?.data?.[0]?.b64_json;
+      if (b64) got.set(j.custom_id, b64);
+    }
+  }
+  for (const f of [st.inputFileId, ...st.refFileIds, b.output_file_id, b.error_file_id]) if (f) await ai.files.delete(f).catch(() => {});
+  await pool.query(`UPDATE email_design_messages SET batch_id = NULL, batch_files = NULL, step_at = now() WHERE id = ANY($1::uuid[])`, [st.turnIds]);
+  // 1. The campaign photos: checked against the real products (a missing one is drawn now).
+  const o = shotOpts(lead);
+  const shots = await Promise.all(
+    (lead.shots ?? []).map(async (s) => {
+      if (s.path) return s;
+      try {
+        let b64 = got.get(`${lead.id}:shot:${s.id}`);
+        if (!b64) {
+          const inp = await shotInputs(s, lead.products ?? []);
+          b64 = await drawFast({ prompt: inp.prompt, size: s.size, images: inp.images }, o.imageModel);
+        }
+        return await finishShot(o, s, b64, lead.products ?? [], log);
+      } catch (e) {
+        return { ...s, error: e instanceof Error ? e.message.slice(0, 300) : String(e) };
+      }
+    }),
+  );
+  const turns = (await pool.query<Msg>(`SELECT * FROM email_design_messages WHERE id = ANY($1::uuid[]) AND status = 'generating'`, [st.turnIds])).rows;
+  await shareShots(pool, turns, shots);
+  // 2. Every version: paste the real pictures, join the phone parts, finish.
+  await Promise.all(
+    turns.map(async (t) => {
+      const pics = new Map<Step, string>();
+      for (const step of ["desktop", "mobile-top", "mobile-bottom"] as Step[]) {
+        const b64 = got.get(`${t.id}:pic:${step}`);
+        if (b64) pics.set(step, b64);
+      }
+      await finishTurn(pool, t, pics, log).catch((e) => fail(pool, t.id, `The AI could not make this version: ${e instanceof Error ? e.message : String(e)}`));
+    }),
+  );
+  return true;
 }
 
 /** Steps 2 (comps): brief(s), then draw; direction 1 starts directions 2–3 so all three draw together. */
@@ -1047,7 +1297,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
                 -- Directions 2-3 are started by direction 1's own run (so all three draw together);
                 -- this is only the fallback when that run is gone.
                 OR EXISTS (SELECT 1 FROM email_design_messages v WHERE v.variant_group = q.variant_group AND v.variant_no = 1
-                             AND v.status IN ('generating','done','failed') AND COALESCE(v.step_at, v.created_at) < now() - interval '3 minutes'))))
+                             AND v.status IN ('done','failed') AND COALESCE(v.step_at, v.created_at) < now() - interval '3 minutes'))))
          ORDER BY q.created_at LIMIT 6 FOR UPDATE SKIP LOCKED)
       RETURNING m.*`,
   );
@@ -1094,11 +1344,40 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
   const ai = openai();
   for (const turn of out.rows) {
     const st0 = turn.batch_files!;
+    if (st0.view === "member") continue;
+    // The tick runs every minute; collecting a batch (checking photos, pasting, redrawing) can take
+    // longer. A batch that is already being collected is skipped, so it is never collected twice.
+    if (!st0.batchId || COLLECTING.has(st0.batchId)) continue;
+    COLLECTING.add(st0.batchId);
+    try {
+      collected += await collectOne(pool, ai, turn, st0, log);
+    } finally {
+      COLLECTING.delete(st0.batchId);
+    }
+  }
+  return { planned, collected };
+}
+
+/** Batches being collected right now (one web process). */
+const COLLECTING = new Set<string>();
+
+/** Collect one finished batch of a picture turn. Returns 1 when something was collected. */
+async function collectOne(pool: Pool, ai: OpenAI, turn: Msg, st0: Stage, log: (m: string) => void): Promise<number> {
+  let collected = 0;
+  {
+    if (st0.view === "all") {
+      try {
+        if (await collectAll(pool, turn, st0, log)) collected++;
+      } catch (e) {
+        log(`[email-ai] turn ${turn.id} batch check failed: ${e instanceof Error ? e.message : e}`);
+      }
+      return collected;
+    }
     if (st0.view === "shots") {
       try {
         const o = { designId: turn.design_id, turnId: turn.id, imageModel: turn.image_model ?? imageModel(), creativeModel: turn.creative_model?.split(" ")[0] ?? "gpt-6-astra" };
         const shots = await collectShots(o, st0, turn.shots ?? [], turn.products ?? [], log);
-        if (!shots) continue;
+        if (!shots) return collected;
         turn.shots = shots;
         await pool.query(`UPDATE email_design_messages SET shots = $2, status = 'planning', batch_id = NULL, batch_files = NULL, step_at = now() WHERE id = $1::uuid`, [turn.id, JSON.stringify(shots)]);
         turn.status = "planning";
@@ -1107,19 +1386,19 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       } catch (e) {
         log(`[email-ai] turn ${turn.id} photo batch check failed: ${e instanceof Error ? e.message : e}`);
       }
-      continue;
+      return collected;
     }
-    const st = st0 as Exclude<Stage, ShotStage>;
+    const st = st0 as Extract<Stage, { view: Step }>;
     const step: Step = st.view === ("mobile" as Step) ? "mobile-bottom" : st.view;
     try {
       const b = await ai.batches.retrieve(st.batchId!);
-      if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) continue;
+      if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) return collected;
       if (b.status !== "completed" || !b.output_file_id) {
         let why = `the OpenAI batch stopped (${b.status})`;
         if (b.error_file_id) why += `: ${(await (await ai.files.content(b.error_file_id)).text()).slice(0, 300)}`;
         await fail(pool, turn.id, why);
         await cleanup(ai, st, b.output_file_id, b.error_file_id);
-        continue;
+        return collected;
       }
       const text = await (await ai.files.content(b.output_file_id)).text();
       const line = JSON.parse(text.split("\n").find(Boolean) ?? "{}") as { response?: { body?: { data?: { b64_json?: string }[]; error?: { message?: string } } }; error?: { message?: string } };
@@ -1127,7 +1406,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       await cleanup(ai, st, b.output_file_id, b.error_file_id);
       if (!b64) {
         await fail(pool, turn.id, `No ${step} picture came back: ${line.response?.body?.error?.message ?? line.error?.message ?? "unknown reason"}`);
-        continue;
+        return collected;
       }
       // A picture from before the phone was drawn in two parts is the whole phone view.
       const saved =
@@ -1150,7 +1429,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       log(`[email-ai] turn ${turn.id} check failed: ${e instanceof Error ? e.message : e}`);
     }
   }
-  return { planned, collected };
+  return collected;
 }
 
 /* ------------------------------------------------- layout engine (2026-11-08) */
