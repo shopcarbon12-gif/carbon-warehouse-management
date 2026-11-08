@@ -877,7 +877,7 @@
       "ordering_terms": "Ordering terms",
       "g_contact": "Your details",
       "g_business": "Business",
-      "g_tax": "Tax and reseller",
+      "g_tax": "Tax and resale",
       "g_address": "Business address",
       "g_verification": "Verification",
       "g_more": "A little more",
@@ -903,7 +903,7 @@
       "social": "Links to your current social accounts",
       "social_help": "Full links to your business's active profiles (Instagram, Facebook, TikTok…), one per line. We use them to verify the business.",
       "website_only": "Website",
-      "other_links": "Other links (Google Business, marketplace…)",
+      "other_links": "Other links",
       "order_size": "Expected order size per season",
       "size_1": "3–5 runs",
       "size_2": "6–15 runs",
@@ -916,11 +916,14 @@
       "sending": "Sending…",
       "sent": "Application sent",
       "error_fix": "Please check this field: __FIELD__",
-      "error_file": "Please attach your resale certificate (PDF or photo, up to 10 MB).",
+      "error_file": "Your resale certificate must be a PDF or photo, up to 10 MB.",
       "error_social": "Please add full links to your current social accounts, for example https://instagram.com/yourstore — one per line.",
       "error_ein": "Please enter a 9-digit EIN, like 12-3456789.",
       "error_too_many": "We received several applications from you today. Please try again tomorrow or email support@shopcarbon.com.",
-      "error_server": "Something went wrong sending your application. Please try again in a moment."
+      "error_server": "Something went wrong sending your application. Please try again in a moment.",
+      "other_links_placeholder": "Google Business, marketplace…",
+      "tax_note": "Give us at least one: your EIN, your state resale permit number, or a copy of your resale certificate (PDF or photo, up to 10 MB). The permit state is required.",
+      "error_tax_proof": "Please give at least one: EIN, state resale permit number, or resale certificate."
     }
   }
 }

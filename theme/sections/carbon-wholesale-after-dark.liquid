@@ -1,7 +1,8 @@
 {% comment %}
   Wholesale — "After Dark" (approved design, 2026-11-03). Renders /pages/wholesale
-  (template page.wholesale.json) as one section: night campaign hero on the left,
-  the wholesale application on the right; stacked on smaller screens.
+  (template page.wholesale.json) as one section: night campaign hero on top,
+  the wholesale application below it in titled sections (owner 2026-11-08);
+  stacked the same way on smaller screens.
 
   The application is the same Shopify contact form the page used before — same
   field names, required flags and Type of store choices — so submissions still
@@ -164,9 +165,22 @@
     text-transform: uppercase;
   }
   .wad__panel-text { margin: 0 0 18px; color: var(--wad-muted); line-height: 1.5; }
-  .wad__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
-  .wad__field { display: flex; flex-direction: column; gap: 5px; grid-column: 1 / -1; }
-  .wad__field--half { grid-column: auto; }
+  /* The application in sections (owner 2026-11-08: "symmetric"): each section's
+     title on the left, its fields on the right in even pairs. */
+  .wad__set { padding: 22px 0; border-top: 1px solid var(--wad-line); }
+  .wad__set:first-of-type { border-top: 0; padding-top: 4px; }
+  .wad__set-head { margin-bottom: 14px; }
+  .wad__set-note { margin: 8px 0 0; font-size: 0.9375rem; line-height: 1.5; color: var(--wad-muted); }
+  .wad__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+  .wad__field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  /* Paired fields share their row's label height, so the boxes always line up
+     even when one label wraps to two lines. */
+  @supports (grid-template-rows: subgrid) {
+    .wad__grid > .wad__field:not(.wad__field--full) { display: grid; grid-template-rows: subgrid; grid-row: span 2; row-gap: 6px; }
+    .wad__grid > .wad__field:not(.wad__field--full) > label { align-self: end; }
+  }
+  .wad__field--full { grid-column: 1 / -1; }
+  .wad__send { display: flex; flex-direction: column; gap: 14px; }
   .wad__field label { font-size: 1rem; color: var(--wad-muted); }
   .wad__req { color: var(--wad-text); }
   .wad__field :is(input, select, textarea) {
@@ -186,16 +200,15 @@
   .wad__field :is(input, select, textarea):focus { border-color: var(--wad-accent-text); }
   .wad__field :is(input, select, textarea):user-invalid,
   .wad__field :is(input, select, textarea)[aria-invalid='true'] { border-color: var(--wad-error); }
-  .wad__group { grid-column: 1 / -1; margin: 14px 0 0; font-size: 0.8125rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--wad-accent-text); }
-  .wad__group:first-child { margin-top: 0; }
+  .wad__group { margin: 0; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--wad-accent-text); }
   .wad__small { font-size: 0.875rem; color: var(--wad-muted); }
-  .wad__field input[type='file'] { padding: 10px; }
+  .wad__field input[type='file'] { padding: 8px 10px; font-size: 0.9375rem; }
   .wad__check { grid-column: 1 / -1; display: flex; gap: 10px; align-items: flex-start; font-size: 1rem; line-height: 1.45; color: var(--wad-muted); cursor: pointer; }
   .wad__check input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--wad-accent-text); }
   .wad__check input[aria-invalid='true'] { outline: 2px solid var(--wad-error); }
   .wad__trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-  .wad__hint { margin: 10px 0 0; font-size: 0.9375rem; color: var(--wad-muted); }
-  .wad__submit { width: 100%; margin-top: 16px; }
+  .wad__hint { margin: 0; font-size: 0.9375rem; color: var(--wad-muted); }
+  .wad__submit { width: 100%; margin-top: 4px; }
   .wad__notice {
     margin: 0 0 18px;
     padding: 12px 14px;
@@ -245,11 +258,19 @@
     .wad__panel { margin: 28px clamp(16px, 5vw, 40px) 0; }
   }
   @media (min-width: 990px) {
+    /* Desktop (owner 2026-11-08): the campaign picture across the top, whole and
+       unshifted, the headline over its lower left; the application below it,
+       centred and wide, so the long form is not squeezed beside empty black. */
     .wad__media-wrap { display: contents; }
-    /* Desktop (owner 2026-11-03): the whole picture at its own shape, slid left
-       so the woman is not behind the application; below it fades to black. */
+    .wad__inner {
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      min-height: 0;
+      padding-top: 0;
+      gap: clamp(8px, 1.5vw, 24px);
+    }
     .wad__media {
-      inset: 0 auto auto calc(var(--wad-shift, 25%) * -1);
+      inset: 0 0 auto 0;
       width: 100%;
       height: auto;
       aspect-ratio: 1672 / 941;
@@ -257,9 +278,33 @@
     .wad__media img { object-position: 50% 50%; }
     .wad__media::after {
       background:
-        linear-gradient(90deg, rgba(7, 7, 8, 0) 0%, rgba(7, 7, 8, 0) 70%, rgba(7, 7, 8, 0.2) 85%, var(--wad-bg) 100%),
-        linear-gradient(180deg, rgba(7, 7, 8, 0.35) 0%, rgba(7, 7, 8, 0) 22%, rgba(7, 7, 8, 0) 62%, var(--wad-bg) 100%);
+        linear-gradient(90deg, rgba(7, 7, 8, 0.75) 0%, rgba(7, 7, 8, 0.3) 32%, rgba(7, 7, 8, 0) 55%),
+        linear-gradient(180deg, rgba(7, 7, 8, 0.35) 0%, rgba(7, 7, 8, 0) 22%, rgba(7, 7, 8, 0) 55%, var(--wad-bg) 100%);
     }
+    .wad__intro {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-start;
+      max-width: 40rem;
+      min-height: calc(100vw * 941 / 1672 - clamp(40px, 6vw, 120px));
+    }
+    .wad__panel {
+      justify-self: center;
+      width: 100%;
+      max-width: 1180px;
+      padding: clamp(32px, 3vw, 52px) clamp(32px, 4vw, 64px);
+    }
+    .wad__panel-title, .wad__panel-text { text-align: center; }
+    .wad__panel-text { margin-bottom: 28px; }
+    .wad__set {
+      display: grid;
+      grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+      gap: 40px;
+      padding: 28px 0;
+    }
+    .wad__set-head { margin: 0; padding-top: 4px; }
+    .wad__terms { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 8px; padding-top: 24px; }
   }
   @media (max-width: 480px) {
     .wad__grid { grid-template-columns: minmax(0, 1fr); }
@@ -349,157 +394,195 @@
           <input type="text" id="WholesaleCompanyFax-{{ section.id }}" name="wad_fax" tabindex="-1" autocomplete="off">
         </div>
 
-        <div class="wad__grid">
-          <p class="wad__group">{{ 'carbon.wholesale.g_contact' | t }}</p>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleName-{{ section.id }}">{{ 'carbon.wholesale.full_name' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleName-{{ section.id }}" name="contact[name]" data-wms="name" required autocomplete="name" value="{{ form.name | default: customer.name | escape }}">
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-contact-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-contact-{{ section.id }}">{{ 'carbon.wholesale.g_contact' | t }}</h3>
           </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleTitle-{{ section.id }}">{{ 'carbon.wholesale.title' | t }}</label>
-            <input type="text" id="WholesaleTitle-{{ section.id }}" name="contact[Title]" data-wms="title" autocomplete="organization-title">
+          <div class="wad__grid">
+            <div class="wad__field">
+              <label for="WholesaleName-{{ section.id }}">{{ 'carbon.wholesale.full_name' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleName-{{ section.id }}" type="text" name="contact[name]" data-wms="name" required autocomplete="name" value="{{ form.name | default: customer.name | escape }}">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleTitle-{{ section.id }}">{{ 'carbon.wholesale.title' | t }}</label>
+              <input id="WholesaleTitle-{{ section.id }}" type="text" name="contact[Title]" data-wms="title" autocomplete="organization-title">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleEmail-{{ section.id }}">{{ 'sections.contact.form.email' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleEmail-{{ section.id }}" type="email" name="contact[email]" data-wms="email" required autocomplete="email" spellcheck="false" autocapitalize="off" value="{{ form.email | default: customer.email | escape }}">
+            </div>
+            <div class="wad__field">
+              <label for="WholesalePhone-{{ section.id }}">{{ 'sections.contact.form.phone' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesalePhone-{{ section.id }}" type="tel" name="contact[phone]" data-wms="phone" required autocomplete="tel">
+            </div>
           </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleEmail-{{ section.id }}">{{ 'sections.contact.form.email' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="email" id="WholesaleEmail-{{ section.id }}" name="contact[email]" data-wms="email" required autocomplete="email" spellcheck="false" autocapitalize="off" value="{{ form.email | default: customer.email | escape }}">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesalePhone-{{ section.id }}">{{ 'sections.contact.form.phone' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="tel" id="WholesalePhone-{{ section.id }}" name="contact[phone]" data-wms="phone" required autocomplete="tel">
-          </div>
-          <p class="wad__group">{{ 'carbon.wholesale.g_business' | t }}</p>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleBusiness-{{ section.id }}">{{ 'carbon.wholesale.legal_name' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleBusiness-{{ section.id }}" name="contact[Legal business name]" data-wms="business" required autocomplete="organization">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleTradeName-{{ section.id }}">{{ 'carbon.wholesale.trade_name' | t }}</label>
-            <input type="text" id="WholesaleTradeName-{{ section.id }}" name="contact[Store name]" data-wms="trade_name">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleStoreType-{{ section.id }}">{{ 'carbon.wholesale.store_type' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <select id="WholesaleStoreType-{{ section.id }}" name="contact[Type of store]" data-wms="store_type" required>
-              <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
-              {%- for value in store_types -%}
-                {%- assign trim_value = value | strip -%}
-                <option value="{{ trim_value | escape }}">{{ trim_value | escape }}</option>
-              {%- endfor -%}
-            </select>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleYears-{{ section.id }}">{{ 'carbon.wholesale.years' | t }}</label>
-            <input type="text" id="WholesaleYears-{{ section.id }}" name="contact[Years in business]" data-wms="years" inputmode="numeric">
-          </div>
-          <p class="wad__group">{{ 'carbon.wholesale.g_tax' | t }}</p>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleEin-{{ section.id }}">{{ 'carbon.wholesale.ein' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleEin-{{ section.id }}" name="contact[EIN]" data-wms="ein" required inputmode="numeric" placeholder="12-3456789" pattern="[0-9]{2}-?[0-9]{7}">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesalePermit-{{ section.id }}">{{ 'carbon.wholesale.permit_number' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesalePermit-{{ section.id }}" name="contact[Resale permit number]" data-wms="permit_number" required>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesalePermitState-{{ section.id }}">{{ 'carbon.wholesale.permit_state' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <select id="WholesalePermitState-{{ section.id }}" name="contact[Resale permit state]" data-wms="permit_state" required>
-              <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
-              {%- assign us_states = 'AL,AK,AZ,AR,CA,CO,CT,DE,DC,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,PR,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY' | split: ',' -%}
-              {%- for st in us_states -%}<option value="{{ st }}">{{ st }}</option>{%- endfor -%}
-              <option value="Outside US">{{ 'carbon.wholesale.outside_us' | t }}</option>
-            </select>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleCertificate-{{ section.id }}">{{ 'carbon.wholesale.certificate' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="file" id="WholesaleCertificate-{{ section.id }}" data-wms="certificate" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,image/webp,.pdf,.jpg,.jpeg,.png,.heic" required>
-            <small class="wad__small">{{ 'carbon.wholesale.certificate_help' | t }}</small>
-          </div>
-          <p class="wad__group">{{ 'carbon.wholesale.g_address' | t }}</p>
-          <div class="wad__field">
-            <label for="WholesaleStreet-{{ section.id }}">{{ 'carbon.wholesale.street' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleStreet-{{ section.id }}" name="contact[Street address]" data-wms="street" required autocomplete="street-address">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleCity-{{ section.id }}">{{ 'carbon.wholesale.city' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleCity-{{ section.id }}" name="contact[City]" data-wms="city" required autocomplete="address-level2">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleState-{{ section.id }}">{{ 'carbon.wholesale.state' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <select id="WholesaleState-{{ section.id }}" name="contact[State]" data-wms="state" required>
-              <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
-              {%- assign us_states = 'AL,AK,AZ,AR,CA,CO,CT,DE,DC,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,PR,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY' | split: ',' -%}
-              {%- for st in us_states -%}<option value="{{ st }}">{{ st }}</option>{%- endfor -%}
-              <option value="Outside US">{{ 'carbon.wholesale.outside_us' | t }}</option>
-            </select>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleZip-{{ section.id }}">{{ 'carbon.wholesale.zip' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleZip-{{ section.id }}" name="contact[ZIP code]" data-wms="zip" required autocomplete="postal-code">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleCountry-{{ section.id }}">{{ 'carbon.wholesale.country' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <input type="text" id="WholesaleCountry-{{ section.id }}" name="contact[Country]" data-wms="country" required autocomplete="country-name" value="United States">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleStorefront-{{ section.id }}">{{ 'carbon.wholesale.physical_store' | t }}</label>
-            <select id="WholesaleStorefront-{{ section.id }}" name="contact[Physical storefront]" data-wms="physical_store">
-              <option value="">{{ 'carbon.wholesale.choose_one' | t }}</option>
-              <option value="Yes">{{ 'carbon.wholesale.yes' | t }}</option>
-              <option value="No">{{ 'carbon.wholesale.no' | t }}</option>
-            </select>
-          </div>
-          <p class="wad__group">{{ 'carbon.wholesale.g_verification' | t }}</p>
-          <div class="wad__field">
-            <label for="WholesaleSocial-{{ section.id }}">{{ 'carbon.wholesale.social' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
-            <textarea id="WholesaleSocial-{{ section.id }}" name="contact[Social accounts]" data-wms="social" rows="2" required spellcheck="false" autocapitalize="off" placeholder="https://instagram.com/yourstore"></textarea>
-            <small class="wad__small">{{ 'carbon.wholesale.social_help' | t }}</small>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleWebsite-{{ section.id }}">{{ 'carbon.wholesale.website_only' | t }}</label>
-            <input type="text" id="WholesaleWebsite-{{ section.id }}" name="contact[Website]" data-wms="website" autocomplete="url" inputmode="url" spellcheck="false" autocapitalize="off">
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleOtherLinks-{{ section.id }}">{{ 'carbon.wholesale.other_links' | t }}</label>
-            <input type="text" id="WholesaleOtherLinks-{{ section.id }}" name="contact[Other links]" data-wms="other_links" inputmode="url" spellcheck="false" autocapitalize="off">
-          </div>
-          <p class="wad__group">{{ 'carbon.wholesale.g_more' | t }}</p>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleOrderSize-{{ section.id }}">{{ 'carbon.wholesale.order_size' | t }}</label>
-            <select id="WholesaleOrderSize-{{ section.id }}" name="contact[Expected order size]" data-wms="order_size">
-              <option value="">{{ 'carbon.wholesale.choose_one' | t }}</option>
-              <option value="3-5 runs">{{ 'carbon.wholesale.size_1' | t }}</option>
-              <option value="6-15 runs">{{ 'carbon.wholesale.size_2' | t }}</option>
-              <option value="16-40 runs">{{ 'carbon.wholesale.size_3' | t }}</option>
-              <option value="40+ runs">{{ 'carbon.wholesale.size_4' | t }}</option>
-            </select>
-          </div>
-          <div class="wad__field wad__field--half">
-            <label for="WholesaleHeardFrom-{{ section.id }}">{{ 'carbon.wholesale.heard_from' | t }}</label>
-            <input type="text" id="WholesaleHeardFrom-{{ section.id }}" name="contact[How did you hear about Carbon]" data-wms="heard_from">
-          </div>
-          <div class="wad__field">
-            <label for="WholesaleBrands-{{ section.id }}">{{ 'carbon.wholesale.brands' | t }}</label>
-            <input type="text" id="WholesaleBrands-{{ section.id }}" name="contact[Brands carried]" data-wms="brands">
-          </div>
-          <div class="wad__field">
-            <label for="WholesaleMessage-{{ section.id }}">{{ 'sections.contact.form.comment' | t }}</label>
-            <textarea id="WholesaleMessage-{{ section.id }}" name="contact[body]" data-wms="message" rows="2">{{ form.body | escape }}</textarea>
-          </div>
-          <label class="wad__check">
-            <input type="checkbox" name="contact[Agrees to wholesale terms]" value="Yes" data-wms="agree_terms" required>
-            <span>{{ 'carbon.wholesale.agree_terms' | t }} <span class="wad__req" aria-hidden="true">*</span></span>
-          </label>
-          <label class="wad__check">
-            <input type="checkbox" name="contact[Consents to verification]" value="Yes" data-wms="consent_verify" required>
-            <span>{{ 'carbon.wholesale.consent_verify' | t }} <span class="wad__req" aria-hidden="true">*</span></span>
-          </label>
         </div>
-        <p class="wad__notice wad__notice--error" data-wms-error role="alert" hidden></p>
-        <p class="wad__hint"><span aria-hidden="true">*</span> {{ 'carbon.wholesale.required' | t }}</p>
-
-        <button type="submit" class="wad__cta wad__submit">
-          {{- section.settings.submit_label | escape -}}
-          {%- render 'carbon-wholesale-arrow' -%}
-        </button>
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-business-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-business-{{ section.id }}">{{ 'carbon.wholesale.g_business' | t }}</h3>
+          </div>
+          <div class="wad__grid">
+            <div class="wad__field">
+              <label for="WholesaleBusiness-{{ section.id }}">{{ 'carbon.wholesale.legal_name' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleBusiness-{{ section.id }}" type="text" name="contact[Legal business name]" data-wms="business" required autocomplete="organization">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleTradeName-{{ section.id }}">{{ 'carbon.wholesale.trade_name' | t }}</label>
+              <input id="WholesaleTradeName-{{ section.id }}" type="text" name="contact[Store name]" data-wms="trade_name">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleStoreType-{{ section.id }}">{{ 'carbon.wholesale.store_type' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <select id="WholesaleStoreType-{{ section.id }}" name="contact[Type of store]" data-wms="store_type" required>
+                <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
+                {%- for value in store_types -%}
+                  {%- assign trim_value = value | strip -%}
+                  <option value="{{ trim_value | escape }}">{{ trim_value | escape }}</option>
+                {%- endfor -%}
+              </select>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleYears-{{ section.id }}">{{ 'carbon.wholesale.years' | t }}</label>
+              <input id="WholesaleYears-{{ section.id }}" type="text" name="contact[Years in business]" data-wms="years" inputmode="numeric">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleStorefront-{{ section.id }}">{{ 'carbon.wholesale.physical_store' | t }}</label>
+              <select id="WholesaleStorefront-{{ section.id }}" name="contact[Physical storefront]" data-wms="physical_store">
+                <option value="">{{ 'carbon.wholesale.choose_one' | t }}</option>
+                <option value="Yes">{{ 'carbon.wholesale.yes' | t }}</option>
+                <option value="No">{{ 'carbon.wholesale.no' | t }}</option>
+              </select>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleBrands-{{ section.id }}">{{ 'carbon.wholesale.brands' | t }}</label>
+              <input id="WholesaleBrands-{{ section.id }}" type="text" name="contact[Brands carried]" data-wms="brands">
+            </div>
+          </div>
+        </div>
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-tax-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-tax-{{ section.id }}">{{ 'carbon.wholesale.g_tax' | t }}</h3>
+            <p class="wad__set-note" id="WholesaleNote-tax-{{ section.id }}">{{ 'carbon.wholesale.tax_note' | t }}</p>
+          </div>
+          <div class="wad__grid">
+            <div class="wad__field">
+              <label for="WholesalePermitState-{{ section.id }}">{{ 'carbon.wholesale.permit_state' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <select id="WholesalePermitState-{{ section.id }}" name="contact[Resale permit state]" data-wms="permit_state" required>
+                <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
+                {%- assign us_states = 'AL,AK,AZ,AR,CA,CO,CT,DE,DC,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,PR,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY' | split: ',' -%}
+                {%- for st in us_states -%}<option value="{{ st }}">{{ st }}</option>{%- endfor -%}
+                <option value="Outside US">{{ 'carbon.wholesale.outside_us' | t }}</option>
+              </select>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleEin-{{ section.id }}">{{ 'carbon.wholesale.ein' | t }}</label>
+              <input id="WholesaleEin-{{ section.id }}" type="text" name="contact[EIN]" data-wms="ein" inputmode="numeric" placeholder="12-3456789" pattern="[0-9]{2}-?[0-9]{7}" aria-describedby="WholesaleNote-tax-{{ section.id }}">
+            </div>
+            <div class="wad__field">
+              <label for="WholesalePermit-{{ section.id }}">{{ 'carbon.wholesale.permit_number' | t }}</label>
+              <input id="WholesalePermit-{{ section.id }}" type="text" name="contact[Resale permit number]" data-wms="permit_number" aria-describedby="WholesaleNote-tax-{{ section.id }}">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleCertificate-{{ section.id }}">{{ 'carbon.wholesale.certificate' | t }}</label>
+              <input id="WholesaleCertificate-{{ section.id }}" type="file" data-wms="certificate" accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,image/webp,.pdf,.jpg,.jpeg,.png,.heic" aria-describedby="WholesaleNote-tax-{{ section.id }}">
+            </div>
+          </div>
+        </div>
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-address-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-address-{{ section.id }}">{{ 'carbon.wholesale.g_address' | t }}</h3>
+          </div>
+          <div class="wad__grid">
+            <div class="wad__field wad__field--full">
+              <label for="WholesaleStreet-{{ section.id }}">{{ 'carbon.wholesale.street' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleStreet-{{ section.id }}" type="text" name="contact[Street address]" data-wms="street" required autocomplete="street-address">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleCity-{{ section.id }}">{{ 'carbon.wholesale.city' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleCity-{{ section.id }}" type="text" name="contact[City]" data-wms="city" required autocomplete="address-level2">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleState-{{ section.id }}">{{ 'carbon.wholesale.state' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <select id="WholesaleState-{{ section.id }}" name="contact[State]" data-wms="state" required>
+                <option value="" disabled selected>{{ 'carbon.wholesale.choose_one' | t }}</option>
+                {%- assign us_states = 'AL,AK,AZ,AR,CA,CO,CT,DE,DC,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,PR,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY' | split: ',' -%}
+                {%- for st in us_states -%}<option value="{{ st }}">{{ st }}</option>{%- endfor -%}
+                <option value="Outside US">{{ 'carbon.wholesale.outside_us' | t }}</option>
+              </select>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleZip-{{ section.id }}">{{ 'carbon.wholesale.zip' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleZip-{{ section.id }}" type="text" name="contact[ZIP code]" data-wms="zip" required autocomplete="postal-code">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleCountry-{{ section.id }}">{{ 'carbon.wholesale.country' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <input id="WholesaleCountry-{{ section.id }}" type="text" name="contact[Country]" data-wms="country" required autocomplete="country-name" value="United States">
+            </div>
+          </div>
+        </div>
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-verification-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-verification-{{ section.id }}">{{ 'carbon.wholesale.g_verification' | t }}</h3>
+          </div>
+          <div class="wad__grid">
+            <div class="wad__field wad__field--full">
+              <label for="WholesaleSocial-{{ section.id }}">{{ 'carbon.wholesale.social' | t }} <span class="wad__req" aria-hidden="true">*</span></label>
+              <textarea id="WholesaleSocial-{{ section.id }}" name="contact[Social accounts]" data-wms="social" rows="2" required spellcheck="false" autocapitalize="off" placeholder="https://instagram.com/yourstore"></textarea>
+              <small class="wad__small">{{ 'carbon.wholesale.social_help' | t }}</small>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleWebsite-{{ section.id }}">{{ 'carbon.wholesale.website_only' | t }}</label>
+              <input id="WholesaleWebsite-{{ section.id }}" type="text" name="contact[Website]" data-wms="website" autocomplete="url" inputmode="url" spellcheck="false" autocapitalize="off" placeholder="https://">
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleOtherLinks-{{ section.id }}">{{ 'carbon.wholesale.other_links' | t }}</label>
+              <input id="WholesaleOtherLinks-{{ section.id }}" type="text" name="contact[Other links]" data-wms="other_links" inputmode="url" spellcheck="false" autocapitalize="off" placeholder="{{ 'carbon.wholesale.other_links_placeholder' | t | escape }}">
+            </div>
+          </div>
+        </div>
+        <div class="wad__set" role="group" aria-labelledby="WholesaleSet-more-{{ section.id }}">
+          <div class="wad__set-head">
+            <h3 class="wad__group" id="WholesaleSet-more-{{ section.id }}">{{ 'carbon.wholesale.g_more' | t }}</h3>
+          </div>
+          <div class="wad__grid">
+            <div class="wad__field">
+              <label for="WholesaleOrderSize-{{ section.id }}">{{ 'carbon.wholesale.order_size' | t }}</label>
+              <select id="WholesaleOrderSize-{{ section.id }}" name="contact[Expected order size]" data-wms="order_size">
+                <option value="">{{ 'carbon.wholesale.choose_one' | t }}</option>
+                <option value="3-5 runs">{{ 'carbon.wholesale.size_1' | t }}</option>
+                <option value="6-15 runs">{{ 'carbon.wholesale.size_2' | t }}</option>
+                <option value="16-40 runs">{{ 'carbon.wholesale.size_3' | t }}</option>
+                <option value="40+ runs">{{ 'carbon.wholesale.size_4' | t }}</option>
+              </select>
+            </div>
+            <div class="wad__field">
+              <label for="WholesaleHeardFrom-{{ section.id }}">{{ 'carbon.wholesale.heard_from' | t }}</label>
+              <input id="WholesaleHeardFrom-{{ section.id }}" type="text" name="contact[How did you hear about Carbon]" data-wms="heard_from">
+            </div>
+            <div class="wad__field wad__field--full">
+              <label for="WholesaleMessage-{{ section.id }}">{{ 'sections.contact.form.comment' | t }}</label>
+              <textarea id="WholesaleMessage-{{ section.id }}" name="contact[body]" data-wms="message" rows="3">{{ form.body | escape }}</textarea>
+            </div>
+          </div>
+        </div>
+        <div class="wad__set wad__set--send">
+          <div class="wad__set-head" aria-hidden="true"></div>
+          <div class="wad__send">
+            <label class="wad__check">
+              <input type="checkbox" name="contact[Agrees to wholesale terms]" value="Yes" data-wms="agree_terms" required>
+              <span>{{ 'carbon.wholesale.agree_terms' | t }} <span class="wad__req" aria-hidden="true">*</span></span>
+            </label>
+            <label class="wad__check">
+              <input type="checkbox" name="contact[Consents to verification]" value="Yes" data-wms="consent_verify" required>
+              <span>{{ 'carbon.wholesale.consent_verify' | t }} <span class="wad__req" aria-hidden="true">*</span></span>
+            </label>
+            <p class="wad__notice wad__notice--error" data-wms-error role="alert" hidden></p>
+            <p class="wad__hint"><span aria-hidden="true">*</span> {{ 'carbon.wholesale.required' | t }}</p>
+            <button type="submit" class="wad__cta wad__submit">
+              {{- section.settings.submit_label | escape -}}
+              {%- render 'carbon-wholesale-arrow' -%}
+            </button>
+          </div>
+        </div>
       {%- endform -%}
 
       <ul class="wad__terms" aria-label="{{ 'carbon.wholesale.ordering_terms' | t | escape }}">
@@ -531,6 +614,7 @@
       file: {{ 'carbon.wholesale.error_file' | t | json }},
       social: {{ 'carbon.wholesale.error_social' | t | json }},
       ein: {{ 'carbon.wholesale.error_ein' | t | json }},
+      taxProof: {{ 'carbon.wholesale.error_tax_proof' | t | json }},
       tooMany: {{ 'carbon.wholesale.error_too_many' | t | json }},
       server: {{ 'carbon.wholesale.error_server' | t | json }},
       done: {{ section.settings.success_text | json }},
@@ -572,8 +656,11 @@
       ev.preventDefault();
       if (busy) return;
       if (!form.reportValidity()) return;
-      const file = fileInput && fileInput.files && fileInput.files[0];
-      if (!file || file.size > 10 * 1024 * 1024) return showError(T.file, 'certificate');
+      const file = (fileInput && fileInput.files && fileInput.files[0]) || null;
+      if (file && file.size > 10 * 1024 * 1024) return showError(T.file, 'certificate');
+      /* Tax proof (owner 2026-11-08): any one of EIN, permit number or certificate. */
+      const filled = (k) => { const el = form.querySelector('[data-wms="' + k + '"]'); return !!(el && el.value.trim()); };
+      if (!file && !filled('ein') && !filled('permit_number')) return showError(T.taxProof, 'ein');
       const social = form.querySelector('[data-wms="social"]');
       if (!socialOk(social.value)) return showError(T.social, 'social');
 
@@ -584,7 +671,7 @@
         if (el.type === 'checkbox') { if (el.checked) fd.append(k, 'on'); return; }
         fd.append(k, el.value || '');
       });
-      fd.append('certificate', file, file.name);
+      if (file) fd.append('certificate', file, file.name);
       const trap = form.elements['wad_fax'];
       fd.append('hp', (trap && trap.value) || '');
       fd.append('t', String(Math.round(performance.now())));
@@ -614,8 +701,8 @@
         }
         if (j && j.error === 'invalid') {
           const f = j.field;
-          const msg = f === 'certificate' ? T.file : f === 'social' ? T.social : f === 'ein' ? T.ein : T.fix.replace('__FIELD__', label(f));
-          showError(msg, f);
+          const msg = f === 'tax_proof' ? T.taxProof : f === 'certificate' ? T.file : f === 'social' ? T.social : f === 'ein' ? T.ein : T.fix.replace('__FIELD__', label(f));
+          showError(msg, f === 'tax_proof' ? 'ein' : f);
         } else if (j && (j.error === 'too_many' || j.error === 'busy')) showError(T.tooMany);
         else showError(T.server);
       } catch (e) {
