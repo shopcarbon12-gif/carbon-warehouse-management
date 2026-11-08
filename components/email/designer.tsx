@@ -7,11 +7,13 @@ import { btn, card, fetcher, field, label, send } from "@/components/marketing/m
 import { EmailPreviewFrames } from "./preview-frame";
 
 /**
- * Email → AI Designer. One chat per design; every AI turn draws the whole
- * email twice (desktop + mobile). The owner picks what a message changes
+ * Email → AI Designer. One chat per design. Every AI turn is a real email
+ * layout (layout engine, 2026-11-08): the real store and product photos as
+ * they are, generated banners checked against the real products, a desktop
+ * and a phone view of the same email. The owner picks what a message changes
  * (both / desktop / mobile), Batch (half price, slower) or Fast, can attach
- * photos and can speak instead of typing. "Convert to email" turns the chosen
- * version into a real responsive email (preview below the chat).
+ * photos, speak, ask for 3 different directions and pick one, and open any
+ * version on the phone through a link. Older versions are drawn pictures.
  */
 
 type DesignRow = { id: string; title: string; status: string; updated_at: string; has_html: boolean; versions: number; working: boolean };
@@ -29,6 +31,13 @@ type Msg = {
   mobile: string | null;
   products: { id: string; title: string; url: string; price: number; image: string | null }[];
   media: { url: string; description: string }[];
+  engine: "picture" | "layout";
+  hasEmail: boolean;
+  direction: string | null;
+  variantGroup: string | null;
+  variantNo: number | null;
+  picked: boolean | null;
+  banners: { id: string; url: string | null; qa: string | null; error: string | null; text: string | null }[];
 };
 type Design = {
   id: string;
@@ -53,6 +62,13 @@ const TARGETS = [
 /** What an unfinished AI turn is doing right now, in words. */
 function progressText(m: Msg): string {
   if (m.status === "queued") return "Waiting to start (within a minute)…";
+  if (m.engine === "layout") {
+    if (m.status === "planning") return m.text ? "Making the banners…" : "Designing the layout and picking the products (1 to 3 minutes)…";
+    const n = m.banners.length;
+    return m.mode === "fast"
+      ? `Making ${n} banner${n === 1 ? "" : "s"} and checking each against the real product photos (about 2 to 6 minutes)…`
+      : `Making ${n} banner${n === 1 ? "" : "s"} in the OpenAI batch (usually minutes, up to an hour), then checking them…`;
+  }
   if (m.status === "planning" && !m.text) return "Planning the design…";
   const which = m.target === "both" ? (m.desktop ? "the phone version" : "the desktop version") : m.target === "desktop" ? "the desktop version" : "the phone version";
   const step = m.target === "both" ? (m.desktop ? " (2 of 2)" : " (1 of 2)") : "";
@@ -166,12 +182,16 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
     }
   }
 
-  const sendMessage = () =>
-    run("send", async () => {
+  const lastDone = [...messages].reverse().find((m) => m.role === "ai" && m.status === "done");
+  const mustPick = !!lastDone?.variantGroup && !messages.some((m) => m.variantGroup === lastDone.variantGroup && m.picked);
+
+  const sendMessage = (directions = false) =>
+    run(directions ? "directions" : "send", async () => {
       const fd = new FormData();
       fd.set("text", text);
-      fd.set("target", target);
+      fd.set("target", directions ? "both" : target);
       fd.set("mode", mode);
+      if (directions) fd.set("directions", "1");
       for (const f of files) fd.append("file", f);
       const r = await fetch(`/api/email/designs/${id}/messages`, { method: "POST", body: fd });
       const j = (await r.json().catch(() => ({}))) as { error?: string };
@@ -181,11 +201,33 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
       await mutate();
     });
 
+  const pick = (messageId: string) =>
+    run("pick", async () => {
+      await send(`/api/email/designs/${id}/pick`, "POST", { messageId });
+      await mutate();
+      setMsg({ text: "Picked. Keep chatting to change this one, or convert it to an email." });
+    });
+
+  const phoneLink = (messageId: string) =>
+    run("share", async () => {
+      const r = await send<{ url: string }>(`/api/email/designs/${id}/share`, "POST", { messageId });
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(r.url);
+        copied = true;
+      } catch {
+        /* shown below */
+      }
+      if (!copied && typeof navigator.share === "function") await navigator.share({ url: r.url, title: "CARBON email" }).catch(() => {});
+      setMsg({ text: `${copied ? "Phone link copied" : "Phone link"}: ${r.url} — paste it into WhatsApp and open it on the phone (it shows the email exactly as a phone mail app lays it out).` });
+    });
+
   const stop = () => run("stop", async () => void (await send(`/api/email/designs/${id}/stop`, "POST"), await mutate()));
   const convert = (messageId: string) =>
     run("convert", async () => {
       await send(`/api/email/designs/${id}/convert`, "POST", { messageId });
-      setMsg({ text: "Converting: OpenAI is cutting out the pictures and writing the email. This takes a few minutes; you can leave the page." });
+      const layout = messages.find((x) => x.id === messageId)?.engine === "layout";
+      setMsg({ text: layout ? "Packaging the email and its zip (under a minute)…" : "Converting: OpenAI is cutting out the pictures and writing the email. This takes a few minutes; you can leave the page." });
       await mutate();
     });
 
@@ -293,14 +335,30 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
             <div key={m.id} className={`${card} flex max-w-full flex-col gap-2`}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className={label}>
-                  AI · {m.mode === "fast" ? "Fast" : "Batch"} · {TARGETS.find((t) => t.id === m.target)?.label ?? m.target}
+                  {m.variantNo ? `Direction ${m.variantNo} of 3 · ` : ""}AI · {m.mode === "fast" ? "Fast" : "Batch"} · {TARGETS.find((t) => t.id === m.target)?.label ?? m.target}
+                  {m.variantGroup && m.picked ? " · ✓ picked" : ""}
                 </span>
                 {m.status === "done" && (
-                  <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || design.status === "converting" || working} onClick={() => convert(m.id)}>
-                    {design.chosen_message === m.id && design.status === "ready" ? "Convert again" : "Convert to email"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    {m.variantGroup && !m.picked && (
+                      <button type="button" className={`${btn} border-[var(--wms-fg)]`} disabled={!!busy} onClick={() => pick(m.id)}>
+                        Use this one
+                      </button>
+                    )}
+                    {m.hasEmail && (
+                      <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={!!busy} onClick={() => phoneLink(m.id)}>
+                        {busy === "share" ? "Making link…" : "Copy phone link"}
+                      </button>
+                    )}
+                    {(!m.variantGroup || m.picked) && (
+                      <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || design.status === "converting" || working} onClick={() => convert(m.id)}>
+                        {design.chosen_message === m.id && design.status === "ready" ? "Use again" : m.engine === "layout" ? "Use this email" : "Convert to email"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
+              {m.direction && <p className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Direction: {m.direction}</p>}
               {m.text && <p className="whitespace-pre-wrap text-sm text-[var(--wms-fg)]">{m.text}</p>}
               {m.status !== "done" && (
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
@@ -337,7 +395,20 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                   </div>
                 </div>
               )}
-              {(m.desktop || m.mobile || m.status === "done") && (
+              {m.engine === "layout" && m.status === "done" && m.banners.some((b) => b.qa || b.error) && (
+                <ul className="flex flex-col gap-0.5 text-[0.7rem] text-amber-700 dark:text-amber-300">
+                  {m.banners
+                    .filter((b) => b.qa || b.error)
+                    .map((b) => (
+                      <li key={b.id}>
+                        Banner {b.id}: {b.error ? `not made (${b.error})` : `the check still sees: ${b.qa}`}. Ask the AI to redo it if it bothers you.
+                      </li>
+                    ))}
+                </ul>
+              )}
+              {m.engine === "layout" && m.status === "done" && m.error && <p className="text-xs text-amber-700 dark:text-amber-300">{m.error}</p>}
+              {m.engine === "layout" && m.status === "done" && m.hasEmail && <EmailPreviewFrames designId={id} messageId={m.id} height={900} />}
+              {m.engine !== "layout" && (m.desktop || m.mobile || m.status === "done") && (
                 <div className="grid grid-cols-[5fr_3fr] items-start gap-2">
                   <div className="flex min-w-0 flex-col gap-1">
                     <span className={label}>Desktop</span>
@@ -363,7 +434,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && (text.trim() || files.length) && !working) sendMessage();
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && (text.trim() || files.length) && !working && !mustPick) sendMessage();
           }}
         />
         {files.length > 0 && (
@@ -424,13 +495,26 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               Stop the AI
             </button>
           ) : (
-            <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || (!text.trim() && !files.length)} onClick={sendMessage}>
-              {busy === "send" ? "Sending…" : "Send"}
-            </button>
+            <>
+              <button
+                type="button"
+                className={`${btn} border-[var(--wms-fg)]`}
+                disabled={!!busy || mustPick || (!text.trim() && !files.length)}
+                onClick={() => sendMessage(true)}
+                title="Three versions in completely different directions; you pick one"
+              >
+                {busy === "directions" ? "Sending…" : "Show me 3 directions"}
+              </button>
+              <button type="button" className={`${btn} border-[var(--wms-fg)] bg-[var(--wms-fg)] text-[var(--wms-bg)]`} disabled={!!busy || mustPick || (!text.trim() && !files.length)} onClick={() => sendMessage()}>
+                {busy === "send" ? "Sending…" : "Send"}
+              </button>
+            </>
           )}
         </div>
         <p className="text-[0.68rem] text-[var(--wms-muted)]">
-          Batch costs half and usually comes back within minutes to an hour; Fast comes back in about a minute or two. The first version always draws both views.
+          {mustPick
+            ? "Pick one of the 3 directions above (Use this one) to keep going."
+            : "Store and product photos are always used as they are; only the banners are generated, and each is checked against the real products. Batch costs half (minutes to an hour); Fast takes a few minutes. 3 directions makes three versions at once (three times the banners)."}
         </p>
       </div>
 
@@ -455,7 +539,7 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               )}
             </div>
           </div>
-          {design.status === "converting" && <p className="text-xs text-[var(--wms-muted)]">Converting: OpenAI is cutting out the pictures and writing the email…</p>}
+          {design.status === "converting" && <p className="text-xs text-[var(--wms-muted)]">Preparing the email…</p>}
           {design.status === "failed" && design.convert_error && <p className="text-xs text-[var(--wms-status-danger-fg)]">{design.convert_error}</p>}
           {design.html && (
             <>

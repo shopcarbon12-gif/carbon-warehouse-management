@@ -26,12 +26,21 @@ const offerSchema = z
     endsAt: z.string().datetime({ offset: true }),
     minSubtotal: z.number().min(0).max(10000).nullable().optional(),
     prefix: z.string().max(12).optional(),
+    kind: z.enum(["amount", "percent"]).optional(),
   })
-  .strict();
+  .strict()
+  .refine((o) => o.kind !== "percent" || o.amount <= 90, { message: "At most 90% off" });
 
 export function parseOffer(v: unknown): Offer | null | "invalid" {
   if (v === null || v === undefined) return null;
   const p = offerSchema.safeParse(v);
   if (!p.success) return "invalid";
-  return { amount: Math.round(p.data.amount * 100) / 100, endsAt: new Date(p.data.endsAt).toISOString(), minSubtotal: p.data.minSubtotal || null, prefix: cleanPrefix(p.data.prefix) };
+  const kind = p.data.kind ?? "amount";
+  return {
+    amount: kind === "percent" ? Math.round(p.data.amount) : Math.round(p.data.amount * 100) / 100,
+    endsAt: new Date(p.data.endsAt).toISOString(),
+    minSubtotal: p.data.minSubtotal || null,
+    prefix: cleanPrefix(p.data.prefix),
+    kind,
+  };
 }

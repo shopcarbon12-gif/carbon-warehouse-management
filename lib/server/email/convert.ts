@@ -86,14 +86,14 @@ STEP 5. Zip the package folder (email.html, manifest.json, images/…) as /mnt/d
 type Manifest = { subject?: string; preheader?: string; images?: { file?: string; alt?: string }[]; merge_tags?: string[]; notes?: string; [k: string]: unknown };
 
 export async function startConvert(pool: Pool, tenantId: string, designId: string, messageId: string): Promise<void> {
-  const m = await pool.query<{ desktop_path: string | null; mobile_path: string | null }>(
-    `SELECT m.desktop_path, m.mobile_path FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id
+  const m = await pool.query<{ desktop_path: string | null; mobile_path: string | null; engine: string; html: string | null }>(
+    `SELECT m.desktop_path, m.mobile_path, m.engine, m.html FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id
       WHERE m.id = $1::uuid AND m.design_id = $2::uuid AND d.tenant_id = $3::uuid AND m.role = 'ai' AND m.status = 'done'`,
     [messageId, designId, tenantId],
   );
   const row = m.rows[0];
   if (!row) throw new Error("Pick a finished version to convert");
-  if (!row.desktop_path || !row.mobile_path) throw new Error("This version is missing its desktop or phone picture");
+  if (row.engine === "layout" ? !row.html : !row.desktop_path || !row.mobile_path) throw new Error("This version is missing its email");
   const r = await pool.query(
     `UPDATE email_designs SET status = 'converting', chosen_message = $2::uuid, convert_error = NULL, convert_started_at = now(), updated_at = now()
       WHERE id = $1::uuid AND status <> 'converting'`,
@@ -135,6 +135,8 @@ export async function runConversions(pool: Pool, log: (m: string) => void = cons
 }
 
 async function convertOne(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
+  const eng = await pool.query<{ engine: string }>(`SELECT engine FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
+  if (eng.rows[0]?.engine === "layout") return packageLayout(pool, designId, messageId, log);
   const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null }>(`SELECT desktop_path, mobile_path, products, media FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
   const row = m.rows[0];
   const ai = openai();
@@ -172,6 +174,61 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
     await ai.files.delete(fDesk.id).catch(() => {});
     await ai.files.delete(fMob.id).catch(() => {});
   }
+}
+
+/**
+ * A layout-engine version is already a real email: freeze it on the design and
+ * build the zip (email.html + manifest.json + every picture) for the owner.
+ */
+async function packageLayout(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
+  const r = await pool.query<{ html: string; products: TurnProduct[] | null; media: TurnMedia[] | null; banners: { id: string; url?: string | null; prompt?: string; text?: string | null }[] | null; direction: string | null; subject_hint: string | null; preheader_hint: string | null }>(
+    `SELECT m.html, m.products, m.media, m.banners, m.direction, d.subject_hint, d.preheader_hint FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.id = $1::uuid`,
+    [messageId],
+  );
+  const row = r.rows[0];
+  if (!row?.html) throw new Error("This version has no email");
+  const html = sanitizeEmailHtml(row.html);
+  const zip = new JSZip();
+  // Pictures in the zip, with a copy of the email that points at them.
+  const urls = [...new Set([...html.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((m) => m[1]).filter((u) => /^https:\/\//.test(u)))];
+  let local = html;
+  let n = 0;
+  for (const u of urls.slice(0, MAX_FILES - 4)) {
+    try {
+      const res = await fetch(u, { signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      const meta = await sharp(buf).metadata();
+      const ext = meta.format === "png" ? "png" : "jpg";
+      const name = `images/${String(++n).padStart(2, "0")}.${ext}`;
+      zip.file(name, buf);
+      local = local.split(u).join(name);
+    } catch {
+      /* the hosted link stays in email.html */
+    }
+  }
+  zip.file("email.html", html);
+  zip.file("email-local.html", local);
+  const manifest = {
+    subject: row.subject_hint ?? "",
+    preheader: row.preheader_hint ?? "",
+    direction: row.direction,
+    engine: "layout",
+    products: (row.products ?? []).map((p) => ({ title: p.title, price: p.price, url: p.url, photo: p.image })),
+    brand_pictures: (row.media ?? []).map((m) => ({ description: m.description, url: m.url })),
+    banners: (row.banners ?? []).map((b) => ({ id: b.id, url: b.url, words: b.text ?? null, brief: b.prompt ?? "" })),
+    merge_tags: usedMergeTags(html),
+    notes: "email.html uses the hosted pictures (ready to send); email-local.html uses the files in images/.",
+  };
+  zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  const zipPath = `email/designs/${designId}/v-${messageId.replace(/-/g, "")}/email-package.zip`;
+  await uploadBytesToStorage({ path: zipPath, bytes, contentType: "application/zip" });
+  await pool.query(
+    `UPDATE email_designs SET status = 'ready', html = $2, manifest = $3, package_path = $4, convert_error = NULL, updated_at = now() WHERE id = $1::uuid`,
+    [designId, html, JSON.stringify({ ...manifest, images: n }), zipPath],
+  );
+  log(`[email-convert] ${designId}: layout version packaged (${n} pictures)`);
 }
 
 export function mediaUrl(path: string): string {

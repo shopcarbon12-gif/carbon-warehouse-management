@@ -133,6 +133,8 @@ const ROUTES: Record<string, Entry> = {
   "email/designs/[id]/stop": { module: "Email", label: "Stopped the AI Designer" },
   "email/designs/[id]/convert": { module: "Email", label: "Converted a design to an email" },
   "email/designs/[id]/package": { module: "Email", label: "Uploaded an email package" },
+  "email/designs/[id]/pick": { module: "Email", label: "Picked one of three AI email directions" },
+  "email/designs/[id]/share": { module: "Email", label: "Made a phone link for an email version" },
   "email/transcribe": { module: "Email", label: "Spoke a message to the AI Designer" },
   "email/campaigns": { module: "Email", label: "Made a new email campaign" },
   "email/campaigns/[id]": { module: "Email", label: "Changed an email campaign" },

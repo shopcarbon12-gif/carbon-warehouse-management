@@ -37,6 +37,13 @@ export async function GET(req: Request, { params }: Ctx) {
     mobile: file(m.mobile_path),
     products: m.products ?? [],
     media: (m.media ?? []).map((x: { url: string; description: string }) => ({ url: x.url, description: x.description })),
+    engine: m.engine,
+    hasEmail: !!m.html,
+    direction: m.direction ?? null,
+    variantGroup: m.variant_group ?? null,
+    variantNo: m.variant_no ?? null,
+    picked: m.picked ?? null,
+    banners: (m.banners ?? []).map((b: { id: string; url?: string | null; qa?: string | null; error?: string | null; text?: string | null }) => ({ id: b.id, url: b.url ?? null, qa: b.qa ?? null, error: b.error ?? null, text: b.text ?? null })),
   }));
   const row = d.rows[0];
   return NextResponse.json({

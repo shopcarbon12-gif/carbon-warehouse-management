@@ -144,3 +144,35 @@ export async function logoReference(): Promise<Buffer> {
   logoRef = await sharp(png).flatten({ background: "#ffffff" }).extend({ top: 60, bottom: 60, left: 60, right: 60, background: "#ffffff" }).jpeg({ quality: 95 }).toBuffer();
   return logoRef;
 }
+
+/** Every photo of some products (front, side, back, details), newest listing order kept. */
+export async function productGallery(ids: string[], perProduct = 4): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!ids.length) return out;
+  const ctx = await welcomeShopCtx();
+  if (!ctx) return out;
+  const d: { nodes: ({ id: string; media?: { nodes: { preview?: { image?: { url: string } | null } | null }[] } } | null)[] } = await welcomeGql(
+    ctx,
+    `query Gal($ids: [ID!]!, $n: Int!) { nodes(ids: $ids) { ... on Product { id media(first: $n) { nodes { preview { image { url } } } } } } }`,
+    { ids: ids.slice(0, 50), n: perProduct },
+  );
+  for (const n of d.nodes) {
+    if (!n?.media) continue;
+    out.set(n.id, n.media.nodes.map((m) => m.preview?.image?.url).filter((u): u is string => !!u));
+  }
+  return out;
+}
+
+/** Any picture URL (Shopify CDN or our own), as a picture-model reference (1024 px JPEG on white). */
+export async function referencePhoto(url: string, width = 1024): Promise<Buffer | null> {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.hostname.endsWith("shopify.com") || u.hostname.endsWith("shopcarbon.com")) u.searchParams.set("width", String(width));
+  const r = await fetch(u, { signal: AbortSignal.timeout(20_000) }).catch(() => null);
+  if (!r?.ok) return null;
+  return sharp(Buffer.from(await r.arrayBuffer())).rotate().flatten({ background: "#ffffff" }).resize({ width, withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+}

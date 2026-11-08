@@ -15,7 +15,8 @@ import { btn, card, etLocalInput, etLocalToIso, etWhen, fetcher, field, label, s
  */
 
 type Audience = { who: "all" | "subscribed"; sinceYear?: number | null; beforeYear?: number | null; notEmailedDays?: number | null };
-type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string };
+type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string; kind?: "amount" | "percent" };
+const offerText = (o: Offer) => (o.kind === "percent" ? `${o.amount}%` : `$${o.amount}`);
 type Stats = { total: number; queued: number; sent: number; failed: number; skipped: number; delivered: number; opened: number; clicked: number; bounced: number; complained: number; unsubscribed: number; used: number; sales: number };
 type Row = { id: string; name: string; status: string; subject: string; send_at: string | null; pause_reason: string | null; offer: Offer | null; design_title: string | null; created_at: string; stats: Stats | null };
 type Campaign = {
@@ -380,7 +381,18 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
           </label>
           {draft.offer && (
             <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--wms-fg)]">
-              <span>$</span>
+              <select
+                id="email-c-kind"
+                className={`${field} w-24`}
+                value={draft.offer.kind ?? "amount"}
+                onChange={(e) => {
+                  const kind = e.target.value === "percent" ? "percent" : "amount";
+                  set({ offer: { ...draft.offer!, kind, amount: kind === "percent" ? Math.min(draft.offer!.amount, 90) : draft.offer!.amount } });
+                }}
+              >
+                <option value="amount">$ off</option>
+                <option value="percent">% off</option>
+              </select>
               <input
                 id="email-c-amount"
                 className={`${field} w-20`}
@@ -390,7 +402,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
                 value={String(draft.offer.amount)}
                 onChange={(e) => set({ offer: { ...draft.offer!, amount: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 } })}
               />
-              <span>off one order (once per person) · ends</span>
+              <span>{draft.offer.kind === "percent" ? "percent" : "dollars"} off one order (once per person) · ends</span>
               <input
                 id="email-c-ends"
                 className={field}
@@ -473,7 +485,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
             {confirmApprove ? (
               <>
                 <span className="font-semibold">
-                  Send to {nf.format(data.reach ?? 0)} people{draft.offer ? ` with a $${draft.offer.amount} code each` : ""}?
+                  Send to {nf.format(data.reach ?? 0)} people{draft.offer ? ` with a ${offerText(draft.offer)} code each` : ""}?
                 </span>
                 <button
                   type="button"

@@ -56,6 +56,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/api/public/email/unsubscribe") return true;
   if (pathname === "/api/public/email/sns") return true;
   if (pathname.startsWith("/api/public/email-media/")) return true;
+  /* the owner's phone link to one AI Designer version (unguessable token, read-only) */
+  if (pathname.startsWith("/api/public/email/view/")) return true;
   /* Meta catalog close-up feed and its square pictures: Meta's crawler fetches
      them with no session; they hold only photos already public on the store. */
   if (pathname === "/api/storefront/meta-feed" || pathname === "/api/storefront/meta-feed/image") return true;

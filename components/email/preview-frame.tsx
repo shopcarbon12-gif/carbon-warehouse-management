@@ -13,8 +13,9 @@ const text = async (u: string) => {
   return r.text();
 };
 
-export function EmailPreviewFrames({ designId, version, height = 720 }: { designId: string; version?: string; height?: number }) {
-  const { data, error } = useSWR(`/api/email/designs/${designId}/preview${version ? `?v=${encodeURIComponent(version)}` : ""}`, text);
+export function EmailPreviewFrames({ designId, version, messageId, height = 720 }: { designId: string; version?: string; messageId?: string; height?: number }) {
+  const q = messageId ? `?message=${messageId}` : version ? `?v=${encodeURIComponent(version)}` : "";
+  const { data, error } = useSWR(`/api/email/designs/${designId}/preview${q}`, text);
   if (error) return <p className="text-xs text-[var(--wms-status-danger-fg)]">Preview failed: {error.message}</p>;
   if (data === undefined) return <p className="text-xs text-[var(--wms-muted)]">Loading preview…</p>;
   return (

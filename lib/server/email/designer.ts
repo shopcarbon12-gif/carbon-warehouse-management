@@ -17,6 +17,10 @@
  *     Only-mobile turns edit the previous phone view; only-desktop turns edit
  *     the previous desktop view.
  *
+ * Since 2026-11-08 new turns use the LAYOUT ENGINE (layout.ts): a real email
+ * layout with the original photos, where only banners are generated. The
+ * picture engine below stays for older versions (and batches in flight).
+ *
  * The worker's email tick (every minute) moves turns forward; nothing here
  * runs in the owner's browser, so leaving the page does not stop it.
  */
@@ -27,6 +31,7 @@ import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvid
 import { DESKTOP_SIZE, MOBILE_SIZE, imageModel, openai, textModel, transcribeModel } from "./config";
 import { catalogLines, inStockCatalog, logoReference, productPhoto, type CatalogProduct } from "./catalog";
 import { STORE_TEXT, mediaLibrary, mediaLines, mediaPhoto, type MediaItem, type TurnMedia } from "./brand";
+import { collectBanners, drawBannersFast, planLayout, renderLayout, submitBanners, type Banner, type LayoutStage, type LayoutTurn } from "./layout";
 
 export type TurnProduct = { id: string; title: string; url: string; price: number; image: string | null };
 
@@ -51,6 +56,13 @@ type Msg = {
   error: string | null;
   products: TurnProduct[] | null;
   media: TurnMedia[] | null;
+  engine: "picture" | "layout";
+  variant_group: string | null;
+  variant_no: number | null;
+  picked: boolean | null;
+  direction: string | null;
+  html: string | null;
+  banners: Banner[] | null;
   created_at: Date;
 };
 
@@ -107,23 +119,38 @@ async function currentViews(pool: Pool, designId: string, before?: Date): Promis
 /** Owner message + the AI turn that answers it. */
 export async function addOwnerMessage(
   pool: Pool,
-  input: { designId: string; text: string; attachments: { path: string; name: string }[]; target: Target; mode: "batch" | "fast"; by: string | null },
-): Promise<{ ownerId: string; aiId: string }> {
+  input: { designId: string; text: string; attachments: { path: string; name: string }[]; target: Target; mode: "batch" | "fast"; by: string | null; directions?: boolean },
+): Promise<{ ownerId: string; aiId: string; aiIds: string[] }> {
   const busy = await pool.query(`SELECT 1 FROM email_design_messages WHERE design_id = $1::uuid AND status IN ('queued','planning','generating') LIMIT 1`, [input.designId]);
   if (busy.rowCount) throw new Error("The AI is still working on the last message. Wait for it to finish (or stop it) before sending another.");
-  const views = await currentViews(pool, input.designId);
-  // The first turn always draws both views.
-  const target: Target = !views.desktop || !views.mobile ? "both" : input.target;
+  // Three directions waiting for the owner's choice: pick one first.
+  const open = await pool.query(
+    `SELECT 1 FROM email_design_messages m WHERE m.design_id = $1::uuid AND m.role = 'ai' AND m.status = 'done' AND m.variant_group IS NOT NULL
+        AND m.created_at = (SELECT max(created_at) FROM email_design_messages WHERE design_id = $1::uuid AND role = 'ai' AND status = 'done')
+        AND NOT EXISTS (SELECT 1 FROM email_design_messages x WHERE x.variant_group = m.variant_group AND x.picked IS TRUE) LIMIT 1`,
+    [input.designId],
+  );
+  if (open.rowCount) throw new Error('Pick one of the 3 directions first ("Use this one"), then keep chatting.');
+  const any = await pool.query(`SELECT 1 FROM email_design_messages WHERE design_id = $1::uuid AND role = 'ai' AND status = 'done' LIMIT 1`, [input.designId]);
+  // The first turn always makes both views.
+  const target: Target = !any.rowCount ? "both" : input.target;
   const o = await pool.query<{ id: string }>(
     `INSERT INTO email_design_messages (design_id, role, text, attachments, target, status, created_by) VALUES ($1::uuid, 'owner', $2, $3, $4, 'done', $5) RETURNING id`,
     [input.designId, input.text, JSON.stringify(input.attachments), target, input.by],
   );
-  const a = await pool.query<{ id: string }>(
-    `INSERT INTO email_design_messages (design_id, role, target, mode, status, created_at) VALUES ($1::uuid, 'ai', $2, $3, 'queued', now() + interval '1 millisecond') RETURNING id`,
-    [input.designId, target, input.mode],
-  );
+  const n = input.directions ? 3 : 1;
+  const group = input.directions ? crypto.randomUUID() : null;
+  const aiIds: string[] = [];
+  for (let i = 1; i <= n; i++) {
+    const a = await pool.query<{ id: string }>(
+      `INSERT INTO email_design_messages (design_id, role, target, mode, status, engine, variant_group, variant_no, created_at)
+       VALUES ($1::uuid, 'ai', $2, $3, 'queued', 'layout', $4::uuid, $5, now() + ($6 || ' milliseconds')::interval) RETURNING id`,
+      [input.designId, group ? "both" : target, input.mode, group, group ? i : null, String(i)],
+    );
+    aiIds.push(a.rows[0].id);
+  }
   await pool.query(`UPDATE email_designs SET updated_at = now(), status = CASE WHEN status = 'failed' THEN 'drafting' ELSE status END WHERE id = $1::uuid`, [input.designId]);
-  return { ownerId: o.rows[0].id, aiId: a.rows[0].id };
+  return { ownerId: o.rows[0].id, aiId: aiIds[0], aiIds };
 }
 
 /** Stop a turn that is still waiting / being drawn. */
@@ -455,7 +482,7 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
   // 0. A turn cut off by a restart while planning / drawing fast.
   await pool.query(
     `UPDATE email_design_messages SET status = 'failed', error = 'Interrupted (the server restarted). Send the message again.', finished_at = now()
-      WHERE status IN ('planning','generating') AND batch_id IS NULL AND batch_files IS NULL AND created_at < now() - interval '20 minutes'`,
+      WHERE status IN ('planning','generating') AND batch_id IS NULL AND batch_files IS NULL AND created_at < now() - interval '40 minutes'`,
   );
   // 1. New turns: plan, then draw (fast) or submit (batch).
   const queued = await pool.query<Msg>(
@@ -463,7 +490,21 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       WHERE id IN (SELECT id FROM email_design_messages WHERE status = 'queued' ORDER BY created_at LIMIT 3 FOR UPDATE SKIP LOCKED)
       RETURNING *`,
   );
-  for (const turn of queued.rows) {
+  const layoutTurns = queued.rows.filter((t) => t.engine === "layout");
+  // Layout turns run side by side (three directions at once), each on its own.
+  const layoutRuns = Promise.all(
+    layoutTurns.map((t) =>
+      runLayoutTurn(pool, t.id, log).then(
+        () => void planned++,
+        async (e) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          log(`[email-layout] turn ${t.id} failed: ${msg}`);
+          await fail(pool, t.id, `The AI could not make this version: ${msg}`);
+        },
+      ),
+    ),
+  );
+  for (const turn of queued.rows.filter((t) => t.engine !== "layout")) {
     try {
       const p = await plan(pool, turn);
       await pool.query(
@@ -488,8 +529,19 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
       await fail(pool, turn.id, `The AI could not make this version: ${msg}`);
     }
   }
+  await layoutRuns;
+  // 2a. Layout banners from a batch.
+  const lb = await pool.query<{ id: string }>(`SELECT id::text FROM email_design_messages WHERE status = 'generating' AND batch_files IS NOT NULL AND engine = 'layout'`);
+  for (const r of lb.rows) {
+    try {
+      if (await collectLayoutBatch(pool, r.id, log)) collected++;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log(`[email-layout] turn ${r.id} batch check failed: ${msg}`);
+    }
+  }
   // 2. Batch pictures: collect what came back, then draw the next view.
-  const out = await pool.query<Msg>(`SELECT * FROM email_design_messages WHERE status = 'generating' AND batch_files IS NOT NULL`);
+  const out = await pool.query<Msg>(`SELECT * FROM email_design_messages WHERE status = 'generating' AND batch_files IS NOT NULL AND engine = 'picture'`);
   if (!out.rows.length) return { planned, collected };
   const ai = openai();
   for (const turn of out.rows) {
@@ -529,6 +581,87 @@ export async function runDesignTurns(pool: Pool, log: (m: string) => void = cons
   }
   return { planned, collected };
 }
+
+/* ------------------------------------------------------------ layout engine */
+
+async function loadLayoutTurn(pool: Pool, id: string): Promise<LayoutTurn> {
+  const r = await pool.query<LayoutTurn>(
+    `SELECT m.id::text, m.design_id::text, d.tenant_id::text, m.text, m.target, m.mode, m.status, m.products, m.media, m.draft_html, m.banners,
+            m.direction, m.variant_group::text, m.variant_no, m.batch_files, m.created_at
+       FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.id = $1::uuid`,
+    [id],
+  );
+  if (!r.rows[0]) throw new Error("turn not found");
+  return r.rows[0];
+}
+
+/** Plan a layout turn, then draw its banners (fast) or send them to a batch. */
+async function runLayoutTurn(pool: Pool, id: string, log: (m: string) => void): Promise<void> {
+  const turn = await loadLayoutTurn(pool, id);
+  const p = await planLayout(pool, turn);
+  const note = p.unknown.length ? ` (left out pictures I could not find: ${[...new Set(p.unknown)].join(", ")})` : "";
+  await pool.query(
+    `UPDATE email_design_messages SET text = $2, draft_html = $3, products = $4, media = $5, banners = $6, direction = $7 WHERE id = $1::uuid AND status = 'planning'`,
+    [turn.id, p.reply + note, p.html, JSON.stringify(p.products), JSON.stringify(p.media), JSON.stringify(p.banners), p.direction],
+  );
+  if (!turn.variant_group)
+    await pool.query(
+      `UPDATE email_designs SET title = CASE WHEN title = 'New email' AND $2::text IS NOT NULL THEN $2 ELSE title END,
+              subject_hint = COALESCE($3, subject_hint), preheader_hint = COALESCE($4, preheader_hint), updated_at = now() WHERE id = $1::uuid`,
+      [turn.design_id, p.title, p.subject, p.preheader],
+    );
+  Object.assign(turn, { draft_html: p.html, products: p.products, media: p.media, banners: p.banners, direction: p.direction });
+  const toDraw = p.banners.filter((b) => !b.url);
+  if (toDraw.length && turn.mode !== "fast") {
+    const st = await submitBanners(pool, turn);
+    if (st) {
+      await pool.query(`UPDATE email_design_messages SET status = 'generating', batch_id = $2, batch_files = $3 WHERE id = $1::uuid AND status = 'planning'`, [turn.id, st.batchId, JSON.stringify(st)]);
+      log(`[email-layout] turn ${turn.id}: ${toDraw.length} banner(s) sent to the OpenAI batch ${st.batchId}`);
+      return;
+    }
+  }
+  if (toDraw.length) await pool.query(`UPDATE email_design_messages SET status = 'generating' WHERE id = $1::uuid AND status = 'planning'`, [turn.id]);
+  const banners = toDraw.length ? await drawBannersFast(pool, turn, log) : p.banners;
+  await finishLayoutTurn(pool, turn, banners, log);
+}
+
+/** Batch banners came back: finish the turn. True when it finished. */
+async function collectLayoutBatch(pool: Pool, id: string, log: (m: string) => void): Promise<boolean> {
+  const turn = await loadLayoutTurn(pool, id);
+  if (turn.status !== "generating" || !turn.batch_files) return false;
+  const banners = await collectBanners(pool, turn, log);
+  if (!banners) return false;
+  await finishLayoutTurn(pool, turn, banners, log);
+  return true;
+}
+
+async function finishLayoutTurn(pool: Pool, turn: LayoutTurn, banners: Banner[], log: (m: string) => void): Promise<void> {
+  turn.banners = banners;
+  const { html, missing } = await renderLayout(pool, turn, turn.draft_html ?? "");
+  const failed = banners.filter((b) => !b.url).map((b) => `${b.id}: ${b.error ?? "not drawn"}`);
+  const note = failed.length ? `Some banners could not be made and were left out (${failed.join("; ")}). Ask again to retry them.` : missing.length ? `Left out pictures that could not be loaded: ${missing.join(", ")}.` : null;
+  const r = await pool.query(
+    `UPDATE email_design_messages SET status = 'done', html = $2, banners = $3, error = $4, finished_at = now(), batch_id = NULL, batch_files = NULL
+      WHERE id = $1::uuid AND status IN ('planning','generating')`,
+    [turn.id, html, JSON.stringify(banners), note],
+  );
+  if (r.rowCount) await pool.query(`UPDATE email_designs SET updated_at = now() WHERE id = $1::uuid`, [turn.design_id]);
+  log(`[email-layout] turn ${turn.id}: done (${banners.length} banner(s))`);
+}
+
+/** The owner picks one of the 3 directions. */
+export async function pickDirection(pool: Pool, designId: string, messageId: string): Promise<void> {
+  const r = await pool.query<{ variant_group: string | null }>(
+    `SELECT variant_group::text FROM email_design_messages WHERE id = $1::uuid AND design_id = $2::uuid AND role = 'ai' AND status = 'done'`,
+    [messageId, designId],
+  );
+  const g = r.rows[0]?.variant_group;
+  if (!g) throw new Error("That version is not one of three directions");
+  await pool.query(`UPDATE email_design_messages SET picked = (id = $2::uuid) WHERE variant_group = $1::uuid`, [g, messageId]);
+  await pool.query(`UPDATE email_designs SET updated_at = now() WHERE id = $1::uuid`, [designId]);
+}
+
+export type { LayoutStage };
 
 /* -------------------------------------------------------------- voice input */
 

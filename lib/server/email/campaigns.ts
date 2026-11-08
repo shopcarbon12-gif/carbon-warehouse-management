@@ -27,7 +27,13 @@ import { audienceSql, markShopifyUnsubscribed, type Audience } from "./contacts"
 import { INSTAGRAM_URL, SHOP_URL, SesSendError, WMS_BASE, getEmailSettings, senderReady, sesPacing, sesSend, type EmailSettings } from "./config";
 import { fillMergeTags, htmlToText, longDay, personalCode, shouldPause, usedMergeTags, wrapEmail, type MergeValues } from "./rules";
 
-export type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string };
+/** kind: "amount" = $ off the order (default, older campaigns), "percent" = % off the order. */
+export type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string; kind?: "amount" | "percent" };
+
+/** "$20" or "10%". */
+export function offerLabel(o: Offer): string {
+  return o.kind === "percent" ? `${o.amount}%` : `$${o.amount % 1 ? o.amount.toFixed(2) : o.amount}`;
+}
 
 export type CampaignRow = {
   id: string;
@@ -66,7 +72,7 @@ export function mergeValuesFor(input: { firstName: string | null; code: string |
     greeting_name: input.firstName ?? "there",
     code: input.code ?? "",
     code_url: input.code ? codeUrl(input.code) : SHOP_URL,
-    offer_amount: input.offer ? `$${input.offer.amount % 1 ? input.offer.amount.toFixed(2) : input.offer.amount}` : "",
+    offer_amount: input.offer ? offerLabel(input.offer) : "",
     offer_ends: input.offer ? longDay(input.offer.endsAt) : "",
     shop_url: SHOP_URL,
     instagram_url: INSTAGRAM_URL,
@@ -103,7 +109,10 @@ export async function createPersonalCode(campaign: { name: string; offer: Offer 
           context: { all: "ALL" },
           tags: ["carbon-email"],
           customerGets: {
-            value: { discountAmount: { amount: campaign.offer.amount.toFixed(2), appliesOnEachItem: false } },
+            value:
+              campaign.offer.kind === "percent"
+                ? { percentage: Math.round(campaign.offer.amount * 100) / 10000 }
+                : { discountAmount: { amount: campaign.offer.amount.toFixed(2), appliesOnEachItem: false } },
             items: { all: true },
           },
           ...(campaign.offer.minSubtotal ? { minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: campaign.offer.minSubtotal.toFixed(2) } } } : {}),
@@ -180,11 +189,12 @@ export async function approvalProblems(pool: Pool, tenantId: string, c: Campaign
   if (c.design_id && !html) out.push("The design has not been converted to an email yet.");
   if (html) {
     const tags = usedMergeTags(html);
-    if ((tags.includes("code") || tags.includes("code_url")) && !c.offer) out.push("The email shows a code, so the campaign needs an offer ($ off).");
+    if ((tags.includes("code") || tags.includes("code_url")) && !c.offer) out.push("The email shows a code, so the campaign needs an offer ($ or % off).");
     if (c.offer && !tags.includes("code")) out.push("The campaign has an offer, but the email never shows {{code}}. Convert the design again or remove the offer.");
   }
   if (c.offer) {
-    if (!(c.offer.amount > 0 && c.offer.amount <= 500)) out.push("The offer amount must be between $1 and $500.");
+    if (c.offer.kind === "percent" ? !(c.offer.amount >= 1 && c.offer.amount <= 90) : !(c.offer.amount > 0 && c.offer.amount <= 500))
+      out.push(c.offer.kind === "percent" ? "The offer must be between 1% and 90% off." : "The offer amount must be between $1 and $500.");
     if (!c.offer.endsAt || new Date(c.offer.endsAt).getTime() < Date.now() + 24 * 3600_000) out.push("The code end date must be at least a day away.");
   }
   if (!s.sendingEnabled) out.push("Sending is switched off in Email → Settings.");
