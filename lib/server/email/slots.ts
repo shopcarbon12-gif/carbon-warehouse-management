@@ -306,6 +306,82 @@ export async function pasteAssigned(
       layers.push({ input: fill, left: b.x, top: b.y });
     }
   }
-  if (!layers.length) return { png, found, missing };
-  return { png: await sharp(png).composite(layers).png({ compressionLevel: 9 }).toBuffer(), found, missing };
+  const pasted = layers.length ? await sharp(png).composite(layers).png({ compressionLevel: 9 }).toBuffer() : png;
+  return { png: await cleanMagenta(pasted), found, missing };
+}
+
+/**
+ * Any magenta left after pasting (a sliver beside a label the model wrote across a box, a box nobody
+ * claimed) is painted in the colour around it, so no pink is ever left in a picture.
+ */
+export async function cleanMagenta(png: Buffer): Promise<Buffer> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const W = info.width;
+  const H = info.height;
+  const TOL = 90 * 90;
+  const [mr, mg, mb] = BOX.rgb;
+  const isMag = (i: number) => (data[i] - mr) ** 2 + (data[i + 1] - mg) ** 2 + (data[i + 2] - mb) ** 2 < TOL;
+  const seen = new Uint8Array(W * H);
+  let changed = false;
+  for (let start = 0; start < W * H; start++) {
+    if (seen[start] || !isMag(start * 3)) continue;
+    const pts: number[] = [];
+    const stack = [start];
+    seen[start] = 1;
+    let minX = W, minY = H, maxX = 0, maxY = 0;
+    while (stack.length) {
+      const p = stack.pop()!;
+      pts.push(p);
+      const x = p % W;
+      const y = (p - x) / W;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      for (const q of [p - 1, p + 1, p - W, p + W]) {
+        if (q < 0 || q >= W * H || seen[q]) continue;
+        if ((q === p - 1 && x === 0) || (q === p + 1 && x === W - 1)) continue;
+        if (!isMag(q * 3)) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    if (pts.length < 6) continue;
+    // The average colour of a 4 px ring around it (not magenta).
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let y = Math.max(0, minY - 4); y <= Math.min(H - 1, maxY + 4); y++)
+      for (let x = Math.max(0, minX - 4); x <= Math.min(W - 1, maxX + 4); x++) {
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) continue;
+        const i = (y * W + x) * 3;
+        if (isMag(i)) continue;
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        n++;
+      }
+    const fill = n ? [r / n, g / n, b / n] : [255, 255, 255];
+    for (const p of pts) {
+      data[p * 3] = fill[0];
+      data[p * 3 + 1] = fill[1];
+      data[p * 3 + 2] = fill[2];
+    }
+    changed = true;
+  }
+  if (!changed) return png;
+  return sharp(data, { raw: { width: W, height: H, channels: 3 } }).png({ compressionLevel: 9 }).toBuffer();
+}
+
+/** The real logo placed at the top centre when the model never drew its box (white or black by background). */
+export async function placeLogoOnTop(png: Buffer, logos: { black: () => Promise<Buffer>; white: () => Promise<Buffer> }): Promise<Buffer> {
+  const m = await sharp(png).metadata();
+  const W = m.width ?? 0;
+  const w = Math.round(W * 0.3);
+  const h = Math.round(w / 3.35);
+  const top = Math.round(W * 0.04);
+  const left = Math.round((W - w) / 2);
+  const area = await sharp(png).extract({ left, top, width: w, height: h }).png().toBuffer();
+  const st = await sharp(area).stats();
+  const dark = 0.2126 * st.channels[0].mean + 0.7152 * st.channels[1].mean + 0.0722 * st.channels[2].mean < 128;
+  const logo = await sharp(await (dark ? logos.white() : logos.black())).resize({ width: w, height: h, fit: "inside" }).png().toBuffer();
+  return sharp(png).composite([{ input: logo, left, top }]).png({ compressionLevel: 9 }).toBuffer();
 }

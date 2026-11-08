@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import sharp from "sharp";
-import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, slotKeysIn, type Slot } from "../lib/server/email/slots";
+import { BOX, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "../lib/server/email/slots";
 
 const out = process.argv[2];
 const solid = (w: number, h: number, c: { r: number; g: number; b: number }) => sharp({ create: { width: w, height: h, channels: 3, background: c } }).png().toBuffer();
@@ -43,6 +43,9 @@ const MAG = { r: 255, g: 0, b: 255 };
       { input: await solid(1000, 230, MAG), left: 100, top: 1340 },
       { input: await solid(120, 60, { r: 0, g: 0, b: 0 }), left: 540, top: 1420 },
       { input: await sharp(noise, { raw: { width: 300, height: 300, channels: 3 } }).png().toBuffer(), left: 800, top: 300 },
+      // a sliver of magenta beside a black "2-PIECE SET" label (too small to be a box)
+      { input: await solid(70, 22, { r: 0, g: 0, b: 0 }), left: 600, top: 760 },
+      { input: await solid(30, 22, MAG), left: 670, top: 760 },
     ])
     .blur(1.2)
     .jpeg({ quality: 72 })
@@ -85,6 +88,13 @@ const MAG = { r: 255, g: 0, b: 255 };
   assert.ok((await px(600, 1450))[1] > 120, "hero photo over the label");
   assert.ok((await px(600, 110))[0] > 200, "a WHITE logo on the dark band");
   assert.equal((await findLabelledBoxes(r.png)).length, 0, "no magenta left");
+  const [sr, sg, sb] = await px(685, 771);
+  assert.ok(!(sr > 200 && sg < 80 && sb > 200), `the magenta sliver is painted over (${sr},${sg},${sb})`);
+  // No logo box drawn: the real logo goes on top (black on the light page top here).
+  const plain = await solid(1200, 800, { r: 240, g: 232, b: 218 });
+  const withLogo = await placeLogoOnTop(plain, { black: async () => logoBlack, white: async () => logoWhite });
+  const { data: lp } = await sharp(withLogo).extract({ left: 600, top: 100, width: 1, height: 1 }).raw().toBuffer({ resolveWithObject: true });
+  assert.ok(lp[0] < 60, "a BLACK logo placed at the top centre of a light page");
   if (out) {
     await sharp(png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-before.jpg`);
     await sharp(r.png).resize({ width: 600 }).jpeg().toFile(`${out}/slots-after.jpg`);

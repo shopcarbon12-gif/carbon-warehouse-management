@@ -25,13 +25,17 @@ export type ShotStage = { view: "shots"; batchId: string; inputFileId: string; r
 
 const NO_BLUR = /\b(hat|cap|beanie|bucket|sunglass|glasses|earring|necklace|chain|jewel|ring|bracelet|scarf|balaclava)/i;
 
+/**
+ * A garment reference without the person's head: the top of an on-model photo is cut off, so the model
+ * never copies a face. (2026-11-08: a BLURRED head was copied as blurred faces into a campaign photo.)
+ * Headwear, eyewear and jewellery keep the whole photo.
+ */
 async function faceless(b: Buffer, title: string): Promise<Buffer> {
   if (NO_BLUR.test(title)) return b;
   const m = await sharp(b).metadata();
   if (!m.width || !m.height) return b;
-  const band = Math.round(m.height * 0.17);
-  const top = await sharp(b).extract({ left: 0, top: 0, width: m.width, height: band }).blur(28).toBuffer();
-  return sharp(b).composite([{ input: top, left: 0, top: 0 }]).jpeg({ quality: 90 }).toBuffer();
+  const band = Math.round(m.height * 0.16);
+  return sharp(b).extract({ left: 0, top: band, width: m.width, height: m.height - band }).jpeg({ quality: 90 }).toBuffer();
 }
 
 /** The four photos of a concept; a photo whose brief and products did not change keeps its picture. */
@@ -56,7 +60,7 @@ function shotPrompt(s: Shot, products: TurnProduct[], labels: string[]): string 
     PHOTO_STYLE,
     `THE PHOTO: ${s.prompt}`,
     `THE CLOTHES: the people wear exactly these real CARBON products, shown in the reference photos: ${names || "the referenced products"}. Same garment type, cut, colour, wash, fabric, prints, stitching, hardware and any CARBON lettering; where a side is not visible in the photos keep it plain. NEVER another brand's logo, swoosh, stripes, monogram or wordmark on anything.`,
-    `THE PEOPLE: new adults (never anyone from a reference photo — their heads are blurred on purpose), natural skin texture, real hands, believable bodies.`,
+    `THE PEOPLE: new adults (the reference photos show the clothes only, without heads), every face sharp, natural and fully visible — never blurred, pixelated or hidden; natural skin texture, real hands, believable bodies.`,
     `NO words, letters, numbers, logos, watermarks or readable signs anywhere in the picture (shop signs blank or out of focus).`,
     s.kind === "hero"
       ? "Composition: landscape; the people placed to one side, calm space on the other side for a headline; nobody cut at the edges."
@@ -102,6 +106,7 @@ const QA = `You check a campaign photo for CARBON (a streetwear store) against t
 - a garment or shoe that clearly differs from its real product photo (type, colour, wash, print, length, a missing piece);
 - words, letters or readable signs in the picture;
 - broken anatomy (extra or melted fingers, distorted faces), obvious AI artefacts, a plastic or CGI look;
+- any face that is blurred, pixelated, smudged, cut off at the eyes or hidden (every face must be sharp and natural);
 - a person cut off at the head or feet when the whole outfit should show.
 Do not judge location, pose or styling taste.`;
 

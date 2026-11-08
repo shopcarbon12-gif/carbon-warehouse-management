@@ -49,7 +49,7 @@ import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
 import { STORE_MEDIA, STORE_TEXT, mediaLibrary, mediaLines, type MediaItem, type TurnMedia } from "./brand";
 import { styleGuide, styleText } from "./style";
-import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, slotKeysIn, type Slot } from "./slots";
+import { BOX, BOX_RULES, TOKEN, assignBoxes, briefWithBoxes, findLabelledBoxes, pasteAssigned, placeLogoOnTop, slotKeysIn, type Slot } from "./slots";
 import { CONCEPT_RULES, cleanConcept, conceptText, creativeJson, img, txt, type Concept } from "./creative";
 import { collectShots, drawShotsFast, finishShot, shotInputs, shotsFor, type Shot, type ShotStage } from "./assets";
 import { freshStyles, styleBrief, styleName, STRUCTURES, type Style } from "./styles";
@@ -696,6 +696,12 @@ async function withRealPictures(pool: Pool, turn: Msg, step: Step, png0: Buffer,
     }
   }
   const r = await pasteAssigned(png, found.assigned, loader, logos);
+  // Every email has the real logo: when the model never drew its box (it put a photo at the very top),
+  // CarbonWMS places it at the top centre.
+  if (slots.some((x) => x.kind === "logo") && found.missing.some((x) => x.kind === "logo") && (step === "desktop" || step === "mobile-top")) {
+    log(`[email-ai] turn ${turn.id} ${step}: logo placed at the top by CarbonWMS`);
+    return placeLogoOnTop(r.png, logos);
+  }
   return r.png;
 }
 
