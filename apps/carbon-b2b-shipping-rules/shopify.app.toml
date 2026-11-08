@@ -2,7 +2,7 @@
 # One job: at checkout, B2B (company) buyers only see the shipping option(s)
 # the merchant keeps (default "Standard"), optionally renamed. Retail untouched.
 
-client_id = "cedecc1aef268609965c2a03294df4c3"
+client_id = "5db5b5123cb24a6848c6050b87c99d37"
 name = "Carbon B2B Shipping Rules"
 application_url = "https://b2b-shipping.shopcarbon.com"
 embedded = true
