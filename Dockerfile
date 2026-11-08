@@ -73,9 +73,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # changes. Override per-deploy via Coolify env if a future operator is
 # elsewhere — this is the project default, not a hard pin.
 ENV TZ=America/New_York
+# Email visual check (lib/server/email/render.ts): Alpine's Chromium renders the finished email for
+# the desktop + phone screenshots; Liberation fonts stand in for Arial/Helvetica like mail apps do.
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs \
   && apk add --no-cache libc6-compat postgresql-client su-exec tzdata ffmpeg \
+     chromium nss freetype harfbuzz ttf-freefont font-liberation \
   && cp /usr/share/zoneinfo/America/New_York /etc/localtime \
   && echo "America/New_York" > /etc/timezone
 COPY --from=builder /app/public ./public

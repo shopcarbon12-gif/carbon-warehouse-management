@@ -44,6 +44,10 @@ type Msg = {
   variantNo: number | null;
   picked: boolean | null;
   banners: { id: string; url: string | null; qa: string | null; error: string | null; text: string | null }[];
+  concept: Concept | null;
+  shots: { id: string; kind: "hero" | "look"; url: string | null; qa: string | null; error: string | null }[];
+  creativeModel: string | null;
+  imageModel: string | null;
 };
 type Design = {
   id: string;
@@ -55,8 +59,19 @@ type Design = {
   preheader_hint: string | null;
   manifest: { notes?: string | null; merge_tags?: string[]; image_count?: number } | null;
   convert_error: string | null;
+  check_status: "running" | "queued" | "passed" | "failed" | "error" | null;
+  check_override: boolean;
+  check_rounds: { round: number; pass: boolean; score: number; summary: string; issues: { severity: string; view: string; where: string; problem: string; fix: string }[]; desktop: string | null; phone: string | null; model: string; fixed?: boolean; error?: string }[];
   package_url: string | null;
   updated_at: string;
+};
+
+type Concept = {
+  story: string;
+  hero: { scene: string; headline: string };
+  looks: { id: string; name: string; mood: string; copy: string }[];
+  offer: { headline: string; text: string };
+  showroom: { headline: string; text: string };
 };
 
 const WORKING = ["queued", "planning", "generating", "approved", "approved-planning"];
@@ -70,6 +85,11 @@ const TARGETS = [
 /** What an unfinished AI turn is doing right now, in words. */
 function progressText(m: Msg): string {
   if (m.status === "queued") return "Waiting to start (within a minute)…";
+  if (m.step === "concept" && m.status === "planning") return "The creative director is writing the concept (the idea, the hero, three looks)…";
+  if (m.step === "shots")
+    return m.mode === "fast"
+      ? "Making the 4 campaign photos (hero + 3 looks) and checking each against the real products (about 2 to 4 minutes)…"
+      : "Making the 4 campaign photos in the OpenAI batch (usually minutes, up to an hour), then checking each…";
   if (m.engine === "layout") {
     if (m.status === "planning") return m.text ? "Making the banners…" : "Designing the layout and picking the products (1 to 3 minutes)…";
     const n = m.banners.length;
@@ -146,6 +166,76 @@ export function EmailDesigner() {
   );
 }
 
+/** Steps 5–6: the rendered email's visual check (screenshots, problems, fixes). */
+function CheckPanel({ design, busy, onAction, onZoom }: { design: Design; busy: string | null; onAction: (a: "check" | "override") => void; onZoom: (s: string) => void }) {
+  const running = design.status === "checking" || design.check_status === "running" || design.check_status === "queued";
+  const rounds = design.check_rounds ?? [];
+  const last = rounds.at(-1);
+  const tone =
+    design.check_status === "passed" ? "border-emerald-500/60" : design.check_status === "failed" || design.check_status === "error" ? "border-amber-500/70" : "border-[var(--wms-border)]";
+  return (
+    <div className={`flex flex-col gap-2 rounded-md border p-2 ${tone}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={label}>
+          Visual check
+          {running
+            ? " · running (rendering the email, the creative director reviews the screenshots)…"
+            : design.check_status === "passed"
+              ? ` · passed${last ? ` (score ${last.score}/10)` : ""}`
+              : design.check_status === "failed"
+                ? ` · not passed${last ? ` (score ${last.score}/10)` : ""}${design.check_override ? " · you chose to use it anyway" : ""}`
+                : design.check_status === "error"
+                  ? " · could not run"
+                  : " · not run yet"}
+        </span>
+        {!running && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={!!busy} onClick={() => onAction("check")}>
+              {busy === "check-check" ? "Starting…" : "Check again"}
+            </button>
+            {(design.check_status === "failed" || design.check_status === "error") && !design.check_override && (
+              <button type="button" className={`${btn} border-[var(--wms-border)]`} disabled={!!busy} onClick={() => onAction("override")}>
+                Use anyway
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {rounds.map((r) => (
+        <div key={r.round} className="flex flex-col gap-1 border-t border-[var(--wms-border)] pt-1 text-xs text-[var(--wms-fg)]">
+          <span className="font-semibold">
+            Round {r.round}: {r.error ? "could not run" : r.pass ? "passed" : "not passed"} {r.error ? "" : `· ${r.score}/10`}
+            {r.model ? ` · ${r.model}` : ""}
+            {r.fixed ? " · fixed automatically, checked again" : ""}
+          </span>
+          {r.error ? <span className="text-[var(--wms-status-danger-fg)]">{r.error}</span> : r.summary && <span>{r.summary}</span>}
+          {r.issues.length > 0 && (
+            <ul className="list-disc pl-4">
+              {r.issues.map((i, n) => (
+                <li key={n} className={i.severity === "high" ? "text-[var(--wms-status-danger-fg)]" : ""}>
+                  [{i.severity}, {i.view}] {i.where}: {i.problem}
+                </li>
+              ))}
+            </ul>
+          )}
+          {(r.desktop || r.phone) && (
+            <div className="flex gap-2">
+              {[r.desktop, r.phone].map((u, k) =>
+                u ? (
+                  <button key={k} type="button" onClick={() => onZoom(u)} className={`overflow-hidden rounded border border-[var(--wms-border)] ${k ? "w-20" : "w-32"}`} title={k ? "Phone screenshot" : "Desktop screenshot"}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={u} alt={k ? "Phone screenshot" : "Desktop screenshot"} loading="lazy" className="block h-24 w-full object-cover object-top" />
+                  </button>
+                ) : null,
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Picture({ src, alt, onOpen }: { src: string | null; alt: string; onOpen: (s: string) => void }) {
   if (!src) return <div className="flex h-40 items-center justify-center rounded border border-dashed border-[var(--wms-border)] text-[0.68rem] text-[var(--wms-muted)]">—</div>;
   return (
@@ -158,7 +248,7 @@ function Picture({ src, alt, onOpen }: { src: string | null; alt: string; onOpen
 
 function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
   const { data, error, mutate } = useSWR<{ design: Design; messages: Msg[] }>(`/api/email/designs/${id}`, fetcher, {
-    refreshInterval: (d) => (d && (d.messages.some((m) => WORKING.includes(m.status)) || d.design.status === "converting") ? 4000 : 0),
+    refreshInterval: (d) => (d && (d.messages.some((m) => WORKING.includes(m.status)) || d.design.status === "converting" || d.design.status === "checking" || d.design.check_status === "running" || d.design.check_status === "queued") ? 4000 : 0),
   });
   const [text, setText] = useState("");
   const [target, setTarget] = useState<"both" | "desktop" | "mobile">("both");
@@ -317,7 +407,19 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
           defaultValue={design.title}
           onBlur={(e) => e.target.value.trim() && e.target.value !== design.title && rename(e.target.value.trim())}
         />
-        <span className="font-mono text-[0.68rem] uppercase text-[var(--wms-muted)]">{design.status === "ready" ? "Email ready" : design.status}</span>
+        <span className="font-mono text-[0.68rem] uppercase text-[var(--wms-muted)]">
+          {design.status === "checking" || design.check_status === "running" || design.check_status === "queued"
+            ? "Checking the email…"
+            : design.status === "ready"
+              ? design.check_status === "passed"
+                ? "Email ready · passed the check"
+                : design.check_override
+                  ? "Email ready · used anyway"
+                  : design.check_status === "failed" || design.check_status === "error"
+                    ? "Email not passed yet"
+                    : "Email ready"
+              : design.status}
+        </span>
       </div>
       {msg && <p className={`text-xs ${msg.err ? "text-[var(--wms-status-danger-fg)]" : "text-emerald-700 dark:text-emerald-300"}`}>{msg.text}</p>}
 
@@ -371,6 +473,56 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
                 )}
               </div>
               {m.direction && <p className="font-mono text-[0.68rem] uppercase tracking-wide text-[var(--wms-muted)]">Direction: {m.direction}</p>}
+              {m.concept && (!m.variantNo || m.variantNo === 1) && (
+                <details className="rounded border border-[var(--wms-border)] p-2 text-xs text-[var(--wms-fg)]" open={m.status === "review"}>
+                  <summary className="cursor-pointer font-semibold">
+                    The concept{m.creativeModel ? ` · by ${m.creativeModel}` : ""}
+                    {m.imageModel ? ` · photos by ${m.imageModel.replace("gpt-image-", "")}` : ""}
+                  </summary>
+                  <div className="mt-1 flex flex-col gap-1">
+                    <p>{m.concept.story}</p>
+                    <p>
+                      <b>Hero:</b> “{m.concept.hero.headline}”
+                    </p>
+                    {m.concept.looks.map((l, i) => (
+                      <p key={l.id}>
+                        <b>
+                          Look {i + 1} · {l.name}
+                        </b>{" "}
+                        ({l.mood}) — {l.copy}
+                      </p>
+                    ))}
+                    <p>
+                      <b>Offer:</b> {m.concept.offer.headline} — {m.concept.offer.text}
+                    </p>
+                    <p>
+                      <b>Showroom:</b> {m.concept.showroom.headline} — {m.concept.showroom.text}
+                    </p>
+                    {m.status === "review" && <p className="text-[var(--wms-muted)]">The hero and the 3 look photos are made after you approve the items.</p>}
+                  </div>
+                </details>
+              )}
+              {m.status !== "review" && (!m.variantNo || m.variantNo === 1) && m.shots.some((x) => x.url || x.error) && (
+                <div className="flex flex-col gap-1">
+                  <span className={label}>Campaign photos made for this email</span>
+                  <div className="flex flex-wrap gap-2">
+                    {m.shots.map((x) => (
+                      <div key={x.id} className={`flex flex-col gap-0.5 text-[0.66rem] text-[var(--wms-muted)] ${x.kind === "hero" ? "w-56 max-md:w-full" : "w-28 max-md:w-[30%]"}`}>
+                        {x.url ? (
+                          <button type="button" onClick={() => setZoom(x.url)} className="block overflow-hidden rounded border border-[var(--wms-border)]" title="Open full size">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={x.url} alt={x.kind === "hero" ? "Hero photo" : `Look ${x.id.slice(1)} photo`} loading="lazy" className="block h-auto w-full" />
+                          </button>
+                        ) : (
+                          <span className="text-[var(--wms-status-danger-fg)]">Not made: {x.error}</span>
+                        )}
+                        <span>{x.kind === "hero" ? "Hero" : `Look ${x.id.slice(1)}`}</span>
+                        {x.qa && <span className="text-amber-700 dark:text-amber-300">Check still sees: {x.qa}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {m.text && <p className="whitespace-pre-wrap text-sm text-[var(--wms-fg)]">{m.text}</p>}
               {m.status !== "done" && m.status !== "review" && (
                 <p className={`text-xs ${m.status === "failed" ? "text-[var(--wms-status-danger-fg)]" : "text-[var(--wms-muted)]"}`}>
@@ -558,7 +710,8 @@ function DesignChat({ id, onBack }: { id: string; onBack: () => void }) {
               )}
             </div>
           </div>
-          {design.status === "converting" && <p className="text-xs text-[var(--wms-muted)]">Preparing the email…</p>}
+          {design.status === "converting" && <p className="text-xs text-[var(--wms-muted)]">Writing the email code from the chosen version…</p>}
+          {design.html && <CheckPanel design={design} busy={busy} onAction={(action) => run(`check-${action}`, async () => void (await send(`/api/email/designs/${id}/check`, "POST", { action }), await mutate()))} onZoom={setZoom} />}
           {design.status === "failed" && design.convert_error && <p className="text-xs text-[var(--wms-status-danger-fg)]">{design.convert_error}</p>}
           {design.html && (
             <>

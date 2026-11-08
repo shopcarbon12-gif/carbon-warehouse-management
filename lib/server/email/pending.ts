@@ -9,7 +9,8 @@ export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string;
        UNION ALL
        SELECT d.tenant_id, d.created_by FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id WHERE m.status IN ('queued','planning','generating','approved','approved-planning')
        UNION ALL
-       SELECT tenant_id, created_by FROM email_designs WHERE status = 'converting'
+       SELECT tenant_id, created_by FROM email_designs WHERE status = 'converting' OR check_status = 'queued'
+          OR (status = 'checking' AND updated_at < now() - interval '30 minutes')
        UNION ALL
        -- brand media library (lib/server/email/brand.ts): new Shopify files once a day, then describe what is new
        SELECT t.tenant_id, NULL FROM (SELECT DISTINCT tenant_id FROM email_designs) t

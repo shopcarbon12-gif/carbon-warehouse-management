@@ -8,7 +8,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
-import { getEmailSettings, sesStatus } from "@/lib/server/email/config";
+import { CREATIVE_MODELS, IMAGE_MODELS, getEmailSettings, sesStatus } from "@/lib/server/email/config";
 import { STORE, mediaStatus } from "@/lib/server/email/brand";
 
 export const runtime = "nodejs";
@@ -30,6 +30,8 @@ const schema = z
     sendingEnabled: z.boolean().optional(),
     maxPerMinute: z.number().int().min(1).max(3000).optional(),
     bouncePausePct: z.number().min(0.5).max(4.5).optional(),
+    creativeModel: z.enum(CREATIVE_MODELS).optional(),
+    imageModel: z.enum(IMAGE_MODELS).optional(),
   })
   .strict();
 
@@ -45,9 +47,10 @@ async function PUT_handler(req: Request) {
        from_name = COALESCE($2, from_name), from_email = COALESCE($3, from_email), reply_to = COALESCE($4, reply_to),
        postal_address = COALESCE($5, postal_address), sending_enabled = COALESCE($6, sending_enabled),
        max_per_minute = COALESCE($7, max_per_minute), bounce_pause_pct = COALESCE($8, bounce_pause_pct),
+       creative_model = COALESCE($10, creative_model), image_model = COALESCE($11, image_model),
        updated_at = now(), updated_by = $9
      WHERE tenant_id = $1::uuid`,
-    [g.session.tid, b.fromName ?? null, b.fromEmail ?? null, b.replyTo ?? null, b.postalAddress ?? null, b.sendingEnabled ?? null, b.maxPerMinute ?? null, b.bouncePausePct ?? null, g.session.email ?? null],
+    [g.session.tid, b.fromName ?? null, b.fromEmail ?? null, b.replyTo ?? null, b.postalAddress ?? null, b.sendingEnabled ?? null, b.maxPerMinute ?? null, b.bouncePausePct ?? null, g.session.email ?? null, b.creativeModel ?? null, b.imageModel ?? null],
   );
   return NextResponse.json({ settings: await getEmailSettings(g.pool, g.session.tid) });
 }

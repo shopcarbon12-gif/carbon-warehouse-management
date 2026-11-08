@@ -37,7 +37,7 @@ const prod = (n: number, ref: string): CatalogProduct => ({
 });
 
 (async () => {
-  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql"]) {
+  for (const f of ["0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql"]) {
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
   }

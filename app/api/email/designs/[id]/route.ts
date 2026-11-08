@@ -47,10 +47,16 @@ export async function GET(req: Request, { params }: Ctx) {
     variantNo: m.variant_no ?? null,
     picked: m.picked ?? null,
     banners: (m.banners ?? []).map((b: { id: string; url?: string | null; qa?: string | null; error?: string | null; text?: string | null }) => ({ id: b.id, url: b.url ?? null, qa: b.qa ?? null, error: b.error ?? null, text: b.text ?? null })),
+    concept: m.concept_data ?? null,
+    shots: (m.shots ?? []).map((x) => ({ id: x.id, kind: x.kind, url: file(x.path), qa: x.qa ?? null, error: x.error ?? null })),
+    creativeModel: m.creative_model ?? null,
+    imageModel: m.image_model ?? null,
   }));
   const row = d.rows[0];
+  type Round = { round: number; pass: boolean; score: number; summary: string; issues: unknown[]; desktop: string | null; phone: string | null; model: string; at: string; fixed?: boolean; error?: string };
+  const rounds = ((row.check_rounds ?? []) as Round[]).map((r) => ({ ...r, desktop: file(r.desktop), phone: file(r.phone) }));
   return NextResponse.json({
-    design: { ...row, package_url: file(row.package_path) },
+    design: { ...row, package_url: file(row.package_path), check_rounds: rounds },
     messages,
   });
 }

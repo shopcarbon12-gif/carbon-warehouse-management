@@ -59,9 +59,16 @@ export type EmailSettings = {
   bouncePausePct: number;
   configurationSet: string;
   snsTopicArn: string | null;
+  /** The creative director (concept + visual review) and the picture model, chosen in Email → Settings. */
+  creativeModel: string;
+  imageModel: string;
   updatedAt: string | null;
   updatedBy: string | null;
 };
+
+/** The models the owner can pick from (2026-11-08: compare GPT-6 Astra with gpt-5.5; Sunburst 2.5 / 2.6). */
+export const CREATIVE_MODELS = ["gpt-6-astra", "gpt-5.5"] as const;
+export const IMAGE_MODELS = ["gpt-image-2.5-sunburst", "gpt-image-2.6-sunburst"] as const;
 
 type Row = {
   from_name: string;
@@ -73,6 +80,8 @@ type Row = {
   bounce_pause_pct: string;
   configuration_set: string;
   sns_topic_arn: string | null;
+  creative_model: string | null;
+  image_model: string | null;
   updated_at: Date;
   updated_by: string | null;
 };
@@ -91,6 +100,8 @@ export async function getEmailSettings(pool: Pool, tenantId: string): Promise<Em
     bouncePausePct: Number(s.bounce_pause_pct),
     configurationSet: s.configuration_set,
     snsTopicArn: s.sns_topic_arn,
+    creativeModel: s.creative_model || "gpt-6-astra",
+    imageModel: s.image_model || imageModel(),
     updatedAt: s.updated_at?.toISOString() ?? null,
     updatedBy: s.updated_by,
   };

@@ -26,6 +26,9 @@ import { SAMPLE_CODE, SAMPLE_NAME, type TurnProduct } from "./designer";
 import { LOGO_URLS, referencePhoto } from "./catalog";
 import { STORE, STORE_MEDIA, type TurnMedia } from "./brand";
 import { MERGE_TAGS, sanitizeEmailHtml, usedMergeTags } from "./rules";
+import { slotKeysIn } from "./slots";
+import { checkDesign } from "./check";
+import type { Shot } from "./assets";
 
 const MAX_FILES = 60;
 const MAX_UNZIPPED = 40 * 1024 * 1024;
@@ -152,13 +155,21 @@ export async function runConversions(pool: Pool, log: (m: string) => void = cons
 async function convertOne(pool: Pool, designId: string, messageId: string, log: (m: string) => void): Promise<void> {
   const eng = await pool.query<{ engine: string }>(`SELECT engine FROM email_design_messages WHERE id = $1::uuid`, [messageId]);
   if (eng.rows[0]?.engine === "layout") return packageLayout(pool, designId, messageId, log);
-  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null; desktop_prompt: string | null; mobile_prompt: string | null }>(
-    `SELECT desktop_path, mobile_path, products, media, desktop_prompt, mobile_prompt FROM email_design_messages WHERE id = $1::uuid`,
+  const m = await pool.query<{ desktop_path: string; mobile_path: string; products: TurnProduct[] | null; media: TurnMedia[] | null; desktop_prompt: string | null; mobile_prompt: string | null; shots: Shot[] | null }>(
+    `SELECT desktop_path, mobile_path, products, media, desktop_prompt, mobile_prompt, shots FROM email_design_messages WHERE id = $1::uuid`,
     [messageId],
   );
   const row = m.rows[0];
+  // Versions with picture tokens: only the products actually shown (not the whole approved pool).
+  const shownKeys = new Set(slotKeysIn(row.desktop_prompt, row.mobile_prompt));
+  if (shownKeys.size) {
+    const key = (id: string) => `p${id.split("/").pop() ?? id}`;
+    const all = row.products ?? [];
+    const shown = all.filter((p) => shownKeys.has(key(p.id)) || (p.set && all.some((q) => q.set?.name === p.set!.name && shownKeys.has(key(q.id)))));
+    if (shown.length) row.products = shown;
+  }
   // A design that shows the store always gets both real store photos, even if the AI did not list them.
-  if (/\bS[12]\b|store photo|storefront|showroom|the store from|inside the store/i.test(`${row.desktop_prompt ?? ""} ${row.mobile_prompt ?? ""}`)) {
+  if (shownKeys.has("s1") || shownKeys.has("s2") || /\bS[12]\b|store photo|storefront|showroom|the store from|inside the store/i.test(`${row.desktop_prompt ?? ""} ${row.mobile_prompt ?? ""}`)) {
     const have = new Set((row.media ?? []).map((x) => x.id));
     row.media = [...(row.media ?? []), ...STORE_MEDIA.filter((s) => !have.has(s.id)).map((s) => ({ id: s.id, url: s.url, width: s.width, height: s.height, kind: s.kind, description: s.description }))];
   }
@@ -169,13 +180,20 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
   const fMob = await ai.files.create({ file: await toFile(mob, "design-mobile.png", { type: "image/png" }), purpose: "user_data" });
   // The original photos (store, CARBON pictures, product photos) go in as files, so the email uses them, not AI copies.
   const originals: (Original & { id: string; key: string })[] = [];
-  const addOriginal = async (key: string, file: string, url: string | null, what: string) => {
-    if (!url || originals.length >= 16 || originals.some((o) => o.key === key)) return;
-    const jpg = await referencePhoto(url, 1600).catch(() => null);
+  const addOriginal = async (key: string, file: string, url: string | null, what: string, path?: string | null) => {
+    if ((!url && !path) || originals.length >= 18 || originals.some((o) => o.key === key)) return;
+    const jpg = path
+      ? await downloadStorageObject(path).then((o) => sharp(Buffer.from(o.body)).jpeg({ quality: 92 }).toBuffer()).catch(() => null)
+      : await referencePhoto(url!, 1600).catch(() => null);
     if (!jpg) return;
     const f = await ai.files.create({ file: await toFile(jpg, file, { type: "image/jpeg" }), purpose: "user_data" });
     originals.push({ id: f.id, key, file, what });
   };
+  // The campaign photos made for this email (step 3) are originals too.
+  for (const sh of row.shots ?? []) {
+    if (!sh.path || (shownKeys.size && !shownKeys.has(sh.id))) continue;
+    await addOriginal(`s:${sh.id}`, sh.id === "h1" ? "orig-hero.jpg" : `orig-look-${sh.id.slice(1)}.jpg`, null, sh.id === "h1" ? "the campaign HERO photo made for this email" : `the photo of look ${sh.id.slice(1)} made for this email`, sh.path);
+  }
   for (const [i, m] of (row.media ?? []).entries()) {
     const name = m.kind === "store" ? `orig-store-${m.id.replace(/[^a-z0-9]+/gi, "-").slice(0, 20)}.jpg` : `orig-carbon-picture-${i + 1}.jpg`;
     await addOriginal(`m:${m.id}`, name, m.url, `${m.kind === "store" ? "the REAL CARBON store photo" : "a CARBON picture"}: ${m.description}`);
@@ -210,13 +228,15 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
     if (!zipFile) throw new Error("OpenAI did not produce email-package.zip");
     const res = await ai.containers.files.content.retrieve(zipFile.id, { container_id: containerId });
     const zipBytes = Buffer.from(await res.arrayBuffer());
-    await ingestPackage(pool, designId, zipBytes, log);
+    await ingestPackage(pool, designId, zipBytes, log, "checking");
     await checkOriginals(pool, designId, originals, log);
   } finally {
     await ai.files.delete(fDesk.id).catch(() => {});
     await ai.files.delete(fMob.id).catch(() => {});
     for (const o of originals) await ai.files.delete(o.id).catch(() => {});
   }
+  // Steps 5–6: render, review, fix, re-check — the email is only usable once it passes.
+  await checkDesign(pool, designId, log);
 }
 
 /**
@@ -224,7 +244,7 @@ async function convertOne(pool: Pool, designId: string, messageId: string, log: 
  * files? If one was not, the owner sees it in the notes (and can convert again).
  */
 async function checkOriginals(pool: Pool, designId: string, originals: Original[], log: (m: string) => void): Promise<void> {
-  const want = originals.filter((o) => o.file.startsWith("orig-store") || o.file.startsWith("orig-carbon-picture"));
+  const want = originals.filter((o) => /^orig-(store|carbon-picture|hero|look)/.test(o.file));
   if (!want.length) return;
   const r = await pool.query<{ manifest: Manifest | null }>(`SELECT manifest FROM email_designs WHERE id = $1::uuid`, [designId]);
   const man = r.rows[0]?.manifest;
@@ -296,7 +316,7 @@ export function mediaUrl(path: string): string {
 }
 
 /** Unpack, check, host and store a package (also used when the owner uploads a zip by hand). */
-export async function ingestPackage(pool: Pool, designId: string, zipBytes: Buffer, log: (m: string) => void = console.log): Promise<{ images: number; notes: string | null }> {
+export async function ingestPackage(pool: Pool, designId: string, zipBytes: Buffer, log: (m: string) => void = console.log, status: "ready" | "checking" = "ready"): Promise<{ images: number; notes: string | null }> {
   const zip = await JSZip.loadAsync(zipBytes);
   const entries = Object.values(zip.files).filter((f) => !f.dir);
   if (entries.length > MAX_FILES) throw new Error(`The package has ${entries.length} files (max ${MAX_FILES})`);
@@ -350,10 +370,11 @@ export async function ingestPackage(pool: Pool, designId: string, zipBytes: Buff
   await uploadBytesToStorage({ path: zipPath, bytes: zipBytes, contentType: "application/zip" });
   const notes = [manifest.notes ? String(manifest.notes) : "", leftovers.length ? `Fixed by CarbonWMS: ${leftovers.join(", ")} became merge tags.` : ""].filter(Boolean).join(" ") || null;
   await pool.query(
-    `UPDATE email_designs SET status = 'ready', html = $2, manifest = $3, package_path = $4, convert_error = NULL,
+    `UPDATE email_designs SET status = $7, html = $2, manifest = $3, package_path = $4, convert_error = NULL,
+            check_status = NULL, check_rounds = NULL, check_override = false,
             subject_hint = COALESCE(NULLIF($5, ''), subject_hint), preheader_hint = COALESCE(NULLIF($6, ''), preheader_hint), updated_at = now()
       WHERE id = $1::uuid`,
-    [designId, html, JSON.stringify({ ...manifest, notes, merge_tags: usedMergeTags(html), image_count: hosted.size / 2 }), zipPath, String(manifest.subject ?? "").slice(0, 120), String(manifest.preheader ?? "").slice(0, 200)],
+    [designId, html, JSON.stringify({ ...manifest, notes, merge_tags: usedMergeTags(html), image_count: hosted.size / 2 }), zipPath, String(manifest.subject ?? "").slice(0, 120), String(manifest.preheader ?? "").slice(0, 200), status],
   );
   log(`[email-convert] ${designId}: ready (${hosted.size / 2} pictures)`);
   return { images: hosted.size / 2, notes };

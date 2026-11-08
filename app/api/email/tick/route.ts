@@ -12,6 +12,7 @@ import { refreshResults, runEmailSends } from "@/lib/server/email/campaigns";
 import { runDesignTurns } from "@/lib/server/email/designer";
 import { runConversions } from "@/lib/server/email/convert";
 import { runMediaSync } from "@/lib/server/email/brand";
+import { runQueuedChecks } from "@/lib/server/email/check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,8 @@ export async function POST(req: Request) {
       refreshResults(pool).catch(err),
       runMediaSync(pool).catch(err),
     ]);
-    console.log(`[email] tick sends=${JSON.stringify(sends)} turns=${JSON.stringify(turns)} conversions=${JSON.stringify(conv)} results=${JSON.stringify(results)} media=${JSON.stringify(media)}`);
+    const checks = await runQueuedChecks(pool).catch(err);
+    console.log(`[email] tick sends=${JSON.stringify(sends)} turns=${JSON.stringify(turns)} conversions=${JSON.stringify(conv)} results=${JSON.stringify(results)} media=${JSON.stringify(media)} checks=${JSON.stringify(checks)}`);
   });
   return NextResponse.json({ started: true }, { status: 202 });
 }

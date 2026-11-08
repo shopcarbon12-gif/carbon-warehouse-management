@@ -184,9 +184,21 @@ export async function approvalProblems(pool: Pool, tenantId: string, c: Campaign
   const out: string[] = [];
   if (!c.subject.trim()) out.push("Write a subject line.");
   if (!c.design_id) out.push("Pick an email design.");
-  const d = c.design_id ? await pool.query<{ html: string | null; status: string }>(`SELECT html, status FROM email_designs WHERE id = $1::uuid`, [c.design_id]) : null;
+  const d = c.design_id
+    ? await pool.query<{ html: string | null; status: string; check_status: string | null; check_override: boolean }>(
+        `SELECT html, status, check_status, check_override FROM email_designs WHERE id = $1::uuid`,
+        [c.design_id],
+      )
+    : null;
   const html = d?.rows[0]?.html ?? null;
   if (c.design_id && !html) out.push("The design has not been converted to an email yet.");
+  // Owner, 2026-11-08: an email is only finished once its rendered desktop + phone views pass the visual check.
+  const chk = d?.rows[0];
+  if (html && chk && !chk.check_override) {
+    if (chk.status === "checking" || chk.check_status === "running" || chk.check_status === "queued") out.push("The email's visual check is still running.");
+    else if (chk.check_status === "failed") out.push("The email did not pass the visual check. Fix it (convert again or edit the code, then Check again), or press Use anyway.");
+    else if (chk.check_status === "error") out.push("The visual check could not run. Press Check again, or Use anyway.");
+  }
   if (html) {
     const tags = usedMergeTags(html);
     if ((tags.includes("code") || tags.includes("code_url")) && !c.offer) out.push("The email shows a code, so the campaign needs an offer ($ or % off).");

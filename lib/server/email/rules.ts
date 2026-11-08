@@ -152,8 +152,8 @@ ${body}
 ${FOOTER_MARK}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 16px 32px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:Helvetica,Arial,sans-serif;">
-<tr><td style="border-top:1px solid #e5e5e5;padding-top:16px;font-size:12px;line-height:1.6;color:#888888;text-align:center;">
-You're getting this because you've shopped with Carbon. <a href="{{unsubscribe_url}}" style="color:#888888;text-decoration:underline;">Unsubscribe</a><br>${esc(input.postalAddress)}
+<tr><td style="border-top:1px solid #e5e5e5;padding-top:16px;font-size:13px;line-height:1.6;color:#5f5f5f;text-align:center;">
+You're getting this because you've shopped with Carbon. <a href="{{unsubscribe_url}}" style="color:#5f5f5f;text-decoration:underline;">Unsubscribe</a><br>${esc(input.postalAddress)}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;

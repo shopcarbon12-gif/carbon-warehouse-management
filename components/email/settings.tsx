@@ -13,7 +13,18 @@ type Settings = {
   maxPerMinute: number;
   bouncePausePct: number;
   snsTopicArn: string | null;
+  creativeModel: string;
+  imageModel: string;
 };
+
+const CREATIVE = [
+  ["gpt-6-astra", "GPT-6 Astra (stronger, costs more)"],
+  ["gpt-5.5", "gpt-5.5 (to compare)"],
+] as const;
+const IMAGE = [
+  ["gpt-image-2.5-sunburst", "Sunburst 2.5 (current)"],
+  ["gpt-image-2.6-sunburst", "Sunburst 2.6 (newer, a bit slower)"],
+] as const;
 type Ses = {
   configured: boolean;
   region: string;
@@ -33,6 +44,11 @@ type MediaStatus = { total: number; described: number; usable: number; listedAt:
 type Store = { name: string; address: string; hours: string; phone: string; directionsUrl: string; locatorUrl: string };
 
 const nf = new Intl.NumberFormat("en-US");
+
+async function putModels(body: { creativeModel?: string; imageModel?: string }) {
+  const r = await fetch("/api/email/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error || `HTTP ${r.status}`);
+}
 
 function Check({ ok, warn, children }: { ok: boolean; warn?: boolean; children: React.ReactNode }) {
   const tone = ok ? "text-emerald-700 dark:text-emerald-300" : warn ? "text-amber-700 dark:text-amber-300" : "text-[var(--wms-status-danger-fg)]";
@@ -213,6 +229,55 @@ export function EmailSettingsPanel() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {form && (
+        <section className={card}>
+          <span className={`${label} block pb-2`}>AI Designer models</span>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className={label}>Creative director (the concept + the visual check)</span>
+              <select
+                id="email-set-creative"
+                className={field}
+                value={form.creativeModel}
+                disabled={!!busy}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm({ ...form, creativeModel: v });
+                  void run("models", async () => void (await putModels({ creativeModel: v }), await mutate()));
+                }}
+              >
+                {CREATIVE.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className={label}>Picture model (campaign photos + design pictures)</span>
+              <select
+                id="email-set-image"
+                className={field}
+                value={form.imageModel}
+                disabled={!!busy}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm({ ...form, imageModel: v });
+                  void run("models", async () => void (await putModels({ imageModel: v }), await mutate()));
+                }}
+              >
+                {IMAGE.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="pt-1 text-[0.68rem] text-[var(--wms-muted)]">Each version shows which models made it, so you can compare. The email code itself is always written by gpt-5.5.</p>
         </section>
       )}
 
