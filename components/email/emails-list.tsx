@@ -5,13 +5,15 @@
  * New email (blank, a CARBON starter, or one of the store's saved templates), open the editor (?edit=<id> keeps it open on refresh),
  * duplicate, delete, or start a campaign with it.
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
 import { Copy, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { STARTERS } from "@/lib/email-editor/prebuilt";
 import { btn, card, fetcher, send } from "@/components/marketing/marketing-shared";
 import { EmailEditor } from "./editor/editor";
+import { ChoiceGrid, useCatalog, type Choice } from "./starter-preview";
+import type { EmailDoc } from "@/lib/email-editor/types";
 
 type Row = { id: string; title: string; subject: string | null; updated_at: string; created_by: string | null; has_es: boolean; has_pt: boolean; campaigns: number };
 
@@ -40,7 +42,7 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
   };
   const { data, error, mutate } = useSWR<{ emails: Row[] }>("/api/email/editor", fetcher);
   const [choosing, setChoosing] = useState(false);
-  const lib = useSWR<{ templates: { id: string; name: string; created_at: string; created_by: string | null }[] }>(choosing ? "/api/email/editor/library" : null, fetcher);
+  const lib = useSWR<{ templates: { id: string; name: string; created_at: string; created_by: string | null; data: EmailDoc }[] }>(choosing ? "/api/email/editor/library" : null, fetcher);
   async function removeTemplate(t: { id: string; name: string }) {
     if (!window.confirm(`Delete the template "${t.name}"? Emails made from it stay as they are.`)) return;
     const res = await fetch(`/api/email/editor/library?id=${t.id}`, { method: "DELETE" });
@@ -49,6 +51,12 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
   }
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const cat = useCatalog(choosing);
+  const starters = useMemo<Choice[]>(() => STARTERS.map((st) => ({ key: st.id, name: st.name, description: st.description, doc: st.make(), onStart: () => void create({ starter: st.id }) })), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const templates = useMemo<Choice[]>(
+    () => (lib.data?.templates ?? []).map((t) => ({ key: t.id, name: t.name, description: `Saved ${when(t.created_at)}`, doc: t.data, onStart: () => void create({ templateId: t.id }) })),
+    [lib.data], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   async function create(body: { starter?: string; fromId?: string; templateId?: string }) {
     setMsg(null);
@@ -101,40 +109,25 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
         </button>
       </div>
       {choosing && (
-        <section className={`${card} flex flex-col gap-2`}>
+        <section className={`${card} flex flex-col gap-3`}>
           {!!lib.data?.templates.length && (
             <>
               <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Your templates</h3>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {lib.data.templates.map((t) => (
-                  <div key={t.id} className="relative flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] hover:border-[var(--wms-fg)]">
-                    <button type="button" disabled={!!busy} onClick={() => create({ templateId: t.id })} className="flex flex-col gap-1 p-3 pr-9 text-left disabled:opacity-50">
-                      <span className="text-sm font-semibold text-[var(--wms-fg)]">{busy === t.id ? "Creating…" : t.name}</span>
-                      <span className="text-xs text-[var(--wms-muted)]">Saved {when(t.created_at)}</span>
-                    </button>
-                    <button type="button" title="Delete template" aria-label={`Delete template ${t.name}`} onClick={() => void removeTemplate(t)} className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded text-[var(--wms-muted)] hover:text-[var(--wms-status-danger-fg)]">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <ChoiceGrid
+                cat={cat}
+                busy={busy}
+                items={templates}
+                extra={(c) => (
+                  <button type="button" title="Delete template" aria-label={`Delete template ${c.name}`} onClick={() => void removeTemplate({ id: c.key, name: c.name })} className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded bg-white/90 text-[#6b7280] shadow-sm hover:text-[#b91c1c]">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              />
             </>
           )}
           <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{lib.data?.templates.length ? "CARBON starters" : "Start from"}</h3>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-            {STARTERS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                disabled={!!busy}
-                onClick={() => create({ starter: s.id })}
-                className="flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] p-3 text-left hover:border-[var(--wms-fg)] disabled:opacity-50"
-              >
-                <span className="text-sm font-semibold text-[var(--wms-fg)]">{busy === s.id ? "Creating…" : s.name}</span>
-                <span className="text-xs text-[var(--wms-muted)]">{s.description}</span>
-              </button>
-            ))}
-          </div>
+          <p className="-mt-2 text-xs text-[var(--wms-muted)]">Click one to see the whole email (computer and phone) before you start.</p>
+          <ChoiceGrid cat={cat} busy={busy} items={starters} />
         </section>
       )}
       {msg && <p className="text-xs text-[var(--wms-status-danger-fg)]">{msg}</p>}
