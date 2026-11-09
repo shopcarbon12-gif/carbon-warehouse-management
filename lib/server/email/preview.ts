@@ -5,7 +5,7 @@ import { mergeValuesFor } from "./campaigns";
 import { SAMPLE_CODE, SAMPLE_NAME } from "./designer";
 import { fillMergeTags, wrapEmail, type EmailLang } from "./rules";
 
-export const PREVIEW_CSP = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+export const PREVIEW_CSP = "default-src 'none'; img-src * data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; base-uri 'none'; form-action 'none'";
 
 export function previewHtml(input: { html: string; subject: string; preheader: string; postalAddress: string; lang?: EmailLang; languages?: EmailLang[] }): string {
   const html = wrapEmail({ designHtml: input.html, subject: input.subject, preheader: input.preheader, postalAddress: input.postalAddress, lang: input.lang, languages: input.languages });

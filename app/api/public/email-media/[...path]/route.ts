@@ -1,7 +1,8 @@
 /**
  * GET /api/public/email-media/designs/<designId>/v-<stamp>/<file> — the
  * pictures inside sent emails (mail apps fetch them). Public (proxy.ts);
- * only paths under email/designs/<uuid>/v-…/ are served, never attachments.
+ * only paths under email/designs/<uuid>/v-…/ and the editor's uploads
+ * (email/uploads/<uuid>.jpg|png|gif) are served, never attachments.
  */
 import { downloadStorageObject } from "@/lib/storageProvider";
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ path: string[] }> };
 
-const OK = /^designs\/[0-9a-f-]{36}\/v-[a-z0-9]+\/[A-Za-z0-9._-]+\.(jpg|png)$/;
+const OK = /^(designs\/[0-9a-f-]{36}\/v-[a-z0-9]+\/[A-Za-z0-9._-]+|uploads\/[0-9a-f-]{36})\.(jpg|png|gif)$/;
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { path } = await params;
@@ -19,7 +20,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const obj = await downloadStorageObject(`email/${rel}`);
     return new Response(obj.body, {
       headers: {
-        "Content-Type": rel.endsWith(".png") ? "image/png" : "image/jpeg",
+        "Content-Type": rel.endsWith(".png") ? "image/png" : rel.endsWith(".gif") ? "image/gif" : "image/jpeg",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });

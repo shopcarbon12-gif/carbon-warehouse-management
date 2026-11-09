@@ -136,6 +136,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
     refreshInterval: (d) => (d && ["scheduled", "sending"].includes(d.campaign.status) ? 5000 : 0),
   });
   const { data: designs } = useSWR<{ designs: DesignRow[] }>("/api/email/designs", fetcher);
+  const { data: built } = useSWR<{ emails: { id: string; title: string }[] }>("/api/email/editor", fetcher);
   const [draft, setDraft] = useState<Campaign | null>(null);
   const [testTo, setTestTo] = useState("");
   const [sendAt, setSendAt] = useState("");
@@ -299,18 +300,31 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
           <input id="email-c-name" className={field} disabled={!isDraft} value={draft.name} onChange={(e) => set({ name: e.target.value })} />
         </label>
         <label className="flex min-w-0 flex-col gap-1">
-          <span className={label}>Email design</span>
+          <span className={label}>Email</span>
           <div className="flex gap-2">
             <select id="email-c-design" className={`${field} min-w-0 flex-1`} disabled={!isDraft} value={draft.design_id ?? ""} onChange={(e) => set({ design_id: e.target.value || null })}>
-              <option value="">Choose a converted design…</option>
-              {ready.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.title}
-                </option>
-              ))}
+              <option value="">Choose an email…</option>
+              {!!built?.emails.length && (
+                <optgroup label="Emails (editor)">
+                  {built.emails.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.title}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {!!ready.length && (
+                <optgroup label="AI Designer">
+                  {ready.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.title}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             <button type="button" className={`${btn} border-[var(--wms-border)]`} onClick={onOpenDesigner}>
-              AI Designer
+              Emails
             </button>
           </div>
         </label>

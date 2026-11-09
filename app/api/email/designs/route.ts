@@ -18,7 +18,7 @@ export async function GET(req: Request) {
             (SELECT count(*) FROM email_design_messages m WHERE m.design_id = d.id AND m.role = 'ai' AND m.status = 'done')::int AS versions,
             EXISTS (SELECT 1 FROM email_design_messages m WHERE m.design_id = d.id AND m.status IN ('queued','planning','generating','approved','approved-planning')) AS working,
             EXISTS (SELECT 1 FROM email_design_messages m WHERE m.design_id = d.id AND m.status = 'review') AS waiting
-       FROM email_designs d WHERE d.tenant_id = $1::uuid AND d.archived_at IS NULL ORDER BY d.updated_at DESC LIMIT 100`,
+       FROM email_designs d WHERE d.tenant_id = $1::uuid AND d.archived_at IS NULL AND d.editor_doc IS NULL ORDER BY d.updated_at DESC LIMIT 100`,
     [g.session.tid],
   );
   return NextResponse.json({ designs: r.rows });

@@ -332,6 +332,27 @@ export async function sendTest(pool: Pool, tenantId: string, input: { campaignId
   return sendOne(s, { to: input.to, ...mail, unsub: unsubscribeUrl(token), tags: [{ name: "campaign", value: c.id }, { name: "kind", value: "test" }] });
 }
 
+/** A test of a design on its own (the editor's "Send test"): sample code, the design's subject line. */
+export async function sendDesignTest(pool: Pool, tenantId: string, input: { designId: string; to: string }): Promise<string> {
+  const s = await getEmailSettings(pool, tenantId);
+  const v = await senderReady(s);
+  if (!v.ok) throw new Error(v.why ?? "Amazon SES is not ready");
+  const d = await pool.query<{ html: string | null; html_es: string | null; html_pt: string | null; subject_hint: string | null; preheader_hint: string | null; title: string }>(
+    `SELECT html, html_es, html_pt, subject_hint, preheader_hint, title FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`,
+    [input.designId, tenantId],
+  );
+  const row = d.rows[0];
+  if (!row?.html) throw new Error("This email has nothing in it yet");
+  const languages: ("en" | "es" | "pt")[] = ["en", ...(row.html_es ? (["es"] as const) : []), ...(row.html_pt ? (["pt"] as const) : [])];
+  const subject = row.subject_hint || row.title;
+  const html = wrapEmail({ designHtml: row.html, subject, preheader: row.preheader_hint ?? "", postalAddress: s.postalAddress, languages });
+  const contact = await pool.query<{ first_name: string | null; unsub_token: string }>(`SELECT first_name, unsub_token FROM email_contacts WHERE tenant_id = $1::uuid AND email = $2`, [tenantId, input.to.toLowerCase()]);
+  const token = contact.rows[0]?.unsub_token ?? "test";
+  const offer: Offer = { amount: 20, endsAt: new Date(Date.now() + 21 * 86400_000).toISOString(), minSubtotal: null, prefix: "CB20" };
+  const mail = renderFor({ subject: `[TEST] ${subject}`, html }, mergeValuesFor({ firstName: contact.rows[0]?.first_name ?? "Maria", code: "CB20-TEST00", offer, unsubToken: token }));
+  return sendOne(s, { to: input.to, ...mail, unsub: unsubscribeUrl(token), tags: [{ name: "kind", value: "test" }] });
+}
+
 const TICK_BUDGET_MS = 45_000;
 
 /** Called by the tick: move every due campaign forward for up to ~45 s. */

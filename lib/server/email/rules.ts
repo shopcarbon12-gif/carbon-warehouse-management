@@ -82,10 +82,12 @@ function esc(s: string): string {
  * link working by falling back to the shop URL.
  */
 export function fillMergeTags(html: string, v: MergeValues): string {
-  return html.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_m, tag: string) => {
+  // {{tag}} or {{tag|fallback}} (the editor's "default text", used when the person has no value).
+  return html.replace(/\{\{\s*([a-z_]+)\s*(?:\|\s*([^}]*?)\s*)?\}\}/g, (_m, tag: string, fallback: string | undefined) => {
     if (!(MERGE_TAGS as readonly string[]).includes(tag)) return "";
     const val = v[tag as MergeTag];
-    if (val != null) return esc(val);
+    if (val != null && val !== "") return esc(val);
+    if (fallback != null) return esc(fallback);
     if (tag === "greeting_name") return "there";
     if (tag === "code_url" || tag === "shop_url") return esc(v.shop_url ?? "https://shopcarbon.com");
     return "";
@@ -95,7 +97,7 @@ export function fillMergeTags(html: string, v: MergeValues): string {
 /** The merge tags a template uses (for the "this email expects a code" check). */
 export function usedMergeTags(html: string): MergeTag[] {
   const out = new Set<MergeTag>();
-  for (const m of html.matchAll(/\{\{\s*([a-z_]+)\s*\}\}/g)) if ((MERGE_TAGS as readonly string[]).includes(m[1])) out.add(m[1] as MergeTag);
+  for (const m of html.matchAll(/\{\{\s*([a-z_]+)\s*(?:\|[^}]*)?\}\}/g)) if ((MERGE_TAGS as readonly string[]).includes(m[1])) out.add(m[1] as MergeTag);
   return [...out];
 }
 
@@ -171,6 +173,8 @@ export function wrapEmail(input: { designHtml: string; subject: string; preheade
   const safe = sanitizeEmailHtml(input.designHtml);
   const body = bodyOf(safe).replace(FOOTER_MARK, "");
   const styles = headStyles(safe);
+  // An editor email carries its page colour (<!--carbon-bg:#f5f5f5-->): the footer sits on the same colour.
+  const bg = /<!--carbon-bg:(#[0-9a-fA-F]{3,8})-->/.exec(input.designHtml)?.[1] ?? "#ffffff"; // read before sanitizing (it drops comments)
   const pre = input.preheader.trim();
   const foot = FOOTER_TEXT[lang];
   return `<!doctype html>
@@ -179,12 +183,12 @@ export function wrapEmail(input: { designHtml: string; subject: string; preheade
 <title>${esc(input.subject)}</title>
 ${styles}
 </head>
-<body style="margin:0;padding:0;background:#ffffff;">
+<body style="margin:0;padding:0;background:${bg};">
 ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(pre)}${"&#8199;&#65279;&#847; ".repeat(40)}</div>` : ""}
 ${languageBar(lang, input.languages ?? [])}
 ${body}
 ${FOOTER_MARK}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 16px 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${bg};"><tr><td align="center" style="padding:8px 16px 32px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:Helvetica,Arial,sans-serif;">
 <tr><td style="border-top:1px solid #e5e5e5;padding-top:16px;font-size:13px;line-height:1.6;color:#5f5f5f;text-align:center;">
 ${foot.why} <a href="{{unsubscribe_url}}" style="color:#5f5f5f;text-decoration:underline;">${foot.unsub}</a><br>${esc(input.postalAddress)}

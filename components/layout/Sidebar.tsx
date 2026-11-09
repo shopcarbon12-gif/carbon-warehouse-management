@@ -119,20 +119,28 @@ const sections: NavSection[] = [
       { href: "/shopify/sales", label: "Orders", icon: ShoppingBag, count: "shopifyToFulfill" },
       { href: "/shopify/returns", label: "Returns", icon: Undo2, count: "shopifyReturns" },
       { href: "/shopify/carbon-shield", label: "Carbon Shield", icon: ShieldCheck },
-      { href: "/shopify/email-popup", label: "Email Popup", icon: MailPlus },
       { href: "/shopify/wholesale", label: "Wholesale", icon: Store, count: "shopifyWholesale" },
       { href: "/shopify/visitors", label: "Visitors", icon: Eye },
     ],
   },
   {
+    // Owner, 2026-11-09: email is its own area (like Klaviyo), not part of Social or Rewards.
+    id: "email",
+    label: "Email Marketing",
+    isActiveSection: (p) => p.startsWith("/marketing/email") || p.startsWith("/marketing/signup-forms"),
+    items: [
+      { href: "/marketing/email", label: "Emails & campaigns", icon: Mail },
+      { href: "/marketing/signup-forms", label: "Sign-up forms", icon: MailPlus },
+    ],
+  },
+  {
     id: "marketing",
     label: "Social",
-    isActiveSection: (p) => p.startsWith("/marketing"),
+    isActiveSection: (p) => p.startsWith("/marketing") && !p.startsWith("/marketing/email") && !p.startsWith("/marketing/signup-forms"),
     items: [
       { href: "/marketing/calendar", label: "Calendar", icon: CalendarDays },
       { href: "/marketing/best-time", label: "Best time", icon: Clock },
       { href: "/marketing/results", label: "Results", icon: BarChart3 },
-      { href: "/marketing/email", label: "Email", icon: Mail },
       { href: "/marketing/ads", label: "Ads", icon: Megaphone },
       { href: "/marketing/merchant", label: "Merchant Center", icon: ShoppingBag },
       { href: "/integrations/social", label: "Social channels", icon: Megaphone },

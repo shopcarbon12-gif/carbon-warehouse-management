@@ -1,11 +1,6 @@
-import { WelcomePopupWorkspace } from "@/components/shopify/welcome-popup-workspace";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
+/** Moved to Email Marketing → Sign-up forms (2026-11-09); old links still work. */
 export default function WelcomePopupPage() {
-  return (
-    <div className="mx-auto flex w-full min-w-0 max-w-7xl flex-col">
-      <WelcomePopupWorkspace />
-    </div>
-  );
+  redirect("/marketing/signup-forms");
 }

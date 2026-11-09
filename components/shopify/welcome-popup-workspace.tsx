@@ -82,7 +82,7 @@ export function WelcomePopupWorkspace() {
       {/* Header + on/off */}
       <div className="flex flex-col gap-3 border-b border-[var(--wms-border)] pb-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Email Popup</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-[var(--wms-fg)]">Sign-up form · Email Popup</h1>
           <p className="mt-1 max-w-2xl font-mono text-xs text-[var(--wms-muted)]">
             Shoppers on shopcarbon.com leave their email — in the popup or the footer newsletter — and get {s.percentOff}% off their first
             order. Each email is subscribed in Shopify and gets its own code: one use, linked to that email, never on top of another
