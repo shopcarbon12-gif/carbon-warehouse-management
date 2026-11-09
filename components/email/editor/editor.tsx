@@ -18,6 +18,7 @@ import {
   AlignRight,
   ArrowLeft,
   Bold,
+  BookmarkPlus,
   Check,
   ChevronLeft,
   CircleAlert,
@@ -39,13 +40,13 @@ import {
   Undo2,
   UserRound,
 } from "lucide-react";
-import { BLOCK_LABEL, newBlock, type Block, type BlockType, type EmailDoc, type ProductFeed, type ProductItem } from "@/lib/email-editor/types";
+import { BLOCK_LABEL, cloneSection, docColors, newBlock, type Block, type BlockType, type BrandKit, type EmailDoc, type ProductFeed, type ProductItem } from "@/lib/email-editor/types";
 import { prebuiltSections } from "@/lib/email-editor/prebuilt";
 import { Canvas, isSectionDrag, type Drag, type Drop } from "./canvas";
-import { AddContentPanel, BlockPanel, SectionPanel, StylesPanel, type PanelHelpers } from "./panels";
-import { ImagePicker, LayoutDialog, ProductPicker, type PickedImage } from "./pickers";
+import { AddContentPanel, BlockPanel, SectionPanel, StylesPanel, type KitState, type PanelHelpers, type SavedSection } from "./panels";
+import { ImagePicker, LayoutDialog, Modal, ProductPicker, ghostBtn, primaryBtn, type PickedImage } from "./pickers";
 import { PreviewSheet, VersionsPanel } from "./preview";
-import { Field, FontPicker, Group, Text, useEditorFonts } from "./fields";
+import { BrandColors, Field, FontPicker, Group, Text, inputCls, useEditorFonts } from "./fields";
 import {
   addNewBlock,
   addSection,
@@ -334,6 +335,29 @@ export function EmailEditor({ id, onClose }: { id: string; onClose: () => void }
 
 function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => void }) {
   useEditorFonts();
+  /* phase 2: saved sections + brand kit (loaded once; changed here) */
+  const [saved, setSaved] = useState<SavedSection[] | null>(null);
+  const [kit, setKit] = useState<KitState>({ kit: null, busy: false, msg: null });
+  const [naming, setNaming] = useState<{ kind: "template" | "section"; sectionId?: string; name: string; busy?: boolean; err?: string } | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
+  const loadSaved = useCallback(async () => {
+    const r = await fetch("/api/email/editor/library", { cache: "no-store" }).catch(() => null);
+    if (!r?.ok) return setSaved([]);
+    const j = (await r.json()) as { sections: SavedSection[] };
+    setSaved(j.sections);
+  }, []);
+  useEffect(() => {
+    void loadSaved();
+    void fetch("/api/email/editor/brand-kit", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { kit: null }))
+      .then((j: { kit: BrandKit | null }) => setKit((k) => ({ ...k, kit: j.kit })))
+      .catch(() => {});
+  }, [loadSaved]);
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 3500);
+    return () => clearTimeout(t);
+  }, [flash]);
   const h = useHistory(initial.doc);
   const { doc } = h;
   const [title, setTitle] = useState(initial.title);
@@ -503,6 +527,41 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
           if (b.type === "product" && b.source === "dynamic") void feedItems(b.feed).then((items) => h.set((cur) => updateBlock(cur, b.id, (x) => (x.type === "product" ? { ...x, items } : x)), `feed${b.id}`));
   };
 
+  const addSaved = (sid: string, at = afterSection()) => {
+    const x = saved?.find((y) => y.id === sid);
+    if (!x) return;
+    const sec = cloneSection(x.data);
+    h.set(insertSections(doc, at, [sec]));
+    setSel({ kind: "section", id: sec.id });
+  };
+  const deleteSaved = async (sid: string, name: string) => {
+    if (!window.confirm(`Delete the saved section “${name}”? Emails that already use it keep their copy.`)) return;
+    await fetch(`/api/email/editor/library?id=${sid}`, { method: "DELETE" }).catch(() => null);
+    void loadSaved();
+  };
+  const saveNamed = async () => {
+    if (!naming) return;
+    const name = naming.name.trim();
+    if (!name) return setNaming({ ...naming, err: "Give it a name" });
+    const data = naming.kind === "template" ? doc : doc.sections.find((x) => x.id === naming.sectionId);
+    if (!data) return setNaming(null);
+    setNaming({ ...naming, busy: true, err: undefined });
+    const r = await fetch("/api/email/editor/library", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: naming.kind, name, data }) }).catch(() => null);
+    const j = r ? ((await r.json().catch(() => ({}))) as { error?: string }) : { error: "No connection" };
+    if (!r?.ok) return setNaming({ ...naming, busy: false, err: j.error || "Could not save" });
+    setNaming(null);
+    if (naming.kind === "section") {
+      void loadSaved();
+      setFlash(`Saved “${name}”. Find it in Add content → Saved.`);
+    } else setFlash(`Saved “${name}” as a template. Find it under New email.`);
+  };
+  const putKit = async (next: BrandKit, msg: string) => {
+    setKit((k) => ({ ...k, busy: true, msg: null }));
+    const r = await fetch("/api/email/editor/brand-kit", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) }).catch(() => null);
+    const j = r ? ((await r.json().catch(() => ({}))) as { error?: string }) : { error: "No connection" };
+    setKit((k) => (r?.ok ? { kit: next, busy: false, msg } : { ...k, busy: false, msg: j.error || "Could not save the brand kit" }));
+  };
+
   const onDrop = () => {
     const g = dragRef.current;
     const d = dropRef.current;
@@ -519,6 +578,7 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
       h.set(moveBlock(doc, g.id, d.spot));
       setSel({ kind: "block", id: g.id });
     } else if (d.kind === "section" && g.kind === "prebuilt") addPrebuilt(g.id, d.at);
+    else if (d.kind === "section" && g.kind === "saved") addSaved(g.id, d.at);
     else if (d.kind === "section" && g.kind === "layout") setLayoutAt(d.at);
     else if (d.kind === "section" && g.kind === "move-section") h.set(moveSection(doc, g.id, d.at));
   };
@@ -553,7 +613,11 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
       }
     }
   };
-  const sectionAction = (a: "up" | "down" | "duplicate" | "delete", sid: string) => {
+  const sectionAction = (a: "up" | "down" | "duplicate" | "delete" | "save", sid: string) => {
+    if (a === "save") {
+      setNaming({ kind: "section", sectionId: sid, name: "" });
+      return;
+    }
     const i = findSection(doc, sid);
     if (a === "delete") {
       h.set(removeSection(doc, sid));
@@ -643,7 +707,46 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
   );
 
   return (
+    <BrandColors.Provider value={kit.kit?.colors ?? []}>
     <div className="fixed inset-0 z-[60] flex flex-col bg-[var(--wms-bg)]">
+      {flash && (
+        <div role="status" className="fixed bottom-5 left-1/2 z-[80] -translate-x-1/2 rounded-md bg-[#1F2430] px-4 py-2.5 text-[0.8rem] text-white shadow-lg">
+          {flash}
+        </div>
+      )}
+      {naming && (
+        <Modal
+          title={naming.kind === "template" ? "Save as a template" : "Save this section"}
+          onClose={() => setNaming(null)}
+          footer={
+            <>
+              <button type="button" className={ghostBtn} onClick={() => setNaming(null)}>
+                Cancel
+              </button>
+              <button type="button" className={primaryBtn} disabled={naming.busy} onClick={() => void saveNamed()}>
+                {naming.busy ? "Saving…" : "Save"}
+              </button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-2 p-5">
+            <label htmlFor="ce-save-name" className="text-[0.78rem] text-[var(--wms-muted)]">
+              {naming.kind === "template" ? "New emails can start from this template (New email → Your templates). This email stays as it is." : "Reuse it in any email: Add content → Saved. Each email gets its own copy."}
+            </label>
+            <input
+              id="ce-save-name"
+              autoFocus
+              className={inputCls}
+              value={naming.name}
+              maxLength={80}
+              placeholder={naming.kind === "template" ? "e.g. Weekly new arrivals" : "e.g. Store footer"}
+              onChange={(e) => setNaming({ ...naming, name: e.target.value, err: undefined })}
+              onKeyDown={(e) => e.key === "Enter" && void saveNamed()}
+            />
+            {naming.err && <p className="text-[0.75rem] text-[var(--wms-status-danger-fg)]">{naming.err}</p>}
+          </div>
+        </Modal>
+      )}
       {/* top bar */}
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)] px-3">
         <button type="button" onClick={exit} title="Exit editor" aria-label="Exit editor" className="grid h-8 w-8 place-items-center rounded text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]">
@@ -654,6 +757,10 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
         <div className="ml-auto flex items-center gap-2">
           <button type="button" onClick={() => setVersions(!versions)} title="Version history" aria-label="Version history" className={`grid h-8 w-8 place-items-center rounded ${versions ? "bg-[var(--wms-surface-elevated)] text-[var(--wms-fg)]" : "text-[var(--wms-muted)] hover:text-[var(--wms-fg)]"}`}>
             <History size={17} />
+          </button>
+          <button type="button" onClick={() => setNaming({ kind: "template", name: title })} title="Save as a template (start new emails from it)" className="flex h-8 items-center gap-1.5 rounded px-2.5 text-[0.8rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]">
+            <BookmarkPlus size={16} />
+            <span className="max-md:hidden">Save as template</span>
           </button>
           <span className="h-5 w-px bg-[var(--wms-border)]" />
           <button
@@ -711,9 +818,24 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
                   onLayout={(ws) => h.set((d) => setLayout(d, selSection.id, ws))}
                 />
               ) : rail === "add" ? (
-                <AddContentPanel setDrag={setDrag} onAdd={addBlock} onAddLayout={() => setLayoutAt(afterSection())} onAddPrebuilt={(pid) => addPrebuilt(pid)} />
+                <AddContentPanel
+                  setDrag={setDrag}
+                  onAdd={addBlock}
+                  onAddLayout={() => setLayoutAt(afterSection())}
+                  onAddPrebuilt={(pid) => addPrebuilt(pid)}
+                  saved={saved}
+                  onAddSaved={(sid) => addSaved(sid)}
+                  onDeleteSaved={(sid, name) => void deleteSaved(sid, name)}
+                />
               ) : rail === "styles" ? (
-                <StylesPanel styles={doc.styles} onChange={(st, key) => h.set((d) => ({ ...d, styles: st }), key ? `styles:${key}` : "")} />
+                <StylesPanel
+                  styles={doc.styles}
+                  onChange={(st, key) => h.set((d) => ({ ...d, styles: st }), key ? `styles:${key}` : "")}
+                  kit={kit}
+                  onApplyKit={() => kit.kit && (h.set((d) => ({ ...d, styles: kit.kit!.styles })), setKit((k) => ({ ...k, msg: "Brand kit used. Undo (Ctrl+Z) brings the old styles back." })))}
+                  onSaveKit={() => void putKit({ styles: doc.styles, colors: kit.kit?.colors ?? docColors(doc) }, "Saved as the brand kit. New blank emails start with these styles.")}
+                  onKitColors={(colors) => kit.kit && void putKit({ ...kit.kit, colors }, "Brand colours saved.")}
+                />
               ) : (
                 <div className="min-h-0 overflow-y-auto">
                   <Group title="Inbox">
@@ -853,6 +975,7 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
         />
       )}
     </div>
+    </BrandColors.Provider>
   );
 }
 

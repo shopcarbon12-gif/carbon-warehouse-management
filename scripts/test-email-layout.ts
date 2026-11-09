@@ -1,7 +1,7 @@
 /**
  * CarbonWMS Email layout engine — slots, rendering and the 3-directions flow,
  * against a THROWAWAY Postgres (never a real database), no network:
- *   TEST_DB=postgres://postgres:test@127.0.0.1:55499/postgres npx tsx scripts/test-email-layout.ts
+ *   TEST_DB=postgres://postgres:test@127.0.0.1:55499/postgres EMAIL_AI_DESIGNER=on npx tsx scripts/test-email-layout.ts
  * Run scripts/test-email-db.ts first (it creates the email tables).
  */
 import assert from "node:assert/strict";

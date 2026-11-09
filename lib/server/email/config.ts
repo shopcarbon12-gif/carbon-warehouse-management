@@ -71,9 +71,10 @@ export type EmailSettings = {
  * "$100 in the OpenAI API … none of it even give me 1 good option"). Emails are built in the
  * editor now. Nothing that spends on OpenAI for it runs: new messages, approvals, conversions,
  * visual checks and the worker's turns all stop here. The old designs stay readable and usable
- * in campaigns. Set to false to bring it back (and add the tab again in email-workspace.tsx).
+ * in campaigns. EMAIL_AI_DESIGNER=on brings the server side back (the old tests run with it); the tab
+ * would also need adding again in email-workspace.tsx.
  */
-export const AI_DESIGNER_OFF = true;
+export const aiDesignerOff = (): boolean => process.env.EMAIL_AI_DESIGNER !== "on";
 export const AI_DESIGNER_OFF_MSG = "The AI Designer is switched off. Build emails in Email Marketing → Emails → New email.";
 
 /** The models the owner can pick from (2026-11-08: compare GPT-6 Astra with gpt-5.5; Sunburst 2.5 / 2.6). */

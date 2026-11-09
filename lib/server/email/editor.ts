@@ -18,6 +18,7 @@ import { WMS_BASE } from "./config";
 import { mediaLibrary } from "./brand";
 import { catalogSets, inStockCatalog } from "./catalog";
 import { ensureEditorPics, loadPics } from "./text-pics";
+import { getKit, templateDoc } from "./library";
 
 export type EditorEmail = {
   id: string;
@@ -62,12 +63,17 @@ export async function readyEditorPics(pool: Pool, designId: string): Promise<voi
   await ensureEditorPics(pool, designId, editorHtml).catch((e) => console.warn(`[email-pics] ${designId}: ${e instanceof Error ? e.message : String(e)}`));
 }
 
-export async function createEditorEmail(pool: Pool, tenantId: string, by: string | null, input: { title?: string; starter?: string; fromId?: string }): Promise<string> {
+export async function createEditorEmail(pool: Pool, tenantId: string, by: string | null, input: { title?: string; starter?: string; fromId?: string; templateId?: string }): Promise<string> {
   let doc: EmailDoc = blankDoc();
   let title = input.title?.trim() || "New email";
   let subject = "";
   let preheader = "";
-  if (input.fromId) {
+  if (input.templateId) {
+    const t = await templateDoc(pool, tenantId, input.templateId);
+    if (!t) throw new Error("Template not found");
+    doc = t.doc;
+    title = input.title?.trim() || t.name;
+  } else if (input.fromId) {
     const src = await getEditorEmail(pool, tenantId, input.fromId);
     if (!src) throw new Error("Email not found");
     doc = src.doc;
@@ -80,6 +86,11 @@ export async function createEditorEmail(pool: Pool, tenantId: string, by: string
       doc = st.make();
       if (!input.title) title = st.id === "blank" ? "New email" : st.name;
     }
+  }
+  // A blank email starts in the store's brand kit (the starters keep their own look).
+  if (!input.templateId && !input.fromId && (!input.starter || input.starter === "blank")) {
+    const kit = await getKit(pool, tenantId);
+    if (kit) doc = { ...doc, styles: kit.styles };
   }
   const { pics, missing } = await picsFor(pool, doc);
   const r = await pool.query<{ id: string }>(

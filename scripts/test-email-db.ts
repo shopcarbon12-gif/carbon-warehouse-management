@@ -1,7 +1,7 @@
 /**
  * CarbonWMS Email — database test against a THROWAWAY Postgres (never prod):
  *   docker run -d --rm --name carbon-email-test -e POSTGRES_PASSWORD=test -p 127.0.0.1:55499:5432 postgres:16-alpine
- *   TEST_DB=postgres://postgres:test@127.0.0.1:55499/postgres npx tsx scripts/test-email-db.ts
+ *   TEST_DB=postgres://postgres:test@127.0.0.1:55499/postgres EMAIL_AI_DESIGNER=on npx tsx scripts/test-email-db.ts
  * Applies only migration 0147 and checks the contact list, audiences, the
  * approval snapshot, SES events, unsubscribes and campaign states.
  */
@@ -18,6 +18,11 @@ if (!/127\.0\.0\.1:55499|localhost:55499/.test(url)) throw new Error("TEST_DB mu
 const T = "00000000-0000-0000-0000-000000000001";
 
 async function main() {
+  // The AI Designer is switched off in production (2026-11-09); these checks keep its code honest.
+  if (process.env.EMAIL_AI_DESIGNER !== "on") {
+    console.log("skipped: the AI Designer is off — run with EMAIL_AI_DESIGNER=on");
+    return;
+  }
   const pool = new Pool({ connectionString: url });
   await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
   // Idempotent: the migrations run again on every deploy.

@@ -2,7 +2,7 @@
 
 /**
  * Email Marketing → Emails: the emails built in the drag-and-drop editor (Klaviyo's "Templates").
- * New email (blank or a CARBON starter), open the editor (?edit=<id> keeps it open on refresh),
+ * New email (blank, a CARBON starter, or one of the store's saved templates), open the editor (?edit=<id> keeps it open on refresh),
  * duplicate, delete, or start a campaign with it.
  */
 import { useState } from "react";
@@ -40,12 +40,19 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
   };
   const { data, error, mutate } = useSWR<{ emails: Row[] }>("/api/email/editor", fetcher);
   const [choosing, setChoosing] = useState(false);
+  const lib = useSWR<{ templates: { id: string; name: string; created_at: string; created_by: string | null }[] }>(choosing ? "/api/email/editor/library" : null, fetcher);
+  async function removeTemplate(t: { id: string; name: string }) {
+    if (!window.confirm(`Delete the template "${t.name}"? Emails made from it stay as they are.`)) return;
+    const res = await fetch(`/api/email/editor/library?id=${t.id}`, { method: "DELETE" });
+    if (!res.ok) setMsg("Could not delete the template");
+    await lib.mutate();
+  }
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function create(body: { starter?: string; fromId?: string }) {
+  async function create(body: { starter?: string; fromId?: string; templateId?: string }) {
     setMsg(null);
-    setBusy(body.starter ?? body.fromId ?? "new");
+    setBusy(body.starter ?? body.fromId ?? body.templateId ?? "new");
     try {
       const r = await send<{ id: string }>("/api/email/editor", "POST", body);
       setChoosing(false);
@@ -95,7 +102,25 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
       </div>
       {choosing && (
         <section className={`${card} flex flex-col gap-2`}>
-          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Start from</h3>
+          {!!lib.data?.templates.length && (
+            <>
+              <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Your templates</h3>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {lib.data.templates.map((t) => (
+                  <div key={t.id} className="relative flex flex-col gap-1 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] hover:border-[var(--wms-fg)]">
+                    <button type="button" disabled={!!busy} onClick={() => create({ templateId: t.id })} className="flex flex-col gap-1 p-3 pr-9 text-left disabled:opacity-50">
+                      <span className="text-sm font-semibold text-[var(--wms-fg)]">{busy === t.id ? "Creating…" : t.name}</span>
+                      <span className="text-xs text-[var(--wms-muted)]">Saved {when(t.created_at)}</span>
+                    </button>
+                    <button type="button" title="Delete template" aria-label={`Delete template ${t.name}`} onClick={() => void removeTemplate(t)} className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded text-[var(--wms-muted)] hover:text-[var(--wms-status-danger-fg)]">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{lib.data?.templates.length ? "CARBON starters" : "Start from"}</h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {STARTERS.map((s) => (
               <button

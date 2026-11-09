@@ -21,7 +21,7 @@ import sharp from "sharp";
 import { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
-import { AI_DESIGNER_OFF, AI_DESIGNER_OFF_MSG, WMS_BASE, openai, textModel } from "./config";
+import { aiDesignerOff, AI_DESIGNER_OFF_MSG, WMS_BASE, openai, textModel } from "./config";
 import { SAMPLE_CODE, SAMPLE_NAME, type TurnProduct } from "./designer";
 import { LOGO_URLS, referencePhoto } from "./catalog";
 import { STORE, STORE_MEDIA, type TurnMedia } from "./brand";
@@ -104,7 +104,7 @@ STEP 5. Zip the package folder (email.html, manifest.json, images/…) as /mnt/d
 type Manifest = { subject?: string; preheader?: string; images?: { file?: string; alt?: string }[]; merge_tags?: string[]; notes?: string; [k: string]: unknown };
 
 export async function startConvert(pool: Pool, tenantId: string, designId: string, messageId: string): Promise<void> {
-  if (AI_DESIGNER_OFF) throw new Error(AI_DESIGNER_OFF_MSG);
+  if (aiDesignerOff()) throw new Error(AI_DESIGNER_OFF_MSG);
   const m = await pool.query<{ desktop_path: string | null; mobile_path: string | null; engine: string; html: string | null }>(
     `SELECT m.desktop_path, m.mobile_path, m.engine, m.html FROM email_design_messages m JOIN email_designs d ON d.id = m.design_id
       WHERE m.id = $1::uuid AND m.design_id = $2::uuid AND d.tenant_id = $3::uuid AND m.role = 'ai' AND m.status = 'done'`,
@@ -123,7 +123,7 @@ export async function startConvert(pool: Pool, tenantId: string, designId: strin
 
 /** Called by the tick: convert one design at a time. */
 export async function runConversions(pool: Pool, log: (m: string) => void = console.log): Promise<number> {
-  if (AI_DESIGNER_OFF) return 0;
+  if (aiDesignerOff()) return 0;
   const lock = await pool.connect();
   try {
     const got = await lock.query<{ ok: boolean }>(`SELECT pg_try_advisory_lock(hashtext('carbon_email_convert')) AS ok`);

@@ -1,7 +1,7 @@
 import { withActivity } from "@/lib/server/activity-log";
 /**
  * GET  /api/email/editor — the emails made in the drag-and-drop editor.
- * POST /api/email/editor — a new one: { title?, starter? } or a copy { fromId }.
+ * POST /api/email/editor — a new one: { title?, starter? }, a copy { fromId }, or from a saved template { templateId }.
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ emails: r.rows });
 }
 
-const schema = z.object({ title: z.string().trim().max(80).optional(), starter: z.string().max(40).optional(), fromId: z.string().uuid().optional() }).strict();
+const schema = z.object({ title: z.string().trim().max(80).optional(), starter: z.string().max(40).optional(), fromId: z.string().uuid().optional(), templateId: z.string().uuid().optional() }).strict();
 
 async function POST_handler(req: Request) {
   const g = await marketingAdminGuard(req);

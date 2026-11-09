@@ -532,3 +532,28 @@ export function isDoc(x: unknown): x is EmailDoc {
   const d = x as EmailDoc;
   return !!d && d.v === 1 && !!d.styles && Array.isArray(d.sections) && d.sections.every((s) => Array.isArray(s?.cols) && s.cols.every((c) => Array.isArray(c?.blocks)));
 }
+
+/* --------------------------------------------------------------- brand kit */
+
+/**
+ * The store's brand kit (owner, 2026-11-09, like Klaviyo's): the email styles new blank emails
+ * start with (fonts, text colours, link and button look, page and content colours, width) and the
+ * brand colours offered in every colour picker.
+ */
+export type BrandKit = { styles: GlobalStyles; colors: string[] };
+
+const HEX6 = /^#[0-9A-Fa-f]{6}$/;
+export function isKit(x: unknown): x is BrandKit {
+  const k = x as BrandKit;
+  return !!k && !!k.styles && typeof k.styles === "object" && !!k.styles.text && Array.isArray(k.colors) && k.colors.length <= 24 && k.colors.every((c) => typeof c === "string" && HEX6.test(c));
+}
+
+/** The colours an email uses (for "Save as brand kit": a starting palette). */
+export function docColors(doc: EmailDoc): string[] {
+  const seen = new Map<string, number>();
+  for (const m of JSON.stringify(doc).matchAll(/#[0-9A-Fa-f]{6}\b/g)) {
+    const c = m[0].toUpperCase();
+    seen.set(c, (seen.get(c) ?? 0) + 1);
+  }
+  return [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([c]) => c);
+}

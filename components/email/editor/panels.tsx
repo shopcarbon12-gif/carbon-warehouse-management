@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { PREBUILT } from "@/lib/email-editor/prebuilt";
 import { picBlocked } from "@/lib/email-editor/render";
-import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
+import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type BrandKit, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
 import type { Drag } from "./canvas";
 
@@ -67,8 +67,26 @@ function Tile({ label, icon, onDragStart, onDragEnd, onClick }: { label: string;
   );
 }
 
-export function AddContentPanel({ setDrag, onAdd, onAddLayout, onAddPrebuilt }: { setDrag: (d: Drag) => void; onAdd: (t: BlockType) => void; onAddLayout: () => void; onAddPrebuilt: (id: string) => void }) {
-  const [tab, setTab] = useState<"basic" | "prebuilt">("basic");
+export type SavedSection = { id: string; name: string; created_by: string | null; data: Section };
+
+export function AddContentPanel({
+  setDrag,
+  onAdd,
+  onAddLayout,
+  onAddPrebuilt,
+  saved,
+  onAddSaved,
+  onDeleteSaved,
+}: {
+  setDrag: (d: Drag) => void;
+  onAdd: (t: BlockType) => void;
+  onAddLayout: () => void;
+  onAddPrebuilt: (id: string) => void;
+  saved: SavedSection[] | null;
+  onAddSaved: (id: string) => void;
+  onDeleteSaved: (id: string, name: string) => void;
+}) {
+  const [tab, setTab] = useState<"basic" | "prebuilt" | "saved">("basic");
   const [q, setQ] = useState("");
   const [tag, setTag] = useState("All");
   const tags = ["All", ...Array.from(new Set(PREBUILT.flatMap((p) => p.tags)))];
@@ -84,6 +102,7 @@ export function AddContentPanel({ setDrag, onAdd, onAddLayout, onAddPrebuilt }: 
           [
             ["basic", "Basic"],
             ["prebuilt", "Pre-built"],
+            ["saved", "Saved"],
           ] as const
         ).map(([t, l]) => (
           <button key={t} type="button" onClick={() => setTab(t)} className={`-mb-px border-b-2 px-2 py-2.5 text-[0.8rem] ${tab === t ? "border-[var(--wms-accent)] font-semibold text-[var(--wms-fg)]" : "border-transparent text-[var(--wms-muted)]"}`}>
@@ -109,6 +128,34 @@ export function AddContentPanel({ setDrag, onAdd, onAddLayout, onAddPrebuilt }: 
             </div>
           </div>
           <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">Drag a block onto the email, or click it to add it under the selected block. Double-click text to type in it.</p>
+        </div>
+      ) : tab === "saved" ? (
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto p-4">
+          {!saved && <p className="text-[0.75rem] text-[var(--wms-muted)]">Loading…</p>}
+          {saved && !saved.length && (
+            <p className="text-[0.75rem] leading-relaxed text-[var(--wms-muted)]">
+              Nothing saved yet. Click a section on the email, then the bookmark button on its toolbar, to keep it here and reuse it in any email (a header, a footer, a store block…).
+            </p>
+          )}
+          {saved?.map((x) => (
+            <div key={x.id} className="group flex items-center gap-1">
+              <button
+                type="button"
+                draggable
+                onDragStart={start({ kind: "saved", id: x.id })}
+                onDragEnd={() => setDrag(null)}
+                onClick={() => onAddSaved(x.id)}
+                className="flex min-w-0 flex-1 items-center justify-between rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] px-3 py-2.5 text-left text-[0.8rem] text-[var(--wms-fg)] hover:border-[var(--wms-accent)]"
+              >
+                <span className="truncate">{x.name}</span>
+                <span className="shrink-0 text-[0.68rem] text-[var(--wms-muted)]">{x.data.cols.length > 1 ? `${x.data.cols.length} columns` : "section"}</span>
+              </button>
+              <button type="button" title={`Delete “${x.name}”`} aria-label={`Delete ${x.name}`} onClick={() => onDeleteSaved(x.id, x.name)} className="grid h-8 w-8 shrink-0 place-items-center rounded text-[var(--wms-muted)] hover:text-[var(--wms-status-danger-fg)]">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          {saved && saved.length > 0 && <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">Drag one onto the email or click it. Each email gets its own copy, so changing it in one email never changes another.</p>}
         </div>
       ) : (
         <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-4">
@@ -804,13 +851,85 @@ const HEADINGS: { k: HeadingKey; label: string }[] = [
   { k: "h4", label: "Heading 4" },
 ];
 
-export function StylesPanel({ styles, onChange }: { styles: GlobalStyles; onChange: (s: GlobalStyles, key?: string) => void }) {
+export type KitState = { kit: BrandKit | null; busy: boolean; msg: string | null };
+
+export function StylesPanel({
+  styles,
+  onChange,
+  kit,
+  onApplyKit,
+  onSaveKit,
+  onKitColors,
+}: {
+  styles: GlobalStyles;
+  onChange: (s: GlobalStyles, key?: string) => void;
+  kit: KitState;
+  onApplyKit: () => void;
+  onSaveKit: () => void;
+  onKitColors: (colors: string[]) => void;
+}) {
   const [k, setK] = useState<HeadingKey>("body");
+  const [add, setAdd] = useState("#111111");
   const s = styles;
   const set = (p: Partial<GlobalStyles>, key = "") => onChange({ ...s, ...p }, key);
   const t = s.text[k];
+  const same = !!kit.kit && JSON.stringify(kit.kit.styles) === JSON.stringify(s);
   return (
     <div className="min-h-0 overflow-y-auto">
+      <Group title="Brand kit">
+        <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">
+          {kit.kit
+            ? same
+              ? "This email uses your brand kit."
+              : "Your saved fonts, colours, buttons and page look. New blank emails start with them."
+            : "Save this email's styles as your brand kit: new blank emails start with them, and any email can use them in one click."}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {kit.kit && !same && (
+            <button type="button" disabled={kit.busy} onClick={onApplyKit} className="h-8 rounded bg-[var(--wms-accent)] px-3 text-[0.75rem] font-semibold text-[var(--wms-accent-fg)] disabled:opacity-50">
+              Use brand kit here
+            </button>
+          )}
+          {!same && (
+            <button type="button" disabled={kit.busy} onClick={onSaveKit} className="h-8 rounded border border-[var(--wms-border)] px-3 text-[0.75rem] font-semibold text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50">
+              {kit.kit ? "Save these styles as the brand kit" : "Save as brand kit"}
+            </button>
+          )}
+        </div>
+        {kit.kit && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[0.72rem] text-[var(--wms-muted)]">Brand colours (the round button in every colour field)</span>
+            <div className="flex flex-wrap gap-1.5">
+              {kit.kit.colors.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  title={`${c}: click to remove`}
+                  aria-label={`Remove ${c}`}
+                  disabled={kit.busy}
+                  onClick={() => onKitColors(kit.kit!.colors.filter((x) => x !== c))}
+                  className="group relative h-7 w-7 rounded border border-[var(--wms-border)]"
+                  style={{ background: c }}
+                >
+                  <span className="absolute inset-0 hidden place-items-center rounded bg-black/40 text-[0.7rem] text-white group-hover:grid">×</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <Color value={add} onChange={setAdd} />
+              <button
+                type="button"
+                disabled={kit.busy || kit.kit.colors.length >= 24 || kit.kit.colors.includes(add.toUpperCase())}
+                onClick={() => onKitColors([...kit.kit!.colors, add.toUpperCase()])}
+                className="h-8 rounded border border-[var(--wms-border)] px-2.5 text-[0.75rem] text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-40"
+              >
+                Add colour
+              </button>
+            </div>
+          </div>
+        )}
+        {kit.msg && <p className="text-[0.72rem] text-[var(--wms-muted)]">{kit.msg}</p>}
+      </Group>
       <Group title="Email">
         <Field label="Page background" inline>
           <Color value={s.pageBg} onChange={(v) => set({ pageBg: v }, "pbg")} />

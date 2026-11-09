@@ -5,9 +5,12 @@
  * heading (optional groups show + to add and − to remove), colour fields (swatch + hex), padding as
  * Vertical / Horizontal with a split into four sides, a font row, alignment buttons, toggles.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AlignCenter, AlignLeft, AlignRight, Bold, Italic, Minus, Plus, Strikethrough, Underline, Unlink2, Link2 } from "lucide-react";
 import { FONTS, FONT_CATS, fontStack, googleFontUrl, type Align, type Border, type Font, type Pad } from "@/lib/email-editor/types";
+
+/** The store's brand colours (brand kit), offered in every colour field. */
+export const BrandColors = createContext<string[]>([]);
 
 /** Load every library font into the editor page once (the picker shows each name in its own font). */
 export function useEditorFonts() {
@@ -167,8 +170,38 @@ export function Color({ value, onChange }: { value: string; onChange: (v: string
     setTxt(value.replace("#", "").toUpperCase());
   }
   const full = /^#[0-9a-fA-F]{3}$/.test(value) ? `#${value[1]}${value[1]}${value[2]}${value[2]}${value[3]}${value[3]}` : value;
+  const brand = useContext(BrandColors);
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
   return (
-    <div className="flex h-8 w-[132px] items-center gap-1.5 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5">
+    <div ref={box} className={`relative flex h-8 ${brand.length ? "w-[156px]" : "w-[132px]"} items-center gap-1.5 rounded border border-[var(--wms-border)] bg-[var(--wms-surface-elevated)] px-1.5`}>
+      {open && (
+        <div className="absolute right-0 top-9 z-50 grid w-[204px] grid-cols-6 gap-1.5 rounded-md border border-[var(--wms-border)] bg-[var(--wms-surface)] p-2 shadow-lg">
+          <span className="col-span-6 text-[0.68rem] font-semibold uppercase tracking-wide text-[var(--wms-muted)]">Brand colours</span>
+          {brand.map((c) => (
+            <button
+              key={c}
+              type="button"
+              title={c}
+              aria-label={`Use ${c}`}
+              onClick={() => {
+                onChange(c);
+                setOpen(false);
+              }}
+              className={`h-6 w-6 rounded border ${c.toUpperCase() === full.toUpperCase() ? "border-[var(--wms-accent)] ring-2 ring-[var(--wms-accent)]" : "border-[var(--wms-border)]"}`}
+              style={{ background: c }}
+            />
+          ))}
+        </div>
+      )}
       <input type="color" aria-label="Pick a colour" value={HEX.test(full) ? full : "#000000"} onChange={(e) => onChange(e.target.value.toUpperCase())} className="h-5 w-5 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0" />
       <span className="text-[0.75rem] text-[var(--wms-muted)]">#</span>
       <input
@@ -181,6 +214,16 @@ export function Color({ value, onChange }: { value: string; onChange: (v: string
           if (t.length === 6) onChange(`#${t}`);
         }}
       />
+      {brand.length > 0 && (
+        <button
+          type="button"
+          title="Brand colours"
+          aria-label="Brand colours"
+          onClick={() => setOpen(!open)}
+          className="h-4 w-4 shrink-0 rounded-full border border-[var(--wms-border)]"
+          style={{ background: `conic-gradient(${brand.slice(0, 6).concat(brand[0]).join(",")})` }}
+        />
+      )}
     </div>
   );
 }

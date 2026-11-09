@@ -174,6 +174,19 @@ async function main() {
     assert.ok(canvas.includes("Hello") && !canvas.includes("<img"), "the canvas stays editable text");
   });
 
+  await t("AI Designer switched off: no new messages unless EMAIL_AI_DESIGNER=on", async () => {
+    const { aiDesignerOff } = await import("../lib/server/email/config");
+    const was = process.env.EMAIL_AI_DESIGNER;
+    delete process.env.EMAIL_AI_DESIGNER;
+    assert.equal(aiDesignerOff(), true);
+    const { addOwnerMessage } = await import("../lib/server/email/designer");
+    await assert.rejects(addOwnerMessage(null as never, { designId: "x", text: "x", attachments: [], target: "both", mode: "fast", by: null }), /switched off/);
+    process.env.EMAIL_AI_DESIGNER = "on";
+    assert.equal(aiDesignerOff(), false);
+    if (was === undefined) delete process.env.EMAIL_AI_DESIGNER;
+    else process.env.EMAIL_AI_DESIGNER = was;
+  });
+
   await t("headline pictures: Chromium draws the real web font at 2x", async () => {
     const { draw } = await import("../lib/server/email/text-pics");
     const { picPage } = await import("../lib/email-editor/render");
@@ -205,9 +218,9 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
-    console.log("ok  migrations (with 0155, 0156) apply twice");
+    console.log("ok  migrations (with 0155–0157) apply twice");
 
     await t("create from a starter: a ready design with html, listed as an editor email", async () => {
       const id = await createEditorEmail(pool, T, "owner@shopcarbon.com", { starter: "collection" });
@@ -260,7 +273,7 @@ async function main() {
       const { setPicStorageForTests, localizePics } = await import("../lib/server/email/text-pics");
       const { readyEditorPics } = await import("../lib/server/email/editor");
       const stored = new Map<string, number>();
-      setPicStorageForTests(async (p) => void stored.set(p.path, p.bytes.length));
+      setPicStorageForTests(async (p) => (stored.set(p.path, p.bytes.length), { url: "", path: p.path }));
       const id = await createEditorEmail(pool, T, null, { starter: "drop" });
       const before = (await pool.query(`SELECT html FROM email_designs WHERE id = $1`, [id])).rows[0].html as string;
       assert.ok(!before.includes("pic-") && before.includes("NEW HEAT"), "saved at once with text standing in");
@@ -284,6 +297,49 @@ async function main() {
       const mm = /<img src="[^"]*pic-([0-9a-f]{16})\.png" alt="NUEVO CALOR"/.exec(es);
       assert.ok(mm && mm[1] !== m![1], "Spanish copy has its own picture");
       assert.ok(!es.includes(`pic-${m![1]}.png`));
+    });
+
+    await t("templates and saved sections: saved as copies, new emails from a template, deleted ones gone", async () => {
+      const { saveItem, listSaved, deleteItem, renameItem } = await import("../lib/server/email/library");
+      const src = (await getEditorEmail(pool, T, await createEditorEmail(pool, T, null, { starter: "editorial" })))!;
+      const tid = await saveItem(pool, T, "o@x", { kind: "template", name: "  Weekly arrivals  ", data: src.doc });
+      const sec = src.doc.sections[1];
+      const sid = await saveItem(pool, T, "o@x", { kind: "section", name: "Hero", data: sec });
+      const all = await listSaved(pool, T);
+      assert.deepEqual(all.map((x) => x.kind).sort(), ["section", "template"]);
+      const savedSec = all.find((x) => x.id === sid)!.data as typeof sec;
+      assert.notEqual(savedSec.id, sec.id, "a saved section never shares ids with the email it came from");
+      assert.equal(JSON.stringify(savedSec.cols[0].blocks.map((b) => b.type)), JSON.stringify(sec.cols[0].blocks.map((b) => b.type)));
+      const fromT = (await getEditorEmail(pool, T, await createEditorEmail(pool, T, null, { templateId: tid })))!;
+      assert.equal(fromT.title, "Weekly arrivals");
+      assert.equal(fromT.doc.sections.length, src.doc.sections.length);
+      assert.notEqual(fromT.doc.sections[0].id, src.doc.sections[0].id);
+      assert.deepEqual(fromT.doc.styles, src.doc.styles);
+      await assert.rejects(saveItem(pool, T, null, { kind: "section", name: "x", data: { nope: 1 } }), /Invalid section/);
+      await assert.rejects(saveItem(pool, T, null, { kind: "template", name: " ", data: src.doc }), /name/);
+      assert.ok(await renameItem(pool, T, sid, "Store hero"));
+      assert.equal((await listSaved(pool, T, "section"))[0].name, "Store hero");
+      assert.ok(await deleteItem(pool, T, tid));
+      assert.equal((await listSaved(pool, T, "template")).length, 0);
+      await assert.rejects(createEditorEmail(pool, T, null, { templateId: tid }), /Template not found/);
+      assert.equal((await listSaved(pool, "00000000-0000-0000-0000-000000000002")).length, 0, "another store sees nothing");
+    });
+
+    await t("brand kit: saved, checked, blank emails start with it, starters keep their own look", async () => {
+      const { saveKit, getKit } = await import("../lib/server/email/library");
+      assert.equal(await getKit(pool, T), null);
+      const styles = structuredClone(defaultStyles());
+      styles.pageBg = "#F7F4EF";
+      styles.text.h1 = { ...styles.text.h1, family: "Bodoni Moda" };
+      await saveKit(pool, T, "o@x", { styles, colors: ["#111111", "#f7f4ef", "#111111"] });
+      const k = (await getKit(pool, T))!;
+      assert.deepEqual(k.colors, ["#111111", "#F7F4EF"], "colours upper-cased, no repeats");
+      await assert.rejects(saveKit(pool, T, null, { styles, colors: ["red"] }), /Invalid brand kit/);
+      const blank = (await getEditorEmail(pool, T, await createEditorEmail(pool, T, null, { starter: "blank" })))!;
+      assert.equal(blank.doc.styles.pageBg, "#F7F4EF");
+      assert.equal(blank.doc.styles.text.h1.family, "Bodoni Moda");
+      const drop = (await getEditorEmail(pool, T, await createEditorEmail(pool, T, null, { starter: "drop" })))!;
+      assert.notEqual(drop.doc.styles.pageBg, "#F7F4EF", "a starter keeps its own look");
     });
   } finally {
     await pool.end();

@@ -12,7 +12,7 @@ import { EmailsList } from "./emails-list";
  * editor) · Campaigns · Audience · Settings. The open tab lives in the URL
  * (?tab=) so a refresh or a shared link opens the same place. The AI Designer
  * tab was removed 2026-11-09 (switched off: lib/server/email/config.ts
- * AI_DESIGNER_OFF); an old ?tab=designer link opens Emails.
+ * aiDesignerOff()); an old ?tab=designer link opens Emails.
  */
 const TABS = [
   { id: "emails", label: "Emails" },

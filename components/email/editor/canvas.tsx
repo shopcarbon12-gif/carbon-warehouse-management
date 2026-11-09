@@ -10,7 +10,7 @@
  *  - double-click a text block to type in it, with the text toolbar at the top of the canvas.
  */
 import { useEffect, useRef, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Copy, GripVertical, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, BookmarkPlus, Copy, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { columnWidths, renderBlock } from "@/lib/email-editor/render";
 import { BLOCK_LABEL, fontStack, type Block, type EmailDoc, type GlobalStyles, type HeadingKey, type Section } from "@/lib/email-editor/types";
 import type { Sel, Spot } from "./state";
@@ -19,12 +19,13 @@ export type Drag =
   | { kind: "new"; type: Block["type"] }
   | { kind: "move"; id: string }
   | { kind: "prebuilt"; id: string }
+  | { kind: "saved"; id: string }
   | { kind: "layout" }
   | { kind: "move-section"; id: string }
   | null;
 export type Drop = { kind: "block"; spot: Spot } | { kind: "section"; at: number } | null;
 
-export const isSectionDrag = (d: Drag) => !!d && (d.kind === "prebuilt" || d.kind === "layout" || d.kind === "move-section");
+export const isSectionDrag = (d: Drag) => !!d && (d.kind === "prebuilt" || d.kind === "saved" || d.kind === "layout" || d.kind === "move-section");
 
 type Props = {
   doc: EmailDoc;
@@ -44,7 +45,7 @@ type Props = {
   setDrag: (d: Drag) => void;
   onText: (id: string, html: string) => void;
   blockAction: (a: "up" | "down" | "duplicate" | "delete", id: string) => void;
-  sectionAction: (a: "up" | "down" | "duplicate" | "delete", id: string) => void;
+  sectionAction: (a: "up" | "down" | "duplicate" | "delete" | "save", id: string) => void;
 };
 
 const BLUE = "#2F6FED";
@@ -267,6 +268,9 @@ export function Canvas(p: Props) {
                     </ToolBtn>
                     <ToolBtn title="Duplicate section" onClick={() => p.sectionAction("duplicate", sec.id)}>
                       <Copy size={15} />
+                    </ToolBtn>
+                    <ToolBtn title="Save section (reuse it in any email)" onClick={() => p.sectionAction("save", sec.id)}>
+                      <BookmarkPlus size={15} />
                     </ToolBtn>
                     <ToolBtn title="Delete section" danger onClick={() => p.sectionAction("delete", sec.id)}>
                       <Trash2 size={15} />
