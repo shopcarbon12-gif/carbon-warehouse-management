@@ -10,13 +10,14 @@ import type { Pool } from "pg";
 import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
-import { renderEmail, BG_MARK } from "@/lib/email-editor/render";
+import { renderEmail, BG_MARK, picSources, type Pic } from "@/lib/email-editor/render";
 import { STARTERS } from "@/lib/email-editor/prebuilt";
 import { blankDoc, isDoc, LOGO, type EmailDoc, type ProductItem } from "@/lib/email-editor/types";
 import { sanitizeEmailHtml } from "./rules";
 import { WMS_BASE } from "./config";
 import { mediaLibrary } from "./brand";
 import { catalogSets, inStockCatalog } from "./catalog";
+import { ensureEditorPics, loadPics } from "./text-pics";
 
 export type EditorEmail = {
   id: string;
@@ -30,10 +31,35 @@ export type EditorEmail = {
   updated_at: string;
 };
 
-/** The email's HTML for sending (sanitized; the page colour mark kept for the footer). */
-export function editorHtml(doc: EmailDoc): string {
-  const html = sanitizeEmailHtml(renderEmail(doc));
+/** The email's HTML for sending (sanitized; the page colour mark kept for the footer). Headline pictures that exist are used; text stands in for the rest. */
+export function editorHtml(doc: EmailDoc, pics: Record<string, Pic> = {}): string {
+  const html = sanitizeEmailHtml(renderEmail(doc, pics));
   return html.replace(/<body([^>]*)>/i, (m) => `${m}${BG_MARK(doc.styles.pageBg)}`);
+}
+
+/** The headline pictures that already exist for this email, and whether any are still missing. */
+async function picsFor(pool: Pool, doc: EmailDoc): Promise<{ pics: Record<string, Pic>; missing: boolean }> {
+  const keys = picSources(doc).map((s) => s.key);
+  const pics = await loadPics(pool, keys);
+  return { pics, missing: keys.some((k) => !pics[k]) };
+}
+
+/** Draw a few seconds after the last save (typing in a picture headline saves every second or so). */
+const later = new Map<string, ReturnType<typeof setTimeout>>();
+function schedulePics(pool: Pool, designId: string): void {
+  clearTimeout(later.get(designId));
+  later.set(
+    designId,
+    setTimeout(() => {
+      later.delete(designId);
+      void readyEditorPics(pool, designId);
+    }, 4000).unref(),
+  );
+}
+
+/** Wait until an editor email's headline pictures are drawn and in its html (preview, test, translate, campaign). */
+export async function readyEditorPics(pool: Pool, designId: string): Promise<void> {
+  await ensureEditorPics(pool, designId, editorHtml).catch((e) => console.warn(`[email-pics] ${designId}: ${e instanceof Error ? e.message : String(e)}`));
 }
 
 export async function createEditorEmail(pool: Pool, tenantId: string, by: string | null, input: { title?: string; starter?: string; fromId?: string }): Promise<string> {
@@ -55,11 +81,13 @@ export async function createEditorEmail(pool: Pool, tenantId: string, by: string
       if (!input.title) title = st.id === "blank" ? "New email" : st.name;
     }
   }
+  const { pics, missing } = await picsFor(pool, doc);
   const r = await pool.query<{ id: string }>(
     `INSERT INTO email_designs (tenant_id, title, status, editor_doc, html, subject_hint, preheader_hint, created_by)
      VALUES ($1::uuid, $2, 'ready', $3, $4, $5, $6, $7) RETURNING id::text`,
-    [tenantId, title.slice(0, 80), JSON.stringify(doc), editorHtml(doc), subject, preheader, by],
+    [tenantId, title.slice(0, 80), JSON.stringify(doc), editorHtml(doc, pics), subject, preheader, by],
   );
+  if (missing) schedulePics(pool, r.rows[0].id);
   return r.rows[0].id;
 }
 
@@ -93,7 +121,8 @@ export async function saveEditorEmail(
   by: string | null,
 ): Promise<{ updated_at: string; translationsDropped: boolean }> {
   if (!isDoc(input.doc)) throw new Error("Invalid email");
-  const html = editorHtml(input.doc);
+  const { pics, missing } = await picsFor(pool, input.doc);
+  const html = editorHtml(input.doc, pics);
   if (html.length > 900_000) throw new Error("The email is too big");
   const r = await pool.query<{ updated_at: Date; dropped: boolean }>(
     `WITH old AS (SELECT html, html_es IS NOT NULL OR html_pt IS NOT NULL AS had FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid AND editor_doc IS NOT NULL)
@@ -108,6 +137,8 @@ export async function saveEditorEmail(
     [id, tenantId, JSON.stringify(input.doc), html, input.title?.trim().slice(0, 80) || null, input.subject ?? null, input.preheader ?? null],
   );
   if (!r.rows[0]) throw new Error("Email not found");
+  // New or changed headline pictures are drawn in the background (saving never waits for them).
+  if (missing) schedulePics(pool, id);
   const last = await pool.query<{ age: number }>(`SELECT EXTRACT(EPOCH FROM now() - max(created_at))::int AS age FROM email_design_versions WHERE design_id = $1::uuid`, [id]);
   const age = last.rows[0]?.age;
   if (input.snapshot || age == null || age > 600) {

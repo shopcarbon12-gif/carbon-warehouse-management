@@ -13,7 +13,7 @@
 import sharp from "sharp";
 import type { Pool } from "pg";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
-import { getEmailSettings } from "./config";
+import { AI_DESIGNER_OFF, getEmailSettings } from "./config";
 import { previewHtml } from "./preview";
 import { renderEmail } from "./render";
 import { fixHtml, review, type Issue } from "./creative";
@@ -109,6 +109,7 @@ export async function checkDesign(pool: Pool, designId: string, log: (m: string)
 
 /** Designs whose owner pressed "Check again" (check_status 'queued'), one at a time (called by the tick). */
 export async function runQueuedChecks(pool: Pool, log: (m: string) => void = console.log): Promise<number> {
+  if (AI_DESIGNER_OFF) return 0;
   // A check cut off by a restart: run it again.
   await pool.query(`UPDATE email_designs SET check_status = 'queued' WHERE (status = 'checking' OR check_status = 'running') AND updated_at < now() - interval '30 minutes'`);
   const r = await pool.query<{ id: string }>(

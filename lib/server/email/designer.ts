@@ -43,7 +43,7 @@ import sharp from "sharp";
 import OpenAI, { toFile } from "openai";
 import type { Pool } from "pg";
 import { downloadStorageObject, uploadBytesToStorage } from "@/lib/storageProvider";
-import { DESKTOP_SIZE, MOBILE_SIZE, getEmailSettings, imageModel, openai, textModel, transcribeModel } from "./config";
+import { AI_DESIGNER_OFF, AI_DESIGNER_OFF_MSG, DESKTOP_SIZE, MOBILE_SIZE, getEmailSettings, imageModel, openai, textModel, transcribeModel } from "./config";
 import { readFile } from "node:fs/promises";
 import nodePath from "node:path";
 import { LOGO_URLS, catalogLines, catalogSets, inStockCatalog, referencePhoto, type CatalogProduct, type CatalogSet } from "./catalog";
@@ -192,6 +192,7 @@ export async function addOwnerMessage(
   pool: Pool,
   input: { designId: string; text: string; attachments: { path: string; name: string }[]; target: Target; mode: "batch" | "fast"; by: string | null; directions?: boolean; review?: boolean },
 ): Promise<{ ownerId: string; aiId: string; aiIds: string[] }> {
+  if (AI_DESIGNER_OFF) throw new Error(AI_DESIGNER_OFF_MSG);
   const busy = await pool.query<{ status: string }>(`SELECT status FROM email_design_messages WHERE design_id = $1::uuid AND status = ANY($2::text[]) LIMIT 1`, [input.designId, OPEN]);
   if (busy.rows[0]?.status === "review") throw new Error("The AI is waiting for you to approve its items (above). Approve them, or stop it, before sending another message.");
   if (busy.rowCount) throw new Error("The AI is still working on the last message. Wait for it to finish (or stop it) before sending another.");
@@ -869,6 +870,7 @@ export type OutfitEdit = { key: string; person: number; productIds: string[] };
  * changed are drawn again.
  */
 export async function approveItems(pool: Pool, designId: string, messageId: string, productIds: string[], mediaIds: string[], outfits?: OutfitEdit[]): Promise<void> {
+  if (AI_DESIGNER_OFF) throw new Error(AI_DESIGNER_OFF_MSG);
   const r = await pool.query<{ variant_group: string | null; products: TurnProduct[] | null; media: TurnMedia[] | null; concept_data: Concept | null; shots: Shot[] | null }>(
     `SELECT variant_group::text, products, media, concept_data, shots FROM email_design_messages WHERE id = $1::uuid AND design_id = $2::uuid AND role = 'ai' AND status = 'review'`,
     [messageId, designId],
@@ -1382,6 +1384,7 @@ async function planPictureTurn(pool: Pool, turn: Msg, log: (m: string) => void):
 
 /** Called by the tick. */
 export async function runDesignTurns(pool: Pool, log: (m: string) => void = console.log): Promise<{ planned: number; collected: number }> {
+  if (AI_DESIGNER_OFF) return { planned: 0, collected: 0 };
   let planned = 0;
   let collected = 0;
   // 0. A turn cut off by a restart while planning / drawing fast.

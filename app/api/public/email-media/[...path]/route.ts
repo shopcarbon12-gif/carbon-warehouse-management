@@ -2,7 +2,7 @@
  * GET /api/public/email-media/designs/<designId>/v-<stamp>/<file> — the
  * pictures inside sent emails (mail apps fetch them). Public (proxy.ts);
  * only paths under email/designs/<uuid>/v-…/ and the editor's uploads
- * (email/uploads/<uuid>.jpg|png|gif) are served, never attachments.
+ * (email/uploads/<uuid>.jpg|png|gif, headline pictures uploads/pic-<key>.png) are served, never attachments.
  */
 import { downloadStorageObject } from "@/lib/storageProvider";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ path: string[] }> };
 
-const OK = /^(designs\/[0-9a-f-]{36}\/v-[a-z0-9]+\/[A-Za-z0-9._-]+|uploads\/[0-9a-f-]{36})\.(jpg|png|gif)$/;
+const OK = /^(designs\/[0-9a-f-]{36}\/v-[a-z0-9]+\/[A-Za-z0-9._-]+|uploads\/[0-9a-f-]{36}|uploads\/pic-[0-9a-f]{16})\.(jpg|png|gif)$/;
 
 export async function GET(_req: Request, { params }: Ctx) {
   const { path } = await params;

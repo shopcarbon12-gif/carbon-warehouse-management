@@ -64,6 +64,9 @@ function copy(text: string) {
   navigator.clipboard?.writeText(text).catch(() => {});
 }
 
+/** The AI Designer is switched off (2026-11-09): its model choices stay hidden. */
+const SHOW_AI_MODELS: boolean = false;
+
 export function EmailSettingsPanel() {
   const { data, error, mutate } = useSWR<{ settings: Settings; ses: Ses; media: MediaStatus | null; store: Store }>("/api/email/settings", fetcher);
   const [form, setForm] = useState<Settings | null>(null);
@@ -122,7 +125,7 @@ export function EmailSettingsPanel() {
 
       {data && (
         <section className={card}>
-          <span className={`${label} block pb-2`}>What the AI Designer knows (from shopcarbon.com)</span>
+          <span className={`${label} block pb-2`}>Your brand library (from shopcarbon.com, used in the editor)</span>
           <ul className="flex flex-col gap-1.5">
             <Check ok>Real CARBON logo, always used as the official file.</Check>
             <Check ok>Every in-stock product from the catalog, with real photos, names and prices.</Check>
@@ -232,7 +235,8 @@ export function EmailSettingsPanel() {
         </section>
       )}
 
-      {form && (
+      {/* The AI Designer is switched off (2026-11-09), so its model choices are hidden. */}
+      {SHOW_AI_MODELS && form && (
         <section className={card}>
           <span className={`${label} block pb-2`}>AI Designer models</span>
           <div className="grid gap-2 md:grid-cols-2">

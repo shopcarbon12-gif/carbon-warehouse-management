@@ -333,7 +333,7 @@ export function Canvas(p: Props) {
                                 onDragOver={(e) => overBlock(e, sec, ci, bi)}
                                 onDrop={doDrop}
                               >
-                                {(isSel || isHov) && <Tab text={`${BLOCK_LABEL[b.type]}${hiddenB ? " (hidden here)" : ""}`} color={isSel ? BLUE : "#8B93A3"} top={false} />}
+                                {(isSel || isHov) && <Tab text={`${BLOCK_LABEL[b.type]}${b.type === "text" && b.asPic ? " · sent as a picture" : ""}${hiddenB ? " (hidden here)" : ""}`} color={isSel ? BLUE : "#8B93A3"} top={false} />}
                                 {isSel && !editing && (
                                   <div className="absolute -left-11 top-0 z-30 flex flex-col rounded-md border border-[#E3E6EC] bg-white p-0.5 shadow-md">
                                     <span

@@ -144,6 +144,55 @@ async function main() {
     assert.equal(d.sections[0].id, s2.id);
   });
 
+  await t("headline pictures: one key per look, personal tags and paragraphs stay text, the canvas keeps live text", async () => {
+    const { picSources, picBlocked, renderBlock: rb } = await import("../lib/email-editor/render");
+    const d = STARTERS.find((x) => x.id === "drop")!.make();
+    const src = picSources(d);
+    assert.ok(src.length >= 1, "the drop starter's Bebas headline is a picture");
+    const heat = src.find((p) => p.alt === "NEW HEAT")!;
+    assert.ok(heat && /^[0-9a-f]{16}$/.test(heat.key));
+    assert.equal(heat.bg, "#0E0E0E", "drawn on the section colour (no see-through text in dark mode)");
+    assert.ok(heat.page.includes("family=Bebas+Neue") && heat.page.includes(`width:${heat.width}px`));
+    assert.equal(picSources(STARTERS.find((x) => x.id === "drop")!.make())[0].key, src[0].key, "same look → same key");
+    // Without the picture yet: the words go out as text. With it: an <img> with the words as alt.
+    assert.ok(!renderEmail(d).includes("pic-") && renderEmail(d).includes("NEW HEAT"));
+    const html = renderEmail(d, { [heat.key]: { url: `https://x/pic-${heat.key}.png`, w: heat.width, h: 90 } });
+    assert.ok(new RegExp(`<img src="https://x/pic-${heat.key}\\.png" alt="NEW HEAT" width="${heat.width}" class="ce-imgm"[^>]*color:#FFFFFF`).test(html), "alt words light on black");
+    // A different colour, width or word is a new picture.
+    const d2 = structuredClone(d);
+    d2.sections.forEach((s) => s.cols.forEach((c) => c.blocks.forEach((b) => b.type === "text" && b.asPic && (b.html = b.html.replace("NEW HEAT", "NEW DROP")))));
+    assert.notEqual(picSources(d2).find((p) => p.alt === "NEW DROP")!.key, heat.key);
+    assert.match(picBlocked("<h1>Hi {{first_name|friend}}</h1>") ?? "", /personal tag/);
+    assert.match(picBlocked(`<p>${"word ".repeat(80)}</p>`) ?? "", /too long/);
+    assert.equal(picBlocked("<h1>Worth the detour</h1>"), null);
+    const blk = newBlock("text");
+    if (blk.type === "text") {
+      blk.asPic = true;
+      blk.html = "<h1>Hello</h1>";
+    }
+    const canvas = rb(blk, { styles: defaultStyles(), width: 600, mobile: false, canvas: true, pics: {} });
+    assert.ok(canvas.includes("Hello") && !canvas.includes("<img"), "the canvas stays editable text");
+  });
+
+  await t("headline pictures: Chromium draws the real web font at 2x", async () => {
+    const { draw } = await import("../lib/server/email/text-pics");
+    const { picPage } = await import("../lib/email-editor/render");
+    const sharp = (await import("sharp")).default;
+    const st = defaultStyles();
+    const frag = (fam: string) => `<div><h1 style="margin:0;font-family:'${fam}',Arial,sans-serif;font-size:96px;line-height:1;color:#111111;text-align:left;">NEW HEAT</h1></div>`;
+    const jobs = [
+      { key: "bebas", page: picPage(frag("Bebas Neue"), 500, "#FFFFFF", st), bg: "#FFFFFF", alt: "NEW HEAT" },
+      { key: "arial", page: picPage(frag("Arial"), 500, "#FFFFFF", st), bg: "#FFFFFF", alt: "NEW HEAT" },
+    ];
+    const out = await draw(jobs, () => {});
+    const size = async (png: Buffer) => sharp(png).metadata();
+    const b = await size(out.get("bebas")!);
+    const a = await size(out.get("arial")!);
+    assert.equal(b.width, 1000, "2x the 500 px block");
+    // Bebas Neue (condensed) fits "NEW HEAT" on one line at 96 px; Arial needs two. Proves the web font loaded.
+    assert.ok(b.height! < a.height! * 0.7, `Bebas ${b.height} vs Arial ${a.height}`);
+  });
+
   const url = process.env.TEST_DB ?? "";
   if (!url) {
     console.log(`\n${n} groups passed (no TEST_DB: database part skipped)`);
@@ -156,9 +205,9 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
-    console.log("ok  migrations (with 0155) apply twice");
+    console.log("ok  migrations (with 0155, 0156) apply twice");
 
     await t("create from a starter: a ready design with html, listed as an editor email", async () => {
       const id = await createEditorEmail(pool, T, "owner@shopcarbon.com", { starter: "collection" });
@@ -205,6 +254,36 @@ async function main() {
       assert.equal(editorHtml(d), html);
       const copy = await createEditorEmail(pool, T, null, { fromId: id });
       assert.equal((await getEditorEmail(pool, T, copy))!.title, "New email (copy)");
+    });
+
+    await t("headline pictures end to end: drawn, stored once, put into the email; translations get their own", async () => {
+      const { setPicStorageForTests, localizePics } = await import("../lib/server/email/text-pics");
+      const { readyEditorPics } = await import("../lib/server/email/editor");
+      const stored = new Map<string, number>();
+      setPicStorageForTests(async (p) => void stored.set(p.path, p.bytes.length));
+      const id = await createEditorEmail(pool, T, null, { starter: "drop" });
+      const before = (await pool.query(`SELECT html FROM email_designs WHERE id = $1`, [id])).rows[0].html as string;
+      assert.ok(!before.includes("pic-") && before.includes("NEW HEAT"), "saved at once with text standing in");
+      await readyEditorPics(pool, id);
+      const html = (await pool.query(`SELECT html FROM email_designs WHERE id = $1`, [id])).rows[0].html as string;
+      const m = /<img src="[^"]*\/uploads\/pic-([0-9a-f]{16})\.png" alt="NEW HEAT"/.exec(html);
+      assert.ok(m, "the headline is a picture in the stored email");
+      assert.ok(stored.has(`email/uploads/pic-${m![1]}.png`) && stored.get(`email/uploads/pic-${m![1]}.png`)! > 500);
+      const row = (await pool.query(`SELECT width, height FROM email_text_pics WHERE key = $1`, [m![1]])).rows[0];
+      assert.ok(row.width > 400 && row.height > 40, JSON.stringify(row));
+      // A second email with the same headline reuses the picture (nothing drawn again).
+      const n0 = stored.size;
+      const id2 = await createEditorEmail(pool, T, null, { starter: "drop" });
+      assert.ok(((await pool.query(`SELECT html FROM email_designs WHERE id = $1`, [id2])).rows[0].html as string).includes(`pic-${m![1]}.png`));
+      assert.equal(stored.size, n0);
+      // Saving keeps the picture; translations draw the translated words.
+      const e = (await getEditorEmail(pool, T, id))!;
+      await saveEditorEmail(pool, T, id, { doc: e.doc }, null);
+      assert.equal((await pool.query(`SELECT html FROM email_designs WHERE id = $1`, [id])).rows[0].html, html);
+      const es = await localizePics(pool, e.doc, html, async (f) => f.replace("NEW HEAT", "NUEVO CALOR"), () => {});
+      const mm = /<img src="[^"]*pic-([0-9a-f]{16})\.png" alt="NUEVO CALOR"/.exec(es);
+      assert.ok(mm && mm[1] !== m![1], "Spanish copy has its own picture");
+      assert.ok(!es.includes(`pic-${m![1]}.png`));
     });
   } finally {
     await pool.end();

@@ -10,6 +10,15 @@
 import type { Pool } from "pg";
 import { openai, textModel } from "./config";
 import { sanitizeEmailHtml } from "./rules";
+import { isDoc } from "@/lib/email-editor/types";
+import { readyEditorPics } from "./editor";
+import { localizePics } from "./text-pics";
+
+/** A translated block of HTML without any page wrapper the translator may add. */
+const bodyOf = (h: string) => {
+  const m = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(h);
+  return (m ? m[1] : h).replace(/<!doctype[^>]*>|<\/?html[^>]*>|<head[\s\S]*?<\/head>/gi, "").trim();
+};
 
 export type Lang = "es" | "pt";
 const NAME: Record<Lang, string> = { es: "Latin-American Spanish (es-419, as spoken in Florida)", pt: "Brazilian Portuguese (pt-BR)" };
@@ -41,11 +50,23 @@ export async function translateEmail(html: string, lang: Lang): Promise<string |
 
 /** Translate a design's current email into Spanish and Portuguese (both at once). */
 export async function translateDesign(pool: Pool, designId: string, log: (m: string) => void = console.log): Promise<void> {
-  const d = await pool.query<{ html: string | null }>(`SELECT html FROM email_designs WHERE id = $1::uuid`, [designId]);
+  // Editor emails: headline pictures first, so the copies are made from the finished email.
+  await readyEditorPics(pool, designId);
+  const d = await pool.query<{ html: string | null; editor_doc: unknown }>(`SELECT html, editor_doc FROM email_designs WHERE id = $1::uuid`, [designId]);
   const html = d.rows[0]?.html;
   if (!html) return;
+  const doc = isDoc(d.rows[0]?.editor_doc) ? d.rows[0].editor_doc : null;
   await pool.query(`UPDATE email_designs SET translate_status = 'running', html_es = NULL, html_pt = NULL WHERE id = $1::uuid`, [designId]);
-  const [es, pt] = await Promise.all([translateEmail(html, "es").catch(() => null), translateEmail(html, "pt").catch(() => null)]);
+  // Each headline picture is drawn again in the language (its words translated, same look).
+  const one = async (lang: Lang) => {
+    const out = await translateEmail(html, lang).catch(() => null);
+    if (!out || !doc) return out;
+    return localizePics(pool, doc, out, async (frag) => {
+      const t = await translateEmail(frag, lang);
+      return t ? bodyOf(t) : null;
+    }, log).catch(() => out);
+  };
+  const [es, pt] = await Promise.all([one("es"), one("pt")]);
   // Only if the English email did not change meanwhile (the owner may have edited the code).
   await pool.query(`UPDATE email_designs SET html_es = $2, html_pt = $3, translate_status = $4 WHERE id = $1::uuid AND html = $5`, [designId, es, pt, es && pt ? "done" : "failed", html]);
   log(`[email-translate] ${designId}: es ${es ? "ok" : "failed"}, pt ${pt ? "ok" : "failed"}`);

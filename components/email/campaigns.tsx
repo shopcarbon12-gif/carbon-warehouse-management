@@ -125,7 +125,7 @@ export function EmailCampaigns({ onOpenDesigner }: { onOpenDesigner: () => void 
             ))}
           </tbody>
         </table>
-        {data && !data.campaigns.length && <p className="py-3 text-xs text-[var(--wms-muted)]">No campaigns yet. Make a design in the AI Designer first, then a campaign here.</p>}
+        {data && !data.campaigns.length && <p className="py-3 text-xs text-[var(--wms-muted)]">No campaigns yet. Build an email in Emails first, then a campaign here.</p>}
       </div>
     </div>
   );
@@ -314,7 +314,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
                 </optgroup>
               )}
               {!!ready.length && (
-                <optgroup label="AI Designer">
+                <optgroup label="Old AI Designer emails">
                   {ready.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.title}

@@ -37,7 +37,12 @@ type Base = {
   visibility: Visibility;
 };
 
-export type TextBlock = Base & { type: "text"; html: string; areaPad: Pad; areaBg: string | null; border: Border | null };
+/**
+ * asPic: "Send as a picture" (owner, 2026-11-09) — the block is drawn once on the server in the
+ * exact font and sent as an <img> (the words in its alt text), so Gmail and Outlook show the real
+ * typeface. The editor canvas keeps showing live, editable text.
+ */
+export type TextBlock = Base & { type: "text"; html: string; areaPad: Pad; areaBg: string | null; border: Border | null; asPic?: boolean };
 
 export type ImageBlock = Base & {
   type: "image";

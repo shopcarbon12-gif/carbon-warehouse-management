@@ -6,6 +6,7 @@
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
 import { getEmailSettings } from "@/lib/server/email/config";
 import { PREVIEW_CSP, previewHtml, versionPreview } from "@/lib/server/email/preview";
+import { readyEditorPics } from "@/lib/server/email/editor";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ export async function GET(req: Request, { params }: Ctx) {
     const html = await versionPreview(g.pool, g.session.tid, { messageId: message });
     return page(html ?? "<p style='font:14px sans-serif;padding:20px'>This version is not ready yet.</p>");
   }
+  // Editor emails: draw any headline pictures still missing, so the preview is what will be sent.
+  await readyEditorPics(g.pool, id);
   const d = await g.pool.query<{ html: string | null; html_es: string | null; html_pt: string | null; subject_hint: string | null; preheader_hint: string | null }>(
     `SELECT html, html_es, html_pt, subject_hint, preheader_hint FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`,
     [id, g.session.tid],

@@ -26,6 +26,7 @@ import { welcomeGql, welcomeShopCtx, userErrorText } from "@/lib/server/welcome/
 import { audienceSql, markShopifyUnsubscribed, type Audience } from "./contacts";
 import { INSTAGRAM_URL, SHOP_URL, SesSendError, WMS_BASE, getEmailSettings, senderReady, sesPacing, sesSend, type EmailSettings } from "./config";
 import { fillMergeTags, htmlToText, longDay, personalCode, shouldPause, usedMergeTags, wrapEmail, type MergeValues } from "./rules";
+import { readyEditorPics } from "./editor";
 
 /** kind: "amount" = $ off the order (default, older campaigns), "percent" = % off the order. */
 export type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string; kind?: "amount" | "percent" };
@@ -256,6 +257,8 @@ export async function approveCampaign(pool: Pool, tenantId: string, id: string, 
   const s = await getEmailSettings(pool, tenantId);
   const problems = await approvalProblems(pool, tenantId, c, s);
   if (problems.length) throw new Error(problems.join(" "));
+  // An editor email's headline pictures are drawn before the email is frozen.
+  if (c.design_id) await readyEditorPics(pool, c.design_id);
   const d = await pool.query<{ html: string; html_es: string | null; html_pt: string | null }>(`SELECT html, html_es, html_pt FROM email_designs WHERE id = $1::uuid`, [c.design_id]);
   const dd = d.rows[0];
   // Owner, 2026-11-08: every email offers Spanish and Portuguese (a bold bar on top links to them).
@@ -316,6 +319,7 @@ export async function sendTest(pool: Pool, tenantId: string, input: { campaignId
   const s = await getEmailSettings(pool, tenantId);
   const v = await senderReady(s);
   if (!v.ok) throw new Error(v.why ?? "Amazon SES is not ready");
+  if (c.design_id && !c.html) await readyEditorPics(pool, c.design_id);
   const d = c.design_id ? await pool.query<{ html: string | null; html_es: string | null; html_pt: string | null }>(`SELECT html, html_es, html_pt FROM email_designs WHERE id = $1::uuid`, [c.design_id]) : null;
   const designHtml = c.html ? null : d?.rows[0]?.html;
   if (!c.html && !designHtml) throw new Error("The design has not been converted to an email yet");
@@ -337,6 +341,7 @@ export async function sendDesignTest(pool: Pool, tenantId: string, input: { desi
   const s = await getEmailSettings(pool, tenantId);
   const v = await senderReady(s);
   if (!v.ok) throw new Error(v.why ?? "Amazon SES is not ready");
+  await readyEditorPics(pool, input.designId);
   const d = await pool.query<{ html: string | null; html_es: string | null; html_pt: string | null; subject_hint: string | null; preheader_hint: string | null; title: string }>(
     `SELECT html, html_es, html_pt, subject_hint, preheader_hint, title FROM email_designs WHERE id = $1::uuid AND tenant_id = $2::uuid`,
     [input.designId, tenantId],

@@ -26,12 +26,19 @@ import {
   type ProductBlock,
   type ProductItem,
   type Section,
+  type TextBlock,
   type SplitCell,
   type Stack,
   type Visibility,
 } from "./types";
 
-export type Ctx = { styles: GlobalStyles; width: number; mobile: boolean; canvas?: boolean };
+/** A finished headline picture (made on the server; see PicSource). */
+export type Pic = { url: string; w: number; h: number };
+/**
+ * Ctx.bg: the colour behind the block (null over a section picture → transparent headline picture).
+ * Ctx.pics: finished headline pictures by key. Ctx.collect: gathers the headline pictures an email needs.
+ */
+export type Ctx = { styles: GlobalStyles; width: number; mobile: boolean; canvas?: boolean; bg?: string | null; pics?: Record<string, Pic>; collect?: PicSource[] };
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -258,12 +265,16 @@ const SOCIAL_PX = { s: 24, m: 32, l: 40 } as const;
 export function renderBlock(b: Block, ctx: Ctx): string {
   const W = innerWidth(b, ctx);
   switch (b.type) {
-    case "text":
-      return wrapBlock(
-        b,
-        ctx,
-        `<div style="${padCss(b.areaPad)}${b.areaBg ? `background-color:${b.areaBg};` : ""}${borderCss(b.border)}font-family:${fontStack(ctx.styles.text.body.family)};">${textHtml(b.html, ctx)}</div>`,
-      );
+    case "text": {
+      const inner = `<div style="${padCss(b.areaPad)}${b.areaBg ? `background-color:${b.areaBg};` : ""}${borderCss(b.border)}font-family:${fontStack(ctx.styles.text.body.family)};">${textHtml(b.html, ctx)}</div>`;
+      const src = b.asPic && !ctx.canvas ? picSource(b, inner, ctx) : null;
+      if (src) {
+        ctx.collect?.push(src);
+        const pic = ctx.pics?.[src.key];
+        if (pic) return wrapBlock(b, ctx, picImg(pic, src));
+      }
+      return wrapBlock(b, ctx, inner);
+    }
     case "image": {
       if (!b.src) return ctx.canvas ? wrapBlock(b, ctx, placeholder(180, "Drop an image here")) : "";
       const natural = b.natW ?? W;
@@ -358,11 +369,12 @@ export function columnWidths(s: Section, styles: GlobalStyles, mobile: boolean):
   return s.cols.map((c) => (avail * c.w) / 100);
 }
 
-export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean, canvas = false): string {
+export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean, canvas = false, extra: Pick<Ctx, "pics" | "collect"> = {}): string {
   const v = visAttrs(s.visibility, mobile, canvas);
   if (v.hidden) return "";
   const widths = columnWidths(s, styles, mobile);
-  const colHtml = s.cols.map((c, i) => ({ html: c.blocks.map((b) => renderBlock(b, { styles, width: widths[i], mobile, canvas })).join(""), w: c.w }));
+  const behind = s.contentBg || (s.bgImage ? null : s.bg || styles.contentBg || styles.pageBg);
+  const colHtml = s.cols.map((c, i) => ({ html: c.blocks.map((b) => renderBlock(b, { styles, width: widths[i], mobile, canvas, bg: b.bg || behind, ...extra })).join(""), w: c.w }));
   const inner = s.cols.length === 1 ? colHtml[0].html : cols(colHtml, s.stack, s.valign, s.gap, { styles, width: 0, mobile, canvas });
   const bgImg = s.bgImage ? `background-image:url('${esc(s.bgImage)}');background-size:cover;background-position:center;` : "";
   return T(
@@ -370,6 +382,105 @@ export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean,
     v.cls ? ` class="${v.cls.trim()}"` : "",
     v.style,
   );
+}
+
+/* ------------------------------------------------------- headline pictures */
+
+/**
+ * "Send as a picture": everything the server needs to draw a text block in its exact font — a
+ * small standalone page (the block at its real width, its fonts, the colour behind it) — and a key
+ * that changes whenever any of that changes. The same words in the same style anywhere share one
+ * picture. Not for blocks with personal tags (a picture cannot say each person's name) or long
+ * body copy (pictures of paragraphs read badly and look like spam).
+ */
+export type PicSource = { key: string; page: string; width: number; bg: string | null; alt: string; link: string | null; fragment: string };
+
+export const PIC_MAX_CHARS = 320;
+const PIC_VERSION = "p1";
+
+/** The words of a text block (for the picture's alt text and the length limit). */
+export function plainText(html: string): string {
+  return String(html ?? "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/(p|h[1-6]|li|div)>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Why a text block cannot be sent as a picture (null = it can). */
+export function picBlocked(html: string): string | null {
+  if (/\{\{/.test(html)) return "It has a personal tag (like the first name); a picture would say the same thing to everyone, so it is sent as text.";
+  const t = plainText(html);
+  if (!t) return "It has no words yet.";
+  if (t.length > PIC_MAX_CHARS) return `It is too long for a picture (${t.length} letters; up to ${PIC_MAX_CHARS}). Use it for headlines and short lines.`;
+  return null;
+}
+
+/** 64-bit FNV-1a as 16 hex characters (the same in the browser and on the server). */
+export function hashKey(s: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193 ^ 0x5bd1e995;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 ^ c, 0x01000193 + 2) >>> 0;
+  }
+  return h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0");
+}
+
+/** The fonts a piece of HTML names (Google fonts, so the drawing page can load them). */
+function fontsIn(html: string, styles: GlobalStyles) {
+  return fontsUsed({ html, styles });
+}
+
+/** The page the server draws, for one block's inner HTML (also used for translated words). */
+export function picPage(fragment: string, width: number, bg: string | null, styles: GlobalStyles): string {
+  const fonts = fontsIn(fragment, styles)
+    .map((f) => `<link rel="stylesheet" href="${googleFontUrl(f)}">`)
+    .join("");
+  return `<!doctype html><html><head><meta charset="utf-8">${fonts}<style>html,body{margin:0;padding:0;background:${bg ?? "transparent"};}#pic{width:${width}px;}</style></head><body><div id="pic">${fragment}</div></body></html>`;
+}
+
+/** The key of a drawing page. */
+export const picKey = (page: string) => hashKey(`${PIC_VERSION}|${page}`);
+
+function picSource(b: TextBlock, inner: string, ctx: Ctx): PicSource | null {
+  if (picBlocked(b.html)) return null;
+  const width = Math.round(innerWidth(b, ctx));
+  const bg = ctx.bg ?? null;
+  const page = picPage(inner, width, bg, ctx.styles);
+  const link = /<a\b[^>]*href="([^"]*)"/i.exec(b.html)?.[1]?.replace(/&amp;/g, "&") ?? null;
+  return { key: picKey(page), page, width, bg, alt: plainText(b.html), link, fragment: inner };
+}
+
+/** The headline picture in the email: full block width, shrinks on phones; styled alt text when pictures are off. */
+function picImg(p: Pic, src: PicSource): string {
+  const t = ` style="display:block;width:100%;max-width:${src.width}px;height:auto;border:0;outline:none;text-decoration:none;font-family:Helvetica,Arial,sans-serif;font-size:22px;line-height:1.25;color:${isDark(src.bg) ? "#FFFFFF" : "#111111"};"`;
+  const i = `<img src="${esc(p.url)}" alt="${esc(src.alt)}" width="${src.width}" class="ce-imgm"${t}>`;
+  return src.link ? `<a href="${href(src.link)}" target="_blank" style="text-decoration:none;">${i}</a>` : i;
+}
+
+/** A dark colour (so the words shown while pictures are off are light on it). */
+function isDark(c: string | null): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(c ?? "");
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
+}
+
+/** The headline pictures an email needs (each with its drawing page and key). */
+export function picSources(doc: EmailDoc): PicSource[] {
+  const out: PicSource[] = [];
+  renderEmail(doc, {}, out);
+  const seen = new Set<string>();
+  return out.filter((p) => (seen.has(p.key) ? false : (seen.add(p.key), true)));
 }
 
 /* ------------------------------------------------------------------ email */
@@ -396,9 +507,9 @@ ${sizes}
 }
 
 /** The whole email (a full HTML document; wrapEmail adds the preheader, language bar and footer). */
-export function renderEmail(doc: EmailDoc): string {
+export function renderEmail(doc: EmailDoc, pics: Record<string, Pic> = {}, collect?: PicSource[]): string {
   const s = doc.styles;
-  const sections = doc.sections.map((sec) => renderSection(sec, s, false)).join("\n");
+  const sections = doc.sections.map((sec) => renderSection(sec, s, false, false, { pics, collect })).join("\n");
   // Web fonts (Apple Mail, iPhone, Samsung, Outlook for Mac load them; Gmail shows the fallback).
   const fonts = fontsUsed(doc)
     .map((f) => `<style>@import url('${googleFontUrl(f)}');</style>`)

@@ -3,20 +3,20 @@
 import { useSearchParams } from "next/navigation";
 import { EmailCampaigns } from "./campaigns";
 import { EmailContacts } from "./contacts";
-import { EmailDesigner } from "./designer";
 import { EmailSettingsPanel } from "./settings";
 import { EmailsList } from "./emails-list";
 
 /**
  * Email Marketing: CarbonWMS's own email platform (owner, 2026-11-07; its own
  * menu section since 2026-11-09, built like Klaviyo). Emails (drag-and-drop
- * editor) · Campaigns · AI Designer · Audience · Settings. The open tab lives
- * in the URL (?tab=) so a refresh or a shared link opens the same place.
+ * editor) · Campaigns · Audience · Settings. The open tab lives in the URL
+ * (?tab=) so a refresh or a shared link opens the same place. The AI Designer
+ * tab was removed 2026-11-09 (switched off: lib/server/email/config.ts
+ * AI_DESIGNER_OFF); an old ?tab=designer link opens Emails.
  */
 const TABS = [
   { id: "emails", label: "Emails" },
   { id: "campaigns", label: "Campaigns" },
-  { id: "designer", label: "AI Designer" },
   { id: "contacts", label: "Audience" },
   { id: "settings", label: "Settings" },
 ] as const;
@@ -57,7 +57,6 @@ export function EmailWorkspace() {
       </nav>
       {tab === "emails" && <EmailsList onCampaign={(id) => open("campaigns", { campaign: id })} />}
       {tab === "campaigns" && <EmailCampaigns onOpenDesigner={() => open("emails")} />}
-      {tab === "designer" && <EmailDesigner />}
       {tab === "contacts" && <EmailContacts />}
       {tab === "settings" && <EmailSettingsPanel />}
     </div>

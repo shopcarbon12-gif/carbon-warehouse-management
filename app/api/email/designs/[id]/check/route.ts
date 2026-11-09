@@ -6,6 +6,7 @@ import { withActivity } from "@/lib/server/activity-log";
  */
 import { NextResponse } from "next/server";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
+import { AI_DESIGNER_OFF, AI_DESIGNER_OFF_MSG } from "@/lib/server/email/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const body = (await req.json().catch(() => ({}))) as { action?: string };
   const action = body.action === "override" ? "override" : "check";
+  if (action === "check" && AI_DESIGNER_OFF) return NextResponse.json({ error: AI_DESIGNER_OFF_MSG }, { status: 410 });
   const r = await g.pool.query(
     action === "override"
       ? `UPDATE email_designs SET check_override = true, updated_at = now() WHERE id = $1::uuid AND tenant_id = $2::uuid AND html IS NOT NULL`

@@ -27,6 +27,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { PREBUILT } from "@/lib/email-editor/prebuilt";
+import { picBlocked } from "@/lib/email-editor/render";
 import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
 import type { Drag } from "./canvas";
@@ -229,6 +230,14 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
         <>
           <Group title="Text">
             <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">Double-click the text on the email to type. The toolbar on top has headings, bold, colours, links and personal tags like the first name.</p>
+          </Group>
+          <Group title="Exact font everywhere">
+            <Toggle label="Send as a picture" checked={!!b.asPic} onChange={(v) => set({ asPic: v })} />
+            <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">
+              Gmail and Outlook show a stand-in font. Switched on, this text is sent as a sharp picture of exactly what you see, with the words underneath for people who turn pictures off.
+              Spanish and Portuguese copies get their own picture. Use it for headlines, not paragraphs.
+            </p>
+            {b.asPic && picBlocked(b.html) && <p className="text-[0.72rem] leading-relaxed text-[var(--wms-status-warning-fg)]">Sent as text for now: {picBlocked(b.html)}</p>}
           </Group>
           <Group title="Text area">
             <PadField label="Text area padding" value={b.areaPad} onChange={(v) => set({ areaPad: v })} />

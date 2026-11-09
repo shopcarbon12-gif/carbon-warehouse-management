@@ -8,6 +8,11 @@ const STORE_OUT = "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGP
 const STORE_IN = "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_12_30_10_AM.png?v=1781252368";
 const DIRECTIONS = "https://www.google.com/maps/dir/?api=1&destination=6250+Edgewater+Drive%2C+Suite+100%2C+Orlando%2C+FL+32810";
 
+/** A display headline: sent as a picture, so Gmail and Outlook show the real font too. */
+function headline(html: string, p = pad(9, 32)): Block {
+  return { ...text(html, p), asPic: true } as Block;
+}
+
 function text(html: string, p = pad(9, 32)): Block {
   const b = newBlock("text");
   if (b.type === "text") {
@@ -107,7 +112,7 @@ export const PREBUILT: Prebuilt[] = [
       one([
         spacer(40),
         text(`<p style="text-align:center;font-family:'Montserrat';font-size:11px;letter-spacing:6px;color:#6B6B6B;">AUTUMN · WINTER 2026</p>`),
-        text(`<h1 style="text-align:center;font-family:'Bodoni Moda';font-style:italic;font-weight:400;font-size:58px;line-height:1.05;">Worth the detour</h1>`, pad(6, 32)),
+        headline(`<h1 style="text-align:center;font-family:'Bodoni Moda';font-style:italic;font-weight:400;font-size:58px;line-height:1.05;">Worth the detour</h1>`, pad(6, 32)),
         text(`<p style="text-align:center;font-family:'Montserrat';font-size:14px;line-height:1.7;color:#444444;">The new collection, made for the long way around.</p>`, pad(10, 64)),
         image(null, "Campaign photo", pad(24, 0)),
         btn("DISCOVER", SHOP_URL),
@@ -122,7 +127,7 @@ export const PREBUILT: Prebuilt[] = [
       one([
         spacer(28),
         text(`<p style="text-align:center;font-family:'Space Mono';font-size:12px;letter-spacing:3px;color:#BDBDBD;">DROP 01 · 11.14 · 10 AM</p>`),
-        text(`<h1 style="text-align:center;font-family:'Bebas Neue';font-weight:400;font-size:112px;line-height:0.9;color:#FFFFFF;letter-spacing:2px;">NEW HEAT</h1>`, pad(0, 18)),
+        headline(`<h1 style="text-align:center;font-family:'Bebas Neue';font-weight:400;font-size:112px;line-height:0.9;color:#FFFFFF;letter-spacing:2px;">NEW HEAT</h1>`, pad(0, 18)),
         image(null, "The drop", pad(18, 0)),
         btn("SHOP THE DROP", SHOP_URL, { color: "#E8FF3A", textColor: "#111111", full: true }),
         spacer(28),
@@ -135,7 +140,7 @@ export const PREBUILT: Prebuilt[] = [
     make: () =>
       one([
         text(`<p style="font-family:'Cormorant Garamond';font-size:20px;line-height:1.6;text-align:center;">Every piece in this collection was picked by hand in our Orlando showroom. Come by, try it on, and tell us what you think.</p>`, pad(32, 56)),
-        text(`<p style="text-align:center;font-family:'Great Vibes';font-size:44px;line-height:1.1;">With love, Carbon</p>`, pad(4, 32)),
+        headline(`<p style="text-align:center;font-family:'Great Vibes';font-size:44px;line-height:1.1;">With love, Carbon</p>`, pad(4, 32)),
         spacer(24),
       ]),
   },

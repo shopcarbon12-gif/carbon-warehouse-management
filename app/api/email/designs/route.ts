@@ -5,6 +5,7 @@ import { withActivity } from "@/lib/server/activity-log";
  */
 import { NextResponse } from "next/server";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
+import { AI_DESIGNER_OFF, AI_DESIGNER_OFF_MSG } from "@/lib/server/email/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
 async function POST_handler(req: Request) {
   const g = await marketingAdminGuard(req);
   if ("error" in g) return g.error;
+  if (AI_DESIGNER_OFF) return NextResponse.json({ error: AI_DESIGNER_OFF_MSG }, { status: 410 });
   const b = (await req.json().catch(() => ({}))) as { title?: unknown };
   const title = typeof b.title === "string" && b.title.trim() ? b.title.trim().slice(0, 80) : "New email";
   const r = await g.pool.query<{ id: string }>(`INSERT INTO email_designs (tenant_id, title, created_by) VALUES ($1::uuid, $2, $3) RETURNING id`, [g.session.tid, title, g.session.email ?? null]);
