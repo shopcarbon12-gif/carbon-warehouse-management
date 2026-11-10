@@ -713,6 +713,15 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
   }
   if (types.has("signup")) await into("signup", await pollSignups(pool, tenantId));
   for (const f of flows) if (f.trigger.type === "winback") for (const p of await lapsed(pool, tenantId, f.trigger.days)) if (await enroll(pool, f, p)) n++;
+  if (types.has("wishlist") || types.has("back_in_stock") || types.has("price_drop")) {
+    const W = await import("./wishlists");
+    await W.syncWishlists(pool, tenantId).catch((e) => log(`[flows] wishlists: ${e instanceof Error ? e.message : e}`));
+    for (const f of flows) {
+      const t = f.trigger;
+      const people = t.type === "wishlist" ? await W.wishlistIdle(pool, tenantId, t.days) : t.type === "back_in_stock" ? await W.backInStock(pool, tenantId) : t.type === "price_drop" ? await W.priceDrop(pool, tenantId) : [];
+      for (const p of people) if (await enroll(pool, f, p)) n++;
+    }
+  }
   for (const f of flows) if (f.trigger.type === "browse_abandon") for (const p of await browsed(pool, f.trigger.hours)) if (await enroll(pool, f, p)) n++;
   if (types.has("shipped")) await into("shipped", await pollShipped(pool, tenantId).catch((e) => (log(`[flows] Shopify shipments: ${e instanceof Error ? e.message : e}`), [])));
   if (types.has("birthday")) for (const f of flows.filter((x) => x.trigger.type === "birthday")) for (const p of await birthdaysToday(pool, tenantId)) if (await enroll(pool, f, p)) n++;

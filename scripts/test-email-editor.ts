@@ -310,7 +310,7 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql", "0159_email_segments_ab.sql", "0160_email_hero_pages.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql", "0159_email_segments_ab.sql", "0160_email_hero_pages.sql", "0162_email_wishlists.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     console.log("ok  migrations (with 0155–0159) apply twice");
 
@@ -590,6 +590,32 @@ async function main() {
       assert.ok(rep.rows.some((r) => r.kind === "campaign" && r.name === "AB"));
       await F.archiveFlow(pool, T, fid);
       await pool.query(`DELETE FROM email_orders_seen`);
+    });
+
+    await t("wishlist emails: a list left alone, a sold-out piece back, a price drop", async () => {
+      const W = await import("../lib/server/email/wishlists");
+      const ins = (email: string, v: string, o: { first: number; last: number; was: boolean; now: boolean; daysAgo: number }) =>
+        pool.query(
+          `INSERT INTO email_wishlist_items (tenant_id, email, variant_gid, first_name, title, image, url, first_price, last_price, was_available, available, list_changed_at)
+           VALUES ($1::uuid, $2, $3, 'Zoe', 'Piece ' || $3, 'https://cdn.example/x.jpg', 'https://shopcarbon.com/products/x', $4, $5, $6, $7, now() - make_interval(days => $8::int))`,
+          [T, email, v, o.first, o.last, o.was, o.now, o.daysAgo],
+        );
+      await pool.query(`DELETE FROM email_wishlist_items`);
+      await ins("zoe@x.com", "v1", { first: 80, last: 80, was: true, now: true, daysAgo: 9 });
+      await ins("zoe@x.com", "v2", { first: 100, last: 70, was: true, now: true, daysAgo: 9 });
+      await ins("kim@x.com", "v3", { first: 50, last: 50, was: false, now: true, daysAgo: 2 });
+      const idle = await W.wishlistIdle(pool, T, 7);
+      assert.deepEqual(idle.map((x) => x.email), ["zoe@x.com"]);
+      assert.equal((idle[0].data.items as unknown[]).length, 2);
+      const back = await W.backInStock(pool, T);
+      assert.deepEqual(back.map((x) => x.email), ["kim@x.com"]);
+      const drop = await W.priceDrop(pool, T);
+      assert.equal(drop.length, 1);
+      const it = (drop[0].data.items as { price: number; compareAt: number }[])[0];
+      assert.deepEqual([it.price, it.compareAt], [70, 100], "shows the old and the new price");
+      await pool.query(`INSERT INTO email_orders_seen (source, order_id, tenant_id, email, total, processed_at) VALUES ('shopify', 'wl1', $1::uuid, 'zoe@x.com', 50, now())`, [T]);
+      assert.equal((await W.wishlistIdle(pool, T, 7)).length, 0, "an order since stops the reminder");
+      await pool.query(`DELETE FROM email_orders_seen WHERE order_id = 'wl1'`);
     });
 
     await t("browse-abandon: known shoppers who looked and left get the pieces they looked at; a cart add stops it", async () => {

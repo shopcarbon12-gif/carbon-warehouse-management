@@ -7,8 +7,8 @@
  * Pure (no server or browser APIs): the flow editor and the server both use it.
  */
 
-export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday" | "shipped" | "browse_abandon";
-export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" } | { type: "shipped" } | { type: "browse_abandon"; hours: number };
+export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday" | "shipped" | "browse_abandon" | "wishlist" | "back_in_stock" | "price_drop";
+export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" } | { type: "shipped" } | { type: "browse_abandon"; hours: number } | { type: "wishlist"; days: number } | { type: "back_in_stock" } | { type: "price_drop" };
 
 export type WaitStep = {
   id: string;
@@ -49,7 +49,7 @@ export type FlowSettings = {
   reentryDays: number | null;
 };
 
-export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "shipped" | "browse" | "custom";
+export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "shipped" | "browse" | "wishlist" | "back_in_stock" | "price_drop" | "custom";
 export type FlowDraft = {
   name: string;
   kind: FlowKind;
@@ -76,6 +76,9 @@ export const TRIGGER_LABEL: Record<TriggerType, string> = {
   birthday: "Has a birthday",
   shipped: "Has an order shipped",
   browse_abandon: "Looked at products and left",
+  wishlist: "Left items in their wishlist",
+  back_in_stock: "Has a wishlist item back in stock",
+  price_drop: "Has a wishlist item that got cheaper",
 };
 
 export function triggerText(t: Trigger): string {
@@ -92,6 +95,12 @@ export function triggerText(t: Trigger): string {
       return "On each person's birthday (from Rewards; once a year)";
     case "shipped":
       return "When an online order is shipped (fulfilled in Shopify)";
+    case "wishlist":
+      return `When a logged-in shopper's wishlist has sat untouched for ${t.days} days and they have not ordered since`;
+    case "back_in_stock":
+      return "When a sold-out item in someone's wishlist is available again";
+    case "price_drop":
+      return "When an item in someone's wishlist is now at least 5% cheaper than when they saved it";
     case "browse_abandon":
       return `When a known shopper looked at products on shopcarbon.com and did not add any to the cart within ${t.hours} hours`;
   }
@@ -255,6 +264,48 @@ FLOW_IDEAS.push({
   }),
 });
 
+FLOW_IDEAS.push(
+  {
+    kind: "wishlist",
+    name: "Wishlist reminder",
+    description: "A logged-in shopper saved pieces with the heart and left them for a week: a reminder with what they saved. Stops if they order.",
+    starters: ["pack-48-wishlist"],
+    make: () => ({
+      name: "Wishlist reminder",
+      kind: "wishlist",
+      trigger: { type: "wishlist", days: 7 },
+      settings: { ...DEFAULT_SETTINGS, reentryDays: 30 },
+      steps: [stop("ordered"), email("Your saved pieces", "Still on your list, {{first_name|there}}", "The pieces you saved are waiting")],
+    }),
+  },
+  {
+    kind: "back_in_stock",
+    name: "Back in stock",
+    description: "Something in a shopper's wishlist sold out and is back: they hear first, with the piece.",
+    starters: ["pack-46-back-in-stock"],
+    make: () => ({
+      name: "Back in stock",
+      kind: "back_in_stock",
+      trigger: { type: "back_in_stock" },
+      settings: { ...DEFAULT_SETTINGS, skipRecentHours: 0, reentryDays: 3 },
+      steps: [email("Back in stock", "It's back, {{first_name|there}}", "The piece you saved is in stock again, while sizes last")],
+    }),
+  },
+  {
+    kind: "price_drop",
+    name: "Price drop",
+    description: "A piece in a shopper's wishlist is now at least 5% cheaper than when they saved it: the old and new price.",
+    starters: ["pack-47-price-drop"],
+    make: () => ({
+      name: "Price drop",
+      kind: "price_drop",
+      trigger: { type: "price_drop" },
+      settings: { ...DEFAULT_SETTINGS, reentryDays: 7 },
+      steps: [email("Price drop", "Good news: it just got cheaper", "The piece on your wishlist is now on sale")],
+    }),
+  },
+);
+
 export function blankFlow(): FlowDraft {
   return {
     name: "New flow",
@@ -276,6 +327,8 @@ export function isTrigger(x: unknown): x is Trigger {
   if (t.type === "order") return typeof t.first === "boolean" && ["online", "store", "both"].includes(t.where);
   if (t.type === "winback") return num(t.days, 14, 730);
   if (t.type === "browse_abandon") return num(t.hours, 1, 72);
+  if (t.type === "wishlist") return num(t.days, 1, 60);
+  if (t.type === "back_in_stock" || t.type === "price_drop") return true;
   return false;
 }
 

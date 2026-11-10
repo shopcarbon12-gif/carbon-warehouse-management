@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
 const schema = z
   .object({
-    kind: z.enum(["welcome", "abandoned", "thanks", "winback", "birthday", "shipped", "browse", "custom"]),
+    kind: z.enum(["welcome", "abandoned", "thanks", "winback", "birthday", "shipped", "browse", "wishlist", "back_in_stock", "price_drop", "custom"]),
   })
   .strict();
 
