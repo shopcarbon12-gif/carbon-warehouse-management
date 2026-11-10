@@ -5,11 +5,12 @@ import { EmailCampaigns } from "./campaigns";
 import { EmailContacts } from "./contacts";
 import { EmailSettingsPanel } from "./settings";
 import { EmailsList } from "./emails-list";
+import { EmailFlows } from "./flows";
 
 /**
  * Email Marketing: CarbonWMS's own email platform (owner, 2026-11-07; its own
  * menu section since 2026-11-09, built like Klaviyo). Emails (drag-and-drop
- * editor) · Campaigns · Audience · Settings. The open tab lives in the URL
+ * editor) · Campaigns · Flows (automatic emails) · Audience · Settings. The open tab lives in the URL
  * (?tab=) so a refresh or a shared link opens the same place. The AI Designer
  * tab was removed 2026-11-09 (switched off: lib/server/email/config.ts
  * aiDesignerOff()); an old ?tab=designer link opens Emails.
@@ -17,6 +18,7 @@ import { EmailsList } from "./emails-list";
 const TABS = [
   { id: "emails", label: "Emails" },
   { id: "campaigns", label: "Campaigns" },
+  { id: "flows", label: "Flows" },
   { id: "contacts", label: "Audience" },
   { id: "settings", label: "Settings" },
 ] as const;
@@ -29,7 +31,7 @@ export function EmailWorkspace() {
   function open(t: Tab, extra: Record<string, string> = {}) {
     const u = new URL(window.location.href);
     u.searchParams.set("tab", t);
-    for (const k of ["edit", "campaign"]) u.searchParams.delete(k);
+    for (const k of ["edit", "campaign", "flow"]) u.searchParams.delete(k);
     for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
     window.history.replaceState(null, "", u.toString());
   }
@@ -57,6 +59,7 @@ export function EmailWorkspace() {
       </nav>
       {tab === "emails" && <EmailsList onCampaign={(id) => open("campaigns", { campaign: id })} />}
       {tab === "campaigns" && <EmailCampaigns onOpenDesigner={() => open("emails")} />}
+      {tab === "flows" && <EmailFlows />}
       {tab === "contacts" && <EmailContacts />}
       {tab === "settings" && <EmailSettingsPanel />}
     </div>

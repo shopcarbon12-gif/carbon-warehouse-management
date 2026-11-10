@@ -120,7 +120,8 @@ export type ProductItem = {
   /** A matching set shown as one card (like the homepage): "Hoodie $71.00 + Pants $69.00", "Set $140.00". */
   set?: { line: string; total: number; pieces: number } | null;
 };
-export type ProductFeed = "newest" | "women" | "men" | "most-stock";
+/** "cart" = this person's own cart or order (automatic emails / flows only; examples elsewhere). */
+export type ProductFeed = "newest" | "women" | "men" | "most-stock" | "cart";
 export type ProductBlock = Base & {
   type: "product";
   source: "static" | "dynamic";

@@ -562,17 +562,21 @@ export async function applyEvent(pool: Pool, snsId: string, ev: SesEvent): Promi
   const col: Record<string, string> = { delivery: "delivered_at", open: "opened_at", click: "clicked_at", complaint: "complained_at" };
   if (type === "bounce" && ev.bounce?.bounceType === "Permanent") col.bounce = "bounced_at";
   const c = col[type];
-  if (c) await pool.query(`UPDATE email_campaign_recipients SET ${c} = COALESCE(${c}, $2::timestamptz) WHERE message_id = $1`, [mid, at]);
-  // A click proves the email was opened even when the picture-pixel was blocked.
-  if (type === "click") await pool.query(`UPDATE email_campaign_recipients SET opened_at = COALESCE(opened_at, $2::timestamptz) WHERE message_id = $1`, [mid, at]);
+  // Campaign emails and automatic (flow) emails share the same events.
+  for (const t of ["email_campaign_recipients", "email_flow_sends"]) {
+    if (c) await pool.query(`UPDATE ${t} SET ${c} = COALESCE(${c}, $2::timestamptz) WHERE message_id = $1`, [mid, at]);
+    // A click proves the email was opened even when the picture-pixel was blocked.
+    if (type === "click") await pool.query(`UPDATE ${t} SET opened_at = COALESCE(opened_at, $2::timestamptz) WHERE message_id = $1`, [mid, at]);
+  }
+  const contactOf = `COALESCE((SELECT contact_id FROM email_campaign_recipients WHERE message_id = $1 LIMIT 1), (SELECT contact_id FROM email_flow_sends WHERE message_id = $1 LIMIT 1))`;
   if (type === "bounce" && ev.bounce?.bounceType === "Permanent") {
-    await pool.query(`UPDATE email_contacts SET bounced_at = COALESCE(bounced_at, $2::timestamptz) WHERE id = (SELECT contact_id FROM email_campaign_recipients WHERE message_id = $1 LIMIT 1)`, [mid, at]);
+    await pool.query(`UPDATE email_contacts SET bounced_at = COALESCE(bounced_at, $2::timestamptz) WHERE id = ${contactOf}`, [mid, at]);
   }
   if (type === "complaint") {
     const r = await pool.query<{ shopify_customer_gid: string | null }>(
       `UPDATE email_contacts SET complained_at = COALESCE(complained_at, $2::timestamptz), unsubscribed_at = COALESCE(unsubscribed_at, $2::timestamptz),
               unsubscribe_source = COALESCE(unsubscribe_source, 'complaint')
-        WHERE id = (SELECT contact_id FROM email_campaign_recipients WHERE message_id = $1 LIMIT 1) RETURNING shopify_customer_gid`,
+        WHERE id = ${contactOf} RETURNING shopify_customer_gid`,
       [mid, at],
     );
     await markShopifyUnsubscribed(r.rows[0]?.shopify_customer_gid ?? null);

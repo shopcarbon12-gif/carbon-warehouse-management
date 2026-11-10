@@ -218,9 +218,9 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
-    console.log("ok  migrations (with 0155–0157) apply twice");
+    console.log("ok  migrations (with 0155–0158) apply twice");
 
     await t("create from a starter: a ready design with html, listed as an editor email", async () => {
       const id = await createEditorEmail(pool, T, "owner@shopcarbon.com", { starter: "collection" });
@@ -392,6 +392,85 @@ async function main() {
       const fixed = structuredClone(d);
       for (const s of fixed.sections) for (const c of s.cols) for (const x of c.blocks) if (x.type === "text") x.html = `<p>Hello {{nickname}}</p>`;
       assert.ok(ruleIssues(fixed, "Hi", "There").some((i) => /Unknown personal tag \{\{nickname\}\}/.test(i.text)));
+    });
+
+    await t("flows: ready-made flow → live → person waits, gets their own cart, leaves when they order; events and stats", async () => {
+      const F = await import("../lib/server/email/flows");
+      const { inWindow, flowProblems, FLOW_IDEAS } = await import("../lib/email-editor/flows");
+      const { applyEvent } = await import("../lib/server/email/campaigns");
+      const sent: { to: string; subject: string; html: string; tags: { name: string; value: string }[] }[] = [];
+      let codes = 0;
+      F.setFlowDepsForTests({
+        send: async (_s, m) => (sent.push(m), `mid-${sent.length}`),
+        code: async () => ({ code: `CARBON-T${++codes}`, gid: `gid://shopify/DiscountCodeNode/${codes}` }),
+        pacing: async () => ({ perMinute: 60, leftToday: 1000 }),
+      });
+      await pool.query(`INSERT INTO email_settings (tenant_id) VALUES ($1::uuid) ON CONFLICT DO NOTHING`, [T]);
+
+      // the send window (Orlando): 3 AM waits for 9 AM, noon goes at once
+      const night = new Date("2026-11-10T08:00:00Z"); // 3 AM EST
+      assert.equal(inWindow(night, { sendFrom: 9, sendTo: 21 }).toISOString(), "2026-11-10T14:00:00.000Z");
+      const noon = new Date("2026-11-10T17:00:00Z");
+      assert.equal(inWindow(noon, { sendFrom: 9, sendTo: 21 }).getTime(), noon.getTime());
+
+      for (const idea of FLOW_IDEAS) assert.deepEqual(flowProblems({ ...idea.make(), steps: idea.make().steps.map((x) => (x.type === "email" ? { ...x, designId: "d" } : x)) }), [], idea.kind);
+
+      const id = await F.createFlow(pool, T, "o@x", "abandoned");
+      let f = (await F.getFlow(pool, T, id))!;
+      const emailSteps = f.steps.filter((x) => x.type === "email");
+      assert.equal(emailSteps.length, 2);
+      assert.ok(emailSteps.every((x) => x.type === "email" && x.designId), "its emails were made from the starters");
+      await assert.rejects(F.saveFlow(pool, T, id, { steps: [{ id: "x", type: "wait", amount: -1, unit: "days" }] }), /Invalid steps/);
+      await assert.rejects(F.saveFlow(pool, T, id, { settings: { ...f.settings, sendFrom: 22, sendTo: 9 } }), /Invalid settings/);
+
+      // nothing before "Turn on" counts
+      const item = { id: "i1", title: "Mira Dress", price: 49, compareAt: null, image: "https://cdn.example/mira.jpg", url: "https://shopcarbon.com/products/mira", set: null };
+      const person = (key: string, at: Date) => ({ email: "ana@example.com", firstName: "Ana", key, at, data: { items: [item], checkoutUrl: "https://shopcarbon.com/123/checkouts/ac/abc/recover?key=k&x=1" } });
+      assert.equal(await F.enroll(pool, f, person("checkout:old", new Date())), false, "draft: nobody enters");
+      f = await F.setFlowStatus(pool, T, id, "live");
+      assert.equal(await F.enroll(pool, f, person("checkout:old", new Date(Date.now() - 3_600_000))), false, "before it was turned on");
+      assert.equal(await F.enroll(pool, f, person("checkout:1", new Date(Date.now() + 1000))), true);
+      assert.equal(await F.enroll(pool, f, person("checkout:1", new Date(Date.now() + 1000))), false, "same checkout twice");
+      assert.equal(await F.enroll(pool, f, person("checkout:2", new Date(Date.now() + 1000))), false, "re-entry only after 7 days");
+
+      const at = (h: number) => () => new Date(new Date("2026-11-10T17:00:00Z").getTime() + h * 3_600_000); // noon in Orlando + h
+      await pool.query(`UPDATE email_flow_runs SET next_at = $1, started_at = $1 WHERE flow_id = $2::uuid`, [at(0)(), id]);
+      let r = await F.runFlowSteps(pool, () => {}, at(0));
+      assert.equal(r.sent, 0, "first step is the 1 hour wait");
+      r = await F.runFlowSteps(pool, () => {}, at(0.5));
+      assert.equal(r.sent, 0, "not yet");
+      r = await F.runFlowSteps(pool, () => {}, at(1.01));
+      assert.equal(r.sent, 1, "the cart email");
+      const m = sent[0];
+      assert.equal(m.to, "ana@example.com");
+      assert.equal(m.subject, "You left something behind");
+      assert.ok(m.html.includes("https://cdn.example/mira.jpg") && m.html.includes("Mira Dress"), "their own cart");
+      assert.ok(m.html.includes('href="https://shopcarbon.com/123/checkouts/ac/abc/recover?key=k&amp;x=1"'), "the button goes back to their checkout");
+      assert.ok(/unsubscribe/i.test(m.html), "footer with unsubscribe");
+      assert.ok(!m.html.includes("{{"), "every personal tag filled");
+      assert.deepEqual(m.tags[0], { name: "flow", value: id });
+
+      // SES events reach the flow email
+      await applyEvent(pool, "sns-1", { eventType: "Open", mail: { messageId: "mid-1", destination: ["ana@example.com"] }, open: { timestamp: new Date().toISOString() } } as never);
+      // a night-time due email waits for 9 AM
+      r = await F.runFlowSteps(pool, () => {}, at(1.02 + 24 + 10)); // a day later, 10 PM+: outside the window
+      assert.equal(r.sent, 0);
+      const waiting = await pool.query(`SELECT next_at FROM email_flow_runs WHERE flow_id = $1::uuid`, [id]);
+      assert.equal(Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(waiting.rows[0].next_at)), 9);
+
+      // she orders: the flow stops at the next "stop if they ordered"
+      await pool.query(`INSERT INTO email_orders_seen (source, order_id, tenant_id, email, total, processed_at) VALUES ('shopify', 'o1', $1::uuid, 'ana@example.com', 120, $2)`, [T, at(30)()]);
+      r = await F.runFlowSteps(pool, () => {}, at(48));
+      assert.equal(r.sent, 0);
+      assert.equal(r.exited, 1);
+      const run = await pool.query(`SELECT status, exit_reason FROM email_flow_runs WHERE flow_id = $1::uuid`, [id]);
+      assert.deepEqual(run.rows[0], { status: "exited", exit_reason: "Placed an order" });
+
+      const st = (await F.flowStats(pool, [id])).get(id)!;
+      assert.equal(st.sent, 1);
+      assert.equal(st.opened, 1);
+      assert.equal(st.orders, 1, "she ordered within 5 days of the email: it counts for the flow");
+      assert.equal(st.revenue, 120);
     });
   } finally {
     await pool.end();

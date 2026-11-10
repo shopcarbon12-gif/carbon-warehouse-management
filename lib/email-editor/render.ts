@@ -85,12 +85,15 @@ const TAG_NAMES: Record<string, string> = {
   shop_url: "Shop link",
   instagram_url: "Instagram link",
   unsubscribe_url: "Unsubscribe link",
+  checkout_url: "Checkout link",
+  order_name: "Order number",
 };
 export function chipTags(html: string): string {
   return html.replace(/\{\{\s*([a-z_]+)\s*(?:\|\s*([^}]*?)\s*)?\}\}/g, (_m, tag: string) => {
     if (tag === "code") return `<span style="font-family:'Courier New',monospace;background:rgba(127,127,127,.15);padding:0 4px;border-radius:3px">CB20-AB12CD</span>`;
     if (tag === "offer_amount") return "$20";
     if (tag === "offer_ends") return "Sunday, Nov 30";
+    if (tag === "order_name") return "#1084";
     return `<span style="background:#E8E8E8;color:#444;border-radius:3px;padding:0 4px;font-size:.85em">${esc(TAG_NAMES[tag] ?? tag)}</span>`;
   });
 }

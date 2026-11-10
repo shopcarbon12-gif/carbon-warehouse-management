@@ -248,7 +248,8 @@ export function prebuiltSections(id: string): Section[] {
 
 /* ----------------------------------------------------------------- starters */
 
-export type Starter = { id: string; name: string; description: string; make: () => EmailDoc };
+/** group "flow": made for an automatic email (Flows); shown in its own row on New email. */
+export type Starter = { id: string; name: string; description: string; make: () => EmailDoc; group?: "flow" };
 
 const doc = (ids: string[], styles = defaultStyles()): EmailDoc => ({ v: 1, styles, sections: ids.flatMap(prebuiltSections) });
 
@@ -282,6 +283,101 @@ export function darkenDoc(d: EmailDoc): EmailDoc {
   return d;
 }
 
+/* ------------------------------------------------- automatic emails (Flows) */
+
+/** The person's own cart or order, as product cards (filled per person when the flow sends). */
+function cartBlock(perRow: number): Block {
+  const p = newBlock("product");
+  if (p.type === "product") {
+    p.source = "dynamic";
+    p.feed = "cart";
+    p.perRow = perRow;
+    p.rows = 1;
+    p.orientation = perRow === 1 ? "image-left" : "vertical";
+    p.imgRatio = perRow === 1 ? "auto" : "4:5";
+    p.showButton = false;
+  }
+  return p;
+}
+
+const centered = (inner: string, p = pad(9, 32)) => text(`<p style="text-align:center;">${inner}</p>`, p);
+
+function flowWelcome(): EmailDoc {
+  return {
+    ...doc([]),
+    sections: [
+      ...prebuiltSections("header"),
+      one(
+        [
+          spacer(24),
+          text(`<p style="text-align:center;font-family:'Montserrat';font-size:11px;letter-spacing:6px;color:#6B6B6B;">WELCOME TO CARBON</p>`),
+          headline(`<h1 style="text-align:center;font-family:'Bodoni Moda';font-style:italic;font-weight:400;font-size:48px;line-height:1.05;">Glad you're here</h1>`, pad(6, 32)),
+          centered(`Hi {{first_name|there}}, we're CARBON: a streetwear and going-out store in Orlando, with new pieces every week online and in our showroom.`, pad(10, 56)),
+          image(null, "New at CARBON", pad(18, 0)),
+          btn("SEE WHAT'S NEW", "https://shopcarbon.com/collections/new-arrivals"),
+          spacer(20),
+        ],
+        { bg: "#F7F4EF" },
+      ),
+      ...prebuiltSections("products-3"),
+      ...prebuiltSections("store"),
+      ...prebuiltSections("follow"),
+    ],
+  };
+}
+
+function flowWelcome2(): EmailDoc {
+  const d = doc(["header", "code", "products-6", "follow"]);
+  d.sections.splice(1, 0, one([text(`<h2 style="text-align:center;">Your code is still waiting</h2>`, pad(28, 32)), centered(`{{first_name|Hi}}, your welcome code is good until {{offer_ends}}. Here are a few new pieces to use it on.`, pad(4, 48))]));
+  return d;
+}
+
+function flowCart(): EmailDoc {
+  const d = doc(["header"]);
+  d.sections.push(
+    one([text(`<h2 style="text-align:center;">You left something behind</h2>`, pad(28, 32)), centered(`Your cart is saved, {{first_name|there}}. Sizes go fast, so here it is again.`, pad(4, 48)), spacer(8)]),
+    one([cartBlock(3)], { pad: pad(8, 18) }),
+    one([btn("BACK TO MY CART", "{{checkout_url}}"), centered(`<span style="font-size:13px;color:#6B6B6B;">Free U.S. &amp; Canada shipping over $125 · exchanges within 14 days</span>`, pad(4, 32)), spacer(16)]),
+    ...prebuiltSections("store"),
+    ...prebuiltSections("follow"),
+  );
+  return d;
+}
+
+function flowThanks(): EmailDoc {
+  const d = doc(["header"]);
+  d.sections.push(
+    one([
+      spacer(20),
+      headline(`<h1 style="text-align:center;font-family:'Bodoni Moda';font-style:italic;font-weight:400;font-size:46px;line-height:1.05;">Thank you, {{first_name|friend}}</h1>`, pad(6, 32)),
+      centered(`Your order {{order_name}} means a lot to a small Orlando store. Here is what you picked.`, pad(10, 56)),
+      spacer(6),
+    ]),
+    one([cartBlock(1)], { pad: pad(8, 32) }),
+    one([
+      text(`<h3 style="text-align:center;">Wear it, tag us</h3>`, pad(20, 32)),
+      centered(`Show us how you style it: tag <strong>@shopcarbon</strong> on Instagram. Need a different size? Exchanges within 14 days, online or in the showroom.`, pad(4, 48)),
+      spacer(12),
+    ]),
+    ...prebuiltSections("follow"),
+  );
+  return d;
+}
+
+function flowWinback(): EmailDoc {
+  const d = doc(["header", "hero", "products-6", "code", "store", "follow"]);
+  for (const s of d.sections)
+    for (const c of s.cols)
+      for (const b of c.blocks) {
+        if (b.type !== "text") continue;
+        b.html = b.html
+          .replace("The new collection", "It's been a while")
+          .replace("One line about what is new and why it is worth a look.", "A lot has landed since your last visit, {{first_name|friend}}. Come and see.")
+          .replace("Shop the edit", "New since you were here");
+      }
+  return d;
+}
+
 export const STARTERS: Starter[] = [
   { id: "blank", name: "Blank", description: "Logo header and an empty section.", make: () => ({ ...doc(["header"]), sections: [...prebuiltSections("header"), newSection()] }) },
   {
@@ -295,6 +391,11 @@ export const STARTERS: Starter[] = [
   { id: "lookbook", name: "Lookbook", description: "Dark hero, three looks with their pieces, follow us.", make: () => doc(["header", "hero-dark", "look", "look", "look", "follow"]) },
   { id: "offer", name: "Personal offer", description: "A short note and the person's own code.", make: () => doc(["header", "headline", "code", "products-6", "follow"]) },
   { id: "store", name: "Store visit", description: "Invite people to the Orlando showroom.", make: () => doc(["header", "headline", "store", "follow"]) },
+  { id: "flow-welcome", name: "Welcome", description: "For the Welcome flow: who CARBON is, new arrivals, the showroom.", make: flowWelcome, group: "flow" },
+  { id: "flow-welcome-2", name: "Welcome code reminder", description: "For the Welcome flow: their welcome code is still waiting, with picks to use it on.", make: flowWelcome2, group: "flow" },
+  { id: "flow-cart", name: "Abandoned checkout", description: "Their own cart with a button straight back to checkout.", make: flowCart, group: "flow" },
+  { id: "flow-thanks", name: "Thank you", description: "A personal thank-you with what they bought.", make: flowThanks, group: "flow" },
+  { id: "flow-winback", name: "We miss you", description: "What's new since their last order, and their own code.", make: flowWinback, group: "flow" },
 ];
 
 export { INSTAGRAM };

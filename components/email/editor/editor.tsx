@@ -408,6 +408,8 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
       let list = all;
       if (feed === "women" || feed === "men") list = all.filter((p) => p.gender === feed || p.gender === "unisex");
       if (feed === "most-stock") list = [...all].sort((a, b) => b.stock - a.stock);
+      // A flow fills this per person; here a few examples stand in.
+      if (feed === "cart") list = all.slice(0, 3);
       return list.slice(0, 60).map((p) => ({ id: p.id, title: p.title, price: p.price, compareAt: p.compareAt, image: p.image, url: p.url, set: null }));
     },
     [getCatalog],

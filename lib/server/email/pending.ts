@@ -19,6 +19,9 @@ export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string;
        UNION ALL
        SELECT tenant_id, created_by FROM email_campaigns WHERE offer IS NOT NULL AND status IN ('sending','sent','paused','cancelled') AND started_at IS NOT NULL
           AND (results_at IS NULL OR results_at < now() - interval '3 hours') AND (offer->>'endsAt')::timestamptz > now() - interval '3 days'
+       UNION ALL
+       -- automatic emails (lib/server/email/flows.ts): every minute while a flow is live
+       SELECT tenant_id, created_by FROM email_flows WHERE status = 'live' AND archived_at IS NULL
      ) x GROUP BY tenant_id`,
   );
   return r.rows;

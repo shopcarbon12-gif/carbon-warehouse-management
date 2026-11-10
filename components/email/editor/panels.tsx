@@ -602,7 +602,7 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
                   <Select<ProductFeed>
                     value={b.feed}
                     onChange={async (v) => set({ feed: v, items: await h.feedItems(v) })}
-                    options={[{ v: "newest", label: "Newest arrivals" }, { v: "women", label: "Newest for women" }, { v: "men", label: "Newest for men" }, { v: "most-stock", label: "Most in stock" }]}
+                    options={[{ v: "newest", label: "Newest arrivals" }, { v: "women", label: "Newest for women" }, { v: "men", label: "Newest for men" }, { v: "most-stock", label: "Most in stock" }, { v: "cart", label: "This person's cart or order (automatic emails)" }]}
                   />
                 </Field>
                 <Field label="Start with item number" inline>
