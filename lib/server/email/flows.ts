@@ -561,6 +561,46 @@ async function lapsed(pool: Pool, tenantId: string, days: number): Promise<Perso
   }));
 }
 
+/** Online orders that were shipped (fulfilled) since the cursor, with the tracking link. */
+async function pollShipped(pool: Pool, tenantId: string): Promise<Person[]> {
+  const ctx = await welcomeShopCtx();
+  if (!ctx) return [];
+  const since = (await stateGet(pool, tenantId, "shopify_shipped_at")) ?? new Date(Date.now() - 86_400_000).toISOString();
+  const out: Person[] = [];
+  let newest = since;
+  let after: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const d: {
+      orders: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: { id: string; name: string; email: string | null; updatedAt: string; displayFulfillmentStatus: string; customer: { firstName: string | null } | null; fulfillments: { createdAt: string; trackingInfo: { url: string | null }[] }[]; lineItems: { nodes: { title: string; image: { url: string } | null; originalUnitPriceSet: { shopMoney: { amount: string } }; product: { handle: string } | null }[] } }[];
+      };
+    } = await welcomeGql(
+      ctx,
+      `query FlowShipped($after: String, $q: String) { orders(first: 100, after: $after, sortKey: UPDATED_AT, query: $q) {
+         pageInfo { hasNextPage endCursor }
+         nodes { id name email updatedAt displayFulfillmentStatus customer { firstName }
+           fulfillments(first: 5) { createdAt trackingInfo(first: 1) { url } }
+           lineItems(first: 12) { nodes { title image { url } originalUnitPriceSet { shopMoney { amount } } product { handle } } } } } }`,
+      { after, q: `updated_at:>='${since}' fulfillment_status:shipped` },
+    );
+    for (const o of d.orders.nodes) {
+      if (o.updatedAt > newest) newest = o.updatedAt;
+      const email = normalizeEmail(o.email);
+      const f = o.fulfillments[0];
+      if (!email || !f) continue;
+      const items: ProductItem[] = o.lineItems.nodes
+        .filter((l) => l.image?.url)
+        .map((l, i) => ({ id: `${o.id}-s${i}`, title: l.title, price: Number(l.originalUnitPriceSet.shopMoney.amount) || 0, compareAt: null, image: l.image!.url, url: productUrl(l.product?.handle), set: null }));
+      out.push({ email, firstName: o.customer?.firstName ?? null, key: `shipped:${o.id}`, at: new Date(f.createdAt), data: { items, orderName: o.name, trackingUrl: f.trackingInfo[0]?.url ?? null } });
+    }
+    if (!d.orders.pageInfo.hasNextPage) break;
+    after = d.orders.pageInfo.endCursor;
+  }
+  await stateSet(pool, tenantId, "shopify_shipped_at", newest);
+  return out;
+}
+
 /** People whose birthday is today in Orlando (from Rewards), once a year each. */
 async function birthdaysToday(pool: Pool, tenantId: string): Promise<Person[]> {
   const r = await pool.query<{ email: string; first_name: string | null; y: string }>(
@@ -636,6 +676,7 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
   }
   if (types.has("signup")) await into("signup", await pollSignups(pool, tenantId));
   for (const f of flows) if (f.trigger.type === "winback") for (const p of await lapsed(pool, tenantId, f.trigger.days)) if (await enroll(pool, f, p)) n++;
+  if (types.has("shipped")) await into("shipped", await pollShipped(pool, tenantId).catch((e) => (log(`[flows] Shopify shipments: ${e instanceof Error ? e.message : e}`), [])));
   if (types.has("birthday")) for (const f of flows.filter((x) => x.trigger.type === "birthday")) for (const p of await birthdaysToday(pool, tenantId)) if (await enroll(pool, f, p)) n++;
   if (n) log(`[flows] ${n} new ${n === 1 ? "person" : "people"} in flows`);
   return n;
@@ -653,6 +694,7 @@ type RunRow = {
   data: {
     items?: ProductItem[];
     checkoutUrl?: string;
+    trackingUrl?: string | null;
     orderName?: string;
     code?: string | null;
     percent?: number | null;
@@ -832,15 +874,20 @@ async function sendStep(
     last_emailed_at: Date | null;
     mailable: boolean;
     subscribed: boolean;
+    hard: boolean;
   }>(
     `SELECT unsub_token, last_emailed_at,
             (excluded_reason IS NULL AND unsubscribed_at IS NULL AND bounced_at IS NULL AND complained_at IS NULL AND COALESCE(shopify_marketing, '') <> 'UNSUBSCRIBED') AS mailable,
-            (shopify_marketing = 'SUBSCRIBED') AS subscribed
+            (shopify_marketing = 'SUBSCRIBED') AS subscribed,
+            (excluded_reason IS NOT NULL OR bounced_at IS NOT NULL OR complained_at IS NOT NULL) AS hard
        FROM email_contacts WHERE tenant_id = $1::uuid AND email = $2`,
     [run.tenant_id, run.email],
   );
   const contact = c.rows[0];
-  if (!contact?.mailable) {
+  // Transactional (about their own order): an unsubscribe from marketing does not stop it; bounces,
+  // spam complaints and left-out addresses still do.
+  const reachable = run.settings.who === "transactional" ? !!contact && !contact.hard : !!contact?.mailable;
+  if (!reachable) {
     await skip(pool, run, step, "Unsubscribed, bounced or left out");
     return { kind: "skipped" };
   }
@@ -926,6 +973,7 @@ async function sendStep(
       }),
       checkout_url: run.data.checkoutUrl ?? "",
       order_name: run.data.orderName ?? "",
+      tracking_url: run.data.trackingUrl ?? "",
     };
     const filled = fillMergeTags(html, values);
     const subject = fillMergeTags(step.subject, values)
@@ -1030,6 +1078,7 @@ export async function sendFlowTest(pool: Pool, tenantId: string, input: { flowId
     }),
     checkout_url: "https://shopcarbon.com/cart",
     order_name: "#1000",
+    tracking_url: "https://shopcarbon.com",
   };
   const filled = fillMergeTags(html, values);
   return deps.send(s, {

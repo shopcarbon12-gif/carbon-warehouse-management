@@ -7,8 +7,8 @@
  * Pure (no server or browser APIs): the flow editor and the server both use it.
  */
 
-export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday";
-export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" };
+export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday" | "shipped";
+export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" } | { type: "shipped" };
 
 export type WaitStep = {
   id: string;
@@ -38,7 +38,8 @@ export type FlowStep = WaitStep | EmailStep | StopStep;
 
 export type FlowSettings = {
   /** all = every mailable person; subscribed = only people who said yes to marketing emails. */
-  who: "all" | "subscribed";
+  /** transactional: about the person's own order (thank you, shipped) — also to people who unsubscribed from marketing; never to bounced, spam-reporting or left-out addresses. */
+  who: "all" | "subscribed" | "transactional";
   /** Skip an email when the person got any email from us in the last N hours (0 = never skip). */
   skipRecentHours: number;
   /** Send only between these hours, Orlando time (an email due at night waits for the morning). */
@@ -48,7 +49,7 @@ export type FlowSettings = {
   reentryDays: number | null;
 };
 
-export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "custom";
+export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "shipped" | "custom";
 export type FlowDraft = {
   name: string;
   kind: FlowKind;
@@ -73,6 +74,7 @@ export const TRIGGER_LABEL: Record<TriggerType, string> = {
   abandoned_checkout: "Leaves a checkout without paying",
   winback: "Has not ordered for a while",
   birthday: "Has a birthday",
+  shipped: "Has an order shipped",
 };
 
 export function triggerText(t: Trigger): string {
@@ -87,6 +89,8 @@ export function triggerText(t: Trigger): string {
       return `When someone's last order was ${t.days} days ago`;
     case "birthday":
       return "On each person's birthday (from Rewards; once a year)";
+    case "shipped":
+      return "When an online order is shipped (fulfilled in Shopify)";
   }
 }
 
@@ -182,7 +186,7 @@ export const FLOW_IDEAS: FlowIdea[] = [
       name: "Thank you for your order",
       kind: "thanks",
       trigger: { type: "order", first: false, where: "both" },
-      settings: { ...DEFAULT_SETTINGS, skipRecentHours: 0, reentryDays: 30 },
+      settings: { ...DEFAULT_SETTINGS, who: "transactional", skipRecentHours: 0, reentryDays: 30 },
       steps: [wait(2, "hours"), email("Thank you", "Thank you, {{first_name|there}}", "From all of us at CARBON in Orlando")],
     }),
   },
@@ -220,6 +224,20 @@ FLOW_IDEAS.push({
   }),
 });
 
+FLOW_IDEAS.push({
+  kind: "shipped",
+  name: "Shipped, then a review",
+  description: "When an online order ships: its tracking link right away (sent even to people who opted out of marketing). Two weeks later, a quick “rate the fit”.",
+  starters: ["pack-50-shipped", "pack-51-review"],
+  make: () => ({
+    name: "Shipped, then a review",
+    kind: "shipped",
+    trigger: { type: "shipped" },
+    settings: { ...DEFAULT_SETTINGS, who: "transactional", skipRecentHours: 0, reentryDays: null },
+    steps: [email("Shipped", "Your order {{order_name}} is on its way", "Track it here. From Orlando, with love"), wait(14, "days"), email("Review: rate the fit", "How does it fit, {{first_name|there}}?", "Tell us in one tap")],
+  }),
+});
+
 export function blankFlow(): FlowDraft {
   return {
     name: "New flow",
@@ -237,7 +255,7 @@ const num = (x: unknown, lo: number, hi: number) => typeof x === "number" && Num
 export function isTrigger(x: unknown): x is Trigger {
   const t = x as Trigger;
   if (!t || typeof t !== "object") return false;
-  if (t.type === "signup" || t.type === "abandoned_checkout" || t.type === "birthday") return true;
+  if (t.type === "signup" || t.type === "abandoned_checkout" || t.type === "birthday" || t.type === "shipped") return true;
   if (t.type === "order") return typeof t.first === "boolean" && ["online", "store", "both"].includes(t.where);
   if (t.type === "winback") return num(t.days, 14, 730);
   return false;
@@ -267,7 +285,7 @@ export function isSettings(x: unknown): x is FlowSettings {
   const s = x as FlowSettings;
   return (
     !!s &&
-    (s.who === "all" || s.who === "subscribed") &&
+    (s.who === "all" || s.who === "subscribed" || s.who === "transactional") &&
     num(s.skipRecentHours, 0, 168) &&
     num(s.sendFrom, 0, 23) &&
     num(s.sendTo, 1, 24) &&

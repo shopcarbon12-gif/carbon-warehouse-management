@@ -653,7 +653,8 @@ function TriggerPanel({ flow, onChange }: { flow: Flow; onChange: (t: Trigger) =
         {t.type === "signup" &&
           "People who sign up already get their welcome code by email at once (Email Popup). This flow is what comes after; it can use their welcome code ({{code}}, {{offer_amount}}, {{offer_ends}}). "}
         {t.type === "winback" && "Orders online and in the store both count. Each person enters once their last order passes this many days. "}
-        {t.type === "birthday" && "Birthdays come from Rewards (the store). Each person enters on their birthday, once a year; give the email step its own code as the gift. "}
+        {t.type === "shipped" && "Read from Shopify every 5 minutes: online orders marked shipped. {{tracking_url}} is their tracking link and {{order_name}} their order number. "}
+                {t.type === "birthday" && "Birthdays come from Rewards (the store). Each person enters on their birthday, once a year; give the email step its own code as the gift. "}
         {locked ? "The trigger is fixed while the flow is on (set it back to draft to change it)." : "Changes save by themselves."}
       </p>
     </>
@@ -668,6 +669,7 @@ function SettingsPanel({ s, onChange }: { s: FlowSettings; onChange: (s: FlowSet
         <select className={field} value={s.who} onChange={(e) => onChange({ ...s, who: e.target.value as FlowSettings["who"] })}>
           <option value="all">Everyone who has not unsubscribed</option>
           <option value="subscribed">Only people subscribed to marketing emails</option>
+          <option value="transactional">About their own order (also to people who opted out of marketing)</option>
         </select>
       </Row>
       <Row k="Skip someone who got an email in the last (hours, 0 = never skip)">

@@ -90,6 +90,7 @@ const TAG_NAMES: Record<string, string> = {
   unsubscribe_url: "Unsubscribe link",
   checkout_url: "Checkout link",
   order_name: "Order number",
+  tracking_url: "Tracking link",
 };
 export function chipTags(html: string): string {
   return html.replace(/\{\{\s*([a-z_]+)\s*(?:\|\s*([^}]*?)\s*)?\}\}/g, (_m, tag: string) => {

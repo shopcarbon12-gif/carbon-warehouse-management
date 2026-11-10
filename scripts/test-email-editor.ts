@@ -595,6 +595,8 @@ async function main() {
       const noon = new Date("2026-11-10T17:00:00Z");
       assert.equal(inWindow(noon, { sendFrom: 9, sendTo: 21 }).getTime(), noon.getTime());
 
+      assert.ok(FLOW_IDEAS.some((x) => x.kind === "shipped" && x.make().settings.who === "transactional"), "shipped flow is transactional");
+      assert.ok(FLOW_IDEAS.some((x) => x.kind === "birthday"));
       for (const idea of FLOW_IDEAS) assert.deepEqual(flowProblems({ ...idea.make(), steps: idea.make().steps.map((x) => (x.type === "email" ? { ...x, designId: "d" } : x)) }), [], idea.kind);
 
       const id = await F.createFlow(pool, T, "o@x", "abandoned");
@@ -639,6 +641,21 @@ async function main() {
       assert.equal(r.sent, 0);
       const waiting = await pool.query(`SELECT next_at FROM email_flow_runs WHERE flow_id = $1::uuid`, [id]);
       assert.equal(Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(waiting.rows[0].next_at)), 9);
+
+      // transactional: an unsubscribe from marketing does not stop an order email; a bounce does
+      await pool.query(`UPDATE email_contacts SET unsubscribed_at = now() WHERE email = 'ana@example.com'`);
+      const tx = await F.createFlow(pool, T, "o@x", "shipped");
+      let txf = await F.setFlowStatus(pool, T, tx, "live");
+      await pool.query(`UPDATE email_flows SET live_since = now() - interval '1 hour' WHERE id = $1::uuid`, [tx]);
+      txf = (await F.getFlow(pool, T, tx))!;
+      assert.equal(await F.enroll(pool, txf, { email: "ana@example.com", firstName: "Ana", key: "shipped:1", at: new Date(), data: { orderName: "#1090", trackingUrl: "https://track.example/1" } }), true);
+      const before = sent.length;
+      await F.runFlowSteps(pool, () => {}, at(0.2));
+      const shipMail = sent.slice(before).find((m) => m.subject.includes("#1090"));
+      assert.ok(shipMail, "shipped email went out to an unsubscribed customer");
+      assert.ok(!shipMail!.html.includes("{{"), "every tag filled");
+      await F.archiveFlow(pool, T, tx);
+      await pool.query(`UPDATE email_contacts SET unsubscribed_at = NULL WHERE email = 'ana@example.com'`);
 
       // she orders: the flow stops at the next "stop if they ordered"
       await pool.query(`INSERT INTO email_orders_seen (source, order_id, tenant_id, email, total, processed_at) VALUES ('shopify', 'o1', $1::uuid, 'ana@example.com', 120, $2)`, [T, at(30)()]);

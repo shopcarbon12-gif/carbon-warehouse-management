@@ -40,7 +40,7 @@ const TAGS = {
   cart_url: "{{checkout_url}}",
   order_number: "{{order_name}}",
   order_url: SHOP,
-  tracking_url: SHOP,
+  tracking_url: "{{tracking_url}}",
   review_url: SHOP,
   referral_url: SHOP,
   giftcard_url: SHOP,

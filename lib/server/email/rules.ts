@@ -71,6 +71,7 @@ export const MERGE_TAGS = [
   // automatic emails (Flows): the person's own checkout link and order number
   "checkout_url",
   "order_name",
+  "tracking_url",
 ] as const;
 export type MergeTag = (typeof MERGE_TAGS)[number];
 export type MergeValues = Partial<Record<MergeTag, string>>;
@@ -92,7 +93,7 @@ export function fillMergeTags(html: string, v: MergeValues): string {
     if (val != null && val !== "") return esc(val);
     if (fallback != null) return esc(fallback);
     if (tag === "greeting_name") return "there";
-    if (tag === "code_url" || tag === "shop_url" || tag === "checkout_url") return esc(v.shop_url ?? "https://shopcarbon.com");
+    if (tag === "code_url" || tag === "shop_url" || tag === "checkout_url" || tag === "tracking_url") return esc(v.shop_url ?? "https://shopcarbon.com");
     return "";
   });
 }
