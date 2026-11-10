@@ -2,7 +2,7 @@
  * CarbonWMS Email Editor — ready-made CARBON sections (the "Pre-built" tab) and starter emails.
  * Our own designs, built from the editor's blocks, so everything in them stays editable.
  */
-import { PACK } from "./pack";
+import { PACK, PACK_MORE } from "./pack";
 import { LOGO, INSTAGRAM, SHOP_URL, defaultStyles, newBlock, newSection, pad, type Block, type EmailDoc, type Section } from "./types";
 
 const STORE_OUT = "https://cdn.shopify.com/s/files/1/0680/6572/2620/files/ChatGPT_Image_Jun_12_2026_12_43_51_AM.png?v=1781252379";
@@ -250,7 +250,7 @@ export function prebuiltSections(id: string): Section[] {
 /* ----------------------------------------------------------------- starters */
 
 /** group "flow": made for an automatic email (Flows); shown in its own row on New email. */
-export type Starter = { id: string; name: string; description: string; make: () => EmailDoc; group?: "flow" | "pack" };
+export type Starter = { id: string; name: string; description: string; make: () => EmailDoc; group?: "flow" | "pack" | "pack-seasonal" | "pack-studio" | "pack-bright" };
 
 const doc = (ids: string[], styles = defaultStyles()): EmailDoc => ({ v: 1, styles, sections: ids.flatMap(prebuiltSections) });
 
@@ -382,6 +382,7 @@ function flowWinback(): EmailDoc {
 export const STARTERS: Starter[] = [
   // The CARBON template pack (owner, 2026-11-10; lib/email-editor/pack.ts).
   ...PACK.map((x) => ({ ...x, group: "pack" as const })),
+  ...PACK_MORE,
   { id: "blank", name: "Blank", description: "Logo header and an empty section.", make: () => ({ ...doc(["header"]), sections: [...prebuiltSections("header"), newSection()] }) },
   {
     id: "collection",

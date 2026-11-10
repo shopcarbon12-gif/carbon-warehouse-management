@@ -28,7 +28,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { PREBUILT } from "@/lib/email-editor/prebuilt";
-import { BONE, HERO_LAYOUTS, HERO_LAYOUT_IDS, INK, LIME, ORANGE, RED, heroDefaults } from "@/lib/email-editor/heroes";
+import { BONE, HERO_LAYOUTS, HERO_LAYOUT_IDS, LIME, ORANGE, RED, accentLocked, heroDefaults, heroInfo } from "@/lib/email-editor/heroes";
 import { picBlocked } from "@/lib/email-editor/render";
 import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type BrandKit, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
@@ -762,8 +762,10 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
       );
       break;
     case "hero": {
-      const L = HERO_LAYOUTS[b.layout];
+      const L = heroInfo(b.layout);
+      const core = HERO_LAYOUTS[b.layout];
       const ph = Array.from({ length: L.photos }, (_, i) => b.photos[i] ?? null);
+      const texts = L.pack ? L.texts.map((d, i) => b.texts?.[i] ?? d) : [];
       body = (
         <>
           <Group title="Hero picture">
@@ -773,57 +775,72 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
             <Field label="Design">
               <Select
                 value={b.layout}
-                options={HERO_LAYOUT_IDS.map((id) => ({ v: id, label: HERO_LAYOUTS[id].name }))}
+                options={HERO_LAYOUT_IDS.map((id) => ({ v: id, label: heroInfo(id).name }))}
                 onChange={(v) => {
                   const d = heroDefaults(v);
-                  // Keep the photos and words already there; take the new design's colour.
-                  set({ layout: v, accent: d.accent, photos: Array.from({ length: HERO_LAYOUTS[v].photos }, (_, i) => b.photos[i] ?? null) });
+                  // Keep the photos already there; take the new design's words and colour.
+                  set({ ...d, photos: d.photos.map((_, i) => b.photos[i] ?? null), headline: heroInfo(v).pack ? b.headline : d.headline });
                 }}
               />
             </Field>
-            <Field label={L.fields.headline}>
-              <Text value={b.headline} onChange={(v) => set({ headline: v }, "hl")} />
-            </Field>
-            {L.fields.label && (
-              <Field label={L.fields.label}>
-                <Text value={b.label} onChange={(v) => set({ label: v }, "lb")} />
-              </Field>
+            {core && (
+              <>
+                <Field label={core.fields.headline}>
+                  <Text value={b.headline} onChange={(v) => set({ headline: v }, "hl")} />
+                </Field>
+                {core.fields.label && (
+                  <Field label={core.fields.label}>
+                    <Text value={b.label} onChange={(v) => set({ label: v }, "lb")} />
+                  </Field>
+                )}
+                {core.fields.subline && (
+                  <Field label={core.fields.subline}>
+                    <Text value={b.subline} onChange={(v) => set({ subline: v }, "sl")} />
+                  </Field>
+                )}
+                {core.fields.note && (
+                  <Field label={core.fields.note}>
+                    <Text area value={b.note} onChange={(v) => set({ note: v }, "nt")} />
+                  </Field>
+                )}
+              </>
             )}
-            {L.fields.subline && (
-              <Field label={L.fields.subline}>
-                <Text value={b.subline} onChange={(v) => set({ subline: v }, "sl")} />
-              </Field>
-            )}
-            {L.fields.note && (
-              <Field label={L.fields.note}>
-                <Text area value={b.note} onChange={(v) => set({ note: v }, "nt")} />
-              </Field>
-            )}
-          </Group>
-          <Group title={ph.length > 1 ? `Photos (${ph.length})` : "Photo"}>
-            {ph.map((src, i) => (
-              <ImageChooser
-                key={i}
-                src={src}
-                onPick={() => h.pickImage((img) => set({ photos: ph.map((x, j) => (j === i ? img.url : x)) }))}
-                onRemove={() => set({ photos: ph.map((x, j) => (j === i ? null : x)) })}
-              />
-            ))}
-            <Toggle label="CARBON grade (more contrast, less colour, film grain)" checked={b.grade} onChange={(v) => set({ grade: v })} />
-          </Group>
-          <Group title="Accent colour">
-            <div className="flex flex-wrap gap-1.5">
-              {[ORANGE, LIME, RED, BONE, INK].map((c) => (
-                <button key={c} type="button" title={c} aria-label={`Accent ${c}`} onClick={() => set({ accent: c })} className={`h-7 w-7 rounded border ${b.accent === c ? "ring-2 ring-[#2F6FED]" : "border-[var(--wms-border)]"}`} style={{ background: c }} />
+            {L.pack &&
+              texts.map((t, i) => (
+                <Field key={i} label={`Words ${i + 1}${L.texts[i] !== t ? ` (was “${L.texts[i].slice(0, 28)}”)` : ""}`}>
+                  <Text value={t} onChange={(v) => set({ texts: texts.map((x, j) => (j === i ? v : x)) }, `t${i}`)} />
+                </Field>
               ))}
-            </div>
-            <Color value={b.accent} onChange={(v) => set({ accent: v }, "ac")} />
           </Group>
+          {ph.length > 0 && (
+            <Group title={ph.length > 1 ? `Photos (${ph.length})` : "Photo"}>
+              {ph.map((src, i) => (
+                <ImageChooser
+                  key={i}
+                  src={src}
+                  onPick={() => h.pickImage((img) => set({ photos: ph.map((x, j) => (j === i ? img.url : x)) }))}
+                  onRemove={() => set({ photos: ph.map((x, j) => (j === i ? null : x)) })}
+                />
+              ))}
+              <Toggle label="CARBON grade (more contrast, less colour)" checked={b.grade} onChange={(v) => set({ grade: v })} />
+              <p className="text-[0.7rem] text-[var(--wms-muted)]">A cut-out (a PNG with a see-through background) sits on the type the way the design intends.</p>
+            </Group>
+          )}
+          {!accentLocked(b.layout) && (
+            <Group title="Accent colour">
+              <div className="flex flex-wrap gap-1.5">
+                {[...new Set([L.accent, ORANGE, LIME, RED, BONE])].map((c) => (
+                  <button key={c} type="button" title={c} aria-label={`Accent ${c}`} onClick={() => set({ accent: c })} className={`h-7 w-7 rounded border ${b.accent === c ? "ring-2 ring-[#2F6FED]" : "border-[var(--wms-border)]"}`} style={{ background: c }} />
+                ))}
+              </div>
+              <Color value={b.accent} onChange={(v) => set({ accent: v }, "ac")} />
+            </Group>
+          )}
           <Group title="Link and alt text">
             <Field label="Opens when tapped">
               <Text value={b.href} onChange={(v) => set({ href: v }, "href")} placeholder="https://shopcarbon.com/…" />
             </Field>
-            <Field label="Alt text (empty = the headline)">
+            <Field label="Alt text (empty = the big words)">
               <Text value={b.alt} onChange={(v) => set({ alt: v }, "alt")} />
             </Field>
           </Group>

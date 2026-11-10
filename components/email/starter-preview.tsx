@@ -125,6 +125,7 @@ export function DocThumb({
           "<style>html,body{overflow:hidden!important}</style></head>",
         )}
         tabIndex={-1}
+        loading="lazy"
         className="pointer-events-none absolute left-1/2 top-0"
         style={{
           width: FRAME_W,

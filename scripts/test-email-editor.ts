@@ -207,12 +207,14 @@ async function main() {
   });
 
   await t("CARBON pack: 10 templates, every hero a JPG picture source, small HTML, images with width + alt, footer rule, no 'Carbon Jeans'", async () => {
-    const { PACK } = await import("../lib/email-editor/pack");
-    const { HERO_LAYOUT_IDS, heroPage, heroDefaults } = await import("../lib/email-editor/heroes");
+    const { PACK, PACK_MORE } = await import("../lib/email-editor/pack");
+    const { HERO_LAYOUT_IDS, heroPage, heroDefaults, heroInfo } = await import("../lib/email-editor/heroes");
     const { picSources } = await import("../lib/email-editor/render");
+    const { MERGE_TAGS } = await import("../lib/server/email/rules");
     assert.equal(PACK.length, 10);
-    assert.equal(STARTERS.filter((x) => x.group === "pack").length, 10);
-    for (const p of PACK) {
+    assert.equal(PACK_MORE.length, 60);
+    assert.equal(STARTERS.filter((x) => x.group?.startsWith("pack")).length, 70);
+    for (const p of [...PACK, ...PACK_MORE]) {
       const d = p.make();
       assert.ok(isDoc(d), p.id);
       const html = renderEmail(d);
@@ -226,13 +228,25 @@ async function main() {
       const heroes = picSources(d).filter((x) => x.jpg);
       assert.equal(heroes.length, 1, `${p.id}: one hero picture`);
       assert.ok(heroes[0].page.includes("__heroReady"), "the page fits its headlines");
+      assert.ok(!heroes[0].page.includes("guide{display") || heroes[0].page.includes(".guide{display:none"), `${p.id}: guide labels hidden in the sent picture`);
+      for (const m of html.matchAll(/\{\{\s*([A-Za-z_#/]+)/g)) assert.ok((MERGE_TAGS as readonly string[]).includes(m[1]), `${p.id}: unknown personal tag {{${m[1]}}}`);
+      assert.ok(!/\.\.\/assets\//.test(html), `${p.id}: a relative pack path is left`);
     }
+    // every pack hero (11–70): its words are editable and escaped, photos swap in
+    for (const id of HERO_LAYOUT_IDS.filter((x) => heroInfo(x).pack)) {
+      const d = heroDefaults(id);
+      const page = heroPage({ ...d, texts: d.texts!.map((t, i) => (i === 0 ? "<b>X</b>" : t)), photos: d.photos.map(() => "https://cdn.example/p.jpg") });
+      assert.ok(!page.includes("<b>X</b>") && page.includes("&lt;b&gt;X&lt;/b&gt;"), `${id}: words escaped`);
+      if (d.photos.length) assert.ok(page.includes('src="https://cdn.example/p.jpg"'), `${id}: photo swapped in`);
+      assert.ok(!/\u0001/.test(page), `${id}: a slot marker is left`);
+      assert.ok(!page.includes("../assets/"), `${id}: relative asset path`);
+    }
+    assert.equal(HERO_LAYOUT_IDS.length, 70);
     // the words and photos change the picture (a new key); the same hero in two emails is one picture
     const a = heroPage(heroDefaults("monument"));
     assert.notEqual(a, heroPage({ ...heroDefaults("monument"), headline: "BLACK DENIM" }));
     assert.equal(a, heroPage(heroDefaults("monument")));
     assert.ok(!heroPage({ ...heroDefaults("quiet"), headline: '<script>alert(1)</script>' }).includes("<script>alert"), "headline escaped");
-    assert.equal(HERO_LAYOUT_IDS.length, 10);
   });
 
   const url = process.env.TEST_DB ?? "";

@@ -10,7 +10,11 @@
  * Pure (no server or browser APIs).
  */
 
+/** The 10 hand-built core layouts, or one of the pack's 30 (seasonal 11–30, studio 31–40) by id, e.g. "25-black-friday". */
+import { PACK_HEROES } from "./pack-heroes.data";
+
 export type HeroLayout =
+  | `${number}-${string}`
   | "night-shift"
   | "silhouette"
   | "editorial"
@@ -33,6 +37,8 @@ export type HeroFields = {
   accent: string;
   /** The CARBON grade: contrast +15, saturation −30, film grain. */
   grade: boolean;
+  /** Pack layouts (11–40): every word in the picture, in order (null/missing = the pack's words). */
+  texts?: string[];
 };
 
 export const INK = "#0A0A0A";
@@ -54,7 +60,7 @@ type LayoutDef = {
   bg: string;
 };
 
-export const HERO_LAYOUTS: Record<HeroLayout, LayoutDef> = {
+export const HERO_LAYOUTS: Record<string, LayoutDef> = {
   "night-shift": {
     name: "Night Shift: 3-photo collage, two-word headline",
     height: 760,
@@ -137,7 +143,30 @@ export const HERO_LAYOUTS: Record<HeroLayout, LayoutDef> = {
   },
 };
 
-export const HERO_LAYOUT_IDS = Object.keys(HERO_LAYOUTS) as HeroLayout[];
+const CORE_IDS = Object.keys(HERO_LAYOUTS) as HeroLayout[];
+const PACK_BY_ID = new Map(PACK_HEROES.map((h) => [h.id, h]));
+
+/** Every layout: the 10 core ones, then the pack's 11–40. */
+export const HERO_LAYOUT_IDS: HeroLayout[] = [...CORE_IDS, ...PACK_HEROES.map((h) => h.id as HeroLayout)];
+
+export type HeroInfo = { name: string; height: number; photos: number; bg: string; accent: string; pack: boolean; texts: string[] };
+
+/** Name, size and slots of any layout. */
+export function heroInfo(layout: HeroLayout): HeroInfo {
+  const p = PACK_BY_ID.get(layout);
+  if (p) {
+    const bg = /id="hero"[^>]*background:(#[0-9a-fA-F]{6})/.exec(p.body)?.[1] ?? INK;
+    return { name: `${p.n} · ${p.name}`, height: p.height, photos: p.photos.length, bg, accent: p.accent, pack: true, texts: p.texts };
+  }
+  const L = HERO_LAYOUTS[layout] ?? HERO_LAYOUTS["night-shift"];
+  return { name: L.name, height: L.height, photos: L.photos, bg: L.bg, accent: L.defaults.accent, pack: false, texts: [] };
+}
+
+/** Accent colours that are the page itself (bone, ink): changing them would recolour everything. */
+export const accentLocked = (layout: HeroLayout) => {
+  const a = heroInfo(layout).accent.toUpperCase();
+  return heroInfo(layout).pack && (a === BONE || a === INK);
+};
 
 const esc = (s: string) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 const safeColor = (c: string, fb: string) => (/^#[0-9a-f]{6}$/i.test(c) ? c : fb);
@@ -255,15 +284,22 @@ ${fit(h2.join(" ") || "& PASTE", 330, `position:absolute;left:234px;top:640px;co
       return `
 ${photo(p[0], "left:120px;top:36px;width:360px;height:470px", { grade: false, label: "PRODUCT on a plinth, soft light" })}
 ${fit(f.headline || "THE ESSENTIALS", 540, `position:absolute;left:30px;top:540px;color:${INK};font-family:'Bebas Neue',Impact,sans-serif;line-height:.9;`, 130)}`;
+    default:
+      return ""; // pack layouts are drawn by packPage
   }
 }
 
+/**
+ * Sizes every .fit headline to its data-w width (capped at data-max) once the web fonts are really
+ * there (fonts.ready can resolve before a font stylesheet has even arrived), and again whenever a
+ * font finishes loading. Sets window.__heroReady for the server's renderer.
+ */
+const FIT_JS = `(function(){var done=false;function go(){document.querySelectorAll('.fit').forEach(function(e){var w=+e.dataset.w,m=+e.dataset.max||400;e.style.fontSize='100px';var r=e.scrollWidth||1;e.style.fontSize=Math.min(m,Math.floor(100*w/r*10)/10)+'px';});}function finish(){go();if(!done){done=true;window.__heroReady=true;}}window.__heroReady=false;function fams(){var f=['Anton','Archivo Black','Bebas Neue','Space Grotesk','Bebas','Archivo','SG','Inter'];return Promise.all(f.map(function(x){return document.fonts.load('100px "'+x+'"').catch(function(){});}));}window.addEventListener('load',function(){fams().then(function(){return document.fonts.ready;}).then(finish);});if(document.fonts){document.fonts.addEventListener('loadingdone',go);}setTimeout(finish,6000);})();`;
+
 /** The page the server draws (and the editor shows): #pic, 600 px wide, its own height. */
-export function heroPage(f: HeroFields): string {
+export function heroPage(f: HeroFields, opts: { guide?: boolean } = {}): string {
+  if (PACK_BY_ID.has(f.layout)) return packPage(f, opts.guide ?? false);
   const L = HERO_LAYOUTS[f.layout] ?? HERO_LAYOUTS["night-shift"];
-  // Size every headline to its width once the web fonts are really there (fonts.ready can resolve
-  // before the font stylesheet has even arrived), and again whenever a font finishes loading.
-  const fitJs = `(function(){var done=false;function go(){document.querySelectorAll('.fit').forEach(function(e){var w=+e.dataset.w,m=+e.dataset.max||400;e.style.fontSize='100px';var r=e.scrollWidth||1;e.style.fontSize=Math.min(m,Math.floor(100*w/r*10)/10)+'px';});}function finish(){go();if(!done){done=true;window.__heroReady=true;}}window.__heroReady=false;function fams(){var f=['Anton','Archivo Black','Bebas Neue','Space Grotesk'];return Promise.all(f.map(function(x){return document.fonts.load('100px "'+x+'"').catch(function(){});}));}window.addEventListener('load',function(){fams().then(function(){return document.fonts.ready;}).then(finish);});if(document.fonts){document.fonts.addEventListener('loadingdone',go);}setTimeout(finish,6000);})();`;
   return `<!doctype html><html><head><meta charset="utf-8">${FONTS}<style>
 html,body{margin:0;padding:0;background:${L.bg};}
 #pic{position:relative;width:600px;height:${L.height}px;overflow:hidden;background:${L.bg};-webkit-font-smoothing:antialiased;}
@@ -272,15 +308,53 @@ html,body{margin:0;padding:0;background:${L.bg};}
 .phl{position:absolute;left:8px;bottom:8px;background:${BONE};color:${INK};font:700 10px/1 'Space Grotesk',Arial,sans-serif;padding:4px 6px;letter-spacing:.5px;}
 .grain{position:absolute;inset:0;background:url('${PACK_BASE}/grain.png') 0 0/150px 150px;opacity:.15;mix-blend-mode:overlay;pointer-events:none;}
 .fit{display:inline-block;white-space:nowrap;text-transform:uppercase;font-size:100px;}
-</style></head><body><div id="pic">${body({ ...L.defaults, ...f, accent: f.accent || L.defaults.accent })}</div><script>${fitJs}</script></body></html>`;
+</style></head><body><div id="pic">${body({ ...L.defaults, ...f, accent: f.accent || L.defaults.accent })}</div><script>${FIT_JS}</script></body></html>`;
 }
 
 export function heroDefaults(layout: HeroLayout): HeroFields {
+  const p = PACK_BY_ID.get(layout);
+  if (p) return { layout, photos: p.photos.map(() => null), grade: true, headline: "", label: "", subline: "", note: "", accent: p.accent, texts: [...p.texts] };
   const L = HERO_LAYOUTS[layout];
   return { layout, photos: Array.from({ length: L.photos }, () => null), grade: true, ...L.defaults };
 }
 
 /** Words for people with pictures off (alt text). */
 export function heroAlt(f: HeroFields): string {
+  const p = PACK_BY_ID.get(f.layout);
+  if (p) {
+    const t = p.texts.map((d, i) => f.texts?.[i] ?? d);
+    // The biggest words come first in the pack's files only sometimes: use the longest of the first few.
+    return t.slice(0, 4).join(" · ").slice(0, 200) || "CARBON";
+  }
   return [f.headline, f.subline].filter(Boolean).join(" — ").slice(0, 200) || "CARBON";
+}
+
+/* ---------------------------------------------------------- pack layouts (11–40) */
+
+/**
+ * A pack hero (the owner's own HTML/CSS, converted by scripts/gen-email-pack-heroes.mjs): its words,
+ * its photos (with the pack's filters kept on the frame), its accent. guide = show the "PHOTO: …"
+ * labels (editor only; never in a sent picture).
+ */
+function packPage(f: HeroFields, guide: boolean): string {
+  const p = PACK_BY_ID.get(f.layout)!;
+  const accent = safeColor(f.accent, p.accent);
+  const swap = (s: string) => (accentLocked(f.layout) || accent.toUpperCase() === p.accent.toUpperCase() ? s : s.replace(new RegExp(p.accent, "gi"), accent));
+  const filters = f.grade ? "filter:contrast(1.15) saturate(0.7);" : "";
+  const body = p.body
+    .replace(/\u0001P(\d+)\u0001/g, (_m, i: string) => {
+      const slot = p.photos[+i];
+      const url = f.photos[+i];
+      if (!url) return slot.orig;
+      return slot.kind === "cut"
+        ? `<div class="cut" style="${slot.style}"><img src="${esc(url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:50% 100%;${filters}"></div>`
+        : `<div class="ph" style="${slot.style}"><img src="${esc(url)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 25%;${filters}"></div>`;
+    })
+    .replace(/\u0001T(\d+)\u0001/g, (_m, i: string) => esc(f.texts?.[+i] ?? p.texts[+i] ?? ""));
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${swap(p.css)}
+html,body{margin:0;padding:0;background:transparent;}
+#pic{width:600px;}
+.fit{display:inline-block;white-space:nowrap;}
+${guide ? "" : ".guide{display:none!important}"}
+</style></head><body><div id="pic">${swap(body)}</div><script>${FIT_JS}</script></body></html>`;
 }

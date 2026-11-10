@@ -9,7 +9,8 @@
  * no country of origin, Instagram is @shopcarbon, the crew/rewards link is the Member Club.
  * Products come from the live catalog (newest in stock), not the sample names.
  */
-import { heroDefaults, BONE, INK, LIME, ORANGE, RED, STEEL, PACK_BASE, type HeroLayout } from "./heroes";
+import { heroDefaults, heroInfo, BONE, INK, LIME, ORANGE, RED, STEEL, PACK_BASE, type HeroLayout } from "./heroes";
+import { PACK_EMAILS, type PackPlanRow } from "./pack-emails.data";
 import { LOGO, defaultStyles, newBlock, newSection, pad, type Block, type EmailDoc, type GlobalStyles, type Section } from "./types";
 
 const SHOP = "https://shopcarbon.com";
@@ -37,6 +38,9 @@ function styles(t: Theme): GlobalStyles {
   s.mobile = { ...s.mobile, margin: 0, sizes: { ...s.mobile.sizes, h1: 56, h2: 36, body: 16 } };
   return s;
 }
+
+/** Capitals, but personal tags ({{first_name|there}}) stay as they are. */
+const upper = (s: string) => s.replace(/(\{\{[^}]*\}\})|([^{]+|\{)/g, (_m, tag: string | undefined, rest: string | undefined) => tag ?? (rest ?? "").toUpperCase());
 
 const sec = (blocks: Block[], bg: string, p = pad(0)): Section => ({ ...newSection([100], [blocks]), bg, contentBg: bg, pad: p });
 
@@ -66,7 +70,7 @@ function textBlock(o: { kicker?: string; kickerColor: string; headline: string; 
 function button(label: string, href: string, bg: string, fg: string, o: { align?: "left" | "center"; outline?: string } = {}): Block {
   const b = newBlock("button");
   if (b.type === "button") {
-    b.text = label.toUpperCase();
+    b.text = upper(label);
     b.href = href;
     b.color = bg; // an outline button sits on the page colour
     b.font = { ...b.font, family: BODY_FONT, size: 16, color: fg, bold: true, ls: 2 };
@@ -99,7 +103,7 @@ function logoBar(bg: string, label: string, labelColor: string, darkLogo = false
     logo.align = "left";
     logo.pad = pad(0);
   }
-  const s = newSection([50, 50], [[logo], [text(`<p style="text-align:right;font-family:'${BODY_FONT}';font-size:13px;font-weight:700;letter-spacing:2px;color:${labelColor};">${label.toUpperCase()}</p>`, pad(0))]]);
+  const s = newSection([50, 50], [[logo], [text(`<p style="text-align:right;font-family:'${BODY_FONT}';font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:${labelColor};">${label}</p>`, pad(0))]]);
   return { ...s, bg, contentBg: bg, pad: pad(22, 30), stack: "none", valign: "middle", name: "Logo bar" };
 }
 
@@ -133,14 +137,14 @@ function split(kicker: string, accent: string, headline: string, line: string, f
     im.fill = true;
     im.pad = pad(0);
   }
-  const tx = text(`${kickerP(kicker, accent)}<h2 style="font-family:'${DISPLAY}';font-size:36px;line-height:1.05;color:${fg};">${headline.toUpperCase()}</h2><p style="font-family:'${BODY_FONT}';font-size:16px;line-height:1.6;color:${fg};">${line}</p>`, pad(20, 24));
+  const tx = text(`${kickerP(kicker, accent)}<h2 style="font-family:'${DISPLAY}';font-size:36px;line-height:1.05;color:${fg};">${upper(headline)}</h2><p style="font-family:'${BODY_FONT}';font-size:16px;line-height:1.6;color:${fg};">${line}</p>`, pad(20, 24));
   const s = newSection([50, 50], flip ? [[tx], [im]] : [[im], [tx]]);
   return { ...s, bg, contentBg: bg, pad: pad(0), gap: 0, valign: "middle", stack: flip ? "right-first" : "left-first", name: "Split feature" };
 }
 
 /** Ticker: words split with //, one line. */
 const ticker = (words: string, bg: string, fg: string): Section =>
-  sec([text(`<p style="text-align:center;font-family:'${BODY_FONT}';font-size:14px;font-weight:700;letter-spacing:3px;color:${fg};white-space:nowrap;overflow:hidden;">${words.toUpperCase()}</p>`, pad(14, 10))], bg);
+  sec([text(`<p style="text-align:center;font-family:'${BODY_FONT}';font-size:14px;font-weight:700;letter-spacing:3px;color:${fg};white-space:nowrap;overflow:hidden;">${upper(words)}</p>`, pad(14, 10))], bg);
 
 /** ImageStrip: a full-width element (hazard tape, torn edge). */
 function strip(file: string, bg: string): Section {
@@ -159,7 +163,7 @@ function strip(file: string, bg: string): Section {
 
 const quote = (q: string, who: string, fg: string): Block =>
   text(
-    `<p style="font-family:'${BODY_FONT}';font-size:22px;line-height:1.45;font-weight:500;color:${fg};">“${q}”</p><p style="font-family:'${BODY_FONT}';font-size:13px;font-weight:700;letter-spacing:3px;color:${fg};">— ${who.toUpperCase()}</p>`,
+    `<p style="font-family:'${BODY_FONT}';font-size:22px;line-height:1.45;font-weight:500;color:${fg};">“${q}”</p><p style="font-family:'${BODY_FONT}';font-size:13px;font-weight:700;letter-spacing:3px;color:${fg};">— ${upper(who)}</p>`,
     pad(36, 30),
   );
 
@@ -404,3 +408,86 @@ export const PACK: PackStarter[] = [
       ]),
   },
 ];
+
+/* --------------------------------------------- the pack's 11–70 (converted from its references) */
+
+type PlanRow = PackPlanRow;
+
+const isLight = (c: string) => {
+  const n = parseInt(c.replace("#", ""), 16);
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) >= 140;
+};
+
+function fromRow(r: PlanRow): Section[] {
+  const P4 = (p: readonly number[]) => P(p[0], p[1], p[2], p[3]);
+  switch (r.t) {
+    case "logo":
+      return [logoBar(r.bg, r.label, r.labelColor, r.dark)];
+    case "hero":
+      return [sec([hero(r.layout as HeroLayout, {}, r.href)], INK)].map((s) => {
+        const b = s.cols[0].blocks[0];
+        if (b.type === "hero") b.alt = r.alt;
+        return { ...s, bg: heroInfo(r.layout as HeroLayout).bg, contentBg: heroInfo(r.layout as HeroLayout).bg };
+      });
+    case "text": {
+      const t = text(r.html, pad(0));
+      return [sec([t], r.bg, P4(r.pad))];
+    }
+    case "button": {
+      const b = button(r.label, r.href, r.outline ? r.bg : r.color, r.fg, { align: r.align === "center" ? "center" : "left", outline: r.outline ?? undefined });
+      b.pad = pad(0);
+      return [sec([b], r.bg, P4(r.pad))];
+    }
+    case "products": {
+      const p = products(r.n, r.fg, { border: r.border ?? undefined, sale: r.sale ?? undefined });
+      if (p.type === "product") {
+        if (r.cart) p.feed = "cart";
+        if (r.list) {
+          p.perRow = 1;
+          p.rows = r.n;
+          p.orientation = "image-left";
+          p.imgRatio = "1:1";
+        }
+        p.pad = pad(0);
+      }
+      return [sec([p], r.bg, P4(r.pad))];
+    }
+    case "image": {
+      const im = newBlock("image");
+      if (im.type === "image") {
+        im.src = r.src;
+        im.alt = r.alt;
+        im.fill = true;
+        im.fillMobile = true;
+        im.pad = pad(0);
+      }
+      return [sec([im], r.bg, P4(r.pad))];
+    }
+    case "split": {
+      const im = newBlock("image");
+      if (im.type === "image") {
+        im.alt = r.alt;
+        im.fill = true;
+        im.pad = pad(0);
+      }
+      const tx = text(r.html, pad(20, 24));
+      const s = newSection([50, 50], r.flip ? [[tx], [im]] : [[im], [tx]]);
+      return [{ ...s, bg: r.bg, contentBg: r.bg, pad: pad(0), gap: 0, valign: "middle", stack: r.flip ? "right-first" : "left-first", name: "Split feature" }];
+    }
+    case "footer":
+      return footer(r.bg, r.fg, r.accent, r.dark);
+  }
+}
+
+const SERIES = (n: number): PackGroup => (n <= 30 ? "pack-seasonal" : n <= 40 ? "pack-studio" : "pack-bright");
+export type PackGroup = "pack" | "pack-seasonal" | "pack-studio" | "pack-bright";
+
+/** 11–70 as starters, each a fresh editable email. */
+export const PACK_MORE: (PackStarter & { group: PackGroup; preheader: string })[] = PACK_EMAILS.map((e) => ({
+  id: `pack-${e.id}`,
+  name: `${e.n} · ${e.name}`,
+  description: e.description,
+  preheader: e.preheader,
+  group: SERIES(e.n),
+  make: () => doc({ bg: e.pageBg, fg: isLight(e.pageBg) ? INK : BONE }, e.plan.flatMap(fromRow)),
+}));

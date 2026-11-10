@@ -136,6 +136,15 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  /* The CARBON email pack's pictures, fonts and licences (public/email/pack): read by inboxes, by the
+     editor's sandboxed hero previews and by the server's picture renderer, none with a session.
+     Fonts need CORS (a sandboxed frame has an opaque origin). */
+  if (pathname.startsWith("/email/pack/")) {
+    const res = NextResponse.next();
+    res.headers.set("Access-Control-Allow-Origin", "*");
+    return res;
+  }
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||

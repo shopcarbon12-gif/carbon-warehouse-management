@@ -11,7 +11,7 @@
  * Merge tags ({{first_name}}, {{first_name|friend}}, {{code}} …) are left in place; they are filled
  * per person when the email is sent (rules.ts fillMergeTags).
  */
-import { HERO_LAYOUTS, heroAlt, heroPage } from "./heroes";
+import { heroAlt, heroInfo, heroPage } from "./heroes";
 import {
   fontStack,
   fontsUsed,
@@ -128,7 +128,8 @@ export function styleText(html: string, s: GlobalStyles, mobile: boolean): strin
         `font-weight:${t.bold ? 700 : 400};${t.italic ? "font-style:italic;" : ""}${t.ls ? `letter-spacing:${px(t.ls)};` : ""}text-align:${t.align};` +
         (tag === "li" ? "margin:0 0 4px;" : "");
     }
-    const cls = tag === "a" || tag === "ul" || tag === "ol" ? "" : ` class="ce-${TEXT_TAGS[tag] ?? "body"}"`;
+    // Text with its own size keeps it on phones (only the theme's sizes shrink there).
+    const cls = tag === "a" || tag === "ul" || tag === "ol" || /(^|;)\s*font-size\s*:/i.test(own) ? "" : ` class="ce-${TEXT_TAGS[tag] ?? "body"}"`;
     return `<${tag}${attrs}${cls} style="${base}${own}">`;
   });
 }
@@ -362,18 +363,21 @@ export function renderBlock(b: Block, ctx: Ctx): string {
     case "html":
       return wrapBlock(b, ctx, b.code || "");
     case "hero": {
+      const info = heroInfo(b.layout);
       const page = heroPage(b);
-      const H = HERO_LAYOUTS[b.layout]?.height ?? 700;
+      const H = info.height;
       if (ctx.canvas || ctx.liveHeroes) {
+        // The editor also shows the "PHOTO: …" guide labels of empty photo spots.
+        const live = heroPage(b, { guide: !!ctx.canvas });
         // The editor shows the drawing page itself (scaled to the column), so what you see is the picture.
         const k = W / 600;
         return wrapBlock(
           b,
           ctx,
-          `<div style="width:${Math.round(W)}px;height:${Math.round(H * k)}px;overflow:hidden;"><iframe title="Hero" sandbox="allow-scripts" scrolling="no" srcdoc="${esc(page)}" style="border:0;width:600px;height:${H}px;transform:scale(${k});transform-origin:0 0;pointer-events:none;display:block;"></iframe></div>`,
+          `<div style="width:${Math.round(W)}px;height:${Math.round(H * k)}px;overflow:hidden;"><iframe title="Hero" sandbox="allow-scripts" scrolling="no" loading="lazy" srcdoc="${esc(live)}" style="border:0;width:600px;height:${H}px;transform:scale(${k});transform-origin:0 0;pointer-events:none;display:block;"></iframe></div>`,
         );
       }
-      const src: PicSource = { key: picKey(page), page, width: 600, bg: HERO_LAYOUTS[b.layout]?.bg ?? null, alt: b.alt || heroAlt(b), link: b.href || null, fragment: "", jpg: true };
+      const src: PicSource = { key: picKey(page), page, width: 600, bg: info.bg, alt: b.alt || heroAlt(b), link: b.href || null, fragment: "", jpg: true };
       ctx.collect?.push(src);
       const pic = ctx.pics?.[src.key];
       // Not drawn yet (it is drawn before any preview, test or send): the first photo stands in.
