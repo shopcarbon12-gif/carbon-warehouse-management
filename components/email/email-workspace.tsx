@@ -8,6 +8,7 @@ import { EmailsList } from "./emails-list";
 import { EmailFlows } from "./flows";
 import { EmailCalendar } from "./calendar";
 import { EmailReports } from "./reports";
+import { EmailGuideButton } from "./guide";
 
 /**
  * Email Marketing: CarbonWMS's own email platform (owner, 2026-11-07; its own
@@ -47,7 +48,9 @@ export function EmailWorkspace() {
           <p className="text-xs text-[var(--wms-muted)]">Build emails with drag and drop, send them through Amazon SES with a personal Shopify code per customer, and see what they sold.</p>
         </div>
       </header>
-      <nav className="flex min-w-0 gap-1 overflow-x-auto border-b border-[var(--wms-border)]" aria-label="Email sections">
+      {/* Tabs scroll sideways on a phone; the scroll bar itself stays hidden (its arrows showed beside the tabs). */}
+      <div className="flex min-w-0 items-end gap-2 border-b border-[var(--wms-border)]">
+      <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Email sections">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -61,6 +64,8 @@ export function EmailWorkspace() {
           </button>
         ))}
       </nav>
+        <EmailGuideButton tab={tab} />
+      </div>
       {tab === "emails" && <EmailsList onCampaign={(id) => open("campaigns", { campaign: id })} />}
       {tab === "campaigns" && <EmailCampaigns onOpenDesigner={() => open("emails")} />}
       {tab === "flows" && <EmailFlows />}
