@@ -1,7 +1,7 @@
 import { withActivity } from "@/lib/server/activity-log";
 /**
  * GET  /api/email/flows — the automatic emails (flows), with their numbers.
- * POST /api/email/flows — a new flow: { kind: "welcome" | "abandoned" | "thanks" | "winback" | "custom" }
+ * POST /api/email/flows — a new flow: { kind: "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "custom" }
  *      (a ready-made one comes with its emails, made from the matching starters).
  */
 import { NextResponse } from "next/server";
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
 const schema = z
   .object({
-    kind: z.enum(["welcome", "abandoned", "thanks", "winback", "custom"]),
+    kind: z.enum(["welcome", "abandoned", "thanks", "winback", "birthday", "custom"]),
   })
   .strict();
 

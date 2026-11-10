@@ -221,14 +221,13 @@ function infoCard(accent: string): Section {
   return sec([card, bar], INK, P(0, 30, 28, 30));
 }
 
-/** Countdown: static cells (edit the numbers or the date); a live timer image can replace them later. */
-function countdown(): Block {
-  const cell = (n: string, l: string) =>
-    `<td align="center" style="background:${INK};padding:14px 0;width:23%;"><div style="font-family:'${DISPLAY}',Impact,sans-serif;font-size:44px;line-height:1;color:${BONE};">${n}</div><div style="font-family:'${BODY_FONT}',Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;color:${BONE};padding-top:6px;">${l}</div></td>`;
-  const gap = `<td style="width:2.6%;font-size:0;">&nbsp;</td>`;
-  const b = newBlock("html");
-  if (b.type === "html") {
-    b.code = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${cell("02", "DAYS")}${gap}${cell("14", "HRS")}${gap}${cell("36", "MIN")}${gap}${cell("09", "SEC")}</tr></table>`;
+/** Countdown: the live countdown picture (ends a week from when the email is made; set the date in the editor). */
+function countdown(cellBg = INK, fg = BONE, pageBg: string | null = null): Block {
+  const b = newBlock("countdown");
+  if (b.type === "countdown") {
+    b.cellBg = cellBg;
+    b.fg = fg;
+    b.pageBg = pageBg;
     b.pad = P(28, 30, 0, 30);
   }
   return b;
@@ -347,7 +346,7 @@ export const PACK: PackStarter[] = [
       doc({ bg: RED, fg: INK }, [
         logoBar(RED, "Friday 12PM ET", INK, true),
         sec([hero("red-alert", {}, NEW_IN)], RED),
-        sec([countdown()], RED),
+        sec([countdown(INK, BONE, RED)], RED),
         sec(
           [
             textBlock({ kicker: "Limited run", kickerColor: INK, headline: "DON'T<br>SLEEP.", body: "The night jacket returns in black-on-black. When it's gone, it's gone. Member Club gets early access.", fg: INK, align: "center" }),
@@ -473,6 +472,11 @@ function fromRow(r: PlanRow): Section[] {
       const tx = text(r.html, pad(20, 24));
       const s = newSection([50, 50], r.flip ? [[tx], [im]] : [[im], [tx]]);
       return [{ ...s, bg: r.bg, contentBg: r.bg, pad: pad(0), gap: 0, valign: "middle", stack: r.flip ? "right-first" : "left-first", name: "Split feature" }];
+    }
+    case "countdown": {
+      const c = countdown(r.cell, r.fg, r.bg);
+      c.pad = pad(0);
+      return [sec([c], r.bg, P4(r.pad))];
     }
     case "footer":
       return footer(r.bg, r.fg, r.accent, r.dark);

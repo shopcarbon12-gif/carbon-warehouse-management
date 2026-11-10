@@ -146,6 +146,8 @@ const ROUTES: Record<string, Entry> = {
   "email/editor/brand-kit": { module: "Email", label: "Changed the email brand kit" },
   "email/editor/ai": { module: "Email", label: "Used AI in the email editor (write, rewrite, subject lines, check)" },
   "email/flows": { module: "Email", label: "Made a new automatic email flow" },
+  "email/segments": { module: "Email", label: "Saved or counted an email segment" },
+  "email/segments/[id]": { module: "Email", label: { PUT: "Edited an email segment", DELETE: "Deleted an email segment" } },
   "email/flows/[id]": { module: "Email", label: { PUT: "Edited an automatic email flow", DELETE: "Deleted an automatic email flow" } },
   "email/flows/[id]/action": { module: "Email", label: "Turned an automatic email flow on/off or sent a flow test" },
   "email/campaigns": { module: "Email", label: "Made a new email campaign" },

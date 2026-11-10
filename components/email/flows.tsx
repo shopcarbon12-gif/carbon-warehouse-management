@@ -653,6 +653,7 @@ function TriggerPanel({ flow, onChange }: { flow: Flow; onChange: (t: Trigger) =
         {t.type === "signup" &&
           "People who sign up already get their welcome code by email at once (Email Popup). This flow is what comes after; it can use their welcome code ({{code}}, {{offer_amount}}, {{offer_ends}}). "}
         {t.type === "winback" && "Orders online and in the store both count. Each person enters once their last order passes this many days. "}
+        {t.type === "birthday" && "Birthdays come from Rewards (the store). Each person enters on their birthday, once a year; give the email step its own code as the gift. "}
         {locked ? "The trigger is fixed while the flow is on (set it back to draft to change it)." : "Changes save by themselves."}
       </p>
     </>

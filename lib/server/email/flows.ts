@@ -561,6 +561,17 @@ async function lapsed(pool: Pool, tenantId: string, days: number): Promise<Perso
   }));
 }
 
+/** People whose birthday is today in Orlando (from Rewards), once a year each. */
+async function birthdaysToday(pool: Pool, tenantId: string): Promise<Person[]> {
+  const r = await pool.query<{ email: string; first_name: string | null; y: string }>(
+    `SELECT email, first_name, to_char(now() AT TIME ZONE 'America/New_York', 'YYYY') AS y FROM email_contacts
+      WHERE tenant_id = $1::uuid AND birthday IS NOT NULL
+        AND to_char(birthday, 'MM-DD') = to_char(now() AT TIME ZONE 'America/New_York', 'MM-DD')`,
+    [tenantId],
+  );
+  return r.rows.map((x) => ({ email: x.email, firstName: x.first_name, key: `birthday:${x.email}:${x.y}`, at: new Date(), data: {} }));
+}
+
 /** The contact row (made if new, never changing someone's unsubscribe). */
 async function contactFor(pool: Pool, tenantId: string, p: Person): Promise<{ id: string; first_name: string | null } | null> {
   const r = await pool.query<{ id: string; first_name: string | null }>(
@@ -598,7 +609,7 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
       [tenantId],
     )
   ).rows;
-  if (!flows.length) return 0;
+  // Orders are read every 5 minutes even with no flow on: segments (best customers, lapsed …) need them.
   const lastPoll = await stateGet(pool, tenantId, "polled_at");
   if (!force && lastPoll && Date.now() - new Date(lastPoll).getTime() < POLL_EVERY_MS) return 0;
   await stateSet(pool, tenantId, "polled_at", new Date().toISOString());
@@ -617,6 +628,7 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
   };
   // Orders are always read (the "stop if they ordered" check and win-back need them).
   const orders = [...(await pollShopifyOrders(pool, tenantId).catch((e) => (log(`[flows] Shopify orders: ${e instanceof Error ? e.message : e}`), []))), ...(await pollPosSales(pool, tenantId))];
+  if (!flows.length) return 0;
   if (types.has("order")) await into("order", orders);
   if (types.has("abandoned_checkout")) {
     const since = new Date(Math.min(...flows.filter((f) => f.trigger.type === "abandoned_checkout").map((f) => new Date(f.live_since ?? Date.now()).getTime())));
@@ -624,6 +636,7 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
   }
   if (types.has("signup")) await into("signup", await pollSignups(pool, tenantId));
   for (const f of flows) if (f.trigger.type === "winback") for (const p of await lapsed(pool, tenantId, f.trigger.days)) if (await enroll(pool, f, p)) n++;
+  if (types.has("birthday")) for (const f of flows.filter((x) => x.trigger.type === "birthday")) for (const p of await birthdaysToday(pool, tenantId)) if (await enroll(pool, f, p)) n++;
   if (n) log(`[flows] ${n} new ${n === 1 ? "person" : "people"} in flows`);
   return n;
 }
@@ -951,7 +964,10 @@ async function sendStep(
 
 /** Everything a tick does for flows. */
 export async function runFlows(pool: Pool, log: (m: string) => void = console.log): Promise<{ entered: number; sent: number; skipped: number; exited: number }> {
-  const tenants = await pool.query<{ tenant_id: string }>(`SELECT DISTINCT tenant_id::text FROM email_flows WHERE status = 'live' AND archived_at IS NULL`);
+  // Every store that uses Email (settings saved), so the order history stays current for segments too.
+  const tenants = await pool.query<{ tenant_id: string }>(
+    `SELECT tenant_id::text FROM email_settings UNION SELECT DISTINCT tenant_id::text FROM email_flows WHERE status = 'live' AND archived_at IS NULL`,
+  );
   let entered = 0;
   for (const t of tenants.rows) entered += await pollTriggers(pool, t.tenant_id, log).catch((e) => (log(`[flows] triggers: ${e instanceof Error ? e.message : String(e)}`), 0));
   const steps = await runFlowSteps(pool, log);

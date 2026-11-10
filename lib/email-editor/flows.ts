@@ -7,8 +7,8 @@
  * Pure (no server or browser APIs): the flow editor and the server both use it.
  */
 
-export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback";
-export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number };
+export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday";
+export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" };
 
 export type WaitStep = {
   id: string;
@@ -48,7 +48,7 @@ export type FlowSettings = {
   reentryDays: number | null;
 };
 
-export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "custom";
+export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "custom";
 export type FlowDraft = {
   name: string;
   kind: FlowKind;
@@ -72,6 +72,7 @@ export const TRIGGER_LABEL: Record<TriggerType, string> = {
   order: "Places an order",
   abandoned_checkout: "Leaves a checkout without paying",
   winback: "Has not ordered for a while",
+  birthday: "Has a birthday",
 };
 
 export function triggerText(t: Trigger): string {
@@ -84,6 +85,8 @@ export function triggerText(t: Trigger): string {
       return "When someone starts a checkout on shopcarbon.com and does not pay";
     case "winback":
       return `When someone's last order was ${t.days} days ago`;
+    case "birthday":
+      return "On each person's birthday (from Rewards; once a year)";
   }
 }
 
@@ -134,7 +137,7 @@ export const FLOW_IDEAS: FlowIdea[] = [
     kind: "welcome",
     name: "Welcome series",
     description: "After someone signs up (they already get their welcome code at once): our story and the store a day later, then a reminder before their code runs out.",
-    starters: ["flow-welcome", "flow-welcome-2"],
+    starters: ["pack-42-our-story", "pack-43-first-order"],
     make: () => ({
       name: "Welcome series",
       kind: "welcome",
@@ -154,7 +157,7 @@ export const FLOW_IDEAS: FlowIdea[] = [
     kind: "abandoned",
     name: "Abandoned checkout",
     description: "Someone filled in their email at checkout and left. One hour later: their cart with a button back. A day later, a second nudge. Stops as soon as they order.",
-    starters: ["flow-cart"],
+    starters: ["pack-44-abandoned-cart"],
     make: () => ({
       name: "Abandoned checkout",
       kind: "abandoned",
@@ -174,7 +177,7 @@ export const FLOW_IDEAS: FlowIdea[] = [
     kind: "thanks",
     name: "Thank you for your order",
     description: "A personal thank-you two hours after an order, online or in the store, with what they bought and how to style it. Not a receipt: Shopify still sends that.",
-    starters: ["flow-thanks"],
+    starters: ["pack-49-thank-you"],
     make: () => ({
       name: "Thank you for your order",
       kind: "thanks",
@@ -187,7 +190,7 @@ export const FLOW_IDEAS: FlowIdea[] = [
     kind: "winback",
     name: "We miss you (win-back)",
     description: "Someone's last order was 90 days ago: what is new since then, and a week later their own code. Stops when they order.",
-    starters: ["flow-winback"],
+    starters: ["pack-56-new-arrivals", "pack-55-win-back"],
     make: () => ({
       name: "We miss you",
       kind: "winback",
@@ -202,6 +205,20 @@ export const FLOW_IDEAS: FlowIdea[] = [
     }),
   },
 ];
+
+FLOW_IDEAS.push({
+  kind: "birthday",
+  name: "Happy birthday",
+  description: "On each Rewards member's birthday: the pack's HBD email with their own birthday code, good for two weeks.",
+  starters: ["pack-30-birthday"],
+  make: () => ({
+    name: "Happy birthday",
+    kind: "birthday",
+    trigger: { type: "birthday" },
+    settings: { ...DEFAULT_SETTINGS, skipRecentHours: 0, reentryDays: 300 },
+    steps: [email("Birthday", "Happy birthday, {{first_name|friend}}", "A birthday gift from CARBON, just for you", { kind: "percent", amount: 15, days: 14, minSubtotal: null })],
+  }),
+});
 
 export function blankFlow(): FlowDraft {
   return {
@@ -220,7 +237,7 @@ const num = (x: unknown, lo: number, hi: number) => typeof x === "number" && Num
 export function isTrigger(x: unknown): x is Trigger {
   const t = x as Trigger;
   if (!t || typeof t !== "object") return false;
-  if (t.type === "signup" || t.type === "abandoned_checkout") return true;
+  if (t.type === "signup" || t.type === "abandoned_checkout" || t.type === "birthday") return true;
   if (t.type === "order") return typeof t.first === "boolean" && ["online", "store", "both"].includes(t.where);
   if (t.type === "winback") return num(t.days, 14, 730);
   return false;

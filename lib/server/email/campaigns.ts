@@ -23,7 +23,7 @@
  */
 import type { Pool, PoolClient } from "pg";
 import { welcomeGql, welcomeShopCtx, userErrorText } from "@/lib/server/welcome/config";
-import { audienceSql, markShopifyUnsubscribed, type Audience } from "./contacts";
+import { audienceCount, audienceSql, markShopifyUnsubscribed, type Audience } from "./contacts";
 import { INSTAGRAM_URL, SHOP_URL, SesSendError, WMS_BASE, getEmailSettings, senderReady, sesPacing, sesSend, type EmailSettings } from "./config";
 import { fillMergeTags, htmlToText, longDay, personalCode, shouldPause, usedMergeTags, wrapEmail, type MergeValues } from "./rules";
 import { readyEditorPics } from "./editor";
@@ -34,6 +34,71 @@ export type Offer = { amount: number; endsAt: string; minSubtotal: number | null
 /** "$20" or "10%". */
 export function offerLabel(o: Offer): string {
   return o.kind === "percent" ? `${o.amount}%` : `$${o.amount % 1 ? o.amount.toFixed(2) : o.amount}`;
+}
+
+export type AbTest = { subjectB: string; testPct: number; hours: number; metric: "opens" | "clicks"; testDoneAt?: string | null; winner?: "A" | "B" | null; rates?: { A: number; B: number } | null };
+
+export function parseAb(v: unknown): AbTest | null | "invalid" {
+  if (v === null || v === undefined) return null;
+  const a = v as AbTest;
+  if (typeof a !== "object" || typeof a.subjectB !== "string" || !a.subjectB.trim() || a.subjectB.length > 200) return "invalid";
+  if (!Number.isInteger(a.testPct) || a.testPct < 10 || a.testPct > 50) return "invalid";
+  if (!Number.isInteger(a.hours) || a.hours < 1 || a.hours > 48) return "invalid";
+  if (a.metric !== "opens" && a.metric !== "clicks") return "invalid";
+  return { subjectB: a.subjectB.trim(), testPct: a.testPct, hours: a.hours, metric: a.metric };
+}
+
+/** Split the frozen list: testPct % get A or B (half each, at random), everyone else waits for the winner. */
+async function assignVariants(db: Pool | PoolClient, campaignId: string, testPct: number): Promise<void> {
+  await db.query(
+    `WITH r AS (SELECT id, row_number() OVER (ORDER BY random()) AS rn, count(*) OVER () AS n FROM email_campaign_recipients WHERE campaign_id = $1::uuid)
+     UPDATE email_campaign_recipients x SET variant = CASE
+         WHEN r.rn <= GREATEST(1, ceil(r.n * $2::numeric / 200.0)) THEN 'A'
+         WHEN r.rn <= GREATEST(2, ceil(r.n * $2::numeric / 100.0)) THEN 'B'
+         ELSE 'W' END
+       FROM r WHERE x.id = r.id`,
+    [campaignId, testPct],
+  );
+}
+
+/** A/B results per variant (sent, opened, clicked). */
+export async function abStats(pool: Pool, campaignId: string): Promise<Record<"A" | "B" | "W", { sent: number; opened: number; clicked: number; waiting: number }>> {
+  const r = await pool.query<{ variant: "A" | "B" | "W"; sent: number; opened: number; clicked: number; waiting: number }>(
+    `SELECT variant, count(*) FILTER (WHERE status = 'sent')::int AS sent, count(opened_at)::int AS opened, count(clicked_at)::int AS clicked,
+            count(*) FILTER (WHERE status = 'queued')::int AS waiting
+       FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND variant IS NOT NULL GROUP BY variant`,
+    [campaignId],
+  );
+  const out = { A: { sent: 0, opened: 0, clicked: 0, waiting: 0 }, B: { sent: 0, opened: 0, clicked: 0, waiting: 0 }, W: { sent: 0, opened: 0, clicked: 0, waiting: 0 } };
+  for (const x of r.rows) out[x.variant] = { sent: x.sent, opened: x.opened, clicked: x.clicked, waiting: x.waiting };
+  return out;
+}
+
+/** When the test group is all sent and the wait is over: pick the winner (more opens or clicks per email sent; a tie keeps A). */
+export async function decideAbWinners(pool: Pool, log: (m: string) => void = console.log): Promise<number> {
+  const c = await pool.query<{ id: string; ab: AbTest }>(`SELECT id::text, ab FROM email_campaigns WHERE status = 'sending' AND ab IS NOT NULL AND (ab->>'winner') IS NULL`);
+  let n = 0;
+  for (const row of c.rows) {
+    const st = await abStats(pool, row.id);
+    const testOpen = await pool.query(`SELECT 1 FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND variant IN ('A','B') AND status IN ('queued','sending') LIMIT 1`, [row.id]);
+    if (testOpen.rowCount) continue;
+    if (!row.ab.testDoneAt) {
+      await pool.query(`UPDATE email_campaigns SET ab = ab || jsonb_build_object('testDoneAt', now()) WHERE id = $1::uuid`, [row.id]);
+      continue;
+    }
+    if (Date.now() - new Date(row.ab.testDoneAt).getTime() < row.ab.hours * 3_600_000) continue;
+    const rate = (v: "A" | "B") => (st[v].sent ? (row.ab.metric === "clicks" ? st[v].clicked : st[v].opened) / st[v].sent : 0);
+    const winner = rate("B") > rate("A") ? "B" : "A";
+    await pool.query(`UPDATE email_campaigns SET ab = ab || jsonb_build_object('winner', $2::text, 'rates', jsonb_build_object('A', $3::numeric, 'B', $4::numeric)), updated_at = now() WHERE id = $1::uuid`, [
+      row.id,
+      winner,
+      rate("A"),
+      rate("B"),
+    ]);
+    log(`[email] A/B ${row.id}: ${winner} wins (A ${(rate("A") * 100).toFixed(1)}% vs B ${(rate("B") * 100).toFixed(1)}% ${row.ab.metric})`);
+    n++;
+  }
+  return n;
 }
 
 export type CampaignRow = {
@@ -54,6 +119,8 @@ export type CampaignRow = {
   finished_at: Date | null;
   results: Record<string, number> | null;
   results_at: Date | null;
+  /** A/B subject test (phase 5): a test group gets A or B, the rest gets the winner. */
+  ab: AbTest | null;
   created_by: string | null;
   created_at: Date;
   updated_at: Date;
@@ -195,6 +262,7 @@ export async function campaignStats(pool: Pool | PoolClient, id: string) {
 export async function approvalProblems(pool: Pool, tenantId: string, c: CampaignRow, s: EmailSettings): Promise<string[]> {
   const out: string[] = [];
   if (!c.subject.trim()) out.push("Write a subject line.");
+  if (c.ab && (await audienceCount(pool, tenantId, c.audience)) < 20) out.push("An A/B test needs at least 20 people; switch the test off for a small list.");
   if (!c.design_id) out.push("Pick an email design.");
   const d = c.design_id
     ? await pool.query<{ html: string | null; status: string; check_status: string | null; check_override: boolean }>(
@@ -271,6 +339,7 @@ export async function approveCampaign(pool: Pool, tenantId: string, id: string, 
   try {
     await client.query("BEGIN");
     const recipients = await snapshotRecipients(client, tenantId, id, c.audience);
+    if (c.ab) await assignVariants(client, id, c.ab.testPct);
     await client.query(
       `UPDATE email_campaigns SET html = $2, html_es = $5, html_pt = $6, status = 'scheduled', approved_by = $3, approved_at = now(),
               send_at = COALESCE($4::timestamptz, now()), pause_reason = NULL, updated_at = now() WHERE id = $1::uuid`,
@@ -397,17 +466,20 @@ export async function runEmailSends(pool: Pool, log: (m: string) => void = conso
         if (leftToday <= 0) break;
         const st = await pool.query<{ status: string }>(`SELECT status FROM email_campaigns WHERE id = $1::uuid`, [c.id]);
         if (st.rows[0]?.status !== "sending") break;
-        const next = await pool.query<{ id: string; contact_id: string; email: string; first_name: string | null; code: string | null; discount_gid: string | null }>(
+        // A/B: the waiting group ('W') goes only once there is a winner.
+        const ab = (await pool.query<{ ab: AbTest | null }>(`SELECT ab FROM email_campaigns WHERE id = $1::uuid`, [c.id])).rows[0]?.ab ?? null;
+        const next = await pool.query<{ id: string; contact_id: string; email: string; first_name: string | null; code: string | null; discount_gid: string | null; variant: string | null }>(
           `UPDATE email_campaign_recipients SET status = 'sending'
-            WHERE id = (SELECT id FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND status = 'queued' ORDER BY sort_key, id LIMIT 1 FOR UPDATE SKIP LOCKED)
-           RETURNING id::text, contact_id::text, email, first_name, code, discount_gid`,
-          [c.id],
+            WHERE id = (SELECT id FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND status = 'queued' AND (variant IS DISTINCT FROM 'W' OR $2::boolean)
+                         ORDER BY sort_key, id LIMIT 1 FOR UPDATE SKIP LOCKED)
+           RETURNING id::text, contact_id::text, email, first_name, code, discount_gid, variant`,
+          [c.id, !ab || !!ab.winner],
         );
         const r = next.rows[0];
         if (!r) {
-          await pool.query(`UPDATE email_campaigns SET status = 'sent', finished_at = now(), updated_at = now() WHERE id = $1::uuid AND status = 'sending'
+          const done = await pool.query(`UPDATE email_campaigns SET status = 'sent', finished_at = now(), updated_at = now() WHERE id = $1::uuid AND status = 'sending'
                               AND NOT EXISTS (SELECT 1 FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND status IN ('queued','sending'))`, [c.id]);
-          log(`[email] campaign ${c.id} finished`);
+          if (done.rowCount) log(`[email] campaign ${c.id} finished`);
           break;
         }
         const t0 = Date.now();
@@ -439,7 +511,8 @@ export async function runEmailSends(pool: Pool, log: (m: string) => void = conso
             code = made.code;
             await pool.query(`UPDATE email_campaign_recipients SET code = $2, discount_gid = $3 WHERE id = $1::bigint`, [r.id, made.code, made.gid]);
           }
-          const mail = renderFor({ subject: c.subject, html: c.html ?? "" }, mergeValuesFor({ firstName: r.first_name, code, offer: c.offer, unsubToken: ok.rows[0].unsub_token, campaignId: c.id }));
+          const useB = !!ab && (r.variant === "B" || (r.variant === "W" && ab.winner === "B"));
+          const mail = renderFor({ subject: useB ? ab!.subjectB : c.subject, html: c.html ?? "" }, mergeValuesFor({ firstName: r.first_name, code, offer: c.offer, unsubToken: ok.rows[0].unsub_token, campaignId: c.id }));
           const rid = await sendOne(s, {
             to: r.email,
             ...mail,

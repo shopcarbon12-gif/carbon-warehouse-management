@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { EmailPreviewFrames } from "./preview-frame";
+import { useSegments } from "./segments";
+import type { SegRule } from "@/lib/email-editor/segments";
 import { btn, card, etLocalInput, etLocalToIso, etWhen, fetcher, field, label, send } from "@/components/marketing/marketing-shared";
 
 /**
@@ -14,7 +16,7 @@ import { btn, card, etLocalInput, etLocalToIso, etWhen, fetcher, field, label, s
  * when too many emails bounce.
  */
 
-type Audience = { who: "all" | "subscribed"; sinceYear?: number | null; beforeYear?: number | null; notEmailedDays?: number | null };
+type Audience = { who: "all" | "subscribed"; sinceYear?: number | null; beforeYear?: number | null; notEmailedDays?: number | null; segment?: { id: string; name: string; rules: SegRule[] } | null };
 type Offer = { amount: number; endsAt: string; minSubtotal: number | null; prefix: string; kind?: "amount" | "percent" };
 const offerText = (o: Offer) => (o.kind === "percent" ? `${o.amount}%` : `$${o.amount}`);
 type Stats = { total: number; queued: number; sent: number; failed: number; skipped: number; delivered: number; opened: number; clicked: number; bounced: number; complained: number; unsubscribed: number; used: number; sales: number };
@@ -35,8 +37,11 @@ type Campaign = {
   started_at: string | null;
   finished_at: string | null;
   results_at: string | null;
+  ab: AbTest | null;
 };
-type Detail = { campaign: Campaign; stats: Stats; problems: string[]; reach: number | null; failures: { email: string; error: string | null }[] };
+type AbTest = { subjectB: string; testPct: number; hours: number; metric: "opens" | "clicks"; testDoneAt?: string | null; winner?: "A" | "B" | null; rates?: { A: number; B: number } | null };
+type AbStats = Record<"A" | "B" | "W", { sent: number; opened: number; clicked: number; waiting: number }>;
+type Detail = { campaign: Campaign; stats: Stats; problems: string[]; reach: number | null; failures: { email: string; error: string | null }[]; ab: AbStats | null };
 type DesignRow = { id: string; title: string; status: string; has_html: boolean };
 
 const nf = new Intl.NumberFormat("en-US");
@@ -137,6 +142,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
   });
   const { data: designs } = useSWR<{ designs: DesignRow[] }>("/api/email/designs", fetcher);
   const { data: built } = useSWR<{ emails: { id: string; title: string }[] }>("/api/email/editor", fetcher);
+  const { data: segs } = useSegments();
   const [draft, setDraft] = useState<Campaign | null>(null);
   const [testTo, setTestTo] = useState("");
   const [sendAt, setSendAt] = useState("");
@@ -178,6 +184,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
         preheader: draft.preheader,
         audience: draft.audience,
         offer: draft.offer,
+        ab: draft.ab ? { subjectB: draft.ab.subjectB, testPct: draft.ab.testPct, hours: draft.ab.hours, metric: draft.ab.metric } : null,
       });
       await mutate();
       setMsg({ text: "Saved." });
@@ -200,7 +207,7 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
     const d = new Date(Date.now() + 21 * 86400_000);
     return new Date(`${d.toISOString().slice(0, 10)}T23:59:00-05:00`).toISOString();
   };
-  const dirty = JSON.stringify([draft.name, draft.design_id, draft.subject, draft.preheader, draft.audience, draft.offer]) !== JSON.stringify([c.name, c.design_id, c.subject, c.preheader, c.audience, c.offer]);
+  const dirty = JSON.stringify([draft.name, draft.design_id, draft.subject, draft.preheader, draft.audience, draft.offer, draft.ab]) !== JSON.stringify([c.name, c.design_id, c.subject, c.preheader, c.audience, c.offer, c.ab]);
   const yearOpts = Array.from({ length: new Date().getFullYear() - 2020 }, (_, i) => 2021 + i);
 
   return (
@@ -332,6 +339,64 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
           <span className={label}>Subject ({"{{first_name}}"} puts in their name)</span>
           <input id="email-c-subject" className={field} disabled={!isDraft} value={draft.subject} maxLength={200} onChange={(e) => set({ subject: e.target.value })} />
         </label>
+        <fieldset className="flex min-w-0 flex-col gap-2 md:col-span-2" disabled={!isDraft}>
+          <label className="flex items-center gap-2 text-xs text-[var(--wms-fg)]">
+            <input
+              type="checkbox"
+              checked={!!draft.ab}
+              onChange={(e) => set({ ab: e.target.checked ? { subjectB: "", testPct: 20, hours: 4, metric: "opens" } : null })}
+            />
+            A/B test the subject line (a small group gets A or B first; everyone else gets the winner)
+          </label>
+          {draft.ab && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--wms-fg)]">
+              <input className={`${field} min-w-[260px] flex-1`} maxLength={200} placeholder="Subject B" value={draft.ab.subjectB} onChange={(e) => set({ ab: { ...draft.ab!, subjectB: e.target.value } })} />
+              <span>test on</span>
+              <select className={field} value={draft.ab.testPct} onChange={(e) => set({ ab: { ...draft.ab!, testPct: Number(e.target.value) } })}>
+                {[10, 20, 30, 40, 50].map((x) => (
+                  <option key={x} value={x}>
+                    {x}%
+                  </option>
+                ))}
+              </select>
+              <span>then wait</span>
+              <select className={field} value={draft.ab.hours} onChange={(e) => set({ ab: { ...draft.ab!, hours: Number(e.target.value) } })}>
+                {[1, 2, 4, 6, 12, 24].map((x) => (
+                  <option key={x} value={x}>
+                    {x} h
+                  </option>
+                ))}
+              </select>
+              <span>and pick the one with more</span>
+              <select className={field} value={draft.ab.metric} onChange={(e) => set({ ab: { ...draft.ab!, metric: e.target.value as "opens" | "clicks" } })}>
+                <option value="opens">opens</option>
+                <option value="clicks">clicks</option>
+              </select>
+            </div>
+          )}
+          {!isDraft && c.ab && data.ab && (
+            <div className="grid gap-1 text-xs text-[var(--wms-fg)] sm:grid-cols-3">
+              {(["A", "B"] as const).map((v) => (
+                <div key={v} className={`rounded-md border p-2 ${c.ab?.winner === v ? "border-emerald-500" : "border-[var(--wms-border)]"}`}>
+                  <b>
+                    {v}: {v === "A" ? c.subject : c.ab!.subjectB}
+                  </b>
+                  <div className="text-[var(--wms-muted)]">
+                    {data.ab![v].sent} sent · {data.ab![v].sent ? Math.round((data.ab![v].opened / data.ab![v].sent) * 100) : 0}% opened · {data.ab![v].sent ? Math.round((data.ab![v].clicked / data.ab![v].sent) * 100) : 0}% clicked
+                    {c.ab?.winner === v ? " · WINNER" : ""}
+                  </div>
+                </div>
+              ))}
+              <div className="rounded-md border border-[var(--wms-border)] p-2 text-[var(--wms-muted)]">
+                {c.ab.winner
+                  ? `The rest (${data.ab.W.sent + data.ab.W.waiting}) gets ${c.ab.winner}.`
+                  : c.ab.testDoneAt
+                    ? `${data.ab.W.waiting} wait for the winner, picked ${c.ab.hours} h after the test went out.`
+                    : `${data.ab.W.waiting} wait until the test group is sent and ${c.ab.hours} h have passed.`}
+              </div>
+            </div>
+          )}
+        </fieldset>
         <label className="flex min-w-0 flex-col gap-1">
           <span className={label}>Preview text (shown after the subject in the inbox)</span>
           <input id="email-c-pre" className={field} disabled={!isDraft} value={draft.preheader} maxLength={250} onChange={(e) => set({ preheader: e.target.value })} />
@@ -359,6 +424,24 @@ function CampaignEditor({ id, onBack, onOpenDesigner }: { id: string; onBack: ()
               {yearOpts.map((y) => (
                 <option key={y} value={y + 1}>
                   {y + 1}
+                </option>
+              ))}
+            </select>
+            <span>in the segment</span>
+            <select
+              id="email-c-seg"
+              className={field}
+              value={draft.audience.segment?.id ?? ""}
+              onChange={(e) => {
+                const sg = segs?.segments.find((x) => x.id === e.target.value);
+                setAud({ segment: sg ? { id: sg.id, name: sg.name, rules: sg.rules } : null });
+              }}
+            >
+              <option value="">everyone (no segment)</option>
+              {draft.audience.segment && !segs?.segments.some((x) => x.id === draft.audience.segment!.id) && <option value={draft.audience.segment.id}>{draft.audience.segment.name} (deleted)</option>}
+              {segs?.segments.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
                 </option>
               ))}
             </select>

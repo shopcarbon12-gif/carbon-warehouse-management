@@ -12,6 +12,7 @@
  *    (CAN-SPAM) allows emailing past customers with an unsubscribe link.
  */
 import { randomBytes } from "node:crypto";
+import type { SegRule } from "@/lib/email-editor/segments";
 import type { Pool } from "pg";
 import { welcomeGql, welcomeShopCtx } from "@/lib/server/welcome/config";
 import { cleanFirstName, exclusionReason, normalizeEmail } from "./rules";
@@ -174,7 +175,41 @@ export type Audience = {
   notEmailedDays?: number | null;
   /** Just these addresses (tests). */
   emails?: string[] | null;
+  /** A saved segment (phase 5): its rules are copied in, so the campaign keeps what it was approved with. */
+  segment?: { id: string; name: string; rules: SegRule[] } | null;
 };
+
+/** SQL for one segment rule, about contact `c` (lib/email-editor/segments.ts). */
+export function ruleSql(r: SegRule, p: (v: unknown) => string): string {
+  const orders = (extra: string) => `(SELECT count(*) FROM email_orders_seen o WHERE o.tenant_id = c.tenant_id AND o.email = c.email${extra})`;
+  const since = (days: number | null) => (days == null ? "" : ` AND o.processed_at > now() - make_interval(days => ${p(days)}::int)`);
+  // Opens/clicks from campaigns and from automatic emails.
+  const engaged = (col: string, days: number) =>
+    `(EXISTS (SELECT 1 FROM email_campaign_recipients x WHERE x.email = c.email AND x.${col} > now() - make_interval(days => ${p(days)}::int))
+      OR EXISTS (SELECT 1 FROM email_flow_sends x WHERE x.email = c.email AND x.${col} > now() - make_interval(days => ${p(days)}::int)))`;
+  switch (r.k) {
+    case "ordered":
+      return `${orders(since(r.days))} >= ${p(r.min)}::int`;
+    case "no_order":
+      return `(${orders("")} > 0 AND ${orders(since(r.days))} = 0)`;
+    case "never_ordered":
+      return `${orders("")} = 0`;
+    case "spent":
+      return `(SELECT COALESCE(sum(o.total), 0) FROM email_orders_seen o WHERE o.tenant_id = c.tenant_id AND o.email = c.email${since(r.days)}) >= ${p(r.min)}::numeric`;
+    case "engaged":
+      return engaged(r.what === "opened" ? "opened_at" : "clicked_at", r.days);
+    case "not_engaged":
+      return `((EXISTS (SELECT 1 FROM email_campaign_recipients x WHERE x.email = c.email AND x.sent_at > now() - make_interval(days => ${p(r.days)}::int))
+                OR EXISTS (SELECT 1 FROM email_flow_sends x WHERE x.email = c.email AND x.sent_at > now() - make_interval(days => ${p(r.days)}::int)))
+               AND NOT ${engaged("opened_at", r.days)})`;
+    case "rewards":
+      return r.yes ? "c.in_rewards" : "NOT c.in_rewards";
+    case "birthday": {
+      const m = r.month === "this" ? "EXTRACT(MONTH FROM (now() AT TIME ZONE 'America/New_York'))" : r.month === "next" ? "EXTRACT(MONTH FROM (now() AT TIME ZONE 'America/New_York') + interval '1 month')" : `${p(r.month)}::int`;
+      return `(c.birthday IS NOT NULL AND EXTRACT(MONTH FROM c.birthday) = ${m})`;
+    }
+  }
+}
 
 export function audienceSql(a: Audience, firstParam: number): { where: string; params: unknown[] } {
   const parts = [
@@ -193,6 +228,7 @@ export function audienceSql(a: Audience, firstParam: number): { where: string; p
   if (a.beforeYear) parts.push(`c.customer_since < make_date(${p(Math.trunc(a.beforeYear))}::int, 1, 1)`);
   if (a.notEmailedDays) parts.push(`(c.last_emailed_at IS NULL OR c.last_emailed_at < now() - make_interval(days => ${p(Math.trunc(a.notEmailedDays))}::int))`);
   if (a.emails?.length) parts.push(`c.email = ANY(${p(a.emails)}::text[])`);
+  for (const r of a.segment?.rules ?? []) parts.push(ruleSql(r, p));
   return { where: parts.join(" AND "), params };
 }
 

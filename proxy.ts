@@ -60,6 +60,8 @@ function isPublicPath(pathname: string): boolean {
   if (pathname.startsWith("/api/public/email/view/")) return true;
   /* a customer's email as a web page in English / Spanish / Portuguese (their own unsubscribe token) */
   if (pathname.startsWith("/api/public/email/web/")) return true;
+  /* The live countdown picture inside emails (inboxes load it, no session). */
+  if (pathname === "/api/public/email/countdown") return true;
   /* Meta catalog close-up feed and its square pictures: Meta's crawler fetches
      them with no session; they hold only photos already public on the store. */
   if (pathname === "/api/storefront/meta-feed" || pathname === "/api/storefront/meta-feed/image") return true;

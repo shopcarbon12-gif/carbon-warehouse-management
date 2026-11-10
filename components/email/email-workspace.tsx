@@ -6,6 +6,8 @@ import { EmailContacts } from "./contacts";
 import { EmailSettingsPanel } from "./settings";
 import { EmailsList } from "./emails-list";
 import { EmailFlows } from "./flows";
+import { EmailCalendar } from "./calendar";
+import { EmailReports } from "./reports";
 
 /**
  * Email Marketing: CarbonWMS's own email platform (owner, 2026-11-07; its own
@@ -19,6 +21,8 @@ const TABS = [
   { id: "emails", label: "Emails" },
   { id: "campaigns", label: "Campaigns" },
   { id: "flows", label: "Flows" },
+  { id: "calendar", label: "Calendar" },
+  { id: "reports", label: "Reports" },
   { id: "contacts", label: "Audience" },
   { id: "settings", label: "Settings" },
 ] as const;
@@ -60,6 +64,8 @@ export function EmailWorkspace() {
       {tab === "emails" && <EmailsList onCampaign={(id) => open("campaigns", { campaign: id })} />}
       {tab === "campaigns" && <EmailCampaigns onOpenDesigner={() => open("emails")} />}
       {tab === "flows" && <EmailFlows />}
+      {tab === "calendar" && <EmailCalendar onCampaign={(id) => open("campaigns", { campaign: id })} />}
+      {tab === "reports" && <EmailReports />}
       {tab === "contacts" && <EmailContacts />}
       {tab === "settings" && <EmailSettingsPanel />}
     </div>

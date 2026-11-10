@@ -13,6 +13,7 @@
  */
 import { heroAlt, heroInfo, heroPage } from "./heroes";
 import {
+  COUNTDOWN_URL,
   fontStack,
   fontsUsed,
   googleFontUrl,
@@ -362,6 +363,13 @@ export function renderBlock(b: Block, ctx: Ctx): string {
     }
     case "html":
       return wrapBlock(b, ctx, b.code || "");
+    case "countdown": {
+      const w = Math.min(540, Math.round(W));
+      const q = (c: string | null) => (c ?? "").replace("#", "");
+      const src = `${COUNTDOWN_URL}?to=${encodeURIComponent(b.to)}&bg=${q(b.cellBg)}&fg=${q(b.fg)}&page=${q(b.pageBg ?? ctx.bg ?? b.cellBg)}`;
+      const ends = new Date(b.to).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      return wrapBlock(b, ctx, `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${b.align}" style="margin:${b.align === "left" ? "0 auto 0 0" : b.align === "right" ? "0 0 0 auto" : "0 auto"};"><tr><td>${img(src, `Ends ${ends} ET`, w, { fillMobile: true })}</td></tr></table>`);
+    }
     case "hero": {
       const info = heroInfo(b.layout);
       const page = heroPage(b);

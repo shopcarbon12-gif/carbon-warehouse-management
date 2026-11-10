@@ -249,6 +249,39 @@ async function main() {
     assert.ok(!heroPage({ ...heroDefaults("quiet"), headline: '<script>alert(1)</script>' }).includes("<script>alert"), "headline escaped");
   });
 
+  await t("calendar: floating holidays, send days, order; countdown block", async () => {
+    const { CALENDAR, nthWeekday, upcoming } = await import("../lib/email-editor/calendar");
+    const day = (id: string, y: number) => CALENDAR.find((x) => x.template === id)!.day(y).toISOString().slice(0, 10);
+    assert.equal(day("25-black-friday", 2026), "2026-11-27");
+    assert.equal(day("27-cyber-monday", 2026), "2026-11-30");
+    assert.equal(day("26-small-business-saturday", 2026), "2026-11-28");
+    assert.equal(day("15-mothers-day", 2027), "2027-05-09");
+    assert.equal(day("13-presidents-day", 2027), "2027-02-15");
+    assert.equal(day("16-memorial-day", 2027), "2027-05-31");
+    assert.equal(day("22-labor-day", 2027), "2027-09-06");
+    assert.equal(nthWeekday(2026, 11, 4, 4).toISOString().slice(0, 10), "2026-11-26");
+    const u = upcoming(new Date("2026-11-10T15:00:00Z"), 400);
+    assert.equal(u[0].template, "24-singles-day");
+    assert.equal(u[0].daysLeft, 1);
+    const val = u.filter((x) => x.template === "12-valentines").map((x) => x.sendOn);
+    assert.deepEqual(val, ["2027-02-07", "2027-02-11"], "Valentine's goes out Feb 7 and Feb 11");
+    assert.ok(u.every((x, i) => i === 0 || x.daysLeft >= u[i - 1].daysLeft));
+    const cd = newBlock("countdown");
+    const html = renderBlock(cd, { styles: defaultStyles(), width: 600, mobile: false });
+    assert.ok(html.includes("https://wms.shopcarbon.com/api/public/email/countdown?to=") && /alt="Ends /.test(html) && /width="540"/.test(html));
+  });
+
+  await t("countdown picture: 60 frames, one per second, stops at zero", async () => {
+    const { countdownGif } = await import("../lib/server/email/countdown");
+    const sharp = (await import("sharp")).default;
+    const g = await countdownGif(new URLSearchParams({ to: new Date(Date.now() + 90_000).toISOString(), bg: "0A0A0A", fg: "F2EFE8" }));
+    const m = await sharp(g, { animated: true }).metadata();
+    assert.equal(m.format, "gif");
+    assert.equal(m.pages, 60);
+    const over = await countdownGif(new URLSearchParams({ to: "2020-01-01T00:00:00Z" }));
+    assert.equal((await sharp(over, { animated: true }).metadata()).pages, 1, "an ended countdown is one still frame");
+  });
+
   const url = process.env.TEST_DB ?? "";
   if (!url) {
     console.log(`\n${n} groups passed (no TEST_DB: database part skipped)`);
@@ -261,9 +294,9 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql", "0159_email_segments_ab.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
-    console.log("ok  migrations (with 0155–0158) apply twice");
+    console.log("ok  migrations (with 0155–0159) apply twice");
 
     await t("create from a starter: a ready design with html, listed as an editor email", async () => {
       const id = await createEditorEmail(pool, T, "owner@shopcarbon.com", { starter: "collection" });
@@ -457,6 +490,70 @@ async function main() {
       const { renderEmail } = await import("../lib/email-editor/render");
       const html = renderEmail(d, pics);
       assert.ok(/pic-[0-9a-f]{16}\.jpg" alt="DROP ALERT/.test(html), "the email shows the hero picture with its words as alt text");
+    });
+
+    await t("phase 5: segments, A/B split and winner, birthday flow, report", async () => {
+      const { audienceCount } = await import("../lib/server/email/contacts");
+      const { saveSegment, listSegments, segmentCount } = await import("../lib/server/email/segments");
+      const C = await import("../lib/server/email/campaigns");
+      const F = await import("../lib/server/email/flows");
+      const { emailReport } = await import("../lib/server/email/reports");
+      const add = (email: string, extra = "") =>
+        pool.query(`INSERT INTO email_contacts (tenant_id, email, first_name, unsub_token, in_rewards, birthday) VALUES ($1::uuid, $2, 'X', md5($2), ${extra || "false, NULL"}) ON CONFLICT DO NOTHING`, [T, email]);
+      await pool.query(`DELETE FROM email_orders_seen`);
+      for (let i = 0; i < 30; i++) await add(`p${i}@x.com`);
+      await add("vip@x.com", "true, (now() AT TIME ZONE 'America/New_York')::date - interval '30 years'");
+      const order = (email: string, id: string, total: number, daysAgo: number) =>
+        pool.query(`INSERT INTO email_orders_seen (source, order_id, tenant_id, email, total, processed_at) VALUES ('shopify', $1, $2::uuid, $3, $4, now() - make_interval(days => $5::int))`, [id, T, email, total, daysAgo]);
+      await order("vip@x.com", "o1", 150, 10);
+      await order("vip@x.com", "o2", 200, 40);
+      await order("vip@x.com", "o3", 90, 100);
+      await order("p1@x.com", "o4", 60, 200);
+      assert.equal(await segmentCount(pool, T, [{ k: "ordered", min: 3, days: 365 }]), 1, "3+ orders in a year");
+      assert.equal(await segmentCount(pool, T, [{ k: "spent", min: 300, days: 365 }]), 1);
+      assert.equal(await segmentCount(pool, T, [{ k: "no_order", days: 180 }]), 1, "p1 lapsed");
+      assert.equal(await segmentCount(pool, T, [{ k: "rewards", yes: true }, { k: "birthday", month: "this" }]), 1);
+      const neverBefore = await segmentCount(pool, T, [{ k: "never_ordered" }]);
+      assert.ok(neverBefore >= 29);
+      const sid = await saveSegment(pool, T, "o@x", { name: "Best", rules: [{ k: "ordered", min: 3, days: 365 }] });
+      assert.equal((await listSegments(pool, T)).find((x) => x.id === sid)?.count, 1);
+      await assert.rejects(saveSegment(pool, T, null, { name: "Bad", rules: [{ k: "ordered", min: 0, days: 1 }] }), /Add at least one rule/);
+      assert.equal(await audienceCount(pool, T, { who: "all", segment: { id: sid, name: "Best", rules: [{ k: "ordered", min: 3, days: 365 }] } }), 1);
+
+      // A/B: 20% test split half and half, the rest waits; the winner is the better open rate
+      assert.equal(C.parseAb({ subjectB: "B!", testPct: 5, hours: 4, metric: "opens" }), "invalid");
+      const camp = (await pool.query<{ id: string }>(`INSERT INTO email_campaigns (tenant_id, name, subject, audience, ab, status) VALUES ($1::uuid, 'AB', 'A!', '{"who":"all"}', $2, 'sending') RETURNING id::text`, [T, JSON.stringify({ subjectB: "B!", testPct: 20, hours: 4, metric: "opens" })])).rows[0].id;
+      await C.snapshotRecipients(pool, T, camp, { who: "all" });
+      await pool.query(`WITH r AS (SELECT id, row_number() OVER (ORDER BY id) rn FROM email_campaign_recipients WHERE campaign_id = $1::uuid) UPDATE email_campaign_recipients x SET variant = CASE WHEN rn <= 3 THEN 'A' WHEN rn <= 6 THEN 'B' ELSE 'W' END FROM r WHERE x.id = r.id`, [camp]);
+      await pool.query(`UPDATE email_campaign_recipients SET status = 'sent', sent_at = now() - interval '5 hours' WHERE campaign_id = $1::uuid AND variant IN ('A','B')`, [camp]);
+      await pool.query(`UPDATE email_campaign_recipients SET opened_at = now() WHERE campaign_id = $1::uuid AND variant = 'B'`, [camp]);
+      assert.equal(await C.decideAbWinners(pool, () => {}), 0, "first: the test is marked done");
+      await pool.query(`UPDATE email_campaigns SET ab = ab || '{"testDoneAt":"2020-01-01T00:00:00Z"}' WHERE id = $1::uuid`, [camp]);
+      assert.equal(await C.decideAbWinners(pool, () => {}), 1);
+      const ab = (await pool.query(`SELECT ab FROM email_campaigns WHERE id = $1::uuid`, [camp])).rows[0].ab;
+      assert.equal(ab.winner, "B");
+      const st = await C.abStats(pool, camp);
+      assert.equal(st.A.sent, 3);
+      assert.ok(st.W.waiting >= 25);
+
+      // birthday flow: today's birthdays enter once a year
+      const fid = await F.createFlow(pool, T, "o@x", "birthday");
+      const f = await F.setFlowStatus(pool, T, fid, "live");
+      assert.equal(f.trigger.type, "birthday");
+      await pool.query(`UPDATE email_flows SET live_since = now() - interval '1 minute' WHERE id = $1::uuid`, [fid]);
+      await pool.query(`DELETE FROM email_flow_state WHERE key = 'polled_at'`);
+      F.setFlowDepsForTests({ send: async () => "mid", code: async () => ({ code: "C", gid: "g" }), pacing: async () => ({ perMinute: 60, leftToday: 100 }) });
+      await F.pollTriggers(pool, T, () => {}, true);
+      const runs = await pool.query(`SELECT email FROM email_flow_runs WHERE flow_id = $1::uuid`, [fid]);
+      assert.deepEqual(runs.rows.map((r) => r.email), ["vip@x.com"]);
+      await F.pollTriggers(pool, T, () => {}, true);
+      assert.equal((await pool.query(`SELECT count(*)::int n FROM email_flow_runs WHERE flow_id = $1::uuid`, [fid])).rows[0].n, 1, "once a year");
+
+      const rep = await emailReport(pool, T, 30);
+      assert.ok(rep.totals.sent >= 6);
+      assert.ok(rep.rows.some((r) => r.kind === "campaign" && r.name === "AB"));
+      await F.archiveFlow(pool, T, fid);
+      await pool.query(`DELETE FROM email_orders_seen`);
     });
 
     await t("flows: ready-made flow → live → person waits, gets their own cart, leaves when they order; events and stats", async () => {

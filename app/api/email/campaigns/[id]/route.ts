@@ -9,7 +9,7 @@ import { withActivity } from "@/lib/server/activity-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
-import { approvalProblems, campaignStats, getCampaign } from "@/lib/server/email/campaigns";
+import { abStats, approvalProblems, campaignStats, getCampaign, parseAb } from "@/lib/server/email/campaigns";
 import { audienceCount } from "@/lib/server/email/contacts";
 import { getEmailSettings } from "@/lib/server/email/config";
 import { parseAudience, parseOffer } from "@/lib/server/email/validate";
@@ -30,13 +30,14 @@ export async function GET(req: Request, { params }: Ctx) {
   void _html;
   const s = await getEmailSettings(g.pool, g.session.tid);
   const draft = c.status === "draft";
-  const [stats, problems, reach, failures] = await Promise.all([
+  const [stats, problems, reach, failures, ab] = await Promise.all([
     campaignStats(g.pool, id),
     draft ? approvalProblems(g.pool, g.session.tid, c, s) : Promise.resolve([]),
     draft ? audienceCount(g.pool, g.session.tid, c.audience) : Promise.resolve(null),
     g.pool.query(`SELECT email, error, status FROM email_campaign_recipients WHERE campaign_id = $1::uuid AND status IN ('failed') ORDER BY id DESC LIMIT 20`, [id]),
+    c.ab && !draft ? abStats(g.pool, id) : Promise.resolve(null),
   ]);
-  return NextResponse.json({ campaign: rest, stats, problems, reach, failures: failures.rows });
+  return NextResponse.json({ campaign: rest, stats, problems, reach, failures: failures.rows, ab });
 }
 
 const schema = z
@@ -47,6 +48,7 @@ const schema = z
     preheader: z.string().max(250).optional(),
     audience: z.unknown().optional(),
     offer: z.unknown().optional(),
+    ab: z.unknown().optional(),
   })
   .strict();
 
@@ -62,11 +64,13 @@ async function PATCH_handler(req: Request, { params }: Ctx) {
   const b = p.data;
   const audience = b.audience === undefined ? c.audience : parseAudience(b.audience);
   const offer = b.offer === undefined ? c.offer : parseOffer(b.offer);
+  const ab = b.ab === undefined ? c.ab : parseAb(b.ab);
   if (!audience || offer === "invalid") return NextResponse.json({ error: "Invalid audience or offer" }, { status: 400 });
+  if (ab === "invalid") return NextResponse.json({ error: "A/B test: write subject B, test 10–50% for 1–48 hours" }, { status: 400 });
   await g.pool.query(
-    `UPDATE email_campaigns SET name = $3, design_id = $4, subject = $5, preheader = $6, audience = $7, offer = $8, updated_at = now()
+    `UPDATE email_campaigns SET name = $3, design_id = $4, subject = $5, preheader = $6, audience = $7, offer = $8, ab = $9, updated_at = now()
       WHERE id = $1::uuid AND tenant_id = $2::uuid`,
-    [id, g.session.tid, b.name ?? c.name, b.designId === undefined ? c.design_id : b.designId, b.subject ?? c.subject, b.preheader ?? c.preheader, JSON.stringify(audience), offer ? JSON.stringify(offer) : null],
+    [id, g.session.tid, b.name ?? c.name, b.designId === undefined ? c.design_id : b.designId, b.subject ?? c.subject, b.preheader ?? c.preheader, JSON.stringify(audience), offer ? JSON.stringify(offer) : null, ab ? JSON.stringify(ab) : null],
   );
   return NextResponse.json({ ok: true });
 }

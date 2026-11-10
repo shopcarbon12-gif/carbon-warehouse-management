@@ -213,7 +213,7 @@ const ALERT_KINDS: { id: string; label: string; hint: string }[] = [
   { id: "visitor_back", label: "Visitor is back", hint: "A returning or nicknamed visitor starts a new visit" },
   { id: "visitor_checkout", label: "Started checkout", hint: "A visitor went to checkout" },
   { id: "visitor_cart", label: "Added to cart", hint: "A visitor added something to the cart" },
-  { id: "social", label: "Social", hint: "An AI job finished, or the weekly review is ready" },
+  { id: "social", label: "Social & email", hint: "An AI job finished, the weekly review is ready, or a holiday email is 14 days away" },
   { id: "wholesale", label: "Wholesale applications", hint: "A store applied on the Wholesale page" },
 ];
 const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "wholesale"];

@@ -8,12 +8,13 @@
  */
 import { NextResponse, after } from "next/server";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
-import { refreshResults, runEmailSends } from "@/lib/server/email/campaigns";
+import { decideAbWinners, refreshResults, runEmailSends } from "@/lib/server/email/campaigns";
 import { runDesignTurns } from "@/lib/server/email/designer";
 import { runConversions } from "@/lib/server/email/convert";
 import { runMediaSync } from "@/lib/server/email/brand";
 import { runQueuedChecks } from "@/lib/server/email/check";
 import { runFlows } from "@/lib/server/email/flows";
+import { runCalendarReminders } from "@/lib/server/email/calendar";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
   const pool = g.pool;
   const err = (e: unknown) => ({ error: e instanceof Error ? e.message : String(e) });
   after(async () => {
+    // A/B tests whose wait is over get their winner first, so the rest goes out this tick.
+    await decideAbWinners(pool).catch(err);
     const [sends, flows, turns, conv, results, media] = await Promise.all([
       runEmailSends(pool).catch(err),
       runFlows(pool).catch(err),
@@ -34,6 +37,7 @@ export async function POST(req: Request) {
       runMediaSync(pool).catch(err),
     ]);
     const checks = await runQueuedChecks(pool).catch(err);
+    await runCalendarReminders(pool).catch(err);
     console.log(`[email] tick sends=${JSON.stringify(sends)} flows=${JSON.stringify(flows)} turns=${JSON.stringify(turns)} conversions=${JSON.stringify(conv)} results=${JSON.stringify(results)} media=${JSON.stringify(media)} checks=${JSON.stringify(checks)}`);
   });
   return NextResponse.json({ started: true }, { status: 202 });

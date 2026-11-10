@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Audience } from "./contacts";
 import type { Offer } from "./campaigns";
 import { cleanPrefix } from "./rules";
+import { isRules, type SegRule } from "@/lib/email-editor/segments";
 
 const audienceSchema = z
   .object({
@@ -11,6 +12,11 @@ const audienceSchema = z
     beforeYear: z.number().int().min(2000).max(2100).nullable().optional(),
     notEmailedDays: z.number().int().min(1).max(365).nullable().optional(),
     emails: z.array(z.string().email().max(254)).max(50).nullable().optional(),
+    segment: z
+      .object({ id: z.string().max(40), name: z.string().max(80), rules: z.custom<SegRule[]>((v) => isRules(v), "Invalid segment rules") })
+      .strict()
+      .nullable()
+      .optional(),
   })
   .strict();
 

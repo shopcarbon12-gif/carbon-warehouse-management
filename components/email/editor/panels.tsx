@@ -20,6 +20,7 @@ import {
   Search,
   Share2,
   Sparkles,
+  Timer,
   ShoppingBag,
   SquareSplitHorizontal,
   Ticket,
@@ -33,6 +34,7 @@ import { picBlocked } from "@/lib/email-editor/render";
 import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type BrandKit, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
 import type { Drag } from "./canvas";
+import { etLocalInput, etLocalToIso } from "@/components/marketing/marketing-shared";
 import { AiRewrite } from "./ai";
 
 /* --------------------------------------------------------- add content */
@@ -51,6 +53,7 @@ const TILES: { type: BlockType; label: string; icon: ReactNode }[] = [
   { type: "video", label: "Video", icon: <Film size={18} /> },
   { type: "html", label: "HTML", icon: <Code2 size={18} /> },
   { type: "hero", label: "Hero picture", icon: <Sparkles size={18} /> },
+  { type: "countdown", label: "Countdown", icon: <Timer size={18} /> },
 ];
 
 function Tile({ label, icon, onDragStart, onDragEnd, onClick }: { label: string; icon: ReactNode; onDragStart: (e: DragEvent) => void; onDragEnd: () => void; onClick: () => void }) {
@@ -849,6 +852,30 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
       );
       break;
     }
+    case "countdown":
+      body = (
+        <>
+          <Group title="Countdown">
+            <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">A live picture: every time someone opens the email it shows the days, hours, minutes and seconds left, ticking for a minute (Outlook for Windows shows it still).</p>
+            <Field label="Ends (Orlando time)">
+              <input type="datetime-local" className={inputCls} value={etLocalInput(b.to)} onChange={(e) => {
+                const iso = e.target.value ? etLocalToIso(e.target.value) : null;
+                if (iso) set({ to: iso }, "to");
+              }} />
+            </Field>
+            <Field label="Box colour" inline>
+              <Color value={b.cellBg} onChange={(v) => set({ cellBg: v }, "cb")} />
+            </Field>
+            <Field label="Numbers colour" inline>
+              <Color value={b.fg} onChange={(v) => set({ fg: v }, "fg")} />
+            </Field>
+            <OptColor title="Colour between the boxes" value={b.pageBg} onChange={(v) => set({ pageBg: v }, "pg")} fallback="#0A0A0A" />
+            <AlignSeg value={b.align} onChange={(v) => set({ align: v })} />
+          </Group>
+          <BlockBasics b={b} set={set} />
+        </>
+      );
+      break;
     case "html":
       body = (
         <>

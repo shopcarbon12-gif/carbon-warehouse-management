@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { btn, card, fetcher, label, send } from "@/components/marketing/marketing-shared";
+import { EmailSegments } from "./segments";
 
 type Summary = {
   total: number;
@@ -109,6 +110,7 @@ export function EmailContacts() {
           </div>
         </div>
       )}
+      <EmailSegments />
     </div>
   );
 }

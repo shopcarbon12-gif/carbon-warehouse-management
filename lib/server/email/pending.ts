@@ -22,6 +22,10 @@ export async function emailWorkPending(pool: Pool): Promise<{ tenant_id: string;
        UNION ALL
        -- automatic emails (lib/server/email/flows.ts): every minute while a flow is live
        SELECT tenant_id, created_by FROM email_flows WHERE status = 'live' AND archived_at IS NULL
+       UNION ALL
+       -- the order history (flows' "stop if they ordered", win-back, segments): every 5 minutes
+       SELECT s.tenant_id, NULL FROM email_settings s
+        WHERE NOT EXISTS (SELECT 1 FROM email_flow_state f WHERE f.tenant_id = s.tenant_id AND f.key = 'polled_at' AND f.value::timestamptz > now() - interval '5 minutes')
      ) x GROUP BY tenant_id`,
   );
   return r.rows;

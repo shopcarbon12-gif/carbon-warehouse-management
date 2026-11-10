@@ -176,7 +176,11 @@ export type HtmlBlock = Base & { type: "html"; code: string };
  */
 export type HeroBlock = Base & HeroFields & { type: "hero"; href: string; alt: string };
 
-export type Block = TextBlock | ImageBlock | SplitBlock | ButtonBlock | HeaderBlock | DividerBlock | SpacerBlock | SocialBlock | ProductBlock | CodeBlock | VideoBlock | HtmlBlock | HeroBlock;
+/** A live countdown (DAYS · HRS · MIN · SEC to `to`), drawn per open by /api/public/email/countdown. */
+export type CountdownBlock = Base & { type: "countdown"; to: string; cellBg: string; fg: string; pageBg: string | null; align: Align };
+export const COUNTDOWN_URL = "https://wms.shopcarbon.com/api/public/email/countdown";
+
+export type Block = TextBlock | ImageBlock | SplitBlock | ButtonBlock | HeaderBlock | DividerBlock | SpacerBlock | SocialBlock | ProductBlock | CodeBlock | VideoBlock | HtmlBlock | HeroBlock | CountdownBlock;
 export type BlockType = Block["type"];
 
 export type Column = { id: string; w: number /* percent */; blocks: Block[] };
@@ -470,6 +474,8 @@ export function newBlock(type: BlockType): Block {
       return { ...base(pad(0)), type, code: '<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:16px;"><strong>HTML block</strong></p>' };
     case "hero":
       return { ...base(pad(0)), fullMobile: true, type, ...heroDefaults("night-shift"), href: "https://shopcarbon.com", alt: "" };
+    case "countdown":
+      return { ...base(pad(16, 30)), type, to: new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10) + "T17:00:00.000Z", cellBg: "#0A0A0A", fg: "#F2EFE8", pageBg: null, align: "center" };
   }
 }
 
@@ -539,6 +545,7 @@ export const BLOCK_LABEL: Record<BlockType, string> = {
   video: "Video",
   html: "HTML",
   hero: "Hero picture",
+  countdown: "Countdown",
 };
 
 /** Basic check that a document from the database or the browser is an email doc (the server re-renders it). */
