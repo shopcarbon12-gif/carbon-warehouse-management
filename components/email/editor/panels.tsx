@@ -19,6 +19,7 @@ import {
   RectangleHorizontal,
   Search,
   Share2,
+  Sparkles,
   ShoppingBag,
   SquareSplitHorizontal,
   Ticket,
@@ -27,6 +28,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { PREBUILT } from "@/lib/email-editor/prebuilt";
+import { BONE, HERO_LAYOUTS, HERO_LAYOUT_IDS, INK, LIME, ORANGE, RED, heroDefaults } from "@/lib/email-editor/heroes";
 import { picBlocked } from "@/lib/email-editor/render";
 import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type BrandKit, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
@@ -48,6 +50,7 @@ const TILES: { type: BlockType; label: string; icon: ReactNode }[] = [
   { type: "code", label: "Code", icon: <Ticket size={18} /> },
   { type: "video", label: "Video", icon: <Film size={18} /> },
   { type: "html", label: "HTML", icon: <Code2 size={18} /> },
+  { type: "hero", label: "Hero picture", icon: <Sparkles size={18} /> },
 ];
 
 function Tile({ label, icon, onDragStart, onDragEnd, onClick }: { label: string; icon: ReactNode; onDragStart: (e: DragEvent) => void; onDragEnd: () => void; onClick: () => void }) {
@@ -758,6 +761,77 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
         </>
       );
       break;
+    case "hero": {
+      const L = HERO_LAYOUTS[b.layout];
+      const ph = Array.from({ length: L.photos }, (_, i) => b.photos[i] ?? null);
+      body = (
+        <>
+          <Group title="Hero picture">
+            <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">
+              Big type over photos, drawn as one sharp picture on the server so Gmail and Outlook show it exactly like this. The words also go in the picture&apos;s alt text.
+            </p>
+            <Field label="Design">
+              <Select
+                value={b.layout}
+                options={HERO_LAYOUT_IDS.map((id) => ({ v: id, label: HERO_LAYOUTS[id].name }))}
+                onChange={(v) => {
+                  const d = heroDefaults(v);
+                  // Keep the photos and words already there; take the new design's colour.
+                  set({ layout: v, accent: d.accent, photos: Array.from({ length: HERO_LAYOUTS[v].photos }, (_, i) => b.photos[i] ?? null) });
+                }}
+              />
+            </Field>
+            <Field label={L.fields.headline}>
+              <Text value={b.headline} onChange={(v) => set({ headline: v }, "hl")} />
+            </Field>
+            {L.fields.label && (
+              <Field label={L.fields.label}>
+                <Text value={b.label} onChange={(v) => set({ label: v }, "lb")} />
+              </Field>
+            )}
+            {L.fields.subline && (
+              <Field label={L.fields.subline}>
+                <Text value={b.subline} onChange={(v) => set({ subline: v }, "sl")} />
+              </Field>
+            )}
+            {L.fields.note && (
+              <Field label={L.fields.note}>
+                <Text area value={b.note} onChange={(v) => set({ note: v }, "nt")} />
+              </Field>
+            )}
+          </Group>
+          <Group title={ph.length > 1 ? `Photos (${ph.length})` : "Photo"}>
+            {ph.map((src, i) => (
+              <ImageChooser
+                key={i}
+                src={src}
+                onPick={() => h.pickImage((img) => set({ photos: ph.map((x, j) => (j === i ? img.url : x)) }))}
+                onRemove={() => set({ photos: ph.map((x, j) => (j === i ? null : x)) })}
+              />
+            ))}
+            <Toggle label="CARBON grade (more contrast, less colour, film grain)" checked={b.grade} onChange={(v) => set({ grade: v })} />
+          </Group>
+          <Group title="Accent colour">
+            <div className="flex flex-wrap gap-1.5">
+              {[ORANGE, LIME, RED, BONE, INK].map((c) => (
+                <button key={c} type="button" title={c} aria-label={`Accent ${c}`} onClick={() => set({ accent: c })} className={`h-7 w-7 rounded border ${b.accent === c ? "ring-2 ring-[#2F6FED]" : "border-[var(--wms-border)]"}`} style={{ background: c }} />
+              ))}
+            </div>
+            <Color value={b.accent} onChange={(v) => set({ accent: v }, "ac")} />
+          </Group>
+          <Group title="Link and alt text">
+            <Field label="Opens when tapped">
+              <Text value={b.href} onChange={(v) => set({ href: v }, "href")} placeholder="https://shopcarbon.com/…" />
+            </Field>
+            <Field label="Alt text (empty = the headline)">
+              <Text value={b.alt} onChange={(v) => set({ alt: v }, "alt")} />
+            </Field>
+          </Group>
+          <BlockBasics b={b} set={set} />
+        </>
+      );
+      break;
+    }
     case "html":
       body = (
         <>

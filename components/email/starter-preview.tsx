@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Monitor, Smartphone } from "lucide-react";
-import { renderEmail } from "@/lib/email-editor/render";
+import { chipTags, renderEmail } from "@/lib/email-editor/render";
 import type { Block, EmailDoc, ProductItem } from "@/lib/email-editor/types";
 import { Modal, ghostBtn, primaryBtn } from "./editor/pickers";
 
@@ -69,6 +69,8 @@ export function filledDoc(doc: EmailDoc, cat: Cat[], offset = 0): EmailDoc {
           set: p.set ?? null,
         }));
       b.startAt = 1;
+    } else if (b.type === "hero") {
+      b.photos = b.photos.map((x) => x ?? photo()?.image ?? null);
     } else if (b.type === "video" && !b.thumb) {
       b.thumb = photo()?.image ?? null;
     }
@@ -77,6 +79,9 @@ export function filledDoc(doc: EmailDoc, cat: Cat[], offset = 0): EmailDoc {
     for (const c of s.cols) for (const b of c.blocks) fill(b);
   return d;
 }
+
+/** Personal tags shown as samples (only in the words, never inside links). */
+const sampleTags = (html: string) => html.replace(/>([^<]*)</g, (_m, t: string) => `>${t.includes("{{") ? chipTags(t) : t}<`);
 
 /** The small picture on a card: the whole email width, scaled to the card and centred in it. */
 export function DocThumb({
@@ -108,7 +113,7 @@ export function DocThumb({
     >
       <iframe
         title={title}
-        sandbox=""
+        sandbox="allow-scripts"
         srcDoc={html.replace(
           "</head>",
           "<style>html,body{overflow:hidden!important}</style></head>",
@@ -151,7 +156,7 @@ export function ChoiceGrid({
   const htmls = useMemo(
     () =>
       new Map(
-        items.map((c, i) => [c.key, renderEmail(filledDoc(c.doc, cat, i * 3))]),
+        items.map((c, i) => [c.key, sampleTags(renderEmail(filledDoc(c.doc, cat, i * 3), {}, undefined, { liveHeroes: true }))]),
       ),
     [items, cat],
   );
@@ -272,7 +277,7 @@ function ChoicePreview({
         <div className="w-full overflow-hidden rounded border border-[var(--wms-border)] bg-[#E9ECF1] p-3">
           <iframe
             title={`${choice.name} preview`}
-            sandbox=""
+            sandbox="allow-scripts"
             srcDoc={html}
             className="mx-auto block rounded bg-white shadow-sm"
             style={{

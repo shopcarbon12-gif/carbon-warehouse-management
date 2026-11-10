@@ -11,6 +11,7 @@
  * Merge tags ({{first_name}}, {{first_name|friend}}, {{code}} …) are left in place; they are filled
  * per person when the email is sent (rules.ts fillMergeTags).
  */
+import { HERO_LAYOUTS, heroAlt, heroPage } from "./heroes";
 import {
   fontStack,
   fontsUsed,
@@ -38,7 +39,8 @@ export type Pic = { url: string; w: number; h: number };
  * Ctx.bg: the colour behind the block (null over a section picture → transparent headline picture).
  * Ctx.pics: finished headline pictures by key. Ctx.collect: gathers the headline pictures an email needs.
  */
-export type Ctx = { styles: GlobalStyles; width: number; mobile: boolean; canvas?: boolean; bg?: string | null; pics?: Record<string, Pic>; collect?: PicSource[] };
+/** liveHeroes: show hero pictures as their live page (previews before they are drawn). */
+export type Ctx = { styles: GlobalStyles; width: number; mobile: boolean; canvas?: boolean; bg?: string | null; pics?: Record<string, Pic>; collect?: PicSource[]; liveHeroes?: boolean };
 
 /* ---------------------------------------------------------------- helpers */
 
@@ -359,6 +361,25 @@ export function renderBlock(b: Block, ctx: Ctx): string {
     }
     case "html":
       return wrapBlock(b, ctx, b.code || "");
+    case "hero": {
+      const page = heroPage(b);
+      const H = HERO_LAYOUTS[b.layout]?.height ?? 700;
+      if (ctx.canvas || ctx.liveHeroes) {
+        // The editor shows the drawing page itself (scaled to the column), so what you see is the picture.
+        const k = W / 600;
+        return wrapBlock(
+          b,
+          ctx,
+          `<div style="width:${Math.round(W)}px;height:${Math.round(H * k)}px;overflow:hidden;"><iframe title="Hero" sandbox="allow-scripts" scrolling="no" srcdoc="${esc(page)}" style="border:0;width:600px;height:${H}px;transform:scale(${k});transform-origin:0 0;pointer-events:none;display:block;"></iframe></div>`,
+        );
+      }
+      const src: PicSource = { key: picKey(page), page, width: 600, bg: HERO_LAYOUTS[b.layout]?.bg ?? null, alt: b.alt || heroAlt(b), link: b.href || null, fragment: "", jpg: true };
+      ctx.collect?.push(src);
+      const pic = ctx.pics?.[src.key];
+      // Not drawn yet (it is drawn before any preview, test or send): the first photo stands in.
+      if (!pic) return b.photos.find(Boolean) ? wrapBlock(b, ctx, img(b.photos.find(Boolean)!, src.alt, W, { link: b.href, fillMobile: true })) : "";
+      return wrapBlock(b, ctx, picImg(pic, { ...src, width: Math.round(W) }));
+    }
   }
 }
 
@@ -372,7 +393,7 @@ export function columnWidths(s: Section, styles: GlobalStyles, mobile: boolean):
   return s.cols.map((c) => (avail * c.w) / 100);
 }
 
-export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean, canvas = false, extra: Pick<Ctx, "pics" | "collect"> = {}): string {
+export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean, canvas = false, extra: Pick<Ctx, "pics" | "collect" | "liveHeroes"> = {}): string {
   const v = visAttrs(s.visibility, mobile, canvas);
   if (v.hidden) return "";
   const widths = columnWidths(s, styles, mobile);
@@ -396,7 +417,8 @@ export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean,
  * picture. Not for blocks with personal tags (a picture cannot say each person's name) or long
  * body copy (pictures of paragraphs read badly and look like spam).
  */
-export type PicSource = { key: string; page: string; width: number; bg: string | null; alt: string; link: string | null; fragment: string };
+/** jpg: a hero picture (photos), drawn as JPG; otherwise a headline, drawn as PNG. */
+export type PicSource = { key: string; page: string; width: number; bg: string | null; alt: string; link: string | null; fragment: string; jpg?: boolean };
 
 export const PIC_MAX_CHARS = 320;
 const PIC_VERSION = "p1";
@@ -510,9 +532,9 @@ ${sizes}
 }
 
 /** The whole email (a full HTML document; wrapEmail adds the preheader, language bar and footer). */
-export function renderEmail(doc: EmailDoc, pics: Record<string, Pic> = {}, collect?: PicSource[]): string {
+export function renderEmail(doc: EmailDoc, pics: Record<string, Pic> = {}, collect?: PicSource[], opts: { liveHeroes?: boolean } = {}): string {
   const s = doc.styles;
-  const sections = doc.sections.map((sec) => renderSection(sec, s, false, false, { pics, collect })).join("\n");
+  const sections = doc.sections.map((sec) => renderSection(sec, s, false, false, { pics, collect, liveHeroes: opts.liveHeroes })).join("\n");
   // Web fonts (Apple Mail, iPhone, Samsung, Outlook for Mac load them; Gmail shows the fallback).
   const fonts = fontsUsed(doc)
     .map((f) => `<style>@import url('${googleFontUrl(f)}');</style>`)

@@ -21,6 +21,7 @@ import { isDoc, type EmailDoc } from "@/lib/email-editor/types";
 import { WMS_BASE } from "./config";
 
 const MAX_PER_RUN = 16;
+// Hero pictures load their photos from Shopify/R2; give them time.
 
 /** Where pictures are stored (R2); the tests swap in a fake so they never write to the real bucket. */
 let put: typeof uploadBytesToStorage = uploadBytesToStorage;
@@ -36,7 +37,7 @@ export async function loadPics(pool: Pool, keys: string[]): Promise<Record<strin
   return Object.fromEntries(r.rows.map((x) => [x.key, { url: x.url, w: x.width, h: x.height }]));
 }
 
-type Job = { key: string; page: string; bg: string | null; alt: string };
+type Job = { key: string; page: string; bg: string | null; alt: string; jpg?: boolean };
 
 /** Draw pages in one browser: the #pic box at 2×, fonts loaded first. */
 export async function draw(jobs: Job[], log: (m: string) => void): Promise<Map<string, Buffer>> {
@@ -56,6 +57,8 @@ export async function draw(jobs: Job[], log: (m: string) => void): Promise<Map<s
         await page.setContent(j.page, { waitUntil: "load", timeout: 30_000 });
         await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
         await page.evaluate(() => document.fonts.ready.then(() => undefined)).catch(() => {});
+        // Hero pages size their headlines after the fonts load (heroes.ts); wait for that.
+        await page.waitForFunction(() => (window as unknown as { __heroReady?: boolean }).__heroReady !== false, null, { timeout: 10_000 }).catch(() => {});
         const el = await page.$("#pic");
         if (!el) continue;
         const png = await el.screenshot({ type: "png", omitBackground: !j.bg });
@@ -80,13 +83,15 @@ async function make(pool: Pool, jobs: Job[], log: (m: string) => void): Promise<
   for (const j of jobs) {
     const raw = drawn.get(j.key);
     if (!raw) continue;
-    let bytes = await sharp(raw).png({ palette: true, quality: 95, effort: 8, compressionLevel: 9 }).toBuffer();
-    if (bytes.length > raw.length) bytes = raw;
+    // Heroes are photos: JPG. Headlines have few colours: palette PNG.
+    let bytes = j.jpg ? await sharp(raw).flatten({ background: "#0A0A0A" }).jpeg({ quality: 82, mozjpeg: true }).toBuffer() : await sharp(raw).png({ palette: true, quality: 95, effort: 8, compressionLevel: 9 }).toBuffer();
+    if (!j.jpg && bytes.length > raw.length) bytes = raw;
+    const ext = j.jpg ? "jpg" : "png";
     const m = await sharp(bytes).metadata();
     const w = Math.round((m.width ?? 2) / 2);
     const h = Math.round((m.height ?? 2) / 2);
-    const url = `${WMS_BASE}/api/public/email-media/uploads/pic-${j.key}.png`;
-    await put({ path: `email/uploads/pic-${j.key}.png`, bytes, contentType: "image/png" });
+    const url = `${WMS_BASE}/api/public/email-media/uploads/pic-${j.key}.${ext}`;
+    await put({ path: `email/uploads/pic-${j.key}.${ext}`, bytes, contentType: j.jpg ? "image/jpeg" : "image/png" });
     await pool.query(
       `INSERT INTO email_text_pics (key, url, width, height, bytes, alt) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (key) DO NOTHING`,
       [j.key, url, w, h, bytes.length, j.alt.slice(0, 1000)],
@@ -102,7 +107,7 @@ export async function ensureDocPics(pool: Pool, doc: EmailDoc, log: (m: string) 
   const have = await loadPics(pool, src.map((s) => s.key));
   const missing = src.filter((s) => !have[s.key]);
   if (!missing.length) return have;
-  const made = await make(pool, missing.map((s) => ({ key: s.key, page: s.page, bg: s.bg, alt: s.alt })), log);
+  const made = await make(pool, missing.map((s) => ({ key: s.key, page: s.page, bg: s.bg, alt: s.alt, jpg: s.jpg })), log);
   log(`[email-pics] drew ${Object.keys(made).length} of ${missing.length} headline picture(s)`);
   return { ...have, ...made };
 }
@@ -143,7 +148,8 @@ export async function localizePics(
   translate: (fragment: string) => Promise<string | null>,
   log: (m: string) => void = console.log,
 ): Promise<string> {
-  const src = picSources(doc).filter((s) => html.includes(`pic-${s.key}.png`));
+  // Heroes (JPG) keep their English words; headline pictures are drawn again translated.
+  const src = picSources(doc).filter((s) => !s.jpg && html.includes(`pic-${s.key}.png`));
   if (!src.length) return html;
   const plan: { s: PicSource; job: Job }[] = [];
   for (const s of src) {

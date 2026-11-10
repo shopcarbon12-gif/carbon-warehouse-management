@@ -53,11 +53,12 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const cat = useCatalog(choosing);
-  const allStarters = useMemo<(Choice & { flow: boolean })[]>(
-    () => STARTERS.map((st) => ({ key: st.id, name: st.name, description: st.description, doc: st.make(), flow: st.group === "flow", onStart: () => void create({ starter: st.id }) })),
+  const allStarters = useMemo<(Choice & { flow: boolean; pack: boolean })[]>(
+    () => STARTERS.map((st) => ({ key: st.id, name: st.name, description: st.description, doc: st.make(), flow: st.group === "flow", pack: st.group === "pack", onStart: () => void create({ starter: st.id }) })),
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const starters = useMemo(() => allStarters.filter((x) => !x.flow), [allStarters]);
+  const starters = useMemo(() => allStarters.filter((x) => !x.flow && !x.pack), [allStarters]);
+  const packStarters = useMemo(() => allStarters.filter((x) => x.pack), [allStarters]);
   const flowStarters = useMemo(() => allStarters.filter((x) => x.flow), [allStarters]);
   const templates = useMemo<Choice[]>(
     () => (lib.data?.templates ?? []).map((t) => ({ key: t.id, name: t.name, description: `Saved ${when(t.created_at)}`, doc: t.data, onStart: () => void create({ templateId: t.id }) })),
@@ -138,7 +139,10 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
               />
             </>
           )}
-          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{lib.data?.templates.length ? "CARBON starters" : "Start from"}</h3>
+          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">The CARBON pack</h3>
+          <p className="-mt-2 text-xs text-[var(--wms-muted)]">Ten dark, bold designs. Each hero is drawn as one picture so the big type looks the same in every inbox; pick your own photos in the editor.</p>
+          <ChoiceGrid cat={cat} busy={busy} items={packStarters} />
+          <h3 className="text-sm font-semibold text-[var(--wms-fg)]">{lib.data?.templates.length ? "CARBON starters" : "More starters"}</h3>
           <p className="-mt-2 text-xs text-[var(--wms-muted)]">Click one to see the whole email (computer and phone) before you start.</p>
           <ChoiceGrid cat={cat} busy={busy} items={starters} />
           <h3 className="text-sm font-semibold text-[var(--wms-fg)]">For automatic emails (Flows)</h3>

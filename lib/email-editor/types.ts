@@ -11,6 +11,8 @@
  * Pure (no server or browser APIs): used by the editor in the browser and by the server on save.
  */
 
+import { heroDefaults, type HeroFields } from "./heroes";
+
 export type Pad = { t: number; r: number; b: number; l: number };
 export type Border = { style: "solid" | "dashed" | "dotted"; width: number; color: string };
 export type Align = "left" | "center" | "right";
@@ -168,7 +170,13 @@ export type CodeBlock = Base & {
 export type VideoBlock = Base & { type: "video"; thumb: string | null; href: string; alt: string; align: Align; radius: number };
 export type HtmlBlock = Base & { type: "html"; code: string };
 
-export type Block = TextBlock | ImageBlock | SplitBlock | ButtonBlock | HeaderBlock | DividerBlock | SpacerBlock | SocialBlock | ProductBlock | CodeBlock | VideoBlock | HtmlBlock;
+/**
+ * The CARBON template pack's hero (owner, 2026-11-10): big display type over photos, baked into
+ * one picture on the server (lib/email-editor/heroes.ts layouts) so every inbox shows it as designed.
+ */
+export type HeroBlock = Base & HeroFields & { type: "hero"; href: string; alt: string };
+
+export type Block = TextBlock | ImageBlock | SplitBlock | ButtonBlock | HeaderBlock | DividerBlock | SpacerBlock | SocialBlock | ProductBlock | CodeBlock | VideoBlock | HtmlBlock | HeroBlock;
 export type BlockType = Block["type"];
 
 export type Column = { id: string; w: number /* percent */; blocks: Block[] };
@@ -223,6 +231,8 @@ const MONO = "'Courier New',Courier,monospace";
 export const FONTS: FontDef[] = [
   // Clean, modern sans (the everyday CARBON look)
   { name: "Montserrat", cat: "Clean", fallback: SANS, google: "Montserrat:ital,wght@0,400;0,700;1,400" },
+  { name: "Space Grotesk", cat: "Clean", fallback: SANS, google: "Space+Grotesk:wght@400;500;700" },
+  { name: "Inter", cat: "Clean", fallback: SANS, google: "Inter:wght@400;600;800" },
   { name: "Jost", cat: "Clean", fallback: SANS, google: "Jost:ital,wght@0,400;0,700;1,400" },
   { name: "Josefin Sans", cat: "Clean", fallback: SANS, google: "Josefin+Sans:ital,wght@0,400;0,700;1,400" },
   { name: "Tenor Sans", cat: "Clean", fallback: SANS, google: "Tenor+Sans" },
@@ -458,6 +468,8 @@ export function newBlock(type: BlockType): Block {
       return { ...base(pad(0)), type, thumb: null, href: "", alt: "Watch the video", align: "center", radius: 0 };
     case "html":
       return { ...base(pad(0)), type, code: '<p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:16px;"><strong>HTML block</strong></p>' };
+    case "hero":
+      return { ...base(pad(0)), fullMobile: true, type, ...heroDefaults("night-shift"), href: "https://shopcarbon.com", alt: "" };
   }
 }
 
@@ -526,6 +538,7 @@ export const BLOCK_LABEL: Record<BlockType, string> = {
   code: "Code",
   video: "Video",
   html: "HTML",
+  hero: "Hero picture",
 };
 
 /** Basic check that a document from the database or the browser is an email doc (the server re-renders it). */

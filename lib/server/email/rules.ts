@@ -171,6 +171,15 @@ export function languageBar(lang: EmailLang, available: EmailLang[]): string {
  * footer (unsubscribe + postal address + why) in the email's language.
  * Merge tags are NOT filled here (that is per person).
  */
+/** A dark #rgb / #rrggbb colour. */
+function isDarkHex(c: string): boolean {
+  const h = c.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((x) => x + x).join("") : h.slice(0, 6);
+  const n = parseInt(full, 16);
+  if (!Number.isFinite(n)) return false;
+  return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) < 128;
+}
+
 export function wrapEmail(input: { designHtml: string; subject: string; preheader: string; postalAddress: string; lang?: EmailLang; languages?: EmailLang[] }): string {
   const lang = input.lang ?? "en";
   const safe = sanitizeEmailHtml(input.designHtml);
@@ -180,9 +189,13 @@ export function wrapEmail(input: { designHtml: string; subject: string; preheade
   const bg = /<!--carbon-bg:(#[0-9a-fA-F]{3,8})-->/.exec(input.designHtml)?.[1] ?? "#ffffff"; // read before sanitizing (it drops comments)
   const pre = input.preheader.trim();
   const foot = FOOTER_TEXT[lang];
+  // On a dark page (the CARBON pack), the footer is light text, never faint grey on black.
+  const dark = isDarkHex(bg);
+  const fg = dark ? "#D9D5CC" : "#5f5f5f";
+  const rule = dark ? "#3A3A38" : "#e5e5e5";
   return `<!doctype html>
 <html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting">
-<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<meta name="color-scheme" content="${dark ? "light dark" : "light"}"><meta name="supported-color-schemes" content="${dark ? "light dark" : "light"}">
 <title>${esc(input.subject)}</title>
 ${styles}
 </head>
@@ -193,8 +206,8 @@ ${body}
 ${FOOTER_MARK}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${bg};"><tr><td align="center" style="padding:8px 16px 32px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:Helvetica,Arial,sans-serif;">
-<tr><td style="border-top:1px solid #e5e5e5;padding-top:16px;font-size:13px;line-height:1.6;color:#5f5f5f;text-align:center;">
-${foot.why} <a href="{{unsubscribe_url}}" style="color:#5f5f5f;text-decoration:underline;">${foot.unsub}</a><br>${esc(input.postalAddress)}
+<tr><td style="border-top:1px solid ${rule};padding-top:16px;font-size:13px;line-height:1.6;color:${fg};text-align:center;">
+${foot.why} <a href="{{unsubscribe_url}}" style="color:${fg};text-decoration:underline;">${foot.unsub}</a><br>${esc(input.postalAddress)}
 </td></tr></table>
 </td></tr></table>
 </body></html>`;

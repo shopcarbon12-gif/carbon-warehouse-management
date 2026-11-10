@@ -206,6 +206,35 @@ async function main() {
     assert.ok(b.height! < a.height! * 0.7, `Bebas ${b.height} vs Arial ${a.height}`);
   });
 
+  await t("CARBON pack: 10 templates, every hero a JPG picture source, small HTML, images with width + alt, footer rule, no 'Carbon Jeans'", async () => {
+    const { PACK } = await import("../lib/email-editor/pack");
+    const { HERO_LAYOUT_IDS, heroPage, heroDefaults } = await import("../lib/email-editor/heroes");
+    const { picSources } = await import("../lib/email-editor/render");
+    assert.equal(PACK.length, 10);
+    assert.equal(STARTERS.filter((x) => x.group === "pack").length, 10);
+    for (const p of PACK) {
+      const d = p.make();
+      assert.ok(isDoc(d), p.id);
+      const html = renderEmail(d);
+      assert.ok(html.length < 100_000, `${p.id}: ${html.length} bytes`);
+      assert.ok(!/carbon jeans/i.test(html), `${p.id}: says Carbon Jeans`);
+      assert.ok(!/japan/i.test(html), `${p.id}: names a country`);
+      for (const m of html.matchAll(/<img\b[^>]*>/g)) {
+        assert.ok(/\swidth="\d+"/.test(m[0]), `${p.id}: img without width ${m[0].slice(0, 120)}`);
+        assert.ok(/\salt="/.test(m[0]), `${p.id}: img without alt`);
+      }
+      const heroes = picSources(d).filter((x) => x.jpg);
+      assert.equal(heroes.length, 1, `${p.id}: one hero picture`);
+      assert.ok(heroes[0].page.includes("__heroReady"), "the page fits its headlines");
+    }
+    // the words and photos change the picture (a new key); the same hero in two emails is one picture
+    const a = heroPage(heroDefaults("monument"));
+    assert.notEqual(a, heroPage({ ...heroDefaults("monument"), headline: "BLACK DENIM" }));
+    assert.equal(a, heroPage(heroDefaults("monument")));
+    assert.ok(!heroPage({ ...heroDefaults("quiet"), headline: '<script>alert(1)</script>' }).includes("<script>alert"), "headline escaped");
+    assert.equal(HERO_LAYOUT_IDS.length, 10);
+  });
+
   const url = process.env.TEST_DB ?? "";
   if (!url) {
     console.log(`\n${n} groups passed (no TEST_DB: database part skipped)`);
@@ -392,6 +421,28 @@ async function main() {
       const fixed = structuredClone(d);
       for (const s of fixed.sections) for (const c of s.cols) for (const x of c.blocks) if (x.type === "text") x.html = `<p>Hello {{nickname}}</p>`;
       assert.ok(ruleIssues(fixed, "Hi", "There").some((i) => /Unknown personal tag \{\{nickname\}\}/.test(i.text)));
+    });
+
+    await t("CARBON pack hero: drawn once as a 1200 px JPG, stored, put into the email", async () => {
+      const { setPicStorageForTests, ensureDocPics } = await import("../lib/server/email/text-pics");
+      const { PACK } = await import("../lib/email-editor/pack");
+      const sharp = (await import("sharp")).default;
+      const stored = new Map<string, Buffer>();
+      setPicStorageForTests(async (p) => (stored.set(p.path, Buffer.from(p.bytes)), { url: "", path: p.path }));
+      const d = PACK.find((x) => x.id === "pack-red-alert")!.make();
+      const pics = await ensureDocPics(pool, d, () => {});
+      const keys = Object.keys(pics);
+      assert.ok(keys.length >= 1);
+      const heroPath = [...stored.keys()].find((k) => k.endsWith(".jpg"))!;
+      assert.ok(heroPath, "a .jpg was stored");
+      const meta = await sharp(stored.get(heroPath)!).metadata();
+      assert.equal(meta.format, "jpeg");
+      assert.equal(meta.width, 1200);
+      assert.equal(meta.height, 1200);
+      assert.ok(stored.get(heroPath)!.length < 400_000, `hero ${stored.get(heroPath)!.length} bytes`);
+      const { renderEmail } = await import("../lib/email-editor/render");
+      const html = renderEmail(d, pics);
+      assert.ok(/pic-[0-9a-f]{16}\.jpg" alt="DROP ALERT/.test(html), "the email shows the hero picture with its words as alt text");
     });
 
     await t("flows: ready-made flow → live → person waits, gets their own cart, leaves when they order; events and stats", async () => {
