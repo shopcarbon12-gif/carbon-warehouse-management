@@ -592,6 +592,22 @@ async function main() {
       await pool.query(`DELETE FROM email_orders_seen`);
     });
 
+    await t("send time: live product grids get today's products (flow emails never opened in the editor too)", async () => {
+      const { fillFeeds } = await import("../lib/server/email/editor");
+      const d = STARTERS.find((x) => x.id === "pack-04-monument" || x.id === "drop")!.make();
+      const grid = d.sections.flatMap((s) => s.cols.flatMap((c) => c.blocks)).find((b) => b.type === "product");
+      assert.ok(grid && grid.type === "product" && grid.source === "dynamic" && grid.items.length === 0, "a new email's grid starts empty");
+      const cat = [
+        { id: "1", title: "Wilder Jeans", price: 79, compareAt: null, image: "https://cdn.example/1.jpg", url: "https://shopcarbon.com/products/w", set: null, gender: "men", stock: 3 },
+        { id: "2", title: "Cole Top", price: 39, compareAt: null, image: "https://cdn.example/2.jpg", url: "https://shopcarbon.com/products/c", set: null, gender: "women", stock: 9 },
+      ];
+      const filled = fillFeeds(d, cat);
+      const g2 = filled.sections.flatMap((s) => s.cols.flatMap((c) => c.blocks)).find((b) => b.id === grid!.id);
+      assert.ok(g2 && g2.type === "product" && g2.items.length === 2);
+      assert.equal(grid!.type === "product" && grid!.items.length, 0, "the design itself is not changed");
+      assert.ok(renderEmail(filled).includes("Wilder Jeans"));
+    });
+
     await t("wishlist emails: a list left alone, a sold-out piece back, a price drop", async () => {
       const W = await import("../lib/server/email/wishlists");
       const ins = (email: string, v: string, o: { first: number; last: number; was: boolean; now: boolean; daysAgo: number }) =>

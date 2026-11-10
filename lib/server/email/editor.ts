@@ -59,8 +59,48 @@ function schedulePics(pool: Pool, designId: string): void {
 }
 
 /** Wait until an editor email's headline pictures are drawn and in its html (preview, test, translate, campaign). */
+/**
+ * Before anything is previewed, tested, translated, approved or sent: draw the missing headline and
+ * hero pictures and put TODAY's products into the "newest / women / men / most in stock" grids (the
+ * editor only fills them when the email is opened, so an email built days ago — or never opened, like
+ * a flow's — would otherwise go out with old or no products). The stored html is updated; the
+ * email's own design is not touched.
+ */
 export async function readyEditorPics(pool: Pool, designId: string): Promise<void> {
-  await ensureEditorPics(pool, designId, editorHtml).catch((e) => console.warn(`[email-pics] ${designId}: ${e instanceof Error ? e.message : String(e)}`));
+  const cat = await feedCatalog().catch(() => null);
+  const render = (doc: EmailDoc, pics: Record<string, Pic>) => editorHtml(cat ? fillFeeds(doc, cat) : doc, pics);
+  await ensureEditorPics(pool, designId, render, console.log, !!cat).catch((e) => console.warn(`[email-pics] ${designId}: ${e instanceof Error ? e.message : String(e)}`));
+}
+
+type FeedItem = ProductItem & { gender: string; stock: number };
+let feedCache: { at: number; items: Promise<FeedItem[]> } | null = null;
+
+/** The in-stock catalog for product grids (newest first), kept 10 minutes. */
+export function feedCatalog(): Promise<FeedItem[]> {
+  if (!feedCache || Date.now() - feedCache.at > 10 * 60_000) {
+    const items = inStockCatalog().then((list) =>
+      list.map((p) => ({ id: p.id, title: p.title, price: p.price, compareAt: p.compareAt, image: p.image, url: p.url, set: null, gender: p.gender, stock: p.stock })),
+    );
+    feedCache = { at: Date.now(), items };
+    items.catch(() => (feedCache = null));
+  }
+  return feedCache.items;
+}
+
+/** A copy of the email with its live product grids filled from the catalog (cart grids are per person). */
+export function fillFeeds(doc: EmailDoc, cat: FeedItem[]): EmailDoc {
+  if (!cat.length) return doc;
+  const d = structuredClone(doc);
+  for (const s of d.sections)
+    for (const c of s.cols)
+      for (const b of c.blocks) {
+        if (b.type !== "product" || b.source !== "dynamic" || b.feed === "cart") continue;
+        let list = cat;
+        if (b.feed === "women" || b.feed === "men") list = cat.filter((p) => p.gender === b.feed || p.gender === "unisex");
+        if (b.feed === "most-stock") list = [...cat].sort((x, y) => y.stock - x.stock);
+        b.items = list.slice(0, 60).map((p) => ({ id: p.id, title: p.title, price: p.price, compareAt: p.compareAt, image: p.image, url: p.url, set: p.set }));
+      }
+  return d;
 }
 
 export async function createEditorEmail(

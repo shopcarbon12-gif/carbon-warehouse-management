@@ -125,13 +125,20 @@ const running = new Map<string, Promise<void>>();
  * Make sure an editor email's html has all its headline pictures: draw the missing ones, then put
  * them into the stored html — only if the email was not changed meanwhile (the next save does it).
  */
-export function ensureEditorPics(pool: Pool, designId: string, render: (doc: EmailDoc, pics: Record<string, Pic>) => string, log: (m: string) => void = console.log): Promise<void> {
+export function ensureEditorPics(
+  pool: Pool,
+  designId: string,
+  render: (doc: EmailDoc, pics: Record<string, Pic>) => string,
+  log: (m: string) => void = console.log,
+  /** Re-render even without pictures (e.g. to put today's products in): the caller's render decides. */
+  always = false,
+): Promise<void> {
   const busy = running.get(designId);
-  if (busy) return busy.then(() => ensureEditorPics(pool, designId, render, log));
+  if (busy) return busy.then(() => ensureEditorPics(pool, designId, render, log, always));
   const run = (async () => {
     const d = await pool.query<{ editor_doc: unknown }>(`SELECT editor_doc FROM email_designs WHERE id = $1::uuid AND editor_doc IS NOT NULL`, [designId]);
     const doc = d.rows[0]?.editor_doc;
-    if (!isDoc(doc) || !picSources(doc).length) return;
+    if (!isDoc(doc) || (!always && !picSources(doc).length)) return;
     const pics = await ensureDocPics(pool, doc, log);
     const html = render(doc, pics);
     await pool.query(`UPDATE email_designs SET html = $2 WHERE id = $1::uuid AND editor_doc = $3::jsonb AND html IS DISTINCT FROM $2`, [designId, html, JSON.stringify(doc)]);

@@ -776,7 +776,9 @@ async function emailHtml(pool: Pool, designId: string, run: RunRow): Promise<{ h
   const row = d.rows[0];
   if (!row) return null;
   if (isDoc(row.editor_doc)) {
-    const own = personalDoc(row.editor_doc, run.data.items ?? []);
+    const { feedCatalog, fillFeeds } = await import("./editor");
+    const cat = await feedCatalog().catch(() => null);
+    const own = personalDoc(cat ? fillFeeds(row.editor_doc, cat) : row.editor_doc, run.data.items ?? []);
     if (own)
       return {
         html: editorHtml(
