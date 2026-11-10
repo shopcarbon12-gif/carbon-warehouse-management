@@ -189,12 +189,17 @@ export async function checkEmail(doc: EmailDoc, subject: string, preheader: stri
   const text = emailText(doc);
   if (!text.length) return rules;
   const ids = new Set(text.map((x) => x.id));
+  // The fixed rules always come back, even when the AI read fails.
   const j = await askJson(
     `You proofread one CARBON marketing email before it is sent to customers. ${VOICE}
 Report only real problems a careful editor would fix: spelling and grammar mistakes, an invented discount/percentage/date/free gift (anything not written as a personal tag), another brand's name or "Carbon Jeans", an em dash, a hype word, a claim the store cannot back up, words that contradict each other (two different prices for the same thing, "today only" next to a date), a subject line that does not match the email. Do not comment on design, layout or pictures. Do not invent problems: if the words are fine, return an empty list. Personal tags in double curly braces are filled in per person and are not mistakes.
 Answer JSON: {"issues": [{"id": "<block id, or null for the subject/preview text>", "level": "fix" | "tip", "text": "the problem and the fix, one short plain sentence"}]}`,
     `SUBJECT: ${subject || "(none)"}\nPREVIEW TEXT: ${preheader || "(none)"}\n\nTHE EMAIL, BLOCK BY BLOCK (id | kind | words):\n${text.map((x) => `${x.id} | ${x.kind} | ${x.text.replace(/\n+/g, " / ")}`).join("\n").slice(0, 9000)}`,
-  );
+  ).catch((e: unknown) => {
+    console.warn(`[email-ai] check: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  });
+  if (!j) return [...rules, { level: "tip", blockId: null, text: "The AI could not read the words this time (spelling and tone were not checked). Press Check again in a minute." }];
   const ai = (Array.isArray(j.issues) ? j.issues : [])
     .map((x) => x as Record<string, unknown>)
     .map((x) => ({ level: (x.level === "fix" ? "fix" : "tip") as CheckIssue["level"], blockId: typeof x.id === "string" && ids.has(x.id) ? x.id : null, text: str(x.text, 300) }))
