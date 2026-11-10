@@ -16,7 +16,7 @@ import type { Pool } from "pg";
 import sharp from "sharp";
 import { existsSync } from "node:fs";
 import { uploadBytesToStorage } from "@/lib/storageProvider";
-import { picKey, picPage, picSources, plainText, type Pic, type PicSource } from "@/lib/email-editor/render";
+import { hashKey, picKey, picPage, picSources, plainText, type Pic, type PicSource } from "@/lib/email-editor/render";
 import { isDoc, type EmailDoc } from "@/lib/email-editor/types";
 import { WMS_BASE } from "./config";
 
@@ -103,7 +103,13 @@ async function make(pool: Pool, jobs: Job[], log: (m: string) => void): Promise<
 
 /** Every picture this email needs, drawing the missing ones. */
 export async function ensureDocPics(pool: Pool, doc: EmailDoc, log: (m: string) => void = console.log): Promise<Record<string, Pic>> {
-  const src = picSources(doc);
+  const all = picSources(doc);
+  // Personal heroes (a name in the picture) are kept as pages and drawn per name on request.
+  for (const p of all.filter((x) => x.personal))
+    await pool
+      .query(`INSERT INTO email_hero_pages (key, page, bg, alt) VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING`, [p.key, p.page, p.bg, p.alt.slice(0, 1000)])
+      .catch((e) => log(`[email-pics] personal hero ${p.key}: ${e instanceof Error ? e.message : String(e)}`));
+  const src = all.filter((x) => !x.personal);
   const have = await loadPics(pool, src.map((s) => s.key));
   const missing = src.filter((s) => !have[s.key]);
   if (!missing.length) return have;
@@ -172,4 +178,50 @@ export async function localizePics(
     );
   }
   return out;
+}
+
+/* ------------------------------------------------------- personal heroes (a name in the picture) */
+
+const NAME_TAG = /\{\{\s*first_name\s*(?:\|([^}]*))?\}\}/g;
+const drawing = new Map<string, Promise<string | null>>();
+let drawsThisHour = { at: Date.now(), n: 0 };
+
+/** A name as it may appear in a picture: letters, digits, spaces and . ' -; at most 24; capitals. */
+export function cleanName(n: string | null): string {
+  return (n ?? "")
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N} '.\-]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 24)
+    .toUpperCase();
+}
+
+/**
+ * The picture of a personal hero for one name: stored once per (hero, name) and shared by everyone
+ * with that name. Returns its public URL, or null when the hero does not exist (or too many new
+ * names were asked for this hour: 3,000, so nobody can make the server draw without end).
+ */
+export async function personalHero(pool: Pool, key: string, rawName: string | null, log: (m: string) => void = console.log): Promise<string | null> {
+  if (!/^[0-9a-f]{16}$/.test(key)) return null;
+  const name = cleanName(rawName);
+  const sub = hashKey(`${key}|${name}`);
+  const have = await loadPics(pool, [sub]);
+  if (have[sub]) return have[sub].url;
+  const busy = drawing.get(sub);
+  if (busy) return busy;
+  if (Date.now() - drawsThisHour.at > 3_600_000) drawsThisHour = { at: Date.now(), n: 0 };
+  if (++drawsThisHour.n > 3000) return null;
+  const run = (async () => {
+    const r = await pool.query<{ page: string; bg: string | null; alt: string }>(`SELECT page, bg, alt FROM email_hero_pages WHERE key = $1`, [key]);
+    const row = r.rows[0];
+    if (!row) return null;
+    const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+    const page = row.page.replace(NAME_TAG, (_m, fb: string | undefined) => esc(name || cleanName(fb ?? "") || "MEMBER"));
+    const alt = row.alt.replace(NAME_TAG, (_m, fb: string | undefined) => name || fb || "");
+    const made = await make(pool, [{ key: sub, page, bg: row.bg, alt, jpg: true }], log);
+    return made[sub]?.url ?? null;
+  })().finally(() => drawing.delete(sub));
+  drawing.set(sub, run);
+  return run;
 }

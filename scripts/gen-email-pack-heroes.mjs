@@ -95,8 +95,8 @@ for (const file of readdirSync(join(dir, "hero-templates")).sort()) {
     if (k === undefined) {
       k = texts.length;
       keyOf.set(def, k);
-      // A hero is one picture for everyone: no personal tags in it.
-      texts.push(def === "{{FIRST_NAME}}" ? "MEMBER NAME" : def.replace(/\{\{\s*first_name\s*\}\}/gi, "FRIEND").replace(/\{\{[^}]*\}\}/g, "").replace(/\{\{[A-Z_]*$/, "FRIEND"));
+      // A hero is one picture for everyone, except the member card's own name (drawn per person, see text-pics.ts).
+      texts.push(def === "{{FIRST_NAME}}" ? "{{first_name|MEMBER}}" : def.replace(/\{\{\s*first_name\s*\}\}/gi, "FRIEND").replace(/\{\{[^}]*\}\}/g, "").replace(/\{\{[A-Z_]*$/, "FRIEND"));
     }
     return `${lead}\u0001T${k}\u0001${trail}`;
   });

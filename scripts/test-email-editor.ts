@@ -294,7 +294,7 @@ async function main() {
   try {
     await pool.query(`DROP SCHEMA public CASCADE; CREATE SCHEMA public;`);
     for (let pass = 0; pass < 2; pass++)
-      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql", "0159_email_segments_ab.sql"])
+      for (const f of ["0147_email_campaigns.sql", "0148_email_design_products.sql", "0149_email_brand_media.sql", "0150_email_layout_engine.sql", "0151_email_picture_review.sql", "0152_email_six_steps.sql", "0153_email_translations.sql", "0154_email_styles.sql", "0155_email_editor.sql", "0156_email_text_pics.sql", "0157_email_library.sql", "0158_email_flows.sql", "0159_email_segments_ab.sql", "0160_email_hero_pages.sql"])
         await pool.query(readFileSync(`scripts/migrations/${f}`, "utf8"));
     console.log("ok  migrations (with 0155–0159) apply twice");
 
@@ -490,6 +490,26 @@ async function main() {
       const { renderEmail } = await import("../lib/email-editor/render");
       const html = renderEmail(d, pics);
       assert.ok(/pic-[0-9a-f]{16}\.jpg" alt="DROP ALERT/.test(html), "the email shows the hero picture with its words as alt text");
+    });
+
+    await t("personal hero (member card): kept as a page, drawn once per name, shared by everyone with that name", async () => {
+      const { setPicStorageForTests, ensureDocPics, personalHero, cleanName } = await import("../lib/server/email/text-pics");
+      const { renderEmail } = await import("../lib/email-editor/render");
+      const { PACK_MORE } = await import("../lib/email-editor/pack");
+      const stored = new Map<string, number>();
+      setPicStorageForTests(async (p) => (stored.set(p.path, p.bytes.length), { url: "", path: p.path }));
+      const d = PACK_MORE.find((x) => x.id === "pack-38-glass")!.make();
+      const html = renderEmail(d);
+      const m = /api\/public\/email\/hero\/([0-9a-f]{16})\.jpg\?n=\{\{first_name\|\}\}/.exec(html);
+      assert.ok(m, "the email asks for the person's own picture");
+      await ensureDocPics(pool, d, () => {});
+      assert.equal((await pool.query(`SELECT count(*)::int n FROM email_hero_pages WHERE key = $1`, [m![1]])).rows[0].n, 1);
+      assert.equal(cleanName("  maría <b>josé</b>!! "), "MARÍA BJOSÉB");
+      const a = await personalHero(pool, m![1], "Ana", () => {});
+      const b = await personalHero(pool, m![1], "ana", () => {});
+      assert.ok(a && a === b, "the same name is drawn once");
+      assert.equal([...stored.keys()].filter((k) => k.endsWith(".jpg")).length, 1);
+      assert.equal(await personalHero(pool, "0000000000000000", "Ana", () => {}), null, "unknown hero");
     });
 
     await t("phase 5: segments, A/B split and winner, birthday flow, report", async () => {

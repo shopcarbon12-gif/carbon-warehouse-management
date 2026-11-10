@@ -146,7 +146,7 @@ for (let n = 11; n <= 70; n++) {
     const align = attr(td, "align") ?? (/text-align:center/.test(td) ? "center" : "left");
     if (/assets\/heroes\//.test(row)) {
       const h = /assets\/heroes\/([0-9]+-[a-z0-9-]+)\.jpg/.exec(row)[1];
-      plan.push({ t: "hero", layout: h, href: attr(row.match(/<a\b[^>]*>/)?.[0] ?? "", "href") ?? SHOP, alt: attr(row.match(/<img\b[^>]*>/)?.[0] ?? "", "alt") ?? "" });
+      plan.push({ t: "hero", layout: h, href: fixCopy(attr(row.match(/<a\b[^>]*>/)?.[0] ?? "", "href") ?? SHOP), alt: attr(row.match(/<img\b[^>]*>/)?.[0] ?? "", "alt") ?? "" });
     } else if (/\{\{unsubscribe_url\}\}/.test(row)) {
       const accent = /border-top:4px solid (#[0-9A-Fa-f]{6})/.exec(td)?.[1] ?? "#F2EFE8";
       const fg = /color:(#[0-9A-Fa-f]{6})/.exec(inner)?.[1] ?? "#F2EFE8";

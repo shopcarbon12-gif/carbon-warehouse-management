@@ -376,7 +376,7 @@ export function renderBlock(b: Block, ctx: Ctx): string {
       const H = info.height;
       if (ctx.canvas || ctx.liveHeroes) {
         // The editor also shows the "PHOTO: …" guide labels of empty photo spots.
-        const live = heroPage(b, { guide: !!ctx.canvas });
+        const live = heroPage(b, { guide: !!ctx.canvas }).replace(NAME_TAG, "MARIA"); // a sample name in the editor
         // The editor shows the drawing page itself (scaled to the column), so what you see is the picture.
         const k = W / 600;
         return wrapBlock(
@@ -385,8 +385,15 @@ export function renderBlock(b: Block, ctx: Ctx): string {
           `<div style="width:${Math.round(W)}px;height:${Math.round(H * k)}px;overflow:hidden;"><iframe title="Hero" sandbox="allow-scripts" scrolling="no" loading="lazy" srcdoc="${esc(live)}" style="border:0;width:600px;height:${H}px;transform:scale(${k});transform-origin:0 0;pointer-events:none;display:block;"></iframe></div>`,
         );
       }
-      const src: PicSource = { key: picKey(page), page, width: 600, bg: info.bg, alt: b.alt || heroAlt(b), link: b.href || null, fragment: "", jpg: true };
+      const personal = NAME_TAG.test(page);
+      NAME_TAG.lastIndex = 0;
+      const src: PicSource = { key: picKey(page), page, width: 600, bg: info.bg, alt: b.alt || heroAlt(b), link: b.href || null, fragment: "", jpg: true, personal };
       ctx.collect?.push(src);
+      if (personal) {
+        // Each person's own picture, drawn the first time it is opened (the name goes in the address).
+        const url = `${HERO_URL}/${src.key}.jpg?n={{first_name|}}`;
+        return wrapBlock(b, ctx, picImg({ url, w: 600, h: info.height }, { ...src, width: Math.round(W) }));
+      }
       const pic = ctx.pics?.[src.key];
       // Not drawn yet (it is drawn before any preview, test or send): the first photo stands in.
       if (!pic) return b.photos.find(Boolean) ? wrapBlock(b, ctx, img(b.photos.find(Boolean)!, src.alt, W, { link: b.href, fillMobile: true })) : "";
@@ -430,7 +437,11 @@ export function renderSection(s: Section, styles: GlobalStyles, mobile: boolean,
  * body copy (pictures of paragraphs read badly and look like spam).
  */
 /** jpg: a hero picture (photos), drawn as JPG; otherwise a headline, drawn as PNG. */
-export type PicSource = { key: string; page: string; width: number; bg: string | null; alt: string; link: string | null; fragment: string; jpg?: boolean };
+/** personal: a hero with {{first_name}} in its words — drawn per name when an inbox asks (/api/public/email/hero). */
+export type PicSource = { key: string; page: string; width: number; bg: string | null; alt: string; link: string | null; fragment: string; jpg?: boolean; personal?: boolean };
+
+const NAME_TAG = /\{\{\s*first_name\s*(?:\|([^}]*))?\}\}/g;
+export const HERO_URL = "https://wms.shopcarbon.com/api/public/email/hero";
 
 export const PIC_MAX_CHARS = 320;
 const PIC_VERSION = "p1";
