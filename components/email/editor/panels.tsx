@@ -31,6 +31,7 @@ import { picBlocked } from "@/lib/email-editor/render";
 import { LAYOUTS, LOGO, uid, type Block, type BlockType, type GlobalStyles, type HeadingKey, type BrandKit, type ProductFeed, type ProductItem, type Section, type SocialNet, type Visibility } from "@/lib/email-editor/types";
 import { AlignSeg, BorderGroup, Color, Field, FontRow, Group, Num, OptColor, PadField, Select, Seg, Text, Toggle, inputCls } from "./fields";
 import type { Drag } from "./canvas";
+import { AiRewrite } from "./ai";
 
 /* --------------------------------------------------------- add content */
 
@@ -264,6 +265,8 @@ export type PanelHelpers = {
   pickImage: (cb: (img: { url: string; width: number | null; height: number | null; alt: string }) => void) => void;
   pickProducts: (initial: ProductItem[], cb: (items: ProductItem[]) => void) => void;
   feedItems: (feed: ProductFeed) => Promise<ProductItem[]>;
+  /** The words of the whole email (context for "Rewrite with AI"). */
+  aiContext: () => string;
 };
 
 export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b: Block, key?: string) => void; h: PanelHelpers }) {
@@ -278,6 +281,7 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
           <Group title="Text">
             <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">Double-click the text on the email to type. The toolbar on top has headings, bold, colours, links and personal tags like the first name.</p>
           </Group>
+          <AiRewrite html={b.html} context={h.aiContext} onUse={(html) => set({ html })} />
           <Group title="Exact font everywhere">
             <Toggle label="Send as a picture" checked={!!b.asPic} onChange={(v) => set({ asPic: v })} />
             <p className="text-[0.72rem] leading-relaxed text-[var(--wms-muted)]">

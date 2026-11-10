@@ -254,13 +254,18 @@ const doc = (ids: string[], styles = defaultStyles()): EmailDoc => ({ v: 1, styl
 
 /** The streetwear starter: everything light on black. */
 function darkDrop(): EmailDoc {
+  return darkenDoc(doc(["header-dark", "drop", "products-6", "code", "follow"]));
+}
+
+/** The black page look (used by the streetwear starter and by "Write it with AI"). */
+export function darkenDoc(d: EmailDoc): EmailDoc {
   const st = defaultStyles();
   st.pageBg = "#0E0E0E";
   st.contentBg = "#0E0E0E";
   for (const k of ["body", "h1", "h2", "h3", "h4"] as const) st.text[k] = { ...st.text[k], color: "#FFFFFF" };
   st.text.h3 = { ...st.text.h3, family: "Bebas Neue", size: 40, bold: false, ls: 1 };
   st.link = { ...st.link, color: "#FFFFFF" };
-  const d = doc(["header-dark", "drop", "products-6", "code", "follow"], st);
+  d = { ...d, styles: st };
   for (const sec of d.sections)
     for (const c of sec.cols)
       for (const b of c.blocks) {

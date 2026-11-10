@@ -341,6 +341,58 @@ async function main() {
       const drop = (await getEditorEmail(pool, T, await createEditorEmail(pool, T, null, { starter: "drop" })))!;
       assert.notEqual(drop.doc.styles.pageBg, "#F7F4EF", "a starter keeps its own look");
     });
+
+    await t("AI (phase 3): plan → email, cleaned rewrites, the check's fixed rules", async () => {
+      const { assembleEmail, cleanHtml, ruleIssues, words } = await import("../lib/server/email/editor-ai");
+      const { renderEmail } = await import("../lib/email-editor/render");
+      const prod = (ref: string, title: string, gender: "men" | "women" = "women") => ({
+        ref, id: `gid://${ref}`, title, url: `https://shopcarbon.com/products/${ref}`, type: "Dress", gender, colors: ["Black"], sizes: ["S"], price: 49, compareAt: null, stock: 5, image: `https://cdn.example/${ref}.jpg`, handle: ref, setPartners: [],
+      });
+      const items = [prod("P1", "Mira Dress"), prod("P2", "Nova Top"), prod("P3", "Lux Skirt"), prod("P4", "Rio Tee", "men")];
+      const plan = {
+        title: "Weekend",
+        subject: "Your weekend, sorted",
+        preheader: "Three looks for Friday night",
+        look: "dark",
+        sections: [
+          { id: "header", spots: {} },
+          { id: "drop", spots: { T1: "FRIDAY · 9 PM", T2: "OUT <TONIGHT>", I1: "P1", B1: { text: "SHOP WOMEN", link: "women" } } },
+          { id: "products-6", spots: { T1: "The edit", G1: ["P2", "P3", "NOPE"], B1: { text: "SEE IT ALL", link: "P4" } } },
+          { id: "nonsense", spots: {} },
+          { id: "follow", spots: { T1: "should be ignored" } },
+        ],
+      };
+      const b = assembleEmail(plan, items as never, [], null);
+      assert.equal(b.subject, "Your weekend, sorted");
+      assert.ok(isDoc(b.doc));
+      assert.equal(b.doc.styles.pageBg, "#0E0E0E", "dark look");
+      const blocks = b.doc.sections.flatMap((s) => s.cols.flatMap((c) => c.blocks));
+      const header = blocks.find((x) => x.type === "header");
+      assert.ok(header?.type === "header" && /white/.test(header.logo ?? ""), "dark look uses the white-logo header");
+      const texts = blocks.filter((x) => x.type === "text").map((x) => (x.type === "text" ? x.html : ""));
+      assert.ok(texts.some((h) => h.includes("OUT &lt;TONIGHT&gt;") && h.includes("Bebas Neue")), "headline words escaped, style kept");
+      assert.ok(!texts.some((h) => h.includes("should be ignored")), "fixed sections keep their words");
+      const img = blocks.find((x) => x.type === "image" && x.src);
+      assert.ok(img?.type === "image" && img.src === "https://cdn.example/P1.jpg" && img.href.endsWith("/P1") && img.alt === "Mira Dress");
+      const grid = blocks.find((x) => x.type === "product");
+      assert.ok(grid?.type === "product" && grid.source === "static" && grid.items.map((i) => i.title).join() === "Nova Top,Lux Skirt", "unknown refs dropped");
+      const btns = blocks.filter((x) => x.type === "button").map((x) => (x.type === "button" ? `${x.text}>${x.href}` : ""));
+      assert.ok(btns.includes("SHOP WOMEN>https://shopcarbon.com/collections/women") && btns.includes("SEE IT ALL>https://shopcarbon.com/products/P4"));
+      assert.ok(!renderEmail(b.doc).includes("Drop an image here"));
+      assert.throws(() => assembleEmail({ sections: [{ id: "x" }] }, items as never, [], null), /could not be used/);
+
+      assert.equal(cleanHtml(`<p onclick="x()">Hi <img src=x onerror=1><a href="javascript:alert(1)">go</a><script>bad()</script></p>`), `<p>Hi <a href="#">go</a></p>`);
+      assert.equal(words(`<h1>A &amp; B</h1><p>one<br>two</p>`), "A & B\none\ntwo");
+
+      const d = STARTERS.find((x) => x.id === "collection")!.make();
+      const issues = ruleIssues(d, "", "");
+      assert.ok(issues.some((i) => i.blockId === null && /no subject/.test(i.text)));
+      assert.ok(issues.some((i) => /picture spot is empty/.test(i.text)), "empty hero photo found");
+      assert.ok(issues.some((i) => /example wording/.test(i.text)), "starter wording found");
+      const fixed = structuredClone(d);
+      for (const s of fixed.sections) for (const c of s.cols) for (const x of c.blocks) if (x.type === "text") x.html = `<p>Hello {{nickname}}</p>`;
+      assert.ok(ruleIssues(fixed, "Hi", "There").some((i) => /Unknown personal tag \{\{nickname\}\}/.test(i.text)));
+    });
   } finally {
     await pool.end();
   }

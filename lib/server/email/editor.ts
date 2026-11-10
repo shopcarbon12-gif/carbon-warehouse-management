@@ -63,12 +63,22 @@ export async function readyEditorPics(pool: Pool, designId: string): Promise<voi
   await ensureEditorPics(pool, designId, editorHtml).catch((e) => console.warn(`[email-pics] ${designId}: ${e instanceof Error ? e.message : String(e)}`));
 }
 
-export async function createEditorEmail(pool: Pool, tenantId: string, by: string | null, input: { title?: string; starter?: string; fromId?: string; templateId?: string }): Promise<string> {
+export async function createEditorEmail(
+  pool: Pool,
+  tenantId: string,
+  by: string | null,
+  input: { title?: string; starter?: string; fromId?: string; templateId?: string; built?: { doc: EmailDoc; subject: string; preheader: string } },
+): Promise<string> {
   let doc: EmailDoc = blankDoc();
   let title = input.title?.trim() || "New email";
   let subject = "";
   let preheader = "";
-  if (input.templateId) {
+  if (input.built) {
+    // Written by "Write it with AI" (editor-ai.ts buildFromBrief).
+    doc = input.built.doc;
+    subject = input.built.subject;
+    preheader = input.built.preheader;
+  } else if (input.templateId) {
     const t = await templateDoc(pool, tenantId, input.templateId);
     if (!t) throw new Error("Template not found");
     doc = t.doc;
@@ -88,7 +98,7 @@ export async function createEditorEmail(pool: Pool, tenantId: string, by: string
     }
   }
   // A blank email starts in the store's brand kit (the starters keep their own look).
-  if (!input.templateId && !input.fromId && (!input.starter || input.starter === "blank")) {
+  if (!input.built && !input.templateId && !input.fromId && (!input.starter || input.starter === "blank")) {
     const kit = await getKit(pool, tenantId);
     if (kit) doc = { ...doc, styles: kit.styles };
   }

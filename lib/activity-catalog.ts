@@ -144,6 +144,7 @@ const ROUTES: Record<string, Entry> = {
   "email/editor/media": { module: "Email", label: "Uploaded a picture for emails" },
   "email/editor/library": { module: "Email", label: { POST: "Saved an email template or section", PATCH: "Renamed a saved email template or section", DELETE: "Deleted a saved email template or section" } },
   "email/editor/brand-kit": { module: "Email", label: "Changed the email brand kit" },
+  "email/editor/ai": { module: "Email", label: "Used AI in the email editor (write, rewrite, subject lines, check)" },
   "email/campaigns": { module: "Email", label: "Made a new email campaign" },
   "email/campaigns/[id]": { module: "Email", label: "Changed an email campaign" },
   "email/campaigns/[id]/action": { module: "Email", label: "Tested, approved, paused or cancelled an email campaign" },

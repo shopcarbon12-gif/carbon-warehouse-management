@@ -27,6 +27,7 @@ import {
   Italic,
   Link2,
   List,
+  ListChecks,
   ListOrdered,
   Loader2,
   Mail,
@@ -46,6 +47,7 @@ import { Canvas, isSectionDrag, type Drag, type Drop } from "./canvas";
 import { AddContentPanel, BlockPanel, SectionPanel, StylesPanel, type KitState, type PanelHelpers, type SavedSection } from "./panels";
 import { ImagePicker, LayoutDialog, Modal, ProductPicker, ghostBtn, primaryBtn, type PickedImage } from "./pickers";
 import { PreviewSheet, VersionsPanel } from "./preview";
+import { AiCheck, AiSubjects, docWords } from "./ai";
 import { BrandColors, Field, FontPicker, Group, Text, inputCls, useEditorFonts } from "./fields";
 import {
   addNewBlock,
@@ -340,6 +342,7 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
   const [kit, setKit] = useState<KitState>({ kit: null, busy: false, msg: null });
   const [naming, setNaming] = useState<{ kind: "template" | "section"; sectionId?: string; name: string; busy?: boolean; err?: string } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const loadSaved = useCallback(async () => {
     const r = await fetch("/api/email/editor/library", { cache: "no-store" }).catch(() => null);
     if (!r?.ok) return setSaved([]);
@@ -668,6 +671,7 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
       pickImage: (cb) => setImgCb(() => cb),
       pickProducts: (initialItems, cb) => setProdCb({ initial: initialItems, cb }),
       feedItems,
+      aiContext: () => docWords(latest.current.doc),
     }),
     [feedItems],
   );
@@ -747,6 +751,26 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
           </div>
         </Modal>
       )}
+      {checking && (
+        <AiCheck
+          doc={doc}
+          subject={subject}
+          preheader={preheader}
+          onClose={() => setChecking(false)}
+          onGo={(bid) => {
+            setChecking(false);
+            if (!bid) {
+              setSel(null);
+              setRail("inbox");
+              setCollapsed(false);
+              return;
+            }
+            setSel({ kind: "block", id: bid });
+            setCollapsed(false);
+            requestAnimationFrame(() => document.querySelector(`[data-ce-block="${bid}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+          }}
+        />
+      )}
       {/* top bar */}
       <header className="flex h-11 shrink-0 items-center gap-3 border-b border-[var(--wms-border)] bg-[var(--wms-surface)] px-3">
         <button type="button" onClick={exit} title="Exit editor" aria-label="Exit editor" className="grid h-8 w-8 place-items-center rounded text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]">
@@ -761,6 +785,10 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
           <button type="button" onClick={() => setNaming({ kind: "template", name: title })} title="Save as a template (start new emails from it)" className="flex h-8 items-center gap-1.5 rounded px-2.5 text-[0.8rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]">
             <BookmarkPlus size={16} />
             <span className="max-md:hidden">Save as template</span>
+          </button>
+          <button type="button" onClick={() => setChecking(true)} title="Check the words, links, pictures and personal tags before sending" className="flex h-8 items-center gap-1.5 rounded px-2.5 text-[0.8rem] text-[var(--wms-muted)] hover:bg-[var(--wms-surface-elevated)] hover:text-[var(--wms-fg)]">
+            <ListChecks size={16} />
+            <span className="max-md:hidden">Check</span>
           </button>
           <span className="h-5 w-px bg-[var(--wms-border)]" />
           <button
@@ -850,6 +878,13 @@ function EditorInner({ initial, onClose }: { initial: Loaded; onClose: () => voi
                     </p>
                     <p className="text-[0.7rem] text-[var(--wms-muted)]">Subject: {subject.length} characters (about 40–60 reads best on phones).</p>
                   </Group>
+                  <AiSubjects
+                    doc={doc}
+                    onUse={(sj, ph) => {
+                      setSubject(sj);
+                      setPreheader(ph);
+                    }}
+                  />
                 </div>
               )}
             </div>

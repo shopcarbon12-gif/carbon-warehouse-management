@@ -13,6 +13,7 @@ import { STARTERS } from "@/lib/email-editor/prebuilt";
 import { btn, card, fetcher, send } from "@/components/marketing/marketing-shared";
 import { EmailEditor } from "./editor/editor";
 import { ChoiceGrid, useCatalog, type Choice } from "./starter-preview";
+import { AiWrite } from "./editor/ai";
 import type { EmailDoc } from "@/lib/email-editor/types";
 
 type Row = { id: string; title: string; subject: string | null; updated_at: string; created_by: string | null; has_es: boolean; has_pt: boolean; campaigns: number };
@@ -110,6 +111,13 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
       </div>
       {choosing && (
         <section className={`${card} flex flex-col gap-3`}>
+          <AiWrite
+            onCreated={async (id) => {
+              setChoosing(false);
+              await mutate();
+              setEdit(id);
+            }}
+          />
           {!!lib.data?.templates.length && (
             <>
               <h3 className="text-sm font-semibold text-[var(--wms-fg)]">Your templates</h3>
