@@ -12,7 +12,7 @@ import { Copy, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { STARTERS } from "@/lib/email-editor/prebuilt";
 import { btn, card, fetcher, send } from "@/components/marketing/marketing-shared";
 import { EmailEditor } from "./editor/editor";
-import { ChoiceGrid, useCatalog, type Choice } from "./starter-preview";
+import { ChoiceGrid, DocThumb, useCatalog, type Choice } from "./starter-preview";
 import { AiWrite } from "./editor/ai";
 import type { EmailDoc } from "@/lib/email-editor/types";
 
@@ -28,7 +28,9 @@ const html = async (u: string) => {
 function Thumb({ id, stamp, title }: { id: string; stamp: string; title: string }) {
   const { data } = useSWR(`/api/email/designs/${id}/preview?v=${encodeURIComponent(stamp)}`, html);
   if (!data) return <span className="block h-full w-full animate-pulse bg-[var(--wms-surface-elevated)]" />;
-  return <iframe title={title} sandbox="" srcDoc={data} className="pointer-events-none origin-top-left" style={{ width: 680, height: 1100, transform: "scale(0.5)" }} tabIndex={-1} />;
+  // Centred in the card at any width, on the email's own page colour (owner, 2026-11-10).
+  const bg = /<!--carbon-bg:(#[0-9a-fA-F]{3,8})-->/.exec(data)?.[1] ?? /<body[^>]*background(?:-color)?:\s*(#[0-9a-fA-F]{3,8})/i.exec(data)?.[1] ?? "#FFFFFF";
+  return <DocThumb html={data} title={title} bg={bg} fill />;
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -161,7 +163,7 @@ export function EmailsList({ onCampaign }: { onCampaign: (campaignId: string) =>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {data?.emails.map((r) => (
           <article key={r.id} className={`${card} flex flex-col gap-2`}>
-            <button type="button" onClick={() => setEdit(r.id)} className="group relative block h-52 overflow-hidden rounded border border-[var(--wms-border)] bg-white text-left" aria-label={`Edit ${r.title}`}>
+            <button type="button" onClick={() => setEdit(r.id)} className="group relative block h-52 overflow-hidden rounded border border-[var(--wms-border)] text-left" aria-label={`Edit ${r.title}`}>
               <Thumb id={r.id} stamp={r.updated_at} title={r.title} />
               <span className="absolute inset-0 grid place-items-center bg-black/0 text-sm font-semibold text-transparent transition-colors group-hover:bg-black/35 group-hover:text-white">Edit</span>
             </button>

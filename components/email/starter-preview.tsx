@@ -88,18 +88,24 @@ export function DocThumb({
   html,
   title,
   bg = "#FFFFFF",
+  fill,
 }: {
   html: string;
   title: string;
   bg?: string;
+  /** Take the parent's full height (the saved-email cards) instead of the card height. */
+  fill?: boolean;
 }) {
   const box = useRef<HTMLSpanElement>(null);
   const [scale, setScale] = useState(0.4);
+  const [boxH, setBoxH] = useState(256);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const fit = () =>
-      el.clientWidth > 0 && setScale(Math.min(0.6, el.clientWidth / FRAME_W));
+    const fit = () => {
+      if (el.clientWidth > 0) setScale(Math.min(0.6, el.clientWidth / FRAME_W));
+      if (el.clientHeight > 0) setBoxH(el.clientHeight);
+    };
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el);
@@ -108,7 +114,7 @@ export function DocThumb({
   return (
     <span
       ref={box}
-      className="relative block h-64 overflow-hidden rounded border border-[var(--wms-border)]"
+      className={`relative block overflow-hidden ${fill ? "h-full w-full" : "h-64 rounded border border-[var(--wms-border)]"}`}
       style={{ background: bg }}
     >
       <iframe
@@ -122,7 +128,7 @@ export function DocThumb({
         className="pointer-events-none absolute left-1/2 top-0"
         style={{
           width: FRAME_W,
-          height: Math.ceil(256 / scale) + 4,
+          height: Math.ceil(boxH / scale) + 4,
           transform: `translateX(-50%) scale(${scale})`,
           transformOrigin: "top center",
         }}
