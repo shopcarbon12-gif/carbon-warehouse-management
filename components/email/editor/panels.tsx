@@ -818,15 +818,17 @@ export function BlockPanel({ block, onChange, h }: { block: Block; onChange: (b:
           {ph.length > 0 && (
             <Group title={ph.length > 1 ? `Photos (${ph.length})` : "Photo"}>
               {ph.map((src, i) => (
-                <ImageChooser
-                  key={i}
-                  src={src}
-                  onPick={() => h.pickImage((img) => set({ photos: ph.map((x, j) => (j === i ? img.url : x)) }))}
-                  onRemove={() => set({ photos: ph.map((x, j) => (j === i ? null : x)) })}
-                />
+                <div key={i} className="flex flex-col gap-1">
+                  <ImageChooser
+                    src={src}
+                    onPick={() => h.pickImage((img) => set({ photos: ph.map((x, j) => (j === i ? img.url : x)) }))}
+                    onRemove={() => set({ photos: ph.map((x, j) => (j === i ? null : x)) })}
+                  />
+                  {src && <CutOut url={src} onDone={(url) => set({ photos: ph.map((x, j) => (j === i ? url : x)) })} />}
+                </div>
               ))}
               <Toggle label="CARBON grade (more contrast, less colour)" checked={b.grade} onChange={(v) => set({ grade: v })} />
-              <p className="text-[0.7rem] text-[var(--wms-muted)]">A cut-out (a PNG with a see-through background) sits on the type the way the design intends.</p>
+              <p className="text-[0.7rem] text-[var(--wms-muted)]">Designs that put the model on the type look best with a cut-out: “Cut out the background” removes a plain studio backdrop (about 15 seconds) and saves the result in your pictures.</p>
             </Group>
           )}
           {!accentLocked(b.layout) && (
@@ -1103,6 +1105,39 @@ export function StylesPanel({
           </Field>
         ))}
       </Group>
+    </div>
+  );
+}
+
+/** "Cut out the background": the server removes a plain studio backdrop and saves a see-through PNG. */
+function CutOut({ url, onDone }: { url: string; onDone: (url: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (/\(cut%20out\)|cut-out|\.png(\?|$)/i.test(url)) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        disabled={busy}
+        className="h-7 rounded border border-[var(--wms-border)] px-2.5 text-[0.75rem] text-[var(--wms-fg)] hover:border-[var(--wms-fg)] disabled:opacity-50"
+        onClick={async () => {
+          setBusy(true);
+          setErr(null);
+          try {
+            const r = await fetch("/api/email/editor/cutout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }) });
+            const j = (await r.json()) as { image?: { url: string }; error?: string };
+            if (!r.ok || !j.image) throw new Error(j.error || `HTTP ${r.status}`);
+            onDone(j.image.url);
+          } catch (e) {
+            setErr(e instanceof Error ? e.message : String(e));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? "Cutting out… (about 15 s)" : "Cut out the background"}
+      </button>
+      {err && <span className="text-[0.7rem] text-[var(--wms-status-danger-fg)]">{err}</span>}
     </div>
   );
 }

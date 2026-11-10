@@ -24,7 +24,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   /* Email visual check renders screenshots with Chromium (lib/server/email/render.ts); playwright-core
      must stay a plain Node package (webpack cannot bundle it) and is copied into the standalone build. */
-  serverExternalPackages: ["playwright-core"],
+  serverExternalPackages: ["playwright-core", "onnxruntime-web"],
   allowedDevOrigins: ["192.168.1.214"],
   /**
    * Skip Next.js's in-build TypeScript pass when running inside the Coolify

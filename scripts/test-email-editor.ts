@@ -282,6 +282,22 @@ async function main() {
     assert.equal((await sharp(over, { animated: true }).metadata()).pages, 1, "an ended countdown is one still frame");
   });
 
+  await t("cut out the background: studio backdrop goes, the subject stays; only shop/CarbonWMS photos", async () => {
+    const { cutoutPng, allowedPhotoUrl } = await import("../lib/server/email/cutout");
+    const sharp = (await import("sharp")).default;
+    // a dark figure on a light grey studio backdrop
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#F4F4F4"/><rect x="140" y="80" width="120" height="360" rx="40" fill="#1A1A1A"/><circle cx="200" cy="60" r="35" fill="#C99A7A"/></svg>`;
+    const png = await cutoutPng(await sharp(Buffer.from(svg)).jpeg().toBuffer());
+    const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
+    assert.equal(info.channels, 4);
+    const a = (x: number, y: number) => data[(y * info.width + x) * 4 + 3];
+    assert.equal(a(10, 10), 0, "backdrop corner is see-through");
+    assert.equal(a(380, 480), 0);
+    assert.equal(a(200, 250), 255, "the figure stays");
+    assert.ok(allowedPhotoUrl("https://cdn.shopify.com/s/files/1/x.jpg") && allowedPhotoUrl("https://wms.shopcarbon.com/api/public/email-media/uploads/a.jpg"));
+    assert.ok(!allowedPhotoUrl("http://169.254.169.254/latest") && !allowedPhotoUrl("https://evil.example/x.jpg"));
+  });
+
   const url = process.env.TEST_DB ?? "";
   if (!url) {
     console.log(`\n${n} groups passed (no TEST_DB: database part skipped)`);
