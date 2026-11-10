@@ -48,6 +48,10 @@ import {
   Share2,
   Shirt,
   Wand2,
+  Clapperboard,
+  Radar as RadarIcon,
+  Library as LibraryIcon,
+  Sparkles,
   ShoppingBag,
   ShieldCheck,
   MailPlus,
@@ -131,6 +135,19 @@ const sections: NavSection[] = [
     items: [
       { href: "/marketing/email", label: "Emails & campaigns", icon: Mail },
       { href: "/marketing/signup-forms", label: "Sign-up forms", icon: MailPlus },
+    ],
+  },
+  {
+    // CarbonWMS Creative (owner's Creative Engine spec v2, 2026-11-09): the creative team in one place.
+    id: "creative",
+    label: "Creative",
+    isActiveSection: (p) => p.startsWith("/creative"),
+    items: [
+      { href: "/creative", label: "Home", icon: Sparkles },
+      { href: "/creative/create", label: "Create", icon: Clapperboard },
+      { href: "/creative/radar", label: "Radar", icon: RadarIcon },
+      { href: "/creative/library", label: "Library", icon: LibraryIcon },
+      { href: "/creative/settings", label: "Creative settings", icon: SlidersHorizontal },
     ],
   },
   {

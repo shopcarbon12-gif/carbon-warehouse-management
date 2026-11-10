@@ -17,6 +17,8 @@ import { maybeRunMarketing } from "@/lib/server/marketing/scheduler";
 import { marketingAiPending } from "@/lib/server/marketing/ai-changes";
 import { aiJobsPending } from "@/lib/server/marketing/ai-jobs";
 import { emailWorkPending } from "@/lib/server/email/pending";
+import { pendingTenants as creativePending } from "@/lib/server/creative/jobs";
+import { runOneRender } from "@/lib/server/creative/render-worker";
 
 loadEnvConfig(process.cwd());
 
@@ -412,6 +414,68 @@ async function maybeRunEmail(pool: Pool): Promise<void> {
   }
 }
 
+/**
+ * CarbonWMS Creative (lib/server/creative): jobs run in the WEB app (OpenAI + fal.ai keys); the
+ * worker calls /api/creative/tick once a minute while any is due, queues Radar's nightly collection
+ * at 03:00 ET (no paid AI except one-time tagging) and the learning refresh every 6 h. NOTHING here
+ * generates pictures or video on a timer. Renders (HyperFrames HTML → MP4, free) run HERE, one at a
+ * time, in the background so the rest of the loop keeps going.
+ */
+const CREATIVE_TICK_MS = 60_000;
+let lastCreativeTickAt = 0;
+let lastCreativeNightly = "";
+let lastCreativeLearningAt = 0;
+let creativeRenderBusy = false;
+let lastCreativeRenderCheck = 0;
+async function creativeTick(pool: Pool, tenantId: string, requestedBy: string | null, body: Record<string, unknown>, base: string) {
+  const u = await pool.query<{ sub: string; email: string; role: string; lid: string | null }>(
+    `SELECT u.id::text AS sub, u.email, m.role,
+            (SELECT l.id::text FROM locations l WHERE l.tenant_id = m.tenant_id ORDER BY l.created_at LIMIT 1) AS lid
+       FROM memberships m JOIN users u ON u.id = m.user_id
+      WHERE m.tenant_id = $1::uuid AND m.role = 'admin'
+      ORDER BY (u.email = $2) DESC, u.created_at LIMIT 1`,
+    [tenantId, requestedBy ?? ""],
+  );
+  const a = u.rows[0];
+  if (!a?.lid) return;
+  const token = await signSession({ sub: a.sub, email: a.email, tid: tenantId, lid: a.lid, role: a.role });
+  const res = await fetch(`${base}/api/creative/tick`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
+  if (res.status !== 202) console.error(`[worker] creative tick → HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+}
+async function maybeRunCreative(pool: Pool): Promise<void> {
+  if (!creativeRenderBusy && Date.now() - lastCreativeRenderCheck > 5000) {
+    lastCreativeRenderCheck = Date.now();
+    creativeRenderBusy = true;
+    void runOneRender(pool)
+      .catch((e) => console.error("[worker] creative render failed", e))
+      .finally(() => {
+        creativeRenderBusy = false;
+      });
+  }
+  const now = Date.now();
+  if (now - lastCreativeTickAt < CREATIVE_TICK_MS) return;
+  lastCreativeTickAt = now;
+  const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (!base) return;
+  try {
+    const et = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const day = `${et.getFullYear()}-${et.getMonth() + 1}-${et.getDate()}`;
+    const nightly = et.getHours() === 3 && lastCreativeNightly !== day;
+    const learning = now - lastCreativeLearningAt > 6 * 3600_000;
+    const tenants = new Map<string, string | null>();
+    for (const t of await creativePending(pool)) tenants.set(t.tenant_id, t.requested_by);
+    if (nightly || learning) {
+      const r = await pool.query<{ tenant_id: string }>(`SELECT tenant_id::text FROM creative_settings`).catch(() => ({ rows: [] as { tenant_id: string }[] }));
+      for (const x of r.rows) if (!tenants.has(x.tenant_id)) tenants.set(x.tenant_id, null);
+    }
+    for (const [tid, by] of tenants) await creativeTick(pool, tid, by, { nightly, learning }, base);
+    if (nightly) lastCreativeNightly = day;
+    if (learning) lastCreativeLearningAt = now;
+  } catch (e) {
+    console.error("[worker] creative tick failed", e);
+  }
+}
+
 async function main() {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   console.log("WMS worker started (Ctrl+C to stop)");
@@ -435,6 +499,7 @@ async function main() {
       await maybeRunMarketing(pool);
       await maybeRunSocialAi(pool);
       await maybeRunEmail(pool);
+      await maybeRunCreative(pool);
       await maybeRunSeoWatch(pool);
       const job = await claimJob(pool);
       if (!job) {

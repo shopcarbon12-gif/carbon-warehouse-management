@@ -49,6 +49,11 @@ function isPublicPath(pathname: string): boolean {
   /* CarbonCast post media: Instagram/Facebook fetch the picture or video
      when a post is published. Random UUID per file; only post media is served. */
   if (pathname.startsWith("/api/public/marketing-media/")) return true;
+  /* CarbonWMS Creative: one CARBON file for the AI engines (fal.ai / OpenAI) and the render worker —
+     HMAC-signed, expiring, never Radar media; and the render worker handing back a finished MP4
+     (signed per generation id). */
+  if (pathname.startsWith("/api/public/creative/f/")) return true;
+  if (pathname === "/api/creative/render/upload") return true;
   if (pathname === "/api/storefront/welcome-unsubscribe") return true;
   /* CarbonWMS Email: the unsubscribe link in every marketing email (random
      per-contact token), Amazon SNS delivery events (signature-checked against
