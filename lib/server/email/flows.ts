@@ -561,6 +561,43 @@ async function lapsed(pool: Pool, tenantId: string, days: number): Promise<Perso
   }));
 }
 
+/**
+ * Known shoppers (an email from a sign-up, a login or an order — Visitors) who looked at product
+ * pages in a visit between `hours` and 48 h ago and added nothing to the cart, checked out or ordered
+ * since. One run per visit; the email shows the products they looked at (still in stock).
+ */
+export async function browsed(pool: Pool, hours: number, loadCatalog?: () => Promise<{ id: string; handle: string; title: string; price: number; compareAt: number | null; image: string | null; url: string }[]>): Promise<Person[]> {
+  const r = await pool
+    .query<{ visitor_id: string; visit: number; email: string; name: string | null; handles: string[]; last: Date }>(
+      `SELECT v.visitor_id, e.visit, v.email, v.customer_name AS name, array_agg(DISTINCT e.detail->>'product') AS handles, max(e.at) AS last
+         FROM visitor_events e JOIN visitors v ON v.visitor_id = e.visitor_id
+        WHERE v.email IS NOT NULL AND e.kind = 'view' AND e.detail ? 'product'
+          AND e.at > now() - interval '48 hours'
+        GROUP BY v.visitor_id, e.visit, v.email, v.customer_name
+       HAVING max(e.at) < now() - make_interval(hours => $1::int)
+          AND NOT EXISTS (SELECT 1 FROM visitor_events x WHERE x.visitor_id = v.visitor_id AND x.kind IN ('cart_add','checkout','order') AND x.at > min(e.at))`,
+      [hours],
+    )
+    .catch(() => ({ rows: [] as never[] }));
+  if (!r.rows.length) return [];
+  const { inStockCatalog } = await import("./catalog");
+  const catalog = await (loadCatalog ?? inStockCatalog)().catch(() => []);
+  const byHandle = new Map(catalog.map((p) => [p.handle, p]));
+  const out: Person[] = [];
+  for (const x of r.rows) {
+    const email = normalizeEmail(x.email);
+    if (!email) continue;
+    const items: ProductItem[] = x.handles
+      .map((h) => byHandle.get(h))
+      .filter((p): p is NonNullable<typeof p> => !!p && !!p.image)
+      .slice(0, 6)
+      .map((p) => ({ id: p.id, title: p.title, price: p.price, compareAt: p.compareAt, image: p.image, url: p.url, set: null }));
+    if (!items.length) continue; // nothing they looked at is still in stock
+    out.push({ email, firstName: x.name?.split(/\s+/)[0] ?? null, key: `browse:${x.visitor_id}:${x.visit}`, at: x.last, data: { items } });
+  }
+  return out;
+}
+
 /** Online orders that were shipped (fulfilled) since the cursor, with the tracking link. */
 async function pollShipped(pool: Pool, tenantId: string): Promise<Person[]> {
   const ctx = await welcomeShopCtx();
@@ -676,6 +713,7 @@ export async function pollTriggers(pool: Pool, tenantId: string, log: (m: string
   }
   if (types.has("signup")) await into("signup", await pollSignups(pool, tenantId));
   for (const f of flows) if (f.trigger.type === "winback") for (const p of await lapsed(pool, tenantId, f.trigger.days)) if (await enroll(pool, f, p)) n++;
+  for (const f of flows) if (f.trigger.type === "browse_abandon") for (const p of await browsed(pool, f.trigger.hours)) if (await enroll(pool, f, p)) n++;
   if (types.has("shipped")) await into("shipped", await pollShipped(pool, tenantId).catch((e) => (log(`[flows] Shopify shipments: ${e instanceof Error ? e.message : e}`), [])));
   if (types.has("birthday")) for (const f of flows.filter((x) => x.trigger.type === "birthday")) for (const p of await birthdaysToday(pool, tenantId)) if (await enroll(pool, f, p)) n++;
   if (n) log(`[flows] ${n} new ${n === 1 ? "person" : "people"} in flows`);

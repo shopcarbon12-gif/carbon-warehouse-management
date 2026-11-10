@@ -170,7 +170,8 @@ for (let n = 11; n <= 70; n++) {
       });
     } else if ((row.match(/assets\/placeholders\//g) ?? []).length >= 2 && /\$\d|\{\{cart_total\}\}/.test(row)) {
       const count = (row.match(/assets\/placeholders\//g) ?? []).length;
-      const cart = /Qty|cart_total|Order total|TOTAL/i.test(row);
+      // the person's own cart / order — or, for browse-abandon, the pieces they looked at
+      const cart = /Qty|cart_total|Order total|TOTAL/i.test(row) || /^4[5]-/.test(fileName);
       const list = cart || /class="h1"|font-size:(?:7|8|9)\dpx/.test(row) || !/class="col"/.test(row);
       plan.push({
         t: "products",

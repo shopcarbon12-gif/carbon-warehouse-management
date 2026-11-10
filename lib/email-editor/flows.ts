@@ -7,8 +7,8 @@
  * Pure (no server or browser APIs): the flow editor and the server both use it.
  */
 
-export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday" | "shipped";
-export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" } | { type: "shipped" };
+export type TriggerType = "signup" | "order" | "abandoned_checkout" | "winback" | "birthday" | "shipped" | "browse_abandon";
+export type Trigger = { type: "signup" } | { type: "order"; first: boolean; where: "online" | "store" | "both" } | { type: "abandoned_checkout" } | { type: "winback"; days: number } | { type: "birthday" } | { type: "shipped" } | { type: "browse_abandon"; hours: number };
 
 export type WaitStep = {
   id: string;
@@ -49,7 +49,7 @@ export type FlowSettings = {
   reentryDays: number | null;
 };
 
-export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "shipped" | "custom";
+export type FlowKind = "welcome" | "abandoned" | "thanks" | "winback" | "birthday" | "shipped" | "browse" | "custom";
 export type FlowDraft = {
   name: string;
   kind: FlowKind;
@@ -75,6 +75,7 @@ export const TRIGGER_LABEL: Record<TriggerType, string> = {
   winback: "Has not ordered for a while",
   birthday: "Has a birthday",
   shipped: "Has an order shipped",
+  browse_abandon: "Looked at products and left",
 };
 
 export function triggerText(t: Trigger): string {
@@ -91,6 +92,8 @@ export function triggerText(t: Trigger): string {
       return "On each person's birthday (from Rewards; once a year)";
     case "shipped":
       return "When an online order is shipped (fulfilled in Shopify)";
+    case "browse_abandon":
+      return `When a known shopper looked at products on shopcarbon.com and did not add any to the cart within ${t.hours} hours`;
   }
 }
 
@@ -238,6 +241,20 @@ FLOW_IDEAS.push({
   }),
 });
 
+FLOW_IDEAS.push({
+  kind: "browse",
+  name: "Looked but didn't add",
+  description: "A shopper we know (signed up or logged in) looked at products and left without adding any: 4 hours later, the pieces they looked at. Stops if they order.",
+  starters: ["pack-45-browse-abandon"],
+  make: () => ({
+    name: "Looked but didn't add",
+    kind: "browse",
+    trigger: { type: "browse_abandon", hours: 4 },
+    settings: { ...DEFAULT_SETTINGS, reentryDays: 7 },
+    steps: [stop("ordered"), email("Still on your mind", "Still thinking about it, {{first_name|there}}?", "The pieces you looked at, in case you want another look")],
+  }),
+});
+
 export function blankFlow(): FlowDraft {
   return {
     name: "New flow",
@@ -258,6 +275,7 @@ export function isTrigger(x: unknown): x is Trigger {
   if (t.type === "signup" || t.type === "abandoned_checkout" || t.type === "birthday" || t.type === "shipped") return true;
   if (t.type === "order") return typeof t.first === "boolean" && ["online", "store", "both"].includes(t.where);
   if (t.type === "winback") return num(t.days, 14, 730);
+  if (t.type === "browse_abandon") return num(t.hours, 1, 72);
   return false;
 }
 

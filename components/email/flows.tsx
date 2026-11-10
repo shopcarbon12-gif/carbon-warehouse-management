@@ -594,7 +594,7 @@ function TriggerPanel({ flow, onChange }: { flow: Flow; onChange: (t: Trigger) =
           value={t.type}
           onChange={(e) => {
             const v = e.target.value as Trigger["type"];
-            onChange(v === "order" ? { type: "order", first: false, where: "both" } : v === "winback" ? { type: "winback", days: 90 } : { type: v });
+            onChange(v === "order" ? { type: "order", first: false, where: "both" } : v === "winback" ? { type: "winback", days: 90 } : v === "browse_abandon" ? { type: "browse_abandon", hours: 4 } : { type: v });
           }}
         >
           {(Object.keys(TRIGGER_LABEL) as Trigger["type"][]).map((k) => (
@@ -628,6 +628,11 @@ function TriggerPanel({ flow, onChange }: { flow: Flow; onChange: (t: Trigger) =
           </label>
         </>
       )}
+      {t.type === "browse_abandon" && (
+        <Row k="Hours after they leave">
+          <input type="number" className={field} disabled={locked} min={1} max={72} value={t.hours} onChange={(e) => onChange({ ...t, hours: Math.max(1, Math.min(72, Number(e.target.value) || 4)) })} />
+        </Row>
+      )}
       {t.type === "winback" && (
         <Row k="Days since their last order">
           <input
@@ -653,7 +658,8 @@ function TriggerPanel({ flow, onChange }: { flow: Flow; onChange: (t: Trigger) =
         {t.type === "signup" &&
           "People who sign up already get their welcome code by email at once (Email Popup). This flow is what comes after; it can use their welcome code ({{code}}, {{offer_amount}}, {{offer_ends}}). "}
         {t.type === "winback" && "Orders online and in the store both count. Each person enters once their last order passes this many days. "}
-        {t.type === "shipped" && "Read from Shopify every 5 minutes: online orders marked shipped. {{tracking_url}} is their tracking link and {{order_name}} their order number. "}
+        {t.type === "browse_abandon" && "Only shoppers we know by email (signed up, logged in or ordered before) can get it; the email shows the products they looked at that are still in stock. "}
+                {t.type === "shipped" && "Read from Shopify every 5 minutes: online orders marked shipped. {{tracking_url}} is their tracking link and {{order_name}} their order number. "}
                 {t.type === "birthday" && "Birthdays come from Rewards (the store). Each person enters on their birthday, once a year; give the email step its own code as the gift. "}
         {locked ? "The trigger is fixed while the flow is on (set it back to draft to change it)." : "Changes save by themselves."}
       </p>

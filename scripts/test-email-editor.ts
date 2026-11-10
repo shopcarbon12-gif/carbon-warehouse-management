@@ -576,6 +576,29 @@ async function main() {
       await pool.query(`DELETE FROM email_orders_seen`);
     });
 
+    await t("browse-abandon: known shoppers who looked and left get the pieces they looked at; a cart add stops it", async () => {
+      const F = await import("../lib/server/email/flows");
+      await pool.query(`CREATE TABLE IF NOT EXISTS visitors (visitor_id text PRIMARY KEY, email text, customer_name text)`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS visitor_events (id bigserial PRIMARY KEY, visitor_id text, at timestamptz, visit int, kind text, path text, detail jsonb)`);
+      await pool.query(`INSERT INTO visitors VALUES ('v1', 'lea@x.com', 'Lea Stone'), ('v2', 'max@x.com', 'Max'), ('v3', NULL, NULL) ON CONFLICT DO NOTHING`);
+      const ev = (v: string, kind: string, hoursAgo: number, product?: string) =>
+        pool.query(`INSERT INTO visitor_events (visitor_id, at, visit, kind, path, detail) VALUES ($1, now() - make_interval(hours => $2::int), 1, $3, $4, $5)`, [v, hoursAgo, kind, product ? `/products/${product}` : "/", product ? { product } : {}]);
+      await ev("v1", "view", 6, "wilder-jeans");
+      await ev("v1", "view", 5, "cole-top");
+      await ev("v2", "view", 6, "wilder-jeans");
+      await ev("v2", "cart_add", 5);
+      await ev("v3", "view", 6, "wilder-jeans");
+      const cat = async () => [
+        { id: "p1", handle: "wilder-jeans", title: "Wilder Jeans", price: 79, compareAt: null, image: "https://cdn.example/w.jpg", url: "https://shopcarbon.com/products/wilder-jeans" },
+        { id: "p2", handle: "cole-top", title: "Cole Top", price: 39, compareAt: null, image: "https://cdn.example/c.jpg", url: "https://shopcarbon.com/products/cole-top" },
+      ];
+      const got = await F.browsed(pool, 4, cat);
+      assert.deepEqual(got.map((x) => x.email), ["lea@x.com"], "only the known shopper who added nothing");
+      assert.equal(got[0].firstName, "Lea");
+      assert.deepEqual((got[0].data.items as { title: string }[]).map((i) => i.title).sort(), ["Cole Top", "Wilder Jeans"]);
+      assert.equal((await F.browsed(pool, 12, cat)).length, 0, "not before the wait is over");
+    });
+
     await t("flows: ready-made flow → live → person waits, gets their own cart, leaves when they order; events and stats", async () => {
       const F = await import("../lib/server/email/flows");
       const { inWindow, flowProblems, FLOW_IDEAS } = await import("../lib/email-editor/flows");
