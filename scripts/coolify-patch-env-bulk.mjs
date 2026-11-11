@@ -7,10 +7,13 @@
  *   node scripts/coolify-patch-env-bulk.mjs WMS_AUTO_MIGRATE=1
  *
  * Loads .env.coolify.local for COOLIFY_* (same as other scripts).
+ * KEY=@secrets takes the value from the gitignored .env.agent-secrets, so a secret never
+ * lands on the command line. Tunnels to Coolify over SSH when :8000 is firewalled.
  */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { coolifyOrigin } from "./lib/coolify-tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -70,6 +73,19 @@ if (!base || !token || !appUuid || args.length === 0) {
   process.exit(1);
 }
 
+function fromSecrets(key) {
+  const f = path.join(root, ".env.agent-secrets");
+  if (!fs.existsSync(f)) return "";
+  let val = "";
+  for (const line of fs.readFileSync(f, "utf8").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith(`${key}=`)) continue;
+    val = t.slice(key.length + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+  }
+  return val;
+}
+
 const bulk = [];
 for (const pair of args) {
   const i = pair.indexOf("=");
@@ -78,7 +94,14 @@ for (const pair of args) {
     process.exit(1);
   }
   const key = pair.slice(0, i).trim();
-  const value = pair.slice(i + 1);
+  let value = pair.slice(i + 1);
+  if (value === "@secrets") {
+    value = fromSecrets(key);
+    if (!value) {
+      console.error(`${key} is empty or missing in .env.agent-secrets`);
+      process.exit(1);
+    }
+  }
   bulk.push({
     key,
     value,
@@ -88,7 +111,8 @@ for (const pair of args) {
 }
 
 const url = `${base}/applications/${appUuid}/envs/bulk`;
-const res = await fetch(url, {
+const { rewrite } = await coolifyOrigin(url);
+const res = await fetch(rewrite(url), {
   method: "PATCH",
   headers: {
     Authorization: `Bearer ${token}`,
@@ -99,6 +123,8 @@ const res = await fetch(url, {
 });
 
 const text = await res.text();
-console.log(res.status, text.slice(0, 800));
+// The response echoes values — print only the status and the keys, never secrets.
+console.log(res.status, res.ok ? `set: ${bulk.map((b) => b.key).join(", ")}` : text.slice(0, 300));
 if (!res.ok) process.exit(1);
 console.log("\nOK. Redeploy the WMS app so the container picks up new env.");
+process.exit(0); // close the SSH tunnel
