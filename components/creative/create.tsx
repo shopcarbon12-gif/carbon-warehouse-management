@@ -197,7 +197,7 @@ function NewProject() {
 
 type Concept = {
   title: string; idea: string; hook: { first_1_5s: string; text: string | null; why: string }; recipe_key: string; edit_recipe: string;
-  storyboard: { frame: number; shot: string; text: string | null; thumbUrl: string | null }[]; music: { mood: string; bpm: number }; length_s: number; format: string; inspired_by: string[];
+  storyboard: { frame: number; framing?: string; shot: string; text: string | null; thumbUrl: string | null }[]; look?: { location: string; light: string; palette: string }; music: { mood: string; bpm: number }; length_s: number; format: string; inspired_by: string[];
 };
 type Shot = { idx: number; subject_action: string; camera_move: string; lens: string; lighting: string; location: string; duration_s: number; garment_must_show: string; text_overlay: string | null; is_end_card: boolean };
 type View = {
@@ -309,6 +309,7 @@ function ProjectView({ id }: { id: string }) {
                 <p className="text-sm">{c.idea}</p>
                 <p className="text-sm"><span className="font-bold">Hook (0–1.5 s):</span> {c.hook.first_1_5s}{c.hook.text ? <span className="ml-1 bg-white px-1 text-black">{c.hook.text}</span> : null}</p>
                 <p className={`text-xs ${muted}`}>Why it stops the scroll: {c.hook.why}</p>
+                {c.look?.location && <p className={`text-xs ${muted}`}>Look: {c.look.location} · {c.look.light} · {c.look.palette}</p>}
                 <p className={`text-xs ${muted}`}>{c.edit_recipe}</p>
                 <p className={`text-xs ${muted}`}>{c.music.mood} · {c.music.bpm} BPM · {c.length_s ? `${c.length_s}s` : "slides"} · {c.format}</p>
                 <ol className={`list-decimal pl-4 text-xs ${muted}`}>{c.storyboard.map((f, j) => <li key={j}>{f.shot}{f.text ? ` — “${f.text}”` : ""}</li>)}</ol>

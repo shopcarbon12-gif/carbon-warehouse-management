@@ -101,7 +101,7 @@ export const STILL_COST = IMAGE_COST.high + 0.06 + 0.02; // picture + refs + cri
  * One shot's still, critic-gated. Returns the passing generation (or null after the retries).
  * `quality` low = storyboard thumbnails (no critic).
  */
-export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean } = {}): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
+export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string } = {}): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
   const tid = p.tenant_id;
   const brand = await getBrand(pool, tid);
   const preset = presetOf(brand, p.preset);
@@ -124,7 +124,7 @@ export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { q
   const quality = opts.quality ?? "high";
   const prompt0 = [
     shot.still_prompt,
-    `LOOK: ${preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
+    `LOOK: ${opts.look || preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
     cast.length ? `PEOPLE: the person references show ${cast.map((m) => m.name).join(" and ")} — keep each face, skin tone, hair and body EXACTLY.` : "",
     `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
     "Photoreal fashion campaign photo, real skin texture, natural hands. No added text, captions, watermarks or other brands' logos.",

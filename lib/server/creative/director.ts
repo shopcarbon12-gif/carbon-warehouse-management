@@ -44,13 +44,28 @@ const formatAlias = (s: string) => {
 };
 const AspectFormat = looseEnum(["9:16", "4:5", "1:1"] as const, "9:16", formatAlias);
 
+/** How a storyboard frame is framed — drives the preview's lens so a "macro" frame really is a close detail. */
+export const FRAMINGS = ["macro", "close_up", "medium", "full_body", "wide"] as const;
+const Framing = looseEnum(FRAMINGS, "medium", (s) =>
+  /macro|extreme|detail/.test(s) ? "macro" : /close/.test(s) ? "close_up" : /full|head.to.toe/.test(s) ? "full_body" : /wide|establish/.test(s) ? "wide" : null,
+);
+/**
+ * Each concept's own visual world (owner, 2026-11-14: "three different concepts looking the same in the
+ * pictures") — the previews and the shot list use it instead of one shared preset look.
+ */
+const ConceptLook = z.preprocess(
+  (v) => (v && typeof v === "object" ? v : { location: "", light: "", palette: "" }),
+  z.object({ location: clip(160), light: clip(120), palette: clip(120) }),
+);
+
 export const Concept = z.object({
   title: clip(60),
   idea: clip(220),
   hook: z.object({ first_1_5s: clip(200), text: clip(60).nullable(), why: clip(220) }),
   recipe_key: z.string(),
   edit_recipe: clip(300),
-  storyboard: z.array(z.object({ frame: z.number().int(), shot: clip(160), text: clip(60).nullable() })).min(4).max(8),
+  storyboard: z.array(z.object({ frame: z.number().int(), framing: Framing, shot: clip(160), text: clip(60).nullable() })).min(4).max(8),
+  look: ConceptLook,
   music: z.object({ mood: z.string(), bpm: z.number() }),
   length_s: z.number(),
   format: AspectFormat,
@@ -157,9 +172,10 @@ export async function pitchConcepts(pool: Pool, tenantId: string, brief: Brief, 
     opts.modifier ? `OWNER ASKED: ${MODIFIERS[opts.modifier]}` : "",
     opts.previous?.length ? `PREVIOUS CONCEPTS (don't repeat): ${opts.previous.map((c) => `${c.title} (${c.recipe_key})`).join("; ")}` : "",
     "For each concept: title; one-line idea; the HOOK — what happens in the first 1.5 s and why it stops the scroll (hook.text = the on-screen words, or null); recipe_key (one of the recipes above);",
-    "edit_recipe (cuts, pacing, transitions in one line); a 4–8 frame storyboard; music mood + BPM (the owner likes deep / tech / dark afro house around 118–126 BPM); length_s; format = exactly one of \"9:16\", \"4:5\" or \"1:1\"; cast_count; inspired_by = which winning patterns it builds on.",
+    "edit_recipe (cuts, pacing, transitions in one line); look = the concept's OWN visual world: location (a specific place), light (source, direction, time of day) and palette (2–3 colours); a 4–8 frame storyboard where each frame has a framing (macro, close_up, medium, full_body or wide) and a shot that matches it; music mood + BPM (the owner likes deep / tech / dark afro house around 118–126 BPM); length_s; format = exactly one of \"9:16\", \"4:5\" or \"1:1\"; cast_count; inspired_by = which winning patterns it builds on.",
     brief.kind === "static" ? "This is a STATIC (or carousel): storyboard frames = the slides; length_s = 0." : "",
     brief.kind === "ugc" ? "This is AI UGC: creator-style, phone-shot, one creator talking. It must never pretend to be a real customer or invent reviews." : "",
+    "The 3 concepts must LOOK different at a glance, not only cut differently: three different kinds of place (e.g. a night street, a warm interior, a clean studio, a rooftop at dusk, daylight architecture — never two of the same kind), three different lights and three different palettes, each still true to the brand's look. Vary the framing too: every concept has at least one macro or close_up frame and at least one full_body or wide frame.",
     "Never invent facts, reviews, ratings or numbers. Never name other brands.",
   ]
     .filter(Boolean)
@@ -175,6 +191,7 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
     "You are CARBON's Creative Director writing the PRO SHOT LIST for the chosen concept.",
     briefText(brief, recipe ? [recipe] : []),
     `CHOSEN CONCEPT: ${JSON.stringify(concept)}`,
+    concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
     recipe ? `RECIPE BEATS: ${JSON.stringify(recipe.structure.beats)}` : "",
     "Every shot: subject_action, camera_move, lens, lighting (hard sun / sodium streetlight / neon rim / softbox / on-camera flash / soft directional …), location (from LOCATIONS), duration_s, transition_in,",
     "garment_must_show (which detail of which product must be visible), cast (model ids from CAST), products (product ids from PRODUCTS worn in the shot), text_overlay (short, or null), is_end_card, is_static_frame (true when a still is enough, e.g. freeze frames, flat-lays, end card),",

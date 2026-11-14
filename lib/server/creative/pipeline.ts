@@ -113,12 +113,24 @@ export const conceptThumbs: JobHandler = async (pool, job, setProgress) => {
     for (const [fi, f] of c.storyboard.entries()) {
       if (f.thumb || fi >= 4) continue; // 4 cheap frames per concept
       await setProgress(`Storyboard ${ci + 1}/3, frame ${fi + 1}`);
+      // Each concept is drawn in its OWN look (location, light, palette) and each frame at its own framing,
+      // so three concepts don't come out as the same picture (owner, 2026-11-14).
+      const look = c.look?.location ? c.look : null;
+      const framing = f.framing ?? "medium";
+      const lens = framing === "macro" ? "macro" : framing === "close_up" ? "85mm" : framing === "medium" ? "50mm" : framing === "wide" ? "24mm" : "35mm";
+      const framingText = { macro: "extreme macro detail, the garment fills the frame, no face", close_up: "tight close-up", medium: "waist-up medium shot", full_body: "full body, head to toe", wide: "wide shot, the person small in the place" }[framing];
       const shot: Shot = {
-        idx: 100 + ci * 10 + fi, subject_action: f.shot, camera_move: "static", lens: "35mm", lighting: preset.look.split(",")[0], location: preset.name, duration_s: 1, transition_in: "hard_cut",
+        idx: 100 + ci * 10 + fi, subject_action: f.shot, camera_move: "static", lens, lighting: look?.light || preset.look.split(",")[0], location: look?.location || preset.name, duration_s: 1, transition_in: "hard_cut",
         garment_must_show: "the product", cast: [], products: p.products, text_overlay: null, is_end_card: false, is_static_frame: true,
-        still_prompt: `Storyboard thumbnail, rough but readable: ${f.shot}. ${preset.look}.`, motion_prompt: "", sfx: [],
+        still_prompt: [
+          `Storyboard thumbnail for the ad concept "${c.title}" — ${c.idea}`,
+          fi === 0 ? `This is the hook frame: ${c.hook.first_1_5s}` : "",
+          `FRAME: ${f.shot}. Framing: ${framingText}.`,
+          look ? `Place: ${look.location}. Light: ${look.light}. Palette: ${look.palette}.` : "",
+        ].filter(Boolean).join("\n"),
+        motion_prompt: "", sfx: [],
       };
-      const r = await makeStill(pool, p, shot, { quality: "low" }).catch(() => null);
+      const r = await makeStill(pool, p, shot, { quality: "low", look: look ? `${look.light}; ${look.palette}; within the brand's style (${preset.look})` : undefined }).catch(() => null);
       if (r) f.thumb = r.path;
       // save as we go so the cards fill in
       await setProject(pool, p.id, { concepts });
