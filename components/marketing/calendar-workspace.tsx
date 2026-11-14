@@ -927,7 +927,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
               <span className={label}>Results</span>
               {post.targets.map((t) => (
                 <p key={t.provider} className="text-xs text-[var(--wms-fg)]">
-                  {t.provider}: {t.status}
+                  {t.provider}: {t.provider === "tiktok" && t.status === "published" && t.inDrafts ? "in your TikTok drafts — post it from the TikTok app" : t.status}
                   {t.permalink && (
                     <>
                       {" · "}

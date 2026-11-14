@@ -4,6 +4,8 @@ import { withActivity } from "@/lib/server/activity-log";
  * with the choices TikTok's posting rules make the person pick each time
  * (privacy, comments / Duet / Stitch, content disclosure). The caption and
  * hashtags come from the panel as they are on screen.
+ * { mode: "drafts", caption, hashtags } instead sends it to the TikTok app's drafts (inbox):
+ * TikTok notifies the account and the person posts it from the app (owner, 2026-11-14).
  * GET — where TikTok is with it (the panel asks every few seconds).
  *
  * The result is kept on the post's TikTok row. A manual post is never retried
@@ -13,7 +15,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { marketingAdminGuard } from "@/lib/server/marketing/guard";
 import { listPosts } from "@/lib/server/marketing/store";
-import { startTikTokPost, tiktokPostStatus } from "@/lib/server/marketing/tiktok";
+import { sendTikTokDraft, startTikTokPost, tiktokPostStatus } from "@/lib/server/marketing/tiktok";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,19 +36,40 @@ const schema = z
   })
   .strict();
 
+const draftSchema = z
+  .object({ mode: z.literal("drafts"), caption: z.string().max(4000), hashtags: z.array(z.string().max(100)).max(30) })
+  .strict();
+
 async function POST_handler(req: Request, { params }: Ctx) {
   const g = await marketingAdminGuard(req);
   if ("error" in g) return g.error;
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "Post not found" }, { status: 404 });
-  const parsed = schema.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Choose who can see it first" }, { status: 400 });
+  const body = await req.json().catch(() => null);
+  const draft = draftSchema.safeParse(body);
+  const parsed = schema.safeParse(body);
+  if (!draft.success && !parsed.success) return NextResponse.json({ error: "Choose who can see it first" }, { status: 400 });
   const [post] = await listPosts(g.pool, g.session.tid, { ids: [id] });
   if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
   if (!post.media.length) return NextResponse.json({ error: "Add a picture or a video first" }, { status: 400 });
   const busy = post.targets.find((t) => t.provider === "tiktok");
   if (busy?.status === "publishing") return NextResponse.json({ error: "TikTok is still working on this post" }, { status: 409 });
   if (busy?.status === "published") return NextResponse.json({ error: "Already posted to TikTok" }, { status: 409 });
+  if (draft.success) {
+    try {
+      const { publishId } = await sendTikTokDraft(g.pool, g.session.tid, post.format, draft.data.caption, draft.data.hashtags, post.media);
+      await g.pool.query(
+        `INSERT INTO marketing_post_targets (post_id, provider, status, remote_id, attempts, error, updated_at)
+         VALUES ($1::uuid, 'tiktok', 'publishing', $2, 99, NULL, now())
+         ON CONFLICT (post_id, provider) DO UPDATE SET status = 'publishing', remote_id = $2, attempts = 99, error = NULL, updated_at = now()`,
+        [id, `${publishId}|`],
+      );
+      return NextResponse.json({ state: "processing" });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "TikTok did not take the draft" }, { status: 502 });
+    }
+  }
+  if (!parsed.success) return NextResponse.json({ error: "Choose who can see it first" }, { status: 400 });
   const b = parsed.data;
   try {
     const { publishId, creator } = await startTikTokPost(g.pool, g.session.tid, post.format, b.caption, b.hashtags, post.media, {
@@ -78,11 +101,15 @@ export async function GET(req: Request, { params }: Ctx) {
   const row = r.rows[0];
   if (!row) return NextResponse.json({ state: "none" });
   if (row.status !== "publishing" || !row.remote_id?.includes("|"))
-    return NextResponse.json({ state: row.status === "published" ? "published" : row.status === "failed" ? "failed" : "none", permalink: row.permalink, error: row.error });
+    return NextResponse.json({
+      state: row.status === "published" ? (row.remote_id?.startsWith("inbox:") ? "in_drafts" : "published") : row.status === "failed" ? "failed" : "none",
+      permalink: row.permalink,
+      error: row.error,
+    });
   const [publishId, username] = row.remote_id.split("|");
   try {
     const s = await tiktokPostStatus(g.pool, g.session.tid, publishId, row.format, username);
-    if (s.state === "published")
+    if (s.state === "published" || s.state === "in_drafts")
       await g.pool.query(
         `UPDATE marketing_post_targets SET status = 'published', remote_id = $2, permalink = $3, published_at = now(), updated_at = now() WHERE post_id = $1::uuid AND provider = 'tiktok'`,
         [id, s.remoteId, s.permalink],

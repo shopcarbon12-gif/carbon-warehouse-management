@@ -82,7 +82,7 @@ async function api<T>(path: string, token: string, body?: unknown, method = "POS
   if (!res.ok || (j.error?.code && j.error.code !== "ok")) {
     const code = j.error?.code ?? String(res.status);
     const hint: Record<string, string> = {
-      unaudited_client_can_only_post_to_private_accounts: "TikTok has not reviewed the app yet: until it does, posts can only go to a PRIVATE TikTok account",
+      unaudited_client_can_only_post_to_private_accounts: "TikTok has not reviewed the app for public posting yet, so it only posts to a PRIVATE account — use \"Send to TikTok drafts\" and post it from the TikTok app",
       url_ownership_unverified: "TikTok has not verified the picture address yet (Social channels → TikTok shows how)",
       spam_risk_too_many_posts: "TikTok's daily posting limit for this account was reached",
     };
@@ -205,10 +205,7 @@ export async function startTikTokPost(
     });
     publishId = j.data?.publish_id ?? "";
   } else {
-    // TikTok refuses photos over 1080×1920 (picture_size_check_failed): use the shrunk copy.
-    const photos = media.filter((m) => m.kind === "image").slice(0, 35)
-      .map((m) => m.url.replace(/(\/marketing-media\/[0-9a-f-]{36})\.(jpe?g|png)(\?.*)?$/i, "$1-tiktok.jpg"));
-    if (!photos.length) throw new Error("TikTok needs at least one picture");
+    const photos = tiktokPhotos(media);
     // Instagram's first line works as TikTok's photo title (90 characters).
     const title = [...caption.trim().split("\n")[0]].slice(0, 90).join("");
     const j = await api<{ data?: { publish_id?: string } }>("/post/publish/content/init/", token, {
@@ -230,14 +227,85 @@ export async function startTikTokPost(
   return { publishId, creator };
 }
 
-/** Where TikTok is with a post: processing, done (with the post's link when public) or failed. */
+/** TikTok refuses photos over 1080×1920 (picture_size_check_failed): use the shrunk copies (35 at most). */
+function tiktokPhotos(media: { kind: string; url: string }[]): string[] {
+  const photos = media
+    .filter((m) => m.kind === "image")
+    .slice(0, 35)
+    .map((m) => m.url.replace(/(\/marketing-media\/[0-9a-f-]{36})\.(jpe?g|png)(\?.*)?$/i, "$1-tiktok.jpg"));
+  if (!photos.length) throw new Error("TikTok needs at least one picture");
+  return photos;
+}
+
+/**
+ * How calendar posts go to TikTok (owner, 2026-11-14). "drafts" (the default): the video or photos land in
+ * the TikTok app's inbox, and the owner adds a sound and posts it there — works before TikTok reviews the app
+ * for public posting. "direct": CarbonWMS posts it itself (only public once TikTok has reviewed the app).
+ * Kept in marketing_channels.config.postMode, which a reconnect leaves alone.
+ */
+export type TikTokPostMode = "drafts" | "direct";
+
+export async function tiktokPostMode(pool: Pool, tenantId: string): Promise<TikTokPostMode> {
+  const r = await pool.query<{ m: string | null }>(
+    `SELECT config->>'postMode' AS m FROM marketing_channels WHERE tenant_id = $1::uuid AND provider = 'tiktok' LIMIT 1`,
+    [tenantId],
+  );
+  return r.rows[0]?.m === "direct" ? "direct" : "drafts";
+}
+
+export async function setTikTokPostMode(pool: Pool, tenantId: string, mode: TikTokPostMode): Promise<boolean> {
+  const r = await pool.query(
+    `UPDATE marketing_channels SET config = COALESCE(config, '{}'::jsonb) || jsonb_build_object('postMode', $2::text)
+      WHERE tenant_id = $1::uuid AND provider = 'tiktok'`,
+    [tenantId, mode],
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
+/**
+ * Send to the TikTok app's inbox as a draft (Content Posting API "upload": scope video.upload). TikTok
+ * notifies the account; the person finishes it in the app (sound, caption, who can see it) and posts it.
+ * A video carries no caption this way (TikTok's upload takes none) — the panel offers "Copy caption".
+ */
+export async function sendTikTokDraft(
+  pool: Pool,
+  tenantId: string,
+  format: string,
+  caption: string,
+  hashtags: string[],
+  media: { kind: string; url: string }[],
+): Promise<{ publishId: string }> {
+  const { token } = await accessToken(pool, tenantId);
+  const video = media.find((m) => m.kind === "video");
+  let publishId: string;
+  if (format === "reel" && video) {
+    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/inbox/video/init/", token, {
+      source_info: { source: "PULL_FROM_URL", video_url: video.url },
+    });
+    publishId = j.data?.publish_id ?? "";
+  } else {
+    const tags = hashtags.map((h) => `#${h.replace(/^#+/, "")}`).join(" ");
+    const text = `${caption.trim()}${tags ? `\n\n${tags}` : ""}`;
+    const j = await api<{ data?: { publish_id?: string } }>("/post/publish/content/init/", token, {
+      media_type: "PHOTO",
+      post_mode: "MEDIA_UPLOAD",
+      post_info: { title: [...caption.trim().split("\n")[0]].slice(0, 90).join(""), description: [...text].slice(0, 4000).join("") },
+      source_info: { source: "PULL_FROM_URL", photo_images: tiktokPhotos(media), photo_cover_index: 0 },
+    });
+    publishId = j.data?.publish_id ?? "";
+  }
+  if (!publishId) throw new Error("TikTok did not take the draft");
+  return { publishId };
+}
+
+/** Where TikTok is with a post: processing, done (with the post's link when public), in the app's drafts, or failed. */
 export async function tiktokPostStatus(
   pool: Pool,
   tenantId: string,
   publishId: string,
   format: string,
   username: string,
-): Promise<{ state: "processing" | "published" | "failed"; error: string | null; remoteId: string; permalink: string | null }> {
+): Promise<{ state: "processing" | "published" | "in_drafts" | "failed"; error: string | null; remoteId: string; permalink: string | null }> {
   const { token } = await accessToken(pool, tenantId);
   const s = await api<{ data?: { status?: string; fail_reason?: string; publicaly_available_post_id?: (string | number)[] } }>(
     "/post/publish/status/fetch/", token, { publish_id: publishId },
@@ -245,6 +313,8 @@ export async function tiktokPostStatus(
   const st = s.data?.status;
   const postId = s.data?.publicaly_available_post_id?.[0];
   if (st === "FAILED") return { state: "failed", error: `TikTok could not post it: ${s.data?.fail_reason ?? "unknown reason"}`, remoteId: publishId, permalink: null };
+  // A draft: it is waiting in the TikTok app's inbox. remote_id "inbox:<publish id>" marks it as a draft.
+  if (st === "SEND_TO_USER_INBOX") return { state: "in_drafts", error: null, remoteId: `inbox:${publishId}`, permalink: null };
   if (st === "PUBLISH_COMPLETE")
     return {
       state: "published",
@@ -264,6 +334,16 @@ export async function publishTikTok(
   hashtags: string[],
   media: { kind: string; url: string }[],
 ): Promise<{ remoteId: string; permalink: string | null }> {
+  if ((await tiktokPostMode(pool, tenantId)) === "drafts") {
+    const { publishId } = await sendTikTokDraft(pool, tenantId, format, caption, hashtags, media);
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      const s = await tiktokPostStatus(pool, tenantId, publishId, format, "");
+      if (s.state === "in_drafts" || s.state === "published") return { remoteId: s.remoteId, permalink: s.permalink };
+      if (s.state === "failed") throw new Error(s.error ?? "TikTok could not take the draft");
+    }
+    return { remoteId: `inbox:${publishId}`, permalink: null };
+  }
   const { token } = await accessToken(pool, tenantId);
   const info = await creatorInfo(token);
   // A Sandbox (unaudited) app may only post privately, even when TikTok offers more.
