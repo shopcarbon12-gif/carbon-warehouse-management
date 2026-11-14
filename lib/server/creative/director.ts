@@ -17,16 +17,43 @@ import { ownWinners } from "./learning";
 export const MODIFIERS = { crazier: "Push it further: bolder hooks, stranger angles, more pattern interrupts — still on-brand.", luxury: "More luxury: slower, quieter, deep blacks, editorial negative space, fewer words.", new: "Completely new ideas — none of the previous concepts' recipes or hooks." } as const;
 export type Modifier = keyof typeof MODIFIERS;
 
+/**
+ * The model's JSON is not schema-enforced (strict: false), so it sometimes writes "9x16", "Vertical",
+ * "Dolly in" or a sentence one word too long — and the whole step failed (owner, 2026-11-14:
+ * "Invalid option: expected one of 9:16|4:5|1:1"). Close answers are mapped; anything else falls
+ * back to a safe choice; over-long text is cut.
+ */
+const norm = (v: unknown) => (typeof v === "string" ? v.trim().toLowerCase() : v);
+function looseEnum<const T extends readonly [string, ...string[]]>(values: T, fallback: T[number], alias: (s: string) => string | null = () => null) {
+  return z.preprocess((v) => {
+    const s = norm(v);
+    if (typeof s !== "string") return fallback;
+    const exact = values.find((x) => x.toLowerCase() === s);
+    if (exact) return exact;
+    const flat = s.replace(/[\s-]+/g, "_");
+    return values.find((x) => x.toLowerCase() === flat) ?? alias(s) ?? fallback;
+  }, z.enum(values));
+}
+const clip = (n: number) => z.preprocess((v) => (typeof v === "string" ? [...v].slice(0, n).join("") : v), z.string().max(n));
+const formatAlias = (s: string) => {
+  const r = s.replace(/\s/g, "").replace(/[x×/]/g, ":");
+  if (r.startsWith("9:16") || /vertical|portrait|story|stories|reel|tiktok/.test(s)) return "9:16";
+  if (r.startsWith("4:5") || /feed/.test(s)) return "4:5";
+  if (r.startsWith("1:1") || /square/.test(s)) return "1:1";
+  return null;
+};
+const AspectFormat = looseEnum(["9:16", "4:5", "1:1"] as const, "9:16", formatAlias);
+
 export const Concept = z.object({
-  title: z.string().max(60),
-  idea: z.string().max(220),
-  hook: z.object({ first_1_5s: z.string().max(200), text: z.string().max(60).nullable(), why: z.string().max(220) }),
+  title: clip(60),
+  idea: clip(220),
+  hook: z.object({ first_1_5s: clip(200), text: clip(60).nullable(), why: clip(220) }),
   recipe_key: z.string(),
-  edit_recipe: z.string().max(300),
-  storyboard: z.array(z.object({ frame: z.number().int(), shot: z.string().max(160), text: z.string().max(60).nullable() })).min(4).max(8),
+  edit_recipe: clip(300),
+  storyboard: z.array(z.object({ frame: z.number().int(), shot: clip(160), text: clip(60).nullable() })).min(4).max(8),
   music: z.object({ mood: z.string(), bpm: z.number() }),
   length_s: z.number(),
-  format: z.enum(["9:16", "4:5", "1:1"]),
+  format: AspectFormat,
   cast_count: z.number().int().min(1).max(4),
   inspired_by: z.array(z.string()).max(3),
 });
@@ -35,21 +62,21 @@ const Concepts = z.object({ concepts: z.array(Concept).length(3) });
 
 export const Shot = z.object({
   idx: z.number().int(),
-  subject_action: z.string().max(300),
-  camera_move: z.enum(["static", "dolly_in", "dolly_out", "orbit", "whip_pan", "crash_zoom", "handheld_follow", "top_down", "low_angle", "tracking_side", "push_in", "tilt_up"]),
-  lens: z.enum(["24mm", "35mm", "50mm", "85mm", "macro"]),
-  lighting: z.string().max(80),
-  location: z.string().max(120),
+  subject_action: clip(300),
+  camera_move: looseEnum(["static", "dolly_in", "dolly_out", "orbit", "whip_pan", "crash_zoom", "handheld_follow", "top_down", "low_angle", "tracking_side", "push_in", "tilt_up"] as const, "static"),
+  lens: looseEnum(["24mm", "35mm", "50mm", "85mm", "macro"] as const, "35mm", (x) => (/macro/.test(x) ? "macro" : ((m) => (m ? `${m[1]}mm` : null))(x.match(/\b(24|35|50|85)\s*mm/)))),
+  lighting: clip(80),
+  location: clip(120),
   duration_s: z.number().min(0.5).max(10),
-  transition_in: z.string().max(40),
-  garment_must_show: z.string().max(200),
+  transition_in: clip(40),
+  garment_must_show: clip(200),
   cast: z.array(z.string()).max(4), // model ids
   products: z.array(z.string()).max(4), // product ids worn in this shot
-  text_overlay: z.string().max(80).nullable(),
+  text_overlay: clip(80).nullable(),
   is_end_card: z.boolean(),
   is_static_frame: z.boolean(), // freeze / still is enough (no video clip needed)
-  still_prompt: z.string().max(1200),
-  motion_prompt: z.string().max(900),
+  still_prompt: clip(1200),
+  motion_prompt: clip(900),
   sfx: z.array(z.string()).max(3),
 });
 export type Shot = z.infer<typeof Shot>;
@@ -130,7 +157,7 @@ export async function pitchConcepts(pool: Pool, tenantId: string, brief: Brief, 
     opts.modifier ? `OWNER ASKED: ${MODIFIERS[opts.modifier]}` : "",
     opts.previous?.length ? `PREVIOUS CONCEPTS (don't repeat): ${opts.previous.map((c) => `${c.title} (${c.recipe_key})`).join("; ")}` : "",
     "For each concept: title; one-line idea; the HOOK — what happens in the first 1.5 s and why it stops the scroll (hook.text = the on-screen words, or null); recipe_key (one of the recipes above);",
-    "edit_recipe (cuts, pacing, transitions in one line); a 4–8 frame storyboard; music mood + BPM (the owner likes deep / tech / dark afro house around 118–126 BPM); length_s; format; cast_count; inspired_by = which winning patterns it builds on.",
+    "edit_recipe (cuts, pacing, transitions in one line); a 4–8 frame storyboard; music mood + BPM (the owner likes deep / tech / dark afro house around 118–126 BPM); length_s; format = exactly one of \"9:16\", \"4:5\" or \"1:1\"; cast_count; inspired_by = which winning patterns it builds on.",
     brief.kind === "static" ? "This is a STATIC (or carousel): storyboard frames = the slides; length_s = 0." : "",
     brief.kind === "ugc" ? "This is AI UGC: creator-style, phone-shot, one creator talking. It must never pretend to be a real customer or invent reviews." : "",
     "Never invent facts, reviews, ratings or numbers. Never name other brands.",
