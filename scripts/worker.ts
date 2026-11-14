@@ -417,7 +417,7 @@ async function maybeRunEmail(pool: Pool): Promise<void> {
 /**
  * CarbonWMS Creative (lib/server/creative): jobs run in the WEB app (OpenAI + fal.ai keys); the
  * worker calls /api/creative/tick once a minute while any is due, queues Radar's nightly collection
- * at 03:00 ET (no paid AI except one-time tagging) and the learning refresh every 6 h. NOTHING here
+ * at 03:00 ET (only when CREATIVE_RADAR_NIGHTLY=1 — off by default, owner 2026-11-14) and the free learning refresh every 6 h. NOTHING here
  * generates pictures or video on a timer. Renders (HyperFrames HTML → MP4, free) run HERE, one at a
  * time, in the background so the rest of the loop keeps going.
  */
