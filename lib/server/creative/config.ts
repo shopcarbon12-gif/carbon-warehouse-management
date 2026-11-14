@@ -165,7 +165,9 @@ export const DEFAULT_PRESETS: Preset[] = [
   },
 ];
 
-export const DEFAULT_DOS = ["always show the denim wash up close", "show the real garment details: stitching, hardware, prints"];
+// "the denim wash" only on denim pieces: the old "always show the denim wash up close" made every concept open
+// on an invented denim shot for a black hooded dress, which the critic then rejected 3 times (owner, 2026-11-14).
+export const DEFAULT_DOS = ["always show the real fabric up close (the wash on denim pieces only)", "show the real garment details: stitching, hardware, prints"];
 export const DEFAULT_DONTS = ["no cheesy stock-photo smiles", "no cartoon fonts", "no other brands' logos or text", "no invented reviews, stats or claims"];
 
 /**

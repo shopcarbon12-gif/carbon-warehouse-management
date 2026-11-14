@@ -176,6 +176,7 @@ export async function pitchConcepts(pool: Pool, tenantId: string, brief: Brief, 
     brief.kind === "static" ? "This is a STATIC (or carousel): storyboard frames = the slides; length_s = 0." : "",
     brief.kind === "ugc" ? "This is AI UGC: creator-style, phone-shot, one creator talking. It must never pretend to be a real customer or invent reviews." : "",
     "The 3 concepts must LOOK different at a glance, not only cut differently: three different kinds of place (e.g. a night street, a warm interior, a clean studio, a rooftop at dusk, daylight architecture — never two of the same kind), three different lights and three different palettes, each still true to the brand's look. Vary the framing too: every concept has at least one macro or close_up frame and at least one full_body or wide frame.",
+    "FACTS ONLY: describe only the fabric, colour, wash, hardware and details the PRODUCTS facts and detail crops show. Never call a piece denim (or any other fabric) unless its facts say so — a black knit dress is not denim.",
     "Never invent facts, reviews, ratings or numbers. Never name other brands.",
   ]
     .filter(Boolean)
@@ -190,6 +191,7 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
   const prompt = [
     "You are CARBON's Creative Director writing the PRO SHOT LIST for the chosen concept.",
     briefText(brief, recipe ? [recipe] : []),
+    "FACTS ONLY: describe only the fabric, colour, wash, hardware and details the PRODUCTS facts and detail crops show. Never call a piece denim (or any other fabric) unless its facts say so — a black knit dress is not denim.",
     `CHOSEN CONCEPT: ${JSON.stringify(concept)}`,
     concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
     recipe ? `RECIPE BEATS: ${JSON.stringify(recipe.structure.beats)}` : "",
