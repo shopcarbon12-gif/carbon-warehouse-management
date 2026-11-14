@@ -51,6 +51,49 @@ export function parseJsonText(text: string): unknown {
   }
 }
 
+/**
+ * The model's JSON is not schema-enforced (strict: false), so a reply can be a little off — 4 items
+ * where 3 are allowed, a sentence past the length cap, an option spelled differently — and the whole
+ * step used to fail (owner, 2026-11-14: "expected array to have <=3 items"). Mend what can be mended
+ * without guessing content: cut over-long lists and text, swap an unknown option for the first allowed
+ * one, drop a null where a value was optional. Anything else still fails.
+ */
+export function parseLenient<T>(schema: z.ZodType<T>, raw: unknown): ReturnType<z.ZodType<T>["safeParse"]> {
+  const value = raw;
+  let parsed = schema.safeParse(value);
+  for (let round = 0; round < 25 && !parsed.success; round++) {
+    let mended = false;
+    for (const issue of parsed.error.issues) {
+      const path = issue.path as (string | number)[];
+      if (!path.length) continue;
+      let parent: unknown = value;
+      for (const k of path.slice(0, -1)) parent = (parent as Record<string | number, unknown> | null)?.[k];
+      if (!parent || typeof parent !== "object") continue;
+      const key = path[path.length - 1];
+      const box = parent as Record<string | number, unknown>;
+      const cur = box[key];
+      if (issue.code === "too_big" && typeof issue.maximum === "number") {
+        const max = Number(issue.maximum);
+        const next = Array.isArray(cur) ? cur.slice(0, max) : typeof cur === "string" ? [...cur].slice(0, max).join("") : typeof cur === "number" ? max : undefined;
+        if (next !== undefined) {
+          box[key] = next;
+          mended = true;
+        }
+      } else if (issue.code === "too_small" && typeof issue.minimum === "number" && typeof cur === "number") {
+        box[key] = Number(issue.minimum);
+        mended = true;
+      } else if (issue.code === "invalid_value" && Array.isArray(issue.values) && issue.values.length) {
+        const want = typeof cur === "string" ? cur.trim().toLowerCase().replace(/[\s-]+/g, "_") : "";
+        box[key] = issue.values.find((v) => String(v).toLowerCase() === want) ?? issue.values[0];
+        mended = true;
+      }
+    }
+    if (!mended) break;
+    parsed = schema.safeParse(value);
+  }
+  return parsed;
+}
+
 export async function json<T>(pool: Pool, prompt: string, schema: z.ZodType<T>, opts: JsonOpts): Promise<{ value: T; cost: number }> {
   await spendGate(pool, opts.tenantId, "openai", opts.estimate ?? 0.05);
   const model = opts.model ?? textModel();
@@ -62,7 +105,7 @@ export async function json<T>(pool: Pool, prompt: string, schema: z.ZodType<T>, 
   });
   const cost = textCost(model, r.usage?.input_tokens ?? 0, r.usage?.output_tokens ?? 0);
   await recordSpend(pool, opts.tenantId, { provider: "openai", what: opts.what, cost, projectId: opts.projectId });
-  const parsed = schema.safeParse(parseJsonText(r.output_text ?? ""));
+  const parsed = parseLenient(schema, parseJsonText(r.output_text ?? ""));
   if (!parsed.success) throw new PlainError(`The AI answer for "${opts.what}" did not have the right shape (${parsed.error.issues[0]?.message ?? "invalid"}). Try again.`);
   return { value: parsed.data, cost };
 }

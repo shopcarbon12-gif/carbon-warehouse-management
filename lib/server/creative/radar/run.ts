@@ -7,7 +7,7 @@ import sharp from "sharp";
 import { deleteStorageObjects } from "@/lib/storageProvider";
 import { getCreativeSettings, recordSpend, spendGate } from "../config";
 import { enqueue, type JobHandler } from "../jobs";
-import { collectBatch, embed, submitBatch, type LlmImage } from "../llm";
+import { collectBatch, embed, parseLenient, submitBatch, type LlmImage } from "../llm";
 import { getFile } from "../storage";
 import { textCost } from "../routing";
 import { ANALYSIS_PROMPT, decide, landingSignal } from "./classify";
@@ -181,7 +181,7 @@ export const radarTag: JobHandler = async (pool, job, setProgress) => {
   const embedQueue: { id: string; text: string }[] = [];
   for (const r of out.results) {
     cost += textCost(p.model ?? "gpt-5.5", r.inTok, r.outTok, true);
-    const parsed = r.ok ? AdAnalysis.safeParse(r.value) : null;
+    const parsed = r.ok ? parseLenient(AdAnalysis, r.value) : null;
     if (!parsed?.success) {
       failed++;
       await pool.query(`UPDATE creative_ads SET status = 'review', reject_reason = $2, updated_at = now() WHERE id = $1::uuid AND status = 'new'`, [r.customId, `tagging failed: ${r.error ?? parsed?.error.issues[0]?.message ?? "bad answer"}`]);
