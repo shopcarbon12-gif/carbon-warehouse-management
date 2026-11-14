@@ -102,6 +102,30 @@ export const projectConcepts: JobHandler = async (pool, job, setProgress) => {
   return { status: "done", progress: "3 concepts ready — pick one" };
 };
 
+/** How many pictures are drawn at once — OpenAI's image rate limit is the ceiling. */
+const STILL_PARALLEL = Number(process.env.CREATIVE_STILL_PARALLEL || 5);
+const THUMB_PARALLEL = Number(process.env.CREATIVE_THUMB_PARALLEL || 6);
+
+/**
+ * Run fn over items, at most `limit` at a time. The first error stops new items from starting, lets the
+ * ones already running finish (they are paid for), then is thrown — the same outcome as the old one-by-one loop.
+ */
+async function inParallel<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  let firstError: unknown = null;
+  const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length && firstError === null) {
+      try {
+        await fn(items[next++]);
+      } catch (e) {
+        firstError ??= e;
+      }
+    }
+  });
+  await Promise.all(lanes);
+  if (firstError !== null) throw firstError;
+}
+
 /** Cheap storyboard thumbnails (low quality, no critic). */
 export const conceptThumbs: JobHandler = async (pool, job, setProgress) => {
   const p = await loadProject(pool, job.tenant_id, job.project_id!);
@@ -109,10 +133,11 @@ export const conceptThumbs: JobHandler = async (pool, job, setProgress) => {
   const concepts = (p.concepts ?? []) as (Omit<Concept, "storyboard"> & { storyboard: Frame[] })[];
   const brand = await getBrand(pool, p.tenant_id);
   const preset = presetOf(brand, p.preset);
-  for (const [ci, c] of concepts.entries()) {
-    for (const [fi, f] of c.storyboard.entries()) {
-      if (f.thumb || fi >= 4) continue; // 4 cheap frames per concept
-      await setProgress(`Storyboard ${ci + 1}/3, frame ${fi + 1}`);
+  // All thumbnails at the same time (owner, 2026-11-14), 4 cheap frames per concept.
+  const jobs = concepts.flatMap((c, ci) => c.storyboard.map((f, fi) => ({ c, ci, f, fi })).filter(({ f, fi }) => !f.thumb && fi < 4));
+  let drawn = 0;
+  await setProgress(`Drawing ${jobs.length} storyboard thumbnails at the same time`);
+  await inParallel(jobs, THUMB_PARALLEL, async ({ c, ci, f, fi }) => {
       // Each concept is drawn in its OWN look (location, light, palette) and each frame at its own framing,
       // so three concepts don't come out as the same picture (owner, 2026-11-14).
       const look = c.look?.location ? c.look : null;
@@ -133,9 +158,10 @@ export const conceptThumbs: JobHandler = async (pool, job, setProgress) => {
       const r = await makeStill(pool, p, shot, { quality: "low", look: look ? `${look.light}; ${look.palette}; within the brand's style (${preset.look})` : undefined }).catch(() => null);
       if (r) f.thumb = r.path;
       // save as we go so the cards fill in
+      drawn++;
       await setProject(pool, p.id, { concepts });
-    }
-  }
+      await setProgress(`Storyboard thumbnails: ${drawn} of ${jobs.length} done`);
+  });
   return { status: "done", progress: "Storyboards ready" };
 };
 
@@ -202,13 +228,18 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   const have = await stillsByShot(pool, p.id);
   const only = (job.payload as { shots?: number[] }).shots;
   const failed: number[] = [];
-  for (const s of shots) {
-    if (s.is_end_card || (have.has(s.idx) && !only?.includes(s.idx))) continue;
-    if (only && !only.includes(s.idx)) continue;
-    await setProgress(`Still ${s.idx + 1} of ${shots.length}: ${s.subject_action.slice(0, 60)}`);
+  // All shots are drawn at the same time (owner, 2026-11-14: one by one took 6–8 minutes a creative).
+  // Each shot still has its own critic and retries; STILL_PARALLEL caps how many run at once.
+  const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)));
+  let finished = 0;
+  await setProgress(`Drawing ${todo.length} still${todo.length === 1 ? "" : "s"} at the same time`);
+  await inParallel(todo, STILL_PARALLEL, async (s) => {
     const r = await makeStill(pool, p, s, { extra: (job.payload as { extra?: string }).extra });
     if (!r) failed.push(s.idx + 1);
-  }
+    finished++;
+    await setProgress(`Drawing stills at the same time: ${finished} of ${todo.length} done`);
+  });
+  failed.sort((a, b) => a - b);
   await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check after 3 tries — they are left out. Ask for a change or try again.` : null });
   await enqueue(pool, p.tenant_id, "project_draft", {}, { projectId: p.id, requestedBy: job.requested_by, progress: p.kind === "static" ? "Laying out the statics" : "Cutting the draft (free)" });
   return { status: "done", progress: failed.length ? `${failed.length} still(s) failed the critic` : "All stills passed the critic" };
