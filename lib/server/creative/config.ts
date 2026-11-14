@@ -74,6 +74,20 @@ export class PlainError extends Error {
 
 export type SpendSummary = Record<Provider, { today: number; month: number; daily: number; monthly: number }> & { total: { today: number; month: number } };
 
+/**
+ * A one-day raise of the daily caps (owner, 2026-11-14: "allow this only today"):
+ * CREATIVE_CAP_TODAY="2026-11-14 openai=25 fal=40" counts only on that Eastern date, then is ignored.
+ */
+function todayOverride(p: Provider): number {
+  const v = (process.env.CREATIVE_CAP_TODAY || "").trim();
+  const m = v.match(/^(\d{4}-\d{2}-\d{2})\s+(.*)$/);
+  if (!m) return 0;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  if (m[1] !== today) return 0;
+  const n = Number(m[2].match(new RegExp(`\\b${p}=(\\d+(?:\\.\\d+)?)`))?.[1] ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function spendSummary(pool: Pool, tenantId: string): Promise<SpendSummary> {
   const caps = (await getCreativeSettings(pool, tenantId)).caps;
   const r = await pool.query<{ provider: Provider; today: string; month: string }>(
@@ -89,7 +103,7 @@ export async function spendSummary(pool: Pool, tenantId: string): Promise<SpendS
     const row = r.rows.find((x) => x.provider === p);
     const today = Number(row?.today ?? 0);
     const month = Number(row?.month ?? 0);
-    out[p] = { today, month, daily: caps[p].daily, monthly: caps[p].monthly };
+    out[p] = { today, month, daily: Math.max(caps[p].daily, todayOverride(p)), monthly: caps[p].monthly };
     out.total.today += today;
     out.total.month += month;
   }

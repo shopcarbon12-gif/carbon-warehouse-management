@@ -193,9 +193,15 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   const res = await pollVideo(g.inputs, g.external_id);
   if (res.state === "pending") return st;
   if (res.state === "failed") {
-    await pool.query(`UPDATE creative_generations SET status = 'failed', error = $2, updated_at = now() WHERE id = $1::uuid`, [st.genId, res.error.slice(0, 500)]);
+    await pool.query(`UPDATE creative_generations SET status = 'failed', error = $2, cost_usd = 0, updated_at = now() WHERE id = $1::uuid`, [st.genId, res.error.slice(0, 500)]);
+    // fal does not bill a request that returns no video: take its estimate off today's spend, so failed tries
+    // don't eat the cap (owner, 2026-11-14: $14.40 "spent" with no clip made).
+    await pool.query(`UPDATE creative_spend SET cost_usd = 0, what = left('failed, not billed: ' || what, 200) WHERE generation_id = $1::uuid`, [st.genId]);
     // Auto-fallback: retry once on the same engine, then the next engine in the route. Logged, never asked.
-    const next = st.tries < 1 ? { ...st, tries: st.tries + 1 } : { ...st, tries: 0, engineAt: st.engineAt + 1 };
+    // A refusal (content policy — e.g. Seedance won't take faces that look like real people) never passes on
+    // the same engine, so it goes straight to the next one.
+    const refused = /content_policy|likeness|real people|not allowed|safety/i.test(res.error);
+    const next = st.tries < 1 && !refused ? { ...st, tries: st.tries + 1 } : { ...st, tries: 0, engineAt: st.engineAt + 1 };
     if (next.engineAt >= st.engines.length) return { ...st, status: "failed", error: `Every video engine failed for shot ${st.shotIdx + 1}: ${res.error.slice(0, 200)}` };
     return submitClip(pool, p, next);
   }

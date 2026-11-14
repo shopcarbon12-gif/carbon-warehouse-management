@@ -103,22 +103,22 @@ export const DEFAULT_ROUTES: Record<VideoJob, { label: string; why: string; engi
   fashion_motion: {
     label: "Product / fashion motion (walks, spins, fabric, outfit swaps)",
     why: "Best garment fidelity + fabric physics",
-    engines: ["fal-ai/kling-video/v3/pro/image-to-video", "fal-ai/kling-video/o3/pro/image-to-video", "bytedance/seedance-2.0/reference-to-video"],
+    engines: ["fal-ai/kling-video/v3/pro/image-to-video", "fal-ai/kling-video/o3/pro/image-to-video"],
   },
   ugc_talking: {
     label: "UGC / people talking / natural human motion",
     why: "Most natural movement + native dialogue",
-    engines: ["fal-ai/veo3.1/image-to-video", "fal-ai/veo3.1/fast/image-to-video", "fal-ai/kling-video/v3/pro/image-to-video"],
+    engines: ["fal-ai/kling-video/v3/pro/image-to-video", "fal-ai/kling-video/o3/pro/image-to-video"],
   },
   identity: {
     label: "Same face across many clips (saved models)",
     why: "Identity consistency",
-    engines: ["bytedance/seedance-2.0/reference-to-video", "fal-ai/kling-video/v3/pro/image-to-video"],
+    engines: ["fal-ai/kling-video/o3/pro/image-to-video", "fal-ai/kling-video/v3/pro/image-to-video"],
   },
   draft: {
     label: "Drafts / previews",
     why: "Cheap",
-    engines: ["bytedance/seedance-2.0/mini/reference-to-video", "fal-ai/kling-video/v3/standard/image-to-video"],
+    engines: ["fal-ai/kling-video/v3/standard/image-to-video", "fal-ai/kling-video/v3/pro/image-to-video"],
   },
 };
 
