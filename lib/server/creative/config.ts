@@ -113,7 +113,7 @@ export async function spendSummary(pool: Pool, tenantId: string): Promise<SpendS
 /** Throws a PlainError when `cost` would take a provider over its daily or monthly cap. */
 export async function spendGate(pool: Pool, tenantId: string, provider: Provider, cost: number): Promise<void> {
   const s = (await spendSummary(pool, tenantId))[provider];
-  const name = provider === "fal" ? "fal.ai (video)" : "OpenAI";
+  const name = provider === "fal" ? "video (Kling / fal.ai)" : "OpenAI";
   if (s.today + cost > s.daily + 1e-9)
     throw new PlainError(`Paused: ${name} would pass today's cap ($${s.today.toFixed(2)} spent of $${s.daily.toFixed(2)}; this step ≈ $${cost.toFixed(2)}). Raise the cap in Creative → Settings, or wait until tomorrow.`);
   if (s.month + cost > s.monthly + 1e-9)

@@ -22,9 +22,25 @@ export type VideoEngine = {
   /** $ per second, audio off / on. */
   perSecond: { silent: number; audio: number };
   nativeDialogue: boolean;
+  /** Who runs it: fal.ai (default) or Kling direct (KLING_API_KEY). */
+  provider?: "fal" | "kling";
 };
 
+/** Kling direct: USD per Kling API unit (KLING_UNIT_USD); Kling 4.0 Omni at 1080p = 1.5 units/s. */
+const KLING_UNIT = Number(process.env.KLING_UNIT_USD || 0.14);
+
 export const VIDEO_ENGINES: Record<string, VideoEngine> = {
+  "kling-direct/kling-4.0-omni": {
+    id: "kling-direct/kling-4.0-omni",
+    label: "Kling 4.0 (direct)",
+    imageField: "start_image_url",
+    durations: Array.from({ length: 28 }, (_, i) => i + 3),
+    durationFormat: "plain",
+    aspectField: true,
+    perSecond: { silent: 1.5 * KLING_UNIT, audio: 1.5 * KLING_UNIT },
+    nativeDialogue: true,
+    provider: "kling",
+  },
   "fal-ai/kling-video/v3/pro/image-to-video": {
     id: "fal-ai/kling-video/v3/pro/image-to-video",
     label: "Kling 3.0 Pro",

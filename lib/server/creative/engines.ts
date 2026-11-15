@@ -12,7 +12,7 @@ import { toFile } from "openai";
 import { falKey, imageModel, openai, PlainError, ttsModel } from "./config";
 import { engineDuration, IMAGE_COST, TTS_COST_PER_CHAR, VIDEO_ENGINES, estimateVideoCost } from "./routing";
 
-export type JobRef = { provider: "openai" | "fal"; externalId: string; meta?: Record<string, unknown> };
+export type JobRef = { provider: "openai" | "fal" | "kling"; externalId: string; meta?: Record<string, unknown> };
 export type JobResult =
   | { state: "pending"; note?: string }
   | { state: "failed"; error: string }
@@ -109,6 +109,9 @@ export type VideoRequest = {
   imageUrl: string; // first frame (approved still), signed URL
   referenceUrls?: string[]; // identity refs (Seedance reference mode)
   endImageUrl?: string;
+  /** Kling direct: the cast member's photos + fixed voice. */
+  personRefUrls?: string[];
+  voiceId?: string | null;
   seconds: number;
   aspect: "9:16" | "16:9" | "1:1" | "4:5";
   audio: boolean;
@@ -136,6 +139,11 @@ export function buildVideoInput(v: VideoRequest): { input: Record<string, unknow
 }
 
 export async function submitVideo(v: VideoRequest): Promise<JobRef & { cost: number; seconds: number }> {
+  if (VIDEO_ENGINES[v.engineId]?.provider === "kling") {
+    const { submitKlingOmni } = await import("./kling");
+    const k = await submitKlingOmni({ prompt: v.prompt, firstFrame: v.imageUrl, lastFrame: v.endImageUrl ?? null, personRefs: v.personRefUrls, voiceId: v.voiceId, seconds: v.seconds, aspect: v.aspect });
+    return { provider: "kling", externalId: k.taskId, meta: { provider: "kling", engine: v.engineId, input: k.input }, cost: estimateVideoCost(v.engineId, k.seconds, v.audio), seconds: k.seconds };
+  }
   const { input, seconds } = buildVideoInput(v);
   const r = await fetch(`${QUEUE}/${v.engineId}`, { method: "POST", headers: falHeaders(), body: JSON.stringify(input), signal: AbortSignal.timeout(60_000) });
   const j = (await r.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
@@ -149,7 +157,11 @@ export async function submitVideo(v: VideoRequest): Promise<JobRef & { cost: num
   };
 }
 
-export async function pollVideo(meta: { status_url?: string; response_url?: string; engine?: string }, requestId: string): Promise<JobResult> {
+export async function pollVideo(meta: { status_url?: string; response_url?: string; engine?: string; provider?: string }, requestId: string): Promise<JobResult> {
+  if (meta.provider === "kling") {
+    const { pollKling } = await import("./kling");
+    return pollKling(requestId);
+  }
   const statusUrl = meta.status_url ?? `${QUEUE}/${meta.engine}/requests/${requestId}/status`;
   const s = await fetch(statusUrl, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) });
   const sj = (await s.json().catch(() => ({}))) as { status?: string; error?: string };

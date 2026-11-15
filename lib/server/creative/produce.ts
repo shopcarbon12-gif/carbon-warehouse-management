@@ -14,6 +14,7 @@ import { listModels, modelRefBytes, type CastModel } from "./casting";
 import { twinRefs } from "./twin";
 import { getFile, putFile, signedUrl, fetchBytes } from "./storage";
 import { routeFor, VIDEO_ENGINES, estimateVideoCost, IMAGE_COST, type VideoJob } from "./routing";
+import { ensureKlingVoice, KLING4, klingKey } from "./kling";
 import type { Shot } from "./director";
 
 export type ProjectRow = {
@@ -192,16 +193,20 @@ export function videoJobFor(p: ProjectRow, shot: Shot, castUseCount: number): Vi
   return "fashion_motion";
 }
 
-export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
+export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; personRefs?: string[]; voiceId?: string | null; speakerId?: string | null; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
 
 /** Submit one clip (first frame = the approved still). */
 export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, "genId" | "status"> & { genId?: string }): Promise<ClipState> {
   const engineId = st.engines[st.engineAt];
   const e = VIDEO_ENGINES[engineId];
+  if (e.provider === "kling" && st.speakerId && !st.voiceId) {
+    const m = (await listModels(pool, p.tenant_id)).find((x) => x.id === st.speakerId);
+    st = { ...st, voiceId: m ? await ensureKlingVoice(pool, p.tenant_id, m, p.id).catch(() => null) : null };
+  }
   const cost = estimateVideoCost(engineId, st.seconds, st.audio);
   await spendGate(pool, p.tenant_id, "fal", cost);
-  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), endImageUrl: st.endStill ? signedUrl(st.endStill, 24 * 3600) : undefined, referenceUrls: st.refs, seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
-  const genId = await insertGen(pool, p.tenant_id, { projectId: p.id, kind: "clip", shotIdx: st.shotIdx, provider: "fal", model: engineId, prompt: st.prompt, attempt: st.attempt, inputs: { ...ref.meta, still: st.still }, status: "running" });
+  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), endImageUrl: st.endStill ? signedUrl(st.endStill, 24 * 3600) : undefined, referenceUrls: st.refs, personRefUrls: st.personRefs, voiceId: st.voiceId, seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
+  const genId = await insertGen(pool, p.tenant_id, { projectId: p.id, kind: "clip", shotIdx: st.shotIdx, provider: e.provider ?? "fal", model: engineId, prompt: st.prompt, attempt: st.attempt, inputs: { ...ref.meta, still: st.still }, status: "running" });
   await pool.query(`UPDATE creative_generations SET external_id = $2, cost_usd = $3 WHERE id = $1::uuid`, [genId, ref.externalId, ref.cost]);
   await recordSpend(pool, p.tenant_id, { provider: "fal", what: `clip shot ${st.shotIdx + 1} (${VIDEO_ENGINES[engineId].label}, ${ref.seconds}s)`, cost: ref.cost, projectId: p.id, generationId: genId });
   return { ...st, genId, status: "running" };
@@ -256,7 +261,19 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
     if (!still) continue;
     const maxUse = Math.max(0, ...(s.cast ?? []).map((c) => uses.get(c) ?? 0));
     const job = videoJobFor(p, s, maxUse);
-    const engines = routeFor(job, settings.routing);
+    // Kling 4.0 direct first when the key is on the server (owner, 2026-11-15); the saved route stays the backup.
+    const engines = [...(klingKey() ? [KLING4] : []), ...routeFor(job, settings.routing).filter((x) => x !== KLING4)];
+    // The cast member's photos (face + body) — Kling direct keeps the person identical with them.
+    const personRefs: string[] = [];
+    for (const c of (s.cast ?? []).slice(0, 1)) {
+      const m = models.find((x) => x.id === c);
+      for (const u of (m?.refs ?? []).slice(0, 2)) {
+        const path = tryGetStoragePathFromUrl(u);
+        if (path) personRefs.push(signedUrl(path, 24 * 3600));
+      }
+    }
+    // Who speaks: their fixed Kling voice is fetched (or made once) only when the clip is really sent.
+    const speakerId = p.kind === "ugc" && s.say ? (s.cast ?? [])[0] ?? null : null;
     const refs: string[] = [];
     if (job === "identity")
       for (const c of s.cast ?? []) {
@@ -275,6 +292,8 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
     out.push({
       shotIdx: s.idx,
       endStill,
+      personRefs,
+      speakerId,
       engines,
       engineAt: 0,
       tries: 0,
