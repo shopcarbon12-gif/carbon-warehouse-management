@@ -112,6 +112,7 @@ export type VideoRequest = {
   /** Kling direct: the cast member's photos + fixed voice. */
   personRefUrls?: string[];
   voiceId?: string | null;
+  middleImageUrls?: string[];
   seconds: number;
   aspect: "9:16" | "16:9" | "1:1" | "4:5";
   audio: boolean;
@@ -141,7 +142,7 @@ export function buildVideoInput(v: VideoRequest): { input: Record<string, unknow
 export async function submitVideo(v: VideoRequest): Promise<JobRef & { cost: number; seconds: number }> {
   if (VIDEO_ENGINES[v.engineId]?.provider === "kling") {
     const { submitKlingOmni } = await import("./kling");
-    const k = await submitKlingOmni({ prompt: v.prompt, firstFrame: v.imageUrl, lastFrame: v.endImageUrl ?? null, personRefs: v.personRefUrls, voiceId: v.voiceId, seconds: v.seconds, aspect: v.aspect });
+    const k = await submitKlingOmni({ prompt: v.prompt, firstFrame: v.imageUrl, lastFrame: v.endImageUrl ?? null, middleFrames: v.middleImageUrls, personRefs: v.personRefUrls, voiceId: v.voiceId, seconds: v.seconds, aspect: v.aspect });
     return { provider: "kling", externalId: k.taskId, meta: { provider: "kling", engine: v.engineId, input: k.input }, cost: estimateVideoCost(v.engineId, k.seconds, v.audio), seconds: k.seconds };
   }
   const { input, seconds } = buildVideoInput(v);

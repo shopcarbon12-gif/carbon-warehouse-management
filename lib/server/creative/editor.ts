@@ -58,7 +58,7 @@ const nearest = (t: number, beats: number[]) => (beats.length ? beats.reduce((p,
  */
 export function buildEditPlan(input: {
   shots: Shot[];
-  media: Record<number, { kind: "video" | "image"; asset: string; duration?: number; audio?: boolean }>;
+  media: Record<number, { kind: "video" | "image"; asset: string; duration?: number; audio?: boolean; offset?: number }>;
   aspect: string;
   brand: BrandBrain;
   preset: Preset;
@@ -89,8 +89,10 @@ export function buildEditPlan(input: {
   for (const [i, s] of shots.entries()) {
     const m = input.media[s.idx];
     if (!m) continue;
-    let end = t + s.duration_s;
-    if (beats.length) {
+    // A slice of one continuous take: its exact length, never snapped to the beat, so the speech runs on unbroken.
+    const inTake = m.kind === "video" && m.offset != null && m.duration != null;
+    let end = t + (inTake ? m.duration! : s.duration_s);
+    if (beats.length && !inTake) {
       const snapped = nearest(end, beats);
       if (snapped - t >= 0.4) end = snapped;
     }
@@ -102,9 +104,13 @@ export function buildEditPlan(input: {
       shotIdx: s.idx,
       start: Math.round(t * 1000) / 1000,
       dur,
-      src: isVideo ? { kind: "video", asset: m.asset, mediaStart: 0, rate: m.duration && m.duration < dur ? Math.max(0.5, m.duration / dur) : 1, audio: Boolean(m.audio) } : { kind: "image", asset: m.asset },
+      src: isVideo
+        ? inTake
+          ? { kind: "video", asset: m.asset, mediaStart: m.offset!, rate: 1, audio: Boolean(m.audio) }
+          : { kind: "video", asset: m.asset, mediaStart: 0, rate: m.duration && m.duration < dur ? Math.max(0.5, m.duration / dur) : 1, audio: Boolean(m.audio) }
+        : { kind: "image", asset: m.asset },
       motion: isVideo ? "none" : i % 2 ? "kenburns_out" : "kenburns_in",
-      transitionIn: (i === 0 ? "hard_cut" : (s.transition_in as Transition)) || "hard_cut",
+      transitionIn: i === 0 || inTake ? "hard_cut" : (s.transition_in as Transition) || "hard_cut",
       text: txt ? { text: txt, style: i === 0 ? "hook" : /\$\d/.test(txt) ? "price" : i === heroIdx ? "slam" : "caption", at: 0.08, dur: Math.max(0.6, dur - 0.15) } : null,
       sfx: (s.sfx ?? []).map((n) => input.sfx?.[n.toLowerCase()]).filter((a): a is string => Boolean(a)).slice(0, 2).map((asset) => ({ asset, at: 0, volume: 0.6 })),
       isEndCard: false,

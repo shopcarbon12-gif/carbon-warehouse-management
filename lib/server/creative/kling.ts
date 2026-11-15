@@ -41,6 +41,8 @@ export type KlingClip = {
   prompt: string;
   firstFrame: string; // signed URL
   lastFrame?: string | null;
+  /** One continuous take: the in-between shots' pictures, in order (@m1, @m2 …). */
+  middleFrames?: string[];
   personRefs?: string[]; // signed URLs of the cast member's photos
   voiceId?: string | null;
   seconds: number;
@@ -49,9 +51,10 @@ export type KlingClip = {
 
 export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; seconds: number; input: unknown }> {
   const seconds = Math.min(30, Math.max(3, Math.round(v.seconds)));
-  const refs = (v.personRefs ?? []).slice(0, 3);
+  const mids = (v.middleFrames ?? []).slice(0, 7);
+  const refs = (v.personRefs ?? []).slice(0, Math.max(0, 10 - 2 - mids.length));
   const lead = [
-    `@f1 is the first frame${v.lastFrame ? " and @f2 is the last frame — the video moves from @f1 to @f2" : ""}.`,
+    `@f1 is the first frame${mids.length ? `, ${mids.map((_, i) => `@m${i + 1}`).join(", ")} are the keyframes in between, in order,` : ""}${v.lastFrame ? " and @f2 is the last frame — the video moves through them in order" : ""}.`,
     refs.length ? `${refs.map((_, i) => `@p${i + 1}`).join(", ")} show the same person: keep the face, hair, skin tone and body exactly identical in every frame.` : "",
     v.voiceId ? "Whenever the person speaks, she or he speaks in English using @v1 — the same voice for every word, with accurate lip synchronization." : "",
   ]
@@ -60,6 +63,7 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
   const contents: Record<string, unknown>[] = [
     { type: "prompt", text: `${lead} ${v.prompt}`.slice(0, 20000) },
     { type: "first_frame", url: v.firstFrame, id: "f1" },
+    ...mids.map((url, i) => ({ type: "middle_frame", url, id: `m${i + 1}` })),
     ...refs.map((url, i) => ({ type: "refer_image", url, id: `p${i + 1}` })),
     ...(v.lastFrame ? [{ type: "last_frame", url: v.lastFrame, id: "f2" }] : []),
     ...(v.voiceId ? [{ type: "voice", voice_id: v.voiceId, id: "v1" }] : []),

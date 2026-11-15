@@ -295,18 +295,19 @@ async function assetsFor(pool: Pool, p: ProjectRow, opts: { clips: boolean; noMu
   const brand = await getBrand(pool, p.tenant_id);
   const preset = presetOf(brand, p.preset);
   const stills = await stillsByShot(pool, p.id);
-  const clips = opts.clips ? await clipsByShot(pool, p.id) : new Map<number, { path: string; duration: number }>();
+  const clips = opts.clips ? await clipsByShot(pool, p.id) : new Map<number, { path: string; duration: number; offset?: number }>();
   const assets: Record<string, string> = {};
-  const media: Record<number, { kind: "video" | "image"; asset: string; duration?: number; audio?: boolean }> = {};
+  const media: Record<number, { kind: "video" | "image"; asset: string; duration?: number; audio?: boolean; offset?: number }> = {};
   for (const [idx, path] of stills) {
     const key = `still-${idx}.png`;
     assets[key] = signedUrl(path, 24 * 3600);
     media[idx] = { kind: "image", asset: key };
   }
   for (const [idx, c] of clips) {
-    const key = `clip-${idx}.mp4`;
+    // A shot inside a one-take clip shares the file: one asset per file, the shot plays its own slice.
+    const key = c.offset != null ? `take-${c.path.split("/").pop()!.replace(/[^a-zA-Z0-9.-]/g, "_")}` : `clip-${idx}.mp4`;
     assets[key] = signedUrl(c.path, 24 * 3600);
-    media[idx] = { kind: "video", asset: key, duration: c.duration, audio: p.kind === "ugc" };
+    media[idx] = { kind: "video", asset: key, duration: c.duration, audio: p.kind === "ugc", offset: c.offset };
   }
   const audio = await listAudio(pool, p.tenant_id);
   let track: Track | null = null;
@@ -553,6 +554,7 @@ export const projectTestClip: JobHandler = async (pool, job, setProgress) => {
     const have = await clipsByShot(pool, p.id);
     const first = (await clipPlan(pool, p, shots)).find((c) => !have.has(c.shotIdx));
     if (!first) return { status: "done", progress: "The first shot already has a real clip" };
+    if (first.takeShots) return { status: "done", progress: "This UGC is one continuous take — Make the video makes it in one go" };
     await setProgress(`Making a test clip of shot ${first.shotIdx + 1} on ${first.engines[0]}`);
     const clip = await submitClip(pool, p, first);
     return { status: "waiting", afterSeconds: 30, payload: { clip }, progress: `Test clip of shot ${first.shotIdx + 1} on the video engine (1–4 min)` };
@@ -568,7 +570,8 @@ export async function testClipEstimate(pool: Pool, p: ProjectRow): Promise<numbe
   if (p.kind !== "video" && p.kind !== "ugc") return null;
   const have = await clipsByShot(pool, p.id);
   const first = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).find((c) => !have.has(c.shotIdx));
-  if (!first) return null;
+  // A one-take UGC is a single clip: Make the video IS the one clip, so there is nothing smaller to test.
+  if (!first || first.takeShots) return null;
   const { estimateVideoCost } = await import("./routing");
   return Math.round((estimateVideoCost(first.engines[0], first.seconds, first.audio) + 0.03) * 100) / 100;
 }

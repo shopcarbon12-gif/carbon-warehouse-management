@@ -193,7 +193,7 @@ export function videoJobFor(p: ProjectRow, shot: Shot, castUseCount: number): Vi
   return "fashion_motion";
 }
 
-export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; personRefs?: string[]; voiceId?: string | null; speakerId?: string | null; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
+export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; personRefs?: string[]; voiceId?: string | null; speakerId?: string | null; takeShots?: { idx: number; seconds: number }[]; middleStills?: string[]; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
 
 /** Submit one clip (first frame = the approved still). */
 export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, "genId" | "status"> & { genId?: string }): Promise<ClipState> {
@@ -205,7 +205,7 @@ export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, 
   }
   const cost = estimateVideoCost(engineId, st.seconds, st.audio);
   await spendGate(pool, p.tenant_id, "fal", cost);
-  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), endImageUrl: st.endStill ? signedUrl(st.endStill, 24 * 3600) : undefined, referenceUrls: st.refs, personRefUrls: st.personRefs, voiceId: st.voiceId, seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
+  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), endImageUrl: st.endStill ? signedUrl(st.endStill, 24 * 3600) : undefined, referenceUrls: st.refs, personRefUrls: st.personRefs, voiceId: st.voiceId, middleImageUrls: (st.middleStills ?? []).map((x) => signedUrl(x, 24 * 3600)), seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
   const genId = await insertGen(pool, p.tenant_id, { projectId: p.id, kind: "clip", shotIdx: st.shotIdx, provider: e.provider ?? "fal", model: engineId, prompt: st.prompt, attempt: st.attempt, inputs: { ...ref.meta, still: st.still }, status: "running" });
   await pool.query(`UPDATE creative_generations SET external_id = $2, cost_usd = $3 WHERE id = $1::uuid`, [genId, ref.externalId, ref.cost]);
   await recordSpend(pool, p.tenant_id, { provider: "fal", what: `clip shot ${st.shotIdx + 1} (${VIDEO_ENGINES[engineId].label}, ${ref.seconds}s)`, cost: ref.cost, projectId: p.id, generationId: genId });
@@ -233,11 +233,20 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   }
   const { bytes } = await fetchBytes(res.url!, 300 * 1024 * 1024);
   const path = await putFile(`creative/projects/${p.id}/clip-${st.shotIdx}-${st.genId.slice(0, 8)}.mp4`, bytes, "video/mp4");
-  const k = await keyframes(bytes, 4, 768);
+  const k = await keyframes(bytes, st.takeShots ? 6 : 4, 768);
+  // One take: where each shot sits inside it, scaled to the real length — the edit plays it back without a gap.
+  const planned = (st.takeShots ?? []).reduce((a, x) => a + x.seconds, 0);
+  let at = 0;
+  const take = st.takeShots?.map((x) => {
+    const dur = planned ? (x.seconds / planned) * k.duration : 0;
+    const r = { idx: x.idx, offset: Math.round(at * 1000) / 1000, dur: Math.round(dur * 1000) / 1000 };
+    at += dur;
+    return r;
+  });
   const crit = await garmentRefs(pool, p.tenant_id, shot.products?.length ? shot.products : p.products);
   const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.puts_on) });
   await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, output_meta = $4::jsonb, critic = $5::jsonb, updated_at = now() WHERE id = $1::uuid`, [
-    st.genId, c.pass ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height }), JSON.stringify(c),
+    st.genId, c.pass ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height, ...(take ? { take } : {}) }), JSON.stringify(c),
   ]);
   if (c.pass) return { ...st, status: "done" };
   if (st.attempt > MAX_RETRIES) {
@@ -313,6 +322,34 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
       aspect: "9:16",
     });
   }
+  // UGC on Kling direct: the whole thing is ONE continuous phone take (owner, 2026-11-15) — the shots' pictures
+  // become its keyframes and every line is spoken in order in one voice; the edit cuts it back at the shots.
+  if (p.kind === "ugc" && out.length >= 2 && out[0].engines[0] === KLING4) {
+    const take = out.slice(0, 9);
+    const seconds = Math.min(30, take.reduce((a, c) => a + c.seconds, 0));
+    const byIdx = new Map(shots.map((x) => [x.idx, x]));
+    const lines = take.map((c, i) => {
+      const s = byIdx.get(c.shotIdx)!;
+      const ref = i === 0 ? "@f1" : i === take.length - 1 ? "@f2" : `@m${i}`;
+      return `${i === 0 ? "Start" : i === take.length - 1 ? "End" : "Then"} on ${ref} (~${c.seconds}s): ${s.subject_action}${s.say ? ` — she says: "${s.say}"` : ""}.`;
+    });
+    return [
+      {
+        ...take[0],
+        engines: [KLING4],
+        seconds,
+        endStill: take[take.length - 1].still,
+        middleStills: take.slice(1, -1).map((c) => c.still),
+        takeShots: take.map((c) => ({ idx: c.shotIdx, seconds: c.seconds })),
+        speakerId: take.find((c) => c.speakerId)?.speakerId ?? null,
+        prompt: [
+          "ONE continuous vertical phone video, a single take with no cuts: a real person filming herself for her followers, handheld, natural light, real room sound.",
+          ...lines,
+          "Move naturally from each keyframe to the next. Keep the clothes, face and room exactly as in the keyframes. Realistic fabric motion. No text on screen.",
+        ].join("\n"),
+      },
+    ];
+  }
   return out;
 }
 
@@ -336,10 +373,16 @@ export async function stillsByShot(pool: Pool, projectId: string): Promise<Map<n
   );
   return new Map(r.rows.map((x) => [x.shot_idx, x.output_path]));
 }
-export async function clipsByShot(pool: Pool, projectId: string): Promise<Map<number, { path: string; duration: number }>> {
-  const r = await pool.query<{ shot_idx: number; output_path: string; output_meta: { duration?: number } | null }>(
+export async function clipsByShot(pool: Pool, projectId: string): Promise<Map<number, { path: string; duration: number; offset?: number }>> {
+  const r = await pool.query<{ shot_idx: number; output_path: string; output_meta: { duration?: number; take?: { idx: number; offset: number; dur: number }[] } | null }>(
     `SELECT DISTINCT ON (shot_idx) shot_idx, output_path, output_meta FROM creative_generations WHERE project_id = $1::uuid AND kind = 'clip' AND status = 'done' ORDER BY shot_idx, created_at DESC`,
     [projectId],
   );
-  return new Map(r.rows.map((x) => [x.shot_idx, { path: x.output_path, duration: x.output_meta?.duration ?? 5 }]));
+  const out = new Map<number, { path: string; duration: number; offset?: number }>();
+  for (const x of r.rows) {
+    // One continuous take covers several shots: each shot gets its slice (offset + length) of the same file.
+    if (x.output_meta?.take?.length) for (const t of x.output_meta.take) out.set(t.idx, { path: x.output_path, duration: t.dur, offset: t.offset });
+    else if (!out.has(x.shot_idx)) out.set(x.shot_idx, { path: x.output_path, duration: x.output_meta?.duration ?? 5 });
+  }
+  return out;
 }
