@@ -32,7 +32,8 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
     `CREATOR PERSONA: ${v.persona}.`,
     "HOW SHE TALKS (owner, 2026-11-15: \"she shouldn't talk like a walking advertisement — like a woman filming herself in front of the mirror, recommending it\"): exactly like a real girl talking to her phone in her room — casual, warm, a little spontaneous, full sentences the way people actually speak (\"okay so…\", \"honestly\", \"look at this\", \"I love that…\", \"it's so soft\"). She reacts to the piece: how it feels, how it fits, how she'd wear it, what she likes about one or two details. Then an easy, friendly recommendation (\"you guys need this, it's on shopcarbon.com\"). NEVER slogans, taglines or ad copy — no \"locked in\", \"details do the talking\", \"no extra\", \"elevate your look\", no brand-speak, no lists of features. It must not sound like a TV commercial.",
     `FACTS SHEET (the ONLY facts you may use): ${JSON.stringify(v.facts)}`,
-    v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · hook idea: ${v.concept.hook?.first_1_5s ?? ""}` : "",
+    v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · what the first second LOOKS like (a picture, not words to say): ${v.concept.hook?.first_1_5s ?? ""}` : "",
+    "hook, every lines[].say and cta are ONLY the words she says out loud, in first person — never a description of what she does, never her name, never stage directions (those go in lines[].action). The cta is her one closing sentence; don't repeat the shop line twice.",
     "Structure: a natural opener (≤ 8 words, e.g. \"Okay, you guys have to see this dress\") → 2–4 things she says about how it feels / fits / one detail she loves (each line names the fact it uses; feelings like 'I love it' are fine, invented facts are not) → a casual recommendation that mentions shopcarbon.com. About 30–45 spoken words in total, 12–18 seconds.",
     "FORBIDDEN: invented reviews, ratings, sales numbers, 'best seller', 'everyone is buying', claiming to be a customer ('I bought this'), any claim not in the facts, other brands, where it is made.",
     "banned_check: answer honestly whether your script breaks any rule (all should be false).",
@@ -42,6 +43,10 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
   for (let i = 0; i < 2; i++) {
     const s = (await json(pool, prompt + (i ? "\n\nYOUR LAST SCRIPT BROKE A RULE — rewrite without any review, stat or customer claim." : ""), UgcScript, { tenantId, what: "UGC script", projectId: v.projectId, maxOutputTokens: 2000 })).value;
     const all = [s.hook, ...s.lines.map((l) => l.say), s.cta].join(" ");
+    // A spoken line that reads like a stage direction ("Elena pulls the hood up…") is rejected and rewritten.
+    const name = (v.persona.match(/^[A-Z][a-z]+/)?.[0] ?? "").trim();
+    if (i === 0 && /\b(she|her|pulls|steps|turns|the phone is|camera)\b/i.test(s.hook + " " + s.cta)) continue;
+    if (i === 0 && name && new RegExp(`\\b${name}\\b`).test(all)) continue;
     if (!FAKE.test(all) && !s.banned_check.invented_reviews && !s.banned_check.invented_stats && !s.banned_check.claims_to_be_customer) return s;
   }
   throw new Error("The UGC script kept breaking the honesty rules (reviews / stats / customer claims). Try a different concept.");
