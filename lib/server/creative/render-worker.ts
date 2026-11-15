@@ -64,6 +64,8 @@ function ffmpegAbs(): string | null {
 const ENGINES: Record<string, RenderEngine> = { hyperframes: HyperFramesEngine };
 
 export function uploadSig(genId: string, secret = process.env.CREATIVE_LINK_SECRET || process.env.SESSION_SECRET || ""): string {
+  // No secret on the server → no valid signature at all (an empty key would be guessable).
+  if (!secret) return "";
   return crypto.createHmac("sha256", secret).update(`render:${genId}`).digest("hex").slice(0, 40);
 }
 

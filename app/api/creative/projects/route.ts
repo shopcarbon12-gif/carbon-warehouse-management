@@ -13,6 +13,7 @@ import { createProject } from "@/lib/server/creative/pipeline";
 import { createCampaign } from "@/lib/server/creative/campaign";
 import { appFileUrl } from "@/lib/server/creative/storage";
 import { ANIMATED_TEMPLATES, type AnimatedTemplate } from "@/lib/server/creative/animated";
+import { PlainError } from "@/lib/server/creative/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +74,11 @@ async function POST_handler(req: Request) {
   try {
     const b = await body(req, schema);
     const by = g.session.email ?? null;
+    // An inspiration ad must be one of this tenant's Radar ads (its pictures are read for originality checks).
+    if (b.inspirationAdId) {
+      const own = await g.pool.query(`SELECT 1 FROM creative_ads WHERE id = $1::uuid AND tenant_id = $2::uuid`, [b.inspirationAdId, g.session.tid]);
+      if (!own.rows[0]) throw new PlainError("That Radar ad isn't in your Radar.");
+    }
     let out: { projectId: string; campaignId?: string };
     if (b.kind === "campaign") {
       const c = await createCampaign(g.pool, g.session.tid, { name: b.title ?? "New drop", products: b.products, preset: b.preset, cast: b.cast, inspirationAdId: b.inspirationAdId }, by);

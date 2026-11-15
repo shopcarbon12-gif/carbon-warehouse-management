@@ -138,7 +138,13 @@ async function POST_handler(req: Request) {
           const b = await g.pool.query<{ id: string }>(`SELECT id::text FROM creative_boards WHERE tenant_id = $1::uuid ORDER BY created_at LIMIT 1`, [tid]);
           boardId = b.rows[0]?.id ?? (await g.pool.query<{ id: string }>(`INSERT INTO creative_boards (tenant_id, name) VALUES ($1::uuid, 'Saved') RETURNING id::text`, [tid])).rows[0].id;
         }
-        if (a.on) await g.pool.query(`INSERT INTO creative_board_items (board_id, ad_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT DO NOTHING`, [boardId, a.adId]);
+        // Board and ad must both be this tenant's (review 2026-11-15).
+        if (a.on)
+          await g.pool.query(
+            `INSERT INTO creative_board_items (board_id, ad_id) SELECT b.id, ad.id FROM creative_boards b, creative_ads ad
+              WHERE b.id = $1::uuid AND b.tenant_id = $3::uuid AND ad.id = $2::uuid AND ad.tenant_id = $3::uuid ON CONFLICT DO NOTHING`,
+            [boardId, a.adId, tid],
+          );
         else await g.pool.query(`DELETE FROM creative_board_items WHERE ad_id = $1::uuid AND board_id IN (SELECT id FROM creative_boards WHERE tenant_id = $2::uuid)`, [a.adId, tid]);
         return NextResponse.json({ ok: true });
       }

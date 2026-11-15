@@ -104,7 +104,7 @@ const putSchema = z
         voice: z.object({ description: z.string().max(300), samples: z.array(z.object({ text: z.string().max(300), verdict: z.enum(["up", "down"]).nullable() })).max(20) }).optional(),
         dos: z.array(z.string().max(160)).max(30).optional(),
         donts: z.array(z.string().max(160)).max(30).optional(),
-        fonts: z.object({ headline: z.string().max(60), body: z.string().max(60), headlineFile: z.string().nullable().optional(), bodyFile: z.string().nullable().optional() }).optional(),
+        fonts: z.object({ headline: z.string().max(60), body: z.string().max(60), headlineFile: z.string().max(300).regex(/^creative\/brand\/[0-9a-f-]{36}\/[\w.\-]+$/).nullable().optional(), bodyFile: z.string().max(300).regex(/^creative\/brand\/[0-9a-f-]{36}\/[\w.\-]+$/).nullable().optional() }).optional(),
         colors: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
         editStyle: z.record(z.string(), z.unknown()).optional(),
         platform: z.object({ default: z.string(), tiktok: z.boolean() }).optional(),

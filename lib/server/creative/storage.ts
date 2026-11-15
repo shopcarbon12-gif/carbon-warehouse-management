@@ -63,6 +63,26 @@ export function signedUrl(path: string, ttlSeconds = 6 * 3600): string {
   return `${WMS_BASE}/api/public/creative/f/${body}.${sig}${ext}`;
 }
 
+/** Constant-time compare that never throws (multi-byte input made timingSafeEqual throw → a 500). */
+export function safeEqual(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+/**
+ * Only media types are ever served back (review 2026-11-15: a stored third-party "image" that was really SVG /
+ * HTML would run script on the WMS origin). Anything else goes out as a download.
+ */
+export function servedHeaders(contentType: string): Record<string, string> {
+  const ok = /^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime)|audio\/[\w.+-]+|font\/[\w.+-]+)$/i.test(contentType.split(";")[0].trim());
+  return {
+    "Content-Type": ok ? contentType : "application/octet-stream",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
+  };
+}
+
 export function verifySigned(token: string): string | null {
   const t = token.replace(/\.(jpg|jpeg|png|webp|mp4|mp3|wav|m4a|woff2?|ttf|otf)$/i, "");
   const parts = t.split(".");
@@ -70,7 +90,7 @@ export function verifySigned(token: string): string | null {
   const [body, sig] = parts;
   if (!body || !sig) return null;
   const want = crypto.createHmac("sha256", secret()).update(body).digest("base64url").slice(0, 32);
-  if (want.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(want), Buffer.from(sig))) return null;
+  if (!safeEqual(want, sig)) return null;
   try {
     const v = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { p: string; e: number };
     if (!v.p || v.e < Date.now() / 1000 || isRadarPath(v.p)) return null;

@@ -15,6 +15,7 @@
  */
 import { dateOf, embeddedJson, findObjects, str, withBrowser, type Captured } from "./browser";
 import type { AdapterCtx, NormalizedAd, NormalizedMedia, SourceAdapter } from "./ingest";
+import { PlainError } from "../config";
 
 const MEDIA_RE = /https?:\\?\/\\?\/[^"'\s<>\\]+?\.(?:jpe?g|png|webp|mp4)(?:\?[^"'\s<>\\]*)?/gi;
 const unescape = (u: string) => u.replace(/\\\//g, "/").replace(/\\u0026/g, "&").replace(/&amp;/g, "&");
@@ -395,9 +396,23 @@ export const SOURCE_DEFAULTS: Record<string, { enabled: boolean; priority: numbe
 
 /* ------------------------------------------------------------------ manual import */
 
+/** A pasted link must point at the public internet — never the server's own network (review 2026-11-15). */
+async function assertPublicUrl(url: string): Promise<void> {
+  const { lookup } = await import("node:dns/promises");
+  const u = new URL(url);
+  if (!/^https?:$/.test(u.protocol)) throw new PlainError("Paste a normal web link (https://…).");
+  const addrs = await lookup(u.hostname, { all: true }).catch(() => []);
+  if (!addrs.length) throw new PlainError("That link's website can't be found.");
+  const priv = (a: string) => /^(10\.|127\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(a) || a === "::1" || /^f[cd]|^fe80/i.test(a);
+  if (addrs.some((x) => priv(x.address))) throw new PlainError("That link points inside a private network — paste the public ad link.");
+}
+
 export async function manualFromUrl(url: string): Promise<NormalizedAd> {
-  const r = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; CarbonWMS-Radar/1.0)" } });
-  if (!r.ok) throw new Error(`That link answered HTTP ${r.status}`);
+  await assertPublicUrl(url);
+  const r = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; CarbonWMS-Radar/1.0)" } }).catch(() => null);
+  if (!r) throw new PlainError("That link didn't answer — check it opens in your browser.");
+  if (r.url && r.url !== url) await assertPublicUrl(r.url);
+  if (!r.ok) throw new PlainError(`That link answered HTTP ${r.status} — it may need a login. Download the ad and upload the file instead.`);
   const ct = r.headers.get("content-type") ?? "";
   const host = new URL(url).hostname.replace(/^www\./, "");
   if (/^(image|video)\//.test(ct)) {

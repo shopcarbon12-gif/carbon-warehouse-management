@@ -53,7 +53,7 @@ export async function createProject(pool: Pool, tenantId: string, v: CreateInput
   );
   const id = r.rows[0].id;
   await enqueue(pool, tenantId, "project_concepts", {}, { projectId: id, requestedBy: by, progress: "Reading the products" });
-  if (v.ideaId) await pool.query(`UPDATE creative_ideas SET status = 'made' WHERE id = $1::uuid`, [v.ideaId]);
+  if (v.ideaId) await pool.query(`UPDATE creative_ideas SET status = 'made' WHERE id = $1::uuid AND tenant_id = $2::uuid`, [v.ideaId, tenantId]);
   return id;
 }
 
