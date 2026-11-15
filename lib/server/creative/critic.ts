@@ -57,7 +57,7 @@ export async function criticize(
   const brand = await getBrand(pool, tenantId);
   // Up to 12 frames of a clip / take (6 missed the ring coming off in a 29 s take), then the real product + person.
   const frames = v.frames.slice(0, 12);
-  const imgs = [...frames, ...v.garmentRefs.slice(0, 6), ...(v.personRef ? [v.personRef] : [])];
+  const imgs = [...frames, ...v.garmentRefs.slice(0, 8), ...(v.personRef ? [v.personRef] : [])];
   const prompt = [
     "You are the quality gate for CARBON's ads. Be strict — the owner must never see anything fake, off-brand or showing the garment wrong.",
     brandBlock(brand, v.preset, v.ugc),

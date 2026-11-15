@@ -287,7 +287,7 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
 /** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
 const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
 type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
-type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean };
+type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean; after?: StillTask[] };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
 function continuityOf(shots: Shot[]) {
@@ -321,7 +321,9 @@ async function stillTaskInput(pool: Pool, p: ProjectRow, shots: Shot[], t: Still
     const firstFrame = firstPath ? (await getFile(firstPath)).bytes : undefined;
     return { shot: endShot(s), opts: { extra, kind: "still_end" as const, firstFrame, continuity: anchor ?? undefined, outfit } };
   }
-  return { shot: s, opts: { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit } };
+  // The anchor picture itself never copies its own previous picture (a redraw starts it fresh).
+  const isAnchor = continuityOf(shots).anchorShot?.idx === s.idx;
+  return { shot: s, opts: { extra, notWornYet: notWorn(s), continuity: isAnchor ? undefined : anchor ?? undefined, outfit } };
 }
 
 async function anchorBytes(pool: Pool, p: ProjectRow, shots: Shot[]): Promise<Buffer | null> {
@@ -430,7 +432,13 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
         if (t.kind === "still" && s?.puts_on && s.end_state) next.push({ idx: t.idx, kind: "still_end", attempt: 1 });
       } else retry(j.critic ? retryHint(j.critic) : "try again");
     }
-    if (next.length) return submitStillBatch(pool, p, shots, next, { ...st, failed }, setProgress);
+    // The other shots wait for the anchor (they copy its face, outfit and room): sent once it passed or ran out of tries.
+    let after = st.after ?? [];
+    if (after.length && !next.some((t) => t.kind === "still" && t.idx === anchorShot?.idx)) {
+      next.push(...after);
+      after = [];
+    }
+    if (next.length) return submitStillBatch(pool, p, shots, next, { ...st, failed, after }, setProgress);
     return finishStills(pool, p, job.requested_by, failed);
   }
 
@@ -445,7 +453,18 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
   const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)) && !endOnly.some((e) => e.idx === s.idx));
   const failed: number[] = [];
   const extra = st.extra;
-  // The ANCHOR picture is drawn first, right now (every other shot copies its face, outfit and room).
+  const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
+  const anchorTodo = Boolean(anchorShot && todo.some((x) => x.idx === anchorShot.idx));
+  if (!STILLS_LIVE) {
+    // EVERY picture goes through the half-price batch, the anchor too (owner, 2026-11-15: "it should all go together
+    // to batch, and they all should come together"). The anchor goes first; the others follow in the next batch
+    // because they copy its face, outfit and room. Nothing is shown until the whole set is done.
+    const others: StillTask[] = [...endOnly.map((s) => ({ idx: s.idx, kind: "still_end" as const, attempt: 1 })), ...rest.map((s) => ({ idx: s.idx, kind: "still" as const, attempt: 1 }))];
+    if (anchorTodo) return submitStillBatch(pool, p, shots, [{ idx: anchorShot!.idx, kind: "still", attempt: 1 }], { ...st, failed, round: 0, after: others }, setProgress);
+    if (!others.length) return finishStills(pool, p, job.requested_by, failed);
+    return submitStillBatch(pool, p, shots, others, { ...st, failed, round: 0, after: [] }, setProgress);
+  }
+  // Live (CREATIVE_STILLS_LIVE=1): the ANCHOR picture is drawn first, right now (every other shot copies it).
   let anchor: Buffer | null = null;
   const anchorPath = anchorShot ? have.get(anchorShot.idx) : undefined;
   if (anchorShot && anchorPath && !todo.some((x) => x.idx === anchorShot.idx)) anchor = (await getFile(anchorPath)).bytes;
@@ -454,14 +473,6 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
     const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null, notWornYet: notWorn(anchorShot) });
     if (r) anchor = (await getFile(r.path)).bytes;
     else failed.push(anchorShot.idx + 1);
-  }
-  const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
-  // The anchor IS the put-on shot (a one-shot "off the hanger"): its "now wearing it" frame still has to be drawn.
-  const anchorEnd = anchorShot && anchor && anchorShot.puts_on && anchorShot.end_state && todo.some((x) => x.idx === anchorShot.idx);
-  if (!STILLS_LIVE) {
-    const tasks: StillTask[] = [...(anchorEnd ? [{ idx: anchorShot!.idx, kind: "still_end" as const, attempt: 1 }] : []), ...endOnly.map((s) => ({ idx: s.idx, kind: "still_end" as const, attempt: 1 })), ...rest.map((s) => ({ idx: s.idx, kind: "still" as const, attempt: 1 }))];
-    if (!tasks.length) return finishStills(pool, p, job.requested_by, failed);
-    return submitStillBatch(pool, p, shots, tasks, { ...st, failed, round: 0 }, setProgress);
   }
   // Live (CREATIVE_STILLS_LIVE=1): all at the same time at full price.
   let finished = 0;

@@ -62,11 +62,10 @@ async function insertGen(pool: Pool, tenantId: string, v: { projectId: string; k
   return r.rows[0].id;
 }
 
-/** Garment references for the critic: cut-outs + detail crops. */
 /** The real product for the quality check: the same references the picture model gets (real photos included). */
 async function garmentRefs(pool: Pool, tenantId: string, products: string[]): Promise<Buffer[]> {
   const out: Buffer[] = [];
-  for (const g of await twinRefs(pool, tenantId, products, { max: 6 }).catch(() => [])) {
+  for (const g of await twinRefs(pool, tenantId, products, { max: 8 }).catch(() => [])) {
     try {
       out.push(await sharp(g.bytes).resize(768, 768, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
     } catch {
@@ -145,6 +144,9 @@ export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: 
     opts.notWornYet
       ? `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products. In THIS frame the piece is NOT worn yet — it is on the hanger / in the bag / in ${he ? "his" : "her"} hands exactly as the shot says, and it must look EXACTLY like the references (colour, wash, graphic letter-for-letter, hardware). ${he ? "He" : "She"} wears a plain neutral basic (plain white or black tank top or tee) where the piece will go.`
       : `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
+    garments.some((g) => g.angle === "product photo")
+      ? "COLOURWAYS: some product references are the same piece in its other colourways. Use ONLY the colourway this shot names (if none is named, the first reference's colour); the shape, toe, sole, stripes, logo and stitching are identical in every colourway — copy them exactly, never add lines, stripes or panels that the references don't show."
+      : "",
     ugc
       ? "Photoreal frame from a real person's phone video: real skin texture, natural hands, casual and unposed, everyday background with real-life clutter kept tidy. No added text, captions, watermarks or other brands' logos."
       : "Photoreal fashion campaign photo, real skin texture, natural hands. No added text, captions, watermarks or other brands' logos.",

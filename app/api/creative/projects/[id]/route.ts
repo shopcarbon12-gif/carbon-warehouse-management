@@ -38,10 +38,17 @@ export async function GET(req: Request, { params }: Ctx) {
     const concepts = ((v.project.concepts ?? []) as { storyboard?: { thumb?: string }[] }[]).map((c) => ({ ...c, storyboard: (c.storyboard ?? []).map((f) => ({ ...f, thumbUrl: appFileUrl(f.thumb ?? null) })) }));
     const music = await listAudio(g.pool, g.session.tid, "music");
     const trackId = (v.project.edit_plan as { trackId?: string } | null)?.trackId ?? null;
+    // While the pictures are being drawn, the new ones stay hidden until the whole set is done (owner, 2026-11-15:
+    // "they all should come together").
+    const drawing = (
+      await g.pool.query<{ created_at: Date }>(`SELECT created_at FROM creative_jobs WHERE project_id = $1::uuid AND kind = 'project_stills' AND status IN ('queued','running','waiting') ORDER BY created_at DESC LIMIT 1`, [id])
+    ).rows[0]?.created_at;
+    const shownStill = (x: { created_at: Date | string }) => !drawing || new Date(x.created_at).getTime() < new Date(drawing).getTime();
     return NextResponse.json({
+      stillsDrawing: Boolean(drawing),
       project: { ...v.project, concepts },
       // The owner only sees what passed the critic (spec §9): rejected / failed attempts stay hidden.
-      stills: v.generations.filter((x) => x.kind === "still" && x.status === "done").map((x) => ({ id: x.id, shotIdx: x.shot_idx, url: appFileUrl(x.output_path), critic: x.critic, note: criticSummary(x.critic), attempt: x.attempt, cost: Number(x.cost_usd ?? 0) })),
+      stills: v.generations.filter((x) => x.kind === "still" && x.status === "done" && shownStill(x)).map((x) => ({ id: x.id, shotIdx: x.shot_idx, url: appFileUrl(x.output_path), critic: x.critic, note: criticSummary(x.critic), attempt: x.attempt, cost: Number(x.cost_usd ?? 0) })),
       clips: v.generations.filter((x) => x.kind === "clip" && x.status === "done").map((x) => ({ id: x.id, shotIdx: x.shot_idx, url: appFileUrl(x.output_path), engine: x.model, critic: x.critic, note: criticSummary(x.critic), cost: Number(x.cost_usd ?? 0) })),
       renders: v.generations
         .filter((x) => x.kind === "render" && x.status === "done" && x.output_path)

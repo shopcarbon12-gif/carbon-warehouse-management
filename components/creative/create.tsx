@@ -212,6 +212,7 @@ type Shot = { idx: number; subject_action: string; camera_move: string; lens: st
 type View = {
   project: { id: string; title: string; kind: string; status: string; step_note: string | null; concepts: Concept[] | null; concept_idx: number | null; shot_list: { shots: Shot[] } | null; captions: { options?: string[]; hashtags?: string[] } | null; sizes: string[]; role: string | null; campaign_id: string | null; preset: string; feedback: string | null };
   stills: { id: string; shotIdx: number; url: string; note: string; critic: { overall: number } | null }[];
+  stillsDrawing?: boolean;
   clips: { id: string; shotIdx: number; url: string; engine: string; note: string }[];
   renders: { id: string; size: string | null; draft: boolean; url: string; poster: string | null; kind: "video" | "image"; shotIdx: number | null; createdAt: string }[];
   rendersRunning: number;
@@ -508,7 +509,10 @@ function ProjectView({ id }: { id: string }) {
         <ScriptBox key={data.scriptText} text={data.scriptText} versions={data.scriptVersions} final={p.status === "final"} busy={busy} act={act} />
       ) : null}
 
-      {/* Stills (critic-passed only) */}
+      {/* Stills (critic-passed only) — new ones appear all together when the whole set is done */}
+      {data.stillsDrawing ? (
+        <p className={`mb-3 text-sm ${muted}`}>The pictures are being drawn in the half-price batch. They all appear here together once every one has passed the quality check (9.5/10) — a desktop alert comes when they&rsquo;re ready.</p>
+      ) : null}
       {data.stills.length ? (
         <section className="mb-6">
           <h2 className={`${head} mb-2 text-xl`}>Shots <span className={`text-sm ${muted}`}>passed the quality check{data.attempts.rejected ? ` · ${data.attempts.rejected} rejected tries hidden` : ""}</span></h2>
