@@ -48,6 +48,51 @@ export async function generateImage(req: { prompt: string; refs?: ImageRef[]; si
   return { bytes: Buffer.from(b64, "base64"), cost: IMAGE_COST[quality] + refCost, model };
 }
 
+/* ------------------------------------------------------------------ OpenAI Batch: pictures at half price */
+
+/**
+ * Prompt-only pictures through the OpenAI Batch API (half the price; done within 24 h, usually
+ * minutes). The tap only queues it: the job checks back later, so nothing waits on the answer.
+ */
+export async function submitImageBatch(
+  lines: { customId: string; prompt: string; size?: Size; quality?: "high" | "medium" | "low" }[],
+  meta: Record<string, string>,
+): Promise<{ batchId: string }> {
+  if (!lines.length) throw new Error("empty batch");
+  const model = imageModel();
+  const jsonl = lines
+    .map((l) => JSON.stringify({ custom_id: l.customId, method: "POST", url: "/v1/images/generations", body: { model, prompt: l.prompt, size: l.size ?? "1024x1536", quality: l.quality ?? "medium", n: 1 } }))
+    .join("\n");
+  const client = openai();
+  const file = await client.files.create({ file: new File([jsonl], "creative-images.jsonl", { type: "application/jsonl" }), purpose: "batch" });
+  const batch = await client.batches.create({ input_file_id: file.id, endpoint: "/v1/images/generations" as "/v1/responses", completion_window: "24h", metadata: meta });
+  return { batchId: batch.id };
+}
+
+export type ImageBatchOutcome =
+  | { state: "pending"; status: string }
+  | { state: "failed"; status: string; error: string }
+  | { state: "done"; results: { customId: string; bytes?: Buffer; error?: string }[] };
+
+export async function collectImageBatch(batchId: string): Promise<ImageBatchOutcome> {
+  const client = openai();
+  const b = await client.batches.retrieve(batchId);
+  if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) return { state: "pending", status: b.status };
+  if (b.status !== "completed") return { state: "failed", status: b.status, error: b.errors?.data?.[0]?.message ?? b.status };
+  const results: { customId: string; bytes?: Buffer; error?: string }[] = [];
+  for (const fileId of [b.output_file_id, b.error_file_id].filter(Boolean) as string[]) {
+    const text = await (await client.files.content(fileId)).text();
+    for (const line of text.split("\n")) {
+      if (!line.trim()) continue;
+      const row = JSON.parse(line);
+      const b64 = (row.response?.body?.data as { b64_json?: string }[] | undefined)?.[0]?.b64_json;
+      if (b64) results.push({ customId: row.custom_id, bytes: Buffer.from(b64, "base64") });
+      else results.push({ customId: row.custom_id, error: row.error?.message ?? row.response?.body?.error?.message ?? "no picture (safety filter?)" });
+    }
+  }
+  return { state: "done", results };
+}
+
 /* ------------------------------------------------------------------ fal.ai video */
 
 const QUEUE = "https://queue.fal.run";

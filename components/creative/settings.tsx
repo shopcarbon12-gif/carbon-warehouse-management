@@ -24,7 +24,9 @@ type S = {
   audio: { id: string; kind: string; name: string; bpm: number | null; duration_s: number | null; moods: string[]; license: string; url: string; beats: { drop: number | null } | null }[];
   recipes: { key: string; name: string; idea: string; status: string; media_types: string[]; score: number | null }[];
   locations: { id: string; name: string; description: string; url: string | null; source: string }[];
-  costs: { candidates: number; sheet: number };
+  costs: { candidates: number; sheet: number; lookSamples: number };
+  /** Look keys with a sample-frame batch still out ("*" = every Look without frames). */
+  looksInBatch: string[];
 };
 
 const TABS = ["brand", "models", "music", "locations", "caps", "radar", "more"] as const;
@@ -33,7 +35,7 @@ export function CreativeSettings() {
   const sp = useSearchParams();
   const router = useRouter();
   const tab = (TABS as readonly string[]).includes(sp.get("tab") ?? "") ? (sp.get("tab") as (typeof TABS)[number]) : "brand";
-  const { data, error, mutate } = useSWR<S>("/api/creative/settings", fetcher);
+  const { data, error, mutate } = useSWR<S>("/api/creative/settings", fetcher, { refreshInterval: (d) => (d?.looksInBatch?.length ? 20_000 : 0) });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
@@ -52,6 +54,16 @@ export function CreativeSettings() {
   }
   const put = (json: Record<string, unknown>) => run("save", () => api("/api/creative/settings", { method: "PUT", json }));
   const act = <T,>(json: Record<string, unknown>, label = String(json.action)) => run(label, () => api<T>("/api/creative/settings", { method: "POST", json }));
+  /** Queue-and-go (OpenAI batch): never sets `busy`, so every other button stays free. */
+  const queue = async (json: Record<string, unknown>) => {
+    setErr(null);
+    try {
+      await api("/api/creative/settings", { method: "POST", json });
+      await mutate();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
   const upload = (fd: FormData, label = "upload") => run(label, () => api("/api/creative/upload", { method: "POST", body: fd }));
 
   return (
@@ -61,7 +73,7 @@ export function CreativeSettings() {
         {TABS.map((t) => <button key={t} className={chip(tab === t)} onClick={() => router.replace(`/creative/settings?tab=${t}`)}>{t === "more" ? "⋯ More" : t === "brand" ? "Brand Brain" : t}</button>)}
       </div>
       <ErrorLine error={err ?? (error as Error | undefined)?.message} />
-      {!data ? <p className={muted}>Loading…</p> : tab === "brand" ? <BrandTab d={data} put={put} act={act} upload={upload} busy={busy} /> : tab === "models" ? <ModelsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "music" ? <MusicTab d={data} act={act} upload={upload} busy={busy} /> : tab === "locations" ? <LocationsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "caps" ? <CapsTab d={data} put={put} /> : tab === "radar" ? <RadarTab d={data} put={put} /> : <MoreTab d={data} put={put} act={act} busy={busy} />}
+      {!data ? <p className={muted}>Loading…</p> : tab === "brand" ? <BrandTab d={data} put={put} act={act} upload={upload} busy={busy} queue={queue} /> : tab === "models" ? <ModelsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "music" ? <MusicTab d={data} act={act} upload={upload} busy={busy} /> : tab === "locations" ? <LocationsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "caps" ? <CapsTab d={data} put={put} /> : tab === "radar" ? <RadarTab d={data} put={put} /> : <MoreTab d={data} put={put} act={act} busy={busy} />}
     </CreativeShell>
   );
 }
@@ -70,7 +82,7 @@ type Fn = (json: Record<string, unknown>) => Promise<unknown>;
 type Act = <T>(json: Record<string, unknown>, label?: string) => Promise<T | null>;
 type Up = (fd: FormData, label?: string) => Promise<unknown>;
 
-function BrandTab({ d, put, act, upload, busy }: { d: S; put: Fn; act: Act; upload: Up; busy: string | null }) {
+function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Act; upload: Up; busy: string | null; queue: Fn }) {
   const b = d.brand;
   const [step, setStep] = useState(0);
   const [samples, setSamples] = useState(b.voice.samples);
@@ -126,6 +138,18 @@ function BrandTab({ d, put, act, upload, busy }: { d: S; put: Fn; act: Act; uplo
           </div>
         </div>
       ) : step === 1 ? (
+        <>
+        {(() => {
+          const missing = b.presets.filter((p) => !p.samples?.length).length;
+          return missing ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button className={btn} disabled={d.looksInBatch.includes("*")} onClick={() => void queue({ action: "preset_samples", preset: "missing" })}>
+                {d.looksInBatch.includes("*") ? "In the batch…" : `Sample frames for the ${missing} Looks without them (batch ≈ ${money(missing * d.costs.lookSamples)})`}
+              </button>
+              <span className={`text-xs ${muted}`}>Sent to the OpenAI batch at half price — the pictures appear here by themselves, usually within the hour. Keep working meanwhile.</span>
+            </div>
+          ) : null;
+        })()}
         <div className="grid gap-3 md:grid-cols-2">
           {presets.map((p, i) => (
             <div key={p.key} className={card}>
@@ -133,7 +157,7 @@ function BrandTab({ d, put, act, upload, busy }: { d: S; put: Fn; act: Act; uplo
                 <h3 className={`${head} text-xl`}>{p.name}</h3>
                 <button className={chip(b.defaultPreset === p.key)} onClick={() => void put({ brand: { defaultPreset: p.key } })}>{b.defaultPreset === p.key ? "Default" : "Make default"}</button>
               </div>
-              <div className="my-2 grid grid-cols-2 gap-1">{[0, 1].map((j) => <Media key={j} url={p.sampleUrls?.[j]} className="aspect-[2/3] w-full" />)}</div>
+              <div className="my-2 grid grid-cols-2 gap-1">{[0, 1].map((j) => <Media key={j} url={(b.presets.find((x) => x.key === p.key) ?? p).sampleUrls?.[j]} className="aspect-[2/3] w-full" />)}</div>
               <textarea className={`${input} min-h-20 py-2`} value={p.look} onChange={(e) => setPresets((ps) => ps.map((x, k) => (k === i ? { ...x, look: e.target.value } : x)))} />
               <div className="mt-2 grid grid-cols-5 gap-1 text-[11px]">
                 {(["contrast", "saturation", "brightness", "warmth", "grain"] as const).map((g) => (
@@ -142,11 +166,16 @@ function BrandTab({ d, put, act, upload, busy }: { d: S; put: Fn; act: Act; uplo
               </div>
               <div className="mt-2 flex gap-2">
                 <button className={btn} onClick={() => void put({ brand: { presets: presets.map(({ sampleUrls: _s, ...x }) => (void _s, x)) } })}>Save</button>
-                <button className={btn} disabled={!!busy} onClick={() => void act({ action: "preset_samples", preset: p.key }, `s-${p.key}`)}>{busy === `s-${p.key}` ? "Drawing…" : "Sample frames (≈ $0.14)"}</button>
+                {d.looksInBatch.includes(p.key) || (d.looksInBatch.includes("*") && !b.presets.find((x) => x.key === p.key)?.samples?.length) ? (
+                  <span className={`self-center text-xs ${muted}`}>In the batch — frames appear here when it is done</span>
+                ) : (
+                  <button className={btn} onClick={() => void queue({ action: "preset_samples", preset: p.key })}>{b.presets.find((x) => x.key === p.key)?.samples?.length ? "New sample frames" : "Sample frames"} (batch ≈ {money(d.costs.lookSamples)})</button>
+                )}
               </div>
             </div>
           ))}
         </div>
+        </>
       ) : step === 2 ? (
         <div className={card}>
           <label className="text-sm">How CARBON sounds<input className={`${input} mt-1`} value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
@@ -400,6 +429,7 @@ function MoreTab({ d, put, act, busy }: { d: S; put: Fn; act: Act; busy: string 
             <span className="flex-1"><b>{r.name}</b> <span className={`text-xs ${muted}`}>{r.idea} · {r.media_types.join("/")}{r.score != null ? ` · Radar score ${r.score}` : ""}</span></span>
             {r.status === "proposed" ? <span className="text-xs text-amber-200">proposed from Radar</span> : null}
             <button className={chip(r.status === "active")} onClick={() => void act({ action: "recipe_status", key: r.key, status: r.status === "active" ? "retired" : "active" })}>{r.status === "active" ? "On" : r.status === "proposed" ? "Approve" : "Off"}</button>
+            {r.status === "proposed" ? <button className={chip(false)} onClick={() => void act({ action: "recipe_status", key: r.key, status: "dismissed" })}>Dismiss</button> : null}
           </div>
         ))}
       </div>

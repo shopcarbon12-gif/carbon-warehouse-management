@@ -10,6 +10,7 @@ import { conceptThumbs, projectConcepts, projectDraft, projectFinal, projectShot
 import { campaignPack, projectCutdown } from "./campaign";
 import { projectRerender } from "./chat";
 import { refreshResults } from "./learning";
+import { presetSamples } from "./looks";
 
 const learningRefresh: JobHandler = async (pool, job) => {
   const n = await refreshResults(pool, job.tenant_id);
@@ -32,6 +33,7 @@ export const HANDLERS: Record<string, JobHandler> = {
   project_cutdown: projectCutdown,
   campaign_pack: campaignPack,
   learning_refresh: learningRefresh,
+  preset_samples: presetSamples,
 };
 
 /** Jobs that never spend on image / video generation (the audit list for "no background generation"). */

@@ -11,7 +11,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withActivity } from "@/lib/server/activity-log";
-import { guard, fail, body } from "@/lib/server/creative/http";
+import { guard, fail, body, kick } from "@/lib/server/creative/http";
+import { looksInBatch, queueLookSamples, SAMPLE_BATCH_COST_PER_LOOK } from "@/lib/server/creative/looks";
 import { DEFAULT_CAPS, getBrand, getCreativeSettings, keysStatus, PlainError, presetOf, recordSpend, spendGate, brandBlock } from "@/lib/server/creative/config";
 import { DEFAULT_ROUTES, VIDEO_ENGINES } from "@/lib/server/creative/routing";
 import { SOURCE_DEFAULTS } from "@/lib/server/creative/radar/sources";
@@ -19,6 +20,18 @@ import { listModels, modelCandidates, createModel, upsertMeta, describeModel, CA
 import { listAudio } from "@/lib/server/creative/audio";
 import { listRecipes } from "@/lib/server/creative/recipes";
 import { appFileUrl, getFile, putFile } from "@/lib/server/creative/storage";
+import { getStoragePublicUrl, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
+
+/** Studio model pictures are stored as private R2 endpoint URLs; the browser needs the public address (as /api/models/list does). */
+function viewUrl(u: string): string {
+  const path = tryGetStoragePathFromUrl(u);
+  if (!path) return u;
+  try {
+    return getStoragePublicUrl(path);
+  } catch {
+    return u;
+  }
+}
 import { generateImage, falCatalog, TTS_VOICES } from "@/lib/server/creative/engines";
 import { json } from "@/lib/server/creative/llm";
 
@@ -36,7 +49,7 @@ export async function GET(req: Request) {
       getBrand(g.pool, tid),
       listModels(g.pool, tid),
       listAudio(g.pool, tid),
-      listRecipes(g.pool, tid),
+      listRecipes(g.pool, tid).then((rs) => rs.filter((r) => r.status !== "dismissed")),
       g.pool.query(`SELECT id::text, name, description, preset, storage_path, source FROM creative_locations WHERE tenant_id = $1::uuid ORDER BY created_at`, [tid]),
     ]);
     return NextResponse.json({
@@ -49,12 +62,13 @@ export async function GET(req: Request) {
         logoUrls: brand.logos,
         headlineFontUrl: appFileUrl(brand.fonts.headlineFile ?? null),
       },
-      models,
+      models: models.map((m) => ({ ...m, refs: m.refs.map(viewUrl) })),
       voices: TTS_VOICES,
       audio: audio.map((a) => ({ ...a, url: appFileUrl(a.storage_path) })),
       recipes,
       locations: locations.rows.map((l) => ({ ...l, url: appFileUrl(l.storage_path) })),
-      costs: { candidates: CANDIDATE_COST, sheet: SHEET_COST },
+      costs: { candidates: CANDIDATE_COST, sheet: SHEET_COST, lookSamples: SAMPLE_BATCH_COST_PER_LOOK },
+      looksInBatch: await looksInBatch(g.pool, tid),
     });
   } catch (e) {
     return fail(e);
@@ -80,7 +94,7 @@ const putSchema = z
     metaCountries: z.array(z.string().length(2)).max(27).optional(),
     brand: z
       .object({
-        presets: z.array(presetSchema).min(1).max(8).optional(),
+        presets: z.array(presetSchema).min(1).max(16).optional(),
         defaultPreset: z.string().max(30).optional(),
         voice: z.object({ description: z.string().max(300), samples: z.array(z.object({ text: z.string().max(300), verdict: z.enum(["up", "down"]).nullable() })).max(20) }).optional(),
         dos: z.array(z.string().max(160)).max(30).optional(),
@@ -110,8 +124,9 @@ async function PUT_handler(req: Request) {
       [tid, b.caps ? JSON.stringify(b.caps) : null, b.routing ? JSON.stringify(b.routing) : null, b.sources ? JSON.stringify(b.sources) : null, b.categoryOptions ? JSON.stringify(b.categoryOptions) : null, b.retentionDays ?? null, b.metaCountries?.map((c) => c.toUpperCase()) ?? null, g.session.email ?? null],
     );
     if (b.brand) {
-      await getBrand(g.pool, tid);
-      const x = b.brand;
+      const cur = await getBrand(g.pool, tid);
+      // Sample frames are written only by the batch job: keep the stored ones (the page may be older than the batch).
+      const x = b.brand.presets ? { ...b.brand, presets: b.brand.presets.map((p) => ({ ...p, samples: cur.presets.find((c) => c.key === p.key)?.samples ?? p.samples })) } : b.brand;
       await g.pool.query(
         `UPDATE creative_brand SET presets = COALESCE($2::jsonb, presets), default_preset = COALESCE($3, default_preset), voice = COALESCE($4::jsonb, voice),
                 dos = COALESCE($5, dos), donts = COALESCE($6, donts), fonts = COALESCE($7::jsonb, fonts), colors = COALESCE($8::jsonb, colors),
@@ -132,7 +147,7 @@ async function PUT_handler(req: Request) {
 
 const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("voice_samples") }),
-  z.object({ action: z.literal("preset_samples"), preset: z.string().max(30) }),
+  z.object({ action: z.literal("preset_samples"), preset: z.string().max(30) }), // a Look key, or "missing"
   z.object({ action: z.literal("model_candidates"), gender: z.enum(["female", "male"]), description: z.string().max(400).optional(), lane: z.string().max(40).nullable().optional() }),
   z.object({ action: z.literal("create_model"), name: z.string().min(1).max(40), gender: z.enum(["female", "male"]), candidatePath: z.string().max(300), look: z.string().max(120).optional(), lanes: z.array(z.string()).max(4).optional(), personality: z.string().max(120).optional(), voice: z.string().max(20).optional() }),
   z.object({ action: z.literal("model_meta"), modelId: z.string().max(60), pinned: z.boolean().optional(), active: z.boolean().optional(), voice: z.string().max(20).optional(), personality: z.string().max(120).optional(), lanes: z.array(z.string()).max(6).optional(), look: z.string().max(120).optional() }),
@@ -142,7 +157,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("location_delete"), id: z.string().uuid() }),
   z.object({ action: z.literal("audio_delete"), id: z.string().uuid() }),
   z.object({ action: z.literal("audio_tags"), id: z.string().uuid(), moods: z.array(z.string().max(40)).max(8) }),
-  z.object({ action: z.literal("recipe_status"), key: z.string().max(80), status: z.enum(["active", "retired"]) }),
+  z.object({ action: z.literal("recipe_status"), key: z.string().max(80), status: z.enum(["active", "retired", "dismissed"]) }),
   z.object({ action: z.literal("catalog_check") }),
 ]);
 
@@ -164,19 +179,12 @@ async function POST_handler(req: Request) {
         return NextResponse.json({ samples: r.value.captions.map((text) => ({ text, verdict: null })), cost: r.cost });
       }
       case "preset_samples": {
+        // Half-price OpenAI batch: the tap only queues it, the page is free at once (owner, 2026-11-15).
         const brand = await getBrand(g.pool, tid);
-        const p = presetOf(brand, a.preset);
-        const cost = 2 * 0.07;
-        await spendGate(g.pool, tid, "openai", cost);
-        const samples: string[] = [];
-        for (const scene of ["a model in dark denim and a black hoodie walking toward camera", "a close-up of folded jeans and a jacket on a surface"]) {
-          const img = await generateImage({ prompt: `Fashion campaign sample frame for the "${p.name}" look: ${p.look}. ${scene}. Photoreal, no text, no logos.`, size: "1024x1536", quality: "medium" });
-          await recordSpend(g.pool, tid, { provider: "openai", what: `preset sample (${p.name})`, cost: img.cost });
-          samples.push(await putFile(`creative/brand/${tid}/preset-${p.key}-${Date.now()}-${samples.length}.png`, img.bytes, "image/png"));
-        }
-        const presets = brand.presets.map((x) => (x.key === p.key ? { ...x, samples } : x));
-        await g.pool.query(`UPDATE creative_brand SET presets = $2::jsonb, updated_at = now() WHERE tenant_id = $1::uuid`, [tid, JSON.stringify(presets)]);
-        return NextResponse.json({ samples: samples.map((s) => appFileUrl(s)) });
+        if (a.preset !== "missing" && !brand.presets.some((x) => x.key === a.preset)) throw new PlainError("Which Look?");
+        await queueLookSamples(g.pool, tid, a.preset === "missing" ? "missing" : [a.preset], g.session.email ?? null);
+        kick(g.pool, tid);
+        return NextResponse.json({ queued: true });
       }
       case "model_candidates":
         return NextResponse.json({ candidates: await modelCandidates(g.pool, tid, { gender: a.gender, description: a.description, lane: a.lane ?? null }) });
