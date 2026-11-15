@@ -75,12 +75,12 @@ async function download(url: string, file: string) {
 
 /** One queued render, if any. Returns true when it did work. */
 export async function runOneRender(pool: Pool): Promise<boolean> {
-  // A render left 'running' by a worker restart (deploy, crash) is never picked up again — the draft
-  // then waits forever. Longest real render ≈ 25 min HyperFrames + 20 min finishing, so after 60 min
-  // untouched it is orphaned: queue it again.
+  // A render left 'running' by a worker restart (deploy, crash) is never picked up again. A running render
+  // checks in every 30 s (heartbeat below), so one silent for 3 minutes is orphaned: queue it again
+  // (owner, 2026-11-15: a deploy mid-render left the Sydney final waiting).
   await pool.query(
     `UPDATE creative_generations SET status = 'queued', error = NULL, updated_at = now()
-      WHERE kind = 'render' AND status = 'running' AND updated_at < now() - interval '60 minutes'`,
+      WHERE kind = 'render' AND status = 'running' AND updated_at < now() - interval '3 minutes'`,
   );
   const c = await pool.query<{ id: string; inputs: { plan: EditPlan; engine?: string; upscale4k?: boolean; interpolate?: boolean; html?: string | null } }>(
     `UPDATE creative_generations SET status = 'running', updated_at = now()
@@ -90,6 +90,9 @@ export async function runOneRender(pool: Pool): Promise<boolean> {
   const g = c.rows[0];
   if (!g) return false;
   const base = (process.env.WMS_APP_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+  const beat = setInterval(() => {
+    void pool.query(`UPDATE creative_generations SET updated_at = now() WHERE id = $1::uuid AND status = 'running'`, [g.id]).catch(() => undefined);
+  }, 30_000);
   try {
     const plan = g.inputs.plan;
     const engine = ENGINES[g.inputs.engine ?? "hyperframes"] ?? HyperFramesEngine;
@@ -116,6 +119,8 @@ export async function runOneRender(pool: Pool): Promise<boolean> {
   } catch (e) {
     console.error("[creative render]", e);
     await pool.query(`UPDATE creative_generations SET status = 'failed', error = $2, updated_at = now() WHERE id = $1::uuid`, [g.id, (e as Error).message.slice(0, 1500)]);
+  } finally {
+    clearInterval(beat);
   }
   return true;
 }
