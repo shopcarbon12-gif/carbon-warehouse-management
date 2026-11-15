@@ -278,12 +278,19 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   });
   const crit = await garmentRefs(pool, p.tenant_id, shot.products?.length ? shot.products : p.products);
   const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.puts_on) });
+  // A one-take UGC costs ~$3–5 a take: it is NEVER re-filmed by itself (owner, 2026-11-15: a picky check re-filmed
+  // Sydney at $4.55). The take is kept; the check's notes go to the owner, who decides (Film it again).
+  const keep = c.pass || Boolean(st.takeShots);
   await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, output_meta = $4::jsonb, critic = $5::jsonb, updated_at = now() WHERE id = $1::uuid`, [
-    st.genId, c.pass ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height, ...(take ? { take } : {}) }), JSON.stringify(c),
+    st.genId, keep ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height, ...(take ? { take } : {}) }), JSON.stringify(c),
   ]);
+  if (!c.pass && st.takeShots) {
+    await setProject(pool, p.id, { step_note: `The quality check's notes on this take (${c.overall}/10): ${[c.note, ...c.problems.slice(0, 3)].join(" · ")} — if you want it different, change the words or tap Film it again.` });
+    return { ...st, status: "done" };
+  }
   if (c.pass) return { ...st, status: "done" };
-  if (st.attempt > MAX_RETRIES) {
-    // Keep the best-scoring clip but say so — the owner decides (it is never shown as passed).
+  if (st.attempt > 1) {
+    // Video costs real money: one automatic redo at most. Keep the best-scoring clip but say so — the owner decides (it is never shown as passed).
     return { ...st, status: "failed", error: `Shot ${st.shotIdx + 1}'s clip didn't pass the quality check after ${st.attempt} tries (${c.fails.join(", ")}): ${c.note}` };
   }
   return submitClip(pool, p, { ...st, attempt: st.attempt + 1, tries: 0, prompt: `${st.prompt} ${retryHint(c)}` });
