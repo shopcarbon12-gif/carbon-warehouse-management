@@ -49,14 +49,16 @@ export async function criticize(
   },
 ): Promise<CriticReport> {
   const brand = await getBrand(pool, tenantId);
-  const imgs = [...v.frames.slice(0, 6), ...v.garmentRefs.slice(0, 5), ...(v.personRef ? [v.personRef] : [])];
+  // Up to 12 frames of a clip / take (6 missed the ring coming off in a 29 s take), then the real product + person.
+  const frames = v.frames.slice(0, 12);
+  const imgs = [...frames, ...v.garmentRefs.slice(0, 5), ...(v.personRef ? [v.personRef] : [])];
   const prompt = [
     "You are the quality gate for CARBON's ads. Be strict — the owner must never see anything fake, off-brand or showing the garment wrong.",
     brandBlock(brand, v.preset, v.ugc),
-    `The first ${Math.min(6, v.frames.length)} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(5, v.garmentRefs.length)} of the REAL product (cut-outs and detail crops).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
+    `The first ${frames.length} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(5, v.garmentRefs.length)} of the REAL product (cut-outs and detail crops).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
     v.shot ? `The shot should show: ${v.shot.subject_action ?? ""}. The garment must show: ${v.shot.garment_must_show ?? "the product clearly"}.` : "",
     "Score 1–10 (10 = perfect):",
-    "garment_accuracy — colour, wash, graphic / logo letter-for-letter, fit, length, details vs the real product.",
+    "garment_accuracy — colour, wash, graphic / logo letter-for-letter, fit, length, details vs the real product. AUTOMATIC FAIL (3 or lower) if in ANY frame a ring, zip, button, buckle, strap, chain or print comes off the garment, floats in a hand, or changes count / shape / place.",
     v.notWornYet ? "In this shot the garment may be on a hanger, in a bag or in the person's hands (not worn) — judge the garment itself, not whether it is worn." : "",
     "ai_artifacts — hands, faces, extra limbs, warping, melting text, flicker (10 = none at all).",
     v.kind === "still" ? "motion_realism — null for a still." : "motion_realism — natural body and fabric motion across the keyframes.",

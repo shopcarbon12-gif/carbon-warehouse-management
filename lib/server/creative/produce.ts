@@ -223,6 +223,9 @@ export function videoJobFor(p: ProjectRow, shot: Shot, castUseCount: number): Vi
   return "fashion_motion";
 }
 
+/** Owner, 2026-11-15: the Sydney take had her take a silver ring OFF the dress — hardware must never come off. */
+export const GARMENT_INTEGRITY = "GARMENT INTEGRITY: every ring, zip, button, buckle, strap, chain, patch and print is sewn on and stays attached exactly where the product shows it — it never comes off, never floats in a hand, never changes shape or count. Hands may touch the FABRIC near a detail, never pull, pinch or hold the hardware away from the garment.";
+
 export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; personRefs?: string[]; voiceId?: string | null; speakerId?: string | null; takeShots?: { idx: number; seconds: number }[]; middleStills?: string[]; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
 
 /** Submit one clip (first frame = the approved still). */
@@ -274,7 +277,8 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   }
   const { bytes } = await fetchBytes(res.url!, 300 * 1024 * 1024);
   const path = await putFile(`creative/projects/${p.id}/clip-${st.shotIdx}-${st.genId.slice(0, 8)}.mp4`, bytes, "video/mp4");
-  const k = await keyframes(bytes, st.takeShots ? 6 : 4, 768);
+  // A take is long: look at many frames (one every ~2.5 s) so a moment like hardware coming off isn't missed.
+  const k = await keyframes(bytes, st.takeShots ? 12 : 5, 640);
   // One take: where each shot sits inside it, scaled to the real length — the edit plays it back without a gap.
   const planned = (st.takeShots ?? []).reduce((a, x) => a + x.seconds, 0);
   let at = 0;
@@ -372,6 +376,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
           : `Camera: ${s.camera_move.replace(/_/g, " ")}, ${s.lens}. Light: ${s.lighting}.`,
         endStill ? `The clip ends exactly on the last frame given: ${s.end_state}. The garment looks exactly like the last frame — no morphing.` : "Keep the clothes, logo and face exactly as in the first frame.",
         "Realistic fabric motion. No text.",
+        GARMENT_INTEGRITY,
       ].join(" "),
       seconds: Math.max(3, Math.ceil(s.duration_s), words ? Math.ceil(words / 2.6) + 1 : 0),
       audio: p.kind === "ugc",
@@ -423,6 +428,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
           `Keyframe 1 is the first frame; the rest come in order${endStill ? " and the last one is the final frame" : ""}. What happens, in order:`,
           ...lines,
           "Move naturally from each keyframe to the next. Keep the clothes, face and room exactly as in the keyframes. Realistic fabric motion. No text on screen.",
+          GARMENT_INTEGRITY,
         ].join("\n"),
       },
     ];
