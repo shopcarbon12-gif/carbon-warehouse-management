@@ -8,6 +8,7 @@
  * so the same person always sounds the same (before, every clip invented its own voice).
  */
 import type { Pool } from "pg";
+import sharp from "sharp";
 import { PlainError, recordSpend } from "./config";
 import type { CastModel } from "./casting";
 import { speak } from "./engines";
@@ -49,6 +50,17 @@ export type KlingClip = {
   aspect: string;
 };
 
+/**
+ * Pictures go INSIDE the request (base64 JPEG), not as links: Kling's servers sometimes can't download from
+ * wms.shopcarbon.com ("Something went wrong when we tried to get the contents of the file", 2026-11-15).
+ */
+async function inline(url: string): Promise<string> {
+  const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  if (!r.ok) throw new PlainError(`Couldn't read a picture for Kling (HTTP ${r.status}).`);
+  const jpg = await sharp(Buffer.from(await r.arrayBuffer())).resize(1440, 1440, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+  return jpg.toString("base64");
+}
+
 export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; seconds: number; input: unknown }> {
   const seconds = Math.min(30, Math.max(3, Math.round(v.seconds)));
   const mids = (v.middleFrames ?? []).slice(0, 7);
@@ -73,7 +85,8 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
     settings: { audio: "native", resolution: "1080p", aspect_ratio: v.aspect === "4:5" ? "3:4" : v.aspect, duration: seconds },
     options: { watermark_info: { enabled: false } },
   };
-  const d = await call<{ id: string }>("/omni-video/kling-4.0", { body: input });
+  const sent = { ...input, contents: await Promise.all(contents.map(async (c) => (typeof c.url === "string" ? { ...c, url: await inline(c.url) } : c))) };
+  const d = await call<{ id: string }>("/omni-video/kling-4.0", { body: sent });
   if (!d?.id) throw new PlainError("Kling returned no task id.");
   return { taskId: d.id, seconds, input };
 }

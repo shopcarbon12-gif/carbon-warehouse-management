@@ -227,7 +227,8 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
     // A refusal (content policy — e.g. Seedance won't take faces that look like real people) never passes on
     // the same engine, so it goes straight to the next one.
     const refused = /content_policy|likeness|real people|not allowed|safety/i.test(res.error);
-    const next = st.tries < 1 && !refused ? { ...st, tries: st.tries + 1 } : { ...st, tries: 0, engineAt: st.engineAt + 1 };
+    // A one-take clip has no other engine to fall back to, so it gets two more tries on Kling.
+    const next = st.tries < (st.takeShots ? 2 : 1) && !refused ? { ...st, tries: st.tries + 1 } : { ...st, tries: 0, engineAt: st.engineAt + 1 };
     if (next.engineAt >= st.engines.length) return { ...st, status: "failed", error: `Every video engine failed for shot ${st.shotIdx + 1}: ${res.error.slice(0, 200)}` };
     return submitClip(pool, p, next);
   }
