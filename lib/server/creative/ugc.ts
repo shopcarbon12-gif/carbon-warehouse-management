@@ -48,7 +48,7 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
     "HOW THE CREATOR TALKS (owner, 2026-11-15: \"she shouldn't talk like a walking advertisement — like a woman filming herself in front of the mirror, recommending it\"): exactly like a real person (a girl or a guy — match the creator) talking to their phone in their room — casual, warm, a little spontaneous, full sentences the way people actually speak (\"okay so…\", \"honestly\", \"look at this\", \"I love that…\", \"it's so soft\"). Use contractions and the little words people really say (\"like\", \"so\", \"literally\", \"oh and\"), short half-sentences are fine. They react to the piece: how it feels, how it fits, how they'd wear it, what they like about one or two details. Then an easy, friendly recommendation (\"you guys need this, it's on shopcarbon.com\"). NEVER slogans, taglines or ad copy — no \"locked in\", \"details do the talking\", \"no extra\", \"elevate your look\", no brand-speak, no lists of features. It must not sound like a TV commercial.",
     `FACTS SHEET (the ONLY facts you may use): ${JSON.stringify(v.facts)}`,
     v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · what the first second LOOKS like (a picture, not words to say): ${v.concept.hook?.first_1_5s ?? ""}` : "",
-    "hook, every lines[].say and cta are ONLY the words the creator says out loud, in first person — never a description of what they do, never their name, never stage directions (those go in lines[].action). The cta is her one closing sentence; don't repeat the shop line twice.",
+    "hook, every lines[].say and cta are ONLY the words the creator says out loud, in first person — never a description of what they do, never their name, never stage directions (those go in lines[].action). The cta is the creator's one closing sentence; don't repeat the shop line twice.",
     "Structure: a natural opener (≤ 8 words, e.g. \"Okay, you guys have to see this\") → mostly REACTIONS and how it feels / fits / how they'd wear it, mentioning at most ONE or TWO details (never a list of features, never a spec sheet like 'the upper is smooth with matching laces and a round toe') → a casual recommendation that mentions shopcarbon.com. About 30–45 spoken words in total, 12–18 seconds.",
     "FORBIDDEN: invented reviews, ratings, sales numbers, 'best seller', 'everyone is buying', claiming to be a customer ('I bought this'), any claim not in the facts, other brands, where it is made.",
     "banned_check: answer honestly whether your script breaks any rule (all should be false).",
@@ -59,7 +59,8 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
     const s = (await json(pool, prompt + (i ? "\n\nYOUR LAST SCRIPT BROKE A RULE — rewrite without any review, stat or customer claim." : ""), UgcScript, { tenantId, what: "UGC script", projectId: v.projectId, maxOutputTokens: 2000 })).value;
     const all = [s.hook, ...s.lines.map((l) => l.say), s.cta].join(" ");
     // A spoken line that reads like a stage direction ("Elena pulls the hood up…") is rejected and rewritten.
-    const name = (v.persona.match(/^[A-Z][a-z]+/)?.[0] ?? "").trim();
+    // The creator's real name (from the cast) — a spoken line must never narrate them in third person.
+    const name = (v.ctx?.person?.name ?? "").trim();
     if (i === 0 && /\b(she|her|pulls|steps|turns|the phone is|camera)\b/i.test(s.hook + " " + s.cta)) continue;
     if (i === 0 && name && new RegExp(`\\b${name}\\b`).test(all)) continue;
     if (!FAKE.test(all) && !s.banned_check.invented_reviews && !s.banned_check.invented_stats && !s.banned_check.claims_to_be_customer) return s;

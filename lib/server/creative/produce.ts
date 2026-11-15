@@ -110,37 +110,43 @@ export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: 
   const models = await listModels(pool, tid);
   const cast = (shot.cast?.length ? shot.cast : p.cast_ids).map((id) => models.find((m) => m.id === id)).filter((m): m is CastModel => Boolean(m));
   const products = shot.products?.length ? shot.products : p.products;
-  const refs: ImageRef[] = [];
   const low = opts.quality === "low"; // storyboard thumbnail: one garment reference, no people refs
-  for (const m of low ? [] : cast.slice(0, 4)) {
-    const b = await modelRefBytes(m, shot.is_end_card ? 0 : 3);
-    b.forEach((x, i) => refs.push({ name: `person-${m.name}-${i}.jpg`, bytes: x, mime: "image/jpeg" }));
-  }
+  // Reference order = what is kept first at the picture model's 16-reference limit (review 2026-11-15: the
+  // continuity / first-frame pictures were the first to be dropped): first frame, continuity, garments,
+  // then people (fewer photos each when there's a crowd), then the location.
+  const head: ImageRef[] = [];
+  if (opts.firstFrame) head.push({ name: "first-frame.jpg", bytes: await sharp(opts.firstFrame).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
+  if (opts.continuity) head.push({ name: "continuity.jpg", bytes: await sharp(opts.continuity).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
   const garments = await twinRefs(pool, tid, products);
   if (!garments.length && !shot.is_end_card) throw new PlainError("The product twin has no cut-outs yet. Build and confirm the product first.");
-  (low ? garments.slice(0, 1) : garments).forEach((g, i) => refs.push({ name: `garment-${i}-${g.angle}.png`, bytes: g.bytes, mime: "image/png" }));
+  const gRefs = (low ? garments.slice(0, 1) : garments).map((g, i) => ({ name: `garment-${i}-${g.angle}.png`, bytes: g.bytes, mime: "image/png" }));
+  const people: ImageRef[] = [];
+  const perPerson = cast.length > 2 ? 1 : cast.length > 1 ? 2 : 3;
+  for (const m of low ? [] : cast.slice(0, 4)) {
+    const b = await modelRefBytes(m, shot.is_end_card ? 0 : perPerson);
+    b.forEach((x, i) => people.push({ name: `person-${m.name}-${i}.jpg`, bytes: x, mime: "image/jpeg" }));
+  }
   const loc = low || ugc ? null : await locationRef(pool, tid, shot.location);
-  if (loc) refs.push(loc);
-  if (opts.continuity) refs.push({ name: "continuity.jpg", bytes: await sharp(opts.continuity).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
-  if (opts.firstFrame) refs.push({ name: "first-frame.jpg", bytes: await sharp(opts.firstFrame).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
+  const refs: ImageRef[] = [...head, ...gRefs, ...people, ...(loc ? [loc] : [])].slice(0, 16);
   const crit = low ? [] : await garmentRefs(pool, tid, products);
   // The person's own reference, so the critic can fail a shot where the face changed (owner, 2026-11-15).
   const personRef = low || !cast[0] ? null : (await modelRefBytes(cast[0], 1).catch(() => [] as Buffer[]))[0] ?? null;
   const insp = low ? [] : await inspirationHashes(pool, p.inspiration_ad_id);
   const quality = opts.quality ?? "high";
+  const he = cast[0]?.gender === "male";
   const prompt0 = [
     shot.still_prompt,
     ugc
       ? `${UGC_LOOK} Camera: phone, ${shot.camera_move === "static" ? "propped up or selfie" : "handheld"}. Light: ${shot.lighting}. Place: ${shot.location}.`
       : `LOOK: ${opts.look || preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
     opts.continuity
-      ? `CONTINUITY: the continuity reference is another frame of this SAME video. Same person — identical face, hair, skin, makeup and body — same ${opts.notWornYet ? "basics she wears under the piece" : "outfit worn the same way"}, same room, same light and the same phone. Only the pose and framing change.`
+      ? `CONTINUITY: the continuity reference is another frame of this SAME video. Same person — identical face, hair, skin, makeup and body — same ${opts.notWornYet ? `basics ${he ? "he" : "she"} wears under the piece` : "outfit worn the same way"}, same room, same light and the same phone. Only the pose and framing change.`
       : "",
     opts.outfit ? `OUTFIT (identical in every shot): ${opts.outfit}.` : "",
     opts.firstFrame ? "The first-frame reference is the START of this same moment: keep the place, light, camera position, background and person identical — only what the shot describes has changed." : "",
     cast.length ? `PEOPLE: the person references show ${cast.map((m) => m.name).join(" and ")} — keep each face, skin tone, hair and body EXACTLY.` : "",
     opts.notWornYet
-      ? `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products. In THIS frame the piece is NOT worn yet — it is on the hanger / in the bag / in her hands exactly as the shot says, and it must look EXACTLY like the references (colour, wash, graphic letter-for-letter, hardware). She wears a plain neutral basic (plain white or black tank top or tee) where the piece will go.`
+      ? `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products. In THIS frame the piece is NOT worn yet — it is on the hanger / in the bag / in ${he ? "his" : "her"} hands exactly as the shot says, and it must look EXACTLY like the references (colour, wash, graphic letter-for-letter, hardware). ${he ? "He" : "She"} wears a plain neutral basic (plain white or black tank top or tee) where the piece will go.`
       : `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
     ugc
       ? "Photoreal frame from a real person's phone video: real skin texture, natural hands, casual and unposed, everyday background with real-life clutter kept tidy. No added text, captions, watermarks or other brands' logos."
@@ -277,7 +283,12 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
     return r;
   });
   const crit = await garmentRefs(pool, p.tenant_id, shot.products?.length ? shot.products : p.products);
-  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.puts_on) });
+  // A one-take UGC is judged as the whole take: every shot's action in order, not only the first shot's.
+  const all = p.shot_list?.shots ?? [];
+  const judged = st.takeShots
+    ? { ...shot, subject_action: st.takeShots.map((t) => all.find((x) => x.idx === t.idx)?.subject_action).filter(Boolean).join(" → "), garment_must_show: "the product, worn as in the keyframes" }
+    : shot;
+  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot: judged, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0 && !st.takeShots, ugc: p.kind === "ugc", notWornYet: Boolean(shot.puts_on) && !st.takeShots });
   // A one-take UGC costs ~$3–5 a take: it is NEVER re-filmed by itself (owner, 2026-11-15: a picky check re-filmed
   // Sydney at $4.55). The take is kept; the check's notes go to the owner, who decides (Film it again).
   const keep = c.pass || Boolean(st.takeShots);
@@ -368,29 +379,45 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
   // UGC on Kling direct: the whole thing is ONE continuous phone take (owner, 2026-11-15) — the shots' pictures
   // become its keyframes and every line is spoken in order in one voice; the edit cuts it back at the shots.
   if (p.kind === "ugc" && out.length >= 2 && (out[0].engines[0] === FAL_K4 || out[0].engines[0] === KLING4)) {
-    const take = out.slice(0, 9);
+    const take = out.slice(0, 8);
     const seconds = Math.min(30, take.reduce((a, c) => a + c.seconds, 0));
     const byIdx = new Map(shots.map((x) => [x.idx, x]));
     // He or she, from the cast member (owner, 2026-11-15: Nico's take said "she").
     const speaker = models.find((m) => m.id === (take.find((c) => c.speakerId)?.speakerId ?? p.cast_ids[0]));
     const male = speaker?.gender === "male";
-    const lines = take.map((c, i) => {
+    // Keyframes in order: each shot's picture, and right after the put-on shot its "now wearing it" picture
+    // (review 2026-11-15: the take never used it, so a put-on ending finished NOT worn). The take only ENDS on a
+    // given frame when that frame is a put-on result; otherwise the last shot's picture is a middle keyframe so
+    // its action and line still get their seconds.
+    const frames: { still: string; label: string }[] = [];
+    const lines: string[] = [];
+    for (const c of take) {
       const s = byIdx.get(c.shotIdx)!;
-      const ref = i === 0 ? "the first frame" : i === take.length - 1 ? "the last frame" : `keyframe ${i}`;
-      return `${i === 0 ? "Start" : i === take.length - 1 ? "End" : "Then"} on ${ref} (~${c.seconds}s): ${s.subject_action}${s.say ? ` — ${male ? "he" : "she"} says: "${s.say}"` : ""}.`;
-    });
+      const startN = frames.length;
+      frames.push({ still: c.still, label: "" });
+      if (c.endStill) frames.push({ still: c.endStill, label: "" });
+      const said = s.say ? ` — ${male ? "he" : "she"} says: "${s.say}"` : "";
+      lines.push(`[keyframe ${startN + 1}${c.endStill ? ` → keyframe ${startN + 2} (now wearing it)` : ""}] (~${c.seconds}s): ${s.subject_action}${said}.`);
+    }
+    const lastIsEnd = Boolean(take[take.length - 1].endStill);
+    const kept = frames.slice(0, 9);
+    const first = kept[0];
+    const endStill = lastIsEnd && kept.length > 1 ? kept[kept.length - 1].still : null;
+    const middle = kept.slice(1, endStill ? -1 : undefined).map((f) => f.still);
     return [
       {
         ...take[0],
+        still: first.still,
         engines: take[0].engines.filter((x) => x === FAL_K4 || x === KLING4),
         seconds,
-        endStill: take[take.length - 1].still,
-        middleStills: take.slice(1, -1).map((c) => c.still),
+        endStill,
+        middleStills: middle,
         takeShots: take.map((c) => ({ idx: c.shotIdx, seconds: c.seconds })),
         speakerId: take.find((c) => c.speakerId)?.speakerId ?? null,
         prompt: [
           `ONE continuous vertical phone video, a single take with no cuts: a real ${male ? "guy filming himself for his" : "woman filming herself for her"} followers, handheld, natural light, real room sound.`,
           `VOICE: a real ${male ? "young man" : "young woman"} casually talking to ${male ? "his" : "her"} own phone — natural conversational English, relaxed pace with tiny natural pauses, little breaths, a smile in the voice, slightly informal, words a bit run together like real speech. NOT a voice-over, NOT an announcer, NOT text-to-speech, NOT an ad read. Lips match every word.`,
+          `Keyframe 1 is the first frame; the rest come in order${endStill ? " and the last one is the final frame" : ""}. What happens, in order:`,
           ...lines,
           "Move naturally from each keyframe to the next. Keep the clothes, face and room exactly as in the keyframes. Realistic fabric motion. No text on screen.",
         ].join("\n"),
@@ -422,14 +449,17 @@ export async function stillsByShot(pool: Pool, projectId: string): Promise<Map<n
 }
 export async function clipsByShot(pool: Pool, projectId: string): Promise<Map<number, { path: string; duration: number; offset?: number }>> {
   const r = await pool.query<{ shot_idx: number; output_path: string; output_meta: { duration?: number; take?: { idx: number; offset: number; dur: number }[] } | null }>(
-    `SELECT DISTINCT ON (shot_idx) shot_idx, output_path, output_meta FROM creative_generations WHERE project_id = $1::uuid AND kind = 'clip' AND status = 'done' ORDER BY shot_idx, created_at DESC`,
+    `SELECT shot_idx, output_path, output_meta FROM creative_generations WHERE project_id = $1::uuid AND kind = 'clip' AND status = 'done' ORDER BY created_at DESC`,
     [projectId],
   );
+  // Newest first, and a shot already covered is never overwritten — so the NEWEST take wins over any older one.
   const out = new Map<number, { path: string; duration: number; offset?: number }>();
   for (const x of r.rows) {
     // One continuous take covers several shots: each shot gets its slice (offset + length) of the same file.
-    if (x.output_meta?.take?.length) for (const t of x.output_meta.take) out.set(t.idx, { path: x.output_path, duration: t.dur, offset: t.offset });
-    else if (!out.has(x.shot_idx)) out.set(x.shot_idx, { path: x.output_path, duration: x.output_meta?.duration ?? 5 });
+    if (x.output_meta?.take?.length) {
+      if (x.output_meta.take.some((t) => out.has(t.idx))) continue;
+      for (const t of x.output_meta.take) out.set(t.idx, { path: x.output_path, duration: t.dur, offset: t.offset });
+    } else if (!out.has(x.shot_idx)) out.set(x.shot_idx, { path: x.output_path, duration: x.output_meta?.duration ?? 5 });
   }
   return out;
 }

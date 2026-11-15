@@ -66,7 +66,7 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
   const mids = (v.middleFrames ?? []).slice(0, 7);
   const refs = (v.personRefs ?? []).slice(0, Math.max(0, 10 - 2 - mids.length));
   const lead = [
-    `@f1 is the first frame${mids.length ? `, ${mids.map((_, i) => `@m${i + 1}`).join(", ")} are keyframes 1–${mids.length} in between, in order,` : ""}${v.lastFrame ? " and @f2 is the last frame — the video moves through them in order" : ""}.`,
+    `@f1 is keyframe 1 (the first frame)${mids.length ? `, ${mids.map((_, i) => `@m${i + 1}`).join(", ")} are keyframes 2–${mids.length + 1} in order` : ""}${v.lastFrame ? `, and @f2 is keyframe ${mids.length + 2} (the final frame)` : ""} — the video moves through them in order.`,
     refs.length ? `${refs.map((_, i) => `@p${i + 1}`).join(", ")} show the same person: keep the face, hair, skin tone and body exactly identical in every frame.` : "",
     v.voiceId ? "Whenever the person speaks, she or he speaks in English using @v1 — the same voice for every word, with accurate lip synchronization." : "",
   ]

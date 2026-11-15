@@ -210,7 +210,7 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
   if (p.kind === "ugc") {
     await setProgress("Writing the creator script (facts only)");
     const facts = await Promise.all(p.products.map(async (id) => (await getTwin(pool, p.tenant_id, id))?.facts ?? {}));
-    script = await writeUgcScript(pool, p.tenant_id, { facts, persona: cast[0]?.personality ?? "calm, confident streetwear creator", preset: p.preset, concept, projectId: p.id });
+    script = await writeUgcScript(pool, p.tenant_id, { facts, persona: cast[0]?.personality ?? "calm, confident streetwear creator", preset: p.preset, concept, projectId: p.id, ctx: { person: cast[0] ? { name: cast[0].name, gender: cast[0].gender, personality: cast[0].personality } : null } });
   }
   await setProgress("Writing the pro shot list");
   const sl = await writeShotList(pool, p.tenant_id, brief, script ? { ...concept, edit_recipe: `${concept.edit_recipe}. Creator lines in order: ${[script.hook, ...script.lines.map((l) => l.say), script.cta].join(" / ")}` } : concept, p.id);
@@ -240,7 +240,21 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
     s.products = (s.products ?? []).filter((x) => p.products.includes(x));
     if (!s.products.length) s.products = p.products.slice(0, 2);
   }
-  await setProject(pool, p.id, { concept_idx: conceptIdx, shot_list: sl, script, status: "shots", captions: { options: sl.captions, hashtags: hashtagsFor(p, brief.lane) } });
+  let captionOptions = sl.captions;
+  if (p.kind === "ugc" && script) {
+    // What they say = the script the owner sees in "What they say", word for word, spread over the shots in order
+    // (review 2026-11-15: the shot-list AI could reword or drop lines). Post captions in the same natural voice.
+    const said = [script.hook, ...script.lines.map((l) => l.say), script.cta].filter(Boolean);
+    const talk = sl.shots.filter((x) => !x.is_end_card);
+    talk.forEach((x, i) => {
+      const from = Math.floor((i * said.length) / talk.length);
+      const to = Math.floor(((i + 1) * said.length) / talk.length);
+      x.say = said.slice(from, to).join(" ") || null;
+    });
+    const facts = await Promise.all(p.products.map(async (id) => (await getTwin(pool, p.tenant_id, id))?.facts ?? {}));
+    captionOptions = (await writeUgcCaptions(pool, p.tenant_id, { script, facts, projectId: p.id }).catch(() => null)) ?? sl.captions;
+  }
+  await setProject(pool, p.id, { concept_idx: conceptIdx, shot_list: sl, script, status: "shots", captions: { options: captionOptions, hashtags: hashtagsFor(p, brief.lane) } });
   const n = sl.shots.filter((s) => !s.is_end_card).length;
   await enqueue(pool, p.tenant_id, "project_stills", {}, { projectId: p.id, requestedBy: job.requested_by, progress: `Dressing the models: ${n} stills (≈ $${(n * STILL_COST).toFixed(2)})` });
   return { status: "done", progress: "Shot list ready" };
@@ -270,6 +284,20 @@ function continuityOf(shots: Shot[]) {
   return { notWorn, anchorShot };
 }
 
+/**
+ * The put-on shot's LAST frame: its own scene (now wearing it) — not the shot's still_prompt, which by design
+ * describes the moment BEFORE (on the hanger), so end frames came back on the hanger (review 2026-11-15).
+ */
+function endShot(s: Shot): Shot {
+  const after = s.end_state ?? s.subject_action;
+  return {
+    ...s,
+    subject_action: after,
+    still_prompt: `The LAST moment of this shot: ${after}. Same place, light, camera position, phone and person as the first frame — the piece is now WORN exactly as the product references.`,
+    garment_must_show: `${s.garment_must_show}. Now worn: ${after}`,
+  };
+}
+
 /** The shot + options for one picture (a still, or the last frame of the put-on shot). */
 async function stillTaskInput(pool: Pool, p: ProjectRow, shots: Shot[], t: StillTask, extra: string | undefined, anchor: Buffer | null) {
   const s = shots.find((x) => x.idx === t.idx)!;
@@ -278,7 +306,7 @@ async function stillTaskInput(pool: Pool, p: ProjectRow, shots: Shot[], t: Still
   if (t.kind === "still_end") {
     const firstPath = (await stillsByShot(pool, p.id)).get(s.idx);
     const firstFrame = firstPath ? (await getFile(firstPath)).bytes : undefined;
-    return { shot: { ...s, subject_action: s.end_state ?? s.subject_action, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state ?? ""}` }, opts: { extra, kind: "still_end" as const, firstFrame, continuity: anchor ?? undefined, outfit } };
+    return { shot: endShot(s), opts: { extra, kind: "still_end" as const, firstFrame, continuity: anchor ?? undefined, outfit } };
   }
   return { shot: s, opts: { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit } };
 }
@@ -382,7 +410,12 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   // ---- first run
   const have = await stillsByShot(pool, p.id);
   const only = st.shots;
-  const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)));
+  // A put-on shot whose first picture exists and only its "now wearing it" frame is missing: draw just that frame.
+  const ends = new Set(
+    (await pool.query<{ shot_idx: number }>(`SELECT DISTINCT shot_idx FROM creative_generations WHERE project_id = $1::uuid AND kind = 'still_end' AND status = 'done'`, [p.id])).rows.map((r) => r.shot_idx),
+  );
+  const endOnly = only ? shots.filter((s) => only.includes(s.idx) && have.has(s.idx) && s.puts_on && s.end_state && !ends.has(s.idx)) : [];
+  const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)) && !endOnly.some((e) => e.idx === s.idx));
   const failed: number[] = [];
   const extra = st.extra;
   // The ANCHOR picture is drawn first, right now (every other shot copies its face, outfit and room).
@@ -391,14 +424,17 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   if (anchorShot && anchorPath && !todo.some((x) => x.idx === anchorShot.idx)) anchor = (await getFile(anchorPath)).bytes;
   if (anchorShot && todo.some((x) => x.idx === anchorShot.idx)) {
     await setProgress(`Drawing the anchor picture first (shot ${anchorShot.idx + 1}) — every other shot copies its face, outfit and room`);
-    const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null });
+    const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null, notWornYet: notWorn(anchorShot) });
     if (r) anchor = (await getFile(r.path)).bytes;
     else failed.push(anchorShot.idx + 1);
   }
   const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
+  // The anchor IS the put-on shot (a one-shot "off the hanger"): its "now wearing it" frame still has to be drawn.
+  const anchorEnd = anchorShot && anchor && anchorShot.puts_on && anchorShot.end_state && todo.some((x) => x.idx === anchorShot.idx);
   if (!STILLS_LIVE) {
-    if (!rest.length) return finishStills(pool, p, job.requested_by, failed);
-    return submitStillBatch(pool, p, shots, rest.map((s) => ({ idx: s.idx, kind: "still" as const, attempt: 1 })), { ...st, failed, round: 0 }, setProgress);
+    const tasks: StillTask[] = [...(anchorEnd ? [{ idx: anchorShot!.idx, kind: "still_end" as const, attempt: 1 }] : []), ...endOnly.map((s) => ({ idx: s.idx, kind: "still_end" as const, attempt: 1 })), ...rest.map((s) => ({ idx: s.idx, kind: "still" as const, attempt: 1 }))];
+    if (!tasks.length) return finishStills(pool, p, job.requested_by, failed);
+    return submitStillBatch(pool, p, shots, tasks, { ...st, failed, round: 0 }, setProgress);
   }
   // Live (CREATIVE_STILLS_LIVE=1): all at the same time at full price.
   let finished = 0;
@@ -408,7 +444,7 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
     else if (s.end_state && s.puts_on) {
       await setProgress(`Shot ${s.idx + 1}: drawing the last frame (${s.end_state.slice(0, 60)})`);
       const first = (await getFile(r.path)).bytes;
-      const end = await makeStill(pool, p, { ...s, subject_action: s.end_state, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state}` }, { extra, kind: "still_end", firstFrame: first, continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
+      const end = await makeStill(pool, p, endShot(s), { extra, kind: "still_end", firstFrame: first, continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
       if (!end) failed.push(s.idx + 1);
     }
     finished++;

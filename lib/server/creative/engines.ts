@@ -81,15 +81,18 @@ export async function submitImageEditBatch(
   if (!lines.length) throw new Error("empty batch");
   const model = imageModel();
   const sharp = (await import("sharp")).default;
-  const cache = new Map<Buffer, string>();
+  // Same picture (same bytes) → encoded once, even when each line downloaded its own copy.
+  const { createHash } = await import("node:crypto");
+  const cache = new Map<string, string>();
   const dataUrl = async (r: ImageRef) => {
-    const hit = cache.get(r.bytes);
+    const key = createHash("sha1").update(r.bytes).digest("hex");
+    const hit = cache.get(key);
     if (hit) return hit;
     const png = /png/.test(r.mime ?? "") || r.name.endsWith(".png");
     const img = sharp(r.bytes).resize(1024, 1024, { fit: "inside", withoutEnlargement: true });
     const out = png ? await img.png({ compressionLevel: 9 }).toBuffer() : await img.jpeg({ quality: 86 }).toBuffer();
     const u = `data:image/${png ? "png" : "jpeg"};base64,${out.toString("base64")}`;
-    cache.set(r.bytes, u);
+    cache.set(key, u);
     return u;
   };
   const rows: string[] = [];
@@ -165,7 +168,7 @@ export function buildVideoInput(v: VideoRequest): { input: Record<string, unknow
     const mids = (v.middleImageUrls ?? []).slice(0, 8);
     const refs = (v.personRefUrls ?? []).slice(0, Math.max(0, 10 - 2 - mids.length));
     const lead = [
-      `The video starts on the first frame${mids.length ? `, moves through keyframes 1–${mids.length} in order` : ""}${v.endImageUrl ? " and ends on the last frame" : ""}.`,
+      `The start image is keyframe 1${mids.length ? `, the middle images are keyframes 2–${mids.length + 1} in order` : ""}${v.endImageUrl ? `, and the end image is keyframe ${mids.length + 2}, the final frame` : ""}.`,
       refs.length ? `${refs.map((_, i) => `@Image${i + 1}`).join(", ")} show the same person: keep the face, hair, skin tone and body exactly identical in every frame.` : "",
       v.voiceId ? "Whenever the person speaks, they speak in English using @Voice1 — the same voice for every word, with accurate lip synchronization." : "",
     ].filter(Boolean).join(" ");
