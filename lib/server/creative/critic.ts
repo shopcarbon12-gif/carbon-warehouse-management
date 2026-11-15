@@ -73,7 +73,21 @@ export async function criticize(
   ]
     .filter(Boolean)
     .join("\n");
-  const r = (await json(pool, prompt, Report, { tenantId, what: `critic (${v.kind})`, projectId: v.projectId, images: imgs.map((b) => ({ b64: b.toString("base64") })), maxOutputTokens: 900 })).value;
+  // The answer was cut off at 900 tokens (the model's thinking counts too) → "The AI reply was not JSON" failed a
+  // whole paid video (owner, 2026-11-15). More room, one retry, and if it still can't answer, the picture / clip
+  // goes to the owner marked "not checked" instead of failing the job.
+  const ask = () => json(pool, prompt, Report, { tenantId, what: `critic (${v.kind})`, projectId: v.projectId, images: imgs.map((b) => ({ b64: b.toString("base64") })), maxOutputTokens: 3000 });
+  let r: z.infer<typeof Report>;
+  try {
+    r = (await ask().catch(() => ask())).value;
+  } catch (e) {
+    if (e instanceof Error && /Paused|cap/i.test(e.message)) throw e;
+    return {
+      garment_accuracy: 7, ai_artifacts: 7, motion_realism: null, brand_fit: 7, hook_strength: null, originality: 7, ugc_realism: null, same_person: null,
+      text_and_logos_seen: [], problems: [], note: "The quality check couldn't answer for this one — please look at it yourself.",
+      overall: 7, pass: true, fails: [], foreignBrands: [],
+    };
+  }
 
   // Originality, hard checks: other brands' names in the readable text, and near-identical pictures.
   const names = (

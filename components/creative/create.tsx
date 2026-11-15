@@ -7,7 +7,7 @@
  */
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
 import { api, btn, btnDanger, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, JobLine, KIND_LABEL, Media, money, muted, STATUS_LABEL, type Job } from "./ui";
 
@@ -218,6 +218,27 @@ type View = {
   notice: string | null;
 };
 
+/** Batches finish while you're away: a desktop alert + sound says when (Settings › Alerts, owner 2026-11-15). */
+function DesktopAlertsHint() {
+  const show = useSyncExternalStore(
+    () => () => undefined,
+    () => {
+      try {
+        return typeof Notification !== "undefined" && Notification.permission !== "granted";
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
+  if (!show) return null;
+  return (
+    <p className="mb-3 border-l-2 border-sky-300 bg-sky-300/10 px-3 py-2 text-sm text-sky-100">
+      Pictures are made in the half-price batch and arrive later. <Link className="underline" href="/settings/alerts">Turn on desktop alerts</Link> on this computer to get a notification with a sound when they&rsquo;re ready.
+    </p>
+  );
+}
+
 function ProjectView({ id }: { id: string }) {
   const router = useRouter();
   const { data, error, mutate } = useSWR<View>(`/api/creative/projects/${id}`, fetcher, {
@@ -278,6 +299,7 @@ function ProjectView({ id }: { id: string }) {
         </div>
       </div>
       {data.notice ? <p className="mb-3 border-l-2 border-amber-300 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{data.notice}</p> : null}
+      <DesktopAlertsHint />
       <ErrorLine error={err} />
       {p.step_note ? <p className="mb-3 border-l-2 border-amber-300 px-3 py-2 text-sm text-amber-100">{p.step_note}</p> : null}
       {live.length ? <div className={`${card} mb-4`}>{live.map((j) => <JobLine key={j.id} job={j} />)}</div> : null}

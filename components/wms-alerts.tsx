@@ -215,8 +215,9 @@ const ALERT_KINDS: { id: string; label: string; hint: string }[] = [
   { id: "visitor_cart", label: "Added to cart", hint: "A visitor added something to the cart" },
   { id: "social", label: "Social & email", hint: "An AI job finished, the weekly review is ready, or a holiday email is 14 days away" },
   { id: "wholesale", label: "Wholesale applications", hint: "A store applied on the Wholesale page" },
+  { id: "creative", label: "Creative ready", hint: "A batch of pictures or a video is ready" },
 ];
-const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "wholesale"];
+const DEFAULT_KINDS = ["orders", "studio", "visitor_new", "visitor_back", "visitor_checkout", "wholesale", "creative"];
 
 export function AlertsControl() {
   const [state, setState] = useState<"loading" | "hidden" | "unsupported" | "off" | "on" | "blocked">("loading");

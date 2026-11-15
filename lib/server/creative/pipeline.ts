@@ -13,14 +13,17 @@ import { enqueue, type JobHandler } from "./jobs";
 import { autoCast, listModels } from "./casting";
 import { buildBrief, pitchConcepts, writeShotList, type Concept, type Modifier, type Shot } from "./director";
 import { getTwin } from "./twin";
-import { advanceClip, clipPlan, clipsByShot, loadProject, makeStill, queueRender, renderState, setProject, stillsByShot, submitClip, STILL_COST, type ClipState, type ProjectRow } from "./produce";
+import { advanceClip, clipPlan, clipsByShot, judgeStill, loadProject, makeStill, newStillGen, prepareStill, queueRender, renderState, setProject, stillsByShot, submitClip, STILL_COST, type ClipState, type ProjectRow } from "./produce";
 import { buildEditPlan, type EditPlan } from "./editor";
 import { listAudio, pickTrack, sfxFor, sfxIndex, type Track } from "./audio";
 import { composeStatic, STATIC_SIZES } from "./statics";
 import { getFile, putFile, signedUrl, WMS_BASE } from "./storage";
 import { captionCards, writeUgcScript, type UgcScript } from "./ugc";
 import { animatedHtml, type AnimatedTemplate } from "./animated";
-import { speak } from "./engines";
+import { collectImageBatch, speak, submitImageEditBatch, type ImageRef } from "./engines";
+import { MAX_RETRIES, retryHint, type CriticReport } from "./critic";
+import { IMAGE_COST } from "./routing";
+import { notifyCreative } from "./notify";
 import { listRecipes } from "./recipes";
 import sharp from "sharp";
 
@@ -98,7 +101,8 @@ export const projectConcepts: JobHandler = async (pool, job, setProgress) => {
   let concepts = await pitchConcepts(pool, p.tenant_id, brief, { modifier: modifier ?? null, previous: modifier ? previous : [], projectId: p.id });
   if (brief0.recipe && !modifier) concepts = concepts.map((c, i) => (i === 0 ? { ...c, recipe_key: brief0.recipe! } : c));
   await setProject(pool, p.id, { concepts, concept_idx: null, status: "concepts", step_note: null, brief: { ...brief0, lane: brief.lane, season: brief.season } });
-  await enqueue(pool, p.tenant_id, "concept_thumbs", {}, { projectId: p.id, requestedBy: job.requested_by, progress: "Drawing cheap storyboard thumbnails" });
+  // UGC: no storyboard sketches (owner, 2026-11-15) — the concept text is enough; the shots are the real preview.
+  if (p.kind !== "ugc") await enqueue(pool, p.tenant_id, "concept_thumbs", {}, { projectId: p.id, requestedBy: job.requested_by, progress: "Drawing cheap storyboard thumbnails" });
   return { status: "done", progress: "3 concepts ready — pick one" };
 };
 
@@ -240,24 +244,131 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
   return [...base, ...(lanes[lane ?? "streetwear"] ?? lanes.streetwear), ...(p.kind === "ugc" ? ["aigenerated"] : [])];
 }
 
-export const projectStills: JobHandler = async (pool, job, setProgress) => {
-  const p = await loadProject(pool, job.tenant_id, job.project_id!);
-  const shots = p.shot_list?.shots ?? [];
-  const have = await stillsByShot(pool, p.id);
-  const only = (job.payload as { shots?: number[] }).shots;
-  const failed: number[] = [];
-  // All shots are drawn at the same time (owner, 2026-11-14: one by one took 6–8 minutes a creative).
-  // Each shot still has its own critic and retries; STILL_PARALLEL caps how many run at once.
-  const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)));
-  let finished = 0;
-  await setProgress(`Drawing ${todo.length} still${todo.length === 1 ? "" : "s"} at the same time`);
-  const extra = (job.payload as { extra?: string }).extra;
-  // Continuity (owner, 2026-11-15: face, outfit and room changed from shot to shot). One ANCHOR picture is
-  // drawn first — the first shot where the piece is worn — and every other shot copies its person, hair,
-  // outfit, room and light. Shots before the put-on moment show the piece not worn yet.
+/** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
+const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
+type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
+type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string };
+
+/** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
+function continuityOf(shots: Shot[]) {
   const change = shots.find((x) => x.puts_on && x.end_state);
   const notWorn = (x: Shot) => (change ? x.idx <= change.idx : false);
   const anchorShot = shots.find((x) => !x.is_end_card && !notWorn(x)) ?? shots.find((x) => !x.is_end_card);
+  return { notWorn, anchorShot };
+}
+
+/** The shot + options for one picture (a still, or the last frame of the put-on shot). */
+async function stillTaskInput(pool: Pool, p: ProjectRow, shots: Shot[], t: StillTask, extra: string | undefined, anchor: Buffer | null) {
+  const s = shots.find((x) => x.idx === t.idx)!;
+  const { notWorn } = continuityOf(shots);
+  const outfit = p.shot_list?.outfit ?? null;
+  if (t.kind === "still_end") {
+    const firstPath = (await stillsByShot(pool, p.id)).get(s.idx);
+    const firstFrame = firstPath ? (await getFile(firstPath)).bytes : undefined;
+    return { shot: { ...s, subject_action: s.end_state ?? s.subject_action, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state ?? ""}` }, opts: { extra, kind: "still_end" as const, firstFrame, continuity: anchor ?? undefined, outfit } };
+  }
+  return { shot: s, opts: { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit } };
+}
+
+async function anchorBytes(pool: Pool, p: ProjectRow, shots: Shot[]): Promise<Buffer | null> {
+  const { anchorShot } = continuityOf(shots);
+  const path = anchorShot ? (await stillsByShot(pool, p.id)).get(anchorShot.idx) : undefined;
+  return path ? (await getFile(path)).bytes : null;
+}
+
+async function finishStills(pool: Pool, p: ProjectRow, requestedBy: string | null, failed: number[]) {
+  failed = [...new Set(failed)].sort((a, b) => a - b);
+  await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check after 3 tries — they are left out. Ask for a change or try again.` : null });
+  await enqueue(pool, p.tenant_id, "project_draft", {}, { projectId: p.id, requestedBy, progress: p.kind === "static" ? "Laying out the statics" : "Cutting the draft (free)" });
+  await notifyCreative(pool, p.tenant_id, {
+    title: `Creative · ${p.title || "your creative"}: pictures ready`,
+    body: failed.length ? `Ready — shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check. Tap to look.` : "Every shot passed the quality check. Tap to look and make the video.",
+    url: `/creative/create?project=${p.id}`,
+    tag: `creative-${p.id}-stills`,
+  });
+  return { status: "done" as const, progress: failed.length ? `${failed.length} still(s) failed the critic` : "All stills passed the critic" };
+}
+
+async function submitStillBatch(pool: Pool, p: ProjectRow, shots: Shot[], tasks: StillTask[], st: StillsState, setProgress: (s: string) => Promise<void>) {
+  const anchor = await anchorBytes(pool, p, shots);
+  const lines: { customId: string; prompt: string; refs: ImageRef[]; quality: "high" }[] = [];
+  let est = 0;
+  for (const t of tasks) {
+    const { shot, opts } = await stillTaskInput(pool, p, shots, t, st.extra, anchor);
+    const prep = await prepareStill(pool, p, shot, opts);
+    lines.push({ customId: `${t.idx}|${t.kind}|${t.attempt}`, prompt: t.hint ? `${prep.prompt0}\nRETRY — the quality check found: ${t.hint}` : prep.prompt0, refs: prep.refs, quality: "high" });
+    est += (IMAGE_COST.high + prep.refs.length * 0.01) * 0.5 + 0.02;
+  }
+  await spendGate(pool, p.tenant_id, "openai", est);
+  await setProgress(`Sending ${lines.length} picture${lines.length === 1 ? "" : "s"} to the OpenAI batch (half price)`);
+  const { batchId } = await submitImageEditBatch(lines, { purpose: "creative_stills", project: p.id });
+  const round = (st.round ?? 0) + 1;
+  return {
+    status: "waiting" as const,
+    afterSeconds: 120,
+    payload: { ...st, batchId, tasks, round, started: new Date().toISOString() },
+    progress: `${lines.length} picture${lines.length === 1 ? "" : "s"} in the OpenAI batch (half price${round > 1 ? `, redraw round ${round}` : ""}) — you can leave; a desktop alert comes when they're ready`,
+  };
+}
+
+export const projectStills: JobHandler = async (pool, job, setProgress) => {
+  const p = await loadProject(pool, job.tenant_id, job.project_id!);
+  const shots = p.shot_list?.shots ?? [];
+  const st = job.payload as StillsState;
+  const { notWorn, anchorShot } = continuityOf(shots);
+
+  // ---- later runs: collect the batch, check every picture, redraw what failed in the next batch
+  if (st.batchId && !STILLS_LIVE) {
+    const out = await collectImageBatch(st.batchId);
+    if (out.state === "pending") return { status: "waiting", afterSeconds: 120, progress: `Pictures in the OpenAI batch (half price) — ${out.status}. You can leave; a desktop alert comes when they're ready.` };
+    if (out.state === "failed") throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Try again.`);
+    const anchor = await anchorBytes(pool, p, shots);
+    const failed = [...(st.failed ?? [])];
+    const next: StillTask[] = [];
+    let n = 0;
+    // Pictures of this batch already saved + checked (a Try again after a pause must not count them twice).
+    const seen = await pool.query<{ shot_idx: number; kind: string; attempt: number; status: string; critic: CriticReport | null }>(
+      `SELECT shot_idx, kind, attempt, status, critic FROM creative_generations WHERE project_id = $1::uuid AND inputs->>'batch' = $2`,
+      [p.id, st.batchId],
+    );
+    for (const t of st.tasks ?? []) {
+      const r = out.results.find((x) => x.customId === `${t.idx}|${t.kind}|${t.attempt}`);
+      await setProgress(`Checking the batch pictures: ${++n} of ${st.tasks?.length ?? 0}`);
+      const retry = (hint: string) => (t.attempt <= MAX_RETRIES ? next.push({ ...t, attempt: t.attempt + 1, hint }) : failed.push(t.idx + 1));
+      const done = seen.rows.find((x) => x.shot_idx === t.idx && x.kind === t.kind && x.attempt === t.attempt);
+      if (done) {
+        const s0 = shots.find((x) => x.idx === t.idx);
+        if (done.status === "done") {
+          if (t.kind === "still" && s0?.puts_on && s0.end_state) next.push({ idx: t.idx, kind: "still_end", attempt: 1 });
+        } else retry(done.critic ? retryHint(done.critic) : "try again");
+        continue;
+      }
+      const { shot, opts } = await stillTaskInput(pool, p, shots, t, st.extra, anchor);
+      const prep = await prepareStill(pool, p, shot, opts);
+      if (!r?.bytes) {
+        retry(`The picture was blocked or missing (${r?.error ?? "no result"}). Keep it clearly fashion, fully clothed, natural pose.`);
+        continue;
+      }
+      const genId = await newStillGen(pool, p, shot, opts, prep, prep.prompt0, t.attempt, { batch: st.batchId });
+      const cost = (IMAGE_COST.high + prep.refs.length * 0.01) * 0.5;
+      await recordSpend(pool, p.tenant_id, { provider: "openai", what: `still shot ${t.idx + 1}, batch (${p.title})`, cost, projectId: p.id, generationId: genId });
+      const j = await judgeStill(pool, p, shot, opts, prep, { genId, bytes: r.bytes, model: "batch", cost });
+      if (j.critic?.pass) {
+        const s = shots.find((x) => x.idx === t.idx);
+        if (t.kind === "still" && s?.puts_on && s.end_state) next.push({ idx: t.idx, kind: "still_end", attempt: 1 });
+      } else retry(j.critic ? retryHint(j.critic) : "try again");
+    }
+    if (next.length) return submitStillBatch(pool, p, shots, next, { ...st, failed }, setProgress);
+    return finishStills(pool, p, job.requested_by, failed);
+  }
+
+  // ---- first run
+  const have = await stillsByShot(pool, p.id);
+  const only = st.shots;
+  const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)));
+  const failed: number[] = [];
+  const extra = st.extra;
+  // The ANCHOR picture is drawn first, right now (every other shot copies its face, outfit and room).
   let anchor: Buffer | null = null;
   const anchorPath = anchorShot ? have.get(anchorShot.idx) : undefined;
   if (anchorShot && anchorPath && !todo.some((x) => x.idx === anchorShot.idx)) anchor = (await getFile(anchorPath)).bytes;
@@ -266,27 +377,27 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
     const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null });
     if (r) anchor = (await getFile(r.path)).bytes;
     else failed.push(anchorShot.idx + 1);
-    finished++;
   }
   const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
+  if (!STILLS_LIVE) {
+    if (!rest.length) return finishStills(pool, p, job.requested_by, failed);
+    return submitStillBatch(pool, p, shots, rest.map((s) => ({ idx: s.idx, kind: "still" as const, attempt: 1 })), { ...st, failed, round: 0 }, setProgress);
+  }
+  // Live (CREATIVE_STILLS_LIVE=1): all at the same time at full price.
+  let finished = 0;
   await inParallel(rest, STILL_PARALLEL, async (s) => {
     const r = await makeStill(pool, p, s, { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
     if (!r) failed.push(s.idx + 1);
     else if (s.end_state && s.puts_on) {
-      // The LAST frame of a change shot (now wearing it): drawn from the first frame so the place, light and
-      // person match; the video engine then moves from one picture to the other.
       await setProgress(`Shot ${s.idx + 1}: drawing the last frame (${s.end_state.slice(0, 60)})`);
       const first = (await getFile(r.path)).bytes;
       const end = await makeStill(pool, p, { ...s, subject_action: s.end_state, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state}` }, { extra, kind: "still_end", firstFrame: first, continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
       if (!end) failed.push(s.idx + 1);
     }
     finished++;
-    await setProgress(`Drawing the other stills at the same time: ${finished} of ${todo.length} done`);
+    await setProgress(`Drawing the other stills at the same time: ${finished} of ${rest.length} done`);
   });
-  failed.sort((a, b) => a - b);
-  await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check after 3 tries — they are left out. Ask for a change or try again.` : null });
-  await enqueue(pool, p.tenant_id, "project_draft", {}, { projectId: p.id, requestedBy: job.requested_by, progress: p.kind === "static" ? "Laying out the statics" : "Cutting the draft (free)" });
-  return { status: "done", progress: failed.length ? `${failed.length} still(s) failed the critic` : "All stills passed the critic" };
+  return finishStills(pool, p, job.requested_by, failed);
 };
 
 /* ------------------------------------------------------------------ edit plans */

@@ -98,16 +98,11 @@ async function locationRef(pool: Pool, tenantId: string, name: string): Promise<
 
 export const STILL_COST = IMAGE_COST.high + 0.06 + 0.02; // picture + refs + critic
 
-/**
- * One shot's still, critic-gated. Returns the passing generation (or null after the retries).
- * `quality` low = storyboard thumbnails (no critic).
- */
-export async function makeStill(
-  pool: Pool,
-  p: ProjectRow,
-  shot: Shot,
-  opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean; continuity?: Buffer; outfit?: string | null } = {},
-): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
+export type StillOpts = { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean; continuity?: Buffer; outfit?: string | null };
+export type StillPrep = { prompt0: string; refs: ImageRef[]; quality: "high" | "medium" | "low"; crit: Buffer[]; personRef: Buffer | null; insp: string[]; ugc: boolean };
+
+/** Everything a shot's picture needs: the prompt and the reference pictures (used live and by the batch). */
+export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: StillOpts = {}): Promise<StillPrep> {
   const ugc = p.kind === "ugc";
   const tid = p.tenant_id;
   const brand = await getBrand(pool, tid);
@@ -128,10 +123,10 @@ export async function makeStill(
   if (loc) refs.push(loc);
   if (opts.continuity) refs.push({ name: "continuity.jpg", bytes: await sharp(opts.continuity).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
   if (opts.firstFrame) refs.push({ name: "first-frame.jpg", bytes: await sharp(opts.firstFrame).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
-  const crit = await garmentRefs(pool, tid, products);
+  const crit = low ? [] : await garmentRefs(pool, tid, products);
   // The person's own reference, so the critic can fail a shot where the face changed (owner, 2026-11-15).
   const personRef = low || !cast[0] ? null : (await modelRefBytes(cast[0], 1).catch(() => [] as Buffer[]))[0] ?? null;
-  const insp = await inspirationHashes(pool, p.inspiration_ad_id);
+  const insp = low ? [] : await inspirationHashes(pool, p.inspiration_ad_id);
   const quality = opts.quality ?? "high";
   const prompt0 = [
     shot.still_prompt,
@@ -154,27 +149,56 @@ export async function makeStill(
   ]
     .filter(Boolean)
     .join("\n");
+  return { prompt0, refs, quality, crit, personRef, insp, ugc };
+}
+
+/** A new picture for a shot: saved, then (unless it's a cheap thumbnail) run through the quality check. */
+export async function judgeStill(
+  pool: Pool,
+  p: ProjectRow,
+  shot: Shot,
+  opts: StillOpts,
+  prep: StillPrep,
+  v: { genId: string; bytes: Buffer; model: string; cost: number },
+): Promise<{ path: string; critic: CriticReport | null }> {
+  const path = await putFile(`creative/projects/${p.id}/still-${shot.idx}-${v.genId.slice(0, 8)}.png`, v.bytes, "image/png");
+  if (prep.quality === "low") {
+    await pool.query(`UPDATE creative_generations SET status = 'done', output_path = $2, model = $3, cost_usd = $4, updated_at = now() WHERE id = $1::uuid`, [v.genId, path, v.model, v.cost]);
+    return { path, critic: null };
+  }
+  const frame = await sharp(v.bytes).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
+  const c = await criticize(pool, p.tenant_id, { frames: [frame], kind: "still", garmentRefs: prep.crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: prep.insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc: prep.ugc, notWornYet: opts.notWornYet, personRef: prep.personRef });
+  await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, model = $4, cost_usd = $5, critic = $6::jsonb, updated_at = now() WHERE id = $1::uuid`, [
+    v.genId, c.pass ? "done" : "rejected", path, v.model, v.cost, JSON.stringify(c),
+  ]);
+  return { path, critic: c };
+}
+
+export async function newStillGen(pool: Pool, p: ProjectRow, shot: Shot, opts: StillOpts, prep: StillPrep, prompt: string, attempt: number, extra: Record<string, unknown> = {}): Promise<string> {
+  return insertGen(pool, p.tenant_id, { projectId: p.id, kind: prep.quality === "low" ? "sample" : opts.kind ?? "still", shotIdx: shot.idx, provider: "openai", prompt, attempt, draft: opts.draft, inputs: { refs: prep.refs.map((r) => r.name), ...extra } });
+}
+
+/**
+ * One shot's still, critic-gated, at full price right now (the anchor picture, and anything asked for live).
+ * Returns the passing generation (or null after the retries). `quality` low = storyboard thumbnails (no critic).
+ */
+export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: StillOpts = {}): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
+  const tid = p.tenant_id;
+  const prep = await prepareStill(pool, p, shot, opts);
+  const { prompt0, refs, quality } = prep;
   let best: { genId: string; path: string; critic: CriticReport } | null = null;
   for (let attempt = 1; attempt <= (quality === "low" ? 1 : MAX_RETRIES + 1); attempt++) {
     const est = (quality === "low" ? IMAGE_COST.low : quality === "medium" ? IMAGE_COST.medium : IMAGE_COST.high) + refs.length * 0.01 + (quality === "low" ? 0 : 0.02);
     await spendGate(pool, tid, "openai", est);
     const prompt = attempt === 1 ? prompt0 : `${prompt0}\nRETRY — the quality check found: ${retryHint(best!.critic)}`;
-    const genId = await insertGen(pool, tid, { projectId: p.id, kind: quality === "low" ? "sample" : opts.kind ?? "still", shotIdx: shot.idx, provider: "openai", prompt, attempt, draft: opts.draft, inputs: { refs: refs.map((r) => r.name) } });
+    const genId = await newStillGen(pool, p, shot, opts, prep, prompt, attempt);
     try {
       const g = await generateImage({ prompt, refs, size: "1024x1536", quality });
       await recordSpend(pool, tid, { provider: "openai", what: `still shot ${shot.idx + 1} (${p.title})`, cost: g.cost, projectId: p.id, generationId: genId });
-      const path = await putFile(`creative/projects/${p.id}/still-${shot.idx}-${genId.slice(0, 8)}.png`, g.bytes, "image/png");
-      if (quality === "low") {
-        await pool.query(`UPDATE creative_generations SET status = 'done', output_path = $2, model = $3, cost_usd = $4, updated_at = now() WHERE id = $1::uuid`, [genId, path, g.model, g.cost]);
-        return { genId, path, critic: null };
-      }
-      const frame = await sharp(g.bytes).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
-      const c = await criticize(pool, tid, { frames: [frame], kind: "still", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc, notWornYet: opts.notWornYet, personRef });
-      await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, model = $4, cost_usd = $5, critic = $6::jsonb, updated_at = now() WHERE id = $1::uuid`, [
-        genId, c.pass ? "done" : "rejected", path, g.model, g.cost, JSON.stringify(c),
-      ]);
-      if (c.pass) return { genId, path, critic: c };
-      if (!best || c.overall > best.critic.overall) best = { genId, path, critic: c };
+      const j = await judgeStill(pool, p, shot, opts, prep, { genId, bytes: g.bytes, model: g.model, cost: g.cost });
+      if (!j.critic) return { genId, path: j.path, critic: null };
+      if (j.critic.pass) return { genId, path: j.path, critic: j.critic };
+      if (!best || j.critic.overall > best.critic.overall) best = { genId, path: j.path, critic: j.critic };
     } catch (e) {
       await pool.query(`UPDATE creative_generations SET status = 'failed', error = $2, updated_at = now() WHERE id = $1::uuid`, [genId, (e as Error).message.slice(0, 500)]);
       if (e instanceof PlainError && /Paused|key/.test(e.message)) throw e;

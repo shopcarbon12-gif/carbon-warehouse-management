@@ -69,6 +69,40 @@ export async function submitImageBatch(
   return { batchId: batch.id };
 }
 
+/**
+ * Pictures WITH reference pictures (people, garments, continuity frame) through the Batch API, half price
+ * (owner, 2026-11-15: "whatever I click to generate, it's sent to the batch"). One /v1/images/edits line per
+ * picture; the references travel inside the line as JPEG / PNG data URLs.
+ */
+export async function submitImageEditBatch(
+  lines: { customId: string; prompt: string; refs: ImageRef[]; size?: Size; quality?: "high" | "medium" | "low" }[],
+  meta: Record<string, string>,
+): Promise<{ batchId: string }> {
+  if (!lines.length) throw new Error("empty batch");
+  const model = imageModel();
+  const sharp = (await import("sharp")).default;
+  const cache = new Map<Buffer, string>();
+  const dataUrl = async (r: ImageRef) => {
+    const hit = cache.get(r.bytes);
+    if (hit) return hit;
+    const png = /png/.test(r.mime ?? "") || r.name.endsWith(".png");
+    const img = sharp(r.bytes).resize(1024, 1024, { fit: "inside", withoutEnlargement: true });
+    const out = png ? await img.png({ compressionLevel: 9 }).toBuffer() : await img.jpeg({ quality: 86 }).toBuffer();
+    const u = `data:image/${png ? "png" : "jpeg"};base64,${out.toString("base64")}`;
+    cache.set(r.bytes, u);
+    return u;
+  };
+  const rows: string[] = [];
+  for (const l of lines) {
+    const images = await Promise.all(l.refs.slice(0, 16).map(async (r) => ({ image_url: await dataUrl(r) })));
+    rows.push(JSON.stringify({ custom_id: l.customId, method: "POST", url: "/v1/images/edits", body: { model, prompt: l.prompt, images, size: l.size ?? "1024x1536", quality: l.quality ?? "high", n: 1 } }));
+  }
+  const client = openai();
+  const file = await client.files.create({ file: new File([rows.join("\n")], "creative-stills.jsonl", { type: "application/jsonl" }), purpose: "batch" });
+  const batch = await client.batches.create({ input_file_id: file.id, endpoint: "/v1/images/edits" as "/v1/responses", completion_window: "24h", metadata: meta });
+  return { batchId: batch.id };
+}
+
 export type ImageBatchOutcome =
   | { state: "pending"; status: string }
   | { state: "failed"; status: string; error: string }
