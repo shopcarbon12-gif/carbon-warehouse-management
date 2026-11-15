@@ -10,3 +10,10 @@ if (!key) { console.log("KLING_API_KEY is empty"); process.exit(1); }
 const r = await fetch("https://api-singapore.klingai.com/v1/general/presets-voices?pageNum=1&pageSize=3", { headers: { Authorization: `Bearer ${key}` } });
 const j = await r.json().catch(() => ({}));
 console.log(`HTTP ${r.status} · code ${j.code} · ${j.message ?? ""} · preset voices returned: ${Array.isArray(j.data) ? j.data.length : "-"}`);
+// Resource packages (free call, QPS <= 1): which packages are live and what's left (Kling notes a 12 h delay on "remaining").
+const now = Date.now();
+const c = await fetch(`https://api-singapore.klingai.com/account/costs?start_time=${now - 365 * 86400000}&end_time=${now + 86400000}`, { headers: { Authorization: `Bearer ${key}` } });
+const cj = await c.json().catch(() => ({}));
+for (const p of cj.data?.resource_pack_subscribe_infos ?? [])
+  console.log(`package: ${p.resource_pack_name} · tier ${p.resource_pack_tier} · ${p.status} · ${p.remaining_quantity}/${p.total_quantity} units · ${p.resource_pack_applicable_models ?? ""} · expires ${new Date(p.invalid_time).toISOString().slice(0, 10)}`);
+if (!(cj.data?.resource_pack_subscribe_infos ?? []).length) console.log(`packages: none (${cj.code} ${cj.message ?? ""})`);
