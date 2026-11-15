@@ -5,7 +5,7 @@
  */
 import type { Pool } from "pg";
 import sharp from "sharp";
-import { getBrand, getCreativeSettings, presetOf, recordSpend, spendGate, PlainError, UGC_LOOK } from "./config";
+import { falKey, getBrand, getCreativeSettings, presetOf, recordSpend, spendGate, PlainError, UGC_LOOK } from "./config";
 import { tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { generateImage, pollVideo, submitVideo, type ImageRef } from "./engines";
 import { criticize, MAX_RETRIES, retryHint, type CriticReport } from "./critic";
@@ -14,7 +14,7 @@ import { listModels, modelRefBytes, type CastModel } from "./casting";
 import { twinRefs } from "./twin";
 import { getFile, putFile, signedUrl, fetchBytes } from "./storage";
 import { routeFor, VIDEO_ENGINES, estimateVideoCost, IMAGE_COST, type VideoJob } from "./routing";
-import { ensureKlingVoice, KLING4, klingKey } from "./kling";
+import { ensureFalKlingVoice, ensureKlingVoice, FAL_K4, KLING4, klingKey } from "./kling";
 import type { Shot } from "./director";
 
 export type ProjectRow = {
@@ -223,9 +223,11 @@ export type ClipState = { shotIdx: number; genId: string; engines: string[]; eng
 export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, "genId" | "status"> & { genId?: string }): Promise<ClipState> {
   const engineId = st.engines[st.engineAt];
   const e = VIDEO_ENGINES[engineId];
-  if (e.provider === "kling" && st.speakerId && !st.voiceId) {
+  // The speaker's fixed voice for THIS engine (Kling direct and fal keep separate voice ids).
+  if (st.speakerId && (e.provider === "kling" || engineId === FAL_K4)) {
     const m = (await listModels(pool, p.tenant_id)).find((x) => x.id === st.speakerId);
-    st = { ...st, voiceId: m ? await ensureKlingVoice(pool, p.tenant_id, m, p.id).catch(() => null) : null };
+    const voiceId = m ? await (e.provider === "kling" ? ensureKlingVoice : ensureFalKlingVoice)(pool, p.tenant_id, m, p.id).catch(() => null) : null;
+    st = { ...st, voiceId };
   }
   const cost = estimateVideoCost(engineId, st.seconds, st.audio);
   await spendGate(pool, p.tenant_id, "fal", cost);
@@ -296,7 +298,10 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
     const maxUse = Math.max(0, ...(s.cast ?? []).map((c) => uses.get(c) ?? 0));
     const job = videoJobFor(p, s, maxUse);
     // Kling 4.0 direct first when the key is on the server (owner, 2026-11-15); the saved route stays the backup.
-    const engines = [...(klingKey() ? [KLING4] : []), ...routeFor(job, settings.routing).filter((x) => x !== KLING4)];
+    // Kling 4.0 through fal first (owner, 2026-11-15: "switch"), Kling direct as the backup when its key is set,
+    // then the saved route.
+    const k4 = [...(falKey() ? [FAL_K4] : []), ...(klingKey() ? [KLING4] : [])];
+    const engines = [...k4, ...routeFor(job, settings.routing).filter((x) => !k4.includes(x))];
     // The cast member's photos (face + body) — Kling direct keeps the person identical with them.
     const personRefs: string[] = [];
     for (const c of (s.cast ?? []).slice(0, 1)) {
@@ -349,7 +354,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
   }
   // UGC on Kling direct: the whole thing is ONE continuous phone take (owner, 2026-11-15) — the shots' pictures
   // become its keyframes and every line is spoken in order in one voice; the edit cuts it back at the shots.
-  if (p.kind === "ugc" && out.length >= 2 && out[0].engines[0] === KLING4) {
+  if (p.kind === "ugc" && out.length >= 2 && (out[0].engines[0] === FAL_K4 || out[0].engines[0] === KLING4)) {
     const take = out.slice(0, 9);
     const seconds = Math.min(30, take.reduce((a, c) => a + c.seconds, 0));
     const byIdx = new Map(shots.map((x) => [x.idx, x]));
@@ -358,13 +363,13 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
     const male = speaker?.gender === "male";
     const lines = take.map((c, i) => {
       const s = byIdx.get(c.shotIdx)!;
-      const ref = i === 0 ? "@f1" : i === take.length - 1 ? "@f2" : `@m${i}`;
+      const ref = i === 0 ? "the first frame" : i === take.length - 1 ? "the last frame" : `keyframe ${i}`;
       return `${i === 0 ? "Start" : i === take.length - 1 ? "End" : "Then"} on ${ref} (~${c.seconds}s): ${s.subject_action}${s.say ? ` — ${male ? "he" : "she"} says: "${s.say}"` : ""}.`;
     });
     return [
       {
         ...take[0],
-        engines: [KLING4],
+        engines: take[0].engines.filter((x) => x === FAL_K4 || x === KLING4),
         seconds,
         endStill: take[take.length - 1].still,
         middleStills: take.slice(1, -1).map((c) => c.still),

@@ -30,6 +30,18 @@ export type VideoEngine = {
 const KLING_UNIT = Number(process.env.KLING_UNIT_USD || 0.14);
 
 export const VIDEO_ENGINES: Record<string, VideoEngine> = {
+  // Kling 4.0 through fal (owner, 2026-11-15: "switch" — ~30% cheaper than Kling direct, no prepaid units):
+  // first / middle / last frames + the person's photos (@Image1…) + a fixed voice (@Voice1), native audio.
+  "kling/v4/reference-to-video": {
+    id: "kling/v4/reference-to-video",
+    label: "Kling 4.0 (fal)",
+    imageField: "start_image_url",
+    durations: Array.from({ length: 28 }, (_, i) => i + 3),
+    durationFormat: "plain",
+    aspectField: true,
+    perSecond: { silent: 0.157, audio: 0.157 },
+    nativeDialogue: true,
+  },
   "kling-direct/kling-4.0-omni": {
     id: "kling-direct/kling-4.0-omni",
     label: "Kling 4.0 (direct)",

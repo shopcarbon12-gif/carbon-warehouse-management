@@ -54,7 +54,7 @@ export type KlingClip = {
  * Pictures go INSIDE the request (base64 JPEG), not as links: Kling's servers sometimes can't download from
  * wms.shopcarbon.com ("Something went wrong when we tried to get the contents of the file", 2026-11-15).
  */
-async function inline(url: string): Promise<string> {
+export async function inline(url: string): Promise<string> {
   const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
   if (!r.ok) throw new PlainError(`Couldn't read a picture for Kling (HTTP ${r.status}).`);
   const jpg = await sharp(Buffer.from(await r.arrayBuffer())).resize(1440, 1440, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
@@ -66,7 +66,7 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
   const mids = (v.middleFrames ?? []).slice(0, 7);
   const refs = (v.personRefs ?? []).slice(0, Math.max(0, 10 - 2 - mids.length));
   const lead = [
-    `@f1 is the first frame${mids.length ? `, ${mids.map((_, i) => `@m${i + 1}`).join(", ")} are the keyframes in between, in order,` : ""}${v.lastFrame ? " and @f2 is the last frame — the video moves through them in order" : ""}.`,
+    `@f1 is the first frame${mids.length ? `, ${mids.map((_, i) => `@m${i + 1}`).join(", ")} are keyframes 1–${mids.length} in between, in order,` : ""}${v.lastFrame ? " and @f2 is the last frame — the video moves through them in order" : ""}.`,
     refs.length ? `${refs.map((_, i) => `@p${i + 1}`).join(", ")} show the same person: keep the face, hair, skin tone and body exactly identical in every frame.` : "",
     v.voiceId ? "Whenever the person speaks, she or he speaks in English using @v1 — the same voice for every word, with accurate lip synchronization." : "",
   ]
@@ -101,6 +101,9 @@ export async function pollKling(taskId: string): Promise<JobResult> {
   return { state: "done", url, contentType: "video/mp4" };
 }
 
+/** Kling 4.0 on fal (the main engine since 2026-11-15). */
+export const FAL_K4 = "kling/v4/reference-to-video";
+
 /** A neutral sample (no product claims) — only the sound of the voice is used. */
 const SAMPLE =
   "Okay so, quick one. I literally just got back, and I have to show you guys this. Honestly, I was not expecting it to look this good. Like, look at this. Anyway, let me know what you think, okay? Love you, bye.";
@@ -131,4 +134,37 @@ export async function ensureKlingVoice(pool: Pool, tenantId: string, m: CastMode
     }
   }
   return null; // not ready in time — the clip goes without a fixed voice rather than waiting forever
+}
+
+/**
+ * The same idea on fal: one voice per cast member, made once on fal's Kling (voices made on the owner's own
+ * Kling account don't exist there), saved on creative_model_meta.fal_voice_id.
+ */
+export async function ensureFalKlingVoice(pool: Pool, tenantId: string, m: CastModel, projectId?: string | null): Promise<string | null> {
+  const { falKey } = await import("./config");
+  if (!falKey()) return null;
+  const have = await pool.query<{ fal_voice_id: string | null }>(`SELECT fal_voice_id FROM creative_model_meta WHERE tenant_id = $1::uuid AND model_id = $2`, [tenantId, m.id]);
+  if (have.rows[0]?.fal_voice_id) return have.rows[0].fal_voice_id;
+  const v = await speak(SAMPLE, m.voice ?? (m.gender === "male" ? "ash" : "coral"), `A real ${m.gender === "male" ? "guy" : "girl"} talking to their phone: ${m.personality ?? "relaxed, warm, confident"}. Casual, natural, not an announcer.`);
+  await recordSpend(pool, tenantId, { provider: "openai", what: `voice sample for ${m.name}`, cost: v.cost, projectId: projectId ?? null });
+  const path = await putFile(`creative/voices/${tenantId}/${m.id}-fal-${Date.now()}.mp3`, v.bytes, "audio/mpeg");
+  const headers = { Authorization: `Key ${falKey()}`, "Content-Type": "application/json" };
+  const r = await fetch("https://queue.fal.run/fal-ai/kling-video/create-voice", { method: "POST", headers, body: JSON.stringify({ voice_url: signedUrl(path, 3600) }), signal: AbortSignal.timeout(60_000) });
+  const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string; detail?: unknown };
+  if (!r.ok || !j.status_url) throw new PlainError(`fal could not start ${m.name}'s voice (HTTP ${r.status}: ${JSON.stringify(j.detail ?? j).slice(0, 160)})`);
+  for (let i = 0; i < 40; i++) {
+    await new Promise((res) => setTimeout(res, 3000));
+    const s = (await (await fetch(j.status_url, { headers, signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { status?: string };
+    if (s.status === "IN_QUEUE" || s.status === "IN_PROGRESS") continue;
+    const out = (await (await fetch(j.response_url!, { headers, signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { voice_id?: string };
+    if (!out.voice_id) return null;
+    await pool.query(
+      `INSERT INTO creative_model_meta (tenant_id, model_id, fal_voice_id) VALUES ($1::uuid, $2, $3)
+       ON CONFLICT (tenant_id, model_id) DO UPDATE SET fal_voice_id = EXCLUDED.fal_voice_id`,
+      [tenantId, m.id, out.voice_id],
+    );
+    await recordSpend(pool, tenantId, { provider: "fal", what: `fal Kling voice for ${m.name}`, cost: 0.01, projectId: projectId ?? null });
+    return out.voice_id;
+  }
+  return null;
 }

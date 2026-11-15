@@ -157,6 +157,28 @@ export function buildVideoInput(v: VideoRequest): { input: Record<string, unknow
   const e = VIDEO_ENGINES[v.engineId];
   if (!e) throw new Error(`unknown engine ${v.engineId}`);
   const secs = engineDuration(e, v.seconds);
+  if (v.engineId.startsWith("kling/v4/")) {
+    // Kling 4.0 on fal: keyframes + the person's photos + a fixed voice in one request.
+    const mids = (v.middleImageUrls ?? []).slice(0, 8);
+    const refs = (v.personRefUrls ?? []).slice(0, Math.max(0, 10 - 2 - mids.length));
+    const lead = [
+      `The video starts on the first frame${mids.length ? `, moves through keyframes 1–${mids.length} in order` : ""}${v.endImageUrl ? " and ends on the last frame" : ""}.`,
+      refs.length ? `${refs.map((_, i) => `@Image${i + 1}`).join(", ")} show the same person: keep the face, hair, skin tone and body exactly identical in every frame.` : "",
+      v.voiceId ? "Whenever the person speaks, they speak in English using @Voice1 — the same voice for every word, with accurate lip synchronization." : "",
+    ].filter(Boolean).join(" ");
+    const input: Record<string, unknown> = {
+      prompt: `${lead} ${v.prompt}`.slice(0, 20000),
+      start_image_url: v.imageUrl,
+      duration: Math.min(30, Math.max(3, secs)),
+      resolution: "1080p",
+      aspect_ratio: v.aspect === "4:5" ? "9:16" : v.aspect,
+    };
+    if (mids.length) input.middle_image_urls = mids;
+    if (v.endImageUrl) input.end_image_url = v.endImageUrl;
+    if (refs.length) input.image_urls = refs;
+    if (v.voiceId) input.voice_ids = [v.voiceId];
+    return { input, seconds: input.duration as number };
+  }
   const input: Record<string, unknown> = { prompt: v.prompt };
   if (e.imageField === "image_urls") {
     input.image_urls = [v.imageUrl, ...(v.referenceUrls ?? [])].slice(0, 9);
@@ -180,7 +202,16 @@ export async function submitVideo(v: VideoRequest): Promise<JobRef & { cost: num
     return { provider: "kling", externalId: k.taskId, meta: { provider: "kling", engine: v.engineId, input: k.input }, cost: estimateVideoCost(v.engineId, k.seconds, v.audio), seconds: k.seconds };
   }
   const { input, seconds } = buildVideoInput(v);
-  const r = await fetch(`${QUEUE}/${v.engineId}`, { method: "POST", headers: falHeaders(), body: JSON.stringify(input), signal: AbortSignal.timeout(60_000) });
+  let body: Record<string, unknown> = input;
+  if (v.engineId.startsWith("kling/v4/")) {
+    // Pictures inside the request (Kling's servers couldn't download from wms.shopcarbon.com, 2026-11-15).
+    const { inline } = await import("./kling");
+    const d = async (u: unknown) => (typeof u === "string" ? `data:image/jpeg;base64,${await inline(u)}` : u);
+    const many = async (a: unknown) => (Array.isArray(a) ? Promise.all(a.map(d)) : a);
+    body = { ...input, start_image_url: await d(input.start_image_url), end_image_url: await d(input.end_image_url), middle_image_urls: await many(input.middle_image_urls), image_urls: await many(input.image_urls) };
+    for (const k of Object.keys(body)) if (body[k] === undefined) delete body[k];
+  }
+  const r = await fetch(`${QUEUE}/${v.engineId}`, { method: "POST", headers: falHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(120_000) });
   const j = (await r.json().catch(() => ({}))) as { request_id?: string; status_url?: string; response_url?: string; detail?: unknown };
   if (!r.ok || !j.request_id) throw new PlainError(`fal.ai refused the video request (HTTP ${r.status}: ${JSON.stringify(j.detail ?? j).slice(0, 200)}).`);
   return {
