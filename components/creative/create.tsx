@@ -366,9 +366,13 @@ function ProjectView({ id }: { id: string }) {
               ) : null}
               <button className={btn} onClick={() => act({ action: "feedback", verdict: "down" }, "fb")}>👎</button>
               <p className={`w-full text-xs ${muted}`}>
-                {isMotion
-                  ? "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects. The test makes only the first shot so you can see it move first — it is kept, not paid twice."
-                  : "Approve marks it final."}
+                {!isMotion
+                  ? "Approve marks it final."
+                  : data.testClipEstimate
+                    ? "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects. The test makes only the first shot so you can see it move first — it is kept, not paid twice."
+                    : p.kind === "ugc"
+                      ? "Make the video films it as ONE continuous phone take on Kling 4.0 — the shots above are its keyframes, she says every line in her own voice — then adds music, captions and the CARBON ending."
+                      : "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects."}
               </p>
             </div>
           ) : null}
