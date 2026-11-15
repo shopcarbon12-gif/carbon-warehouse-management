@@ -4,6 +4,7 @@
  * Radar's nightly collection (radar_nightly, no paid AI) and its one-time tagging batch.
  */
 import { musicSeed } from "./music-seed";
+import { ideaPictures } from "./idea-pictures";
 import type { JobHandler } from "./jobs";
 import { radarNightly, radarRetention, radarSource, radarTag } from "./radar/run";
 import { twinBuild } from "./twin";
@@ -34,6 +35,7 @@ export const HANDLERS: Record<string, JobHandler> = {
   music_seed: musicSeed,
   ugc_rescript: ugcRescript,
   ugc_refresh: ugcRefresh,
+  idea_pictures: ideaPictures,
   project_rerender: projectRerender,
   project_cutdown: projectCutdown,
   campaign_pack: campaignPack,

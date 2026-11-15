@@ -13,12 +13,15 @@ import { json } from "./llm";
 import { ownWinners } from "./learning";
 import { listRecipes } from "./recipes";
 import { currentSeason } from "./radar/query";
+import { enqueue } from "./jobs";
 
 const Ideas = z.object({
   ideas: z
     .array(
       z.object({
-        idea: z.string().max(140),
+        idea: z.string().max(160),
+        /** What the preview picture shows: place, light, who, pose, how the piece is worn (owner, 2026-11-15). */
+        scene: z.string().max(300).optional(),
         reason: z.string().max(160),
         product_refs: z.array(z.string()).max(3),
         kind: z.enum(["static", "video", "ugc", "animated", "campaign"]),
@@ -54,7 +57,7 @@ export function upcomingDates(now = new Date()): string[] {
   return list.filter(([d]) => d.getTime() >= now.getTime() - 86_400_000 && d.getTime() <= end).map(([d, n]) => `${n} — ${d.toDateString()}`);
 }
 
-export async function giveIdeas(pool: Pool, tenantId: string): Promise<{ ideas: { id: string; idea: string; reason: string; prefill: Record<string, unknown> }[]; cost: number }> {
+export async function giveIdeas(pool: Pool, tenantId: string): Promise<{ ideas: { id: string; idea: string; reason: string; prefill: Record<string, unknown>; picture: string | null; pictureStatus: string }[]; cost: number }> {
   const brand = await getBrand(pool, tenantId);
   const cat = await inStockCatalog().catch(() => []);
   // New = Shopify's newest first (the catalog is sorted that way); slow = lots in stock.
@@ -85,6 +88,8 @@ export async function giveIdeas(pool: Pool, tenantId: string): Promise<{ ideas: 
     `WINNING IN RADAR (public activity signals): ${patterns.rows.map((p) => `${p.pattern} (${p.n} ads, ${p.lane})`).join("; ") || "Radar is still empty"}`,
     own.length ? `WORKS FOR CARBON: ${own.join("; ")}` : "",
     `RECIPES: ${recipes.map((r) => `${r.key} (${r.name})`).join(", ")}`,
+    "WRITE IN PLAIN WORDS (owner, 2026-11-15): idea = what the ad shows, the way you'd explain it to a friend (e.g. 'Nico unboxes the Off Sneakers in his car and walks out in them'). No slogans, no quoted taglines, no jargon like 'material_detail_as_proof' or recipe keys. reason = one plain sentence with the real signal (stock, new, best seller, what's working).",
+    "scene = one sentence describing the single picture that shows this idea: the place, the light, the person, the pose and how the product is worn or held.",
     "product_refs = P-numbers from the lists. Never invent numbers or products. Example reason: 'Cargo pants are slow (40 in stock); speed-ramp walk-ins are winning in streetwear.'",
   ]
     .filter(Boolean)
@@ -94,11 +99,13 @@ export async function giveIdeas(pool: Pool, tenantId: string): Promise<{ ideas: 
   const out = [];
   for (const i of r.value.ideas) {
     const prefill = { products: i.product_refs.map((x) => ref.get(x)).filter(Boolean), kind: i.kind, recipe: i.recipe_key, preset: i.preset };
-    const row = await pool.query<{ id: string }>(`INSERT INTO creative_ideas (tenant_id, idea, reason, prefill, cost_usd) VALUES ($1::uuid, $2, $3, $4::jsonb, $5) RETURNING id`, [
-      tenantId, i.idea, i.reason, JSON.stringify(prefill), r.cost / r.value.ideas.length,
+    const row = await pool.query<{ id: string }>(`INSERT INTO creative_ideas (tenant_id, idea, reason, prefill, cost_usd, scene, picture_status) VALUES ($1::uuid, $2, $3, $4::jsonb, $5, $6, 'queued') RETURNING id`, [
+      tenantId, i.idea, i.reason, JSON.stringify(prefill), r.cost / r.value.ideas.length, i.scene ?? null,
     ]);
-    out.push({ id: row.rows[0].id, idea: i.idea, reason: i.reason, prefill });
+    out.push({ id: row.rows[0].id, idea: i.idea, reason: i.reason, prefill, picture: null, pictureStatus: "queued" });
   }
+  // One preview picture per idea, all in one half-price batch (the tap doesn't wait for them).
+  await enqueue(pool, tenantId, "idea_pictures", { ids: out.map((x) => x.id) }, { requestedBy: null, progress: "Drawing a picture for each idea (half-price batch)" });
   return { ideas: out, cost: r.cost };
 }
 

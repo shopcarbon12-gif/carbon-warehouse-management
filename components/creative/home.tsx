@@ -8,7 +8,7 @@ import useSWR from "swr";
 import { api, btn, btnPrimary, card, CreativeShell, ErrorLine, fetcher, head, JobLine, KIND_LABEL, Media, money, muted, STATUS_LABEL, type Job } from "./ui";
 
 type Spend = Record<"openai" | "fal", { today: number; month: number; daily: number; monthly: number }> & { total: { today: number; month: number } };
-type Idea = { id: string; idea: string; reason: string; prefill: { products?: string[]; kind?: string; recipe?: string | null; preset?: string } };
+type Idea = { id: string; idea: string; reason: string; prefill: { products?: string[]; kind?: string; recipe?: string | null; preset?: string }; picture?: string | null; pictureStatus?: string | null };
 type Overview = {
   spend: Spend;
   keys: { openai: boolean; fal: boolean; meta: boolean };
@@ -45,7 +45,7 @@ function Bar({ label, used, cap }: { label: string; used: number; cap: number })
 
 export function CreativeHome() {
   const router = useRouter();
-  const { data, error, mutate } = useSWR<Overview>("/api/creative", fetcher, { refreshInterval: (d) => (d?.jobs?.some((j) => ["queued", "running", "waiting"].includes(j.status)) ? 5000 : 0) });
+  const { data, error, mutate } = useSWR<Overview>("/api/creative", fetcher, { refreshInterval: (d) => (d?.jobs?.some((j) => ["queued", "running", "waiting"].includes(j.status)) || d?.ideas?.some((i) => i.pictureStatus === "queued" || i.pictureStatus === "batch") ? 5000 : 0) });
   const [ideas, setIdeas] = useState<Idea[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -55,8 +55,10 @@ export function CreativeHome() {
     setBusy(true);
     setErr(null);
     try {
-      const r = await api<{ ideas: Idea[]; cost: number }>("/api/creative/ideas", { method: "POST" });
-      setIdeas(r.ideas);
+      await api<{ ideas: Idea[]; cost: number }>("/api/creative/ideas", { method: "POST" });
+      // The cards come from the overview so their pictures fill in as the batch finishes.
+      setIdeas(null);
+      await mutate();
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -109,6 +111,11 @@ export function CreativeHome() {
           <div className="grid gap-2 md:grid-cols-2">
             {shown.map((i) => (
               <div key={i.id} className={`${card} flex flex-col gap-2`}>
+                {i.picture ? (
+                  <a href={i.picture} target="_blank" rel="noreferrer"><Media url={i.picture} className="aspect-[4/5] w-full" alt={i.idea} /></a>
+                ) : i.pictureStatus === "queued" || i.pictureStatus === "batch" ? (
+                  <div className={`flex aspect-[4/5] w-full items-center justify-center bg-white/5 px-4 text-center text-xs ${muted}`}>Picture on the way (half-price batch) — a desktop alert comes when it&rsquo;s ready</div>
+                ) : null}
                 <p className="text-base font-semibold">{i.idea}</p>
                 <p className={`text-sm ${muted}`}>{i.reason}</p>
                 <div className="mt-auto flex gap-2">
@@ -118,7 +125,7 @@ export function CreativeHome() {
               </div>
             ))}
           </div>
-          <p className={`mt-2 text-xs ${muted}`}>Text only — one cheap AI call. Nothing is drawn or filmed until you tap Make this and approve the draft.</p>
+          <p className={`mt-2 text-xs ${muted}`}>One cheap AI call for the ideas, then one preview picture each in the half-price batch. Nothing else is drawn or filmed until you tap Make this.</p>
         </section>
       ) : null}
 

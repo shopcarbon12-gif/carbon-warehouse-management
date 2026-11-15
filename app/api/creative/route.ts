@@ -33,7 +33,7 @@ export async function GET(req: Request) {
            FROM creative_projects p WHERE p.tenant_id = $1::uuid ORDER BY p.updated_at DESC LIMIT 24`,
         [tid],
       ),
-      g.pool.query(`SELECT id::text, idea, reason, prefill, status, created_at FROM creative_ideas WHERE tenant_id = $1::uuid AND status = 'new' ORDER BY created_at DESC LIMIT 5`, [tid]),
+      g.pool.query(`SELECT id::text, idea, reason, prefill, status, created_at, picture_path, picture_status FROM creative_ideas WHERE tenant_id = $1::uuid AND status = 'new' ORDER BY created_at DESC LIMIT 5`, [tid]),
       g.pool.query(`SELECT id::text, name, status, hero_project_id::text, created_at FROM creative_campaigns WHERE tenant_id = $1::uuid ORDER BY created_at DESC LIMIT 6`, [tid]),
     ]);
     return NextResponse.json({
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       radar: { kept: radar.kept, review: radar.review, rejected: radar.rejected, discovered: radar.discovered, season: radar.season },
       jobs,
       projects: projects.rows.map((p) => ({ ...p, cover: appFileUrl(p.poster || (/\.(jpg|png)$/i.test(p.cover ?? "") ? p.cover : null)), video: /\.mp4$/i.test(p.cover ?? "") ? appFileUrl(p.cover) : null, spend: Number(p.spend) })),
-      ideas: ideas.rows,
+      ideas: ideas.rows.map(({ picture_path, picture_status, ...x }) => ({ ...x, picture: appFileUrl(picture_path), pictureStatus: picture_status })),
       campaigns: campaigns.rows,
     });
   } catch (e) {

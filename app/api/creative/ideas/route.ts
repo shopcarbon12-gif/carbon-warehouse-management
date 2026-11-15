@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { withActivity } from "@/lib/server/activity-log";
-import { guard, fail, body } from "@/lib/server/creative/http";
+import { guard, fail, body, kick } from "@/lib/server/creative/http";
 import { giveIdeas } from "@/lib/server/creative/ideas";
 import { recordFeedback } from "@/lib/server/creative/learning";
 
@@ -18,7 +18,9 @@ async function POST_handler(req: Request) {
   const g = await guard(req);
   if ("error" in g) return g.error;
   try {
-    return NextResponse.json(await giveIdeas(g.pool, g.session.tid));
+    const r = await giveIdeas(g.pool, g.session.tid);
+    kick(g.pool, g.session.tid);
+    return NextResponse.json(r);
   } catch (e) {
     return fail(e);
   }
