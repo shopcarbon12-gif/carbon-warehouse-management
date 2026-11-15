@@ -106,6 +106,8 @@ export async function chatEdit(pool: Pool, tenantId: string, projectId: string, 
   if (remake.size) {
     // The changed shots' old stills and clips are set aside; the rest are kept as they are.
     await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind IN ('still','still_end','clip') AND shot_idx = ANY($2::int[]) AND status = 'done'`, [p.id, [...remake]]);
+    // A one-take UGC is ONE clip covering every shot: a redrawn shot means the take has to be filmed again.
+    if (p.kind === "ugc") await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status = 'done' AND output_meta ? 'take'`, [p.id]);
   }
   const rerender: "free" | "stills" | "none" = remake.size ? "stills" : change.actions.some((a) => a.type !== "none" && a.type !== "caption") ? "free" : "none";
   if (rerender === "stills") {

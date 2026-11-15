@@ -161,7 +161,8 @@ export async function collectBatch(batchId: string): Promise<BatchOutcome> {
   const client = openai();
   const b = await client.batches.retrieve(batchId);
   if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) return { state: "pending", status: b.status };
-  if (b.status !== "completed") return { state: "failed", status: b.status, error: b.errors?.data?.[0]?.message ?? b.status };
+  const partial = (b.status === "expired" || b.status === "cancelled") && (b.output_file_id || b.error_file_id);
+  if (b.status !== "completed" && !partial) return { state: "failed", status: b.status, error: b.errors?.data?.[0]?.message ?? b.status };
   const results: { customId: string; ok: boolean; value?: unknown; error?: string; inTok: number; outTok: number }[] = [];
   for (const fileId of [b.output_file_id, b.error_file_id].filter(Boolean) as string[]) {
     const text = await (await client.files.content(fileId)).text();

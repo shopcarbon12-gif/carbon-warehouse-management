@@ -112,7 +112,10 @@ export async function collectImageBatch(batchId: string): Promise<ImageBatchOutc
   const client = openai();
   const b = await client.batches.retrieve(batchId);
   if (["validating", "in_progress", "finalizing", "cancelling"].includes(b.status)) return { state: "pending", status: b.status };
-  if (b.status !== "completed") return { state: "failed", status: b.status, error: b.errors?.data?.[0]?.message ?? b.status };
+  // An expired / cancelled batch still holds the pictures it finished (and billed): read them like a completed
+  // one; the missing lines go through the normal redraw path.
+  const partial = (b.status === "expired" || b.status === "cancelled") && (b.output_file_id || b.error_file_id);
+  if (b.status !== "completed" && !partial) return { state: "failed", status: b.status, error: b.errors?.data?.[0]?.message ?? b.status };
   const results: { customId: string; bytes?: Buffer; error?: string }[] = [];
   for (const fileId of [b.output_file_id, b.error_file_id].filter(Boolean) as string[]) {
     const text = await (await client.files.content(fileId)).text();
@@ -229,11 +232,15 @@ export async function pollVideo(meta: { status_url?: string; response_url?: stri
     return pollKling(requestId);
   }
   const statusUrl = meta.status_url ?? `${QUEUE}/${meta.engine}/requests/${requestId}/status`;
-  const s = await fetch(statusUrl, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) });
+  // A network blip, a 429 / 5xx or a non-JSON answer is NOT a failed clip — it is asked again on the next check
+  // (review 2026-11-15: treating it as failed booked the clip at $0 and re-filmed it while fal still billed it).
+  const s = await fetch(statusUrl, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) }).catch(() => null);
+  if (!s || !s.ok) return { state: "pending", note: `fal status check ${s?.status ?? "unreachable"} — asking again` };
   const sj = (await s.json().catch(() => ({}))) as { status?: string; error?: string };
-  if (sj.status === "IN_QUEUE" || sj.status === "IN_PROGRESS") return { state: "pending", note: sj.status };
-  if (sj.status !== "COMPLETED") return { state: "failed", error: sj.error ?? `fal status ${sj.status ?? s.status}` };
-  const rr = await fetch(meta.response_url ?? `${QUEUE}/${meta.engine}/requests/${requestId}`, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) });
+  if (!sj.status || sj.status === "IN_QUEUE" || sj.status === "IN_PROGRESS") return { state: "pending", note: sj.status ?? "unknown" };
+  if (sj.status !== "COMPLETED") return { state: "failed", error: sj.error ?? `fal status ${sj.status}` };
+  const rr = await fetch(meta.response_url ?? `${QUEUE}/${meta.engine}/requests/${requestId}`, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) }).catch(() => null);
+  if (!rr || rr.status >= 500 || rr.status === 429) return { state: "pending", note: "fal result not readable yet — asking again" };
   const rj = (await rr.json().catch(() => ({}))) as { video?: { url?: string }; detail?: unknown };
   if (!rr.ok || !rj.video?.url) return { state: "failed", error: `fal returned no video (${JSON.stringify(rj.detail ?? rj).slice(0, 200)})` };
   return { state: "done", url: rj.video.url, contentType: "video/mp4" };

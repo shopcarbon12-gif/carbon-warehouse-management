@@ -92,10 +92,12 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
 }
 
 export async function pollKling(taskId: string): Promise<JobResult> {
-  const d = await call<{ id: string; status: string; message?: string; outputs?: { type: string; url?: string }[] }[]>(`/tasks?task_ids=${encodeURIComponent(taskId)}`);
+  const d = await call<{ id: string; status: string; message?: string; outputs?: { type: string; url?: string }[] }[]>(`/tasks?task_ids=${encodeURIComponent(taskId)}`).catch(() => null);
+  if (!d) return { state: "pending", note: "Kling status check failed — asking again" };
   const t = d?.[0];
-  if (!t || t.status === "submitted" || t.status === "processing") return { state: "pending", note: t?.status ?? "submitted" };
-  if (t.status !== "succeeded") return { state: "failed", error: `Kling: ${t.message || t.status}` };
+  // Done = succeed / succeeded; failed = failed only; anything else (queued, processing, unknown) keeps waiting.
+  if (!t || !["succeed", "succeeded", "failed"].includes(t.status)) return { state: "pending", note: t?.status ?? "submitted" };
+  if (t.status === "failed") return { state: "failed", error: `Kling: ${t.message || t.status}` };
   const url = t.outputs?.find((o) => o.type === "video")?.url;
   if (!url) return { state: "failed", error: "Kling returned no video" };
   return { state: "done", url, contentType: "video/mp4" };

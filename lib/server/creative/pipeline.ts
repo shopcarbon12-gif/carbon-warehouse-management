@@ -9,7 +9,7 @@
  */
 import type { Pool } from "pg";
 import { getBrand, presetOf, PlainError, recordSpend, spendGate } from "./config";
-import { enqueue, type JobHandler } from "./jobs";
+import { enqueue, openJob, type JobHandler } from "./jobs";
 import { autoCast, listModels } from "./casting";
 import { buildBrief, pitchConcepts, writeShotList, type Concept, type Modifier, type Shot } from "./director";
 import { getTwin } from "./twin";
@@ -260,7 +260,7 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
 /** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
 const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
 type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
-type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string };
+type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
 function continuityOf(shots: Shot[]) {
@@ -334,7 +334,11 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   if (st.batchId && !STILLS_LIVE) {
     const out = await collectImageBatch(st.batchId);
     if (out.state === "pending") return { status: "waiting", afterSeconds: 120, progress: `Pictures in the OpenAI batch (half price) — ${out.status}. You can leave; a desktop alert comes when they're ready.` };
-    if (out.state === "failed") throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Try again.`);
+    if (out.state === "failed") {
+      // Send the same pictures again once (a dead batch can't be read back); after that, the owner decides.
+      if ((st.batchFails ?? 0) < 1 && st.tasks?.length) return submitStillBatch(pool, p, shots, st.tasks, { ...st, batchId: undefined, batchFails: (st.batchFails ?? 0) + 1 }, setProgress);
+      throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Try again.`);
+    }
     const anchor = await anchorBytes(pool, p, shots);
     const failed = [...(st.failed ?? [])];
     const next: StillTask[] = [];
@@ -454,6 +458,10 @@ async function applyScript(pool: Pool, p: ProjectRow, script: UgcScript, opts: {
   });
   const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
   const text = said.join(" ");
+  // A clip / take filmed with the OLD words must not be reused by Make the video (a finished video stays on screen
+  // until Film it again).
+  if (p.status !== "final" && text !== scriptText(p.script as UgcScript | null))
+    await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','running','rejected')`, [p.id]);
   const versions = ((ep.scriptVersions as string[] | undefined) ?? []).filter((v) => v !== text);
   ep.scriptVersions = [...versions, text].slice(-12);
   delete ep.takeCaptions;
@@ -623,7 +631,7 @@ export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts:
       fontAsset: a.fontAsset,
       draft: opts.draft,
     });
-    return { plan, track: a.track };
+    return { plan: ugcMix(p, plan), track: a.track };
   }
   if (opts.voicePath) a.assets["voice.mp3"] = signedUrl(opts.voicePath, 24 * 3600);
   const overrides = (p.edit_plan as { overrides?: { speed?: number; textScale?: number } })?.overrides ?? {};
@@ -638,7 +646,7 @@ export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts:
     preset,
     music: a.track ? { asset: "music.audio", beats: a.track.beats?.beats ?? [], bpm: a.track.bpm ?? 120, drop: a.track.beats?.drop ?? null, duration: a.track.duration_s ?? 60 } : null,
     voice: opts.voicePath ? { asset: "voice.mp3", duration: opts.voiceDur ?? 10 } : null,
-    captions: script ? captionCards(script) : [],
+    captions: p.kind === "ugc" ? [] : script ? captionCards(script) : [], // no subtitles on UGC (owner, 2026-11-15)
     sfx: a.sfx,
     assets: a.assets,
     logoAsset: "logo.png",
@@ -646,7 +654,13 @@ export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts:
     draft: opts.draft,
   });
   if (overrides.textScale) plan.textScale = overrides.textScale;
-  return { plan, track: a.track };
+  return { plan: ugcMix(p, plan), track: a.track };
+}
+
+/** UGC: the person's voice leads — music stays low under it, on every cut and re-cut (not only the first final). */
+function ugcMix(p: ProjectRow, plan: EditPlan): EditPlan {
+  if (p.kind === "ugc" && plan.music && (p.shot_list?.shots ?? []).some((x) => x.say)) plan.music = { ...plan.music, volume: 0.18 };
+  return plan;
 }
 
 /** Animated: the template, driven by the Product Twin cut-outs (no paid AI). */
@@ -779,54 +793,79 @@ async function composeStatics(pool: Pool, p: ProjectRow, setProgress: (s: string
 
 /* ------------------------------------------------------------------ approve → final */
 
-export const projectFinal: JobHandler = async (pool, job, setProgress) => {
+export const projectFinal: JobHandler = async (pool, job, setProgress, savePayload) => {
   const p = await loadProject(pool, job.tenant_id, job.project_id!);
-  const st = job.payload as { phase?: "clips" | "render"; clips?: ClipState[]; renders?: string[]; upscale4k?: boolean };
+  const st = job.payload as { phase?: "clips" | "render"; clips?: ClipState[]; renders?: string[]; upscale4k?: boolean; renderRetries?: number };
   if (p.kind === "static" || p.kind === "animated") {
     await pool.query(`UPDATE creative_generations SET draft = false WHERE project_id = $1::uuid AND kind = 'render' AND status = 'done'`, [p.id]);
     await setProject(pool, p.id, { status: "final" });
     return { status: "done", progress: "Final — ready to post" };
   }
   if (!st.phase) {
-    // Shots that already have a passing clip (an earlier approve, or a chat edit elsewhere) keep it.
+    // Shots that already have a passing clip (an earlier approve, a test clip) keep it; clips already SENT by an
+    // earlier run of this step (saved below, one by one) are never sent — and paid for — again.
     const have = await clipsByShot(pool, p.id);
-    const plan = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).filter((c) => !have.has(c.shotIdx));
-    if (!plan.length && !have.size) throw new PlainError("No approved stills to animate.");
-    const clips: ClipState[] = [];
+    const sent = st.clips ?? [];
+    const plan = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).filter((c) => !have.has(c.shotIdx) && !sent.some((x) => x.shotIdx === c.shotIdx));
+    if (!plan.length && !have.size && !sent.length) throw new PlainError("No approved stills to animate.");
+    // The whole plan must fit under today's video cap before anything is sent.
+    const { estimateVideoCost } = await import("./routing");
+    await spendGate(pool, p.tenant_id, "fal", plan.reduce((a, c) => a + estimateVideoCost(c.engines[0], c.seconds, c.audio), 0));
+    const clips: ClipState[] = [...sent];
     for (const c of plan) {
       await setProgress(`Sending shot ${c.shotIdx + 1} to ${c.engines[0]}`);
       clips.push(await submitClip(pool, p, c));
+      await savePayload({ ...st, clips });
     }
     await setProject(pool, p.id, { status: "clips" });
-    return { status: "waiting", afterSeconds: 45, payload: { ...st, phase: "clips", clips }, progress: `${clips.length} clips on the video engines` };
+    return { status: "waiting", afterSeconds: 45, payload: { ...st, phase: "clips", clips }, progress: `${clips.length} clip${clips.length === 1 ? "" : "s"} on the video engine` };
   }
   if (st.phase === "clips") {
     const shots = p.shot_list?.shots ?? [];
-    const clips: ClipState[] = [];
-    for (const c of st.clips ?? []) clips.push(await advanceClip(pool, p, c, shots.find((s) => s.idx === c.shotIdx)!));
-    const running = clips.filter((c) => c.status === "running").length;
-    if (running) return { status: "waiting", afterSeconds: 30, payload: { ...st, clips }, progress: `${clips.length - running}/${clips.length} clips done` };
-    const failed = clips.filter((c) => c.status === "failed");
-    if (failed.length) await setProject(pool, p.id, { step_note: `${failed.map((f) => f.error).join(" · ")} — those shots use the still instead.` });
-    const renders: string[] = [];
-    const ep: Record<string, unknown> = { ...(p.edit_plan ?? {}) };
-    for (const size of p.sizes.length ? p.sizes : ["9:16"]) {
-      const { plan, track } = await buildPlan(pool, p, size, { clips: true, draft: false, trackId: (p.edit_plan as { trackId?: string })?.trackId ?? null, noMusic: (p.edit_plan as { noMusic?: boolean })?.noMusic ?? false });
-      if (p.kind === "ugc" && (p.shot_list?.shots ?? []).some((x) => x.say)) plan.music = plan.music ? { ...plan.music, volume: 0.18 } : null; // the creator's voice leads
-      ep[`final-${size}`] = plan;
-      ep.trackId = track?.id ?? null;
-      const slowed = plan.segments.some((s) => s.src.kind === "video" && (s.src.rate ?? 1) < 0.95);
-      renders.push(await queueRender(pool, p, plan, { draft: false, size, interpolate: slowed, upscale4k: st.upscale4k }));
+    const clips: ClipState[] = [...(st.clips ?? [])];
+    for (let i = 0; i < clips.length; i++) {
+      try {
+        clips[i] = await advanceClip(pool, p, clips[i], shots.find((s) => s.idx === clips[i].shotIdx)!);
+      } catch (e) {
+        // Keep what changed so far (a re-sent clip has a new id) before the error stops this run.
+        await savePayload({ ...st, clips });
+        throw e;
+      }
+      await savePayload({ ...st, clips });
     }
-    await setProject(pool, p.id, { edit_plan: ep });
-    return { status: "waiting", afterSeconds: 20, payload: { ...st, phase: "render", clips, renders }, progress: "Final render + finishing (grade, grain, −14 LUFS)" };
+    const running = clips.filter((c) => c.status === "running").length;
+    if (running) return { status: "waiting", afterSeconds: 30, payload: { ...st, clips }, progress: `${clips.length - running}/${clips.length} clip${clips.length === 1 ? "" : "s"} done — the video engine takes a few minutes` };
+    const failed = clips.filter((c) => c.status === "failed");
+    if (failed.length && p.kind === "ugc" && clips.every((c) => c.status === "failed")) throw new PlainError(`${failed.map((f) => f.error).join(" · ")} — tap Try again.`);
+    if (failed.length) await setProject(pool, p.id, { step_note: `${failed.map((f) => f.error).join(" · ")} — those shots use the still instead.` });
+    return finalRenders(pool, p, st, clips);
   }
   const r = await renderState(pool, st.renders ?? []);
-  if (r.failed) throw new PlainError(`The final render failed: ${r.failed.slice(0, 300)}`);
-  if (!r.done) return { status: "waiting", afterSeconds: 15, progress: "Final render + finishing" };
+  if (r.failed) {
+    // One automatic re-render (fresh links), then hand it to the owner with a Try again that rebuilds the edit.
+    if ((st.renderRetries ?? 0) < 1) return finalRenders(pool, p, { ...st, renderRetries: (st.renderRetries ?? 0) + 1 }, st.clips ?? []);
+    await savePayload({ ...st, phase: "clips", renders: undefined, renderRetries: 0 });
+    throw new PlainError(`The final edit failed: ${r.failed.slice(0, 200)} — tap Try again.`);
+  }
+  if (!r.done) return { status: "waiting", afterSeconds: 15, progress: "Final edit + finishing (about 2 minutes)" };
   await setProject(pool, p.id, { status: "final" });
+  await notifyCreative(pool, p.tenant_id, { title: `Creative · ${p.title || "your video"} is ready`, body: "The final video is done — tap to watch it.", url: `/creative/create?project=${p.id}`, tag: `creative-${p.id}-final` });
   return { status: "done", progress: "Final — ready to post" };
 };
+
+async function finalRenders(pool: Pool, p: ProjectRow, st: Record<string, unknown> & { upscale4k?: boolean }, clips: ClipState[]) {
+  const renders: string[] = [];
+  const ep: Record<string, unknown> = { ...(p.edit_plan ?? {}) };
+  for (const size of p.sizes.length ? p.sizes : ["9:16"]) {
+    const { plan, track } = await buildPlan(pool, p, size, { clips: true, draft: false, trackId: (p.edit_plan as { trackId?: string })?.trackId ?? null, noMusic: (p.edit_plan as { noMusic?: boolean })?.noMusic ?? false });
+    ep[`final-${size}`] = plan;
+    ep.trackId = track?.id ?? null;
+    const slowed = plan.segments.some((s) => s.src.kind === "video" && (s.src.rate ?? 1) < 0.95);
+    renders.push(await queueRender(pool, p, plan, { draft: false, size, interpolate: slowed, upscale4k: st.upscale4k }));
+  }
+  await setProject(pool, p.id, { edit_plan: ep });
+  return { status: "waiting" as const, afterSeconds: 20, payload: { ...st, phase: "render", clips, renders }, progress: "Final edit + finishing (about 2 minutes)" };
+}
 
 /**
  * One real clip of the first shot (owner, 2026-11-15: see the real thing before paying for all of it).
@@ -879,8 +918,12 @@ export async function approveProject(pool: Pool, tenantId: string, id: string, b
   if (p.status !== "draft") throw new PlainError("Only a finished draft can be approved.");
   const missing = await missingShots(pool, p);
   if (missing.length) throw new PlainError(`Shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} missing — tap Redraw missing shots first, so the video doesn't jump.`);
-  await enqueue(pool, tenantId, "project_final", { upscale4k: opts.upscale4k ?? false }, { projectId: id, requestedBy: by, progress: p.kind === "static" || p.kind === "animated" ? "Finishing" : "Making the real video clips" });
-  await setProject(pool, id, { status: "approved" });
+  if (await openJob(pool, id, ["project_test_clip", "project_final", "project_stills"])) throw new PlainError("Still working on this — wait until the current step is done.");
+  // Claim the draft atomically BEFORE queueing: a double tap / second tab gets no row and queues nothing
+  // (review 2026-11-15: two finals = every clip paid twice).
+  const claimed = await pool.query(`UPDATE creative_projects SET status = 'approved', step_note = NULL, updated_at = now() WHERE id = $1::uuid AND tenant_id = $2::uuid AND status = 'draft' RETURNING id`, [id, tenantId]);
+  if (!claimed.rows[0]) throw new PlainError("Already on its way.");
+  await enqueue(pool, tenantId, "project_final", { upscale4k: opts.upscale4k ?? false }, { projectId: id, requestedBy: by, progress: p.kind === "static" || p.kind === "animated" ? "Finishing" : "Making the real video" });
 }
 
 /** Cost preview for the final step (shown on the Approve button). */

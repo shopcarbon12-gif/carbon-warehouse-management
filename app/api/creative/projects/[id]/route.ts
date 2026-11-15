@@ -10,7 +10,7 @@ import { z } from "zod";
 import { withActivity } from "@/lib/server/activity-log";
 import { guard, fail, body, kick } from "@/lib/server/creative/http";
 import { approveProject, missingShots, projectView, rewriteScript, saveScriptText } from "@/lib/server/creative/pipeline";
-import { enqueue } from "@/lib/server/creative/jobs";
+import { enqueue, openJob } from "@/lib/server/creative/jobs";
 import { chatEdit } from "@/lib/server/creative/chat";
 import { recordFeedback } from "@/lib/server/creative/learning";
 import { createCarbonCastPost, nextBestTime } from "@/lib/server/creative/publish";
@@ -106,13 +106,21 @@ async function POST_handler(req: Request, { params }: Ctx) {
   try {
     const a = await body(req, schema);
     const p = await loadProject(g.pool, tid, id);
+    // While the video is being filmed nothing may change under it (review 2026-11-15).
+    const filming = ["approved", "clips"].includes(p.status) || Boolean(await openJob(g.pool, id, ["project_final", "project_test_clip"]));
+    const busyFilming = () => {
+      if (filming) throw new PlainError("The video is being made right now — wait until it's done.");
+    };
     switch (a.action) {
       case "concepts":
+        busyFilming();
         await recordFeedback(g.pool, tid, { target: "concept", targetId: id, verdict: "skip", note: a.modifier ?? "new ideas", by });
         await enqueue(g.pool, tid, "project_concepts", { modifier: a.modifier ?? "new" }, { projectId: id, requestedBy: by, progress: "New concepts" });
         await setProject(g.pool, id, { status: "brief", step_note: null });
         break;
       case "pick":
+        // Only from the concept cards, and only once (a double tap must not write two shot lists + two batches).
+        if (p.status !== "concepts") throw new PlainError(p.status === "brief" ? "New concepts are on the way — pick when they're here." : "A concept was already picked.");
         await enqueue(g.pool, tid, "project_shots", { conceptIdx: a.concept }, { projectId: id, requestedBy: by, progress: "Writing the shot list" });
         await setProject(g.pool, id, { status: "shots", step_note: null, concept_idx: a.concept });
         break;
@@ -123,20 +131,23 @@ async function POST_handler(req: Request, { params }: Ctx) {
       case "script_save":
       case "script_rewrite": {
         if (p.kind !== "ugc" || !p.shot_list) throw new PlainError("What they say is for a UGC whose shots are ready.");
-        if (["approved", "clips"].includes(p.status)) throw new PlainError("The video is being filmed right now — change the words after it's done.");
+        busyFilming();
         const text = a.action === "script_save" ? await saveScriptText(g.pool, p, a.text) : await rewriteScript(g.pool, p);
         return NextResponse.json({ ok: true, text });
       }
       case "redraw_missing": {
+        busyFilming();
+        if (!["draft", "stills"].includes(p.status)) throw new PlainError("Redraw is for shots that are ready.");
         const missing = await missingShots(g.pool, p);
         if (!missing.length) throw new PlainError("No shot is missing.");
-        const open = await g.pool.query(`SELECT 1 FROM creative_jobs WHERE project_id = $1::uuid AND kind = 'project_stills' AND status IN ('queued','running','waiting')`, [id]);
-        if (!open.rows[0]) await enqueue(g.pool, tid, "project_stills", { shots: missing.map((n) => n - 1) }, { projectId: id, requestedBy: by, progress: `Redrawing shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} (half-price batch)` });
+        if (await openJob(g.pool, id, ["project_stills"])) throw new PlainError("Those shots are already being drawn.");
+        await enqueue(g.pool, tid, "project_stills", { shots: missing.map((n) => n - 1) }, { projectId: id, requestedBy: by, progress: `Redrawing shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} (half-price batch)` });
         await setProject(g.pool, id, { status: "shots", step_note: null });
         break;
       }
       case "refilm": {
         // A finished UGC filmed again (new natural voice): the old take is set aside, the pictures and words stay.
+        busyFilming();
         if (p.kind !== "ugc" || !["final", "draft"].includes(p.status)) throw new PlainError("Film it again is for a finished UGC.");
         await g.pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','rejected')`, [id]);
         const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
@@ -146,11 +157,12 @@ async function POST_handler(req: Request, { params }: Ctx) {
       }
       case "test_clip": {
         if (p.status !== "draft" || (p.kind !== "video" && p.kind !== "ugc")) throw new PlainError("The test clip is for a video or UGC whose shots are ready.");
-        const open = await g.pool.query(`SELECT 1 FROM creative_jobs WHERE project_id = $1::uuid AND kind IN ('project_test_clip','project_final') AND status IN ('queued','running','waiting')`, [id]);
-        if (!open.rows[0]) await enqueue(g.pool, tid, "project_test_clip", {}, { projectId: id, requestedBy: by, progress: "Making one real test clip" });
+        busyFilming();
+        await enqueue(g.pool, tid, "project_test_clip", {}, { projectId: id, requestedBy: by, progress: "Making one real test clip" });
         break;
       }
       case "chat": {
+        busyFilming();
         const r = await chatEdit(g.pool, tid, id, a.text, by);
         kick(g.pool, tid);
         return NextResponse.json(r);
@@ -165,7 +177,10 @@ async function POST_handler(req: Request, { params }: Ctx) {
           `SELECT output_path, size, shot_idx, output_meta FROM creative_generations WHERE project_id = $1::uuid AND kind = 'render' AND status = 'done' AND output_path IS NOT NULL ORDER BY created_at DESC`,
           [id],
         );
-        const size = a.size ?? (p.kind === "static" ? (p.role === "story" ? "9:16" : p.sizes[0] ?? "4:5") : "9:16");
+        // A second tap within a minute is the same post, not another Calendar draft.
+        const recent = await g.pool.query(`SELECT 1 FROM creative_posts WHERE project_id = $1::uuid AND created_at > now() - interval '60 seconds'`, [id]).catch(() => ({ rows: [] }));
+        if (recent.rows[0]) return NextResponse.json({ ok: true, note: "Already added to Social → Calendar." });
+        const size = a.size ?? (p.kind === "static" ? (p.role === "story" ? "9:16" : p.sizes[0] ?? "4:5") : p.sizes[0] ?? "9:16");
         const ofSize = outs.rows.filter((o) => (o.size ?? size) === size);
         if (!ofSize.length) throw new PlainError(`No finished ${size} file to post.`);
         const isVideo = ofSize.some((o) => o.output_path.endsWith(".mp4"));
@@ -189,13 +204,37 @@ async function POST_handler(req: Request, { params }: Ctx) {
         return NextResponse.json({ postId, scheduledAt: at, note: "Added to Social → Calendar as a draft. Approve it there and it goes out at that time." });
       }
       case "retry": {
-        const j = await g.pool.query<{ id: string }>(`SELECT id::text FROM creative_jobs WHERE project_id = $1::uuid AND status IN ('failed','paused') ORDER BY updated_at DESC LIMIT 1`, [id]);
-        if (!j.rows[0]) throw new PlainError("Nothing to retry.");
-        await g.pool.query(`UPDATE creative_jobs SET status = 'queued', error = NULL, attempts = 0, run_after = now(), progress = 'Trying again' WHERE id = $1::uuid`, [j.rows[0].id]);
+        // Only the project's NEWEST job, and only if it is the one that stopped (an older failure must never be
+        // re-run behind a newer step). Steps that resume from a batch / render that is itself dead start that part
+        // over instead of failing the same way again (review 2026-11-15).
+        const open = await g.pool.query(`SELECT 1 FROM creative_jobs WHERE project_id = $1::uuid AND status IN ('queued','running','waiting')`, [id]);
+        if (open.rows[0]) throw new PlainError("It's already working on this — give it a moment.");
+        const j = await g.pool.query<{ id: string; kind: string; status: string; payload: Record<string, unknown> }>(
+          `SELECT id::text, kind, status, payload FROM creative_jobs WHERE project_id = $1::uuid ORDER BY created_at DESC LIMIT 1`,
+          [id],
+        );
+        const job = j.rows[0];
+        if (!job || !["failed", "paused"].includes(job.status)) throw new PlainError("Nothing to retry.");
+        const pl = { ...job.payload };
+        if (job.kind === "project_stills") {
+          delete pl.batchId;
+          delete pl.tasks;
+        }
+        if (["project_draft", "project_rerender", "project_cutdown"].includes(job.kind)) delete pl.renders;
+        if (job.kind === "project_final" && pl.phase === "render") {
+          pl.phase = "clips";
+          delete pl.renders;
+          pl.renderRetries = 0;
+        }
+        if (job.kind === "project_test_clip" && (pl.clip as { status?: string } | undefined)?.status !== "running") delete pl.clip;
+        await g.pool.query(`UPDATE creative_jobs SET status = 'queued', error = NULL, attempts = 0, run_after = now(), progress = 'Trying again', payload = $2::jsonb WHERE id = $1::uuid`, [job.id, JSON.stringify(pl)]);
+        if (job.kind === "project_final") await setProject(g.pool, id, { status: pl.phase ? "clips" : "approved" });
         await setProject(g.pool, id, { step_note: null });
         break;
       }
       case "delete":
+        // Stop its work first: nothing keeps running (and paying) for a creative that's gone.
+        await g.pool.query(`UPDATE creative_jobs SET status = 'cancelled', progress = 'Creative deleted', updated_at = now() WHERE project_id = $1::uuid AND tenant_id = $2::uuid AND status IN ('queued','waiting','paused','running')`, [id, tid]);
         await g.pool.query(`DELETE FROM creative_projects WHERE id = $1::uuid AND tenant_id = $2::uuid`, [id, tid]);
         return NextResponse.json({ ok: true });
     }

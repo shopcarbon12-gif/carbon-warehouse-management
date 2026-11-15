@@ -21,7 +21,20 @@ export type JobRow = {
   requested_by: string | null;
 };
 
-export type JobHandler = (pool: Pool, job: JobRow, setProgress: (p: string) => Promise<void>) => Promise<JobOutcome>;
+/**
+ * `savePayload` writes the job's state right away (e.g. after each paid clip is sent), so a pause / crash /
+ * retry mid-step never loses what was already paid for (review 2026-11-15).
+ */
+export type JobHandler = (pool: Pool, job: JobRow, setProgress: (p: string) => Promise<void>, savePayload: (payload: Record<string, unknown>) => Promise<void>) => Promise<JobOutcome>;
+
+/** The open (queued / running / waiting / paused) job of this kind on this project, if any. */
+export async function openJob(pool: Pool, projectId: string, kinds: string[]): Promise<{ id: string; kind: string } | null> {
+  const r = await pool.query<{ id: string; kind: string }>(
+    `SELECT id::text, kind FROM creative_jobs WHERE project_id = $1::uuid AND kind = ANY($2::text[]) AND status IN ('queued','running','waiting','paused') ORDER BY created_at DESC LIMIT 1`,
+    [projectId, kinds],
+  );
+  return r.rows[0] ?? null;
+}
 
 export async function enqueue(
   pool: Pool,
@@ -30,12 +43,26 @@ export async function enqueue(
   payload: Record<string, unknown>,
   opts: { projectId?: string | null; requestedBy?: string | null; afterSeconds?: number; progress?: string } = {},
 ): Promise<string> {
-  const r = await pool.query<{ id: string }>(
-    `INSERT INTO creative_jobs (tenant_id, kind, project_id, payload, requested_by, run_after, progress)
-     VALUES ($1::uuid, $2, $3::uuid, $4::jsonb, $5, now() + make_interval(secs => $6), $7) RETURNING id`,
-    [tenantId, kind, opts.projectId ?? null, JSON.stringify(payload), opts.requestedBy ?? null, opts.afterSeconds ?? 0, opts.progress ?? "Queued"],
-  );
-  return r.rows[0].id;
+  // One open job per project + kind: a double tap (or two tabs) never queues — and pays for — the same step twice.
+  // The unique partial index creative_jobs_one_open (0179) closes the race; a conflict returns the open job.
+  if (opts.projectId) {
+    const open = await openJob(pool, opts.projectId, [kind]);
+    if (open) return open.id;
+  }
+  try {
+    const r = await pool.query<{ id: string }>(
+      `INSERT INTO creative_jobs (tenant_id, kind, project_id, payload, requested_by, run_after, progress)
+       VALUES ($1::uuid, $2, $3::uuid, $4::jsonb, $5, now() + make_interval(secs => $6), $7) RETURNING id`,
+      [tenantId, kind, opts.projectId ?? null, JSON.stringify(payload), opts.requestedBy ?? null, opts.afterSeconds ?? 0, opts.progress ?? "Queued"],
+    );
+    return r.rows[0].id;
+  } catch (e) {
+    if ((e as { code?: string }).code === "23505" && opts.projectId) {
+      const open = await openJob(pool, opts.projectId, [kind]);
+      if (open) return open.id;
+    }
+    throw e;
+  }
 }
 
 export async function pendingTenants(pool: Pool): Promise<{ tenant_id: string; requested_by: string | null }[]> {
@@ -81,11 +108,20 @@ export async function tick(pool: Pool, tenantId: string, handlers: Record<string
     const setProgress = async (p: string) => {
       await pool.query(`UPDATE creative_jobs SET progress = $2, updated_at = now() WHERE id = $1::uuid`, [job.id, p.slice(0, 300)]);
     };
+    const savePayload = async (payload: Record<string, unknown>) => {
+      job.payload = payload;
+      await pool.query(`UPDATE creative_jobs SET payload = $2::jsonb, updated_at = now() WHERE id = $1::uuid`, [job.id, JSON.stringify(payload)]);
+    };
+    if (!handler) {
+      // A new kind queued by a migration while the old app is still answering (deploy overlap): try again later.
+      await pool.query(`UPDATE creative_jobs SET status = 'queued', attempts = GREATEST(attempts - 1, 0), run_after = now() + interval '5 minutes', progress = 'Waiting for the new version', updated_at = now() WHERE id = $1::uuid`, [job.id]);
+      continue;
+    }
     try {
-      if (!handler) throw new Error(`no handler for ${job.kind}`);
-      const out = await handler(pool, job, setProgress);
+      const out = await handler(pool, job, setProgress, savePayload);
+      // "AND status = 'running'": a runner that was reset as stale (and re-run elsewhere) can't overwrite the newer run.
       if (out.status === "done") {
-        await pool.query(`UPDATE creative_jobs SET status = 'done', result = $2::jsonb, progress = COALESCE($3, 'Done'), error = NULL, updated_at = now() WHERE id = $1::uuid`, [
+        await pool.query(`UPDATE creative_jobs SET status = 'done', result = $2::jsonb, progress = COALESCE($3, 'Done'), error = NULL, updated_at = now() WHERE id = $1::uuid AND status = 'running'`, [
           job.id,
           JSON.stringify(out.result ?? null),
           out.progress ?? null,
@@ -93,7 +129,7 @@ export async function tick(pool: Pool, tenantId: string, handlers: Record<string
       } else {
         await pool.query(
           `UPDATE creative_jobs SET status = 'waiting', run_after = now() + make_interval(secs => $2), progress = COALESCE($3, progress),
-                  payload = COALESCE($4::jsonb, payload), attempts = 0, updated_at = now() WHERE id = $1::uuid`,
+                  payload = COALESCE($4::jsonb, payload), attempts = 0, updated_at = now() WHERE id = $1::uuid AND status = 'running'`,
           [job.id, out.afterSeconds, out.progress ?? null, out.payload ? JSON.stringify(out.payload) : null],
         );
       }
@@ -108,6 +144,10 @@ export async function tick(pool: Pool, tenantId: string, handlers: Record<string
       );
       if (job.project_id && !retry) {
         await pool.query(`UPDATE creative_projects SET step_note = $2, updated_at = now() WHERE id = $1::uuid`, [job.project_id, msg]);
+        // A final that failed for good hands the project back as "ready to film" (it was stuck in approved / clips,
+        // where nothing — approve, edit words, film again — was allowed).
+        if (!paused && (job.kind === "project_final" || job.kind === "project_test_clip"))
+          await pool.query(`UPDATE creative_projects SET status = 'draft' WHERE id = $1::uuid AND status IN ('approved','clips')`, [job.project_id]);
       }
     }
   }
