@@ -20,6 +20,7 @@ const Report = z.object({
   brand_fit: z.number().min(1).max(10),
   hook_strength: z.number().min(1).max(10).nullable(),
   originality: z.number().min(1).max(10),
+  ugc_realism: z.number().min(1).max(10).nullable().optional(),
   text_and_logos_seen: z.array(z.string()).max(10),
   problems: z.array(z.string()).max(6),
   note: z.string().max(160),
@@ -38,20 +39,30 @@ export async function criticize(
     projectId?: string | null;
     inspirationHashes?: string[];
     isHook?: boolean;
+    /** UGC: also scored on looking like a real person's phone video (owner, 2026-11-15). */
+    ugc?: boolean;
+    /** The frame shows the garment before it is put on (hanger / bag / hands). */
+    notWornYet?: boolean;
   },
 ): Promise<CriticReport> {
   const brand = await getBrand(pool, tenantId);
   const imgs = [...v.frames.slice(0, 6), ...v.garmentRefs.slice(0, 5)];
   const prompt = [
     "You are the quality gate for CARBON's ads. Be strict — the owner must never see anything fake, off-brand or showing the garment wrong.",
-    brandBlock(brand, v.preset),
+    brandBlock(brand, v.preset, v.ugc),
     `The first ${Math.min(6, v.frames.length)} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. The last ${Math.min(5, v.garmentRefs.length)} are the REAL product (cut-outs and detail crops).`,
     v.shot ? `The shot should show: ${v.shot.subject_action ?? ""}. The garment must show: ${v.shot.garment_must_show ?? "the product clearly"}.` : "",
     "Score 1–10 (10 = perfect):",
     "garment_accuracy — colour, wash, graphic / logo letter-for-letter, fit, length, details vs the real product.",
+    v.notWornYet ? "In this shot the garment may be on a hanger, in a bag or in the person's hands (not worn) — judge the garment itself, not whether it is worn." : "",
     "ai_artifacts — hands, faces, extra limbs, warping, melting text, flicker (10 = none at all).",
     v.kind === "still" ? "motion_realism — null for a still." : "motion_realism — natural body and fabric motion across the keyframes.",
-    "brand_fit — the look, light and mood match CARBON's preset and do/don't list.",
+    v.ugc
+      ? "brand_fit — the clothes and the person fit CARBON and the do/don't list. Do NOT mark it down for looking casual, phone-shot or non-cinematic — that is what this is meant to be."
+      : "brand_fit — the look, light and mood match CARBON's preset and do/don't list.",
+    v.ugc
+      ? "ugc_realism — does it look like a REAL person filmed it on their phone in an everyday place (10), or like a professional photo shoot / campaign set / cinematic lighting / film grade (1–4)? Strict: polished editorial = fail."
+      : "ugc_realism — null.",
     v.isHook ? "hook_strength — would the first 1.5 s stop the scroll?" : "hook_strength — null unless this is the opening shot.",
     "originality — no other brand's logo, name, text, people or photos (10 = fully original).",
     "text_and_logos_seen — every word / logo you can read. problems — short, concrete. note — one line for the owner.",
@@ -79,11 +90,12 @@ export async function criticize(
     brand_fit: r.brand_fit,
     hook_strength: r.hook_strength,
     originality,
+    ugc_realism: v.ugc ? r.ugc_realism ?? null : null,
   };
   const fails = Object.entries(scores).filter(([, s]) => s != null && s < PASS).map(([k]) => k);
   const vals = Object.values(scores).filter((s): s is number => s != null);
   const overall = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
-  return { ...r, originality, overall, pass: fails.length === 0, fails, foreignBrands };
+  return { ...r, ugc_realism: v.ugc ? r.ugc_realism ?? null : null, originality, overall, pass: fails.length === 0, fails, foreignBrands };
 }
 
 export function criticSummary(c: CriticReport | null | undefined): string {
@@ -97,7 +109,8 @@ export function retryHint(c: CriticReport): string {
   if (c.fails.includes("garment_accuracy")) parts.push("Match the product references EXACTLY (colour, wash, graphic letter-for-letter, fit).");
   if (c.fails.includes("ai_artifacts")) parts.push("Natural anatomy: correct hands and fingers, no warping, no extra limbs, no melted text.");
   if (c.fails.includes("originality")) parts.push("No logos or words except the garment's own CARBON print.");
-  if (c.fails.includes("brand_fit")) parts.push("Stronger CARBON look: darker, moodier, more contrast, no stock-photo smiles.");
+  if (c.fails.includes("brand_fit")) parts.push(c.ugc_realism != null ? "Keep it real and casual, but the clothes and person must fit CARBON." : "Stronger CARBON look: darker, moodier, more contrast, no stock-photo smiles.");
   if (c.fails.includes("motion_realism")) parts.push("Slower, more natural body and fabric motion.");
+  if (c.fails.includes("ugc_realism")) parts.push("Make it look like a real person's phone video: everyday room or street, plain window or room light, casual pose, no studio light, no cinematic set or grade.");
   return [...parts, ...c.problems.map((p) => `Fix: ${p}`)].join(" ");
 }

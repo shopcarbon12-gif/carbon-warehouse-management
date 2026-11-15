@@ -200,6 +200,15 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
   const sl = await writeShotList(pool, p.tenant_id, brief, script ? { ...concept, edit_recipe: `${concept.edit_recipe}. Creator lines in order: ${[script.hook, ...script.lines.map((l) => l.say), script.cta].join(" / ")}` } : concept, p.id);
   // Keep cast / products inside what the project has.
   for (const s of sl.shots) {
+    // Video + UGC: every shot but the end card becomes a real clip (owner, 2026-11-15: "a real video of a human").
+    if ((p.kind === "video" || p.kind === "ugc") && !s.is_end_card) s.is_static_frame = false;
+    if (p.kind === "ugc" && !s.is_end_card) {
+      // A phone: no dollies, orbits or macro lenses.
+      if (!["static", "handheld_follow", "push_in"].includes(s.camera_move)) s.camera_move = "handheld_follow";
+      s.lens = "24mm";
+    } else if (p.kind !== "ugc") {
+      s.say = null;
+    }
     s.cast = (s.cast ?? []).filter((c) => p.cast_ids.includes(c));
     if (!s.cast.length && !s.is_end_card && p.cast_ids.length) s.cast = [p.cast_ids[0]];
     s.products = (s.products ?? []).filter((x) => p.products.includes(x));
@@ -234,8 +243,17 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   let finished = 0;
   await setProgress(`Drawing ${todo.length} still${todo.length === 1 ? "" : "s"} at the same time`);
   await inParallel(todo, STILL_PARALLEL, async (s) => {
-    const r = await makeStill(pool, p, s, { extra: (job.payload as { extra?: string }).extra });
+    const extra = (job.payload as { extra?: string }).extra;
+    const r = await makeStill(pool, p, s, { extra, notWornYet: Boolean(s.end_state) });
     if (!r) failed.push(s.idx + 1);
+    else if (s.end_state) {
+      // The LAST frame of a change shot (now wearing it): drawn from the first frame so the place, light and
+      // person match; the video engine then moves from one picture to the other.
+      await setProgress(`Shot ${s.idx + 1}: drawing the last frame (${s.end_state.slice(0, 60)})`);
+      const first = (await getFile(r.path)).bytes;
+      const end = await makeStill(pool, p, { ...s, subject_action: s.end_state, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state}` }, { extra, kind: "still_end", firstFrame: first });
+      if (!end) failed.push(s.idx + 1);
+    }
     finished++;
     await setProgress(`Drawing stills at the same time: ${finished} of ${todo.length} done`);
   });
@@ -297,12 +315,14 @@ export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts:
   if (opts.voicePath) a.assets["voice.mp3"] = signedUrl(opts.voicePath, 24 * 3600);
   const overrides = (p.edit_plan as { overrides?: { speed?: number; textScale?: number } })?.overrides ?? {};
   const shots = (p.shot_list?.shots ?? []).map((s) => ({ ...s, duration_s: s.duration_s * (overrides.speed ?? 1) }));
+  // UGC keeps the phone's own look: no CARBON grade, no film grain (owner, 2026-11-15).
+  const preset = p.kind === "ugc" ? { ...a.preset, grade: { contrast: 1, saturation: 1, brightness: 0, warmth: 0, grain: 0 } } : a.preset;
   const plan = buildEditPlan({
     shots,
     media: a.media,
     aspect,
     brand: a.brand,
-    preset: a.preset,
+    preset,
     music: a.track ? { asset: "music.audio", beats: a.track.beats?.beats ?? [], bpm: a.track.bpm ?? 120, drop: a.track.beats?.drop ?? null, duration: a.track.duration_s ?? 60 } : null,
     voice: opts.voicePath ? { asset: "voice.mp3", duration: opts.voiceDur ?? 10 } : null,
     captions: script ? captionCards(script) : [],
@@ -369,6 +389,12 @@ export const projectDraft: JobHandler = async (pool, job, setProgress) => {
     if (!r.done) return { status: "waiting", afterSeconds: 15, progress: "Rendering the draft on the CarbonWMS server (free)" };
     await setProject(pool, p.id, { status: "draft" });
     return { status: "done", progress: "Draft ready — approve it or ask for changes" };
+  }
+  if (p.kind === "video" || p.kind === "ugc") {
+    // No slideshow draft of stills (owner, 2026-11-15: "why pay for a draft that doesn't look like the real
+    // thing"). The shots are the preview; Make video (or a one-clip test) makes the real thing.
+    await setProject(pool, p.id, { status: "draft" });
+    return { status: "done", progress: "Shots ready — make the video, or test one clip first" };
   }
   if (p.kind === "static") {
     await composeStatics(pool, p, setProgress, true);
@@ -473,7 +499,7 @@ export const projectFinal: JobHandler = async (pool, job, setProgress) => {
     const ep: Record<string, unknown> = { ...(p.edit_plan ?? {}) };
     for (const size of p.sizes.length ? p.sizes : ["9:16"]) {
       const { plan, track } = await buildPlan(pool, p, size, { clips: true, draft: false, trackId: (p.edit_plan as { trackId?: string })?.trackId ?? null, noMusic: (p.edit_plan as { noMusic?: boolean })?.noMusic ?? false });
-      if (p.kind === "ugc") plan.music = plan.music ? { ...plan.music, volume: 0.18 } : null; // the creator's voice leads
+      if (p.kind === "ugc" && (p.shot_list?.shots ?? []).some((x) => x.say)) plan.music = plan.music ? { ...plan.music, volume: 0.18 } : null; // the creator's voice leads
       ep[`final-${size}`] = plan;
       ep.trackId = track?.id ?? null;
       const slowed = plan.segments.some((s) => s.src.kind === "video" && (s.src.rate ?? 1) < 0.95);
@@ -489,6 +515,38 @@ export const projectFinal: JobHandler = async (pool, job, setProgress) => {
   return { status: "done", progress: "Final — ready to post" };
 };
 
+/**
+ * One real clip of the first shot (owner, 2026-11-15: see the real thing before paying for all of it).
+ * The clip is kept: Make video later skips any shot that already has a passing clip.
+ */
+export const projectTestClip: JobHandler = async (pool, job, setProgress) => {
+  const p = await loadProject(pool, job.tenant_id, job.project_id!);
+  const st = job.payload as { clip?: ClipState };
+  const shots = p.shot_list?.shots ?? [];
+  if (!st.clip) {
+    const have = await clipsByShot(pool, p.id);
+    const first = (await clipPlan(pool, p, shots)).find((c) => !have.has(c.shotIdx));
+    if (!first) return { status: "done", progress: "The first shot already has a real clip" };
+    await setProgress(`Making a test clip of shot ${first.shotIdx + 1} on ${first.engines[0]}`);
+    const clip = await submitClip(pool, p, first);
+    return { status: "waiting", afterSeconds: 30, payload: { clip }, progress: `Test clip of shot ${first.shotIdx + 1} on the video engine (1–4 min)` };
+  }
+  const clip = await advanceClip(pool, p, st.clip, shots.find((s) => s.idx === st.clip!.shotIdx)!);
+  if (clip.status === "running") return { status: "waiting", afterSeconds: 20, payload: { clip }, progress: `Test clip of shot ${clip.shotIdx + 1} on the video engine` };
+  if (clip.status === "failed") throw new PlainError(clip.error ?? "The test clip failed.");
+  return { status: "done", progress: `Test clip ready (shot ${clip.shotIdx + 1}) — Make video keeps it and makes the rest` };
+};
+
+/** What the one-clip test costs (shown on its button). */
+export async function testClipEstimate(pool: Pool, p: ProjectRow): Promise<number | null> {
+  if (p.kind !== "video" && p.kind !== "ugc") return null;
+  const have = await clipsByShot(pool, p.id);
+  const first = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).find((c) => !have.has(c.shotIdx));
+  if (!first) return null;
+  const { estimateVideoCost } = await import("./routing");
+  return Math.round((estimateVideoCost(first.engines[0], first.seconds, first.audio) + 0.03) * 100) / 100;
+}
+
 /** Owner tapped Approve. */
 export async function approveProject(pool: Pool, tenantId: string, id: string, by: string | null, opts: { upscale4k?: boolean } = {}) {
   const p = await loadProject(pool, tenantId, id);
@@ -500,7 +558,8 @@ export async function approveProject(pool: Pool, tenantId: string, id: string, b
 /** Cost preview for the final step (shown on the Approve button). */
 export async function finalEstimate(pool: Pool, p: ProjectRow): Promise<number> {
   if (p.kind === "static" || p.kind === "animated") return 0;
-  const plan = await clipPlan(pool, p, p.shot_list?.shots ?? []);
+  const have = await clipsByShot(pool, p.id);
+  const plan = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).filter((c) => !have.has(c.shotIdx));
   const { estimateVideoCost } = await import("./routing");
   return Math.round(plan.reduce((a, c) => a + estimateVideoCost(c.engines[0], c.seconds, c.audio) * 1.0 + 0.03, 0) * 100) / 100;
 }
@@ -529,6 +588,7 @@ export async function projectView(pool: Pool, tenantId: string, id: string) {
     cast: p.cast_ids.map((cid) => models.find((m) => m.id === cid)).filter(Boolean),
     twins,
     finalEstimate: p.status === "draft" ? await finalEstimate(pool, p).catch(() => null) : null,
+    testClipEstimate: p.status === "draft" ? await testClipEstimate(pool, p).catch(() => null) : null,
   };
 }
 

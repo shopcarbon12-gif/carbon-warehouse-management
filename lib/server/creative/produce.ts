@@ -5,7 +5,7 @@
  */
 import type { Pool } from "pg";
 import sharp from "sharp";
-import { getBrand, getCreativeSettings, presetOf, recordSpend, spendGate, PlainError } from "./config";
+import { getBrand, getCreativeSettings, presetOf, recordSpend, spendGate, PlainError, UGC_LOOK } from "./config";
 import { tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { generateImage, pollVideo, submitVideo, type ImageRef } from "./engines";
 import { criticize, MAX_RETRIES, retryHint, type CriticReport } from "./critic";
@@ -101,7 +101,13 @@ export const STILL_COST = IMAGE_COST.high + 0.06 + 0.02; // picture + refs + cri
  * One shot's still, critic-gated. Returns the passing generation (or null after the retries).
  * `quality` low = storyboard thumbnails (no critic).
  */
-export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string } = {}): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
+export async function makeStill(
+  pool: Pool,
+  p: ProjectRow,
+  shot: Shot,
+  opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean } = {},
+): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
+  const ugc = p.kind === "ugc";
   const tid = p.tenant_id;
   const brand = await getBrand(pool, tid);
   const preset = presetOf(brand, p.preset);
@@ -117,17 +123,25 @@ export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { q
   const garments = await twinRefs(pool, tid, products);
   if (!garments.length && !shot.is_end_card) throw new PlainError("The product twin has no cut-outs yet. Build and confirm the product first.");
   (low ? garments.slice(0, 1) : garments).forEach((g, i) => refs.push({ name: `garment-${i}-${g.angle}.png`, bytes: g.bytes, mime: "image/png" }));
-  const loc = low ? null : await locationRef(pool, tid, shot.location);
+  const loc = low || ugc ? null : await locationRef(pool, tid, shot.location);
   if (loc) refs.push(loc);
+  if (opts.firstFrame) refs.push({ name: "first-frame.jpg", bytes: await sharp(opts.firstFrame).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
   const crit = await garmentRefs(pool, tid, products);
   const insp = await inspirationHashes(pool, p.inspiration_ad_id);
   const quality = opts.quality ?? "high";
   const prompt0 = [
     shot.still_prompt,
-    `LOOK: ${opts.look || preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
+    ugc
+      ? `${UGC_LOOK} Camera: phone, ${shot.camera_move === "static" ? "propped up or selfie" : "handheld"}. Light: ${shot.lighting}. Place: ${shot.location}.`
+      : `LOOK: ${opts.look || preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
+    opts.firstFrame ? "The first-frame reference is the START of this same moment: keep the place, light, camera position, background and person identical — only what the shot describes has changed." : "",
     cast.length ? `PEOPLE: the person references show ${cast.map((m) => m.name).join(" and ")} — keep each face, skin tone, hair and body EXACTLY.` : "",
-    `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
-    "Photoreal fashion campaign photo, real skin texture, natural hands. No added text, captions, watermarks or other brands' logos.",
+    opts.notWornYet
+      ? `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products. In THIS frame the piece is NOT worn yet — it is on the hanger / in the bag / in her hands exactly as the shot says, and it must look EXACTLY like the references (colour, wash, graphic letter-for-letter, hardware). She wears a plain neutral basic (plain white or black tank top or tee) where the piece will go.`
+      : `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
+    ugc
+      ? "Photoreal frame from a real person's phone video: real skin texture, natural hands, casual and unposed, everyday background with real-life clutter kept tidy. No added text, captions, watermarks or other brands' logos."
+      : "Photoreal fashion campaign photo, real skin texture, natural hands. No added text, captions, watermarks or other brands' logos.",
     opts.extra ?? "",
   ]
     .filter(Boolean)
@@ -137,7 +151,7 @@ export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { q
     const est = (quality === "low" ? IMAGE_COST.low : quality === "medium" ? IMAGE_COST.medium : IMAGE_COST.high) + refs.length * 0.01 + (quality === "low" ? 0 : 0.02);
     await spendGate(pool, tid, "openai", est);
     const prompt = attempt === 1 ? prompt0 : `${prompt0}\nRETRY — the quality check found: ${retryHint(best!.critic)}`;
-    const genId = await insertGen(pool, tid, { projectId: p.id, kind: quality === "low" ? "sample" : "still", shotIdx: shot.idx, provider: "openai", prompt, attempt, draft: opts.draft, inputs: { refs: refs.map((r) => r.name) } });
+    const genId = await insertGen(pool, tid, { projectId: p.id, kind: quality === "low" ? "sample" : opts.kind ?? "still", shotIdx: shot.idx, provider: "openai", prompt, attempt, draft: opts.draft, inputs: { refs: refs.map((r) => r.name) } });
     try {
       const g = await generateImage({ prompt, refs, size: "1024x1536", quality });
       await recordSpend(pool, tid, { provider: "openai", what: `still shot ${shot.idx + 1} (${p.title})`, cost: g.cost, projectId: p.id, generationId: genId });
@@ -147,7 +161,7 @@ export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: { q
         return { genId, path, critic: null };
       }
       const frame = await sharp(g.bytes).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
-      const c = await criticize(pool, tid, { frames: [frame], kind: "still", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: insp, isHook: shot.idx === 0 });
+      const c = await criticize(pool, tid, { frames: [frame], kind: "still", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc, notWornYet: opts.notWornYet });
       await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, model = $4, cost_usd = $5, critic = $6::jsonb, updated_at = now() WHERE id = $1::uuid`, [
         genId, c.pass ? "done" : "rejected", path, g.model, g.cost, JSON.stringify(c),
       ]);
@@ -171,7 +185,7 @@ export function videoJobFor(p: ProjectRow, shot: Shot, castUseCount: number): Vi
   return "fashion_motion";
 }
 
-export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; refs: string[]; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
+export type ClipState = { shotIdx: number; genId: string; engines: string[]; engineAt: number; tries: number; attempt: number; still: string; endStill?: string | null; refs: string[]; prompt: string; seconds: number; audio: boolean; aspect: string; status: "running" | "done" | "failed"; error?: string };
 
 /** Submit one clip (first frame = the approved still). */
 export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, "genId" | "status"> & { genId?: string }): Promise<ClipState> {
@@ -179,7 +193,7 @@ export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, 
   const e = VIDEO_ENGINES[engineId];
   const cost = estimateVideoCost(engineId, st.seconds, st.audio);
   await spendGate(pool, p.tenant_id, "fal", cost);
-  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), referenceUrls: st.refs, seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
+  const ref = await submitVideo({ engineId, prompt: st.prompt, imageUrl: signedUrl(st.still, 24 * 3600), endImageUrl: st.endStill ? signedUrl(st.endStill, 24 * 3600) : undefined, referenceUrls: st.refs, seconds: st.seconds, aspect: st.aspect as "9:16", audio: st.audio && e.nativeDialogue, negative: "blur, distortion, warped hands, extra fingers, morphing clothes, changing logo, text" });
   const genId = await insertGen(pool, p.tenant_id, { projectId: p.id, kind: "clip", shotIdx: st.shotIdx, provider: "fal", model: engineId, prompt: st.prompt, attempt: st.attempt, inputs: { ...ref.meta, still: st.still }, status: "running" });
   await pool.query(`UPDATE creative_generations SET external_id = $2, cost_usd = $3 WHERE id = $1::uuid`, [genId, ref.externalId, ref.cost]);
   await recordSpend(pool, p.tenant_id, { provider: "fal", what: `clip shot ${st.shotIdx + 1} (${VIDEO_ENGINES[engineId].label}, ${ref.seconds}s)`, cost: ref.cost, projectId: p.id, generationId: genId });
@@ -209,7 +223,7 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   const path = await putFile(`creative/projects/${p.id}/clip-${st.shotIdx}-${st.genId.slice(0, 8)}.mp4`, bytes, "video/mp4");
   const k = await keyframes(bytes, 4, 768);
   const crit = await garmentRefs(pool, p.tenant_id, shot.products?.length ? shot.products : p.products);
-  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0 });
+  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.end_state) });
   await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, output_meta = $4::jsonb, critic = $5::jsonb, updated_at = now() WHERE id = $1::uuid`, [
     st.genId, c.pass ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height }), JSON.stringify(c),
   ]);
@@ -229,7 +243,8 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
   for (const s of shots) for (const c of s.cast ?? []) uses.set(c, (uses.get(c) ?? 0) + 1);
   const out: Omit<ClipState, "genId" | "status">[] = [];
   for (const s of shots) {
-    if (s.is_end_card || s.is_static_frame) continue;
+    // Video and UGC: every shot but the end card is a real clip of a moving person (owner, 2026-11-15).
+    if (s.is_end_card) continue;
     const still = (await pool.query<{ output_path: string }>(`SELECT output_path FROM creative_generations WHERE project_id = $1::uuid AND kind = 'still' AND shot_idx = $2 AND status = 'done' ORDER BY created_at DESC LIMIT 1`, [p.id, s.idx])).rows[0]?.output_path;
     if (!still) continue;
     const maxUse = Math.max(0, ...(s.cast ?? []).map((c) => uses.get(c) ?? 0));
@@ -244,16 +259,30 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
           if (path) refs.push(signedUrl(path, 24 * 3600));
         }
       }
+    const endStill = s.end_state
+      ? (await pool.query<{ output_path: string }>(`SELECT output_path FROM creative_generations WHERE project_id = $1::uuid AND kind = 'still_end' AND shot_idx = $2 AND status = 'done' ORDER BY created_at DESC LIMIT 1`, [p.id, s.idx])).rows[0]?.output_path ?? null
+      : null;
+    const ugc = p.kind === "ugc";
+    const who = models.find((m) => m.id === (s.cast ?? [])[0])?.gender === "male" ? "He" : "She";
+    const words = s.say ? s.say.split(/\s+/).length : 0;
     out.push({
       shotIdx: s.idx,
+      endStill,
       engines,
       engineAt: 0,
       tries: 0,
       attempt: 1,
       still,
       refs,
-      prompt: [s.motion_prompt, `Camera: ${s.camera_move.replace(/_/g, " ")}, ${s.lens}. Light: ${s.lighting}.`, "Keep the clothes, logo and face exactly as in the first frame. Realistic fabric motion. No text."].join(" "),
-      seconds: Math.max(3, Math.ceil(s.duration_s)),
+      prompt: [
+        s.motion_prompt,
+        ugc
+          ? `${s.say ? `${who} talks to the phone camera and says: "${s.say}"` : `${who} doesn't talk.`} Filmed on a phone by a real person: ${s.camera_move === "static" ? "the phone is propped up or held selfie-style" : "handheld, a little natural shake"}, natural light, casual and real, not a commercial.`
+          : `Camera: ${s.camera_move.replace(/_/g, " ")}, ${s.lens}. Light: ${s.lighting}.`,
+        endStill ? `The clip ends exactly on the last frame given: ${s.end_state}. The garment looks exactly like the last frame — no morphing.` : "Keep the clothes, logo and face exactly as in the first frame.",
+        "Realistic fabric motion. No text.",
+      ].join(" "),
+      seconds: Math.max(3, Math.ceil(s.duration_s), words ? Math.ceil(words / 2.6) + 1 : 0),
       audio: p.kind === "ugc",
       aspect: "9:16",
     });

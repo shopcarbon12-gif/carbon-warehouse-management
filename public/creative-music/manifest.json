@@ -1,0 +1,364 @@
+{
+  "tracks": [
+    {
+      "id": "f844ee05aa7847dd84aaf71ef3657234",
+      "file": "deep-house-f844ee05.mp3",
+      "name": "deep house — elegant minimal deep house, soft pulses, sophisticated beauty vibe",
+      "moods": [
+        "deep house"
+      ],
+      "duration": 29,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "4c2bbcaa8019484cba148d100fa31c91",
+      "file": "deep-house-4c2bbcaa.mp3",
+      "name": "deep house — modern deep house, pulsing bass, atmospheric synths, elegant and aspir",
+      "moods": [
+        "deep house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "c6077c2e89894b20b9089e07f522fd13",
+      "file": "deep-house-c6077c2e.mp3",
+      "name": "deep house — sophisticated minimal electronic, soft pulsing bass, high-end fashion ",
+      "moods": [
+        "deep house"
+      ],
+      "duration": 21,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "1e0907d797e941bca7f6aceeedc2b669",
+      "file": "deep-house-1e0907d7.mp3",
+      "name": "deep house — soft modern elegant luxury-lounge deep-house, warm and smooth",
+      "moods": [
+        "deep house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "b712043129ac4bad94a998992321315b",
+      "file": "tech-house-b7120431.mp3",
+      "name": "tech house — upbeat runway techno, heavy bass, rhythmic footsteps",
+      "moods": [
+        "tech house"
+      ],
+      "duration": 26,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "641d91cecf974c45bb44b1ccd8d8036c",
+      "file": "tech-house-641d91ce.mp3",
+      "name": "tech house — energetic tech house instrumental, strong beat, risers and bass drop, ",
+      "moods": [
+        "tech house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "8632528d22124edd8e1c7319eb6cc725",
+      "file": "tech-house-8632528d.mp3",
+      "name": "tech house — driving electronic beat, punchy synth bass, no vocals, hits on big wor",
+      "moods": [
+        "tech house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "82fe336396444d409996fef053b5e1b2",
+      "file": "tech-house-82fe3363.mp3",
+      "name": "tech house — upbeat motivational tech house, modern synth pulses, fast-paced",
+      "moods": [
+        "tech house"
+      ],
+      "duration": 24,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "837968830be0477da1740ce8a00770fb",
+      "file": "dark-afro-house-83796883.mp3",
+      "name": "dark afro house — dark energetic electronic, slow-motion build, Afro-house groove, bold ",
+      "moods": [
+        "dark afro house",
+        "afro house"
+      ],
+      "duration": 20,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "8be285e10dd442689e478cf46552e6dd",
+      "file": "dark-afro-house-8be285e1.mp3",
+      "name": "dark afro house — upbeat electronic house afrobeat, 126 BPM, heavy bass hits, no vocals",
+      "moods": [
+        "dark afro house",
+        "afro house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "7307b5b7b69d4ee493d2a4e22eaa1f04",
+      "file": "dark-afro-house-7307b5b7.mp3",
+      "name": "dark afro house — driving melodic afro house groove, 122 BPM, dark premium club aestheti",
+      "moods": [
+        "dark afro house",
+        "afro house"
+      ],
+      "duration": 25,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "70344dc3f70e4389b189879afb0b7418",
+      "file": "dark-afro-house-70344dc3.mp3",
+      "name": "dark afro house — instrumental African percussion, djembe afrobeat, warm and uplifting, ",
+      "moods": [
+        "dark afro house",
+        "afro house"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "cb5bbb2cce5d4fce9fe66d38179ef0e3",
+      "file": "lo-fi-house-cb5bbb2c.mp3",
+      "name": "lo-fi house — minimal chill lo-fi beat, slow and subtle, hazy warm mood",
+      "moods": [
+        "lo-fi house",
+        "lo-fi",
+        "chill"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "559b6cb721e241dcb15a04019d4a745b",
+      "file": "lo-fi-house-559b6cb7.mp3",
+      "name": "lo-fi house — smooth stylish chill house / lo-fi groove, clear beat, cut on the beat",
+      "moods": [
+        "lo-fi house",
+        "lo-fi",
+        "chill"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "25764c1426424026848bb07324804e89",
+      "file": "lo-fi-house-25764c14.mp3",
+      "name": "lo-fi house — lo-fi chill instrumental, calm and welcoming",
+      "moods": [
+        "lo-fi house",
+        "lo-fi",
+        "chill"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "def802c8291f4ce28ddb79076245aa76",
+      "file": "lo-fi-house-def802c8.mp3",
+      "name": "lo-fi house — upbeat warm lo-fi / acoustic house music",
+      "moods": [
+        "lo-fi house",
+        "lo-fi",
+        "chill"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "f7296fc46a65480d81e2d0168163d80c",
+      "file": "chill-f7296fc4.mp3",
+      "name": "chill — lo-fi chill beats for lifestyle vlog, cozy and warm",
+      "moods": [
+        "chill",
+        "ugc",
+        "vlog"
+      ],
+      "duration": 20,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "8fb7d3d40d9f430fb88a040f92df6826",
+      "file": "chill-8fb7d3d4.mp3",
+      "name": "chill — energetic warm upbeat lo-fi, light percussion, friendly vlog mood",
+      "moods": [
+        "chill",
+        "ugc",
+        "vlog"
+      ],
+      "duration": 84,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "df3e8c6fdc424c2687c9047e901f6d60",
+      "file": "chill-df3e8c6f.mp3",
+      "name": "chill — calm minimal ambient, relaxed sunset beach vlog vibe",
+      "moods": [
+        "chill",
+        "ugc",
+        "vlog"
+      ],
+      "duration": 31,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "2e4e03a74406447db651f6fadd5a7120",
+      "file": "chill-2e4e03a7.mp3",
+      "name": "chill — upbeat but chill travel lifestyle background music, no lyrics, warm an",
+      "moods": [
+        "chill",
+        "ugc",
+        "vlog"
+      ],
+      "duration": 39,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "fbcb6d5d48d9466fb3c7fe7e6df3e282",
+      "file": "upbeat-fbcb6d5d.mp3",
+      "name": "upbeat — light upbeat instrumental, playful modern fashion-campaign energy, bri",
+      "moods": [
+        "upbeat",
+        "pop",
+        "ugc"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "b8c4c6ea6c604c3bbccab7ce51851bfe",
+      "file": "upbeat-b8c4c6ea.mp3",
+      "name": "upbeat — upbeat modern fashion-show electronic beat, no vocals",
+      "moods": [
+        "upbeat",
+        "pop",
+        "ugc"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "05e2843a8b2a418a8fa17958a4ebfeea",
+      "file": "upbeat-05e2843a.mp3",
+      "name": "upbeat — energetic upbeat K-pop fashion instrumental, no lyrics",
+      "moods": [
+        "upbeat",
+        "pop",
+        "ugc"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "92ec1d8a5dac4f27837fcd593754d9f4",
+      "file": "upbeat-92ec1d8a.mp3",
+      "name": "upbeat — upbeat trendy fashion pop, bright, playful, light bass and claps",
+      "moods": [
+        "upbeat",
+        "pop",
+        "ugc"
+      ],
+      "duration": 42,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "f487d0e175984c99a98d6fcf38a8ead6",
+      "file": "luxury-f487d0e1.mp3",
+      "name": "luxury — cinematic electronic, luxury modern, no vocals, 100 BPM",
+      "moods": [
+        "luxury",
+        "ambient",
+        "minimal"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "30c7495e9e02462c8e95a1bd0dc9fb89",
+      "file": "luxury-30c7495e.mp3",
+      "name": "luxury — minimal luxury ambient, deep bass pulses, sophisticated and slightly t",
+      "moods": [
+        "luxury",
+        "ambient",
+        "minimal"
+      ],
+      "duration": 66,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "b17bd17a109c4f89a0ba6a37791eb4eb",
+      "file": "luxury-b17bd17a.mp3",
+      "name": "luxury — instrumental cinematic-luxury minimal electronic, deep restrained hit,",
+      "moods": [
+        "luxury",
+        "ambient",
+        "minimal"
+      ],
+      "duration": 28,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "6ddf457b9fd2412a9542a72c9de3a85c",
+      "file": "luxury-6ddf457b.mp3",
+      "name": "luxury — light cinematic ambient, warm editorial luxury, no lyrics",
+      "moods": [
+        "luxury",
+        "ambient",
+        "minimal"
+      ],
+      "duration": 58,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "270b4a7f64f14f638ccf3e0f4aa95ed7",
+      "file": "hip-hop-270b4a7f.mp3",
+      "name": "hip hop — gritty street hip-hop instrumental, moody bass, energetic",
+      "moods": [
+        "hip hop",
+        "street"
+      ],
+      "duration": 26,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "bb0d6ce3c69f4c4c8237b3900d550601",
+      "file": "hip-hop-bb0d6ce3.mp3",
+      "name": "hip hop — hard instrumental boom bap hip hop beat, ~95 BPM, punchy kick and snar",
+      "moods": [
+        "hip hop",
+        "street"
+      ],
+      "duration": 30,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "2fbc6d6ed960476caa22ab061f100493",
+      "file": "hip-hop-2fbc6d6e.mp3",
+      "name": "hip hop — fast-paced punchy hip-hop background beat, high-energy, no vocals",
+      "moods": [
+        "hip hop",
+        "street"
+      ],
+      "duration": 22,
+      "source": "HeyGen music library"
+    },
+    {
+      "id": "0d144462c24e4be9a044712cfe6773be",
+      "file": "hip-hop-0d144462.mp3",
+      "name": "hip hop — upbeat pop hip-hop beat, energetic, rhythmic, fun, no vocals",
+      "moods": [
+        "hip hop",
+        "street"
+      ],
+      "duration": 55,
+      "source": "HeyGen music library"
+    }
+  ]
+}

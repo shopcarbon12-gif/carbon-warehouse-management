@@ -154,6 +154,12 @@ export async function proxy(req: NextRequest) {
     return res;
   }
 
+  /* CarbonWMS Creative's starter music (public/creative-music, from the HeyGen music library): read by the
+     job that loads it into the Music tab, without a session. */
+  if (pathname.startsWith("/creative-music/") && /\.(?:mp3|json)$/.test(pathname)) {
+    return NextResponse.next();
+  }
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||

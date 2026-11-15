@@ -17,8 +17,8 @@ type Model = { id: string; name: string; gender: string; refs: string[]; look: s
 
 const KINDS = [
   { k: "static", t: "Static", d: "Photo ads + carousel, 4:5 and 9:16", ex: "Hero still · price tag · shop now" },
-  { k: "video", t: "Video", d: "Beat-cut Reel from real clips", ex: "Walk-in → freeze → slam" },
-  { k: "ugc", t: "UGC", d: "AI creator talks about the fit", ex: "Fit check in the mirror" },
+  { k: "video", t: "Video", d: "Every shot becomes a real video of your model, then cut on the beat with effects", ex: "Walk-in → freeze → slam" },
+  { k: "ugc", t: "UGC", d: "Looks like a real person filmed it on their phone — talks about or shows the piece", ex: "Unboxing · off the hanger · mirror try-on" },
   { k: "animated", t: "Animated", d: "Kinetic type, spins, price drops — no AI video cost", ex: "Price drop · outfit grid" },
   { k: "campaign", t: "Full Campaign", d: "Hero video + cut-downs + UGC + statics + carousel + stories + animated", ex: "One click = the whole drop" },
 ] as const;
@@ -177,7 +177,7 @@ function NewProject() {
           <button className={`mt-4 text-sm ${muted} underline`} onClick={() => setMore((m) => !m)}>⋯ More</button>
           {more ? (
             <div className={`${card} mt-2 grid gap-2 md:grid-cols-2`}>
-              <label className="text-sm">Look<select className={`${input} mt-1`} value={preset} onChange={(e) => setPreset(e.target.value)}><option value="">Auto (brand default)</option><option value="street">CARBON Street</option><option value="luxury">CARBON Luxury</option><option value="evening">CARBON Evening</option><option value="florida">CARBON Florida Day</option></select></label>
+              <label className="text-sm">Look<select className={`${input} mt-1`} value={preset} onChange={(e) => setPreset(e.target.value)}><option value="">Auto (brand default)</option><option value="street">CARBON Street</option><option value="luxury">CARBON Luxury</option><option value="evening">CARBON Evening</option><option value="florida">CARBON Florida Day</option></select>{kind === "ugc" ? <span className={`mt-1 block text-xs ${muted}`}>UGC ignores the Look — it always looks like a real phone video.</span> : null}</label>
               <label className="text-sm">Name (optional)<input className={`${input} mt-1`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === "campaign" ? "e.g. Winter drop" : ""} /></label>
             </div>
           ) : null}
@@ -185,7 +185,7 @@ function NewProject() {
             <button className={`${btnPrimary} min-h-12 w-full text-base md:w-auto md:px-10`} disabled={busy || (cast !== "auto" && !cast.length && kind !== "animated")} onClick={start}>
               {busy ? "Starting…" : "Show me 3 concepts"}
             </button>
-            <p className={`mt-2 text-xs ${muted}`}>Concepts are text + cheap thumbnails. Nothing expensive runs until you approve a draft.</p>
+            <p className={`mt-2 text-xs ${muted}`}>Concepts are text + cheap thumbnails. The real video is only made when you tap Make video.</p>
           </div>
         </section>
       ) : null}
@@ -213,6 +213,7 @@ type View = {
   cast: { id: string; name: string; refs: string[] }[];
   twins: ({ productId: string; title: string; status: string; confirmed: boolean; error: string | null; facts: Record<string, unknown> | null; cutouts: { angle: string; url: string }[]; details: { kind: string; url: string }[] } | null)[];
   finalEstimate: number | null;
+  testClipEstimate: number | null;
   music: { track: string | null; libraryCount: number };
   notice: string | null;
 };
@@ -258,6 +259,8 @@ function ProjectView({ id }: { id: string }) {
   }
   const slideMap = new Map<string, View["renders"][number]>();
   for (const s of slides) if (!slideMap.has(`${s.size}-${s.shotIdx}`)) slideMap.set(`${s.size}-${s.shotIdx}`, s);
+  const isMotion = p.kind === "video" || p.kind === "ugc";
+  const testRunning = live.some((j) => j.kind === "project_test_clip");
   const captions = p.captions?.options ?? [];
   const hashtags = p.captions?.hashtags ?? [];
   const cap = caption ?? captions[0] ?? "";
@@ -330,9 +333,9 @@ function ProjectView({ id }: { id: string }) {
       ) : null}
 
       {/* Draft / final */}
-      {latestBySize.size || slideMap.size ? (
+      {latestBySize.size || slideMap.size || (p.status === "draft" && isMotion) ? (
         <section className="mb-6">
-          <h2 className={`${head} mb-2 text-2xl`}>{p.status === "final" ? "Final" : "Draft"}</h2>
+          <h2 className={`${head} mb-2 text-2xl`}>{p.status === "final" ? "Final" : isMotion && !latestBySize.size ? "Shots ready — make the video" : "Draft"}</h2>
           <div className="flex flex-wrap gap-3">
             {[...latestBySize.values()].map((r) => (
               <div key={r.id} className="w-full max-w-[360px]">
@@ -353,11 +356,20 @@ function ProjectView({ id }: { id: string }) {
           ) : null}
           {p.status === "draft" ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <button className={`${btnPrimary} min-h-12 px-8 text-base`} disabled={!!busy} onClick={() => act({ action: "approve" }, "approve")}>
-                {busy === "approve" ? "…" : `Approve${data.finalEstimate ? ` → final ≈ ${money(data.finalEstimate)}` : ""}`}
+              <button className={`${btnPrimary} min-h-12 px-8 text-base`} disabled={!!busy || testRunning} onClick={() => act({ action: "approve" }, "approve")}>
+                {busy === "approve" ? "…" : isMotion ? `Make the video${data.finalEstimate ? ` ≈ ${money(data.finalEstimate)}` : ""}` : "Approve"}
               </button>
+              {isMotion && data.testClipEstimate ? (
+                <button className={`${btn} min-h-12`} disabled={!!busy || testRunning} onClick={() => act({ action: "test_clip" }, "test")}>
+                  {busy === "test" ? "…" : testRunning ? "Test clip on the way…" : `Test one clip first ≈ ${money(data.testClipEstimate)}`}
+                </button>
+              ) : null}
               <button className={btn} onClick={() => act({ action: "feedback", verdict: "down" }, "fb")}>👎</button>
-              <p className={`text-xs ${muted}`}>{p.kind === "video" || p.kind === "ugc" ? "Approve makes the real video clips (fal.ai), checks them, then the final edit." : "Approve marks it final."}</p>
+              <p className={`w-full text-xs ${muted}`}>
+                {isMotion
+                  ? "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects. The test makes only the first shot so you can see it move first — it is kept, not paid twice."
+                  : "Approve marks it final."}
+              </p>
             </div>
           ) : null}
           {data.music.libraryCount === 0 && (p.kind === "video" || p.kind === "ugc" || p.kind === "animated") ? (

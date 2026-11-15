@@ -69,6 +69,42 @@ export const SEED_RECIPES = [
     ],
     pacing: "medium", music: { mood: "lo-fi house", bpm: [110, 120] }, length: [8, 14], ugc: true, patterns: ["fit_check_mirror", "try_on_haul"],
   }),
+  r("ugc_unboxing", "Unboxing (UGC)", "Opens the bag or box on the bed, pulls the piece out, holds it up to the phone, then has it on.", ["ugc"], {
+    beats: [
+      { label: "Hook", seconds: 2, shot: "phone over the bed, hands open a plain bag / box, says the hook", transition: "hard_cut", text: "captions" },
+      { label: "Reveal", seconds: 3, shot: "pulls the piece out and holds it up to the lens, shows the front and a detail", transition: "jump_cut", text: "captions" },
+      { label: "On", seconds: 3, shot: "mirror, now wearing it, turns once", transition: "jump_cut", text: "captions" },
+      { label: "CTA", seconds: 2, shot: "close to the phone, says where to get it", transition: "hard_cut", text: "product + price" },
+    ],
+    pacing: "medium", music: { mood: "lo-fi house", bpm: [105, 118] }, length: [9, 14], ugc: true, patterns: ["unboxing", "try_on_haul"],
+  }),
+  r("ugc_off_the_hanger", "Off the hanger → on (UGC)", "Takes it off the hanger or rail and puts it on in one movement, then shows the fit to the phone.", ["ugc"], {
+    beats: [
+      { label: "Hanger", seconds: 3, shot: "phone propped up, takes the piece off the hanger / rail and puts it on in one movement (first frame: on the hanger; last frame: wearing it)", transition: "hard_cut", text: "captions" },
+      { label: "Fit", seconds: 3, shot: "steps back, turns, shows the back to the phone", transition: "jump_cut", text: "captions" },
+      { label: "Detail", seconds: 2.5, shot: "brings a detail close to the lens with her hands", transition: "jump_cut", text: "captions" },
+      { label: "CTA", seconds: 2, shot: "says where to get it", transition: "hard_cut", text: "product + price" },
+    ],
+    pacing: "medium", music: { mood: "deep house", bpm: [112, 122] }, length: [9, 13], ugc: true, patterns: ["try_on_haul", "transformation"],
+  }),
+  r("ugc_talk_to_camera", "Talking to camera (UGC)", "Close to the phone, says what she likes about it — real facts only — and shows each detail to the lens.", ["ugc"], {
+    beats: [
+      { label: "Hook", seconds: 2, shot: "selfie, close, says the hook to the phone", transition: "hard_cut", text: "captions" },
+      { label: "Why", seconds: 3, shot: "talks about the fit / fabric, shows it to the lens", transition: "jump_cut", text: "captions" },
+      { label: "Detail", seconds: 3, shot: "holds a detail up to the camera while talking", transition: "jump_cut", text: "captions" },
+      { label: "CTA", seconds: 2, shot: "says shopcarbon.com", transition: "hard_cut", text: "product + price" },
+    ],
+    pacing: "medium", music: { mood: "lo-fi house", bpm: [100, 115] }, length: [9, 14], ugc: true, patterns: ["talking_head", "testimonial_style"],
+  }),
+  r("ugc_silent_show", "Silent show (UGC)", "No talking: shows the piece to the phone on the beat, captions carry the words.", ["ugc"], {
+    beats: [
+      { label: "Hook", seconds: 1.5, shot: "phone in the mirror, a quick pose", transition: "hard_cut", text: "captions" },
+      { label: "Turns", seconds: 3, shot: "turns, shows the back, the fit moves", transition: "jump_cut", text: "captions" },
+      { label: "Detail", seconds: 2, shot: "hand brings a detail to the lens", transition: "jump_cut", text: "captions" },
+      { label: "End", seconds: 2, shot: "final pose to the phone", transition: "hard_cut", text: "product + price" },
+    ],
+    pacing: "fast", music: { mood: "tech house", bpm: [118, 126] }, length: [8, 11], ugc: true, patterns: ["fit_check_mirror"],
+  }),
   r("three_ways_split", "3 ways to style it → split-screen finale", "One hero piece, three looks, ending on a 3-way split screen.", ["video", "animated"], {
     beats: [
       { label: "Hook", seconds: 1.3, shot: "hero piece alone, hanger or flat", transition: "hard_cut", text: "1 piece, 3 ways" },

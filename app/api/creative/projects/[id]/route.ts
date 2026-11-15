@@ -68,6 +68,7 @@ export async function GET(req: Request, { params }: Ctx) {
           : null,
       ),
       finalEstimate: v.finalEstimate,
+      testClipEstimate: v.testClipEstimate,
       music: { trackId, track: music.find((m) => m.id === trackId)?.name ?? null, libraryCount: music.length },
       notice: v.project.kind === "ugc" ? UGC_NOTICE : null,
     });
@@ -80,6 +81,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("concepts"), modifier: z.enum(["crazier", "luxury", "new"]).nullable().optional() }),
   z.object({ action: z.literal("pick"), concept: z.number().int().min(0).max(2) }),
   z.object({ action: z.literal("approve"), upscale4k: z.boolean().optional() }),
+  z.object({ action: z.literal("test_clip") }),
   z.object({ action: z.literal("chat"), text: z.string().min(1).max(1000) }),
   z.object({ action: z.literal("feedback"), verdict: z.enum(["up", "down"]), note: z.string().max(300).optional() }),
   z.object({ action: z.literal("post"), caption: z.string().max(2200), hashtags: z.array(z.string().max(60)).max(30), at: z.string().datetime({ offset: true }).nullable().optional(), useBestTime: z.boolean().optional(), size: z.string().max(5).optional() }),
@@ -111,6 +113,12 @@ async function POST_handler(req: Request, { params }: Ctx) {
         await approveProject(g.pool, tid, id, by, { upscale4k: a.upscale4k });
         await recordFeedback(g.pool, tid, { target: "project", targetId: id, verdict: "up", note: "approved draft", by });
         break;
+      case "test_clip": {
+        if (p.status !== "draft" || (p.kind !== "video" && p.kind !== "ugc")) throw new PlainError("The test clip is for a video or UGC whose shots are ready.");
+        const open = await g.pool.query(`SELECT 1 FROM creative_jobs WHERE project_id = $1::uuid AND kind IN ('project_test_clip','project_final') AND status IN ('queued','running','waiting')`, [id]);
+        if (!open.rows[0]) await enqueue(g.pool, tid, "project_test_clip", {}, { projectId: id, requestedBy: by, progress: "Making one real test clip" });
+        break;
+      }
       case "chat": {
         const r = await chatEdit(g.pool, tid, id, a.text, by);
         kick(g.pool, tid);

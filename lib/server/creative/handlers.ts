@@ -3,10 +3,11 @@
  * free of imports). NO job here generates pictures or video on a timer: the only scheduled job is
  * Radar's nightly collection (radar_nightly, no paid AI) and its one-time tagging batch.
  */
+import { musicSeed } from "./music-seed";
 import type { JobHandler } from "./jobs";
 import { radarNightly, radarRetention, radarSource, radarTag } from "./radar/run";
 import { twinBuild } from "./twin";
-import { conceptThumbs, projectConcepts, projectDraft, projectFinal, projectShots, projectStills } from "./pipeline";
+import { conceptThumbs, projectConcepts, projectDraft, projectFinal, projectShots, projectStills, projectTestClip } from "./pipeline";
 import { campaignPack, projectCutdown } from "./campaign";
 import { projectRerender } from "./chat";
 import { refreshResults } from "./learning";
@@ -29,6 +30,8 @@ export const HANDLERS: Record<string, JobHandler> = {
   project_stills: projectStills,
   project_draft: projectDraft,
   project_final: projectFinal,
+  project_test_clip: projectTestClip,
+  music_seed: musicSeed,
   project_rerender: projectRerender,
   project_cutdown: projectCutdown,
   campaign_pack: campaignPack,

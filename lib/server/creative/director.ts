@@ -7,7 +7,7 @@
  */
 import type { Pool } from "pg";
 import { z } from "zod";
-import { brandBlock, getBrand, presetOf } from "./config";
+import { brandBlock, getBrand, presetOf, UGC_FORMATS } from "./config";
 import { json } from "./llm";
 import { listRecipes } from "./recipes";
 import { currentSeason, topWinners } from "./radar/query";
@@ -93,6 +93,14 @@ export const Shot = z.object({
   still_prompt: clip(1200),
   motion_prompt: clip(900),
   sfx: z.array(z.string()).max(3),
+  /** UGC: what the creator says out loud in this shot (the video engine speaks it), or null. */
+  say: z.preprocess((v) => (typeof v === "string" && v.trim() ? [...v].slice(0, 160).join("") : null), z.string().nullable()).optional(),
+  /**
+   * A shot where something changes on camera (off the hanger → wearing it, bag → held up): what the
+   * LAST frame shows. A second picture is drawn for it and the video engine moves from one to the other,
+   * so the clothes are right at the end instead of morphing (owner, 2026-11-15).
+   */
+  end_state: z.preprocess((v) => (typeof v === "string" && v.trim() ? [...v].slice(0, 300).join("") : null), z.string().nullable()).optional(),
 });
 export type Shot = z.infer<typeof Shot>;
 export const ShotList = z.object({ shots: z.array(Shot).min(2).max(14), music: z.object({ mood: z.string(), bpm: z.number() }), captions: z.array(z.string()).max(3) });
@@ -144,7 +152,7 @@ export async function buildBrief(pool: Pool, tenantId: string, p: { kind: string
     radar: winners.map((w) => ({ advertiser: "a winning brand", pattern: w.tags?.creative_pattern ?? [], hook: w.tags?.hook_text ?? "", structure: w.tags?.structure_summary ?? "", score: w.winner_score ?? 0 })),
     own: await ownWinners(pool, tenantId),
     inspiration,
-    brand: brandBlock(brand, p.preset),
+    brand: brandBlock(brand, p.preset, p.kind === "ugc"),
   };
 }
 
@@ -174,8 +182,10 @@ export async function pitchConcepts(pool: Pool, tenantId: string, brief: Brief, 
     "For each concept: title; one-line idea; the HOOK — what happens in the first 1.5 s and why it stops the scroll (hook.text = the on-screen words, or null); recipe_key (one of the recipes above);",
     "edit_recipe (cuts, pacing, transitions in one line); look = the concept's OWN visual world: location (a specific place), light (source, direction, time of day) and palette (2–3 colours); a 4–8 frame storyboard where each frame has a framing (macro, close_up, medium, full_body or wide) and a shot that matches it; music mood + BPM (the owner likes deep / tech / dark afro house around 118–126 BPM); length_s; format = exactly one of \"9:16\", \"4:5\" or \"1:1\"; cast_count; inspired_by = which winning patterns it builds on.",
     brief.kind === "static" ? "This is a STATIC (or carousel): storyboard frames = the slides; length_s = 0." : "",
-    brief.kind === "ugc" ? "This is AI UGC: creator-style, phone-shot, one creator talking. It must never pretend to be a real customer or invent reviews." : "",
-    "The 3 concepts must LOOK different at a glance, not only cut differently: three different kinds of place (e.g. a night street, a warm interior, a clean studio, a rooftop at dusk, daylight architecture — never two of the same kind), three different lights and three different palettes, each still true to the brand's look. Vary the framing too: every concept has at least one macro or close_up frame and at least one full_body or wide frame.",
+    brief.kind === "ugc"
+      ? `This is AI UGC — it must feel and look like a REAL person filmed it on their phone, never like a campaign shoot. It must never pretend to be a real customer or invent reviews.\n${UGC_FORMATS}\nThe 3 concepts use 3 DIFFERENT UGC formats and 3 different everyday places (e.g. bedroom mirror, car front seat, apartment by the window, fitting room, daytime sidewalk). look.light is plain natural or room light. Storyboard frames are what the phone sees. Ignore any instruction below about cinematic places or lights.`
+      : "",
+    brief.kind === "ugc" ? "" : "The 3 concepts must LOOK different at a glance, not only cut differently: three different kinds of place (e.g. a night street, a warm interior, a clean studio, a rooftop at dusk, daylight architecture — never two of the same kind), three different lights and three different palettes, each still true to the brand's look. Vary the framing too: every concept has at least one macro or close_up frame and at least one full_body or wide frame.",
     "FACTS ONLY: describe only the fabric, colour, wash, hardware and details the PRODUCTS facts and detail crops show. Never call a piece denim (or any other fabric) unless its facts say so — a black knit dress is not denim.",
     "Never invent facts, reviews, ratings or numbers. Never name other brands.",
   ]
@@ -193,10 +203,14 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
     briefText(brief, recipe ? [recipe] : []),
     "FACTS ONLY: describe only the fabric, colour, wash, hardware and details the PRODUCTS facts and detail crops show. Never call a piece denim (or any other fabric) unless its facts say so — a black knit dress is not denim.",
     `CHOSEN CONCEPT: ${JSON.stringify(concept)}`,
-    concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
+    brief.kind === "ugc"
+      ? `UGC SHOT LIST — the whole video must look like a real person filmed it on a phone.\n${UGC_FORMATS}\nIf the concept is cinematic (night sets, moody light, orbits, macro beauty shots), REWRITE it into the closest UGC format in an everyday place with natural light — keep only the product and the idea. camera_move: static (phone on a shelf / selfie), handheld_follow (a friend holds the phone) or push_in (phone moves closer) — nothing else. lens: 24mm (phone camera). 3–6 shots of 2–4 s plus the end card. say: the creator's spoken line for that shot (short, natural, facts only; the lines of the creator script in order), or null when she doesn't talk. When the shot shows a change (taking it off the hanger and putting it on, pulling it out of the bag and holding it up, zipping up), still_prompt = the FIRST moment (the garment still on the hanger / in the bag / in her hands, not worn yet) and end_state = the LAST moment (now wearing it, exactly how it should look). still_prompt always says it is a frame from a phone video in that everyday place with natural light.`
+      : "",
+    brief.kind !== "ugc" && concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
     recipe ? `RECIPE BEATS: ${JSON.stringify(recipe.structure.beats)}` : "",
     "Every shot: subject_action, camera_move, lens, lighting (hard sun / sodium streetlight / neon rim / softbox / on-camera flash / soft directional …), location (from LOCATIONS), duration_s, transition_in,",
-    "garment_must_show (which detail of which product must be visible), cast (model ids from CAST), products (product ids from PRODUCTS worn in the shot), text_overlay (short, or null), is_end_card, is_static_frame (true when a still is enough, e.g. freeze frames, flat-lays, end card),",
+    "garment_must_show (which detail of which product must be visible), cast (model ids from CAST), products (product ids from PRODUCTS worn in the shot), text_overlay (short, or null), is_end_card, is_static_frame (true ONLY for the end card — every other shot becomes a real video clip of a moving person),",
+    "say (what the person says out loud in the shot, or null) and end_state (null unless the shot shows a change on camera — then what the LAST frame shows, e.g. 'now wearing the jacket, zipped, hands in the pockets'),",
     "still_prompt: the first-frame picture for the image model — describe the scene, pose, camera, lens and light; say the person is the CAST reference and the clothes are the PRODUCT references, exactly as given; no text, no logos except the garment's own print;",
     "motion_prompt: what moves in the clip, for the video model (camera move, body motion, fabric motion), one or two sentences; sfx: up to 3 sound effects (whoosh, fabric rustle, shutter, bass hit …).",
     `Total length close to ${concept.length_s || "the concept's"} s. The last shot is the CARBON end card (is_end_card true).`,

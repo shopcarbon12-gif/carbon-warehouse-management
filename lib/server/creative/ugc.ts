@@ -28,7 +28,7 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
   const brand = await getBrand(pool, tenantId);
   const prompt = [
     "Write a creator-style (UGC) video script for CARBON. It is AI-generated content and will be labelled as such.",
-    brandBlock(brand, v.preset),
+    brandBlock(brand, v.preset, true),
     `CREATOR PERSONA: ${v.persona}. Natural, spoken, short sentences, how a real creator talks to their phone.`,
     `FACTS SHEET (the ONLY facts you may use): ${JSON.stringify(v.facts)}`,
     v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · hook idea: ${v.concept.hook?.first_1_5s ?? ""}` : "",

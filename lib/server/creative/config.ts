@@ -297,13 +297,23 @@ export function presetOf(brand: BrandBrain, key: string | null | undefined): Pre
 }
 
 /** A short block every prompt gets: who CARBON is and what it never does. */
-export function brandBlock(brand: BrandBrain, presetKey?: string | null): string {
+/**
+ * UGC must look like a real person filmed it on a phone (owner, 2026-11-15: a "UGC" came out as a
+ * cinematic stairwell photo shoot because the brand Look won). For UGC this replaces the Look.
+ */
+export const UGC_LOOK =
+  "REAL-PERSON PHONE VIDEO (UGC) — this overrides every brand Look and cinematic idea: a vertical phone camera (selfie front camera, or a friend holding the phone), slight handheld shake, a real everyday place (her own bedroom mirror, apartment living room, car front seat, a store fitting room, a building hallway, a daytime sidewalk, a café), plain natural or room light (window daylight, a ceiling lamp) — never studio lights, never a film grade, never a moody cinematic set, never dolly / orbit / crane moves or macro beauty shots. Casual, relaxed, real: natural hair and expressions, talks to the camera like to a friend.";
+
+export const UGC_FORMATS =
+  "UGC FORMATS (pick ONE per video, the one that fits the product best): unboxing (opens a plain bag or box, pulls the piece out, holds it up to the phone, then has it on); off the hanger (takes it off a hanger or clothes rail and puts it on in one movement — great for jackets, coats, hoodies, tops); mirror try-on / fit check (phone in hand at the mirror, turns, shows the back, touches the fabric); talking to camera (close to the phone, says what she likes about it using only real facts, brings details up to the lens with her hands); silent show (no talking — shows the piece to the phone with music and captions). Hands bring details close to the lens instead of macro cut-aways. One place for the whole video (two at most).";
+
+export function brandBlock(brand: BrandBrain, presetKey?: string | null, ugc = false): string {
   const p = presetOf(brand, presetKey);
   const liked = brand.voice.samples.filter((s) => s.verdict === "up").map((s) => s.text).slice(0, 5);
   const disliked = brand.voice.samples.filter((s) => s.verdict === "down").map((s) => s.text).slice(0, 5);
   return [
     `BRAND: CARBON (shopcarbon.com) — streetwear, denim, luxury and evening wear from Orlando, Florida. Say "CARBON", never "Carbon Jeans".`,
-    `LOOK (${p.name}): ${p.look}.`,
+    ugc ? UGC_LOOK : `LOOK (${p.name}): ${p.look}.`,
     `VOICE: ${brand.voice.description}.${liked.length ? ` Captions the owner liked: ${liked.map((t) => `"${t}"`).join(" · ")}.` : ""}${disliked.length ? ` Captions the owner disliked: ${disliked.map((t) => `"${t}"`).join(" · ")}.` : ""}`,
     `DO: ${brand.dos.join("; ")}.`,
     `DON'T: ${brand.donts.join("; ")}. Never name other brands, never say where the clothes are made.`,

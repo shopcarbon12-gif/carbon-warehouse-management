@@ -105,7 +105,7 @@ export async function chatEdit(pool: Pool, tenantId: string, projectId: string, 
   await setProject(pool, p.id, { edit_plan: ep, shot_list: sl, preset, cast_ids: castIds });
   if (remake.size) {
     // The changed shots' old stills and clips are set aside; the rest are kept as they are.
-    await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind IN ('still','clip') AND shot_idx = ANY($2::int[]) AND status = 'done'`, [p.id, [...remake]]);
+    await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind IN ('still','still_end','clip') AND shot_idx = ANY($2::int[]) AND status = 'done'`, [p.id, [...remake]]);
   }
   const rerender: "free" | "stills" | "none" = remake.size ? "stills" : change.actions.some((a) => a.type !== "none" && a.type !== "caption") ? "free" : "none";
   if (rerender === "stills") {
@@ -141,6 +141,8 @@ export const projectRerender: JobHandler = async (pool, job) => {
     return { status: "done", progress: "Re-laying out" };
   }
   const hasClips = ["final", "clips"].includes(p.status);
+  // Video / UGC before Make video: there is no stills slideshow any more — the change is saved and used by the real edit.
+  if (!hasClips) return { status: "done", progress: "Saved — used when you make the video" };
   const renders: string[] = [];
   for (const size of p.sizes.length ? p.sizes : ["9:16"]) {
     const plan = await rerenderPlan(pool, p, size, hasClips);
