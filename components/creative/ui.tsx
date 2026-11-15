@@ -84,7 +84,33 @@ export function ErrorLine({ error }: { error: string | null | undefined }) {
   return <p className="my-2 border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>;
 }
 
-export type Job = { id: string; kind: string; status: string; progress: string | null; error: string | null; updated_at: string };
+export type Job = { id: string; kind: string; status: string; progress: string | null; error: string | null; updated_at: string; project_id?: string | null };
+
+/** Plain words for each job (the owner never sees internal names like "project_test_clip"). */
+export const JOB_LABEL: Record<string, string> = {
+  project_concepts: "Concepts",
+  concept_thumbs: "Storyboard pictures",
+  project_shots: "Shot list",
+  project_stills: "Pictures",
+  project_draft: "Preview",
+  project_test_clip: "Test clip",
+  project_final: "Final video",
+  project_rerender: "Re-cut",
+  project_cutdown: "Cut-down",
+  campaign_pack: "Campaign pack",
+  twin_build: "Product check",
+  ugc_rescript: "New words",
+  ugc_refresh: "Captions",
+  idea_pictures: "Idea pictures",
+  preset_samples: "Look sample frames",
+  music_seed: "Music library",
+  learning_refresh: "Results",
+  radar_nightly: "Radar collection",
+  radar_source: "Radar collection",
+  radar_tag: "Radar tagging",
+  radar_retention: "Radar clean-up",
+};
+const JOB_STATUS: Record<string, string> = { queued: "starting", running: "working", waiting: "waiting", done: "done", failed: "stopped", paused: "paused", cancelled: "cancelled" };
 
 export function JobLine({ job }: { job: Job }) {
   const tone = job.status === "failed" ? "text-red-300" : job.status === "paused" ? "text-amber-300" : job.status === "done" ? "text-emerald-300" : "text-white";
@@ -94,7 +120,7 @@ export function JobLine({ job }: { job: Job }) {
       <span className={`mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full ${live ? "animate-pulse bg-white" : job.status === "done" ? "bg-emerald-400" : job.status === "failed" ? "bg-red-400" : "bg-amber-400"}`} />
       <div className="min-w-0">
         <span className={tone}>{job.error ?? job.progress ?? job.status}</span>
-        <span className={`ml-2 text-xs ${muted}`}>{job.kind.replace(/_/g, " ")} · {job.status}</span>
+        <span className={`ml-2 text-xs ${muted}`}>{JOB_LABEL[job.kind] ?? job.kind.replace(/_/g, " ")} · {JOB_STATUS[job.status] ?? job.status}</span>
       </div>
     </div>
   );
@@ -110,14 +136,15 @@ export function useLive(active: boolean, ms = 4000) {
   }, [active, ms]);
 }
 
-export function Media({ url, video, poster, className, alt = "" }: { url: string | null | undefined; video?: boolean; poster?: string | null; className?: string; alt?: string }) {
+export function Media({ url, video, poster, className, alt = "", fit = "cover" }: { url: string | null | undefined; video?: boolean; poster?: string | null; className?: string; alt?: string; fit?: "cover" | "contain" }) {
+  const fitClass = fit === "contain" ? "object-contain" : "object-cover";
   if (!url) return <div className={`flex items-center justify-center bg-white/5 text-xs ${muted} ${className ?? ""}`}>—</div>;
   if (video)
     return (
       <video
         src={url}
         poster={poster ?? undefined}
-        className={`bg-black object-cover ${className ?? ""}`}
+        className={`bg-black ${fitClass} ${className ?? ""}`}
         muted
         loop
         playsInline
@@ -128,7 +155,7 @@ export function Media({ url, video, poster, className, alt = "" }: { url: string
       />
     );
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt={alt} loading="lazy" className={`bg-black object-cover ${className ?? ""}`} />;
+  return <img src={url} alt={alt} loading="lazy" className={`bg-black ${fitClass} ${className ?? ""}`} />;
 }
 
 export const KIND_LABEL: Record<string, string> = { static: "Static", video: "Video", ugc: "UGC", animated: "Animated", campaign: "Full Campaign" };
@@ -137,9 +164,15 @@ export const STATUS_LABEL: Record<string, string> = {
   concepts: "Pick a concept",
   shots: "Shot list",
   stills: "Dressing models",
-  draft: "Draft — approve?",
+  draft: "Ready",
   approved: "Making the final",
-  clips: "Video clips",
+  clips: "Filming",
   final: "Final",
   failed: "Failed",
 };
+
+/** The status in plain words for this kind of creative ("draft" means different things). */
+export function statusLabel(kind: string, status: string): string {
+  if (status === "draft") return kind === "video" || kind === "ugc" ? "Shots ready — make the video" : "Ready to approve";
+  return STATUS_LABEL[status] ?? status;
+}

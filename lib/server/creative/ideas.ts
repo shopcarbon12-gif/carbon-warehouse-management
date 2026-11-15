@@ -24,7 +24,8 @@ const Ideas = z.object({
         scene: z.string().max(300).optional(),
         reason: z.string().max(160),
         product_refs: z.array(z.string()).max(3),
-        kind: z.enum(["static", "video", "ugc", "animated", "campaign"]),
+        // Animated is hidden from Create (a template, not AI video); an "animated" idea becomes a photo ad.
+        kind: z.preprocess((v) => (v === "animated" ? "static" : v), z.enum(["static", "video", "ugc", "campaign"])),
         recipe_key: z.string().nullable(),
         preset: z.enum(["street", "luxury", "evening", "florida"]),
       }),

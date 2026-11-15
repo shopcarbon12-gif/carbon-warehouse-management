@@ -5,7 +5,7 @@
  * ads are inspiration for STRUCTURE only, never re-published.
  */
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { api, btn, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, Media, muted } from "./ui";
 
@@ -42,28 +42,49 @@ function qs(f: F) {
 
 export function CreativeRadar() {
   const [f, setF] = useState<F>(EMPTY);
+  // Search waits until typing pauses (each key re-queried and blanked the grid).
+  const [typed, setTyped] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setF((x) => (x.q === typed ? x : { ...x, q: typed })), 350);
+    return () => clearTimeout(t);
+  }, [typed]);
+  const [note, setNote] = useState<string | null>(null);
+  const [working, setWorking] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<"library" | "review" | "brands" | "sources">("library");
   const { data: stats, mutate: ms } = useSWR<Stats>("/api/creative/radar?view=stats", fetcher, { refreshInterval: 30000 });
   const { data: cols } = useSWR<{ collections: { pattern: string; active: number; total: number; thumbs: (string | null)[] }[] }>("/api/creative/radar?view=collections", fetcher);
   const key = `/api/creative/radar?${qs(view === "review" ? { ...f, status: "review" } : f)}`;
-  const { data, error, mutate } = useSWR<{ ads: Card[]; total: number }>(view === "library" || view === "review" ? key : null, fetcher);
+  const { data, error, mutate } = useSWR<{ ads: Card[]; total: number }>(view === "library" || view === "review" ? key : null, fetcher, { keepPreviousData: true });
   const [err, setErr] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const set = (p: Partial<F>) => setF((x) => ({ ...x, ...p }));
   const tog = (k: "media" | "patterns" | "lanes" | "genders" | "platforms" | "sources" | "seasons", v: string) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const allPatterns = useMemo(() => (cols?.collections ?? []).map((c) => c.pattern), [cols]);
 
-  async function post(json: Record<string, unknown>) {
+  /** Every Radar button shows that it's working and what happened (review 2026-11-15: no feedback, double runs). */
+  async function post(json: Record<string, unknown>, label?: string) {
+    if (label && working) return null;
     setErr(null);
+    setNote(null);
+    if (label) setWorking(label);
     try {
       const r = await api<{ result?: string }>("/api/creative/radar", { method: "POST", json });
       await Promise.all([mutate(), ms()]);
+      const said: Record<string, string> = {
+        refresh: "Collecting now — new ads appear over the next minutes.",
+        tag_now: "Tagging the new ads now — they move into the library as they're done.",
+      };
+      const imported: Record<string, string> = { new: "Added to Radar.", merged: "Added as another version of an ad you already have.", seen: "Already in Radar.", preRejected: "Not clothing or shoes — skipped.", noMedia: "No picture or video found at that link." };
+      if (json.action === "import") setNote(imported[r?.result ?? ""] ?? "Imported.");
+      else if (said[String(json.action)]) setNote(said[String(json.action)]);
       return r;
     } catch (e) {
       setErr((e as Error).message);
       return null;
+    } finally {
+      if (label) setWorking(null);
     }
   }
 
@@ -83,8 +104,9 @@ export function CreativeRadar() {
         </div>
       </div>
       <ErrorLine error={err ?? (error as Error | undefined)?.message} />
+      {note ? <p className="mb-3 text-sm text-emerald-300">{note}</p> : null}
 
-      {view === "brands" ? <Brands onErr={setErr} /> : view === "sources" ? <Sources onRefresh={() => post({ action: "refresh" })} onTag={() => post({ action: "tag_now" })} /> : (
+      {view === "brands" ? <Brands onErr={setErr} /> : view === "sources" ? <Sources working={working} onRefresh={() => post({ action: "refresh" }, "refresh")} onTag={() => post({ action: "tag_now" }, "tag")} /> : (
         <>
           {view === "library" && cols?.collections.length ? (
             <div className="-mx-3 mb-4 flex gap-2 overflow-x-auto px-3 pb-1 md:-mx-6 md:px-6">
@@ -109,7 +131,7 @@ export function CreativeRadar() {
               <option value="">All categories</option>
               {(stats?.categories ?? []).map((c) => <option key={c.cat} value={c.cat}>{c.cat} ({c.n})</option>)}
             </select>
-            <input className={`${input} !min-h-9 w-full md:w-64`} placeholder="Search brand, hook, transcript, tags" value={f.q} onChange={(e) => set({ q: e.target.value })} />
+            <input className={`${input} !min-h-9 w-full md:w-64`} placeholder="Search brand, hook, transcript, tags" value={typed} onChange={(e) => setTyped(e.target.value)} />
             <button className={btn} onClick={() => setDrawer(true)}>Filters{Object.entries(f).filter(([k, v]) => !["tab", "q", "sort", "status", "category"].includes(k) && (Array.isArray(v) ? v.length : v)).length ? " •" : ""}</button>
             <select className={`${input} !min-h-9 w-auto`} value={f.sort} onChange={(e) => set({ sort: e.target.value })}>
               <option value="fresh">Fresh picks for you</option>
@@ -121,16 +143,16 @@ export function CreativeRadar() {
           </div>
 
           {view === "library" ? (
-            <form className="mb-3 flex gap-2" onSubmit={async (e) => { e.preventDefault(); if (!url) return; const r = await post({ action: "import", url }); if (r) setUrl(""); }}>
+            <form className="mb-3 flex gap-2" onSubmit={async (e) => { e.preventDefault(); if (!url) return; const r = await post({ action: "import", url }, "import"); if (r) setUrl(""); }}>
               <input className={input} placeholder="Paste an ad link to import it (Instagram, TikTok, Facebook, a video file…)" value={url} onChange={(e) => setUrl(e.target.value)} />
-              <button className={btn}>Import</button>
+              <button className={btn} disabled={working === "import"}>{working === "import" ? "Importing…" : "Import"}</button>
             </form>
           ) : null}
 
           {data && !data.ads.length ? (
             <div className={`${card} text-sm`}>
-              {view === "review" ? "Nothing to review." : stats?.discovered ? "No ads match these filters." : "Radar is empty. Collection runs nightly at 3 AM — or "}
-              {!stats?.discovered && view === "library" ? <button className="underline" onClick={() => post({ action: "refresh" })}>start it now</button> : null}
+              {view === "review" ? "Nothing to review." : stats?.discovered ? "No ads match these filters." : "Radar is empty — nothing is collected until you tap "}
+              {!stats?.discovered && view === "library" ? <button className="underline" disabled={!!working} onClick={() => post({ action: "refresh" }, "refresh")}>{working === "refresh" ? "collecting…" : "Collect now"}</button> : null}
             </div>
           ) : null}
           <div className="columns-2 gap-2 md:columns-4 xl:columns-5">
@@ -144,13 +166,15 @@ export function CreativeRadar() {
                     <p className="truncate text-sm font-semibold">{a.advertiser}</p>
                     <button aria-label="Bookmark" className="min-h-9 min-w-9 text-lg" onClick={() => post({ action: "bookmark", adId: a.id, on: !a.bookmarked })}>{a.bookmarked ? "★" : "☆"}</button>
                   </div>
-                  <p className={`text-xs ${muted}`}>{a.daysRunning != null ? `${a.daysRunning}d running` : "—"} · {a.variations} var · {a.platforms.join(", ") || "—"}{a.isActive ? " · active" : ""}</p>
+                  <p className={`text-xs ${muted}`}>{a.daysRunning != null ? `${a.daysRunning} days running` : "—"} · {a.variations} version{a.variations === 1 ? "" : "s"} · {a.platforms.join(", ") || "—"}{a.isActive ? " · active" : ""}</p>
                   <p className="mt-1 text-xs">{a.winnerScore != null ? <span className="bg-white px-1 font-bold text-black">{a.winnerScore}</span> : "—"} {a.patterns.slice(0, 2).map(PAT).join(" · ")}</p>
                   {view === "review" ? (
-                    <div className="mt-2 flex gap-1">
-                      <p className={`mb-1 text-[11px] ${muted}`}>{a.rejectReason}</p>
-                      <button className={btn} onClick={() => post({ action: "review", adId: a.id, status: "kept" })}>Keep</button>
-                      <button className={btn} onClick={() => post({ action: "review", adId: a.id, status: "rejected" })}>Reject</button>
+                    <div className="mt-2">
+                      {a.rejectReason ? <p className={`mb-1 text-[11px] ${muted}`}>{a.rejectReason}</p> : null}
+                      <div className="flex gap-1">
+                        <button className={btn} onClick={() => post({ action: "review", adId: a.id, status: "kept" })}>Keep</button>
+                        <button className={btn} onClick={() => post({ action: "review", adId: a.id, status: "rejected" })}>Reject</button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -224,10 +248,10 @@ function Detail({ id, onClose, onOpen }: { id: string; onClose: () => void; onOp
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             <div>
               {a.media.map((m, i) => (m.kind === "video" ? <video key={i} src={m.url ?? undefined} poster={m.poster ?? undefined} controls playsInline className="mb-2 w-full bg-black" /> : <Media key={i} url={m.url} className="mb-2 w-full" />))}
-              {a.purged ? <p className={`text-xs ${muted}`}>Media removed after 180 days inactive (details kept).</p> : null}
+              {a.purged ? <p className={`text-xs ${muted}`}>Media removed after the ad stopped running (details kept).</p> : null}
               {a.variationsList.length > 1 ? (
                 <div className="mt-2">
-                  <p className={`mb-1 text-xs uppercase tracking-widest ${muted}`}>{a.variationsList.length} variations</p>
+                  <p className={`mb-1 text-xs uppercase tracking-widest ${muted}`}>{a.variationsList.length} versions</p>
                   <div className="flex gap-1 overflow-x-auto">{a.variationsList.map((v) => <Media key={v.id} url={v.thumb} className="h-24 w-20 shrink-0" />)}</div>
                 </div>
               ) : null}
@@ -244,19 +268,19 @@ function Detail({ id, onClose, onOpen }: { id: string; onClose: () => void; onOp
                 <div className={card}>
                   <p><b>Hook:</b> {a.tags.hook_text || "—"}</p>
                   <p className="mt-1"><b>Structure:</b> {a.tags.structure_summary || "—"}</p>
-                  <p className={`mt-1 text-xs ${muted}`}>{[a.tags.media_type, a.tags.style_lane, a.tags.gender, a.tags.season_event, ...(a.tags.creative_pattern ?? []).map(PAT)].filter(Boolean).join(" · ")}</p>
+                  <p className={`mt-1 text-xs ${muted}`}>{[a.tags.media_type, a.tags.style_lane ? PAT(a.tags.style_lane) : null, a.tags.gender, a.tags.season_event ? PAT(a.tags.season_event) : null, ...(a.tags.creative_pattern ?? []).map(PAT)].filter(Boolean).join(" · ")}</p>
                   <p className={`mt-1 text-xs ${muted}`}>Offer: {a.tags.offer ?? "—"} · price shown: {a.tags.price_shown ?? "—"} · CTA: {a.cta ?? "—"} · type: {a.tags.typography_style ?? "—"}</p>
-                  {a.tags.palette?.length ? <div className="mt-1 flex gap-1">{a.tags.palette.map((c) => <span key={c} className="h-4 w-6 border border-white/20" style={{ background: c }} />)}</div> : null}
+                  {a.tags.palette?.length ? <div className="mt-1 flex gap-1">{a.tags.palette.map((c, i) => <span key={`${c}-${i}`} className="h-4 w-6 border border-white/20" style={{ background: c }} />)}</div> : null}
                   {a.tags.video ? (
                     <div className="mt-2">
-                      <p className={`text-xs ${muted}`}>cut rate {a.tags.video.cut_rate ?? "—"}/s · transitions {a.tags.video.transitions.join(", ") || "—"} · music {String(a.tags.video.music ?? "—")} · VO {String(a.tags.video.voiceover ?? "—")} · captions {String(a.tags.video.captions ?? "—")}</p>
+                      <p className={`text-xs ${muted}`}>cut rate {a.tags.video.cut_rate ?? "—"}/s · transitions {a.tags.video.transitions.map((t) => t.replace(/_/g, " ")).join(", ") || "—"} · music {yesNo(a.tags.video.music)} · voice-over {yesNo(a.tags.video.voiceover)} · captions {yesNo(a.tags.video.captions)}</p>
                       <ol className="mt-1 text-xs">{a.tags.video.shot_list.map((s, i) => <li key={i}>{s.t}s — {s.shot}</li>)}</ol>
                     </div>
                   ) : null}
                 </div>
               ) : <p className={muted}>Not tagged yet (next tagging batch).</p>}
               {a.headline || a.body ? <div className={card}><p className="font-semibold">{a.headline}</p><p className={`mt-1 whitespace-pre-wrap text-xs ${muted}`}>{a.body}</p></div> : null}
-              <p className={`text-xs ${muted}`}>Category: {a.category?.product_category ?? "—"} ({a.category?.confidence != null ? `${Math.round(a.category.confidence * 100)}%` : "—"}) {a.category?.decision ?? ""}</p>
+              <p className={`text-xs ${muted}`}>Category: {a.category?.product_category ?? "—"}{a.category?.confidence != null ? ` (${Math.round(a.category.confidence * 100)}% sure)` : ""}</p>
               <div className="flex flex-wrap gap-2">
                 {a.variationsList.filter((v) => v.sourceUrl).slice(0, 2).map((v) => <a key={v.id} className={btn} href={v.sourceUrl!} target="_blank" rel="noreferrer">Open in source ({v.source})</a>)}
                 {a.landingUrl ? <a className={btn} href={a.landingUrl} target="_blank" rel="noreferrer">Landing page</a> : null}
@@ -341,13 +365,16 @@ function BrandRow({ b, post }: { b: Brand; post: (j: Record<string, unknown>) =>
 
 type Runs = { runs: { id: string; source: string; status: string; counts: Record<string, number>; rejections: string[]; error: string | null; started_at: string; brand: string | null }[]; totals: { source: string; runs: number; discovered: number; new: number; merged: number; failed: number }[]; sources: Record<string, { enabled: boolean; note: string }> };
 
-function Sources({ onRefresh, onTag }: { onRefresh: () => void; onTag: () => void }) {
+const etTime = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const yesNo = (v: boolean | null | undefined) => (v == null ? "—" : v ? "yes" : "no");
+
+function Sources({ onRefresh, onTag, working }: { onRefresh: () => void; onTag: () => void; working: string | null }) {
   const { data } = useSWR<Runs>("/api/creative/radar?view=runs", fetcher, { refreshInterval: 15000 });
   return (
     <div>
       <div className="mb-3 flex flex-wrap gap-2">
-        <button className={btnPrimary} onClick={onRefresh}>Collect now (all brands)</button>
-        <button className={btn} onClick={onTag}>Tag new ads now (Batch, half price)</button>
+        <button className={btnPrimary} disabled={!!working} onClick={onRefresh}>{working === "refresh" ? "Collecting…" : "Collect now (all brands)"}</button>
+        <button className={btn} disabled={!!working} onClick={onTag}>{working === "tag" ? "Sending…" : "Tag new ads now (Batch, half price)"}</button>
         <Link href="/creative/settings?tab=radar" className={btn}>Sources on / off</Link>
       </div>
       <div className="mb-4 overflow-x-auto">
@@ -363,7 +390,7 @@ function Sources({ onRefresh, onTag }: { onRefresh: () => void; onTag: () => voi
         {(data?.runs ?? []).slice(0, 80).map((r) => (
           <details key={r.id} className="border border-white/10 p-2 text-sm">
             <summary className="cursor-pointer">
-              <span className={r.status === "failed" ? "text-red-300" : r.status === "running" ? "text-white" : "text-white/80"}>{r.source}</span> · {r.brand ?? "keyword"} · {r.started_at.slice(0, 16).replace("T", " ")} · found {r.counts.discovered ?? 0}, new {r.counts.new ?? 0}, merged {r.counts.merged ?? 0}, known {r.counts.seen ?? 0}, pre-rejected {r.counts.preRejected ?? 0}
+              <span className={r.status === "failed" ? "text-red-300" : r.status === "running" ? "text-white" : "text-white/80"}>{r.source}</span> · {r.brand ?? "keyword"} · {etTime(r.started_at)} · found {r.counts.discovered ?? 0}, new {r.counts.new ?? 0}, merged {r.counts.merged ?? 0}, known {r.counts.seen ?? 0}, pre-rejected {r.counts.preRejected ?? 0}
             </summary>
             {r.error ? <p className="mt-1 text-xs text-red-300">{r.error}</p> : null}
             <ul className={`mt-1 text-xs ${muted}`}>{(r.rejections ?? []).map((x, i) => <li key={i}>{x}</li>)}</ul>

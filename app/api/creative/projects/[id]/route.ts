@@ -70,6 +70,7 @@ export async function GET(req: Request, { params }: Ctx) {
       finalEstimate: v.finalEstimate,
       testClipEstimate: v.testClipEstimate,
       missingShots: v.missingShots,
+      posts: v.posts,
       scriptText: v.scriptText,
       scriptVersions: v.scriptVersions,
       music: { trackId, track: music.find((m) => m.id === trackId)?.name ?? null, libraryCount: music.length },

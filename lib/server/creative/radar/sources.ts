@@ -386,7 +386,10 @@ export const ADAPTERS: Record<string, SourceAdapter> = {
 /** Default on/off and nightly order. Meta first (phase 2), the rest from phase 7. */
 export const SOURCE_DEFAULTS: Record<string, { enabled: boolean; priority: number; note: string }> = {
   meta_library: { enabled: true, priority: 1, note: "Public page, US ads" },
-  meta_api: { enabled: true, priority: 2, note: "Official API — EU ads only, needs a verified Meta developer token" },
+  // Off by default (review 2026-11-15): it only covers EU ads and every run failed on "Application does not have
+  // permission" — US ads come from the Meta Ad Library page (meta_library). Turn on in Settings › Radar if Meta
+  // grants the permission.
+  meta_api: { enabled: false, priority: 2, note: "Official API — EU ads only; needs Meta's Ad Library API permission (not granted)" },
   tiktok_top: { enabled: true, priority: 3, note: "Industry: Apparel & Accessories" },
   google_atc: { enabled: true, priority: 4, note: "Needs each brand's Google advertiser id (AR…)" },
   snap: { enabled: true, priority: 5, note: "Official API (EU ads)" },

@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
-import { api, btn, btnDanger, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, JobLine, KIND_LABEL, Media, money, muted, STATUS_LABEL, type Job } from "./ui";
+import { api, btn, btnDanger, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, JobLine, KIND_LABEL, Media, money, muted, statusLabel, type Job } from "./ui";
 
 type Product = { id: string; title: string; image: string | null; price: number; stock: number; type: string; gender: string; isNew: boolean; sold30: number | null; twin: { status: string; confirmedAt: string | null } | null };
 type Products = { products: Product[]; suggestions: { newDrops: string[]; bestSellers: string[]; slowMovers: string[] }; twinCost: number };
@@ -19,9 +19,13 @@ const KINDS = [
   { k: "static", t: "Static", d: "Photo ads + carousel, 4:5 and 9:16", ex: "Hero still · price tag · shop now" },
   { k: "video", t: "Video", d: "Every shot becomes a real video of your model, then cut on the beat with effects", ex: "Walk-in → freeze → slam" },
   { k: "ugc", t: "UGC", d: "Looks like a real person filmed it on their phone — talks about or shows the piece", ex: "Unboxing · off the hanger · mirror try-on" },
-  { k: "animated", t: "Animated", d: "Kinetic type, spins, price drops — no AI video cost", ex: "Price drop · outfit grid" },
-  { k: "campaign", t: "Full Campaign", d: "Hero video + cut-downs + UGC + statics + carousel + stories + animated", ex: "One click = the whole drop" },
+  { k: "campaign", t: "Full Campaign", d: "Hero video + cut-downs + UGC + photo ads + carousel + stories", ex: "One click = the whole drop" },
 ] as const;
+
+const ASPECT: Record<string, string> = { "9:16": "aspect-[9/16]", "4:5": "aspect-[4/5]", "1:1": "aspect-square" };
+const TWIN_STATUS: Record<string, string> = { building: "checking the product…", new: "checking the product…", ready: "check these", no_images: "no photos in Shopify", failed: "couldn't read the product" };
+const price = (n: number) => `$${Number(n).toFixed(2).replace(/\.00$/, "")}`;
+const fileName = (title: string | null | undefined, size: string | null, ext: string) => encodeURIComponent(`CARBON-${(title || "creative").replace(/\W+/g, "-").replace(/^-|-$/g, "")}${size ? `-${size.replace(":", "x")}` : ""}.${ext}`);
 
 export function CreativeCreate() {
   const sp = useSearchParams();
@@ -35,7 +39,7 @@ function NewProject() {
   const sp = useSearchParams();
   const router = useRouter();
   const { data: pd, error: pe } = useSWR<Products>("/api/creative/products", fetcher);
-  const { data: sd } = useSWR<{ models: Model[] }>("/api/creative/settings", fetcher);
+  const { data: sd } = useSWR<{ models: Model[]; brand?: { presets?: { key: string; name: string }[] } }>("/api/creative/settings", fetcher);
   const [picked, setPicked] = useState<string[]>(() => (sp.get("products") ?? "").split(",").filter(Boolean));
   const [kind, setKind] = useState<string>(sp.get("kind") ?? "");
   const [cast, setCast] = useState<string[] | "auto">("auto");
@@ -116,13 +120,14 @@ function NewProject() {
                     {p.twin?.confirmedAt ? <span className="absolute left-1 top-1 bg-black/70 px-1 text-[10px]">twin ✓</span> : null}
                     <div className="p-1.5">
                       <p className="line-clamp-2 text-xs font-semibold">{p.title}</p>
-                      <p className={`text-[11px] ${muted}`}>${p.price} · {p.stock} in stock{p.sold30 ? ` · ${p.sold30} sold` : ""}</p>
+                      <p className={`text-[11px] ${muted}`}>{price(p.price)} · {p.stock} in stock{p.sold30 ? ` · ${p.sold30} sold` : ""}</p>
                     </div>
                   </button>
                 );
               })}
               {!pd ? <p className={`col-span-full text-sm ${muted}`}>Loading the catalog…</p> : null}
             </div>
+            {pd && list.length > 120 ? <p className={`mt-1 text-xs ${muted}`}>Showing 120 of {list.length} — search to find the rest.</p> : null}
             {pd ? <p className={`mt-1 text-xs ${muted}`}>The first time a product is used the app builds its Product Twin (cut-outs + facts, ≈ {money(pd.twinCost)} once, kept forever).</p> : null}
           </div>
         ) : null}
@@ -132,7 +137,7 @@ function NewProject() {
       {step >= 2 ? (
         <section className="mt-6">
           <h2 className={`${head} text-2xl md:text-3xl`}>What do you want?</h2>
-          <div className="mt-3 grid gap-2 md:grid-cols-5">
+          <div className="mt-3 grid gap-2 md:grid-cols-4">
             {KINDS.map((x) => (
               <button key={x.k} onClick={() => setKind(x.k)} className={`flex min-h-28 flex-col justify-between border p-3 text-left ${kind === x.k ? "border-white bg-white text-black" : "border-white/15 bg-[#0d0d0d] hover:border-white/50"}`}>
                 <span className={`${head} text-xl`}>{x.t}</span>
@@ -155,9 +160,11 @@ function NewProject() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button className={chip(cast === "auto")} onClick={() => setCast("auto")}>Auto-cast (recommended)</button>
                 <button className={chip(cast !== "auto")} onClick={() => setCast([])}>Pick models</button>
-                <Link className={chip(false)} href="/creative/settings?tab=models">+ New model</Link>
+                <Link className={chip(false)} href="/creative/settings?tab=models" target="_blank">+ New model</Link>
               </div>
-              {cast !== "auto" ? (
+              {cast !== "auto" && !models.length ? (
+                <p className="mt-2 text-sm text-amber-200">No model is ready yet — add one in <Link className="underline" href="/creative/settings?tab=models" target="_blank">Settings › Models</Link> (it needs at least 2 photos).</p>
+              ) : cast !== "auto" ? (
                 <div className="mt-2 grid grid-cols-4 gap-1.5 md:grid-cols-8">
                   {models.map((m) => {
                     const on = cast.includes(m.id);
@@ -177,7 +184,7 @@ function NewProject() {
           <button className={`mt-4 text-sm ${muted} underline`} onClick={() => setMore((m) => !m)}>⋯ More</button>
           {more ? (
             <div className={`${card} mt-2 grid gap-2 md:grid-cols-2`}>
-              <label className="text-sm">Look<select className={`${input} mt-1`} value={preset} onChange={(e) => setPreset(e.target.value)}><option value="">Auto (brand default)</option><option value="street">CARBON Street</option><option value="luxury">CARBON Luxury</option><option value="evening">CARBON Evening</option><option value="florida">CARBON Florida Day</option></select>{kind === "ugc" ? <span className={`mt-1 block text-xs ${muted}`}>UGC ignores the Look — it always looks like a real phone video.</span> : null}</label>
+              <label className="text-sm">Look<select className={`${input} mt-1`} value={preset} onChange={(e) => setPreset(e.target.value)}><option value="">Auto (brand default)</option>{(sd?.brand?.presets ?? []).map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}</select>{kind === "ugc" ? <span className={`mt-1 block text-xs ${muted}`}>UGC ignores the Look — it always looks like a real phone video.</span> : null}</label>
               <label className="text-sm">Name (optional)<input className={`${input} mt-1`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={kind === "campaign" ? "e.g. Winter drop" : ""} /></label>
             </div>
           ) : null}
@@ -185,7 +192,9 @@ function NewProject() {
             <button className={`${btnPrimary} min-h-12 w-full text-base md:w-auto md:px-10`} disabled={busy || (cast !== "auto" && !cast.length && kind !== "animated")} onClick={start}>
               {busy ? "Starting…" : "Show me 3 concepts"}
             </button>
-            <p className={`mt-2 text-xs ${muted}`}>Concepts are text + cheap thumbnails. The real video is only made when you tap Make video.</p>
+            <p className={`mt-2 text-xs ${muted}`}>
+              {kind === "static" ? "Concepts are text + cheap sketches. The photo ads are drawn after you pick one." : kind === "ugc" ? "Concepts are text only. Nothing is filmed until you tap Make the video." : "Concepts are text + cheap sketches. The real video is only made when you tap Make the video."}
+            </p>
           </div>
         </section>
       ) : null}
@@ -215,6 +224,7 @@ type View = {
   finalEstimate: number | null;
   testClipEstimate: number | null;
   missingShots: number[];
+  posts?: { id: string; created_at: string }[];
   scriptText: string | null;
   scriptVersions: string[];
   music: { track: string | null; libraryCount: number };
@@ -226,7 +236,7 @@ type View = {
  * "What they say" (owner, 2026-11-15): see the words, change them by hand, or tap Rewrite for another version that
  * reads the product, every shot and the person. Earlier versions can be brought back.
  */
-function ScriptBox({ text, versions, final, busy, act }: { text: string; versions: string[]; final: boolean; busy: string | null; act: (json: Record<string, unknown>, label: string) => Promise<void> }) {
+function ScriptBox({ text, versions, final, busy, act }: { text: string; versions: string[]; final: boolean; busy: string | null; act: (json: Record<string, unknown>, label: string) => Promise<boolean> }) {
   const [draft, setDraft] = useState<string | null>(null);
   const value = draft ?? text;
   const changed = draft != null && draft.trim() !== text.trim();
@@ -240,10 +250,10 @@ function ScriptBox({ text, versions, final, busy, act }: { text: string; version
       <textarea className={`${input} min-h-28 py-2`} value={value} onChange={(e) => setDraft(e.target.value)} />
       <p className={`mt-1 text-xs ${muted}`}>{words} words · about {Math.max(1, Math.round(words / 2.6))} seconds</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button className={btnPrimary} disabled={!!busy || !changed} onClick={() => act({ action: "script_save", text: value }, "script").then(() => setDraft(null))}>
+        <button className={btnPrimary} disabled={!!busy || !changed} onClick={() => act({ action: "script_save", text: value }, "script").then((ok) => ok && setDraft(null))}>
           {busy === "script" ? "…" : "Save my words"}
         </button>
-        <button className={btn} disabled={!!busy} onClick={() => act({ action: "script_rewrite" }, "rewrite").then(() => setDraft(null))}>
+        <button className={btn} disabled={!!busy} onClick={() => act({ action: "script_rewrite" }, "rewrite").then((ok) => ok && setDraft(null))}>
           {busy === "rewrite" ? "Writing another version…" : "Rewrite — another version"}
         </button>
         {changed ? <button className={btn} onClick={() => setDraft(null)}>Undo my changes</button> : null}
@@ -295,16 +305,22 @@ function ProjectView({ id }: { id: string }) {
   const [say, setSay] = useState("");
   const [caption, setCaption] = useState<string | null>(null);
   const [posted, setPosted] = useState<string | null>(null);
-  const act = async (json: Record<string, unknown>, label: string) => {
+  /** Returns true when it worked (the "What they say" box keeps the owner's text when a save fails). */
+  const act = async (json: Record<string, unknown>, label: string): Promise<boolean> => {
     setBusy(label);
     setErr(null);
     try {
       const r = await api<{ note?: string; reply?: string }>(`/api/creative/projects/${id}`, { method: "POST", json });
       if (json.action === "post") setPosted(r.note ?? "Added to Social → Calendar.");
-      if (json.action === "delete") router.push("/creative/library");
+      if (json.action === "delete") {
+        router.push("/creative/library");
+        return true;
+      }
       await mutate();
+      return true;
     } catch (e) {
       setErr((e as Error).message);
+      return false;
     } finally {
       setBusy(null);
     }
@@ -313,11 +329,15 @@ function ProjectView({ id }: { id: string }) {
   if (!data) return <p className={muted}>Loading…</p>;
   const p = data.project;
   const live = data.jobs.filter((j) => ["queued", "running", "waiting"].includes(j.status));
-  const failedJob = data.jobs.find((j) => ["failed", "paused"].includes(j.status) && !live.length);
+  // Only the NEWEST job can be "the one that stopped" — an old failure from an earlier step is history, not a button.
+  const failedJob = !live.length && data.jobs[0] && ["failed", "paused"].includes(data.jobs[0].status) ? data.jobs[0] : null;
   const concept = p.concept_idx != null ? p.concepts?.[p.concept_idx] : null;
   const finals = data.renders.filter((r) => !r.draft);
   const drafts = data.renders.filter((r) => r.draft);
-  const showRenders = p.status === "final" ? (finals.length ? finals : data.renders) : drafts.length ? drafts : data.renders;
+  const isMotion = p.kind === "video" || p.kind === "ugc";
+  // Video / UGC have no preview: before Make the video only an earlier FINAL exists — shown as "Previous take".
+  const showRenders = p.status === "final" ? (finals.length ? finals : data.renders) : isMotion ? [] : drafts.length ? drafts : data.renders;
+  const previous = isMotion && p.status !== "final" ? finals.find((r) => r.kind === "video") ?? null : null;
   const latestBySize = new Map<string, View["renders"][number]>();
   const slides: View["renders"] = [];
   // showRenders comes newest-first from the API: the first one per size is the latest (owner, 2026-11-15: the page
@@ -328,8 +348,8 @@ function ProjectView({ id }: { id: string }) {
   }
   const slideMap = new Map<string, View["renders"][number]>();
   for (const s of slides) if (!slideMap.has(`${s.size}-${s.shotIdx}`)) slideMap.set(`${s.size}-${s.shotIdx}`, s);
-  const isMotion = p.kind === "video" || p.kind === "ugc";
   const testRunning = live.some((j) => j.kind === "project_test_clip");
+  const regenerating = p.status === "brief" || live.some((j) => j.kind === "project_concepts");
   const captions = p.captions?.options ?? [];
   const hashtags = p.captions?.hashtags ?? [];
   const cap = caption ?? captions[0] ?? "";
@@ -338,12 +358,12 @@ function ProjectView({ id }: { id: string }) {
     <>
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className={`text-xs uppercase tracking-widest ${muted}`}>{KIND_LABEL[p.kind]}{p.role ? ` · ${p.role}` : ""} · {STATUS_LABEL[p.status] ?? p.status} · spent {money(data.spend)}</p>
+          <p className={`text-xs uppercase tracking-widest ${muted}`}>{KIND_LABEL[p.kind]}{p.role ? ` · ${p.role}` : ""} · {statusLabel(p.kind, p.status)} · spent {money(data.spend)}</p>
           <h1 className={`${head} text-3xl md:text-4xl`}>{p.title || concept?.title || "New creative"}</h1>
         </div>
         <div className="flex gap-2">
           <Link href="/creative/create" className={btn}>New</Link>
-          <button className={btnDanger} onClick={() => confirm("Delete this creative?") && act({ action: "delete" }, "delete")}>Delete</button>
+          <button className={btnDanger} disabled={!!busy} onClick={() => confirm("Delete this creative?") && void act({ action: "delete" }, "delete")}>Delete</button>
         </div>
       </div>
       {data.notice ? <p className="mb-3 border-l-2 border-amber-300 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{data.notice}</p> : null}
@@ -364,7 +384,20 @@ function ProjectView({ id }: { id: string }) {
           <h2 className={`${head} mb-2 text-xl`}>Check the product</h2>
           {data.twins.map((t) =>
             t ? (
-              <TwinCard key={t.productId} twin={t} onConfirm={() => api("/api/creative/products", { method: "POST", json: { productId: t.productId, action: "confirm" } }).then(() => mutate())} onUploaded={() => mutate()} />
+              <TwinCard
+                key={t.productId}
+                twin={t}
+                onConfirm={async () => {
+                  setErr(null);
+                  try {
+                    await api("/api/creative/products", { method: "POST", json: { productId: t.productId, action: "confirm" } });
+                    await mutate();
+                  } catch (e) {
+                    setErr((e as Error).message);
+                  }
+                }}
+                onUploaded={() => mutate()}
+              />
             ) : null,
           )}
         </section>
@@ -372,12 +405,12 @@ function ProjectView({ id }: { id: string }) {
 
       {/* Concepts */}
       {p.concepts?.length && (p.status === "concepts" || p.status === "brief") ? (
-        <section className="mb-6">
-          <h2 className={`${head} mb-2 text-2xl`}>Pick 1 of 3</h2>
+        <section className={`mb-6 ${regenerating ? "opacity-50" : ""}`}>
+          <h2 className={`${head} mb-2 text-2xl`}>{regenerating ? "New concepts on the way…" : "Pick 1 of 3"}</h2>
           <div className="grid gap-3 md:grid-cols-3">
             {p.concepts.map((c, i) => (
               <div key={i} className={`${card} flex flex-col gap-2`}>
-                <div className="grid grid-cols-4 gap-1">{c.storyboard.slice(0, 4).map((f, j) => <Media key={j} url={f.thumbUrl} className="aspect-[9/16] w-full" alt={f.shot} />)}</div>
+                {c.storyboard.some((f) => f.thumbUrl) ? <div className="grid grid-cols-4 gap-1">{c.storyboard.slice(0, 4).map((f, j) => <Media key={j} url={f.thumbUrl} className="aspect-[9/16] w-full" alt={f.shot} />)}</div> : null}
                 <h3 className={`${head} text-xl`}>{c.title}</h3>
                 <p className="text-sm">{c.idea}</p>
                 <p className="text-sm"><span className="font-bold">Hook (0–1.5 s):</span> {c.hook.first_1_5s}{c.hook.text ? <span className="ml-1 bg-white px-1 text-black">{c.hook.text}</span> : null}</p>
@@ -386,7 +419,7 @@ function ProjectView({ id }: { id: string }) {
                 <p className={`text-xs ${muted}`}>{c.edit_recipe}</p>
                 <p className={`text-xs ${muted}`}>{c.music.mood} · {c.music.bpm} BPM · {c.length_s ? `${c.length_s}s` : "slides"} · {c.format}</p>
                 <ol className={`list-decimal pl-4 text-xs ${muted}`}>{c.storyboard.map((f, j) => <li key={j}>{f.shot}{f.text ? ` — “${f.text}”` : ""}</li>)}</ol>
-                <button className={`${btnPrimary} mt-auto`} disabled={!!busy || data.twins.some((t) => t && !t.confirmed && t.cutouts.length)} onClick={() => act({ action: "pick", concept: i }, "pick")}>
+                <button className={`${btnPrimary} mt-auto`} disabled={!!busy || regenerating || data.twins.some((t) => t && !t.confirmed && t.cutouts.length)} onClick={() => act({ action: "pick", concept: i }, "pick")}>
                   {busy === "pick" ? "…" : "This one"}
                 </button>
               </div>
@@ -397,20 +430,22 @@ function ProjectView({ id }: { id: string }) {
             <button className={btn} disabled={!!busy} onClick={() => act({ action: "concepts", modifier: "crazier" }, "c")}>Crazier</button>
             <button className={btn} disabled={!!busy} onClick={() => act({ action: "concepts", modifier: "luxury" }, "c")}>More luxury</button>
             <button className={btn} disabled={!!busy} onClick={() => act({ action: "concepts", modifier: "new" }, "c")}>New ideas</button>
-            <Link className={btn} href="/creative/radar">Use a Radar ad as inspiration</Link>
+            <Link className={btn} href="/creative/radar">Start a new one from a Radar ad</Link>
           </div>
         </section>
       ) : null}
 
       {/* Draft / final */}
-      {latestBySize.size || slideMap.size || (p.status === "draft" && isMotion) ? (
+      {latestBySize.size || slideMap.size || previous || (p.status === "draft" && isMotion) ? (
         <section className="mb-6">
           <h2 className={`${head} mb-2 text-2xl`}>{p.status === "final" ? "Final" : isMotion && !latestBySize.size ? "Shots ready — make the video" : "Draft"}</h2>
           <div className="flex flex-wrap gap-3">
-            {[...latestBySize.values()].map((r) => (
+            {[...latestBySize.values(), ...(previous ? [previous] : [])].map((r) => (
               <div key={r.id} className="w-full max-w-[360px]">
-                <video src={r.url} poster={r.poster ?? undefined} controls playsInline className={`w-full bg-black ${r.size === "4:5" ? "aspect-[4/5]" : "aspect-[9/16]"}`} />
-                <p className={`mt-1 text-xs ${muted}`}>{r.size} · {r.draft ? "draft (stills + music, free)" : "final"} · <a className="underline" href={r.url} download>Download</a></p>
+                <video src={r.url} poster={r.poster ?? undefined} controls playsInline className={`w-full bg-black ${ASPECT[r.size ?? "9:16"] ?? "aspect-[9/16]"}`} />
+                <p className={`mt-1 text-xs ${muted}`}>
+                  {r === previous ? "Previous take" : `${r.size} · ${r.draft ? "preview (free)" : "final"}`} · <a className="underline" href={`${r.url}&download=${fileName(p.title || concept?.title, r.size, "mp4")}`}>Download</a>
+                </p>
               </div>
             ))}
           </div>
@@ -418,7 +453,7 @@ function ProjectView({ id }: { id: string }) {
             <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
               {[...slideMap.values()].map((r) => (
                 <a key={r.id} href={r.url} target="_blank" rel="noreferrer" className="block">
-                  <Media url={r.url} className={`w-full ${r.size === "9:16" ? "aspect-[9/16]" : "aspect-[4/5]"}`} />
+                  <Media url={r.url} className={`w-full ${ASPECT[r.size ?? "4:5"] ?? "aspect-[4/5]"}`} />
                   <p className={`text-xs ${muted}`}>{r.size}</p>
                 </a>
               ))}
@@ -443,25 +478,25 @@ function ProjectView({ id }: { id: string }) {
               <button className={`${btnPrimary} min-h-12 px-8 text-base`} disabled={!!busy || testRunning} onClick={() => act({ action: "approve" }, "approve")}>
                 {busy === "approve" ? "…" : isMotion ? `Make the video${data.finalEstimate ? ` ≈ ${money(data.finalEstimate)}` : ""}` : "Approve"}
               </button>
-              {isMotion && data.testClipEstimate ? (
+              {isMotion && data.testClipEstimate && !data.clips.length ? (
                 <button className={`${btn} min-h-12`} disabled={!!busy || testRunning} onClick={() => act({ action: "test_clip" }, "test")}>
                   {busy === "test" ? "…" : testRunning ? "Test clip on the way…" : `Test one clip first ≈ ${money(data.testClipEstimate)}`}
                 </button>
               ) : null}
-              <button className={btn} onClick={() => act({ action: "feedback", verdict: "down" }, "fb")}>👎</button>
+              <button className={chip(p.feedback === "down")} disabled={!!busy || p.feedback === "down"} onClick={() => void act({ action: "feedback", verdict: "down" }, "fb")}>{p.feedback === "down" ? "👎 Noted" : "👎 Not for me"}</button>
               <p className={`w-full text-xs ${muted}`}>
                 {!isMotion
                   ? "Approve marks it final."
                   : data.testClipEstimate
                     ? "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects. The test makes only the first shot so you can see it move first — it is kept, not paid twice."
                     : p.kind === "ugc"
-                      ? `Make the video films it as ONE continuous phone take on Kling 4.0 — the shots above are its keyframes, ${data.cast[0]?.name ?? "the creator"} says every line in one consistent voice — then adds music, captions and the CARBON ending.`
+                      ? `Make the video films it as ONE continuous phone take on Kling 4.0 — the shots above are its keyframes, ${data.cast[0]?.name ?? "the creator"} says every line in one consistent voice — then adds music and the CARBON ending.`
                       : "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects."}
               </p>
             </div>
           ) : null}
           {data.music.libraryCount === 0 && (p.kind === "video" || p.kind === "ugc" || p.kind === "animated") ? (
-            <p className="mt-2 text-xs text-amber-200">No music in the library yet — renders are silent. <Link className="underline" href="/creative/settings?tab=music">Add tracks</Link>.</p>
+            <p className="mt-2 text-xs text-amber-200">No music in the library yet — {p.kind === "ugc" ? "no background music under the voice" : "videos come out silent"}. <Link className="underline" href="/creative/settings?tab=music">Add tracks</Link>.</p>
           ) : data.music.track ? (
             <p className={`mt-2 text-xs ${muted}`}>Music: {data.music.track}</p>
           ) : null}
@@ -483,7 +518,7 @@ function ProjectView({ id }: { id: string }) {
               const clip = [...data.clips].reverse().find((x) => x.shotIdx === s.idx);
               return (
                 <div key={s.idx} className="w-36 shrink-0 md:w-44">
-                  {clip ? <Media url={clip.url} video className="aspect-[9/16] w-full" /> : <Media url={st?.url} className="aspect-[9/16] w-full" />}
+                  {clip ? <Media url={clip.url} video className="aspect-[9/16] w-full" /> : <Media url={st?.url} className="aspect-[2/3] w-full" />}
                   <p className="mt-1 line-clamp-2 text-xs">{s.idx + 1}. {s.subject_action}</p>
                   <p className={`text-[11px] ${muted}`}>{s.camera_move.replace(/_/g, " ")} · {s.lens} · {s.duration_s}s</p>
                   {st?.critic ? <p className="text-[11px] text-emerald-300">{st.critic.overall}/10</p> : null}
@@ -501,11 +536,12 @@ function ProjectView({ id }: { id: string }) {
           <div className="flex flex-wrap gap-2">{captions.map((c, i) => <button key={i} className={chip(cap === c)} onClick={() => setCaption(c)}>Caption {i + 1}</button>)}</div>
           <textarea className={`${input} mt-2 min-h-28 py-2`} value={cap} onChange={(e) => setCaption(e.target.value)} />
           <p className={`mt-1 text-xs ${muted}`}>{hashtags.map((h) => `#${h}`).join(" ")}</p>
+          {!posted && data.posts?.length ? <p className="mt-2 text-sm text-emerald-200">Already in Social → Calendar ({data.posts.length}×). <Link className="underline" href="/marketing/calendar">Open Calendar</Link></p> : null}
           {posted ? (
             <p className="mt-2 text-sm text-emerald-200">{posted} <Link className="underline" href="/marketing/calendar">Open Calendar</Link></p>
           ) : (
             <button className={`${btnPrimary} mt-3`} disabled={!!busy || !cap.trim()} onClick={() => act({ action: "post", caption: cap, hashtags, useBestTime: true }, "post")}>
-              {busy === "post" ? "…" : "Post at the best time"}
+              {busy === "post" ? "…" : data.posts?.length ? "Post again at the best time" : "Post at the best time"}
             </button>
           )}
           <p className={`mt-1 text-xs ${muted}`}>Goes to Social → Calendar as a draft for your approval there (Instagram + Facebook).</p>
@@ -531,7 +567,7 @@ function ProjectView({ id }: { id: string }) {
               void act({ action: "chat", text: t }, "chat");
             }}
           >
-            <input className={input} value={say} onChange={(e) => setSay(e.target.value)} placeholder="faster cuts · swap her for a guy · more luxury · bigger price text" enterKeyHint="send" />
+            <input className={input} value={say} onChange={(e) => setSay(e.target.value)} placeholder="faster cuts · swap the model · more luxury · bigger price text" enterKeyHint="send" />
             <button className={btnPrimary} disabled={!!busy || !say.trim()}>{busy === "chat" ? "…" : "Send"}</button>
           </form>
         </section>
@@ -565,16 +601,16 @@ function TwinCard({ twin, onConfirm, onUploaded }: { twin: NonNullable<View["twi
   }
   return (
     <div className={`${card} mb-2`}>
-      <p className="font-semibold">{twin.title} <span className={`text-xs ${muted}`}>{twin.status}</span></p>
+      <p className="font-semibold">{twin.title} <span className={`text-xs ${muted}`}>{TWIN_STATUS[twin.status] ?? twin.status}</span></p>
       {twin.error ? <p className="text-sm text-amber-200">{twin.error}</p> : null}
       <ErrorLine error={err} />
       <div className="mt-2 flex gap-2 overflow-x-auto">
         {twin.cutouts.map((c) => (
           <div key={c.angle} className="w-28 shrink-0">
-            <Media url={c.url} className="aspect-[2/3] w-full bg-white object-contain" />
+            <Media url={c.url} fit="contain" className="aspect-[2/3] w-full !bg-white" />
             <label className={`mt-1 block cursor-pointer text-center text-[11px] ${muted} underline`}>
               {c.angle} · replace
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && upload(c.angle, e.target.files[0])} />
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) void upload(c.angle, f); }} />
             </label>
           </div>
         ))}
@@ -584,12 +620,12 @@ function TwinCard({ twin, onConfirm, onUploaded }: { twin: NonNullable<View["twi
         {!twin.cutouts.length ? (
           <label className={`${btn} cursor-pointer`}>
             Upload a flat-lay / hanger photo
-            <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && upload("front", e.target.files[0])} />
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (f) void upload("front", f); }} />
           </label>
         ) : null}
       </div>
       {twin.facts ? <p className={`mt-2 text-xs ${muted}`}>Facts the copy may use: {[twin.facts.fabric, twin.facts.fit, ...((twin.facts.seenInPhotos as string[]) ?? []).slice(0, 4)].filter(Boolean).join(" · ") || "—"}</p> : null}
-      {twin.cutouts.length ? <button className={`${btnPrimary} mt-2`} onClick={onConfirm}>✓ Looks right</button> : null}
+      {twin.cutouts.length && twin.status === "ready" ? <button className={`${btnPrimary} mt-2`} onClick={onConfirm}>✓ Looks right</button> : null}
       <p className={`mt-1 text-xs ${muted}`}>The Shopify model never appears in any ad — only these garment cut-outs.</p>
     </div>
   );

@@ -5,7 +5,7 @@
  * locations, spend caps, Radar sources, and the engines table behind "⋯ More" (§12).
  */
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import useSWR from "swr";
 import { api, btn, btnDanger, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, Media, money, muted } from "./ui";
 
@@ -38,12 +38,17 @@ export function CreativeSettings() {
   const { data, error, mutate } = useSWR<S>("/api/creative/settings", fetcher, { refreshInterval: (d) => (d?.looksInBatch?.length ? 20_000 : 0) });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+  const [queued, setQueued] = useState<string[]>([]);
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
     setBusy(label);
     setErr(null);
     try {
       const r = await fn();
       await mutate();
+      // Every save says it worked (review 2026-11-15: nothing changed visibly after Save).
+      setOk("Saved ✓");
+      setTimeout(() => setOk(null), 2500);
       return r;
     } catch (e) {
       setErr((e as Error).message);
@@ -56,12 +61,18 @@ export function CreativeSettings() {
   const act = <T,>(json: Record<string, unknown>, label = String(json.action)) => run(label, () => api<T>("/api/creative/settings", { method: "POST", json }));
   /** Queue-and-go (OpenAI batch): never sets `busy`, so every other button stays free. */
   const queue = async (json: Record<string, unknown>) => {
+    // A second tap while the first is on its way is ignored (it would queue — and pay for — a second batch).
+    const key = JSON.stringify(json);
+    if (queued.includes(key)) return;
+    setQueued((q) => [...q, key]);
     setErr(null);
     try {
       await api("/api/creative/settings", { method: "POST", json });
       await mutate();
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setQueued((q) => q.filter((x) => x !== key));
     }
   };
   const upload = (fd: FormData, label = "upload") => run(label, () => api("/api/creative/upload", { method: "POST", body: fd }));
@@ -73,7 +84,8 @@ export function CreativeSettings() {
         {TABS.map((t) => <button key={t} className={chip(tab === t)} onClick={() => router.replace(`/creative/settings?tab=${t}`)}>{t === "more" ? "⋯ More" : t === "brand" ? "Brand Brain" : t}</button>)}
       </div>
       <ErrorLine error={err ?? (error as Error | undefined)?.message} />
-      {!data ? <p className={muted}>Loading…</p> : tab === "brand" ? <BrandTab d={data} put={put} act={act} upload={upload} busy={busy} queue={queue} /> : tab === "models" ? <ModelsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "music" ? <MusicTab d={data} act={act} upload={upload} busy={busy} /> : tab === "locations" ? <LocationsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "caps" ? <CapsTab d={data} put={put} /> : tab === "radar" ? <RadarTab d={data} put={put} /> : <MoreTab d={data} put={put} act={act} busy={busy} />}
+      {ok ? <p className="mb-2 text-sm text-emerald-300">{ok}</p> : null}
+      {!data ? <p className={muted}>Loading…</p> : tab === "brand" ? <BrandTab d={data} put={put} act={act} upload={upload} busy={busy} queue={queue} queued={queued} /> : tab === "models" ? <ModelsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "music" ? <MusicTab d={data} act={act} upload={upload} busy={busy} /> : tab === "locations" ? <LocationsTab d={data} act={act} upload={upload} busy={busy} /> : tab === "caps" ? <CapsTab d={data} put={put} /> : tab === "radar" ? <RadarTab d={data} put={put} /> : <MoreTab d={data} put={put} act={act} busy={busy} />}
     </CreativeShell>
   );
 }
@@ -82,7 +94,40 @@ type Fn = (json: Record<string, unknown>) => Promise<unknown>;
 type Act = <T>(json: Record<string, unknown>, label?: string) => Promise<T | null>;
 type Up = (fd: FormData, label?: string) => Promise<unknown>;
 
-function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Act; upload: Up; busy: string | null; queue: Fn }) {
+/** Look grades as typed (so "1." and "-" can be typed), clamped to the allowed range on Save. */
+function clampGrade(g: Record<string, unknown>) {
+  const lim: Record<string, [number, number]> = { contrast: [0.5, 2], saturation: [0, 2], brightness: [-0.5, 0.5], warmth: [-0.5, 0.5], grain: [0, 1] };
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(g)) {
+    const n = Number(v);
+    const [lo, hi] = lim[k] ?? [-10, 10];
+    out[k] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
+  }
+  return out;
+}
+
+/** The edit style in plain words (it showed raw JSON and a folder path). */
+function editStyleLines(e: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const n = (k: string) => (typeof e[k] === "number" ? (e[k] as number) : null);
+  if (n("cutEveryBeats")) out.push(`A cut every ${n("cutEveryBeats")} beats`);
+  if (n("clipSeconds")) out.push(`Clips about ${n("clipSeconds")} s each`);
+  const moods = Array.isArray(e.musicMoods) ? (e.musicMoods as string[]) : [];
+  const bpm = (e.bpm ?? {}) as { min?: number; max?: number };
+  if (moods.length) out.push(`Music: ${moods.join(", ")}${bpm.min && bpm.max ? ` around ${bpm.min}–${bpm.max} BPM` : ""}`);
+  const tr = Array.isArray(e.transitions) ? (e.transitions as string[]) : [];
+  if (tr.length) out.push(`Transitions: ${tr.map((t) => t.replace(/_/g, " ")).join(", ")}`);
+  if (n("grain") != null) out.push(n("grain")! > 0 ? "A touch of film grain" : "No film grain");
+  const exp = (e.export ?? {}) as { lufs?: number; fps?: number };
+  if (exp.lufs) out.push(`Loudness ${exp.lufs} LUFS (Instagram level)`);
+  if (exp.fps) out.push(`${exp.fps} frames a second`);
+  const end = (e.endCard ?? {}) as { text?: string; seconds?: number };
+  if (end.text) out.push(`Ends on the ${end.text} card${end.seconds ? ` (${end.seconds} s)` : ""}`);
+  return out.length ? out : ["The CARBON defaults"];
+}
+
+function BrandTab({ d, put, act, upload, busy, queue, queued }: { d: S; put: Fn; act: Act; upload: Up; busy: string | null; queue: Fn; queued: string[] }) {
+  const busyQueue = (preset: string) => queued.some((q) => q.includes(`"preset":"${preset}"`));
   const b = d.brand;
   const [step, setStep] = useState(0);
   const [samples, setSamples] = useState(b.voice.samples);
@@ -91,8 +136,10 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
   const [donts, setDonts] = useState(b.donts.join("\n"));
   const [presets, setPresets] = useState(b.presets);
   const steps = ["Logo + fonts", "Looks", "Voice", "Do / Don't", "Edit style", "Done"];
+  const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const file = (kind: string, extra: Record<string, string>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
+    e.currentTarget.value = ""; // the same file can be picked again after an error
     if (!f) return;
     const fd = new FormData();
     fd.set("kind", kind);
@@ -109,8 +156,8 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
           <div>
             <p className="mb-1 text-sm font-semibold">Logo</p>
             <div className="flex gap-2">
-              <div className="flex h-16 w-40 items-center justify-center bg-black p-2"><Media url={b.logoUrls.white} className="max-h-full w-full object-contain" /></div>
-              <div className="flex h-16 w-40 items-center justify-center bg-white p-2"><Media url={b.logoUrls.black} className="max-h-full w-full object-contain bg-white" /></div>
+              <div className="flex h-16 w-40 items-center justify-center bg-black p-2"><Media url={b.logoUrls.white} fit="contain" className="max-h-full w-full" /></div>
+              <div className="flex h-16 w-40 items-center justify-center bg-white p-2"><Media url={b.logoUrls.black} fit="contain" className="max-h-full w-full !bg-white" /></div>
             </div>
             <div className="mt-2 flex gap-2">
               <label className={`${btn} cursor-pointer`}>Upload light logo<input type="file" accept="image/png,image/svg+xml" className="hidden" onChange={file("logo", { which: "white" })} /></label>
@@ -131,7 +178,17 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
             <div className="flex flex-wrap gap-2">
               {Object.entries(b.colors).map(([k, v]) => (
                 <label key={k} className="flex items-center gap-2 text-sm">
-                  <input type="color" className="h-10 w-12 bg-transparent" defaultValue={v} onBlur={(e) => void put({ brand: { colors: { ...b.colors, [k]: e.target.value } } })} /> {k}
+                  <input
+                    type="color"
+                    className="h-10 w-12 bg-transparent"
+                    defaultValue={v}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (colorTimer.current) clearTimeout(colorTimer.current);
+                      colorTimer.current = setTimeout(() => void put({ brand: { colors: { ...b.colors, [k]: val } } }), 700);
+                    }}
+                  />{" "}
+                  {k}
                 </label>
               ))}
             </div>
@@ -143,7 +200,7 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
           const missing = b.presets.filter((p) => !p.samples?.length).length;
           return missing ? (
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <button className={btn} disabled={d.looksInBatch.includes("*")} onClick={() => void queue({ action: "preset_samples", preset: "missing" })}>
+              <button className={btn} disabled={d.looksInBatch.includes("*") || busyQueue("missing")} onClick={() => void queue({ action: "preset_samples", preset: "missing" })}>
                 {d.looksInBatch.includes("*") ? "In the batch…" : `Sample frames for the ${missing} Looks without them (batch ≈ ${money(missing * d.costs.lookSamples)})`}
               </button>
               <span className={`text-xs ${muted}`}>Sent to the OpenAI batch at half price — the pictures appear here by themselves, usually within the hour. Keep working meanwhile.</span>
@@ -161,15 +218,15 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
               <textarea className={`${input} min-h-20 py-2`} value={p.look} onChange={(e) => setPresets((ps) => ps.map((x, k) => (k === i ? { ...x, look: e.target.value } : x)))} />
               <div className="mt-2 grid grid-cols-5 gap-1 text-[11px]">
                 {(["contrast", "saturation", "brightness", "warmth", "grain"] as const).map((g) => (
-                  <label key={g}>{g}<input className={`${input} !min-h-9 px-1`} inputMode="decimal" value={String(p.grade[g])} onChange={(e) => setPresets((ps) => ps.map((x, k) => (k === i ? { ...x, grade: { ...x.grade, [g]: Number(e.target.value) || 0 } } : x)))} /></label>
+                  <label key={g}>{g}<input className={`${input} !min-h-9 px-1`} inputMode="decimal" value={String(p.grade[g])} onChange={(e) => { const raw = e.target.value.replace(/[^0-9.\-]/g, ""); setPresets((ps) => ps.map((x, k) => (k === i ? { ...x, grade: { ...x.grade, [g]: raw as unknown as number } } : x))); }} /></label>
                 ))}
               </div>
               <div className="mt-2 flex gap-2">
-                <button className={btn} onClick={() => void put({ brand: { presets: presets.map(({ sampleUrls: _s, ...x }) => (void _s, x)) } })}>Save</button>
+                <button className={btn} onClick={() => void put({ brand: { presets: presets.map(({ sampleUrls: _s, ...x }) => (void _s, { ...x, grade: clampGrade(x.grade) })) } })}>Save</button>
                 {d.looksInBatch.includes(p.key) || (d.looksInBatch.includes("*") && !b.presets.find((x) => x.key === p.key)?.samples?.length) ? (
                   <span className={`self-center text-xs ${muted}`}>In the batch — frames appear here when it is done</span>
                 ) : (
-                  <button className={btn} onClick={() => void queue({ action: "preset_samples", preset: p.key })}>{b.presets.find((x) => x.key === p.key)?.samples?.length ? "New sample frames" : "Sample frames"} (batch ≈ {money(d.costs.lookSamples)})</button>
+                  <button className={btn} disabled={busyQueue(p.key)} onClick={() => void queue({ action: "preset_samples", preset: p.key })}>{b.presets.find((x) => x.key === p.key)?.samples?.length ? "New sample frames" : "Sample frames"} (batch ≈ {money(d.costs.lookSamples)})</button>
                 )}
               </div>
             </div>
@@ -181,7 +238,7 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
           <label className="text-sm">How CARBON sounds<input className={`${input} mt-1`} value={desc} onChange={(e) => setDesc(e.target.value)} /></label>
           <div className="mt-3 flex items-center justify-between">
             <p className="text-sm font-semibold">Rate captions 👍 / 👎 so the app learns the tone</p>
-            <button className={btn} disabled={!!busy} onClick={async () => { const r = await act<{ samples: S["brand"]["voice"]["samples"] }>({ action: "voice_samples" }); if (r) setSamples(r.samples); }}>{busy === "voice_samples" ? "Writing…" : samples.length ? "10 new captions" : "Write 10 captions (≈ 1¢)"}</button>
+            <button className={btn} disabled={!!busy} onClick={async () => { const r = await act<{ samples: S["brand"]["voice"]["samples"] }>({ action: "voice_samples" }); if (r) setSamples(r.samples); }}>{busy === "voice_samples" ? "Writing…" : samples.length ? "10 new captions" : "Write 10 captions (≈ 2¢)"}</button>
           </div>
           <div className="mt-2 space-y-1">
             {samples.map((s, i) => (
@@ -201,8 +258,8 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
         </div>
       ) : step === 4 ? (
         <div className={card}>
-          <p className={`mb-2 text-sm ${muted}`}>Your edit taste, taken from your three finished Reels ({String(b.editStyle.source ?? "")}). These are the defaults for every edit.</p>
-          <pre className="overflow-x-auto whitespace-pre-wrap bg-black p-3 text-xs">{JSON.stringify(b.editStyle, null, 2)}</pre>
+          <p className={`mb-2 text-sm ${muted}`}>Your edit taste, taken from your finished Reels. These are the defaults for every edit.</p>
+          <ul className="space-y-1 text-sm">{editStyleLines(b.editStyle).map((l) => <li key={l}>· {l}</li>)}</ul>
         </div>
       ) : (
         <div className={card}>
@@ -244,6 +301,7 @@ function VoicePicker({ model, act, upload, busy, onDone }: { model: S["models"][
             disabled={!!busy}
             onChange={async (e) => {
               const f = e.target.files?.[0];
+              e.currentTarget.value = "";
               if (!f) return;
               const fd = new FormData();
               fd.set("kind", "voice");
@@ -286,11 +344,11 @@ function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy:
   const [cands, setCands] = useState<{ id: string; url: string }[]>([]);
   const [pick, setPick] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [real, setReal] = useState({ name: "", consent: false, notCelebrity: false });
+  const [real, setReal] = useState({ name: "", consent: false, notCelebrity: false, gender: "female" as "female" | "male" });
   const [voiceFor, setVoiceFor] = useState<string | null>(null);
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
         {d.models.map((m) => (
           <div key={m.id} className={`border ${m.active ? "border-white/10" : "border-white/5 opacity-50"} bg-[#0d0d0d]`}>
             <Media url={m.refs[0]} className="aspect-square w-full" />
@@ -303,7 +361,7 @@ function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy:
                 <button className={chip(!m.active)} onClick={() => void act({ action: "model_meta", modelId: m.id, active: !m.active })}>{m.active ? "Hide" : "Show"}</button>
               </div>
               <p className="mt-1 text-[11px]">Voice in videos: <span className="text-white">{m.voiceInVideos ?? "Kling natural"}</span></p>
-              <button className={`${chip(voiceFor === m.id)} mt-1`} onClick={() => setVoiceFor(voiceFor === m.id ? null : m.id)}>Choose voice</button>
+              <button className={`${chip(voiceFor === m.id)} mt-1 w-full justify-center whitespace-normal`} onClick={() => setVoiceFor(voiceFor === m.id ? null : m.id)}>Choose voice</button>
             </div>
           </div>
         ))}
@@ -337,12 +395,16 @@ function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy:
 
       <div className={card}>
         <h3 className={`${head} mb-2 text-xl`}>Upload a real person</h3>
+        <div className="mb-2 flex flex-wrap gap-2">
+          <button className={chip(real.gender === "female")} onClick={() => setReal({ ...real, gender: "female" })}>Woman</button>
+          <button className={chip(real.gender === "male")} onClick={() => setReal({ ...real, gender: "male" })}>Man</button>
+        </div>
         <input className={input} placeholder="Name" value={real.name} onChange={(e) => setReal({ ...real, name: e.target.value })} />
         <label className="mt-2 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5" checked={real.consent} onChange={(e) => setReal({ ...real, consent: e.target.checked })} /> This person agreed to their face being used in CARBON ads</label>
         <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5" checked={real.notCelebrity} onChange={(e) => setReal({ ...real, notCelebrity: e.target.checked })} /> They are not a celebrity or public figure</label>
         <label className={`${btn} mt-2 cursor-pointer ${!(real.consent && real.notCelebrity && real.name) ? "pointer-events-none opacity-40" : ""}`}>
           {busy === "model" ? "Making the sheet…" : `Choose a clear face photo (≈ ${money(d.costs.sheet)})`}
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.set("kind", "model"); fd.set("name", real.name); fd.set("gender", gender); fd.set("consent", String(real.consent)); fd.set("notCelebrity", String(real.notCelebrity)); fd.set("file", f); void upload(fd, "model"); }} />
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (!f) return; const fd = new FormData(); fd.set("kind", "model"); fd.set("name", real.name); fd.set("gender", real.gender); fd.set("consent", String(real.consent)); fd.set("notCelebrity", String(real.notCelebrity)); fd.set("file", f); void upload(fd, "model"); }} />
         </label>
       </div>
     </div>
@@ -353,7 +415,9 @@ function MusicTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy: 
   const [moods, setMoods] = useState("deep house");
   const [license, setLicense] = useState("owner");
   const send = (kind: "music" | "sfx") => (e: React.ChangeEvent<HTMLInputElement>) => {
-    for (const f of Array.from(e.target.files ?? [])) {
+    const files = Array.from(e.target.files ?? []);
+    e.currentTarget.value = "";
+    for (const f of files) {
       const fd = new FormData();
       fd.set("kind", kind);
       fd.set("moods", moods);
@@ -401,7 +465,7 @@ function LocationsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; bu
         <div className="mt-2 flex flex-wrap gap-2">
           <button className={btn} disabled={!name || !!busy} onClick={() => void act({ action: "location_text", name, description: desc })}>Save as words (free)</button>
           <button className={btn} disabled={!name || !!busy} onClick={() => void act({ action: "location_ai", name, description: desc })}>{busy === "location_ai" ? "Drawing…" : "Draw a reusable plate (≈ $0.25)"}</button>
-          <label className={`${btn} cursor-pointer ${!name ? "pointer-events-none opacity-40" : ""}`}>Upload a real photo<input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.set("kind", "location"); fd.set("name", name); fd.set("description", desc); fd.set("file", f); void upload(fd, "location"); }} /></label>
+          <label className={`${btn} cursor-pointer ${!name ? "pointer-events-none opacity-40" : ""}`}>Upload a real photo<input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.currentTarget.value = ""; if (!f) return; const fd = new FormData(); fd.set("kind", "location"); fd.set("name", name); fd.set("description", desc); fd.set("file", f); void upload(fd, "location"); }} /></label>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -417,19 +481,24 @@ function LocationsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; bu
 }
 
 function CapsTab({ d, put }: { d: S; put: Fn }) {
-  const [caps, setCaps] = useState(d.settings.caps);
+  // Typed as text so "12." can be typed; numbers on Save.
+  const [caps, setCaps] = useState<Record<"openai" | "fal", Record<"daily" | "monthly", string>>>({
+    openai: { daily: String(d.settings.caps.openai.daily), monthly: String(d.settings.caps.openai.monthly) },
+    fal: { daily: String(d.settings.caps.fal.daily), monthly: String(d.settings.caps.fal.monthly) },
+  });
+  const num = (v: string) => Math.max(0, Number(v) || 0);
   return (
     <div className={`${card} space-y-3`}>
       <p className={`text-sm ${muted}`}>Jobs pause when a cap is reached. Nothing that costs money runs unless you tap a button.</p>
       {(["openai", "fal"] as const).map((p) => (
         <div key={p} className="grid grid-cols-[8rem_1fr_1fr] items-center gap-2 text-sm">
-          <span>{p === "fal" ? "fal.ai (video)" : "OpenAI"}{d.keys[p] ? "" : " — no key"}</span>
+          <span>{p === "fal" ? "Video (Kling)" : "OpenAI (brain + pictures)"}{d.keys[p] ? "" : " — no key"}</span>
           {(["daily", "monthly"] as const).map((k) => (
-            <label key={k} className="text-xs">{k} $<input className={input} inputMode="decimal" value={String(caps[p][k])} onChange={(e) => setCaps({ ...caps, [p]: { ...caps[p], [k]: Number(e.target.value.replace(/[^\d.]/g, "")) || 0 } })} /></label>
+            <label key={k} className="text-xs">{k} $<input className={input} inputMode="decimal" value={caps[p][k]} onChange={(e) => setCaps({ ...caps, [p]: { ...caps[p], [k]: e.target.value.replace(/[^\d.]/g, "") } })} /></label>
           ))}
         </div>
       ))}
-      <button className={btnPrimary} onClick={() => void put({ caps })}>Save caps</button>
+      <button className={btnPrimary} onClick={() => void put({ caps: { openai: { daily: num(caps.openai.daily), monthly: num(caps.openai.monthly) }, fal: { daily: num(caps.fal.daily), monthly: num(caps.fal.monthly) } } })}>Save caps</button>
     </div>
   );
 }
@@ -470,13 +539,15 @@ function MoreTab({ d, put, act, busy }: { d: S; put: Fn; act: Act; busy: string 
   return (
     <div className="space-y-3">
       <div className={card}>
-        <h3 className={`${head} mb-2 text-lg`}>Engines (you never have to pick)</h3>
-        {Object.entries(d.defaults.routes).map(([job, r]) => {
+        <h3 className={`${head} mb-1 text-lg`}>Engines (you never have to pick)</h3>
+        <p className="text-sm">Main engine for every video and UGC: <b>Kling 4.0</b> (through fal; your own Kling account is the backup). The choices below are only used if Kling 4.0 fails.</p>
+        {Object.entries(d.defaults.routes).filter(([job]) => job !== "draft").map(([job, r]) => {
           const cur = d.settings.routing[job] ?? r.engines;
           return (
             <div key={job} className="border-t border-white/5 py-2 text-sm">
               <p className="font-semibold">{r.label}</p>
               <p className={`text-xs ${muted}`}>{r.why}</p>
+              <span className={`mt-1 block text-xs ${muted}`}>Backup if Kling 4.0 fails</span>
               <select className={`${input} mt-1`} value={cur[0]} onChange={(e) => void put({ routing: { ...d.settings.routing, [job]: [e.target.value, ...r.engines.filter((x) => x !== e.target.value)] } })}>
                 {Object.entries(d.defaults.engines).map(([id, e]) => <option key={id} value={id}>{e.label} — ${e.perSecond.silent}/s ({e.perSecond.audio}/s with sound)</option>)}
               </select>

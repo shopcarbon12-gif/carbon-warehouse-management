@@ -50,6 +50,7 @@ export function keysStatus() {
   return {
     openai: Boolean(getOpenAiApiKey().trim()),
     fal: Boolean(falKey()),
+    kling: Boolean((process.env.KLING_API_KEY || "").trim()),
     meta: Boolean((process.env.META_AD_LIBRARY_TOKEN || process.env.META_SYSTEM_USER_TOKEN || "").trim()),
     snap: Boolean((process.env.SNAP_ADS_GALLERY_TOKEN || "").trim()),
     apify: Boolean((process.env.APIFY_TOKEN || "").trim()),

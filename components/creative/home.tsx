@@ -5,13 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import useSWR from "swr";
-import { api, btn, btnPrimary, card, CreativeShell, ErrorLine, fetcher, head, JobLine, KIND_LABEL, Media, money, muted, STATUS_LABEL, type Job } from "./ui";
+import { api, btn, btnPrimary, card, CreativeShell, ErrorLine, fetcher, head, JobLine, KIND_LABEL, Media, money, muted, statusLabel, type Job } from "./ui";
 
 type Spend = Record<"openai" | "fal", { today: number; month: number; daily: number; monthly: number }> & { total: { today: number; month: number } };
 type Idea = { id: string; idea: string; reason: string; prefill: { products?: string[]; kind?: string; recipe?: string | null; preset?: string }; picture?: string | null; pictureStatus?: string | null };
 type Overview = {
   spend: Spend;
-  keys: { openai: boolean; fal: boolean; meta: boolean };
+  keys: { openai: boolean; fal: boolean; kling?: boolean; meta: boolean };
   brand: { wizardDone: boolean };
   working: string[];
   radar: { kept: number; review: number; season: { label: string } };
@@ -45,11 +45,13 @@ function Bar({ label, used, cap }: { label: string; used: number; cap: number })
 
 export function CreativeHome() {
   const router = useRouter();
-  const { data, error, mutate } = useSWR<Overview>("/api/creative", fetcher, { refreshInterval: (d) => (d?.jobs?.some((j) => ["queued", "running", "waiting"].includes(j.status)) || d?.ideas?.some((i) => i.pictureStatus === "queued" || i.pictureStatus === "batch") ? 5000 : 0) });
-  const [ideas, setIdeas] = useState<Idea[] | null>(null);
+  // 5 s while something is working; 60 s while only idea pictures sit in the (slow) half-price batch.
+  const { data, error, mutate } = useSWR<Overview>("/api/creative", fetcher, {
+    refreshInterval: (d) => (d?.jobs?.some((j) => ["queued", "running"].includes(j.status)) ? 5000 : d?.jobs?.some((j) => j.status === "waiting") || d?.ideas?.some((i) => i.pictureStatus === "queued" || i.pictureStatus === "batch") ? 60_000 : 0),
+  });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const shown = ideas ?? data?.ideas ?? [];
+  const shown = data?.ideas ?? [];
 
   async function giveIdeas() {
     setBusy(true);
@@ -57,7 +59,6 @@ export function CreativeHome() {
     try {
       await api<{ ideas: Idea[]; cost: number }>("/api/creative/ideas", { method: "POST" });
       // The cards come from the overview so their pictures fill in as the batch finishes.
-      setIdeas(null);
       await mutate();
     } catch (e) {
       setErr((e as Error).message);
@@ -66,11 +67,14 @@ export function CreativeHome() {
     }
   }
   async function skip(id: string) {
-    setIdeas((xs) => (xs ?? data?.ideas ?? []).filter((x) => x.id !== id));
+    // Hide it at once, keep the server list as the source (pictures that finish later still appear).
+    await mutate((d) => (d ? { ...d, ideas: d.ideas.filter((x) => x.id !== id) } : d), { revalidate: false });
     await api("/api/creative/ideas", { method: "PATCH", json: { id, status: "skipped" } }).catch(() => {});
     void mutate();
   }
-  const live = (data?.jobs ?? []).filter((j) => ["queued", "running", "waiting", "failed", "paused"].includes(j.status)).slice(0, 6);
+  const live = (data?.jobs ?? []).filter((j) => ["queued", "running", "waiting"].includes(j.status)).slice(0, 6);
+  // Stopped jobs from the last day, each with a way to fix it — not mixed into "Working on".
+  const stuck = (data?.jobs ?? []).filter((j) => ["failed", "paused"].includes(j.status) && Date.now() - new Date(j.updated_at).getTime() < 86_400_000).slice(0, 4);
 
   return (
     <CreativeShell>
@@ -95,9 +99,9 @@ export function CreativeHome() {
           {data ? (
             <>
               <Bar label="OpenAI (brain + pictures)" used={data.spend.openai.month} cap={data.spend.openai.monthly} />
-              <Bar label="fal.ai (video)" used={data.spend.fal.month} cap={data.spend.fal.monthly} />
+              <Bar label="Video (Kling)" used={data.spend.fal.month} cap={data.spend.fal.monthly} />
               <p className={`text-xs ${muted}`}>Today {money(data.spend.total.today)} · jobs pause at a cap · nothing runs unless you tap.</p>
-              {!data.keys.fal ? <p className="text-xs text-amber-200">Video needs a fal.ai key (FAL_KEY) on the server.</p> : null}
+              {!data.keys.fal && !data.keys.kling ? <p className="text-xs text-amber-200">Video needs a fal.ai or Kling key on the server.</p> : null}
             </>
           ) : null}
         </div>
@@ -113,6 +117,8 @@ export function CreativeHome() {
               <div key={i.id} className={`${card} flex flex-col gap-2`}>
                 {i.picture ? (
                   <a href={i.picture} target="_blank" rel="noreferrer"><Media url={i.picture} className="aspect-[4/5] w-full" alt={i.idea} /></a>
+                ) : i.pictureStatus === "failed" ? (
+                  <div className={`flex aspect-[4/5] w-full items-center justify-center bg-white/5 px-4 text-center text-xs ${muted}`}>The preview picture couldn&rsquo;t be drawn — the idea still works.</div>
                 ) : i.pictureStatus === "queued" || i.pictureStatus === "batch" ? (
                   <div className={`flex aspect-[4/5] w-full items-center justify-center bg-white/5 px-4 text-center text-xs ${muted}`}>Picture on the way (half-price batch) — a desktop alert comes when it&rsquo;s ready</div>
                 ) : null}
@@ -152,6 +158,17 @@ export function CreativeHome() {
           {live.map((j) => <JobLine key={j.id} job={j} />)}
         </section>
       ) : null}
+      {stuck.length ? (
+        <section className={`${card} mt-3 border-amber-300/30`}>
+          <h2 className={`${head} mb-1 text-lg`}>Needs you</h2>
+          {stuck.map((j) => (
+            <div key={j.id} className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1"><JobLine job={j} /></div>
+              {j.project_id ? <Link className={btn} href={`/creative/create?project=${j.project_id}`}>Open</Link> : null}
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       <section className="mt-6">
         <div className="mb-2 flex items-end justify-between">
@@ -165,7 +182,7 @@ export function CreativeHome() {
                 <Media url={p.cover} video={false} className="aspect-[4/5] w-full" />
                 <div className="p-2">
                   <p className="truncate text-sm font-semibold">{p.title || KIND_LABEL[p.kind]}</p>
-                  <p className={`text-xs ${p.status === "draft" ? "text-amber-200" : muted}`}>{KIND_LABEL[p.kind]} · {STATUS_LABEL[p.status] ?? p.status} · {money(p.spend)}</p>
+                  <p className={`text-xs ${p.status === "draft" ? "text-amber-200" : muted}`}>{KIND_LABEL[p.kind]} · {statusLabel(p.kind, p.status)} · {money(p.spend)}</p>
                 </div>
               </Link>
             ))}

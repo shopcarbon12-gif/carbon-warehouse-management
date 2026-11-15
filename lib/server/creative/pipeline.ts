@@ -997,6 +997,8 @@ export async function projectView(pool: Pool, tenantId: string, id: string) {
     finalEstimate: p.status === "draft" ? await finalEstimate(pool, p).catch(() => null) : null,
     testClipEstimate: p.status === "draft" ? await testClipEstimate(pool, p).catch(() => null) : null,
     missingShots: ["draft", "stills"].includes(p.status) ? await missingShots(pool, p).catch(() => []) : [],
+    // Already sent to Social → Calendar (a reload must not offer a duplicate post as if it were the first).
+    posts: (await pool.query<{ id: string; created_at: string }>(`SELECT post_id::text AS id, created_at FROM creative_posts WHERE project_id = $1::uuid ORDER BY created_at DESC`, [id]).catch(() => ({ rows: [] }))).rows,
     scriptText: p.kind === "ugc" ? scriptText(p.script as UgcScript | null) : null,
     scriptVersions: p.kind === "ugc" ? ((((p.edit_plan ?? {}) as { scriptVersions?: string[] }).scriptVersions ?? []).slice(-12)) : [],
   };

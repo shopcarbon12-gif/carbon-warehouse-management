@@ -53,7 +53,16 @@ async function POST_handler(req: Request) {
         const ext = name.match(/\.(woff2?|ttf|otf)$/i)![0].toLowerCase();
         const path = await putFile(`creative/brand/${tid}/font-${which}-${Date.now()}${ext}`, bytes, ext === ".woff2" ? "font/woff2" : ext === ".woff" ? "font/woff" : ext === ".otf" ? "font/otf" : "font/ttf");
         const b = await getBrand(g.pool, tid);
-        const family = String(form.get("family") ?? "").trim() || name.replace(/\.[^.]+$/, "");
+        // "Neuzeit_Grotesk_W01_Regular.otf" → "Neuzeit Grotesk" (foundry codes and weights dropped).
+        const family =
+          String(form.get("family") ?? "").trim() ||
+          name
+            .replace(/\.[^.]+$/, "")
+            .replace(/[_-]+/g, " ")
+            .replace(/\b(W0\d|LT|Std|Pro|Regular|Bold|Light|Medium|Book|Roman|Italic|Web)\b/gi, "")
+            .replace(/\s+/g, " ")
+            .trim() ||
+          name;
         await g.pool.query(`UPDATE creative_brand SET fonts = $2::jsonb, updated_at = now() WHERE tenant_id = $1::uuid`, [tid, JSON.stringify({ ...b.fonts, [which]: family, [`${which}File`]: path })]);
         return NextResponse.json({ ok: true });
       }

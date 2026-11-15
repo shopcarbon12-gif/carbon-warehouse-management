@@ -85,12 +85,18 @@ export async function rankings(pool: Pool, tenantId: string): Promise<Ranking[]>
       WHERE f.tenant_id = $1::uuid AND f.target = 'project' AND f.verdict IN ('up','down')`,
     [tenantId],
   );
+  // 👍 / 👎 only break ties between keys that have REAL post results — never counted as posts or mixed into
+  // the engagement average (review 2026-11-15: two 👍 read as "avg 1 over 2 posts").
+  const nudge = new Map<string, number>();
   for (const f of fb.rows) {
-    const s = f.verdict === "up" ? 1 : -1;
-    add("recipe", f.recipe, s);
-    add("preset", f.preset, s);
+    const s = f.verdict === "up" ? 0.01 : -0.01;
+    if (f.recipe) nudge.set(`recipe:${f.recipe}`, (nudge.get(`recipe:${f.recipe}`) ?? 0) + s);
+    if (f.preset) nudge.set(`preset:${f.preset}`, (nudge.get(`preset:${f.preset}`) ?? 0) + s);
   }
-  return [...acc.values()].map((a) => ({ dimension: a.dimension, key: a.key, posts: a.n, avgScore: Math.round((a.total / a.n) * 100) / 100 })).sort((a, b) => b.avgScore - a.avgScore);
+  return [...acc.values()]
+    .map((a) => ({ dimension: a.dimension, key: a.key, posts: a.n, avgScore: Math.round((a.total / a.n) * 100) / 100, tie: nudge.get(`${a.dimension}:${a.key}`) ?? 0 }))
+    .sort((a, b) => b.avgScore + b.tie - (a.avgScore + a.tie))
+    .map((x) => ({ dimension: x.dimension, key: x.key, posts: x.posts, avgScore: x.avgScore }));
 }
 
 /** "What's working for CARBON" — plain sentences, only from real numbers. */
@@ -100,15 +106,23 @@ export async function whatsWorking(pool: Pool, tenantId: string): Promise<string
   if (!posted.rows[0].n) return [];
   const out: string[] = [];
   const top = (d: string) => rk.filter((x) => x.dimension === d && x.posts >= 1);
+  // Names, never ids or codes (review 2026-11-15).
+  const { listModels } = await import("./casting");
+  const { getBrand, presetOf } = await import("./config");
+  const models0 = await listModels(pool, tenantId).catch(() => []);
+  const brand = await getBrand(pool, tenantId);
+  const recipeName = (k: string) => k.replace(/^radar_/, "").replace(/_/g, " ");
+  const lookName = (k: string) => presetOf(brand, k).name;
+  const modelName = (k: string) => models0.find((m) => m.id === k)?.name ?? "one model";
   const recipes = top("recipe");
-  if (recipes.length >= 2) out.push(`"${recipes[0].key.replace(/_/g, " ")}" is your best recipe so far (${recipes[0].posts} post${recipes[0].posts > 1 ? "s" : ""}); "${recipes[recipes.length - 1].key.replace(/_/g, " ")}" is the weakest.`);
-  else if (recipes.length) out.push(`Only one recipe has real results yet: "${recipes[0].key.replace(/_/g, " ")}".`);
+  if (recipes.length >= 2) out.push(`"${recipeName(recipes[0].key)}" is your best format so far (${recipes[0].posts} post${recipes[0].posts > 1 ? "s" : ""}); "${recipeName(recipes[recipes.length - 1].key)}" is the weakest.`);
+  else if (recipes.length) out.push(`Only one format has real results yet: "${recipeName(recipes[0].key)}".`);
   const presets = top("preset");
-  if (presets.length >= 2) out.push(`The ${presets[0].key} look gets more saves and shares than ${presets[presets.length - 1].key}.`);
+  if (presets.length >= 2) out.push(`The ${lookName(presets[0].key)} look gets more saves and shares than ${lookName(presets[presets.length - 1].key)}.`);
   const music = top("music");
   if (music.length >= 2) out.push(`${music[0].key} music beats ${music[music.length - 1].key}.`);
   const models = top("model");
-  if (models.length >= 2) out.push(`Posts with model ${models[0].key} do best right now.`);
+  if (models.length >= 2) out.push(`Posts with ${modelName(models[0].key)} do best right now.`);
   out.push(`Based on ${posted.rows[0].n} posted creative${posted.rows[0].n > 1 ? "s" : ""} — sales next to a post are a correlation, not proof.`);
   return out;
 }
