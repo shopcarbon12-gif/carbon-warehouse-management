@@ -153,7 +153,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
         await g.pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','rejected')`, [id]);
         const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
         delete ep.takeCaptions;
-        await setProject(g.pool, id, { status: "draft", edit_plan: ep, step_note: "Ready to film again — tap Make the video." });
+        await setProject(g.pool, id, { status: "draft", edit_plan: ep, step_note: null });
         break;
       }
       case "test_clip": {

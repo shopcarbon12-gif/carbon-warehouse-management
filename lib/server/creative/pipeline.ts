@@ -861,6 +861,9 @@ export const projectFinal: JobHandler = async (pool, job, setProgress, savePaylo
     const sent = st.clips ?? [];
     const plan = (await clipPlan(pool, p, p.shot_list?.shots ?? [])).filter((c) => !have.has(c.shotIdx) && !sent.some((x) => x.shotIdx === c.shotIdx));
     if (!plan.length && !have.size && !sent.length) throw new PlainError("No approved stills to animate.");
+    // Filming has started: an old "Ready to film again — tap Make the video" note must not outlive it (owner,
+    // 2026-11-15: a finished video still told him to tap a button that isn't there).
+    if (!sent.length) await setProject(pool, p.id, { step_note: null });
     // The whole plan must fit under today's video cap before anything is sent.
     const { estimateVideoCost } = await import("./routing");
     await spendGate(pool, p.tenant_id, "fal", plan.reduce((a, c) => a + estimateVideoCost(c.engines[0], c.seconds, c.audio), 0));
