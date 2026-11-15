@@ -104,9 +104,11 @@ export async function criticize(
   const scores: Record<string, number | null> = {
     garment_accuracy: r.garment_accuracy,
     ai_artifacts: r.ai_artifacts,
-    motion_realism: r.motion_realism,
+    motion_realism: v.kind === "still" ? null : r.motion_realism,
     brand_fit: r.brand_fit,
-    hook_strength: r.hook_strength,
+    // Only the opening shot is judged on the hook, and only clips on motion — a number the model sends anyway
+    // must not fail a picture (owner's sneaker shot 5 failed on "hook_strength", 2026-11-15).
+    hook_strength: v.isHook ? r.hook_strength : null,
     originality,
     ugc_realism: v.ugc ? r.ugc_realism ?? null : null,
     same_person: v.personRef ? r.same_person ?? null : null,
