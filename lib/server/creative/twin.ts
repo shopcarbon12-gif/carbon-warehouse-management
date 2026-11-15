@@ -231,14 +231,40 @@ export async function replaceCutout(pool: Pool, tenantId: string, productId: str
 }
 
 /** Cut-out bytes for the try-on (front first). */
-export async function twinRefs(pool: Pool, tenantId: string, productIds: string[]): Promise<{ productId: string; title: string; angle: string; bytes: Buffer }[]> {
+/**
+ * The real product for the picture model (and the quality check). Cut-outs first, then (owner, 2026-11-15: the AI put
+ * stripes across the toe of the Off Sneakers and only knew the black pair) the REAL product photos:
+ * - footwear / bags / hats / belts: the Shopify product photos themselves (no person in them) — every colourway,
+ *   every angle (side, three-quarter, top, back), so the toe, sole and colours are exactly right;
+ * - clothing: the close-up detail crops (never the Shopify model's face).
+ */
+export async function twinRefs(pool: Pool, tenantId: string, productIds: string[], opts: { max?: number } = {}): Promise<{ productId: string; title: string; angle: string; bytes: Buffer }[]> {
   const out: { productId: string; title: string; angle: string; bytes: Buffer }[] = [];
+  const max = opts.max ?? 8;
   for (const id of productIds) {
     const t = await getTwin(pool, tenantId, id);
     if (!t) continue;
     const order = ["front", "back", "detail", "side", "other"];
     for (const c of [...(t.cutouts ?? [])].sort((a: { angle: string }, b: { angle: string }) => order.indexOf(a.angle) - order.indexOf(b.angle)).slice(0, 3))
       out.push({ productId: id, title: t.title, angle: c.angle, bytes: (await getFile(c.storage_path)).bytes });
+    const kind = `${t.title} ${(t.facts as { type?: string } | null)?.type ?? ""}`.toLowerCase();
+    const objectLike = /sneaker|shoe|boot|sandal|slide|heel|loafer|trainer|footwear|bag|tote|backpack|purse|hat|cap|beanie|belt|wallet/.test(kind);
+    if (objectLike) {
+      const src: string[] = Array.isArray(t.source_images) ? (t.source_images as string[]) : [];
+      // Spread over the list so every colourway / angle is represented (Shopify lists them colour by colour).
+      const pick = src.length <= 6 ? src : [0, 1, 2, Math.floor(src.length / 2), Math.floor(src.length / 2) + 1, Math.floor(src.length / 2) + 2].map((i) => src[i]);
+      for (const u of pick) {
+        if (out.length >= max) break;
+        const sized = u.includes("cdn.shopify.com") ? `${u}${u.includes("?") ? "&" : "?"}width=1024` : u;
+        const r = await fetch(sized, { signal: AbortSignal.timeout(20_000) }).catch(() => null);
+        if (r?.ok) out.push({ productId: id, title: t.title, angle: "product photo", bytes: Buffer.from(await r.arrayBuffer()) });
+      }
+    } else {
+      for (const d of (t.details ?? []).slice(0, 3)) {
+        if (out.length >= max) break;
+        out.push({ productId: id, title: t.title, angle: `detail (${(d as { kind?: string }).kind ?? "close-up"})`, bytes: (await getFile((d as { storage_path: string }).storage_path)).bytes });
+      }
+    }
   }
-  return out;
+  return out.slice(0, max);
 }

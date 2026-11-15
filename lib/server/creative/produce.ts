@@ -63,17 +63,14 @@ async function insertGen(pool: Pool, tenantId: string, v: { projectId: string; k
 }
 
 /** Garment references for the critic: cut-outs + detail crops. */
+/** The real product for the quality check: the same references the picture model gets (real photos included). */
 async function garmentRefs(pool: Pool, tenantId: string, products: string[]): Promise<Buffer[]> {
   const out: Buffer[] = [];
-  for (const id of products) {
-    const t = (await pool.query(`SELECT cutouts, details FROM creative_product_twins WHERE tenant_id = $1::uuid AND product_id = $2`, [tenantId, id])).rows[0];
-    if (!t) continue;
-    for (const c of [...(t.cutouts ?? []).slice(0, 2), ...(t.details ?? []).slice(0, 2)]) {
-      try {
-        out.push(await sharp((await getFile(c.storage_path)).bytes).resize(768, 768, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
-      } catch {
-        /* skip */
-      }
+  for (const g of await twinRefs(pool, tenantId, products, { max: 6 }).catch(() => [])) {
+    try {
+      out.push(await sharp(g.bytes).resize(768, 768, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
+    } catch {
+      /* skip */
     }
   }
   return out;

@@ -57,11 +57,11 @@ export async function criticize(
   const brand = await getBrand(pool, tenantId);
   // Up to 12 frames of a clip / take (6 missed the ring coming off in a 29 s take), then the real product + person.
   const frames = v.frames.slice(0, 12);
-  const imgs = [...frames, ...v.garmentRefs.slice(0, 5), ...(v.personRef ? [v.personRef] : [])];
+  const imgs = [...frames, ...v.garmentRefs.slice(0, 6), ...(v.personRef ? [v.personRef] : [])];
   const prompt = [
     "You are the quality gate for CARBON's ads. Be strict — the owner must never see anything fake, off-brand or showing the garment wrong.",
     brandBlock(brand, v.preset, v.ugc),
-    `The first ${frames.length} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(5, v.garmentRefs.length)} of the REAL product (cut-outs and detail crops).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
+    `The first ${frames.length} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(6, v.garmentRefs.length)} of the REAL product (cut-outs and real product photos — every colourway and angle; check the toe, sole, stripes, logo and colour against them exactly).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
     v.shot ? `The shot should show: ${v.shot.subject_action ?? ""}. The garment must show: ${v.shot.garment_must_show ?? "the product clearly"}.` : "",
     "Score 1–10 (10 = perfect). Be honest and strict: 9–10 only for work that is flawless and ready to publish; anything with a visible flaw is 8 or lower.",
     "garment_accuracy — colour, wash, graphic / logo letter-for-letter, fit, length, details vs the real product. AUTOMATIC FAIL (3 or lower) if in ANY frame a ring, zip, button, buckle, strap, chain or print comes off the garment, floats in a hand, or changes count / shape / place.",
