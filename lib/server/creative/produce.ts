@@ -224,7 +224,9 @@ export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, 
   const engineId = st.engines[st.engineAt];
   const e = VIDEO_ENGINES[engineId];
   // The speaker's fixed voice for THIS engine (Kling direct and fal keep separate voice ids).
-  if (st.speakerId && (e.provider === "kling" || engineId === FAL_K4)) {
+  // A cloned voice is made from a text-to-speech sample and sounds robotic (owner, 2026-11-15). A one-take UGC
+  // keeps ONE voice by itself, so it uses Kling's own natural voice; the clone stays for multi-clip videos.
+  if (st.speakerId && !st.takeShots && (e.provider === "kling" || engineId === FAL_K4)) {
     const m = (await listModels(pool, p.tenant_id)).find((x) => x.id === st.speakerId);
     const voiceId = m ? await (e.provider === "kling" ? ensureKlingVoice : ensureFalKlingVoice)(pool, p.tenant_id, m, p.id).catch(() => null) : null;
     st = { ...st, voiceId };
@@ -377,6 +379,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
         speakerId: take.find((c) => c.speakerId)?.speakerId ?? null,
         prompt: [
           `ONE continuous vertical phone video, a single take with no cuts: a real ${male ? "guy filming himself for his" : "woman filming herself for her"} followers, handheld, natural light, real room sound.`,
+          `VOICE: a real ${male ? "young man" : "young woman"} casually talking to ${male ? "his" : "her"} own phone — natural conversational English, relaxed pace with tiny natural pauses, little breaths, a smile in the voice, slightly informal, words a bit run together like real speech. NOT a voice-over, NOT an announcer, NOT text-to-speech, NOT an ad read. Lips match every word.`,
           ...lines,
           "Move naturally from each keyframe to the next. Keep the clothes, face and room exactly as in the keyframes. Realistic fabric motion. No text on screen.",
         ].join("\n"),

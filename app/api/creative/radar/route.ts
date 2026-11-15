@@ -100,7 +100,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("review"), adId: z.string().uuid(), status: z.enum(["kept", "rejected"]) }),
   z.object({ action: z.literal("bookmark"), adId: z.string().uuid(), boardId: z.string().uuid().nullable().optional(), on: z.boolean() }),
   z.object({ action: z.literal("board"), name: z.string().min(1).max(60) }),
-  z.object({ action: z.literal("brand_add"), name: z.string().min(1).max(120), lane: z.string().max(40).nullable().optional(), prior: z.enum(["apparel", "footwear", "mixed", "unknown"]).default("apparel") }),
+  z.object({ action: z.literal("brand_add"), name: z.string().min(1).max(300), lane: z.string().max(40).nullable().optional(), prior: z.enum(["apparel", "footwear", "mixed", "unknown"]).default("apparel") }),
   z.object({ action: z.literal("brand_status"), brandId: z.string().uuid(), status: z.enum(["active", "rejected", "disabled"]) }),
   z.object({ action: z.literal("brand_ids"), brandId: z.string().uuid(), metaPageIds: z.array(z.string().regex(/^\d+$/)).max(10), google: z.string().regex(/^AR\d+$/).nullable().optional() }),
   z.object({ action: z.literal("tag_now") }),
@@ -142,9 +142,23 @@ async function POST_handler(req: Request) {
         else await g.pool.query(`DELETE FROM creative_board_items WHERE ad_id = $1::uuid AND board_id IN (SELECT id FROM creative_boards WHERE tenant_id = $2::uuid)`, [a.adId, tid]);
         return NextResponse.json({ ok: true });
       }
-      case "brand_add":
-        await g.pool.query(`INSERT INTO creative_ad_brands (tenant_id, name, lane, prior, found_by) VALUES ($1::uuid, $2, $3, $4, 'owner') ON CONFLICT DO NOTHING`, [tid, a.name, a.lane ?? null, a.prior]);
-        return NextResponse.json({ ok: true });
+      case "brand_add": {
+        // A name, or an Instagram / TikTok link or @handle (owner, 2026-11-15): the handle becomes the name Radar
+        // searches the Meta Ad Library with, and is kept on the brand.
+        const raw = a.name.trim();
+        const link = raw.match(/(?:https?:\/\/)?(?:www\.)?(instagram\.com|tiktok\.com)\/@?([A-Za-z0-9._]{2,30})/i);
+        const at = raw.match(/^@([A-Za-z0-9._]{2,30})$/);
+        const handle = link?.[2] ?? at?.[1] ?? null;
+        if (/(instagram|tiktok)\.com\/(p|reel|reels|explore|stories|tv)\//i.test(raw) || /tiktok\.com\/@[^/]+\/video\//i.test(raw) || (/^https?:\/\//i.test(raw) && !link))
+          throw new PlainError("Paste the brand's profile link (instagram.com/brandname), its @handle, or just its name — not a post link.");
+        const platform = link ? (/tiktok/i.test(link[1]) ? "tiktok" : "instagram") : at ? "instagram" : null;
+        const name = handle ?? raw;
+        await g.pool.query(
+          `INSERT INTO creative_ad_brands (tenant_id, name, lane, prior, found_by, handles) VALUES ($1::uuid, $2, $3, $4, 'owner', $5::jsonb) ON CONFLICT DO NOTHING`,
+          [tid, name, a.lane ?? null, a.prior, JSON.stringify(handle && platform ? { [platform]: handle } : {})],
+        );
+        return NextResponse.json({ ok: true, name });
+      }
       case "brand_status":
         await g.pool.query(`UPDATE creative_ad_brands SET status = $3, prior = CASE WHEN $3 = 'active' AND prior = 'unknown' THEN 'apparel' ELSE prior END WHERE id = $1::uuid AND tenant_id = $2::uuid`, [a.brandId, tid, a.status]);
         return NextResponse.json({ ok: true });

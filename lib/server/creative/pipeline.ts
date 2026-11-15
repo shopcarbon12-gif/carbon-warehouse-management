@@ -558,7 +558,8 @@ export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts:
       preset: { ...a.preset, grade: { contrast: 1, saturation: 1, brightness: 0, warmth: 0, grain: 0 } },
       music: a.track ? { asset: "music.audio", beats: a.track.beats?.beats ?? [], bpm: a.track.bpm ?? 120, drop: a.track.beats?.drop ?? null, duration: a.track.duration_s ?? 60 } : null,
       voice: null,
-      captions: clipPath ? await takeCaptions(pool, p, clipPath).catch(() => (script ? captionCards(script) : [])) : [],
+      // No subtitles on a UGC take (owner, 2026-11-15: "remove the subtitles") — a real phone video is just her talking.
+      captions: process.env.CREATIVE_UGC_SUBTITLES === "1" && clipPath ? await takeCaptions(pool, p, clipPath).catch(() => (script ? captionCards(script) : [])) : [],
       sfx: {},
       assets: a.assets,
       logoAsset: "logo.png",

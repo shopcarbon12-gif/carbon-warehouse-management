@@ -294,7 +294,7 @@ function Brands({ onErr }: { onErr: (e: string | null) => void }) {
   return (
     <div>
       <form className="mb-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void post({ action: "brand_add", name: name.trim() }).then(() => setName("")); }}>
-        <input className={input} placeholder="Add a clothing or shoe brand" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className={input} placeholder="Add a clothing or shoe brand — name, Instagram link or @handle" value={name} onChange={(e) => setName(e.target.value)} />
         <button className={btn}>Add</button>
       </form>
       {pending.length ? (

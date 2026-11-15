@@ -378,6 +378,14 @@ function ProjectView({ id }: { id: string }) {
               ))}
             </div>
           ) : null}
+          {p.status === "final" && p.kind === "ugc" ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button className={btn} disabled={!!busy} onClick={() => confirm("Film this UGC again? The same pictures and words, a new take (the video costs again).") && act({ action: "refilm" }, "refilm")}>
+                {busy === "refilm" ? "…" : "Film it again"}
+              </button>
+              <p className={`text-xs ${muted}`}>A new take with the same pictures and words — e.g. for a more natural voice.</p>
+            </div>
+          ) : null}
           {p.status === "draft" ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <button className={`${btnPrimary} min-h-12 px-8 text-base`} disabled={!!busy || testRunning} onClick={() => act({ action: "approve" }, "approve")}>
