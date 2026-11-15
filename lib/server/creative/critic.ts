@@ -68,7 +68,7 @@ export async function criticize(
       ? "ugc_realism — does it look like a REAL person filmed it on their phone in an everyday place (10), or like a professional photo shoot / campaign set / cinematic lighting / film grade (1–4)? Strict: polished editorial = fail."
       : "ugc_realism — null.",
     v.isHook ? "hook_strength — would the first 1.5 s stop the scroll?" : "hook_strength — null unless this is the opening shot.",
-    "originality — no other brand's logo, name, text, people or photos (10 = fully original).",
+    "originality — no OTHER brand's logo, name, text, people or photos (10 = fully original). Everything that is on the real product references (its stripes, prints, graphics, its own logo or tag) IS the product — never count the product's own design against originality, even if it looks like a famous brand's style.",
     "text_and_logos_seen — every word / logo you can read. problems — short, concrete. note — one line for the owner.",
   ]
     .filter(Boolean)
