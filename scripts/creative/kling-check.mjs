@@ -24,3 +24,9 @@ if (process.argv[2]) {
   const x = tj.data?.[0];
   console.log(`task ${process.argv[2]}: ${x?.status ?? tj.message} ${x?.message ?? ""} · video: ${x?.outputs?.some((o) => o.type === "video") ? "yes" : "no"} · billed ${x?.usage?.output_duration ?? "-"} s`);
 }
+// node scripts/creative/kling-check.mjs <taskId> --url — also print the video's download link (Kling keeps it 30 days).
+if (process.argv[2] && process.argv.includes("--url")) {
+  const t = await fetch(`https://api-singapore.klingai.com/tasks?task_ids=${encodeURIComponent(process.argv[2])}`, { headers: { Authorization: `Bearer ${key}` } });
+  const tj = await t.json().catch(() => ({}));
+  console.log(`url: ${tj.data?.[0]?.outputs?.find((o) => o.type === "video")?.url ?? "-"}`);
+}

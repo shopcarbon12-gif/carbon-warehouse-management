@@ -29,10 +29,11 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
   const prompt = [
     "Write a creator-style (UGC) video script for CARBON. It is AI-generated content and will be labelled as such.",
     brandBlock(brand, v.preset, true),
-    `CREATOR PERSONA: ${v.persona}. Natural, spoken, short sentences, how a real creator talks to their phone.`,
+    `CREATOR PERSONA: ${v.persona}.`,
+    "HOW SHE TALKS (owner, 2026-11-15: \"she shouldn't talk like a walking advertisement — like a woman filming herself in front of the mirror, recommending it\"): exactly like a real girl talking to her phone in her room — casual, warm, a little spontaneous, full sentences the way people actually speak (\"okay so…\", \"honestly\", \"look at this\", \"I love that…\", \"it's so soft\"). She reacts to the piece: how it feels, how it fits, how she'd wear it, what she likes about one or two details. Then an easy, friendly recommendation (\"you guys need this, it's on shopcarbon.com\"). NEVER slogans, taglines or ad copy — no \"locked in\", \"details do the talking\", \"no extra\", \"elevate your look\", no brand-speak, no lists of features. It must not sound like a TV commercial.",
     `FACTS SHEET (the ONLY facts you may use): ${JSON.stringify(v.facts)}`,
     v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · hook idea: ${v.concept.hook?.first_1_5s ?? ""}` : "",
-    "Structure: hook (said in the first 1.5 s, ≤ 8 words) → 2–4 beats on the fit and the fabric / details (each line names the fact it uses) → CTA (shopcarbon.com).",
+    "Structure: a natural opener (≤ 8 words, e.g. \"Okay, you guys have to see this dress\") → 2–4 things she says about how it feels / fits / one detail she loves (each line names the fact it uses; feelings like 'I love it' are fine, invented facts are not) → a casual recommendation that mentions shopcarbon.com. About 30–45 spoken words in total, 12–18 seconds.",
     "FORBIDDEN: invented reviews, ratings, sales numbers, 'best seller', 'everyone is buying', claiming to be a customer ('I bought this'), any claim not in the facts, other brands, where it is made.",
     "banned_check: answer honestly whether your script breaks any rule (all should be false).",
   ]

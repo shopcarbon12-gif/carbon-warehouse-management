@@ -219,6 +219,7 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
       // A phone: no dollies, orbits or macro lenses.
       if (!["static", "handheld_follow", "push_in"].includes(s.camera_move)) s.camera_move = "handheld_follow";
       s.lens = "24mm";
+      s.text_overlay = null; // UGC: subtitles of what she says only, no ad titles (owner, 2026-11-15)
     } else if (p.kind !== "ugc") {
       s.say = null;
     }
@@ -400,6 +401,36 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   return finishStills(pool, p, job.requested_by, failed);
 };
 
+/**
+ * ugc_rescript: a new natural script for a UGC, keeping its pictures (owner, 2026-11-15: "she shouldn't talk
+ * like a walking advertisement"). The lines go onto the shots in order; the old take is set aside so
+ * Make the video films it again with the new words.
+ */
+export const ugcRescript: JobHandler = async (pool, job, setProgress) => {
+  const p = await loadProject(pool, job.tenant_id, job.project_id!);
+  if (p.kind !== "ugc" || !p.shot_list) return { status: "done", progress: "Not a UGC with shots" };
+  await setProgress("Rewriting what she says — natural, not an ad");
+  const models = await listModels(pool, p.tenant_id);
+  const cast = models.find((m) => m.id === p.cast_ids[0]);
+  const facts = await Promise.all(p.products.map(async (id) => (await getTwin(pool, p.tenant_id, id))?.facts ?? {}));
+  const concept = ((p.concepts ?? []) as Concept[])[p.concept_idx ?? 0] ?? null;
+  const script = await writeUgcScript(pool, p.tenant_id, { facts, persona: cast?.personality ?? "warm, relaxed, real", preset: p.preset, concept, projectId: p.id });
+  const said = [script.hook, ...script.lines.map((l) => l.say), script.cta];
+  const sl = p.shot_list;
+  const talk = sl.shots.filter((x) => !x.is_end_card);
+  talk.forEach((x, i) => {
+    const from = Math.floor((i * said.length) / talk.length);
+    const to = Math.floor(((i + 1) * said.length) / talk.length);
+    x.say = said.slice(from, to).join(" ") || null;
+    x.text_overlay = null;
+  });
+  await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','running','rejected')`, [p.id]);
+  const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
+  delete ep.takeCaptions;
+  await setProject(pool, p.id, { script, shot_list: sl, edit_plan: ep, status: "draft", step_note: `New words: “${said.join(" ")}” — tap Make the video to film it.` });
+  return { status: "done", progress: "New natural script — tap Make the video" };
+};
+
 /* ------------------------------------------------------------------ edit plans */
 
 async function assetsFor(pool: Pool, p: ProjectRow, opts: { clips: boolean; noMusic?: boolean; trackId?: string | null }) {
@@ -447,9 +478,62 @@ async function assetsFor(pool: Pool, p: ProjectRow, opts: { clips: boolean; noMu
   return { brand, preset, media, assets, track, sfx, fontAsset };
 }
 
+/**
+ * Subtitles from what she REALLY says in a one-take clip (word timestamps from OpenAI speech-to-text, ~1¢),
+ * 3–4 words a card. Saved on the project so re-cuts don't pay again.
+ */
+async function takeCaptions(pool: Pool, p: ProjectRow, takePath: string): Promise<{ text: string; at: number; dur: number }[]> {
+  const ep = (p.edit_plan ?? {}) as { takeCaptions?: { path: string; cards: { text: string; at: number; dur: number }[] } };
+  if (ep.takeCaptions?.path === takePath) return ep.takeCaptions.cards;
+  const { openai } = await import("./config");
+  const { toFile } = await import("openai");
+  const bytes = (await getFile(takePath)).bytes;
+  await spendGate(pool, p.tenant_id, "openai", 0.01);
+  const r = (await openai().audio.transcriptions.create({ file: await toFile(bytes, "take.mp4", { type: "video/mp4" }), model: "whisper-1", response_format: "verbose_json", timestamp_granularities: ["word"] } as never)) as unknown as { words?: { word: string; start: number; end: number }[]; duration?: number };
+  await recordSpend(pool, p.tenant_id, { provider: "openai", what: "subtitles of the UGC take", cost: Math.max(0.001, ((r.duration ?? 20) / 60) * 0.006), projectId: p.id });
+  const words = r.words ?? [];
+  const cards: { text: string; at: number; dur: number }[] = [];
+  for (let i = 0; i < words.length; i += 4) {
+    const w = words.slice(i, i + 4);
+    // a card ends early at a sentence end, so captions break where she pauses
+    const cut = w.findIndex((x) => /[.!?]$/.test(x.word.trim()));
+    const chunk = cut >= 0 && cut < w.length - 1 ? w.slice(0, cut + 1) : w;
+    if (chunk.length < w.length) i -= w.length - chunk.length;
+    cards.push({ text: chunk.map((x) => x.word.trim()).join(" "), at: Math.round(chunk[0].start * 100) / 100, dur: Math.max(0.3, Math.round((chunk[chunk.length - 1].end - chunk[0].start) * 100) / 100) });
+  }
+  await setProject(pool, p.id, { edit_plan: { ...((await loadProject(pool, p.tenant_id, p.id)).edit_plan ?? {}), takeCaptions: { path: takePath, cards } } });
+  return cards;
+}
+
 export async function buildPlan(pool: Pool, p: ProjectRow, aspect: string, opts: { clips: boolean; draft: boolean; noMusic?: boolean; trackId?: string | null; voicePath?: string | null; voiceDur?: number }): Promise<{ plan: EditPlan; track: Track | null }> {
   const a = await assetsFor(pool, p, opts);
   const script = p.script as UgcScript | null;
+  // One continuous UGC take: played as ONE piece from start to end — never cut up and re-timed (owner, 2026-11-15:
+  // the slices replayed the same sentences) — with subtitles from what she actually says.
+  const takeShots = (p.shot_list?.shots ?? []).filter((s) => !s.is_end_card && a.media[s.idx]?.offset != null);
+  if (p.kind === "ugc" && opts.clips && takeShots.length) {
+    const first = takeShots[0];
+    const m = a.media[first.idx];
+    const total = takeShots.reduce((x, s) => x + (a.media[s.idx]?.duration ?? 0), 0);
+    const clipPath = (await clipsByShot(pool, p.id)).get(first.idx)?.path;
+    const shots = [{ ...first, duration_s: total, text_overlay: null, transition_in: "hard_cut", is_static_frame: false }, ...(p.shot_list?.shots ?? []).filter((s) => s.is_end_card)];
+    const plan = buildEditPlan({
+      shots,
+      media: { [first.idx]: { kind: "video", asset: m.asset, duration: total, audio: true, offset: 0 } },
+      aspect,
+      brand: a.brand,
+      preset: { ...a.preset, grade: { contrast: 1, saturation: 1, brightness: 0, warmth: 0, grain: 0 } },
+      music: a.track ? { asset: "music.audio", beats: a.track.beats?.beats ?? [], bpm: a.track.bpm ?? 120, drop: a.track.beats?.drop ?? null, duration: a.track.duration_s ?? 60 } : null,
+      voice: null,
+      captions: clipPath ? await takeCaptions(pool, p, clipPath).catch(() => (script ? captionCards(script) : [])) : [],
+      sfx: {},
+      assets: a.assets,
+      logoAsset: "logo.png",
+      fontAsset: a.fontAsset,
+      draft: opts.draft,
+    });
+    return { plan, track: a.track };
+  }
   if (opts.voicePath) a.assets["voice.mp3"] = signedUrl(opts.voicePath, 24 * 3600);
   const overrides = (p.edit_plan as { overrides?: { speed?: number; textScale?: number } })?.overrides ?? {};
   const shots = (p.shot_list?.shots ?? []).map((s) => ({ ...s, duration_s: s.duration_s * (overrides.speed ?? 1) }));
