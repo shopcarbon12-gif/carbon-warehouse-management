@@ -94,7 +94,21 @@ export function parseLenient<T>(schema: z.ZodType<T>, raw: unknown): ReturnType<
   return parsed;
 }
 
+/**
+ * A reply that comes back broken (cut off at the token limit, or malformed — e.g. "Expected ',' or ']' after
+ * array element", owner's Off Sneakers twin, 2026-11-15) is asked again ONCE with more room before failing.
+ */
 export async function json<T>(pool: Pool, prompt: string, schema: z.ZodType<T>, opts: JsonOpts): Promise<{ value: T; cost: number }> {
+  try {
+    return await jsonOnce(pool, prompt, schema, opts);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (/Paused|cap|key/i.test(msg) || !(e instanceof SyntaxError || /not JSON|right shape|JSON/i.test(msg))) throw e;
+    return jsonOnce(pool, `${prompt}\n\nReply with ONE complete, valid JSON object only.`, schema, { ...opts, maxOutputTokens: Math.round((opts.maxOutputTokens ?? 8000) * 1.6) });
+  }
+}
+
+async function jsonOnce<T>(pool: Pool, prompt: string, schema: z.ZodType<T>, opts: JsonOpts): Promise<{ value: T; cost: number }> {
   await spendGate(pool, opts.tenantId, "openai", opts.estimate ?? 0.05);
   const model = opts.model ?? textModel();
   const r = await openai().responses.create({

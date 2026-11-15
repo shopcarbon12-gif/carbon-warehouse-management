@@ -65,7 +65,19 @@ async function ensureTwins(pool: Pool, p: ProjectRow, by: string | null): Promis
       if (!open.rows[0]) await enqueue(pool, p.tenant_id, "twin_build", { productId: id }, { requestedBy: by, progress: "Building the product twin" });
       return { ready: false, waiting: "Building the product twin (pictures, cut-outs, facts)" };
     }
-    if (t.status === "building" || t.status === "new") return { ready: false, waiting: "Building the product twin" };
+    if (t.status === "building" || t.status === "new") {
+      // A build that died (its job failed) left the twin on "building" forever: start it again (once at a time).
+      const open = await pool.query(`SELECT 1 FROM creative_jobs WHERE tenant_id = $1::uuid AND kind = 'twin_build' AND payload->>'productId' = $2 AND status IN ('queued','running','waiting')`, [p.tenant_id, id]);
+      if (!open.rows[0]) {
+        const fails = await pool.query<{ n: string; error: string | null }>(
+          `SELECT count(*)::text AS n, max(error) AS error FROM creative_jobs WHERE tenant_id = $1::uuid AND kind = 'twin_build' AND payload->>'productId' = $2 AND status = 'failed' AND created_at > now() - interval '1 day'`,
+          [p.tenant_id, id],
+        );
+        if (Number(fails.rows[0]?.n ?? 0) >= 3) throw new PlainError(`The product twin for "${t.title}" failed 3 times today (${(fails.rows[0]?.error ?? "").slice(0, 160)}). Upload a clear flat-lay or hanger photo on the product card, then try again tomorrow.`);
+        await enqueue(pool, p.tenant_id, "twin_build", { productId: id }, { requestedBy: by, progress: "Building the product twin (again)" });
+      }
+      return { ready: false, waiting: "Building the product twin" };
+    }
     if (t.status === "no_images" && !(t.cutouts ?? []).length) throw new PlainError(`"${t.title}" has no pictures in Shopify. Upload a flat-lay or hanger photo on the product card, then try again.`);
     if (t.status === "failed") throw new PlainError(`The product twin for "${t.title}" failed: ${t.error ?? "unknown"}`);
   }
