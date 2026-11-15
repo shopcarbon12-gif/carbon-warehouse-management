@@ -334,7 +334,14 @@ async function anchorBytes(pool: Pool, p: ProjectRow, shots: Shot[]): Promise<Bu
 
 async function finishStills(pool: Pool, p: ProjectRow, requestedBy: string | null, failed: number[]) {
   failed = [...new Set(failed)].sort((a, b) => a - b);
-  await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check after 3 tries — they are left out. Ask for a change or try again.` : null });
+  // Nothing passed at all: no draft is cut and nothing says "ready" (2026-11-15: the page said "Shots ready — make
+  // the video" with no picture).
+  if (!(await stillsByShot(pool, p.id)).size) {
+    await setProject(pool, p.id, { status: "stills", step_note: `None of the pictures reached the 9.5 quality bar after ${MAX_RETRIES + 1} tries each — nothing is shown. Ask for a change or try again.` });
+    await notifyCreative(pool, p.tenant_id, { title: `Creative · ${p.title || "your creative"}: no picture reached 9.5`, body: "Every try scored under the 9.5 bar, so none is shown. Tap to see what to change.", url: `/creative/create?project=${p.id}`, tag: `creative-${p.id}-stills` });
+    return { status: "done" as const, progress: "No picture reached the 9.5 bar" };
+  }
+  await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't reach the 9.5 quality bar after ${MAX_RETRIES + 1} tries — left out. Ask for a change or try again.` : null });
   await enqueue(pool, p.tenant_id, "project_draft", {}, { projectId: p.id, requestedBy, progress: p.kind === "static" ? "Laying out the statics" : "Cutting the draft (free)" });
   await notifyCreative(pool, p.tenant_id, {
     title: `Creative · ${p.title || "your creative"}: pictures ready`,
