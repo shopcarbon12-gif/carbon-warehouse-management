@@ -24,8 +24,23 @@ import { setModelVoice, voicePresets } from "@/lib/server/creative/kling";
 import { getStoragePublicUrl, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 /** Studio model pictures are stored as private R2 endpoint URLs; the browser needs the public address (as /api/models/list does). */
+/**
+ * A model picture the browser can open: served through CarbonWMS's own (logged-in) file route — the stored R2
+ * address is private and the public-address conversion didn't work on the live server (owner, 2026-11-15: empty
+ * boxes on "Who's wearing it?").
+ */
 function viewUrl(u: string): string {
-  const path = tryGetStoragePathFromUrl(u);
+  const fromPath = (() => {
+    try {
+      const parts = new URL(u).pathname.split("/").filter(Boolean).map(decodeURIComponent);
+      const i = parts.indexOf("models");
+      return i >= 0 ? parts.slice(i).join("/") : "";
+    } catch {
+      return "";
+    }
+  })();
+  const path = fromPath || tryGetStoragePathFromUrl(u);
+  if (path && /^models\//.test(path)) return `/api/creative/file?p=${encodeURIComponent(path)}`;
   if (!path) return u;
   try {
     return getStoragePublicUrl(path);

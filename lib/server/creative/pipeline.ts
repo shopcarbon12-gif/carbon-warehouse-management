@@ -11,7 +11,7 @@ import type { Pool } from "pg";
 import { getBrand, presetOf, PlainError, recordSpend, spendGate } from "./config";
 import { enqueue, openJob, releaseReservation, type JobHandler } from "./jobs";
 import { autoCast, listModels } from "./casting";
-import { buildBrief, pitchConcepts, writeShotList, type Concept, type Modifier, type Shot } from "./director";
+import { buildBrief, pitchConcepts, remakeConcept, writeShotList, type Concept, type Modifier, type Shot } from "./director";
 import { getTwin } from "./twin";
 import { advanceClip, clipPlan, clipsByShot, judgeStill, loadProject, makeStill, newStillGen, prepareStill, queueRender, renderState, setProject, stillsByShot, submitClip, STILL_COST, type ClipState, type ProjectRow } from "./produce";
 import { buildEditPlan, type EditPlan } from "./editor";
@@ -106,9 +106,19 @@ export const projectConcepts: JobHandler = async (pool, job, setProgress) => {
   }
   const models = await listModels(pool, p.tenant_id);
   const cast = p.cast_ids.map((id) => models.find((m) => m.id === id)).filter(Boolean).map((m) => ({ id: m!.id, name: m!.name, gender: m!.gender, look: m!.look, personality: m!.personality }));
-  await setProgress("The Creative Director is pitching 3 concepts");
   const brief = await buildBrief(pool, p.tenant_id, { kind: p.kind, products: p.products, preset: p.preset, cast, inspirationAdId: p.inspiration_ad_id });
   const { modifier } = job.payload as { modifier?: Modifier };
+  // From Radar ("Make a CARBON version"): no 3 concepts — the same ad, shot for shot, with CARBON's product and model,
+  // straight to the shot list (owner, 2026-11-15). "New ideas" on such a project still pitches 3 if asked.
+  if (brief.inspiration && !modifier && p.kind !== "static") {
+    await setProgress("Recreating the Radar ad shot for shot with your product and model");
+    const c = await remakeConcept(pool, p.tenant_id, brief, p.id);
+    const remake = { ...c, recipe_key: "radar_remake" };
+    await setProject(pool, p.id, { concepts: [remake], concept_idx: 0, status: "shots", step_note: null, brief: { ...brief0, lane: brief.lane, season: brief.season, remake: true } });
+    await enqueue(pool, p.tenant_id, "project_shots", { conceptIdx: 0 }, { projectId: p.id, requestedBy: job.requested_by, progress: "Writing the shot list (same shots as the Radar ad)" });
+    return { status: "done", progress: "Remake of the Radar ad — drawing its shots next" };
+  }
+  await setProgress("The Creative Director is pitching 3 concepts");
   const previous = (p.concepts ?? []) as Concept[];
   let concepts = await pitchConcepts(pool, p.tenant_id, brief, { modifier: modifier ?? null, previous: modifier ? previous : [], projectId: p.id });
   if (brief0.recipe && !modifier) concepts = concepts.map((c, i) => (i === 0 ? { ...c, recipe_key: brief0.recipe! } : c));

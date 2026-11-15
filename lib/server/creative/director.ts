@@ -124,7 +124,7 @@ export type Brief = {
   locations: { name: string; description: string }[];
   radar: { advertiser: string; pattern: string[]; hook: string; structure: string; score: number }[];
   own: string[];
-  inspiration: { structure: string; hook: string; patterns: string[] } | null;
+  inspiration: { structure: string; hook: string; patterns: string[]; shots: { t: number; shot: string }[]; mediaType: string | null } | null;
   brand: string;
 };
 
@@ -147,7 +147,7 @@ export async function buildBrief(pool: Pool, tenantId: string, p: { kind: string
   if (p.inspirationAdId) {
     const a = await pool.query(`SELECT tags FROM creative_ads WHERE id = $1::uuid AND tenant_id = $2::uuid`, [p.inspirationAdId, tenantId]);
     const t = a.rows[0]?.tags;
-    if (t) inspiration = { structure: t.structure_summary, hook: t.hook_text, patterns: t.creative_pattern };
+    if (t) inspiration = { structure: t.structure_summary, hook: t.hook_text, patterns: t.creative_pattern ?? [], shots: t.video?.shot_list ?? [], mediaType: t.media_type ?? null };
   }
   return {
     kind: p.kind,
@@ -199,8 +199,9 @@ export async function pitchConcepts(pool: Pool, tenantId: string, brief: Brief, 
   ]
     .filter(Boolean)
     .join("\n\n");
-  const r = await json(pool, prompt, Concepts, { tenantId, what: "creative director: 3 concepts", projectId: opts.projectId, maxOutputTokens: 6000 });
-  return r.value.concepts;
+  const r = await json(pool, prompt + (brief.kind === "ugc" ? "\n\nUGC HAS NO ON-SCREEN WORDS: hook.text = null and every storyboard text = null. Titles and ideas in plain words — no slogans or taglines anywhere." : ""), Concepts, { tenantId, what: "creative director: 3 concepts", projectId: opts.projectId, maxOutputTokens: 6000 });
+  // UGC: no on-screen text, whatever the model wrote (owner, 2026-11-15: "Details do the talking." on UGC cards).
+  return brief.kind === "ugc" ? r.value.concepts.map((c) => ({ ...c, hook: { ...c.hook, text: null }, storyboard: c.storyboard.map((f) => ({ ...f, text: null })) })) : r.value.concepts;
 }
 
 export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, concept: Concept, projectId: string): Promise<ShotList> {
@@ -216,6 +217,9 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
       : "",
     brief.kind !== "ugc" && concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
     // UGC shows no on-screen words, so its recipe beats go in without their text cues (review 2026-11-15).
+    brief.inspiration && concept.recipe_key === "radar_remake"
+      ? `THIS IS A SHOT-FOR-SHOT REMAKE of a Radar ad — follow its shots exactly (same count, order, framing, camera, actions, timing, kind of place): ${brief.inspiration.shots.map((x) => `${x.t}s ${x.shot}`).join(" | ") || brief.inspiration.structure}. Only the person (CAST) and the product (PRODUCTS) change.`
+      : "",
     recipe ? `RECIPE BEATS: ${JSON.stringify(brief.kind === "ugc" ? recipe.structure.beats.map((b) => Object.fromEntries(Object.entries(b).filter(([k]) => k !== "text"))) : recipe.structure.beats)}` : "",
     "Every shot: subject_action, camera_move, lens, lighting (hard sun / sodium streetlight / neon rim / softbox / on-camera flash / soft directional …), location (from LOCATIONS), duration_s, transition_in,",
     "garment_must_show (which detail of which product must be visible), cast (model ids from CAST), products (product ids from PRODUCTS worn in the shot), text_overlay (short, or null), is_end_card, is_static_frame (true ONLY for the end card — every other shot becomes a real video clip of a moving person),",
@@ -231,4 +235,27 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
     .join("\n\n");
   const r = await json(pool, prompt, ShotList, { tenantId, what: "creative director: shot list", projectId, maxOutputTokens: 9000 });
   return { ...r.value, shots: r.value.shots.map((s, i) => ({ ...s, idx: i })) };
+}
+
+/**
+ * "Make a CARBON version" from Radar (owner, 2026-11-15): "I want the same video, similar, with a different model,
+ * with my product in his hands — not random options". ONE concept that recreates the Radar ad SHOT FOR SHOT (same
+ * shots, order, framing, camera, actions, timing, kind of place) with CARBON's product and cast — never its brand,
+ * logo, text or people.
+ */
+export async function remakeConcept(pool: Pool, tenantId: string, brief: Brief, projectId: string): Promise<Concept> {
+  if (!brief.inspiration) throw new Error("no inspiration ad");
+  const insp = brief.inspiration;
+  const prompt = [
+    "You are CARBON's Creative Director. Recreate THIS winning ad shot for shot as a CARBON ad — the owner wants the same video with CARBON's product and CARBON's model.",
+    `THE AD: ${insp.structure} · hook: ${insp.hook}${insp.shots.length ? `\nITS SHOTS, in order:\n${insp.shots.map((x) => `  ${x.t}s — ${x.shot}`).join("\n")}` : ""}`,
+    briefText(brief, []),
+    "Keep EXACTLY: the number of shots, their order, framing and camera angle, the actions, the timing and the kind of place / light. Replace ONLY: the person → the CAST member, the product → the PRODUCTS (worn / held the same way the ad shows its product). Never its brand, logo, text, people or exact pictures.",
+    brief.kind === "ugc" ? "It is UGC: hook.text = null, every storyboard text = null (no on-screen words); phone-shot, everyday light." : "On-screen text only where the ad had it, rewritten for CARBON in plain words (no slogans).",
+    "recipe_key: the closest recipe or 'radar_remake'. storyboard: one frame per shot of the ad, same order. length_s ≈ the ad's length. format: \"9:16\". cast_count: as many people as the ad shows (usually 1). inspired_by: the ad's patterns.",
+    "FACTS ONLY about the product. Never invent facts, reviews or numbers. Never name other brands.",
+  ].join("\n\n");
+  const r = await json(pool, prompt, Concept, { tenantId, what: "creative director: Radar remake", projectId, maxOutputTokens: 4000 });
+  const c = r.value;
+  return brief.kind === "ugc" ? { ...c, hook: { ...c.hook, text: null }, storyboard: c.storyboard.map((f) => ({ ...f, text: null })) } : c;
 }

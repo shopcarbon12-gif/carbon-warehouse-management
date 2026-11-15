@@ -85,7 +85,7 @@ function NewProject() {
           <span key={s} className={`${i + 1 === step ? "text-white" : i + 1 < step ? "text-white/60" : "text-white/25"}`}>{i + 1}. {s}{i < 2 ? <span className="mx-2 text-white/20">/</span> : null}</span>
         ))}
       </div>
-      {sp.get("inspiration") ? <p className="mb-3 border-l-2 border-white/40 pl-3 text-sm">Using a Radar ad as inspiration — its structure only, never its brand, text or people.</p> : null}
+      {sp.get("inspiration") ? <p className="mb-3 border-l-2 border-white/40 pl-3 text-sm">Remaking a Radar ad: the same shots, in the same order, with your product and your model — never its brand, text or people.</p> : null}
       <ErrorLine error={err ?? (pe as Error | undefined)?.message} />
 
       {/* 1 — products */}
@@ -190,7 +190,7 @@ function NewProject() {
           ) : null}
           <div className="mt-5">
             <button className={`${btnPrimary} min-h-12 w-full text-base md:w-auto md:px-10`} disabled={busy || (cast !== "auto" && !cast.length && kind !== "animated")} onClick={start}>
-              {busy ? "Starting…" : "Show me 3 concepts"}
+              {busy ? "Starting…" : sp.get("inspiration") && kind !== "static" ? "Make my version of this ad" : "Show me 3 concepts"}
             </button>
             <p className={`mt-2 text-xs ${muted}`}>
               {kind === "static" ? "Concepts are text + cheap sketches. The photo ads are drawn after you pick one." : kind === "ugc" ? "Concepts are text only. Nothing is filmed until you tap Make the video." : "Concepts are text + cheap sketches. The real video is only made when you tap Make the video."}

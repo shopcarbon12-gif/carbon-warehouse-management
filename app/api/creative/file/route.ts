@@ -15,7 +15,8 @@ export async function GET(req: Request) {
   if ("error" in g) return g.error;
   const url = new URL(req.url);
   const p = url.searchParams.get("p") ?? "";
-  if (!/^creative\/[\w./\-:]+$/.test(p) || p.includes("..")) return new Response("Not found", { status: 404 });
+  // creative/… files, and the cast models' pictures (models/…, shared by Creative and Studio).
+  if (!/^(creative|models)\/[\w./\-: ()]+$/.test(p) || p.includes("..")) return new Response("Not found", { status: 404 });
   // Tenant scoping (review 2026-11-15): every tenant-keyed folder must be this tenant's, and a project's files
   // only open for the tenant that owns the project.
   const m = /^creative\/(radar|twins|audio|brand|ideas|locations|voices)\/([0-9a-f-]{36})\//.exec(p);
