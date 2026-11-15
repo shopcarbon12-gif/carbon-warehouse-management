@@ -30,3 +30,10 @@ if (process.argv[2] && process.argv.includes("--url")) {
   const tj = await t.json().catch(() => ({}));
   console.log(`url: ${tj.data?.[0]?.outputs?.find((o) => o.type === "video")?.url ?? "-"}`);
 }
+// node scripts/creative/kling-check.mjs --voices — how many voice-actor library voices, and a few names.
+if (process.argv.includes("--voices")) {
+  const v = await fetch("https://api-singapore.klingai.com/v1/general/presets-voices?pageNum=1&pageSize=200", { headers: { Authorization: `Bearer ${key}` } });
+  const vj = await v.json().catch(() => ({}));
+  const all = (vj.data ?? []).flatMap((t) => t.task_result?.voices ?? []);
+  console.log(`library voices: ${all.length} (with a sample: ${all.filter((x) => x.trial_url).length}) · e.g. ${all.slice(0, 12).map((x) => x.voice_name).join(", ")}`);
+}
