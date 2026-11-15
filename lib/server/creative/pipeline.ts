@@ -198,6 +198,15 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
   }
   await setProgress("Writing the pro shot list");
   const sl = await writeShotList(pool, p.tenant_id, brief, script ? { ...concept, edit_recipe: `${concept.edit_recipe}. Creator lines in order: ${[script.hook, ...script.lines.map((l) => l.say), script.cta].join(" / ")}` } : concept, p.id);
+  // Only ONE shot may be the put-on moment; end_state anywhere else is ignored (owner, 2026-11-15: every shot
+  // had an end_state, so every picture showed the dress on a hanger over random clothes).
+  const change = sl.shots.findIndex((x) => x.puts_on && x.end_state && !x.is_end_card);
+  sl.shots.forEach((x, i) => {
+    if (i !== change) {
+      x.end_state = null;
+      x.puts_on = false;
+    }
+  });
   // Keep cast / products inside what the project has.
   for (const s of sl.shots) {
     // Video + UGC: every shot but the end card becomes a real clip (owner, 2026-11-15: "a real video of a human").
@@ -242,20 +251,37 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
   const todo = shots.filter((s) => !s.is_end_card && !(have.has(s.idx) && !only?.includes(s.idx)) && (!only || only.includes(s.idx)));
   let finished = 0;
   await setProgress(`Drawing ${todo.length} still${todo.length === 1 ? "" : "s"} at the same time`);
-  await inParallel(todo, STILL_PARALLEL, async (s) => {
-    const extra = (job.payload as { extra?: string }).extra;
-    const r = await makeStill(pool, p, s, { extra, notWornYet: Boolean(s.end_state) });
+  const extra = (job.payload as { extra?: string }).extra;
+  // Continuity (owner, 2026-11-15: face, outfit and room changed from shot to shot). One ANCHOR picture is
+  // drawn first — the first shot where the piece is worn — and every other shot copies its person, hair,
+  // outfit, room and light. Shots before the put-on moment show the piece not worn yet.
+  const change = shots.find((x) => x.puts_on && x.end_state);
+  const notWorn = (x: Shot) => (change ? x.idx <= change.idx : false);
+  const anchorShot = shots.find((x) => !x.is_end_card && !notWorn(x)) ?? shots.find((x) => !x.is_end_card);
+  let anchor: Buffer | null = null;
+  const anchorPath = anchorShot ? have.get(anchorShot.idx) : undefined;
+  if (anchorShot && anchorPath && !todo.some((x) => x.idx === anchorShot.idx)) anchor = (await getFile(anchorPath)).bytes;
+  if (anchorShot && todo.some((x) => x.idx === anchorShot.idx)) {
+    await setProgress(`Drawing the anchor picture first (shot ${anchorShot.idx + 1}) — every other shot copies its face, outfit and room`);
+    const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null });
+    if (r) anchor = (await getFile(r.path)).bytes;
+    else failed.push(anchorShot.idx + 1);
+    finished++;
+  }
+  const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
+  await inParallel(rest, STILL_PARALLEL, async (s) => {
+    const r = await makeStill(pool, p, s, { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
     if (!r) failed.push(s.idx + 1);
-    else if (s.end_state) {
+    else if (s.end_state && s.puts_on) {
       // The LAST frame of a change shot (now wearing it): drawn from the first frame so the place, light and
       // person match; the video engine then moves from one picture to the other.
       await setProgress(`Shot ${s.idx + 1}: drawing the last frame (${s.end_state.slice(0, 60)})`);
       const first = (await getFile(r.path)).bytes;
-      const end = await makeStill(pool, p, { ...s, subject_action: s.end_state, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state}` }, { extra, kind: "still_end", firstFrame: first });
+      const end = await makeStill(pool, p, { ...s, subject_action: s.end_state, garment_must_show: `${s.garment_must_show}. Now worn: ${s.end_state}` }, { extra, kind: "still_end", firstFrame: first, continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
       if (!end) failed.push(s.idx + 1);
     }
     finished++;
-    await setProgress(`Drawing stills at the same time: ${finished} of ${todo.length} done`);
+    await setProgress(`Drawing the other stills at the same time: ${finished} of ${todo.length} done`);
   });
   failed.sort((a, b) => a - b);
   await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't pass the quality check after 3 tries — they are left out. Ask for a change or try again.` : null });

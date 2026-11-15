@@ -30,7 +30,7 @@ export type ProjectRow = {
   brief: Record<string, unknown> | null;
   concepts: unknown[] | null;
   concept_idx: number | null;
-  shot_list: { shots: Shot[]; music: { mood: string; bpm: number }; captions: string[] } | null;
+  shot_list: { shots: Shot[]; music: { mood: string; bpm: number }; captions: string[]; outfit?: string | null } | null;
   edit_plan: Record<string, unknown> | null;
   script: Record<string, unknown> | null;
   captions: Record<string, unknown> | null;
@@ -105,7 +105,7 @@ export async function makeStill(
   pool: Pool,
   p: ProjectRow,
   shot: Shot,
-  opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean } = {},
+  opts: { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean; continuity?: Buffer; outfit?: string | null } = {},
 ): Promise<{ genId: string; path: string; critic: CriticReport | null } | null> {
   const ugc = p.kind === "ugc";
   const tid = p.tenant_id;
@@ -125,8 +125,11 @@ export async function makeStill(
   (low ? garments.slice(0, 1) : garments).forEach((g, i) => refs.push({ name: `garment-${i}-${g.angle}.png`, bytes: g.bytes, mime: "image/png" }));
   const loc = low || ugc ? null : await locationRef(pool, tid, shot.location);
   if (loc) refs.push(loc);
+  if (opts.continuity) refs.push({ name: "continuity.jpg", bytes: await sharp(opts.continuity).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
   if (opts.firstFrame) refs.push({ name: "first-frame.jpg", bytes: await sharp(opts.firstFrame).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer(), mime: "image/jpeg" });
   const crit = await garmentRefs(pool, tid, products);
+  // The person's own reference, so the critic can fail a shot where the face changed (owner, 2026-11-15).
+  const personRef = low || !cast[0] ? null : (await modelRefBytes(cast[0], 1).catch(() => [] as Buffer[]))[0] ?? null;
   const insp = await inspirationHashes(pool, p.inspiration_ad_id);
   const quality = opts.quality ?? "high";
   const prompt0 = [
@@ -134,6 +137,10 @@ export async function makeStill(
     ugc
       ? `${UGC_LOOK} Camera: phone, ${shot.camera_move === "static" ? "propped up or selfie" : "handheld"}. Light: ${shot.lighting}. Place: ${shot.location}.`
       : `LOOK: ${opts.look || preset.look}. Camera: ${shot.camera_move.replace(/_/g, " ")}, ${shot.lens} lens. Light: ${shot.lighting}. Location: ${shot.location}.`,
+    opts.continuity
+      ? `CONTINUITY: the continuity reference is another frame of this SAME video. Same person — identical face, hair, skin, makeup and body — same ${opts.notWornYet ? "basics she wears under the piece" : "outfit worn the same way"}, same room, same light and the same phone. Only the pose and framing change.`
+      : "",
+    opts.outfit ? `OUTFIT (identical in every shot): ${opts.outfit}.` : "",
     opts.firstFrame ? "The first-frame reference is the START of this same moment: keep the place, light, camera position, background and person identical — only what the shot describes has changed." : "",
     cast.length ? `PEOPLE: the person references show ${cast.map((m) => m.name).join(" and ")} — keep each face, skin tone, hair and body EXACTLY.` : "",
     opts.notWornYet
@@ -161,7 +168,7 @@ export async function makeStill(
         return { genId, path, critic: null };
       }
       const frame = await sharp(g.bytes).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
-      const c = await criticize(pool, tid, { frames: [frame], kind: "still", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc, notWornYet: opts.notWornYet });
+      const c = await criticize(pool, tid, { frames: [frame], kind: "still", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc, notWornYet: opts.notWornYet, personRef });
       await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, model = $4, cost_usd = $5, critic = $6::jsonb, updated_at = now() WHERE id = $1::uuid`, [
         genId, c.pass ? "done" : "rejected", path, g.model, g.cost, JSON.stringify(c),
       ]);
@@ -223,7 +230,7 @@ export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot
   const path = await putFile(`creative/projects/${p.id}/clip-${st.shotIdx}-${st.genId.slice(0, 8)}.mp4`, bytes, "video/mp4");
   const k = await keyframes(bytes, 4, 768);
   const crit = await garmentRefs(pool, p.tenant_id, shot.products?.length ? shot.products : p.products);
-  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.end_state) });
+  const c = await criticize(pool, p.tenant_id, { frames: k.frames, kind: "clip", garmentRefs: crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: await inspirationHashes(pool, p.inspiration_ad_id), isHook: shot.idx === 0, ugc: p.kind === "ugc", notWornYet: Boolean(shot.puts_on) });
   await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, output_meta = $4::jsonb, critic = $5::jsonb, updated_at = now() WHERE id = $1::uuid`, [
     st.genId, c.pass ? "done" : "rejected", path, JSON.stringify({ duration: k.duration, w: k.width, h: k.height }), JSON.stringify(c),
   ]);
@@ -259,7 +266,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
           if (path) refs.push(signedUrl(path, 24 * 3600));
         }
       }
-    const endStill = s.end_state
+    const endStill = s.end_state && s.puts_on
       ? (await pool.query<{ output_path: string }>(`SELECT output_path FROM creative_generations WHERE project_id = $1::uuid AND kind = 'still_end' AND shot_idx = $2 AND status = 'done' ORDER BY created_at DESC LIMIT 1`, [p.id, s.idx])).rows[0]?.output_path ?? null
       : null;
     const ugc = p.kind === "ugc";

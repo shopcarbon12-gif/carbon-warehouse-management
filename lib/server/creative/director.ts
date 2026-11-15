@@ -101,9 +101,17 @@ export const Shot = z.object({
    * so the clothes are right at the end instead of morphing (owner, 2026-11-15).
    */
   end_state: z.preprocess((v) => (typeof v === "string" && v.trim() ? [...v].slice(0, 300).join("") : null), z.string().nullable()).optional(),
+  /** The ONE shot where the garment goes from not worn to worn (off the hanger / out of the bag → on). */
+  puts_on: z.preprocess((v) => v === true || v === "true", z.boolean()).optional(),
 });
 export type Shot = z.infer<typeof Shot>;
-export const ShotList = z.object({ shots: z.array(Shot).min(2).max(14), music: z.object({ mood: z.string(), bpm: z.number() }), captions: z.array(z.string()).max(3) });
+export const ShotList = z.object({
+  shots: z.array(Shot).min(2).max(14),
+  music: z.object({ mood: z.string(), bpm: z.number() }),
+  captions: z.array(z.string()).max(3),
+  /** What each person wears besides the product, the SAME in every shot (owner, 2026-11-15: shorts in one shot, sweatpants in the next). */
+  outfit: z.preprocess((v) => (typeof v === "string" && v.trim() ? [...v].slice(0, 300).join("") : null), z.string().nullable()).optional(),
+});
 export type ShotList = z.infer<typeof ShotList>;
 
 export type Brief = {
@@ -204,13 +212,14 @@ export async function writeShotList(pool: Pool, tenantId: string, brief: Brief, 
     "FACTS ONLY: describe only the fabric, colour, wash, hardware and details the PRODUCTS facts and detail crops show. Never call a piece denim (or any other fabric) unless its facts say so — a black knit dress is not denim.",
     `CHOSEN CONCEPT: ${JSON.stringify(concept)}`,
     brief.kind === "ugc"
-      ? `UGC SHOT LIST — the whole video must look like a real person filmed it on a phone.\n${UGC_FORMATS}\nIf the concept is cinematic (night sets, moody light, orbits, macro beauty shots), REWRITE it into the closest UGC format in an everyday place with natural light — keep only the product and the idea. camera_move: static (phone on a shelf / selfie), handheld_follow (a friend holds the phone) or push_in (phone moves closer) — nothing else. lens: 24mm (phone camera). 3–6 shots of 2–4 s plus the end card. say: the creator's spoken line for that shot (short, natural, facts only; the lines of the creator script in order), or null when she doesn't talk. When the shot shows a change (taking it off the hanger and putting it on, pulling it out of the bag and holding it up, zipping up), still_prompt = the FIRST moment (the garment still on the hanger / in the bag / in her hands, not worn yet) and end_state = the LAST moment (now wearing it, exactly how it should look). still_prompt always says it is a frame from a phone video in that everyday place with natural light.`
+      ? `UGC SHOT LIST — the whole video must look like a real person filmed it on a phone.\n${UGC_FORMATS}\nIf the concept is cinematic (night sets, moody light, orbits, macro beauty shots), REWRITE it into the closest UGC format in an everyday place with natural light — keep only the product and the idea. camera_move: static (phone on a shelf / selfie), handheld_follow (a friend holds the phone) or push_in (phone moves closer) — nothing else. lens: 24mm (phone camera). 3–6 shots of 2–4 s plus the end card. say: the creator's spoken line for that shot (short, natural, facts only; the lines of the creator script in order), or null when she doesn't talk. At most ONE shot may show putting the piece on (off the hanger / out of the bag → wearing it): mark it puts_on true, its still_prompt = the moment BEFORE (garment on the hanger / in the bag / in her hands) and end_state = the moment AFTER (now wearing it). Shots before it show the piece not worn yet; every shot after it shows her wearing it. If the concept doesn't need putting it on, no shot has puts_on and she wears it in every shot. still_prompt always says it is a frame from a phone video in that everyday place with natural light.`
       : "",
     brief.kind !== "ugc" && concept.look?.location ? `Shoot it in the concept's own look — location: ${concept.look.location}; light: ${concept.look.light}; palette: ${concept.look.palette}. Keep every shot in that world unless the concept calls for a cut to another place.` : "",
     recipe ? `RECIPE BEATS: ${JSON.stringify(recipe.structure.beats)}` : "",
     "Every shot: subject_action, camera_move, lens, lighting (hard sun / sodium streetlight / neon rim / softbox / on-camera flash / soft directional …), location (from LOCATIONS), duration_s, transition_in,",
     "garment_must_show (which detail of which product must be visible), cast (model ids from CAST), products (product ids from PRODUCTS worn in the shot), text_overlay (short, or null), is_end_card, is_static_frame (true ONLY for the end card — every other shot becomes a real video clip of a moving person),",
-    "say (what the person says out loud in the shot, or null) and end_state (null unless the shot shows a change on camera — then what the LAST frame shows, e.g. 'now wearing the jacket, zipped, hands in the pockets'),",
+    "say (what the person says out loud in the shot, or null); puts_on + end_state ONLY for the single shot where the piece is put on (end_state = what the last frame shows, e.g. 'now wearing the jacket, zipped'); every other shot: puts_on false and end_state null — never use end_state to describe where a normal shot ends.",
+    "outfit: one line — what each person wears besides the product (bottoms / shoes / underlayer, e.g. 'barefoot, hair down, small gold hoops'), kept IDENTICAL in every shot. The product is worn the same way in every shot where it is worn.",
     "still_prompt: the first-frame picture for the image model — describe the scene, pose, camera, lens and light; say the person is the CAST reference and the clothes are the PRODUCT references, exactly as given; no text, no logos except the garment's own print;",
     "motion_prompt: what moves in the clip, for the video model (camera move, body motion, fabric motion), one or two sentences; sfx: up to 3 sound effects (whoosh, fabric rustle, shutter, bass hit …).",
     `Total length close to ${concept.length_s || "the concept's"} s. The last shot is the CARBON end card (is_end_card true).`,
