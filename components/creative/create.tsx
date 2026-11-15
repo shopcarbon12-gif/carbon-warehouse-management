@@ -274,7 +274,9 @@ function ProjectView({ id }: { id: string }) {
   const showRenders = p.status === "final" ? (finals.length ? finals : data.renders) : drafts.length ? drafts : data.renders;
   const latestBySize = new Map<string, View["renders"][number]>();
   const slides: View["renders"] = [];
-  for (const r of [...showRenders].reverse()) {
+  // showRenders comes newest-first from the API: the first one per size is the latest (owner, 2026-11-15: the page
+  // kept showing the OLDEST final — the list was reversed twice).
+  for (const r of showRenders) {
     if (r.kind === "video" && !latestBySize.has(r.size ?? "")) latestBySize.set(r.size ?? "", r);
     if (r.kind === "image") slides.push(r);
   }

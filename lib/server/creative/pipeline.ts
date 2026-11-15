@@ -18,7 +18,7 @@ import { buildEditPlan, type EditPlan } from "./editor";
 import { listAudio, pickTrack, sfxFor, sfxIndex, type Track } from "./audio";
 import { composeStatic, STATIC_SIZES } from "./statics";
 import { getFile, putFile, signedUrl, WMS_BASE } from "./storage";
-import { captionCards, writeUgcScript, type UgcScript } from "./ugc";
+import { captionCards, writeUgcCaptions, writeUgcScript, type UgcScript } from "./ugc";
 import { animatedHtml, type AnimatedTemplate } from "./animated";
 import { collectImageBatch, speak, submitImageEditBatch, type ImageRef } from "./engines";
 import { MAX_RETRIES, retryHint, type CriticReport } from "./critic";
@@ -439,8 +439,21 @@ export const ugcRescript: JobHandler = async (pool, job, setProgress) => {
   await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','running','rejected')`, [p.id]);
   const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
   delete ep.takeCaptions;
-  await setProject(pool, p.id, { script, shot_list: sl, edit_plan: ep, status: "draft", step_note: `New words: “${said.join(" ")}” — tap Make the video to film it.` });
+  const options = await writeUgcCaptions(pool, p.tenant_id, { script, facts, projectId: p.id }).catch(() => null);
+  await setProject(pool, p.id, { script, shot_list: sl, edit_plan: ep, status: "draft", step_note: `New words: “${said.join(" ")}” — tap Make the video to film it.`, ...(options ? { captions: { ...((p.captions ?? {}) as Record<string, unknown>), options } } : {}) });
   return { status: "done", progress: "New natural script — tap Make the video" };
+};
+
+/** ugc_refresh: natural post captions from the current script, then a free re-cut (real-speech subtitles). */
+export const ugcRefresh: JobHandler = async (pool, job, setProgress) => {
+  const p = await loadProject(pool, job.tenant_id, job.project_id!);
+  if (p.kind !== "ugc" || !p.script) return { status: "done", progress: "Nothing to refresh" };
+  await setProgress("Writing natural post captions");
+  const facts = await Promise.all(p.products.map(async (id) => (await getTwin(pool, p.tenant_id, id))?.facts ?? {}));
+  const options = await writeUgcCaptions(pool, p.tenant_id, { script: p.script as UgcScript, facts, projectId: p.id });
+  await setProject(pool, p.id, { captions: { ...((p.captions ?? {}) as Record<string, unknown>), options }, step_note: null });
+  if (p.status === "final") await enqueue(pool, p.tenant_id, "project_rerender", {}, { projectId: p.id, requestedBy: job.requested_by, progress: "Re-cutting with subtitles from her real voice (free)" });
+  return { status: "done", progress: "Natural captions written" };
 };
 
 /* ------------------------------------------------------------------ edit plans */
@@ -499,9 +512,17 @@ async function takeCaptions(pool: Pool, p: ProjectRow, takePath: string): Promis
   if (ep.takeCaptions?.path === takePath) return ep.takeCaptions.cards;
   const { openai } = await import("./config");
   const { toFile } = await import("openai");
-  const bytes = (await getFile(takePath)).bytes;
+  const video = (await getFile(takePath)).bytes;
+  // Only the sound goes to speech-to-text (the 1080p video is over its 25 MB limit).
+  const { FFMPEG, run, withTmp } = await import("./media");
+  const { readFile, writeFile } = await import("node:fs/promises");
+  const bytes = await withTmp(async (dir: string) => {
+    await writeFile(`${dir}/take.mp4`, video);
+    await run(FFMPEG, ["-y", "-i", `${dir}/take.mp4`, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", `${dir}/take.mp3`], 60_000);
+    return readFile(`${dir}/take.mp3`);
+  });
   await spendGate(pool, p.tenant_id, "openai", 0.01);
-  const r = (await openai().audio.transcriptions.create({ file: await toFile(bytes, "take.mp4", { type: "video/mp4" }), model: "whisper-1", response_format: "verbose_json", timestamp_granularities: ["word"] } as never)) as unknown as { words?: { word: string; start: number; end: number }[]; duration?: number };
+  const r = (await openai().audio.transcriptions.create({ file: await toFile(bytes, "take.mp3", { type: "audio/mpeg" }), model: "whisper-1", response_format: "verbose_json", timestamp_granularities: ["word"] } as never)) as unknown as { words?: { word: string; start: number; end: number }[]; duration?: number };
   await recordSpend(pool, p.tenant_id, { provider: "openai", what: "subtitles of the UGC take", cost: Math.max(0.001, ((r.duration ?? 20) / 60) * 0.006), projectId: p.id });
   const words = r.words ?? [];
   const cards: { text: string; at: number; dur: number }[] = [];

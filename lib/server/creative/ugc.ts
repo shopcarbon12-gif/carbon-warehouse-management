@@ -52,6 +52,25 @@ export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: R
   throw new Error("The UGC script kept breaking the honesty rules (reviews / stats / customer claims). Try a different concept.");
 }
 
+/**
+ * The Instagram post captions for a UGC, in the same natural voice as what the creator says (owner,
+ * 2026-11-15: the captions were still the old slogans "Not dressed up. Locked in."). Facts only, no slogans.
+ */
+export async function writeUgcCaptions(pool: Pool, tenantId: string, v: { script: UgcScript; facts: Record<string, unknown>[]; projectId: string }): Promise<string[]> {
+  const said = [v.script.hook, ...v.script.lines.map((l) => l.say), v.script.cta].join(" ");
+  const r = await json(
+    pool,
+    [
+      "Write 3 short Instagram captions for a CARBON creator video. The creator says in the video: " + JSON.stringify(said),
+      `FACTS (the only claims allowed): ${JSON.stringify(v.facts)}`,
+      "Sound like a real person posting their own video — casual, warm, 1–2 short sentences, maybe one emoji, end with shopcarbon.com. NO slogans or ad copy (no 'locked in', 'details do the talking', 'elevate'), no hashtags (they're added separately), no invented reviews or numbers, never say Carbon Jeans.",
+    ].join("\n\n"),
+    z.object({ captions: z.array(z.string().max(300)).min(1).max(3) }),
+    { tenantId, what: "UGC post captions", projectId: v.projectId, maxOutputTokens: 1500 },
+  );
+  return r.value.captions;
+}
+
 /** Captions (≈ 3–4 words per card) timed over the lines. */
 export function captionCards(s: UgcScript, start = 0.2): { text: string; at: number; dur: number }[] {
   const out: { text: string; at: number; dur: number }[] = [];

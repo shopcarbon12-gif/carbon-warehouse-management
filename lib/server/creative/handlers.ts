@@ -7,7 +7,7 @@ import { musicSeed } from "./music-seed";
 import type { JobHandler } from "./jobs";
 import { radarNightly, radarRetention, radarSource, radarTag } from "./radar/run";
 import { twinBuild } from "./twin";
-import { conceptThumbs, projectConcepts, projectDraft, projectFinal, projectShots, projectStills, projectTestClip, ugcRescript } from "./pipeline";
+import { conceptThumbs, projectConcepts, projectDraft, projectFinal, projectShots, projectStills, projectTestClip, ugcRefresh, ugcRescript } from "./pipeline";
 import { campaignPack, projectCutdown } from "./campaign";
 import { projectRerender } from "./chat";
 import { refreshResults } from "./learning";
@@ -33,6 +33,7 @@ export const HANDLERS: Record<string, JobHandler> = {
   project_test_clip: projectTestClip,
   music_seed: musicSeed,
   ugc_rescript: ugcRescript,
+  ugc_refresh: ugcRefresh,
   project_rerender: projectRerender,
   project_cutdown: projectCutdown,
   campaign_pack: campaignPack,
