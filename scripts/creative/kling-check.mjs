@@ -17,3 +17,10 @@ const cj = await c.json().catch(() => ({}));
 for (const p of cj.data?.resource_pack_subscribe_infos ?? [])
   console.log(`package: ${p.resource_pack_name} · tier ${p.resource_pack_tier} · ${p.status} · ${p.remaining_quantity}/${p.total_quantity} units · ${p.resource_pack_applicable_models ?? ""} · expires ${new Date(p.invalid_time).toISOString().slice(0, 10)}`);
 if (!(cj.data?.resource_pack_subscribe_infos ?? []).length) console.log(`packages: none (${cj.code} ${cj.message ?? ""})`);
+// node scripts/creative/kling-check.mjs <taskId> — that task's status (no key printed).
+if (process.argv[2]) {
+  const t = await fetch(`https://api-singapore.klingai.com/tasks?task_ids=${encodeURIComponent(process.argv[2])}`, { headers: { Authorization: `Bearer ${key}` } });
+  const tj = await t.json().catch(() => ({}));
+  const x = tj.data?.[0];
+  console.log(`task ${process.argv[2]}: ${x?.status ?? tj.message} ${x?.message ?? ""} · video: ${x?.outputs?.some((o) => o.type === "video") ? "yes" : "no"} · billed ${x?.usage?.output_duration ?? "-"} s`);
+}
