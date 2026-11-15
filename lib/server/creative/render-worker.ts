@@ -75,6 +75,13 @@ async function download(url: string, file: string) {
 
 /** One queued render, if any. Returns true when it did work. */
 export async function runOneRender(pool: Pool): Promise<boolean> {
+  // A render left 'running' by a worker restart (deploy, crash) is never picked up again — the draft
+  // then waits forever. Longest real render ≈ 25 min HyperFrames + 20 min finishing, so after 60 min
+  // untouched it is orphaned: queue it again.
+  await pool.query(
+    `UPDATE creative_generations SET status = 'queued', error = NULL, updated_at = now()
+      WHERE kind = 'render' AND status = 'running' AND updated_at < now() - interval '60 minutes'`,
+  );
   const c = await pool.query<{ id: string; inputs: { plan: EditPlan; engine?: string; upscale4k?: boolean; interpolate?: boolean; html?: string | null } }>(
     `UPDATE creative_generations SET status = 'running', updated_at = now()
       WHERE id = (SELECT id FROM creative_generations WHERE kind = 'render' AND status = 'queued' ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
