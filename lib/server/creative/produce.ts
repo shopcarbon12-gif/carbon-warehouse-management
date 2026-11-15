@@ -353,10 +353,13 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
     const take = out.slice(0, 9);
     const seconds = Math.min(30, take.reduce((a, c) => a + c.seconds, 0));
     const byIdx = new Map(shots.map((x) => [x.idx, x]));
+    // He or she, from the cast member (owner, 2026-11-15: Nico's take said "she").
+    const speaker = models.find((m) => m.id === (take.find((c) => c.speakerId)?.speakerId ?? p.cast_ids[0]));
+    const male = speaker?.gender === "male";
     const lines = take.map((c, i) => {
       const s = byIdx.get(c.shotIdx)!;
       const ref = i === 0 ? "@f1" : i === take.length - 1 ? "@f2" : `@m${i}`;
-      return `${i === 0 ? "Start" : i === take.length - 1 ? "End" : "Then"} on ${ref} (~${c.seconds}s): ${s.subject_action}${s.say ? ` — she says: "${s.say}"` : ""}.`;
+      return `${i === 0 ? "Start" : i === take.length - 1 ? "End" : "Then"} on ${ref} (~${c.seconds}s): ${s.subject_action}${s.say ? ` — ${male ? "he" : "she"} says: "${s.say}"` : ""}.`;
     });
     return [
       {
@@ -368,7 +371,7 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
         takeShots: take.map((c) => ({ idx: c.shotIdx, seconds: c.seconds })),
         speakerId: take.find((c) => c.speakerId)?.speakerId ?? null,
         prompt: [
-          "ONE continuous vertical phone video, a single take with no cuts: a real person filming herself for her followers, handheld, natural light, real room sound.",
+          `ONE continuous vertical phone video, a single take with no cuts: a real ${male ? "guy filming himself for his" : "woman filming herself for her"} followers, handheld, natural light, real room sound.`,
           ...lines,
           "Move naturally from each keyframe to the next. Keep the clothes, face and room exactly as in the keyframes. Realistic fabric motion. No text on screen.",
         ].join("\n"),

@@ -393,7 +393,7 @@ function ProjectView({ id }: { id: string }) {
                   : data.testClipEstimate
                     ? "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects. The test makes only the first shot so you can see it move first — it is kept, not paid twice."
                     : p.kind === "ugc"
-                      ? "Make the video films it as ONE continuous phone take on Kling 4.0 — the shots above are its keyframes, she says every line in her own voice — then adds music, captions and the CARBON ending."
+                      ? `Make the video films it as ONE continuous phone take on Kling 4.0 — the shots above are its keyframes, ${data.cast[0]?.name ?? "the creator"} says every line in one consistent voice — then adds music, captions and the CARBON ending.`
                       : "Make the video turns every shot into a real moving clip (Kling), checks each one, then cuts them together with music, text and effects."}
               </p>
             </div>
