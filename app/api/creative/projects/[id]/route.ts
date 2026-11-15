@@ -10,7 +10,7 @@ import { z } from "zod";
 import { withActivity } from "@/lib/server/activity-log";
 import { guard, fail, body, kick } from "@/lib/server/creative/http";
 import { approveProject, missingShots, projectView, rewriteScript, saveScriptText } from "@/lib/server/creative/pipeline";
-import { enqueue, openJob } from "@/lib/server/creative/jobs";
+import { cancelJobs, enqueue, openJob, releaseReservation } from "@/lib/server/creative/jobs";
 import { chatEdit } from "@/lib/server/creative/chat";
 import { recordFeedback } from "@/lib/server/creative/learning";
 import { createCarbonCastPost, nextBestTime } from "@/lib/server/creative/publish";
@@ -210,16 +210,24 @@ async function POST_handler(req: Request, { params }: Ctx) {
         // over instead of failing the same way again (review 2026-11-15).
         const open = await g.pool.query(`SELECT 1 FROM creative_jobs WHERE project_id = $1::uuid AND status IN ('queued','running','waiting')`, [id]);
         if (open.rows[0]) throw new PlainError("It's already working on this — give it a moment.");
+        // The newest job — or, if that one finished, the newest PAUSED one (a pause must never be stuck behind later work).
         const j = await g.pool.query<{ id: string; kind: string; status: string; payload: Record<string, unknown> }>(
-          `SELECT id::text, kind, status, payload FROM creative_jobs WHERE project_id = $1::uuid ORDER BY created_at DESC LIMIT 1`,
+          `(SELECT id::text, kind, status, payload FROM creative_jobs WHERE project_id = $1::uuid AND status <> 'cancelled' ORDER BY created_at DESC LIMIT 1)
+           UNION ALL
+           (SELECT id::text, kind, status, payload FROM creative_jobs WHERE project_id = $1::uuid AND status = 'paused' ORDER BY created_at DESC LIMIT 1)`,
           [id],
         );
-        const job = j.rows[0];
+        const job = j.rows.find((x) => ["failed", "paused"].includes(x.status));
         if (!job || !["failed", "paused"].includes(job.status)) throw new PlainError("Nothing to retry.");
         const pl = { ...job.payload };
-        if (job.kind === "project_stills") {
+        // A batch is only started over when it is really dead — a finished batch whose collection stopped halfway is
+        // collected again (its pictures are paid for).
+        if (job.kind === "project_stills" && pl.deadBatch) {
+          await releaseReservation(g.pool, tid, pl, id);
           delete pl.batchId;
           delete pl.tasks;
+          pl.reserved = 0;
+          pl.deadBatch = false;
         }
         if (["project_draft", "project_rerender", "project_cutdown"].includes(job.kind)) delete pl.renders;
         if (job.kind === "project_final" && pl.phase === "render") {
@@ -235,7 +243,7 @@ async function POST_handler(req: Request, { params }: Ctx) {
       }
       case "delete":
         // Stop its work first: nothing keeps running (and paying) for a creative that's gone.
-        await g.pool.query(`UPDATE creative_jobs SET status = 'cancelled', progress = 'Creative deleted', updated_at = now() WHERE project_id = $1::uuid AND tenant_id = $2::uuid AND status IN ('queued','waiting','paused','running')`, [id, tid]);
+        await cancelJobs(g.pool, id, "all", "Creative deleted");
         await g.pool.query(`DELETE FROM creative_projects WHERE id = $1::uuid AND tenant_id = $2::uuid`, [id, tid]);
         return NextResponse.json({ ok: true });
     }

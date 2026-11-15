@@ -20,18 +20,21 @@ import { PlainError } from "../config";
 const MEDIA_RE = /https?:\\?\/\\?\/[^"'\s<>\\]+?\.(?:jpe?g|png|webp|mp4)(?:\?[^"'\s<>\\]*)?/gi;
 const unescape = (u: string) => u.replace(/\\\//g, "/").replace(/\\u0026/g, "&").replace(/&amp;/g, "&");
 /**
- * Is this advertiser the brand? Exact (letters only) for short names — "On" must not match "Fashion Nova" —
- * and a whole-word / prefix match otherwise ("Fear of God" vs "Fear of God Essentials" stay apart unless equal).
+ * Is this advertiser the brand? (review 2026-11-15, balanced): accents normalised; the advertiser must BE the brand
+ * or START with the brand's whole name ("Nike Running", "Alo Yoga", "adidas Originals", "REPRESENT CLO"), or be the
+ * brand + "official"; legal suffixes ("Inc.", "LLC") ignored. A short name never matches inside another word
+ * ("On" ≠ "Fashion Nova"), and a different brand that merely CONTAINS the name doesn't match.
  */
 export const brandMatches = (name: string, brand: string) => {
-  const a = name.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const b = brand.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const norm = (x: string) =>
+    x.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9 ]+/g, " ").replace(/\b(inc|llc|ltd|co|corp|gmbh|sa|plc)\b/g, " ").replace(/\s+/g, " ").trim();
+  const a = norm(name);
+  const b = norm(brand);
   if (!a || !b) return false;
-  if (a === b) return true;
-  if (b.length < 5) return false;
-  const words = name.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
-  const bw = brand.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
-  return words === bw || words.startsWith(`${bw} official`) || words === `${bw} official` || a === `${b}official` || a === `the${b}`;
+  const flat = (x: string) => x.replace(/ /g, "");
+  if (flat(a) === flat(b) || flat(a) === `${flat(b)}official` || flat(b) === `${flat(a)}official`) return true;
+  if (flat(b).length < 3) return false;
+  return a.startsWith(`${b} `) || (flat(b).length >= 5 && flat(a).startsWith(flat(b)) && a.split(" ")[0].length >= flat(b).length);
 };
 
 function mediaFromAny(o: unknown, limit = 4): NormalizedMedia[] {
@@ -415,15 +418,26 @@ async function assertPublicUrl(url: string): Promise<void> {
   if (!/^https?:$/.test(u.protocol)) throw new PlainError("Paste a normal web link (https://…).");
   const addrs = await lookup(u.hostname, { all: true }).catch(() => []);
   if (!addrs.length) throw new PlainError("That link's website can't be found.");
-  const priv = (a: string) => /^(10\.|127\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(a) || a === "::1" || /^f[cd]|^fe80/i.test(a);
+  const priv = (raw: string) => {
+    const a = raw.replace(/^::ffff:/i, ""); // IPv4-mapped IPv6
+    return /^(10\.|127\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(a) || a === "::1" || a === "::" || /^f[cd]|^fe80/i.test(a);
+  };
   if (addrs.some((x) => priv(x.address))) throw new PlainError("That link points inside a private network — paste the public ad link.");
 }
 
 export async function manualFromUrl(url: string): Promise<NormalizedAd> {
-  await assertPublicUrl(url);
-  const r = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow", headers: { "User-Agent": "Mozilla/5.0 (compatible; CarbonWMS-Radar/1.0)" } }).catch(() => null);
+  // Every redirect hop is checked BEFORE it is requested (a public link must not bounce into the server's network).
+  let at = url;
+  let r: Response | null = null;
+  for (let hop = 0; hop < 6; hop++) {
+    await assertPublicUrl(at);
+    r = await fetch(at, { signal: AbortSignal.timeout(20_000), redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 (compatible; CarbonWMS-Radar/1.0)" } }).catch(() => null);
+    if (!r) throw new PlainError("That link didn't answer — check it opens in your browser.");
+    const next = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
+    if (!next) break;
+    at = new URL(next, at).toString();
+  }
   if (!r) throw new PlainError("That link didn't answer — check it opens in your browser.");
-  if (r.url && r.url !== url) await assertPublicUrl(r.url);
   if (!r.ok) throw new PlainError(`That link answered HTTP ${r.status} — it may need a login. Download the ad and upload the file instead.`);
   const ct = r.headers.get("content-type") ?? "";
   const host = new URL(url).hostname.replace(/^www\./, "");
@@ -437,6 +451,10 @@ export async function manualFromUrl(url: string): Promise<NormalizedAd> {
   if (v) media.push({ kind: "video", url: unescape(v) });
   const img = meta("og:image");
   if (img) media.push({ kind: "image", url: unescape(img) });
+  // The page's own picture / video links are checked too before anything downloads them.
+  const safe: NormalizedMedia[] = [];
+  for (const m of media) if (await assertPublicUrl(m.url).then(() => true, () => false)) safe.push(m);
+  media.splice(0, media.length, ...safe);
   return {
     source: "manual",
     externalId: url,

@@ -7,7 +7,7 @@
  * Job `idea_pictures` { ids }: 1st run → one batch; later runs → collect, save onto creative_ideas.picture_path.
  */
 import type { Pool } from "pg";
-import type { JobHandler } from "./jobs";
+import { releaseReservation, type JobHandler, type JobOutcome } from "./jobs";
 import { getBrand, presetOf, recordSpend, spendGate, UGC_LOOK } from "./config";
 import { collectImageBatch, submitImageEditBatch, type ImageRef } from "./engines";
 import { listModels, modelRefBytes } from "./casting";
@@ -53,6 +53,19 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
   const p = job.payload as { ids?: string[]; batchId?: string };
   const tid = job.tenant_id;
   if (!p.batchId) {
+    try {
+      return await firstRun(pool, job, setProgress, p, tid);
+    } catch (e) {
+      // Paused at the cap or the batch couldn't be sent: the cards say so instead of "on the way" for ever.
+      await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = ANY($1::uuid[]) AND picture_path IS NULL`, [p.ids ?? []]);
+      throw e;
+    }
+  }
+  return collect(pool, p, tid);
+};
+
+async function firstRun(pool: Pool, job: Parameters<JobHandler>[1], setProgress: (s: string) => Promise<void>, p: { ids?: string[]; batchId?: string }, tid: string): Promise<JobOutcome> {
+  {
     const rows = (
       await pool.query<Row>(
         `SELECT id::text, idea, scene, prefill FROM creative_ideas WHERE tenant_id = $1::uuid AND id = ANY($2::uuid[]) AND picture_path IS NULL AND status = 'new'`,
@@ -93,12 +106,19 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
     await setProgress(`Sending ${lines.length} idea pictures to the OpenAI batch (half price)`);
     const { batchId } = await submitImageEditBatch(lines, { purpose: "creative_idea_pictures" });
     await recordSpend(pool, tid, { provider: "openai", what: "idea pictures in the batch (reserved)", cost: est, estimated: true });
+    const reservedAt = new Date().toISOString();
     await pool.query(`UPDATE creative_ideas SET picture_status = 'batch' WHERE id = ANY($1::uuid[])`, [rows.map((r) => r.id)]);
-    return { status: "waiting", afterSeconds: 120, payload: { ...p, ids: rows.map((r) => r.id), batchId, costs, reserved: est }, progress: `${lines.length} idea pictures in the OpenAI batch — a desktop alert comes when they're ready` };
+    return { status: "waiting", afterSeconds: 120, payload: { ...p, ids: rows.map((r) => r.id), batchId, costs, reserved: est, reservedAt }, progress: `${lines.length} idea pictures in the OpenAI batch — a desktop alert comes when they're ready` };
   }
+  throw new Error("unreachable");
+}
+
+async function collect(pool: Pool, p: { ids?: string[]; batchId?: string }, tid: string): Promise<JobOutcome> {
+  if (!p.batchId) throw new Error("no batch");
   const out = await collectImageBatch(p.batchId);
   if (out.state === "pending") return { status: "waiting", afterSeconds: 120, progress: `Idea pictures in the OpenAI batch — ${out.status}` };
   if (out.state === "failed") {
+    await releaseReservation(pool, tid, p as Record<string, unknown>);
     await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = ANY($1::uuid[]) AND picture_path IS NULL`, [p.ids ?? []]);
     return { status: "done", progress: `The batch did not finish (${out.error})` };
   }
@@ -120,8 +140,9 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
     // Anything the batch didn't return is marked failed, so no card says "on the way" forever.
     await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = ANY($1::uuid[]) AND picture_status = 'batch'`, [p.ids ?? []]);
   }
-  await recordSpend(pool, tid, { provider: "openai", what: `idea pictures, batch (${made})`, cost: cost - Number((p as { reserved?: number }).reserved ?? 0) });
+  await releaseReservation(pool, tid, p as Record<string, unknown>);
+  await recordSpend(pool, tid, { provider: "openai", what: `idea pictures, batch (${made})`, cost });
   if (made)
     await notifyCreative(pool, tid, { title: "Creative · idea pictures ready", body: `${made} idea${made === 1 ? "" : "s"} now show what they'd look like. Tap to look.`, url: "/creative", tag: `creative-ideas-${p.batchId}` });
   return { status: "done", progress: `${made} idea pictures ready` };
-};
+}

@@ -253,8 +253,10 @@ export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, 
 /** Poll one clip; on done → R2 + critic (≤ 2 retries); on failure → retry once, then the next engine. */
 export async function advanceClip(pool: Pool, p: ProjectRow, st: ClipState, shot: Shot): Promise<ClipState> {
   if (st.status !== "running") return st;
-  const g = (await pool.query(`SELECT external_id, inputs FROM creative_generations WHERE id = $1::uuid`, [st.genId])).rows[0];
-  const res = await pollVideo(g.inputs, g.external_id);
+  const g = (await pool.query(`SELECT external_id, inputs, created_at FROM creative_generations WHERE id = $1::uuid`, [st.genId])).rows[0];
+  let res = await pollVideo(g.inputs, g.external_id);
+  // A clip still "in progress" after 90 minutes is treated as failed (the engines finish in minutes).
+  if (res.state === "pending" && Date.now() - new Date(g.created_at).getTime() > 90 * 60_000) res = { state: "failed", error: "The video engine didn't finish within 90 minutes" };
   if (res.state === "pending") return st;
   if (res.state === "failed") {
     await pool.query(`UPDATE creative_generations SET status = 'failed', error = $2, cost_usd = 0, updated_at = now() WHERE id = $1::uuid`, [st.genId, res.error.slice(0, 500)]);
@@ -400,9 +402,10 @@ export async function clipPlan(pool: Pool, p: ProjectRow, shots: Shot[]): Promis
       lines.push(`[keyframe ${startN + 1}${c.endStill ? ` → keyframe ${startN + 2} (now wearing it)` : ""}] (~${c.seconds}s): ${s.subject_action}${said}.`);
     }
     const lastIsEnd = Boolean(take[take.length - 1].endStill);
-    const kept = frames.slice(0, 9);
+    // At most 7 in-between keyframes (Kling direct's limit; fal takes 8) plus the first and, when there is one, the end.
+    const kept = frames.slice(0, Math.min(frames.length, lastIsEnd ? 9 : 8));
     const first = kept[0];
-    const endStill = lastIsEnd && kept.length > 1 ? kept[kept.length - 1].still : null;
+    const endStill = lastIsEnd && kept.length > 1 && kept.length === frames.length ? kept[kept.length - 1].still : null;
     const middle = kept.slice(1, endStill ? -1 : undefined).map((f) => f.still);
     return [
       {

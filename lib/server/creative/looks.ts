@@ -8,7 +8,7 @@
  */
 import type { Pool } from "pg";
 import type { JobHandler } from "./jobs";
-import { enqueue } from "./jobs";
+import { enqueue, releaseReservation } from "./jobs";
 import { getBrand, PlainError, recordSpend, spendGate } from "./config";
 import { collectImageBatch, submitImageBatch } from "./engines";
 import { IMAGE_COST } from "./routing";
@@ -32,7 +32,7 @@ export async function looksInBatch(pool: Pool, tenantId: string): Promise<string
   return r.rows.flatMap((x) => (Array.isArray(x.keys) ? x.keys : ["*"]));
 }
 
-export const presetSamples: JobHandler = async (pool, job, setProgress) => {
+export const presetSamples: JobHandler = async (pool, job, setProgress, savePayload) => {
   const p = job.payload as { keys?: string[] | "missing"; looks?: string[]; batchId?: string };
   const brand = await getBrand(pool, job.tenant_id);
   if (!p.batchId) {
@@ -49,10 +49,15 @@ export const presetSamples: JobHandler = async (pool, job, setProgress) => {
     await setProgress(`Sending ${lines.length} pictures to the OpenAI batch…`);
     const { batchId } = await submitImageBatch(lines, { purpose: "creative_look_samples", tenant: job.tenant_id });
     await recordSpend(pool, job.tenant_id, { provider: "openai", what: "Look sample frames in the batch (reserved)", cost, estimated: true });
-    return { status: "waiting", afterSeconds: 300, payload: { ...p, looks: looks.map((x) => x.key), batchId, reserved: cost }, progress: `In the OpenAI batch: ${looks.map((x) => x.name).join(", ")}` };
+    const reservedAt = new Date().toISOString();
+    return { status: "waiting", afterSeconds: 300, payload: { ...p, looks: looks.map((x) => x.key), batchId, reserved: cost, reservedAt }, progress: `In the OpenAI batch: ${looks.map((x) => x.name).join(", ")}` };
   }
   const out = await collectImageBatch(p.batchId);
   if (out.state === "pending") return { status: "waiting", afterSeconds: 300, progress: `OpenAI batch ${out.status}` };
+  if (out.state === "failed") {
+    await releaseReservation(pool, job.tenant_id, p as Record<string, unknown>);
+    await savePayload({ ...(p as Record<string, unknown>), reserved: 0 });
+  }
   if (out.state === "failed") throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Sample frames again.`);
   const byLook = new Map<string, string[]>();
   let made = 0;
@@ -63,7 +68,8 @@ export const presetSamples: JobHandler = async (pool, job, setProgress) => {
     byLook.set(key, [...(byLook.get(key) ?? []), path]);
     made++;
   }
-  await recordSpend(pool, job.tenant_id, { provider: "openai", what: `Look sample frames, batch (${made} pictures)`, cost: made * IMAGE_COST.medium * 0.5 - Number((p as { reserved?: number }).reserved ?? 0) });
+  await releaseReservation(pool, job.tenant_id, p as Record<string, unknown>);
+  await recordSpend(pool, job.tenant_id, { provider: "openai", what: `Look sample frames, batch (${made} pictures)`, cost: made * IMAGE_COST.medium * 0.5 });
   // Re-read: the owner may have edited a Look while the batch ran; only the frames change.
   const fresh = await getBrand(pool, job.tenant_id);
   const presets = fresh.presets.map((x) => (byLook.has(x.key) ? { ...x, samples: byLook.get(x.key)! } : x));

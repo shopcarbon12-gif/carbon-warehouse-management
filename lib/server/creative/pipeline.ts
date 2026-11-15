@@ -9,7 +9,7 @@
  */
 import type { Pool } from "pg";
 import { getBrand, presetOf, PlainError, recordSpend, spendGate } from "./config";
-import { enqueue, openJob, type JobHandler } from "./jobs";
+import { enqueue, openJob, releaseReservation, type JobHandler } from "./jobs";
 import { autoCast, listModels } from "./casting";
 import { buildBrief, pitchConcepts, writeShotList, type Concept, type Modifier, type Shot } from "./director";
 import { getTwin } from "./twin";
@@ -114,7 +114,7 @@ export const projectConcepts: JobHandler = async (pool, job, setProgress) => {
   if (brief0.recipe && !modifier) concepts = concepts.map((c, i) => (i === 0 ? { ...c, recipe_key: brief0.recipe! } : c));
   await setProject(pool, p.id, { concepts, concept_idx: null, status: "concepts", step_note: null, brief: { ...brief0, lane: brief.lane, season: brief.season } });
   // UGC: no storyboard sketches (owner, 2026-11-15) — the concept text is enough; the shots are the real preview.
-  if (p.kind !== "ugc") await enqueue(pool, p.tenant_id, "concept_thumbs", {}, { projectId: p.id, requestedBy: job.requested_by, progress: "Drawing cheap storyboard thumbnails" });
+  if (p.kind !== "ugc") await enqueue(pool, p.tenant_id, "concept_thumbs", {}, { projectId: p.id, requestedBy: job.requested_by, progress: "Drawing cheap storyboard thumbnails", replace: true });
   return { status: "done", progress: "3 concepts ready — pick one" };
 };
 
@@ -259,7 +259,7 @@ export const projectShots: JobHandler = async (pool, job, setProgress) => {
   }
   await setProject(pool, p.id, { concept_idx: conceptIdx, shot_list: sl, script, status: "shots", captions: { options: captionOptions, hashtags: hashtagsFor(p, brief.lane) } });
   const n = sl.shots.filter((s) => !s.is_end_card).length;
-  await enqueue(pool, p.tenant_id, "project_stills", {}, { projectId: p.id, requestedBy: job.requested_by, progress: `Dressing the models: ${n} stills (≈ $${(n * STILL_COST).toFixed(2)})` });
+  await enqueue(pool, p.tenant_id, "project_stills", {}, { projectId: p.id, requestedBy: job.requested_by, replace: true, progress: `Dressing the models: ${n} stills (≈ $${(n * STILL_COST).toFixed(2)})` });
   return { status: "done", progress: "Shot list ready" };
 };
 
@@ -277,7 +277,7 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
 /** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
 const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
 type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
-type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number };
+type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
 function continuityOf(shots: Shot[]) {
@@ -349,16 +349,17 @@ async function submitStillBatch(pool: Pool, p: ProjectRow, shots: Shot[], tasks:
   // The estimate counts against today's cap NOW (a batch is only billed when collected, so several batches tapped
   // the same day all slipped past the cap — review 2026-11-15); collection swaps it for the real cost.
   await recordSpend(pool, p.tenant_id, { provider: "openai", what: `pictures in the batch (reserved)`, cost: est, estimated: true, projectId: p.id });
+  const reservedAt = new Date().toISOString();
   const round = (st.round ?? 0) + 1;
   return {
     status: "waiting" as const,
     afterSeconds: 120,
-    payload: { ...st, batchId, tasks, round, started: new Date().toISOString(), reserved: est },
+    payload: { ...st, batchId, tasks, round, started: reservedAt, reserved: est, reservedAt, deadBatch: false },
     progress: `${lines.length} picture${lines.length === 1 ? "" : "s"} in the OpenAI batch (half price${round > 1 ? `, redraw round ${round}` : ""}) — you can leave; a desktop alert comes when they're ready`,
   };
 }
 
-export const projectStills: JobHandler = async (pool, job, setProgress) => {
+export const projectStills: JobHandler = async (pool, job, setProgress, savePayload) => {
   const p = await loadProject(pool, job.tenant_id, job.project_id!);
   const shots = p.shot_list?.shots ?? [];
   const st = job.payload as StillsState;
@@ -369,13 +370,21 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
     const out = await collectImageBatch(st.batchId);
     if (out.state === "pending") return { status: "waiting", afterSeconds: 120, progress: `Pictures in the OpenAI batch (half price) — ${out.status}. You can leave; a desktop alert comes when they're ready.` };
     if (out.state === "failed") {
-      // Send the same pictures again once (a dead batch can't be read back); after that, the owner decides.
-      if ((st.batchFails ?? 0) < 1 && st.tasks?.length) return submitStillBatch(pool, p, shots, st.tasks, { ...st, batchId: undefined, batchFails: (st.batchFails ?? 0) + 1 }, setProgress);
+      // A dead batch is billed nothing: release its reservation, send the same pictures again once; after that the
+      // owner decides (Try again starts the batch over — marked deadBatch).
+      await releaseReservation(pool, p.tenant_id, st, p.id);
+      if ((st.batchFails ?? 0) < 1 && st.tasks?.length) return submitStillBatch(pool, p, shots, st.tasks, { ...st, batchId: undefined, reserved: 0, batchFails: (st.batchFails ?? 0) + 1 }, setProgress);
+      await savePayload({ ...st, reserved: 0, deadBatch: true });
       throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Try again.`);
     }
     const anchor = await anchorBytes(pool, p, shots);
-    // Release this batch's reservation; the real cost of each picture is recorded below.
-    if (st.reserved) await recordSpend(pool, p.tenant_id, { provider: "openai", what: `pictures in the batch (reservation released)`, cost: -st.reserved, estimated: true, projectId: p.id });
+    // Release this batch's reservation ONCE (saved at once, so a retry of this step can't release it again);
+    // the real cost of each picture is recorded below.
+    if (st.reserved) {
+      await releaseReservation(pool, p.tenant_id, st, p.id);
+      await savePayload({ ...st, reserved: 0 });
+      st.reserved = 0;
+    }
     const failed = [...(st.failed ?? [])];
     const next: StillTask[] = [];
     let n = 0;
@@ -963,11 +972,19 @@ export async function approveProject(pool: Pool, tenantId: string, id: string, b
   const missing = await missingShots(pool, p);
   if (missing.length) throw new PlainError(`Shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} missing — tap Redraw missing shots first, so the video doesn't jump.`);
   if (await openJob(pool, id, ["project_test_clip", "project_final", "project_stills"])) throw new PlainError("Still working on this — wait until the current step is done.");
+  // A clip of an earlier (failed) final still being filmed: Try again resumes it — a new final would pay for it twice.
+  const filming = await pool.query(`SELECT 1 FROM creative_generations WHERE project_id = $1::uuid AND kind = 'clip' AND status = 'running' LIMIT 1`, [id]);
+  if (filming.rows[0]) throw new PlainError("A clip from the last try is still being filmed — tap Try again to finish it.");
   // Claim the draft atomically BEFORE queueing: a double tap / second tab gets no row and queues nothing
   // (review 2026-11-15: two finals = every clip paid twice).
   const claimed = await pool.query(`UPDATE creative_projects SET status = 'approved', step_note = NULL, updated_at = now() WHERE id = $1::uuid AND tenant_id = $2::uuid AND status = 'draft' RETURNING id`, [id, tenantId]);
   if (!claimed.rows[0]) throw new PlainError("Already on its way.");
-  await enqueue(pool, tenantId, "project_final", { upscale4k: opts.upscale4k ?? false }, { projectId: id, requestedBy: by, progress: p.kind === "static" || p.kind === "animated" ? "Finishing" : "Making the real video" });
+  try {
+    await enqueue(pool, tenantId, "project_final", { upscale4k: opts.upscale4k ?? false }, { projectId: id, requestedBy: by, progress: p.kind === "static" || p.kind === "animated" ? "Finishing" : "Making the real video" });
+  } catch (e) {
+    await pool.query(`UPDATE creative_projects SET status = 'draft' WHERE id = $1::uuid AND status = 'approved'`, [id]);
+    throw e;
+  }
 }
 
 /** Cost preview for the final step (shown on the Approve button). */

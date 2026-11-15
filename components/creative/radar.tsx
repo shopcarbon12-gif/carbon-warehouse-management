@@ -210,7 +210,7 @@ export function CreativeRadar() {
             <p className={`mb-1 text-xs uppercase tracking-widest ${muted}`}>Aspect</p>
             <div className="mb-3 flex gap-1">{["", "vertical", "square", "horizontal"].map((a) => <button key={a} className={chip(f.aspect === a)} onClick={() => set({ aspect: a })}>{a || "any"}</button>)}</div>
             <label className="mb-3 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" className="h-5 w-5" checked={f.hasOffer} onChange={(e) => set({ hasOffer: e.target.checked })} /> Has an offer</label>
-            <button className={btn} onClick={() => setF({ ...EMPTY, tab: f.tab })}>Clear all</button>
+            <button className={btn} onClick={() => { setTyped(""); setF({ ...EMPTY, tab: f.tab }); }}>Clear all</button>
           </div>
         </div>
       ) : null}

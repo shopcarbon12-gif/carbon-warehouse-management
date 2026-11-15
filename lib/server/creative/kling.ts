@@ -92,8 +92,15 @@ export async function submitKlingOmni(v: KlingClip): Promise<{ taskId: string; s
 }
 
 export async function pollKling(taskId: string): Promise<JobResult> {
-  const d = await call<{ id: string; status: string; message?: string; outputs?: { type: string; url?: string }[] }[]>(`/tasks?task_ids=${encodeURIComponent(taskId)}`).catch(() => null);
-  if (!d) return { state: "pending", note: "Kling status check failed — asking again" };
+  let d: { id: string; status: string; message?: string; outputs?: { type: string; url?: string }[] }[] | null = null;
+  try {
+    d = await call<{ id: string; status: string; message?: string; outputs?: { type: string; url?: string }[] }[]>(`/tasks?task_ids=${encodeURIComponent(taskId)}`);
+  } catch (e) {
+    // Temporary trouble waits; a refused key / unknown task is a failure.
+    const m = e instanceof Error ? e.message : "";
+    if (/HTTP (401|403|404)/.test(m)) return { state: "failed", error: m.slice(0, 200) };
+    return { state: "pending", note: "Kling status check failed — asking again" };
+  }
   const t = d?.[0];
   // Done = succeed / succeeded; failed = failed only; anything else (queued, processing, unknown) keeps waiting.
   if (!t || !["succeed", "succeeded", "failed"].includes(t.status)) return { state: "pending", note: t?.status ?? "submitted" };

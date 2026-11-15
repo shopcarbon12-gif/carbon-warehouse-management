@@ -119,6 +119,8 @@ async function PUT_handler(req: Request) {
   if ("error" in g) return g.error;
   try {
     const b = await body(req, putSchema);
+    // Font files must be THIS brand's uploads.
+    for (const f of [b.brand?.fonts?.headlineFile, b.brand?.fonts?.bodyFile]) if (f && !f.startsWith(`creative/brand/${g.session.tid}/`)) throw new PlainError("Upload the font file again.");
     const tid = g.session.tid;
     for (const [k, engines] of Object.entries(b.routing ?? {})) if (!(k in DEFAULT_ROUTES) || engines.some((e) => !VIDEO_ENGINES[e])) throw new PlainError("Unknown engine in routing.");
     await getCreativeSettings(g.pool, tid);

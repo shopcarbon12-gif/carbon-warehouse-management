@@ -238,7 +238,9 @@ export async function pollVideo(meta: { status_url?: string; response_url?: stri
   // A network blip, a 429 / 5xx or a non-JSON answer is NOT a failed clip — it is asked again on the next check
   // (review 2026-11-15: treating it as failed booked the clip at $0 and re-filmed it while fal still billed it).
   const s = await fetch(statusUrl, { headers: falHeaders(), signal: AbortSignal.timeout(30_000) }).catch(() => null);
-  if (!s || !s.ok) return { state: "pending", note: `fal status check ${s?.status ?? "unreachable"} — asking again` };
+  // Only temporary trouble (no answer, 429, 5xx) waits; a real refusal (401 / 403 / 404 / 422) is a failure.
+  if (!s || s.status === 429 || s.status >= 500) return { state: "pending", note: `fal status check ${s?.status ?? "unreachable"} — asking again` };
+  if (!s.ok) return { state: "failed", error: `fal refused the status check (HTTP ${s.status})` };
   const sj = (await s.json().catch(() => ({}))) as { status?: string; error?: string };
   if (!sj.status || sj.status === "IN_QUEUE" || sj.status === "IN_PROGRESS") return { state: "pending", note: sj.status ?? "unknown" };
   if (sj.status !== "COMPLETED") return { state: "failed", error: sj.error ?? `fal status ${sj.status}` };

@@ -99,9 +99,10 @@ function clampGrade(g: Record<string, unknown>) {
   const lim: Record<string, [number, number]> = { contrast: [0.5, 2], saturation: [0, 2], brightness: [-0.5, 0.5], warmth: [-0.5, 0.5], grain: [0, 1] };
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(g)) {
-    const n = Number(v);
     const [lo, hi] = lim[k] ?? [-10, 10];
-    out[k] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
+    // An emptied or half-typed field keeps a neutral value instead of jumping to the range minimum.
+    const n = String(v).trim() === "" || String(v).trim() === "-" ? (k === "contrast" || k === "saturation" ? 1 : 0) : Number(v);
+    out[k] = Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : k === "contrast" || k === "saturation" ? 1 : 0;
   }
   return out;
 }
@@ -137,6 +138,8 @@ function BrandTab({ d, put, act, upload, busy, queue, queued }: { d: S; put: Fn;
   const [presets, setPresets] = useState(b.presets);
   const steps = ["Logo + fonts", "Looks", "Voice", "Do / Don't", "Edit style", "Done"];
   const colorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Every colour picked within the pause is saved together (a single shared timer dropped earlier picks).
+  const pendingColors = useRef<Record<string, string>>({});
   const file = (kind: string, extra: Record<string, string>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.currentTarget.value = ""; // the same file can be picked again after an error
@@ -183,9 +186,13 @@ function BrandTab({ d, put, act, upload, busy, queue, queued }: { d: S; put: Fn;
                     className="h-10 w-12 bg-transparent"
                     defaultValue={v}
                     onChange={(e) => {
-                      const val = e.target.value;
+                      pendingColors.current = { ...pendingColors.current, [k]: e.target.value };
                       if (colorTimer.current) clearTimeout(colorTimer.current);
-                      colorTimer.current = setTimeout(() => void put({ brand: { colors: { ...b.colors, [k]: val } } }), 700);
+                      colorTimer.current = setTimeout(() => {
+                        const next = { ...b.colors, ...pendingColors.current };
+                        pendingColors.current = {};
+                        void put({ brand: { colors: next } });
+                      }, 700);
                     }}
                   />{" "}
                   {k}
@@ -486,7 +493,8 @@ function CapsTab({ d, put }: { d: S; put: Fn }) {
     openai: { daily: String(d.settings.caps.openai.daily), monthly: String(d.settings.caps.openai.monthly) },
     fal: { daily: String(d.settings.caps.fal.daily), monthly: String(d.settings.caps.fal.monthly) },
   });
-  const num = (v: string) => Math.max(0, Number(v) || 0);
+  const bad = (["openai", "fal"] as const).some((p) => (["daily", "monthly"] as const).some((k) => caps[p][k].trim() === "" || !Number.isFinite(Number(caps[p][k]))));
+  const num = (v: string) => Math.max(0, Number(v));
   return (
     <div className={`${card} space-y-3`}>
       <p className={`text-sm ${muted}`}>Jobs pause when a cap is reached. Nothing that costs money runs unless you tap a button.</p>
@@ -498,7 +506,8 @@ function CapsTab({ d, put }: { d: S; put: Fn }) {
           ))}
         </div>
       ))}
-      <button className={btnPrimary} onClick={() => void put({ caps: { openai: { daily: num(caps.openai.daily), monthly: num(caps.openai.monthly) }, fal: { daily: num(caps.fal.daily), monthly: num(caps.fal.monthly) } } })}>Save caps</button>
+      {bad ? <p className="text-sm text-amber-200">Each limit needs a plain number (e.g. 15 or 12.5).</p> : null}
+      <button className={btnPrimary} disabled={bad} onClick={() => void put({ caps: { openai: { daily: num(caps.openai.daily), monthly: num(caps.openai.monthly) }, fal: { daily: num(caps.fal.daily), monthly: num(caps.fal.monthly) } } })}>Save caps</button>
     </div>
   );
 }

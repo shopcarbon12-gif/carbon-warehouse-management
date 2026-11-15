@@ -112,7 +112,7 @@ export async function chatEdit(pool: Pool, tenantId: string, projectId: string, 
   const rerender: "free" | "stills" | "none" = remake.size ? "stills" : change.actions.some((a) => a.type !== "none" && a.type !== "caption") ? "free" : "none";
   if (rerender === "stills") {
     await setProject(pool, p.id, { status: "shots" });
-    await enqueue(pool, tenantId, "project_stills", { shots: [...remake] }, { projectId: p.id, requestedBy: by, progress: `Re-making shot${remake.size > 1 ? "s" : ""} ${[...remake].map((i) => i + 1).join(", ")}` });
+    await enqueue(pool, tenantId, "project_stills", { shots: [...remake] }, { projectId: p.id, requestedBy: by, replace: true, progress: `Re-making shot${remake.size > 1 ? "s" : ""} ${[...remake].map((i) => i + 1).join(", ")}` });
   } else if (rerender === "free") {
     await enqueue(pool, tenantId, "project_rerender", {}, { projectId: p.id, requestedBy: by, progress: "Re-cutting (free)" });
   }
