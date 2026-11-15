@@ -12,7 +12,7 @@ import { getFile } from "../storage";
 import { textCost } from "../routing";
 import { ANALYSIS_PROMPT, decide, landingSignal } from "./classify";
 import { emptyCounts, finishRun, ingestAd, startRun } from "./ingest";
-import { ADAPTERS, SOURCE_DEFAULTS } from "./sources";
+import { ADAPTERS, brandMatches, SOURCE_DEFAULTS } from "./sources";
 import { AdAnalysis, CREATIVE_PATTERNS, DISCOVERY_TERMS, SEED_BRANDS } from "./taxonomy";
 
 export async function ensureSeedBrands(pool: Pool, tenantId: string): Promise<number> {
@@ -51,7 +51,15 @@ export const radarSource: JobHandler = async (pool, job, setProgress) => {
   try {
     for await (const ad of adapter.discover({ pool, tenantId: job.tenant_id, brand, keyword: keyword ?? null, countries: settings.metaCountries, limit: limit ?? 30, log: (m) => log.push(m) })) {
       counts.discovered++;
-      // Keyword discovery: a new advertiser goes to the approve / reject queue, not the library.
+      // A brand's search can return OTHER advertisers (resellers, look-alikes): those are not this brand's ads
+      // (review 2026-11-15). Brands with saved Meta page ids are exact already.
+      if (brand && !(brand.meta_page_ids?.length) && ad.advertiser && !brandMatches(ad.advertiser, brand.name)) {
+        log.push(`skipped (another advertiser): ${ad.advertiser}`);
+        continue;
+      }
+      // Keyword discovery: a new advertiser goes to the approve / reject queue, not the library. An ad with no
+      // real advertiser name (TikTok Top Ads often gives only the keyword back) is not a brand.
+      if (!brand && (!ad.advertiser || ad.advertiser.toLowerCase() === (keyword ?? "").toLowerCase())) continue;
       if (!brand && ad.advertiser && !known.has(ad.advertiser.toLowerCase())) {
         await pool.query(
           `INSERT INTO creative_ad_brands (tenant_id, name, status, prior, found_by) VALUES ($1::uuid, $2, 'pending', 'unknown', $3) ON CONFLICT DO NOTHING`,

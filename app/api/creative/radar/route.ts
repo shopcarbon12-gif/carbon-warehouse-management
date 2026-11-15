@@ -114,9 +114,15 @@ async function POST_handler(req: Request) {
   try {
     const a = await body(req, schema);
     switch (a.action) {
-      case "refresh":
-        await enqueue(g.pool, tid, "radar_nightly", { brandId: a.brandId ?? undefined }, { requestedBy: by, progress: a.brandId ? "Refreshing this brand" : "Refreshing every brand" });
+      case "refresh": {
+        // A collection already queued for the same scope is not queued again (double taps fanned out every source twice).
+        const open = await g.pool.query(
+          `SELECT 1 FROM creative_jobs WHERE tenant_id = $1::uuid AND kind = 'radar_nightly' AND status IN ('queued','running','waiting') AND COALESCE(payload->>'brandId','') = COALESCE($2::text,'')`,
+          [tid, a.brandId ?? null],
+        );
+        if (!open.rows[0]) await enqueue(g.pool, tid, "radar_nightly", { brandId: a.brandId ?? undefined }, { requestedBy: by, progress: a.brandId ? "Refreshing this brand" : "Refreshing every brand" });
         break;
+      }
       case "import": {
         const ad = await manualFromUrl(a.url);
         if (!ad.media.length) throw new PlainError("No picture or video found at that link. Download the ad and upload the file instead.");
@@ -152,21 +158,37 @@ async function POST_handler(req: Request) {
         // A name, or an Instagram / TikTok link or @handle (owner, 2026-11-15): the handle becomes the name Radar
         // searches the Meta Ad Library with, and is kept on the brand.
         const raw = a.name.trim();
-        const link = raw.match(/(?:https?:\/\/)?(?:www\.)?(instagram\.com|tiktok\.com)\/@?([A-Za-z0-9._]{2,30})/i);
+        // Anchored on the host: short links (vm./vt.tiktok.com) and reserved pages are refused, not turned into names.
+        const link = raw.match(/^(?:https?:\/\/)?(?:www\.|m\.)?(instagram\.com|tiktok\.com)\/@?([A-Za-z0-9._]{2,30})\/?(?:[?#].*)?$/i);
+        if (/^(?:https?:\/\/)?(vm|vt)\.tiktok\.com\//i.test(raw)) throw new PlainError("That's a TikTok share link — open it, then paste the brand's profile link (tiktok.com/@brand) or its @handle.");
+        if (link && /^(p|reel|reels|explore|stories|tv|accounts|photo|video|tag|discover)$/i.test(link[2])) throw new PlainError("That's not a brand's profile — paste instagram.com/brandname or the @handle.");
         const at = raw.match(/^@([A-Za-z0-9._]{2,30})$/);
         const handle = link?.[2] ?? at?.[1] ?? null;
         if (/(instagram|tiktok)\.com\/(p|reel|reels|explore|stories|tv)\//i.test(raw) || /tiktok\.com\/@[^/]+\/video\//i.test(raw) || (/^https?:\/\//i.test(raw) && !link))
           throw new PlainError("Paste the brand's profile link (instagram.com/brandname), its @handle, or just its name — not a post link.");
         const platform = link ? (/tiktok/i.test(link[1]) ? "tiktok" : "instagram") : at ? "instagram" : null;
         const name = handle ?? raw;
-        await g.pool.query(
-          `INSERT INTO creative_ad_brands (tenant_id, name, lane, prior, found_by, handles) VALUES ($1::uuid, $2, $3, $4, 'owner', $5::jsonb) ON CONFLICT DO NOTHING`,
+        // An existing brand (also a rejected / pending one) is switched on and gets the handle — it used to be a silent no-op.
+        const before = await g.pool.query<{ id: string }>(`SELECT id::text FROM creative_ad_brands WHERE tenant_id = $1::uuid AND lower(name) = lower($2)`, [tid, name]);
+        const r = await g.pool.query<{ id: string }>(
+          `INSERT INTO creative_ad_brands (tenant_id, name, lane, prior, found_by, handles) VALUES ($1::uuid, $2, $3, $4, 'owner', $5::jsonb)
+           ON CONFLICT (tenant_id, lower(name)) DO UPDATE SET status = 'active', handles = creative_ad_brands.handles || EXCLUDED.handles,
+             prior = CASE WHEN creative_ad_brands.prior = 'unknown' THEN EXCLUDED.prior ELSE creative_ad_brands.prior END
+           RETURNING id::text`,
           [tid, name, a.lane ?? null, a.prior, JSON.stringify(handle && platform ? { [platform]: handle } : {})],
         );
-        return NextResponse.json({ ok: true, name });
+        // Collect its ads right away (the nightly run is off).
+        if (r.rows[0]) await enqueue(g.pool, tid, "radar_nightly", { brandId: r.rows[0].id }, { requestedBy: g.session.email ?? null, progress: `Collecting ${name}` });
+        kick(g.pool, tid);
+        return NextResponse.json({ ok: true, name, existed: Boolean(before.rows[0]) });
       }
       case "brand_status":
         await g.pool.query(`UPDATE creative_ad_brands SET status = $3, prior = CASE WHEN $3 = 'active' AND prior = 'unknown' THEN 'apparel' ELSE prior END WHERE id = $1::uuid AND tenant_id = $2::uuid`, [a.brandId, tid, a.status]);
+        // Approving a brand collects its ads now instead of leaving it empty.
+        if (a.status === "active") {
+          await enqueue(g.pool, tid, "radar_nightly", { brandId: a.brandId }, { requestedBy: g.session.email ?? null, progress: "Collecting the approved brand" });
+          kick(g.pool, tid);
+        }
         return NextResponse.json({ ok: true });
       case "brand_ids":
         await g.pool.query(`UPDATE creative_ad_brands SET meta_page_ids = $3, handles = handles || $4::jsonb WHERE id = $1::uuid AND tenant_id = $2::uuid`, [a.brandId, tid, a.metaPageIds, JSON.stringify(a.google ? { google: a.google } : {})]);

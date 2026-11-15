@@ -126,7 +126,8 @@ export async function recordSpend(
   tenantId: string,
   v: { provider: Provider; what: string; cost: number; estimated?: boolean; projectId?: string | null; generationId?: string | null },
 ): Promise<void> {
-  if (!(v.cost > 0)) return;
+  // Negative rows are allowed: they release a batch's reserved estimate when its real cost is recorded.
+  if (!v.cost || !Number.isFinite(v.cost)) return;
   await pool.query(
     `INSERT INTO creative_spend (tenant_id, provider, what, cost_usd, estimated, project_id, generation_id)
      VALUES ($1::uuid, $2, $3, $4, $5, $6::uuid, $7::uuid)`,

@@ -19,10 +19,19 @@ import { PlainError } from "../config";
 
 const MEDIA_RE = /https?:\\?\/\\?\/[^"'\s<>\\]+?\.(?:jpe?g|png|webp|mp4)(?:\?[^"'\s<>\\]*)?/gi;
 const unescape = (u: string) => u.replace(/\\\//g, "/").replace(/\\u0026/g, "&").replace(/&amp;/g, "&");
-const brandMatches = (name: string, brand: string) => {
+/**
+ * Is this advertiser the brand? Exact (letters only) for short names — "On" must not match "Fashion Nova" —
+ * and a whole-word / prefix match otherwise ("Fear of God" vs "Fear of God Essentials" stay apart unless equal).
+ */
+export const brandMatches = (name: string, brand: string) => {
   const a = name.toLowerCase().replace(/[^a-z0-9]/g, "");
   const b = brand.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return Boolean(a && b) && (a.includes(b) || b.includes(a));
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (b.length < 5) return false;
+  const words = name.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
+  const bw = brand.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").trim();
+  return words === bw || words.startsWith(`${bw} official`) || words === `${bw} official` || a === `${b}official` || a === `the${b}`;
 };
 
 function mediaFromAny(o: unknown, limit = 4): NormalizedMedia[] {

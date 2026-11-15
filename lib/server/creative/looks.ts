@@ -48,7 +48,8 @@ export const presetSamples: JobHandler = async (pool, job, setProgress) => {
     );
     await setProgress(`Sending ${lines.length} pictures to the OpenAI batch…`);
     const { batchId } = await submitImageBatch(lines, { purpose: "creative_look_samples", tenant: job.tenant_id });
-    return { status: "waiting", afterSeconds: 300, payload: { ...p, looks: looks.map((x) => x.key), batchId }, progress: `In the OpenAI batch: ${looks.map((x) => x.name).join(", ")}` };
+    await recordSpend(pool, job.tenant_id, { provider: "openai", what: "Look sample frames in the batch (reserved)", cost, estimated: true });
+    return { status: "waiting", afterSeconds: 300, payload: { ...p, looks: looks.map((x) => x.key), batchId, reserved: cost }, progress: `In the OpenAI batch: ${looks.map((x) => x.name).join(", ")}` };
   }
   const out = await collectImageBatch(p.batchId);
   if (out.state === "pending") return { status: "waiting", afterSeconds: 300, progress: `OpenAI batch ${out.status}` };
@@ -62,7 +63,7 @@ export const presetSamples: JobHandler = async (pool, job, setProgress) => {
     byLook.set(key, [...(byLook.get(key) ?? []), path]);
     made++;
   }
-  await recordSpend(pool, job.tenant_id, { provider: "openai", what: `Look sample frames, batch (${made} pictures)`, cost: made * IMAGE_COST.medium * 0.5 });
+  await recordSpend(pool, job.tenant_id, { provider: "openai", what: `Look sample frames, batch (${made} pictures)`, cost: made * IMAGE_COST.medium * 0.5 - Number((p as { reserved?: number }).reserved ?? 0) });
   // Re-read: the owner may have edited a Look while the batch ran; only the frames change.
   const fresh = await getBrand(pool, job.tenant_id);
   const presets = fresh.presets.map((x) => (byLook.has(x.key) ? { ...x, samples: byLook.get(x.key)! } : x));

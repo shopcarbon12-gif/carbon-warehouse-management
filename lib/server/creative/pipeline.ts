@@ -173,9 +173,12 @@ export const conceptThumbs: JobHandler = async (pool, job, setProgress) => {
       };
       const r = await makeStill(pool, p, shot, { quality: "low", look: look ? `${look.light}; ${look.palette}; within the brand's style (${preset.look})` : undefined }).catch(() => null);
       if (r) f.thumb = r.path;
-      // save as we go so the cards fill in
+      // save as we go so the cards fill in — but only while these are still the project's concepts (the owner may
+      // have asked for new ones meanwhile; writing these back would bring the old concepts back).
       drawn++;
-      await setProject(pool, p.id, { concepts });
+      const now = await loadProject(pool, p.tenant_id, p.id);
+      const same = ((now.concepts ?? []) as { title: string }[]).map((x) => x.title).join("|") === concepts.map((x) => x.title).join("|");
+      if (same) await setProject(pool, p.id, { concepts });
       await setProgress(`Storyboard thumbnails: ${drawn} of ${jobs.length} done`);
   });
   return { status: "done", progress: "Storyboards ready" };
@@ -274,7 +277,7 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
 /** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
 const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
 type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
-type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number };
+type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
 function continuityOf(shots: Shot[]) {
@@ -343,11 +346,14 @@ async function submitStillBatch(pool: Pool, p: ProjectRow, shots: Shot[], tasks:
   await spendGate(pool, p.tenant_id, "openai", est);
   await setProgress(`Sending ${lines.length} picture${lines.length === 1 ? "" : "s"} to the OpenAI batch (half price)`);
   const { batchId } = await submitImageEditBatch(lines, { purpose: "creative_stills", project: p.id });
+  // The estimate counts against today's cap NOW (a batch is only billed when collected, so several batches tapped
+  // the same day all slipped past the cap — review 2026-11-15); collection swaps it for the real cost.
+  await recordSpend(pool, p.tenant_id, { provider: "openai", what: `pictures in the batch (reserved)`, cost: est, estimated: true, projectId: p.id });
   const round = (st.round ?? 0) + 1;
   return {
     status: "waiting" as const,
     afterSeconds: 120,
-    payload: { ...st, batchId, tasks, round, started: new Date().toISOString() },
+    payload: { ...st, batchId, tasks, round, started: new Date().toISOString(), reserved: est },
     progress: `${lines.length} picture${lines.length === 1 ? "" : "s"} in the OpenAI batch (half price${round > 1 ? `, redraw round ${round}` : ""}) — you can leave; a desktop alert comes when they're ready`,
   };
 }
@@ -368,6 +374,8 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
       throw new PlainError(`The OpenAI batch did not finish (${out.error}). Tap Try again.`);
     }
     const anchor = await anchorBytes(pool, p, shots);
+    // Release this batch's reservation; the real cost of each picture is recorded below.
+    if (st.reserved) await recordSpend(pool, p.tenant_id, { provider: "openai", what: `pictures in the batch (reservation released)`, cost: -st.reserved, estimated: true, projectId: p.id });
     const failed = [...(st.failed ?? [])];
     const next: StillTask[] = [];
     let n = 0;

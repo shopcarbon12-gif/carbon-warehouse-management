@@ -12,11 +12,16 @@ type Entry = { id: string; file: string; name: string; moods: string[] };
 
 export const musicSeed: JobHandler = async (pool, job, setProgress) => {
   const base = WMS_BASE.replace(/\/+$/, "");
-  const m = await fetch(`${base}/creative-music/manifest.json`, { signal: AbortSignal.timeout(30_000) });
-  // Right after a deploy the old web app may still be answering: wait for the new one.
-  if (m.status === 404) return { status: "waiting", afterSeconds: 120, progress: "Waiting for the new web app to serve the music" };
-  if (!m.ok) throw new Error(`music manifest HTTP ${m.status}`);
-  const { tracks } = (await m.json()) as { tracks: Entry[] };
+  // During a deploy the old app may answer with a login redirect (HTML) or a 404: wait, don't fail — and give up
+  // after ~1 hour rather than waiting forever.
+  const tries = Number((job.payload as { tries?: number }).tries ?? 0);
+  const m = await fetch(`${base}/creative-music/manifest.json`, { signal: AbortSignal.timeout(30_000), redirect: "manual" }).catch(() => null);
+  const isJson = Boolean(m?.ok && /json/i.test(m.headers.get("content-type") ?? ""));
+  if (!isJson) {
+    if (tries >= 30) return { status: "done", progress: "The music list wasn't reachable — add tracks on the Music tab" };
+    return { status: "waiting", afterSeconds: 120, payload: { ...job.payload, tries: tries + 1 }, progress: "Waiting for the new web app to serve the music" };
+  }
+  const { tracks } = (await m!.json()) as { tracks: Entry[] };
   const have = new Set((await listAudio(pool, job.tenant_id, "music")).map((t) => t.name));
   let added = 0;
   for (const [i, t] of tracks.entries()) {

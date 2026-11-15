@@ -39,9 +39,12 @@ async function refsFor(pool: Pool, tenantId: string, row: Row, i: number, models
     }
   }
   // One cast model, matched to the product (dress / women → a woman), rotating so the cards don't all show one face.
-  const female = /dress|skirt|women|woman|ladies|bra|corset|romper/i.test(`${title} ${row.idea}`);
-  const pool2 = models.filter((m) => m.active && (female ? m.gender === "female" : true));
-  const m = (pool2.length ? pool2 : models)[i % Math.max(1, (pool2.length ? pool2 : models).length)];
+  // The model the idea names wins; else match the product (whole words: "brand" is not "bra").
+  const named = models.find((m) => m.active && new RegExp(`\\b${m.name.replace(/[.*+?^${}()|[\]\\]/g, "")}\\b`, "i").test(row.idea));
+  const female = /\b(dress(es)?|skirts?|wom[ae]n|ladies|bras?|corsets?|rompers?|bodysuits?|bikinis?)\b/i.test(`${title} ${row.idea}`);
+  const male = /\b(men|man|guy|his)\b/i.test(row.idea);
+  const pool2 = models.filter((m) => m.active && (female ? m.gender === "female" : male ? m.gender === "male" : true));
+  const m = named ?? (pool2.length ? pool2 : models)[i % Math.max(1, (pool2.length ? pool2 : models).length)];
   if (m) (await modelRefBytes(m, 2).catch(() => [] as Buffer[])).forEach((b, k) => refs.push({ name: `person-${k}.jpg`, bytes: b, mime: "image/jpeg" }));
   return { refs, title, model: m?.name ?? null };
 }
@@ -61,6 +64,7 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
     const models = await listModels(pool, tid);
     const catalog = await inStockCatalog().catch(() => []);
     const lines: { customId: string; prompt: string; refs: ImageRef[]; quality: "medium" }[] = [];
+    const costs: Record<string, number> = {};
     let est = 0;
     for (const [i, r] of rows.entries()) {
       const { refs, title } = await refsFor(pool, tid, r, i, models, catalog);
@@ -80,13 +84,17 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
           .filter(Boolean)
           .join("\n"),
       });
-      est += COST(refs.length);
+      costs[r.id] = COST(refs.length);
+      est += costs[r.id];
     }
+    // Ideas that weren't picked up (no longer new, already drawn) never stay "on the way".
+    await pool.query(`UPDATE creative_ideas SET picture_status = NULL WHERE id = ANY($1::uuid[]) AND picture_path IS NULL AND NOT (id = ANY($2::uuid[]))`, [p.ids ?? [], rows.map((r) => r.id)]);
     await spendGate(pool, tid, "openai", est);
     await setProgress(`Sending ${lines.length} idea pictures to the OpenAI batch (half price)`);
     const { batchId } = await submitImageEditBatch(lines, { purpose: "creative_idea_pictures" });
+    await recordSpend(pool, tid, { provider: "openai", what: "idea pictures in the batch (reserved)", cost: est, estimated: true });
     await pool.query(`UPDATE creative_ideas SET picture_status = 'batch' WHERE id = ANY($1::uuid[])`, [rows.map((r) => r.id)]);
-    return { status: "waiting", afterSeconds: 120, payload: { ...p, ids: rows.map((r) => r.id), batchId }, progress: `${lines.length} idea pictures in the OpenAI batch — a desktop alert comes when they're ready` };
+    return { status: "waiting", afterSeconds: 120, payload: { ...p, ids: rows.map((r) => r.id), batchId, costs, reserved: est }, progress: `${lines.length} idea pictures in the OpenAI batch — a desktop alert comes when they're ready` };
   }
   const out = await collectImageBatch(p.batchId);
   if (out.state === "pending") return { status: "waiting", afterSeconds: 120, progress: `Idea pictures in the OpenAI batch — ${out.status}` };
@@ -95,16 +103,24 @@ export const ideaPictures: JobHandler = async (pool, job, setProgress) => {
     return { status: "done", progress: `The batch did not finish (${out.error})` };
   }
   let made = 0;
-  for (const r of out.results) {
-    if (!r.bytes) {
-      await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = $1::uuid`, [r.customId]);
-      continue;
+  let cost = 0;
+  const costs = (p as { costs?: Record<string, number> }).costs ?? {};
+  try {
+    for (const r of out.results) {
+      if (!r.bytes) {
+        await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = $1::uuid AND tenant_id = $2::uuid`, [r.customId, tid]);
+        continue;
+      }
+      const path = await putFile(`creative/ideas/${tid}/${r.customId}.png`, r.bytes, "image/png");
+      await pool.query(`UPDATE creative_ideas SET picture_path = $2, picture_status = 'done' WHERE id = $1::uuid AND tenant_id = $3::uuid`, [r.customId, path, tid]);
+      made++;
+      cost += costs[r.customId] ?? COST(4);
     }
-    const path = await putFile(`creative/ideas/${tid}/${r.customId}.png`, r.bytes, "image/png");
-    await pool.query(`UPDATE creative_ideas SET picture_path = $2, picture_status = 'done' WHERE id = $1::uuid`, [r.customId, path]);
-    made++;
+  } finally {
+    // Anything the batch didn't return is marked failed, so no card says "on the way" forever.
+    await pool.query(`UPDATE creative_ideas SET picture_status = 'failed' WHERE id = ANY($1::uuid[]) AND picture_status = 'batch'`, [p.ids ?? []]);
   }
-  await recordSpend(pool, tid, { provider: "openai", what: `idea pictures, batch (${made})`, cost: made * COST(4) });
+  await recordSpend(pool, tid, { provider: "openai", what: `idea pictures, batch (${made})`, cost: cost - Number((p as { reserved?: number }).reserved ?? 0) });
   if (made)
     await notifyCreative(pool, tid, { title: "Creative · idea pictures ready", body: `${made} idea${made === 1 ? "" : "s"} now show what they'd look like. Tap to look.`, url: "/creative", tag: `creative-ideas-${p.batchId}` });
   return { status: "done", progress: `${made} idea pictures ready` };
