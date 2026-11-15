@@ -168,3 +168,70 @@ export async function ensureFalKlingVoice(pool: Pool, tenantId: string, m: CastM
   }
   return null;
 }
+
+/* ---- The owner's voice choice per model (owner, 2026-11-15: "the voice is too deep, too robotic") ----
+ * A model's voice in UGC takes is either Kling's own natural voice (default), a voice from Kling's voice-actor
+ * library (real recorded actors), or a recording the owner uploads. The chosen sample is turned into ONE fal
+ * Kling voice (fal_voice_id) and used in every take of that model. */
+
+async function falCreateVoice(voiceUrl: string): Promise<string> {
+  const { falKey } = await import("./config");
+  if (!falKey()) throw new PlainError("Voices need the fal.ai key on the server.");
+  const headers = { Authorization: `Key ${falKey()}`, "Content-Type": "application/json" };
+  const r = await fetch("https://queue.fal.run/fal-ai/kling-video/create-voice", { method: "POST", headers, body: JSON.stringify({ voice_url: voiceUrl }), signal: AbortSignal.timeout(60_000) });
+  const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string; detail?: unknown };
+  if (!r.ok || !j.status_url) throw new PlainError(`fal could not start the voice (HTTP ${r.status}: ${JSON.stringify(j.detail ?? j).slice(0, 160)})`);
+  for (let i = 0; i < 40; i++) {
+    await new Promise((res) => setTimeout(res, 3000));
+    const s = (await (await fetch(j.status_url, { headers, signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { status?: string };
+    if (s.status === "IN_QUEUE" || s.status === "IN_PROGRESS") continue;
+    const out = (await (await fetch(j.response_url!, { headers, signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { voice_id?: string; detail?: unknown };
+    if (!out.voice_id) throw new PlainError(`fal could not make the voice — the recording must be 5–30 seconds of one clear voice (${JSON.stringify(out.detail ?? "").slice(0, 120)}).`);
+    return out.voice_id;
+  }
+  throw new PlainError("Making the voice took too long — try again.");
+}
+
+export type VoicePreset = { id: string; name: string; url: string };
+
+/** Kling's voice-actor library (real recorded voices), with a sample to listen to. */
+export async function voicePresets(): Promise<VoicePreset[]> {
+  const d = await call<{ task_result?: { voices?: { voice_id: string; voice_name: string; trial_url?: string }[] } }[]>("/v1/general/presets-voices?pageNum=1&pageSize=200");
+  return (d ?? []).flatMap((t) => t.task_result?.voices ?? []).filter((v) => v.trial_url).map((v) => ({ id: v.voice_id, name: v.voice_name, url: v.trial_url! }));
+}
+
+/** Set a model's voice: a library voice (presetId), an uploaded recording (signed URL), or null = Kling's natural voice. */
+export async function setModelVoice(pool: Pool, tenantId: string, modelId: string, v: { presetId?: string; recordingUrl?: string; label?: string } | null): Promise<string> {
+  if (!v) {
+    await pool.query(
+      `INSERT INTO creative_model_meta (tenant_id, model_id, voice_source, voice_label, fal_voice_id) VALUES ($1::uuid, $2, NULL, NULL, NULL)
+       ON CONFLICT (tenant_id, model_id) DO UPDATE SET voice_source = NULL, voice_label = NULL, fal_voice_id = NULL`,
+      [tenantId, modelId],
+    );
+    return "Kling natural voice";
+  }
+  let url = v.recordingUrl ?? null;
+  let label = v.label ?? "Your recording";
+  let source = "recording";
+  if (v.presetId) {
+    const p = (await voicePresets()).find((x) => x.id === v.presetId);
+    if (!p) throw new PlainError("That voice isn't in Kling's library any more.");
+    url = p.url;
+    label = p.name;
+    source = "library";
+  }
+  if (!url) throw new PlainError("Pick a voice or upload a recording.");
+  const id = await falCreateVoice(url);
+  await pool.query(
+    `INSERT INTO creative_model_meta (tenant_id, model_id, voice_source, voice_label, fal_voice_id) VALUES ($1::uuid, $2, $3, $4, $5)
+     ON CONFLICT (tenant_id, model_id) DO UPDATE SET voice_source = EXCLUDED.voice_source, voice_label = EXCLUDED.voice_label, fal_voice_id = EXCLUDED.fal_voice_id`,
+    [tenantId, modelId, source, label.slice(0, 60), id],
+  );
+  return label;
+}
+
+/** The voice the owner chose for this model (for UGC takes), or null = Kling's natural voice. */
+export async function chosenFalVoice(pool: Pool, tenantId: string, modelId: string): Promise<string | null> {
+  const r = await pool.query<{ fal_voice_id: string | null; voice_source: string | null }>(`SELECT fal_voice_id, voice_source FROM creative_model_meta WHERE tenant_id = $1::uuid AND model_id = $2`, [tenantId, modelId]);
+  return r.rows[0]?.voice_source ? r.rows[0].fal_voice_id : null;
+}

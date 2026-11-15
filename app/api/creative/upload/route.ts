@@ -71,6 +71,14 @@ async function POST_handler(req: Request) {
         const t = await addAudio(g.pool, tid, { kind, name: String(form.get("name") ?? name).slice(0, 120), bytes, contentType: type, moods, license });
         return NextResponse.json({ track: { ...t, url: appFileUrl(t.storage_path) } });
       }
+      case "voice": {
+        // A voice recording for a model (Settings › Models › Voice): 5–30 s of one clear voice.
+        if (!/^(audio|video)\//.test(type) && !/\.(mp3|wav|m4a|aac|mp4|mov|webm|ogg)$/i.test(name)) throw new PlainError("Upload an audio recording (mp3, wav, m4a) or a short phone video.");
+        if (bytes.length > 20 * 1024 * 1024) throw new PlainError("Keep the recording under 20 MB (5–30 seconds is plenty).");
+        const ext = (name.match(/\.(mp3|wav|m4a|aac|mp4|mov|webm|ogg)$/i)?.[1] ?? "mp3").toLowerCase();
+        const path = await putFile(`creative/voices/${tid}/rec-${Date.now()}.${ext}`, bytes, type);
+        return NextResponse.json({ ok: true, path });
+      }
       case "model": {
         const consent = form.get("consent") === "true";
         const notCelebrity = form.get("notCelebrity") === "true";

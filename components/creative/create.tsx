@@ -214,11 +214,57 @@ type View = {
   twins: ({ productId: string; title: string; status: string; confirmed: boolean; error: string | null; facts: Record<string, unknown> | null; cutouts: { angle: string; url: string }[]; details: { kind: string; url: string }[] } | null)[];
   finalEstimate: number | null;
   testClipEstimate: number | null;
+  missingShots: number[];
+  scriptText: string | null;
+  scriptVersions: string[];
   music: { track: string | null; libraryCount: number };
   notice: string | null;
 };
 
 /** Batches finish while you're away: a desktop alert + sound says when (Settings › Alerts, owner 2026-11-15). */
+/**
+ * "What they say" (owner, 2026-11-15): see the words, change them by hand, or tap Rewrite for another version that
+ * reads the product, every shot and the person. Earlier versions can be brought back.
+ */
+function ScriptBox({ text, versions, final, busy, act }: { text: string; versions: string[]; final: boolean; busy: string | null; act: (json: Record<string, unknown>, label: string) => Promise<void> }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? text;
+  const changed = draft != null && draft.trim() !== text.trim();
+  const words = value.trim() ? value.trim().split(/\s+/).length : 0;
+  return (
+    <section className={`${card} mb-6`}>
+      <h2 className={`${head} mb-1 text-xl`}>What they say</h2>
+      <p className={`mb-2 text-xs ${muted}`}>
+        Change anything by hand, or tap Rewrite for a new version written from the product, every shot and the person. {final ? "Then tap Film it again to film the new words." : "Make the video films exactly these words."}
+      </p>
+      <textarea className={`${input} min-h-28 py-2`} value={value} onChange={(e) => setDraft(e.target.value)} />
+      <p className={`mt-1 text-xs ${muted}`}>{words} words · about {Math.max(1, Math.round(words / 2.6))} seconds</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className={btnPrimary} disabled={!!busy || !changed} onClick={() => act({ action: "script_save", text: value }, "script").then(() => setDraft(null))}>
+          {busy === "script" ? "…" : "Save my words"}
+        </button>
+        <button className={btn} disabled={!!busy} onClick={() => act({ action: "script_rewrite" }, "rewrite").then(() => setDraft(null))}>
+          {busy === "rewrite" ? "Writing another version…" : "Rewrite — another version"}
+        </button>
+        {changed ? <button className={btn} onClick={() => setDraft(null)}>Undo my changes</button> : null}
+      </div>
+      {versions.length > 1 ? (
+        <details className="mt-3">
+          <summary className={`cursor-pointer text-sm ${muted}`}>Earlier versions ({versions.length - 1})</summary>
+          <div className="mt-2 space-y-2">
+            {[...versions].reverse().filter((v) => v.trim() !== text.trim()).map((v, i) => (
+              <div key={i} className="flex items-start gap-2 border-t border-white/5 pt-2">
+                <p className="flex-1 text-sm">{v}</p>
+                <button className={btn} disabled={!!busy} onClick={() => act({ action: "script_save", text: v }, "script")}>Use this</button>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 function DesktopAlertsHint() {
   const show = useSyncExternalStore(
     () => () => undefined,
@@ -386,6 +432,12 @@ function ProjectView({ id }: { id: string }) {
               <p className={`text-xs ${muted}`}>A new take with the same pictures and words — e.g. for a more natural voice.</p>
             </div>
           ) : null}
+          {p.status === "draft" && data.missingShots.length ? (
+            <div className="mt-4 border-l-2 border-amber-300 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">
+              Shot{data.missingShots.length > 1 ? "s" : ""} {data.missingShots.join(", ")} {data.missingShots.length > 1 ? "are" : "is"} missing — the video would jump there.
+              <button className={`${btn} ml-3`} disabled={!!busy} onClick={() => act({ action: "redraw_missing" }, "redraw")}>{busy === "redraw" ? "…" : "Redraw missing shots"}</button>
+            </div>
+          ) : null}
           {p.status === "draft" ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <button className={`${btnPrimary} min-h-12 px-8 text-base`} disabled={!!busy || testRunning} onClick={() => act({ action: "approve" }, "approve")}>
@@ -414,6 +466,11 @@ function ProjectView({ id }: { id: string }) {
             <p className={`mt-2 text-xs ${muted}`}>Music: {data.music.track}</p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* What they say (UGC) */}
+      {p.kind === "ugc" && data.scriptText != null && p.shot_list && !["approved", "clips"].includes(p.status) ? (
+        <ScriptBox key={data.scriptText} text={data.scriptText} versions={data.scriptVersions} final={p.status === "final"} busy={busy} act={act} />
       ) : null}
 
       {/* Stills (critic-passed only) */}

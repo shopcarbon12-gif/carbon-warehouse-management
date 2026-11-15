@@ -10,7 +10,7 @@ import useSWR from "swr";
 import { api, btn, btnDanger, btnPrimary, card, chip, CreativeShell, ErrorLine, fetcher, head, input, Media, money, muted } from "./ui";
 
 type Preset = { key: string; name: string; look: string; grade: { contrast: number; saturation: number; brightness: number; warmth: number; grain: number }; pacing: string; samples: string[]; sampleUrls: (string | null)[] };
-type Model = { id: string; name: string; gender: string; refs: string[]; look: string | null; personality: string | null; voice: string | null; lanes: string[]; pinned: boolean; active: boolean; isRealPerson: boolean; consent: boolean; height: string | null; size: string | null };
+type Model = { id: string; name: string; gender: string; refs: string[]; look: string | null; personality: string | null; voice: string | null; lanes: string[]; pinned: boolean; active: boolean; isRealPerson: boolean; consent: boolean; height: string | null; size: string | null; voiceInVideos: string | null };
 type S = {
   settings: { caps: Record<"openai" | "fal", { daily: number; monthly: number }>; routing: Record<string, string[]>; sources: Record<string, { enabled: boolean }>; categoryOptions: { bags: boolean; hats: boolean; belts: boolean }; retentionDays: number; metaCountries: string[] };
   defaults: { routes: Record<string, { label: string; why: string; engines: string[] }>; engines: Record<string, { label: string; perSecond: { silent: number; audio: number } }>; sources: Record<string, { enabled: boolean; note: string }> };
@@ -214,6 +214,72 @@ function BrandTab({ d, put, act, upload, busy, queue }: { d: S; put: Fn; act: Ac
   );
 }
 
+/**
+ * The voice a model speaks with in UGC (owner, 2026-11-15: "too deep, too robotic"): Kling's natural voice, a voice
+ * from Kling's voice-actor library (listen first), or a real recording you upload (5–30 s of one clear voice).
+ */
+function VoicePicker({ model, act, upload, busy, onDone }: { model: S["models"][number]; act: Act; upload: Up; busy: string | null; onDone: () => void }) {
+  const [presets, setPresets] = useState<{ id: string; name: string; url: string }[] | null>(null);
+  const [q, setQ] = useState("");
+  const load = async () => {
+    const r = await act<{ presets: { id: string; name: string; url: string }[] }>({ action: "voice_presets" }, "voice_presets");
+    if (r) setPresets(r.presets);
+  };
+  const shown = (presets ?? []).filter((p) => !q.trim() || p.name.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className={card}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className={`${head} text-xl`}>{model.name}&rsquo;s voice</h3>
+        <button className={btn} onClick={onDone}>Close</button>
+      </div>
+      <p className={`mt-1 text-xs ${muted}`}>Now: {model.voiceInVideos ?? "Kling natural voice"}. The voice is used in every UGC this model films (tap Film it again on a finished one).</p>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div>
+          <p className="text-sm font-semibold">Your own recording (most human)</p>
+          <p className={`text-xs ${muted}`}>5–30 seconds of one person talking casually into a phone, any words, quiet room.</p>
+          <input
+            type="file"
+            accept="audio/*,video/*"
+            className="mt-2 text-sm"
+            disabled={!!busy}
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const fd = new FormData();
+              fd.set("kind", "voice");
+              fd.set("file", f);
+              const r = (await upload(fd, "voice_upload")) as { path?: string } | null;
+              if (r?.path && (await act({ action: "model_voice", modelId: model.id, source: "recording", recordingPath: r.path, label: `Recording (${f.name.slice(0, 30)})` }, "model_voice"))) onDone();
+            }}
+          />
+          {busy === "voice_upload" || busy === "model_voice" ? <p className="mt-1 text-xs">Making the voice… (about 30 s)</p> : null}
+          <button className={`${btn} mt-3`} disabled={!!busy} onClick={async () => { if (await act({ action: "model_voice", modelId: model.id, source: "natural" }, "model_voice")) onDone(); }}>Use Kling&rsquo;s natural voice</button>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Kling voice-actor library</p>
+          {!presets ? (
+            <button className={`${btn} mt-2`} disabled={!!busy} onClick={load}>{busy === "voice_presets" ? "Loading…" : "Show the voices"}</button>
+          ) : (
+            <>
+              <input className={`${input} mt-2`} placeholder="Search (e.g. young, girl, man, casual)" value={q} onChange={(e) => setQ(e.target.value)} />
+              <div className="mt-2 max-h-80 space-y-2 overflow-y-auto pr-1">
+                {shown.map((p) => (
+                  <div key={p.id} className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+                    <span className="min-w-28 flex-1 text-sm">{p.name}</span>
+                    <audio src={p.url} controls preload="none" className="h-8 max-w-[220px]" />
+                    <button className={btn} disabled={!!busy} onClick={async () => { if (await act({ action: "model_voice", modelId: model.id, source: "library", presetId: p.id }, "model_voice")) onDone(); }}>Use</button>
+                  </div>
+                ))}
+                {!shown.length ? <p className={`text-xs ${muted}`}>No voice matches.</p> : null}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy: string | null }) {
   const [gender, setGender] = useState<"female" | "male">("female");
   const [desc, setDesc] = useState("");
@@ -221,6 +287,7 @@ function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy:
   const [pick, setPick] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [real, setReal] = useState({ name: "", consent: false, notCelebrity: false });
+  const [voiceFor, setVoiceFor] = useState<string | null>(null);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
@@ -235,14 +302,13 @@ function ModelsTab({ d, act, upload, busy }: { d: S; act: Act; upload: Up; busy:
                 <button className={chip(m.pinned)} onClick={() => void act({ action: "model_meta", modelId: m.id, pinned: !m.pinned })}>{m.pinned ? "Pinned" : "Pin"}</button>
                 <button className={chip(!m.active)} onClick={() => void act({ action: "model_meta", modelId: m.id, active: !m.active })}>{m.active ? "Hide" : "Show"}</button>
               </div>
-              <select className={`${input} mt-1 !min-h-9 text-xs`} value={m.voice ?? ""} onChange={(e) => void act({ action: "model_meta", modelId: m.id, voice: e.target.value })}>
-                <option value="">Voice…</option>
-                {d.voices.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
+              <p className="mt-1 text-[11px]">Voice in videos: <span className="text-white">{m.voiceInVideos ?? "Kling natural"}</span></p>
+              <button className={`${chip(voiceFor === m.id)} mt-1`} onClick={() => setVoiceFor(voiceFor === m.id ? null : m.id)}>Choose voice</button>
             </div>
           </div>
         ))}
       </div>
+      {voiceFor ? <VoicePicker model={d.models.find((m) => m.id === voiceFor)!} act={act} upload={upload} busy={busy} onDone={() => setVoiceFor(null)} /> : null}
       <button className={btn} disabled={!!busy} onClick={() => void act({ action: "describe_models" })}>{busy === "describe_models" ? "Looking…" : "Fill in look / personality for the models (≈ 1¢ each)"}</button>
 
       <div className={card}>

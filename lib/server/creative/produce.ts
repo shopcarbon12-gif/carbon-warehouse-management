@@ -14,7 +14,7 @@ import { listModels, modelRefBytes, type CastModel } from "./casting";
 import { twinRefs } from "./twin";
 import { getFile, putFile, signedUrl, fetchBytes } from "./storage";
 import { routeFor, VIDEO_ENGINES, estimateVideoCost, IMAGE_COST, type VideoJob } from "./routing";
-import { ensureFalKlingVoice, ensureKlingVoice, FAL_K4, KLING4, klingKey } from "./kling";
+import { chosenFalVoice, ensureFalKlingVoice, ensureKlingVoice, FAL_K4, KLING4, klingKey } from "./kling";
 import type { Shot } from "./director";
 
 export type ProjectRow = {
@@ -226,7 +226,11 @@ export async function submitClip(pool: Pool, p: ProjectRow, st: Omit<ClipState, 
   // The speaker's fixed voice for THIS engine (Kling direct and fal keep separate voice ids).
   // A cloned voice is made from a text-to-speech sample and sounds robotic (owner, 2026-11-15). A one-take UGC
   // keeps ONE voice by itself, so it uses Kling's own natural voice; the clone stays for multi-clip videos.
-  if (st.speakerId && !st.takeShots && (e.provider === "kling" || engineId === FAL_K4)) {
+  if (st.speakerId && st.takeShots) {
+    // One-take UGC: the voice the owner chose for this model in Settings › Models (library voice or their own
+    // recording) on fal; otherwise Kling's own natural voice.
+    st = { ...st, voiceId: engineId === FAL_K4 ? await chosenFalVoice(pool, p.tenant_id, st.speakerId).catch(() => null) : null };
+  } else if (st.speakerId && (e.provider === "kling" || engineId === FAL_K4)) {
     const m = (await listModels(pool, p.tenant_id)).find((x) => x.id === st.speakerId);
     const voiceId = m ? await (e.provider === "kling" ? ensureKlingVoice : ensureFalKlingVoice)(pool, p.tenant_id, m, p.id).catch(() => null) : null;
     st = { ...st, voiceId };

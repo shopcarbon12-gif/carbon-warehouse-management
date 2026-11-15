@@ -421,14 +421,30 @@ export const projectStills: JobHandler = async (pool, job, setProgress) => {
 export const ugcRescript: JobHandler = async (pool, job, setProgress) => {
   const p = await loadProject(pool, job.tenant_id, job.project_id!);
   if (p.kind !== "ugc" || !p.shot_list) return { status: "done", progress: "Not a UGC with shots" };
-  await setProgress("Rewriting what she says — natural, not an ad");
+  await setProgress("Rewriting what they say — natural, not an ad");
+  const text = await rewriteScript(pool, p);
+  return { status: "done", progress: `New words: ${text.slice(0, 120)}` };
+};
+
+/* ---- "What they say" (owner, 2026-11-15: see it, edit it by hand, or tap Rewrite for another version) ---- */
+
+export const scriptText = (s: UgcScript | null | undefined) => (s ? [s.hook, ...s.lines.map((l) => l.say), s.cta].filter(Boolean).join(" ") : "");
+
+/** Everything a rewrite should know: the product facts, what the camera sees in each shot, who is talking. */
+async function scriptInputs(pool: Pool, p: ProjectRow) {
   const models = await listModels(pool, p.tenant_id);
   const cast = models.find((m) => m.id === p.cast_ids[0]);
   const facts = await Promise.all(p.products.map(async (id) => (await getTwin(pool, p.tenant_id, id))?.facts ?? {}));
   const concept = ((p.concepts ?? []) as Concept[])[p.concept_idx ?? 0] ?? null;
-  const script = await writeUgcScript(pool, p.tenant_id, { facts, persona: cast?.personality ?? "warm, relaxed, real", preset: p.preset, concept, projectId: p.id });
-  const said = [script.hook, ...script.lines.map((l) => l.say), script.cta];
-  const sl = p.shot_list;
+  const shots = (p.shot_list?.shots ?? []).filter((x) => !x.is_end_card).map((x, i) => ({ n: i + 1, place: x.location, action: x.subject_action }));
+  const versions = (((p.edit_plan ?? {}) as { scriptVersions?: string[] }).scriptVersions ?? []).slice(-6);
+  return { cast, facts, concept, shots, versions };
+}
+
+/** Put a script onto the project: its lines spread over the shots in order; the version kept in the history. */
+async function applyScript(pool: Pool, p: ProjectRow, script: UgcScript, opts: { captions?: string[] | null } = {}) {
+  const said = [script.hook, ...script.lines.map((l) => l.say), script.cta].filter(Boolean);
+  const sl = p.shot_list!;
   const talk = sl.shots.filter((x) => !x.is_end_card);
   talk.forEach((x, i) => {
     const from = Math.floor((i * said.length) / talk.length);
@@ -436,13 +452,54 @@ export const ugcRescript: JobHandler = async (pool, job, setProgress) => {
     x.say = said.slice(from, to).join(" ") || null;
     x.text_overlay = null;
   });
-  await pool.query(`UPDATE creative_generations SET status = 'cancelled' WHERE project_id = $1::uuid AND kind = 'clip' AND status IN ('done','running','rejected')`, [p.id]);
   const ep = { ...((p.edit_plan ?? {}) as Record<string, unknown>) };
+  const text = said.join(" ");
+  const versions = ((ep.scriptVersions as string[] | undefined) ?? []).filter((v) => v !== text);
+  ep.scriptVersions = [...versions, text].slice(-12);
   delete ep.takeCaptions;
-  const options = await writeUgcCaptions(pool, p.tenant_id, { script, facts, projectId: p.id }).catch(() => null);
-  await setProject(pool, p.id, { script, shot_list: sl, edit_plan: ep, status: "draft", step_note: `New words: “${said.join(" ")}” — tap Make the video to film it.`, ...(options ? { captions: { ...((p.captions ?? {}) as Record<string, unknown>), options } } : {}) });
-  return { status: "done", progress: "New natural script — tap Make the video" };
-};
+  await setProject(pool, p.id, {
+    script,
+    shot_list: sl,
+    edit_plan: ep,
+    step_note: p.status === "final" ? "New words saved — tap Film it again to film them." : null,
+    ...(opts.captions ? { captions: { ...((p.captions ?? {}) as Record<string, unknown>), options: opts.captions } } : {}),
+  });
+  return text;
+}
+
+/** Rewrite: a NEW version that reads the product, every shot and the person (and differs from earlier ones). */
+export async function rewriteScript(pool: Pool, p: ProjectRow): Promise<string> {
+  const v = await scriptInputs(pool, p);
+  const script = await writeUgcScript(pool, p.tenant_id, {
+    facts: v.facts,
+    persona: v.cast?.personality ?? "warm, relaxed, real",
+    preset: p.preset,
+    concept: v.concept,
+    projectId: p.id,
+    ctx: { person: v.cast ? { name: v.cast.name, gender: v.cast.gender, personality: v.cast.personality } : null, shots: v.shots, avoid: [...v.versions, scriptText(p.script as UgcScript | null)].filter(Boolean) },
+  });
+  const captions = await writeUgcCaptions(pool, p.tenant_id, { script, facts: v.facts, projectId: p.id }).catch(() => null);
+  return applyScript(pool, p, script, { captions });
+}
+
+/** The owner's own words, typed in the box: split into sentences (opener · middle · closing line). */
+export async function saveScriptText(pool: Pool, p: ProjectRow, text: string): Promise<string> {
+  const parts = text.replace(/\s+/g, " ").trim().match(/[^.!?]+[.!?]*\s*/g)?.map((x) => x.trim()).filter(Boolean) ?? [];
+  if (!parts.length) throw new PlainError("Write what they say first.");
+  const words = (x: string) => x.split(/\s+/).length;
+  const hook = parts[0];
+  const cta = parts.length > 1 ? parts[parts.length - 1] : "";
+  const middle = parts.slice(1, parts.length > 1 ? -1 : undefined);
+  const prev = (p.script ?? {}) as Partial<UgcScript>;
+  const script: UgcScript = {
+    persona: prev.persona ?? "creator",
+    hook,
+    lines: (middle.length ? middle : [""]).map((say) => ({ say, action: "", seconds: Math.max(1, Math.min(8, Math.ceil(words(say) / 2.6) + 0.5)), fact_used: null })),
+    cta,
+    banned_check: { invented_reviews: false, invented_stats: false, claims_to_be_customer: false },
+  };
+  return applyScript(pool, p, script);
+}
 
 /** ugc_refresh: natural post captions from the current script, then a free re-cut (real-speech subtitles). */
 export const ugcRefresh: JobHandler = async (pool, job, setProgress) => {
@@ -805,10 +862,23 @@ export async function testClipEstimate(pool: Pool, p: ProjectRow): Promise<numbe
   return Math.round((estimateVideoCost(first.engines[0], first.seconds, first.audio) + 0.03) * 100) / 100;
 }
 
+/** Shots (1-based) with no passing picture yet — a video must not be filmed with a hole in it (owner, 2026-11-15:
+ * the sneaker take jumped from the car to the parking lot because the put-on shot was missing). */
+export async function missingShots(pool: Pool, p: ProjectRow): Promise<number[]> {
+  if (p.kind !== "video" && p.kind !== "ugc") return [];
+  const have = await stillsByShot(pool, p.id);
+  const ends = new Set(
+    (await pool.query<{ shot_idx: number }>(`SELECT DISTINCT shot_idx FROM creative_generations WHERE project_id = $1::uuid AND kind = 'still_end' AND status = 'done'`, [p.id])).rows.map((r) => r.shot_idx),
+  );
+  return (p.shot_list?.shots ?? []).filter((s) => !s.is_end_card && (!have.has(s.idx) || (s.puts_on && s.end_state && !ends.has(s.idx)))).map((s) => s.idx + 1);
+}
+
 /** Owner tapped Approve. */
 export async function approveProject(pool: Pool, tenantId: string, id: string, by: string | null, opts: { upscale4k?: boolean } = {}) {
   const p = await loadProject(pool, tenantId, id);
   if (p.status !== "draft") throw new PlainError("Only a finished draft can be approved.");
+  const missing = await missingShots(pool, p);
+  if (missing.length) throw new PlainError(`Shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} missing — tap Redraw missing shots first, so the video doesn't jump.`);
   await enqueue(pool, tenantId, "project_final", { upscale4k: opts.upscale4k ?? false }, { projectId: id, requestedBy: by, progress: p.kind === "static" || p.kind === "animated" ? "Finishing" : "Making the real video clips" });
   await setProject(pool, id, { status: "approved" });
 }
@@ -847,6 +917,9 @@ export async function projectView(pool: Pool, tenantId: string, id: string) {
     twins,
     finalEstimate: p.status === "draft" ? await finalEstimate(pool, p).catch(() => null) : null,
     testClipEstimate: p.status === "draft" ? await testClipEstimate(pool, p).catch(() => null) : null,
+    missingShots: ["draft", "stills"].includes(p.status) ? await missingShots(pool, p).catch(() => []) : [],
+    scriptText: p.kind === "ugc" ? scriptText(p.script as UgcScript | null) : null,
+    scriptVersions: p.kind === "ugc" ? ((((p.edit_plan ?? {}) as { scriptVersions?: string[] }).scriptVersions ?? []).slice(-12)) : [],
   };
 }
 

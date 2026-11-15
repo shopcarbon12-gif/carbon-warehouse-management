@@ -19,7 +19,8 @@ import { SOURCE_DEFAULTS } from "@/lib/server/creative/radar/sources";
 import { listModels, modelCandidates, createModel, upsertMeta, describeModel, CANDIDATE_COST, SHEET_COST } from "@/lib/server/creative/casting";
 import { listAudio } from "@/lib/server/creative/audio";
 import { listRecipes } from "@/lib/server/creative/recipes";
-import { appFileUrl, getFile, putFile } from "@/lib/server/creative/storage";
+import { appFileUrl, getFile, putFile, signedUrl } from "@/lib/server/creative/storage";
+import { setModelVoice, voicePresets } from "@/lib/server/creative/kling";
 import { getStoragePublicUrl, tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 
 /** Studio model pictures are stored as private R2 endpoint URLs; the browser needs the public address (as /api/models/list does). */
@@ -52,6 +53,10 @@ export async function GET(req: Request) {
       listRecipes(g.pool, tid).then((rs) => rs.filter((r) => r.status !== "dismissed")),
       g.pool.query(`SELECT id::text, name, description, preset, storage_path, source FROM creative_locations WHERE tenant_id = $1::uuid ORDER BY created_at`, [tid]),
     ]);
+    // The voice each model speaks with in UGC takes (null = Kling's natural voice).
+    const voiceChoice = new Map(
+      (await g.pool.query<{ model_id: string; voice_label: string | null; voice_source: string | null }>(`SELECT model_id, voice_label, voice_source FROM creative_model_meta WHERE tenant_id = $1::uuid AND voice_source IS NOT NULL`, [tid])).rows.map((r) => [r.model_id, r.voice_label ?? r.voice_source]),
+    );
     return NextResponse.json({
       settings,
       defaults: { caps: DEFAULT_CAPS, routes: DEFAULT_ROUTES, engines: VIDEO_ENGINES, sources: SOURCE_DEFAULTS },
@@ -62,7 +67,7 @@ export async function GET(req: Request) {
         logoUrls: brand.logos,
         headlineFontUrl: appFileUrl(brand.fonts.headlineFile ?? null),
       },
-      models: models.map((m) => ({ ...m, refs: m.refs.map(viewUrl) })),
+      models: models.map((m) => ({ ...m, refs: m.refs.map(viewUrl), voiceInVideos: voiceChoice.get(m.id) ?? null })),
       voices: TTS_VOICES,
       audio: audio.map((a) => ({ ...a, url: appFileUrl(a.storage_path) })),
       recipes,
@@ -150,6 +155,8 @@ const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("preset_samples"), preset: z.string().max(30) }), // a Look key, or "missing"
   z.object({ action: z.literal("model_candidates"), gender: z.enum(["female", "male"]), description: z.string().max(400).optional(), lane: z.string().max(40).nullable().optional() }),
   z.object({ action: z.literal("create_model"), name: z.string().min(1).max(40), gender: z.enum(["female", "male"]), candidatePath: z.string().max(300), look: z.string().max(120).optional(), lanes: z.array(z.string()).max(4).optional(), personality: z.string().max(120).optional(), voice: z.string().max(20).optional() }),
+  z.object({ action: z.literal("voice_presets") }),
+  z.object({ action: z.literal("model_voice"), modelId: z.string().max(60), source: z.enum(["natural", "library", "recording"]), presetId: z.string().max(60).nullable().optional(), recordingPath: z.string().max(300).nullable().optional(), label: z.string().max(60).nullable().optional() }),
   z.object({ action: z.literal("model_meta"), modelId: z.string().max(60), pinned: z.boolean().optional(), active: z.boolean().optional(), voice: z.string().max(20).optional(), personality: z.string().max(120).optional(), lanes: z.array(z.string()).max(6).optional(), look: z.string().max(120).optional() }),
   z.object({ action: z.literal("describe_models") }),
   z.object({ action: z.literal("location_ai"), name: z.string().min(1).max(80), description: z.string().max(400), preset: z.string().max(30).nullable().optional() }),
@@ -193,6 +200,19 @@ async function POST_handler(req: Request) {
         const head = (await getFile(a.candidatePath)).bytes;
         const id = await createModel(g.pool, tid, { name: a.name, gender: a.gender, headshot: head, isRealPerson: false, consent: false, notCelebrity: true, by: g.session.email ?? null, look: a.look, lanes: a.lanes, personality: a.personality, voice: a.voice });
         return NextResponse.json({ modelId: id });
+      }
+      case "voice_presets":
+        return NextResponse.json({ presets: await voicePresets() });
+      case "model_voice": {
+        // Settings › Models › Voice (owner, 2026-11-15): library voice, an uploaded recording, or Kling's natural voice.
+        if (a.recordingPath && !a.recordingPath.startsWith(`creative/voices/${tid}/`)) throw new PlainError("Upload the recording first.");
+        const label = await setModelVoice(
+          g.pool,
+          tid,
+          a.modelId,
+          a.source === "natural" ? null : a.source === "library" ? { presetId: a.presetId ?? undefined } : { recordingUrl: a.recordingPath ? signedUrl(a.recordingPath, 3600) : undefined, label: a.label ?? undefined },
+        );
+        return NextResponse.json({ ok: true, label });
       }
       case "model_meta":
         await upsertMeta(g.pool, tid, a.modelId, { pinned: a.pinned, active: a.active, voice: a.voice, personality: a.personality, lanes: a.lanes, look: a.look });

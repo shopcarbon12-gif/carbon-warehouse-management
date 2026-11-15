@@ -24,17 +24,32 @@ export type UgcScript = z.infer<typeof UgcScript>;
 
 const FAKE = /\b(\d+(\.\d+)?\s?(stars?|★)|best[- ]seller|#1|number one|everyone (loves|is buying)|thousands of|customers? (say|love)|i (bought|ordered) (this|it)|my (customers|followers) (say|love)|rated|reviews?)\b/i;
 
-export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: Record<string, unknown>[]; persona: string; preset: string; concept: { hook?: { first_1_5s?: string }; idea?: string } | null; projectId: string }): Promise<UgcScript> {
+export type ScriptContext = {
+  /** The creator: name + gender + personality, so it sounds like THAT person. */
+  person?: { name: string; gender: string; personality: string | null } | null;
+  /** What the camera sees in each shot, in order — the words line up with what's on screen. */
+  shots?: { n: number; place: string; action: string }[];
+  /** Versions already shown — a rewrite must be clearly different. */
+  avoid?: string[];
+};
+
+export async function writeUgcScript(pool: Pool, tenantId: string, v: { facts: Record<string, unknown>[]; persona: string; preset: string; concept: { hook?: { first_1_5s?: string }; idea?: string } | null; projectId: string; ctx?: ScriptContext }): Promise<UgcScript> {
   const brand = await getBrand(pool, tenantId);
   const prompt = [
     "Write a creator-style (UGC) video script for CARBON. It is AI-generated content and will be labelled as such.",
     brandBlock(brand, v.preset, true),
-    `CREATOR PERSONA: ${v.persona}.`,
+    v.ctx?.person
+      ? `THE CREATOR: ${v.ctx.person.name}, a ${v.ctx.person.gender === "male" ? "guy" : "girl"} — ${v.ctx.person.personality ?? v.persona}. Write the way THIS person would talk.`
+      : `CREATOR PERSONA: ${v.persona}.`,
+    v.ctx?.shots?.length
+      ? `WHAT THE CAMERA SEES, in order (the words must fit what's on screen at that moment — talk about the detail they're showing when they show it):\n${v.ctx.shots.map((x) => `  ${x.n}. ${x.place} — ${x.action}`).join("\n")}`
+      : "",
+    v.ctx?.avoid?.length ? `ALREADY WRITTEN (write a clearly DIFFERENT version — different opener, different angle, different words):\n${v.ctx.avoid.map((a) => `  · ${a}`).join("\n")}` : "",
     "HOW THE CREATOR TALKS (owner, 2026-11-15: \"she shouldn't talk like a walking advertisement — like a woman filming herself in front of the mirror, recommending it\"): exactly like a real person (a girl or a guy — match the creator) talking to their phone in their room — casual, warm, a little spontaneous, full sentences the way people actually speak (\"okay so…\", \"honestly\", \"look at this\", \"I love that…\", \"it's so soft\"). Use contractions and the little words people really say (\"like\", \"so\", \"literally\", \"oh and\"), short half-sentences are fine. They react to the piece: how it feels, how it fits, how they'd wear it, what they like about one or two details. Then an easy, friendly recommendation (\"you guys need this, it's on shopcarbon.com\"). NEVER slogans, taglines or ad copy — no \"locked in\", \"details do the talking\", \"no extra\", \"elevate your look\", no brand-speak, no lists of features. It must not sound like a TV commercial.",
     `FACTS SHEET (the ONLY facts you may use): ${JSON.stringify(v.facts)}`,
     v.concept ? `CONCEPT: ${v.concept.idea ?? ""} · what the first second LOOKS like (a picture, not words to say): ${v.concept.hook?.first_1_5s ?? ""}` : "",
     "hook, every lines[].say and cta are ONLY the words the creator says out loud, in first person — never a description of what they do, never their name, never stage directions (those go in lines[].action). The cta is her one closing sentence; don't repeat the shop line twice.",
-    "Structure: a natural opener (≤ 8 words, e.g. \"Okay, you guys have to see this dress\") → 2–4 things they say about how it feels / fits / one detail they love (each line names the fact it uses; feelings like 'I love it' are fine, invented facts are not) → a casual recommendation that mentions shopcarbon.com. About 30–45 spoken words in total, 12–18 seconds.",
+    "Structure: a natural opener (≤ 8 words, e.g. \"Okay, you guys have to see this\") → mostly REACTIONS and how it feels / fits / how they'd wear it, mentioning at most ONE or TWO details (never a list of features, never a spec sheet like 'the upper is smooth with matching laces and a round toe') → a casual recommendation that mentions shopcarbon.com. About 30–45 spoken words in total, 12–18 seconds.",
     "FORBIDDEN: invented reviews, ratings, sales numbers, 'best seller', 'everyone is buying', claiming to be a customer ('I bought this'), any claim not in the facts, other brands, where it is made.",
     "banned_check: answer honestly whether your script breaks any rule (all should be false).",
   ]
