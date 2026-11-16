@@ -112,7 +112,8 @@ export async function chatEdit(pool: Pool, tenantId: string, projectId: string, 
   const rerender: "free" | "stills" | "none" = remake.size ? "stills" : change.actions.some((a) => a.type !== "none" && a.type !== "caption") ? "free" : "none";
   if (rerender === "stills") {
     await setProject(pool, p.id, { status: "shots" });
-    await enqueue(pool, tenantId, "project_stills", { shots: [...remake] }, { projectId: p.id, requestedBy: by, replace: true, progress: `Re-making shot${remake.size > 1 ? "s" : ""} ${[...remake].map((i) => i + 1).join(", ")}` });
+    // Fast lane (owner, 2026-11-16): a change is drawn right now at full price — about a minute a try, 2 tries at most.
+    await enqueue(pool, tenantId, "project_stills", { shots: [...remake], live: true }, { projectId: p.id, requestedBy: by, replace: true, progress: `Re-making shot${remake.size > 1 ? "s" : ""} ${[...remake].map((i) => i + 1).join(", ")} now (full price, about a minute a try)` });
   } else if (rerender === "free") {
     await enqueue(pool, tenantId, "project_rerender", {}, { projectId: p.id, requestedBy: by, progress: "Re-cutting (free)" });
   }

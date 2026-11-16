@@ -22,7 +22,7 @@ import { captionCards, writeUgcCaptions, writeUgcScript, type UgcScript } from "
 import { animatedHtml, type AnimatedTemplate } from "./animated";
 import { collectImageBatch, speak, submitImageEditBatch, type ImageRef, type Size } from "./engines";
 import { cropFor, fixable, fixPrompt, locateProduct, pasteBack, type Box } from "./product-fix";
-import { MAX_RETRIES, retryHint, type CriticReport } from "./critic";
+import { MAX_RETRIES, retryHint, steppedBar, type CriticReport } from "./critic";
 import { IMAGE_COST } from "./routing";
 import { notifyCreative } from "./notify";
 import { listRecipes } from "./recipes";
@@ -300,7 +300,7 @@ async function productLabel(pool: Pool, p: ProjectRow): Promise<string> {
   const r = await pool.query<{ title: string; garment: string | null }>(`SELECT title, facts->>'garment' AS garment FROM creative_product_twins WHERE tenant_id = $1::uuid AND product_id = $2`, [p.tenant_id, p.products[0] ?? ""]);
   return r.rows[0] ? `${r.rows[0].title}${r.rows[0].garment ? ` (${r.rows[0].garment})` : ""}` : "product";
 }
-type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean; after?: StillTask[] };
+type StillsState = { shots?: number[]; live?: boolean; lowered?: string[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean; after?: StillTask[] };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
 function continuityOf(shots: Shot[]) {
@@ -345,16 +345,41 @@ async function anchorBytes(pool: Pool, p: ProjectRow, shots: Shot[]): Promise<Bu
   return path ? (await getFile(path)).bytes : null;
 }
 
-async function finishStills(pool: Pool, p: ProjectRow, requestedBy: string | null, failed: number[]) {
+/**
+ * Out of tries (2 at most, owner 2026-11-16): the best try of this shot since the job started is used if it reaches
+ * 9, else 8.5 (steppedBar). Returns a note like "shot 1 at the 9 bar (9.3)", or null when none got there.
+ */
+async function acceptBest(pool: Pool, p: ProjectRow, jobId: string, t: StillTask): Promise<string | null> {
+  const r = await pool.query<{ id: string; critic: CriticReport | null }>(
+    `SELECT g.id, g.critic FROM creative_generations g
+      WHERE g.project_id = $1::uuid AND g.shot_idx = $2 AND g.kind = $3 AND g.status = 'rejected' AND g.output_path IS NOT NULL
+        AND g.created_at >= (SELECT created_at FROM creative_jobs WHERE id = $4::uuid)`,
+    [p.id, t.idx, t.kind, jobId],
+  );
+  let best: { id: string; overall: number; bar: number } | null = null;
+  for (const row of r.rows) {
+    const bar = steppedBar(row.critic);
+    if (bar != null && (!best || row.critic!.overall > best.overall)) best = { id: row.id, overall: row.critic!.overall, bar };
+  }
+  if (!best) return null;
+  await pool.query(`UPDATE creative_generations SET status = 'done', critic = critic || jsonb_build_object('bar', $2::numeric), updated_at = now() WHERE id = $1::uuid`, [best.id, best.bar]);
+  return `shot ${t.idx + 1}${t.kind === "still_end" ? " (last frame)" : ""} at the ${best.bar} bar (${best.overall})`;
+}
+
+async function finishStills(pool: Pool, p: ProjectRow, requestedBy: string | null, failed: number[], lowered: string[] = []) {
   failed = [...new Set(failed)].sort((a, b) => a - b);
   // Nothing passed at all: no draft is cut and nothing says "ready" (2026-11-15: the page said "Shots ready — make
   // the video" with no picture).
   if (!(await stillsByShot(pool, p.id)).size) {
-    await setProject(pool, p.id, { status: "stills", step_note: `None of the pictures reached the 9.5 quality bar after ${MAX_RETRIES + 1} tries each — nothing is shown. Ask for a change or try again.` });
-    await notifyCreative(pool, p.tenant_id, { title: `Creative · ${p.title || "your creative"}: no picture reached 9.5`, body: "Every try scored under the 9.5 bar, so none is shown. Tap to see what to change.", url: `/creative/create?project=${p.id}`, tag: `creative-${p.id}-stills` });
-    return { status: "done" as const, progress: "No picture reached the 9.5 bar" };
+    await setProject(pool, p.id, { status: "stills", step_note: `No picture reached even 8.5 after ${MAX_RETRIES + 1} tries each — nothing is shown. Ask for a change or try again.` });
+    await notifyCreative(pool, p.tenant_id, { title: `Creative · ${p.title || "your creative"}: no picture reached 8.5`, body: "Every try scored under 8.5, so none is shown. Tap to see what to change.", url: `/creative/create?project=${p.id}`, tag: `creative-${p.id}-stills` });
+    return { status: "done" as const, progress: "No picture reached 8.5" };
   }
-  await setProject(pool, p.id, { status: "stills", step_note: failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't reach the 9.5 quality bar after ${MAX_RETRIES + 1} tries — left out. Ask for a change or try again.` : null });
+  const notes = [
+    lowered.length ? `Under 9.5 after ${MAX_RETRIES + 1} tries, so the bar stepped down: ${lowered.join("; ")}.` : "",
+    failed.length ? `Shot${failed.length > 1 ? "s" : ""} ${failed.join(", ")} didn't reach even 8.5 after ${MAX_RETRIES + 1} tries — left out. Ask for a change or try again.` : "",
+  ].filter(Boolean);
+  await setProject(pool, p.id, { status: "stills", step_note: notes.length ? notes.join(" ") : null });
   await enqueue(pool, p.tenant_id, "project_draft", {}, { projectId: p.id, requestedBy, progress: p.kind === "static" ? "Laying out the statics" : "Cutting the draft (free)" });
   await notifyCreative(pool, p.tenant_id, {
     title: `Creative · ${p.title || "your creative"}: pictures ready`,
@@ -427,7 +452,10 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
       st.reserved = 0;
     }
     const failed = [...(st.failed ?? [])];
+    const lowered = [...(st.lowered ?? [])];
     const next: StillTask[] = [];
+    // Out of tries: the stepped bar decides after the loop (9, then 8.5).
+    const spent: StillTask[] = [];
     let n = 0;
     // Pictures of this batch already saved + checked (a Try again after a pause must not count them twice).
     const seen = await pool.query<{ shot_idx: number; kind: string; attempt: number; status: string; critic: CriticReport | null }>(
@@ -439,7 +467,7 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
       const r = out.results.find((x) => x.customId === `${t.idx}|${t.kind}|${t.attempt}`);
       await setProgress(`Checking the batch pictures: ${++n} of ${st.tasks?.length ?? 0}`);
       // A full redraw (a product pass that didn't get there goes back to a full redraw).
-      const retry = (hint: string) => (t.attempt <= MAX_RETRIES ? next.push({ idx: t.idx, kind: t.kind, attempt: t.attempt + 1, hint }) : failed.push(t.idx + 1));
+      const retry = (hint: string) => (t.attempt <= MAX_RETRIES ? next.push({ idx: t.idx, kind: t.kind, attempt: t.attempt + 1, hint }) : spent.push(t));
       const done = seen.rows.find((x) => x.shot_idx === t.idx && x.kind === t.kind && x.attempt === t.attempt);
       if (done) {
         const s0 = shots.find((x) => x.idx === t.idx);
@@ -471,14 +499,24 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
         else retry(j.critic ? retryHint(j.critic) : "try again");
       } else retry(j.critic ? retryHint(j.critic) : "try again");
     }
+    for (const t of spent) {
+      const note = await acceptBest(pool, p, job.id, t);
+      if (!note) {
+        failed.push(t.idx + 1);
+        continue;
+      }
+      lowered.push(note);
+      const s = shots.find((x) => x.idx === t.idx);
+      if (t.kind === "still" && s?.puts_on && s.end_state) next.push({ idx: t.idx, kind: "still_end", attempt: 1 });
+    }
     // The other shots wait for the anchor (they copy its face, outfit and room): sent once it passed or ran out of tries.
     let after = st.after ?? [];
     if (after.length && !next.some((t) => t.kind === "still" && t.idx === anchorShot?.idx)) {
       next.push(...after);
       after = [];
     }
-    if (next.length) return submitStillBatch(pool, p, shots, next, { ...st, failed, after }, setProgress);
-    return finishStills(pool, p, job.requested_by, failed);
+    if (next.length) return submitStillBatch(pool, p, shots, next, { ...st, failed, lowered, after }, setProgress);
+    return finishStills(pool, p, job.requested_by, failed, lowered);
   }
 
   // ---- first run
@@ -494,7 +532,10 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
   const extra = st.extra;
   const rest = todo.filter((x) => x.idx !== anchorShot?.idx);
   const anchorTodo = Boolean(anchorShot && todo.some((x) => x.idx === anchorShot.idx));
-  if (!STILLS_LIVE) {
+  // Fast lane (owner, 2026-11-16, "only when I make a change"): pictures re-made because the owner asked for a
+  // change are drawn right now at full price (about a minute a try) — new sets stay in the half-price batch.
+  const live = STILLS_LIVE || st.live === true;
+  if (!live) {
     // EVERY picture goes through the half-price batch, the anchor too (owner, 2026-11-15: "it should all go together
     // to batch, and they all should come together"). The anchor goes first; the others follow in the next batch
     // because they copy its face, outfit and room. Nothing is shown until the whole set is done.
@@ -503,13 +544,19 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
     if (!others.length) return finishStills(pool, p, job.requested_by, failed);
     return submitStillBatch(pool, p, shots, others, { ...st, failed, round: 0, after: [] }, setProgress);
   }
-  // Live (CREATIVE_STILLS_LIVE=1): the ANCHOR picture is drawn first, right now (every other shot copies it).
+  // Live (CREATIVE_STILLS_LIVE=1, or the fast lane for a change): the ANCHOR picture is drawn first, right now (every other shot copies it).
+  const lowered: string[] = [];
+  const noteBar = (s: Shot, r: { critic: CriticReport | null } | null, end = false) => {
+    const bar = (r?.critic as { bar?: number } | null | undefined)?.bar;
+    if (bar != null) lowered.push(`shot ${s.idx + 1}${end ? " (last frame)" : ""} at the ${bar} bar (${r!.critic!.overall})`);
+  };
   let anchor: Buffer | null = null;
   const anchorPath = anchorShot ? have.get(anchorShot.idx) : undefined;
   if (anchorShot && anchorPath && !todo.some((x) => x.idx === anchorShot.idx)) anchor = (await getFile(anchorPath)).bytes;
   if (anchorShot && todo.some((x) => x.idx === anchorShot.idx)) {
     await setProgress(`Drawing the anchor picture first (shot ${anchorShot.idx + 1}) — every other shot copies its face, outfit and room`);
     const r = await makeStill(pool, p, anchorShot, { extra, outfit: p.shot_list?.outfit ?? null, notWornYet: notWorn(anchorShot) });
+    noteBar(anchorShot, r);
     if (r) anchor = (await getFile(r.path)).bytes;
     else failed.push(anchorShot.idx + 1);
   }
@@ -517,17 +564,19 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
   let finished = 0;
   await inParallel(rest, STILL_PARALLEL, async (s) => {
     const r = await makeStill(pool, p, s, { extra, notWornYet: notWorn(s), continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
+    noteBar(s, r);
     if (!r) failed.push(s.idx + 1);
     else if (s.end_state && s.puts_on) {
       await setProgress(`Shot ${s.idx + 1}: drawing the last frame (${s.end_state.slice(0, 60)})`);
       const first = (await getFile(r.path)).bytes;
       const end = await makeStill(pool, p, endShot(s), { extra, kind: "still_end", firstFrame: first, continuity: anchor ?? undefined, outfit: p.shot_list?.outfit ?? null });
+      noteBar(s, end, true);
       if (!end) failed.push(s.idx + 1);
     }
     finished++;
-    await setProgress(`Drawing the other stills at the same time: ${finished} of ${rest.length} done`);
+    await setProgress(`Drawing ${rest.length > 1 ? "the pictures at the same time" : "the picture"} now (full price): ${finished} of ${rest.length} done`);
   });
-  return finishStills(pool, p, job.requested_by, failed);
+  return finishStills(pool, p, job.requested_by, failed, lowered);
 };
 
 /**

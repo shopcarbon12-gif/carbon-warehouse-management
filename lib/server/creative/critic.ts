@@ -16,8 +16,19 @@ import { hamming, phash } from "./media";
  */
 export const PASS_OVERALL = Number(process.env.CREATIVE_PASS_OVERALL || 9.5);
 export const PASS = Number(process.env.CREATIVE_PASS_EACH || 9);
-/** Up to 4 tries for a picture at this bar (3 redraws), then it's left out and shown as missing. */
-export const MAX_RETRIES = 3;
+/** Owner, 2026-11-16: "Do not ever let it run more than twice" — 2 tries per picture at most (1 redraw). */
+export const MAX_RETRIES = 1;
+/**
+ * Owner, 2026-11-16: "If you don't reach the 9.5, then you go to 9 and then to 8.5 until you get it." After the last
+ * try, the best try is used if it reaches 9, else 8.5 — never with another brand's logo or words in it, and the
+ * product itself must score at least half a point under that bar.
+ */
+export const STEP_BARS = [9, 8.5];
+export function steppedBar(c: CriticReport | null | undefined): number | null {
+  if (!c || c.foreignBrands?.length) return null;
+  for (const bar of STEP_BARS) if (c.overall >= bar && (c.garment_accuracy ?? 0) >= bar - 0.5) return bar;
+  return null;
+}
 
 const Report = z.object({
   garment_accuracy: z.number().min(1).max(10),

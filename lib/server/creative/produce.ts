@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { falKey, getBrand, getCreativeSettings, presetOf, recordSpend, spendGate, PlainError, UGC_LOOK } from "./config";
 import { tryGetStoragePathFromUrl } from "@/lib/storageProvider";
 import { generateImage, pollVideo, submitVideo, type ImageRef } from "./engines";
-import { criticize, MAX_RETRIES, retryHint, type CriticReport } from "./critic";
+import { criticize, MAX_RETRIES, retryHint, steppedBar, type CriticReport } from "./critic";
 import { keyframes } from "./media";
 import { listModels, modelRefBytes, type CastModel } from "./casting";
 import { getTwin, twinRefs } from "./twin";
@@ -218,6 +218,12 @@ export async function makeStill(pool: Pool, p: ProjectRow, shot: Shot, opts: Sti
       if (attempt > MAX_RETRIES) throw e;
       if (!best) best = { genId, path: "", critic: { overall: 0, pass: false, fails: ["error"], problems: [(e as Error).message.slice(0, 120)], note: "", garment_accuracy: 1, ai_artifacts: 1, motion_realism: null, brand_fit: 1, hook_strength: null, originality: 10, text_and_logos_seen: [], foreignBrands: [] } };
     }
+  }
+  // Out of tries (2 at most): the owner's stepped bar — the best try is used if it reaches 9, else 8.5.
+  const bar = best?.path ? steppedBar(best.critic) : null;
+  if (best && bar != null) {
+    await pool.query(`UPDATE creative_generations SET status = 'done', critic = critic || jsonb_build_object('bar', $2::numeric), updated_at = now() WHERE id = $1::uuid`, [best.genId, bar]);
+    return { genId: best.genId, path: best.path, critic: { ...best.critic, bar } as CriticReport };
   }
   return null;
 }
