@@ -25,7 +25,7 @@ const KIND_LABEL = { social: "Social networks", ads: "Ad platforms", shop: "Shop
 
 /** What each channel still needs from the owner before Social can post there (2026-10-25). */
 const NEEDS: Record<string, string> = {
-  tiktok: "Waiting for the TikTok app keys. Until TikTok reviews the app, posts can only go to a private TikTok account.",
+  tiktok: "Waiting for the TikTok app keys. Until TikTok reviews the app for public posting, posts land in your TikTok drafts and you post them from the TikTok app.",
   youtube: "Sign in to Google once more with YouTube upload allowed (same Google login as Ads and Merchant Center), for Shorts.",
   pinterest: "A Pinterest business account and a Pinterest developer app (Standard access).",
   snapchat: "A Snapchat Public Profile and access to Snap's Public Profile API (granted by Snap on request).",
@@ -167,7 +167,7 @@ export function SocialChannelsWorkspace() {
                       </a>
                     )}
                     {p.id === "tiktok" && connected && (
-                      <p className="mt-1 text-xs text-[var(--wms-muted)]">Reconnect any time with Connect TikTok after disconnecting. Until TikTok reviews the app, posts go out private.</p>
+                      <p className="mt-1 text-xs text-[var(--wms-muted)]">Reconnect any time with Connect TikTok after disconnecting. Until TikTok reviews the app for public posting, calendar posts land in your TikTok drafts (you get an alert) — open TikTok and tap Post.</p>
                     )}
                     {p.id === "google_business" && !connected && p.credentials && (
                       <a href="/api/marketing/channels/google-business/start" className={`${btn} mt-2 inline-block border-sky-600 text-sky-700 dark:text-sky-300`}>
