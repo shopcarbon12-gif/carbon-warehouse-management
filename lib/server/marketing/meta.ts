@@ -152,7 +152,18 @@ export async function publishInstagram(igUserId: string, format: string, caption
     await waitForContainer(c.id, "the picture");
     creationId = c.id;
   }
-  const pub = await graph<{ id: string }>(`${igUserId}/media_publish`, "POST", { creation_id: creationId });
+  // Belt and braces (Day 14, 2026-11-09): even after FINISHED, Instagram can still answer "The media is not ready for
+  // publishing" for a few seconds — wait and ask again, for up to about a minute, before calling it a failure.
+  const pub = await (async () => {
+    for (let i = 0; ; i++) {
+      try {
+        return await graph<{ id: string }>(`${igUserId}/media_publish`, "POST", { creation_id: creationId });
+      } catch (e) {
+        if (i >= 5 || !(e instanceof MetaPublishError) || !/not ready/i.test(e.message)) throw e;
+        await new Promise((r) => setTimeout(r, 10_000));
+      }
+    }
+  })();
   const info = await graph<{ permalink?: string }>(pub.id, "GET", { fields: "permalink" }).catch(() => ({ permalink: undefined }));
   return { remoteId: pub.id, permalink: info.permalink ?? null };
 }
