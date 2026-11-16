@@ -92,15 +92,19 @@ async function imageContainer(igUserId: string, params: Record<string, unknown>,
   }
 }
 
-/** Video containers process asynchronously; wait until Instagram says FINISHED. */
-async function waitForContainer(id: string): Promise<void> {
+/**
+ * Every Instagram container (video, picture, carousel) is processed asynchronously; wait until Instagram
+ * says FINISHED before media_publish. Pictures were published straight away and Instagram sometimes refused
+ * them with "The media is not ready for publishing" (Day 14, 2026-11-09: three tries in two minutes, all refused).
+ */
+async function waitForContainer(id: string, what = "the video"): Promise<void> {
   for (let i = 0; i < 40; i++) {
     const s = await graph<{ status_code?: string; status?: string }>(id, "GET", { fields: "status_code,status" });
-    if (s.status_code === "FINISHED") return;
-    if (s.status_code === "ERROR" || s.status_code === "EXPIRED") throw new MetaPublishError(`Instagram could not process the video (${s.status ?? s.status_code})`);
-    await new Promise((r) => setTimeout(r, 15_000));
+    if (s.status_code === "FINISHED" || s.status_code === "PUBLISHED") return;
+    if (s.status_code === "ERROR" || s.status_code === "EXPIRED") throw new MetaPublishError(`Instagram could not process ${what} (${s.status ?? s.status_code})`);
+    await new Promise((r) => setTimeout(r, i < 4 ? 3_000 : 15_000));
   }
-  throw new MetaPublishError("Instagram took too long to process the video");
+  throw new MetaPublishError(`Instagram took too long to process ${what}`);
 }
 
 export type PublishResult = { remoteId: string; permalink: string | null };
@@ -136,14 +140,16 @@ export async function publishInstagram(igUserId: string, format: string, caption
         m.kind === "video"
           ? await graph<{ id: string }>(`${igUserId}/media`, "POST", { media_type: "VIDEO", video_url: m.url, is_carousel_item: true })
           : await imageContainer(igUserId, { image_url: m.url, is_carousel_item: true, product_tags: tagParam(m.tags) }, m);
-      if (m.kind === "video") await waitForContainer(c.id);
+      await waitForContainer(c.id, m.kind === "video" ? "the video" : "the picture");
       children.push(c.id);
     }
     const c = await graph<{ id: string }>(`${igUserId}/media`, "POST", { media_type: "CAROUSEL", children: children.join(","), caption });
+    await waitForContainer(c.id, "the carousel");
     creationId = c.id;
   } else {
     const m = media[0];
     const c = await imageContainer(igUserId, { image_url: m.url, caption, product_tags: tagParam(m.tags) }, m);
+    await waitForContainer(c.id, "the picture");
     creationId = c.id;
   }
   const pub = await graph<{ id: string }>(`${igUserId}/media_publish`, "POST", { creation_id: creationId });

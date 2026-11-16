@@ -334,7 +334,7 @@ export async function publishTikTok(
   hashtags: string[],
   media: { kind: string; url: string }[],
 ): Promise<{ remoteId: string; permalink: string | null }> {
-  if ((await tiktokPostMode(pool, tenantId)) === "drafts") {
+  const toDrafts = async () => {
     const { publishId } = await sendTikTokDraft(pool, tenantId, format, caption, hashtags, media);
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 10_000));
@@ -343,14 +343,22 @@ export async function publishTikTok(
       if (s.state === "failed") throw new Error(s.error ?? "TikTok could not take the draft");
     }
     return { remoteId: `inbox:${publishId}`, permalink: null };
-  }
+  };
+  if ((await tiktokPostMode(pool, tenantId)) === "drafts") return toDrafts();
   const { token } = await accessToken(pool, tenantId);
   const info = await creatorInfo(token);
   // A Sandbox (unaudited) app may only post privately, even when TikTok offers more.
   const privacy = info.sandbox ? "SELF_ONLY" : PRIVACY_ORDER.find((p) => info.privacyOptions.includes(p)) ?? info.privacyOptions[0];
-  const { publishId } = await startTikTokPost(pool, tenantId, format, caption, hashtags, media, {
-    privacy, allowComment: true, allowDuet: true, allowStitch: true, yourBrand: true, brandedContent: false,
-  });
+  let publishId: string;
+  try {
+    ({ publishId } = await startTikTokPost(pool, tenantId, format, caption, hashtags, media, {
+      privacy, allowComment: true, allowDuet: true, allowStitch: true, yourBrand: true, brandedContent: false,
+    }));
+  } catch (e) {
+    // Until TikTok audits the app for Direct Post it refuses public posts: never lose the post — put it in the drafts.
+    if (e instanceof Error && /not reviewed|unaudited|PRIVATE/i.test(e.message)) return toDrafts();
+    throw e;
+  }
   // TikTok downloads and processes the media; wait for the outcome (up to ~5 minutes).
   for (let i = 0; i < 30; i++) {
     await new Promise((r) => setTimeout(r, 10_000));

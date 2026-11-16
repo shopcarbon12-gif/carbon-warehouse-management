@@ -17,6 +17,7 @@ import { open } from "@/lib/server/secret-box";
 import { fbPostMetrics, igAccountDay, igMediaMetrics, metaPublishConfigured, publishFacebook, publishInstagram, type MediaItem } from "./meta";
 import { writeAltTexts } from "@/lib/seo/alt-text";
 import { refreshStaleTags } from "./tag-refresh";
+import { sendPush } from "@/lib/server/web-push";
 
 const TICK_MS = 60_000;
 const RESULTS_EVERY_MS = 3 * 3600_000;
@@ -187,6 +188,19 @@ async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): P
         [post.id, t.provider, res.remoteId, res.permalink],
       );
       await pool.query(`UPDATE marketing_channels SET last_ok_at = now(), last_error = NULL WHERE tenant_id = $1::uuid AND provider = $2`, [tenantId, t.provider]);
+      // Until TikTok audits the app, a TikTok post lands in the TikTok app's drafts: tell the phone to go post it.
+      if (t.provider === "tiktok" && res.remoteId.startsWith("inbox:"))
+        await sendPush(
+          pool,
+          {
+            kind: "social",
+            title: "TikTok: ready in your drafts",
+            body: `"${post.title}" is in the TikTok app's inbox. Open TikTok, tap the notification, paste the caption and post it.`,
+            url: `/marketing/calendar?post=${post.id}`,
+            tag: `tiktok-draft-${post.id}`,
+          },
+          { tenantId },
+        ).catch(() => {});
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       await pool.query(
@@ -203,6 +217,41 @@ async function publishPost(pool: Pool, tenantId: string, post: MarketingPost): P
   const status = done === after.rows.length ? "published" : retryable ? "approved" : done > 0 ? "partly_published" : "failed";
   await pool.query(`UPDATE marketing_posts SET status = $2, updated_at = now() WHERE id = $1::uuid`, [post.id, status]);
   return status === "published";
+}
+
+/**
+ * "Post the failed channels now" (owner, 2026-11-15): a post that went out on some channels and failed on
+ * others (or failed everywhere) is tried again right away on the failed ones only — published channels are
+ * never posted twice. Used by POST /api/marketing/posts/[id]/retry. Returns the post's status afterwards.
+ */
+export async function postFailedChannelsNow(pool: Pool, tenantId: string, postId: string): Promise<string> {
+  const claim = await pool.query(
+    `UPDATE marketing_posts SET status = 'publishing', updated_at = now()
+      WHERE id = $1::uuid AND tenant_id = $2::uuid AND status IN ('partly_published', 'failed') RETURNING id`,
+    [postId, tenantId],
+  );
+  if (!claim.rowCount) throw new Error("Only a post that failed on a channel can be posted again");
+  await pool.query(
+    `UPDATE marketing_post_targets SET status = 'pending', attempts = 0, error = NULL, updated_at = now() WHERE post_id = $1::uuid AND status = 'failed'`,
+    [postId],
+  );
+  const [post] = await listPosts(pool, tenantId, { ids: [postId] });
+  if (!post) throw new Error("Post not found");
+  try {
+    await publishPost(pool, tenantId, post);
+  } finally {
+    // A manual retry is one go: a channel that fails again waits for the next tap, not for the scheduler
+    // (which would never pick an old post up anyway). Also never leave the post stuck in 'publishing'.
+    await pool.query(`UPDATE marketing_post_targets SET attempts = $2 WHERE post_id = $1::uuid AND status = 'failed'`, [postId, MAX_ATTEMPTS]);
+    await pool.query(
+      `UPDATE marketing_posts p SET status = CASE WHEN EXISTS (SELECT 1 FROM marketing_post_targets t WHERE t.post_id = p.id AND t.status IN ('published', 'skipped'))
+                                              THEN 'partly_published' ELSE 'failed' END, updated_at = now()
+        WHERE p.id = $1::uuid AND p.status IN ('publishing', 'approved')`,
+      [postId],
+    );
+  }
+  const r = await pool.query<{ status: string }>(`SELECT status FROM marketing_posts WHERE id = $1::uuid`, [postId]);
+  return r.rows[0]?.status ?? "failed";
 }
 
 /** Start of a calendar day in New York, as Unix seconds. */

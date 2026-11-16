@@ -939,6 +939,29 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
                   {t.error && <span className="text-[var(--wms-status-danger-fg)]"> · {t.error}</span>}
                 </p>
               ))}
+              {(post.status === "partly_published" || post.status === "failed") && post.targets.some((t) => t.status === "failed") && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="self-start rounded-md border border-[var(--wms-border)] px-3 py-1.5 text-xs font-medium text-[var(--wms-fg)] hover:bg-[var(--wms-surface-elevated)] disabled:opacity-50"
+                  onClick={async () => {
+                    setBusy(true);
+                    setErr(null);
+                    try {
+                      const r = await fetch(`/api/marketing/posts/${post.id}/retry`, { method: "POST" });
+                      const j = (await r.json().catch(() => ({}))) as { error?: string; status?: string };
+                      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+                      await onSaved(j.status === "published" ? "Posted on every channel." : "Tried again — see Results.");
+                    } catch (e) {
+                      setErr(e instanceof Error ? e.message : "Could not post it again");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  {busy ? "Posting…" : `Post now on ${post.targets.filter((t) => t.status === "failed").map((t) => t.provider).join(" + ")}`}
+                </button>
+              )}
             </div>
           )}
 
