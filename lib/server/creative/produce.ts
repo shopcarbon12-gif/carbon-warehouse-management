@@ -11,7 +11,8 @@ import { generateImage, pollVideo, submitVideo, type ImageRef } from "./engines"
 import { criticize, MAX_RETRIES, retryHint, type CriticReport } from "./critic";
 import { keyframes } from "./media";
 import { listModels, modelRefBytes, type CastModel } from "./casting";
-import { twinRefs } from "./twin";
+import { getTwin, twinRefs } from "./twin";
+import { productSignature, shotColourway } from "./product-fix";
 import { getFile, putFile, signedUrl, fetchBytes } from "./storage";
 import { routeFor, VIDEO_ENGINES, estimateVideoCost, IMAGE_COST, type VideoJob } from "./routing";
 import { chosenFalVoice, ensureFalKlingVoice, ensureKlingVoice, FAL_K4, KLING4, klingKey } from "./kling";
@@ -95,7 +96,7 @@ async function locationRef(pool: Pool, tenantId: string, name: string): Promise<
 export const STILL_COST = IMAGE_COST.high + 0.06 + 0.02; // picture + refs + critic
 
 export type StillOpts = { quality?: "high" | "medium" | "low"; extra?: string; draft?: boolean; look?: string; kind?: "still" | "still_end"; firstFrame?: Buffer; notWornYet?: boolean; continuity?: Buffer; outfit?: string | null };
-export type StillPrep = { prompt0: string; refs: ImageRef[]; quality: "high" | "medium" | "low"; crit: Buffer[]; personRef: Buffer | null; insp: string[]; ugc: boolean };
+export type StillPrep = { prompt0: string; refs: ImageRef[]; quality: "high" | "medium" | "low"; crit: Buffer[]; personRef: Buffer | null; insp: string[]; ugc: boolean; mustShow: string; colourway: string | null; signature: string };
 
 /** Everything a shot's picture needs: the prompt and the reference pictures (used live and by the batch). */
 export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: StillOpts = {}): Promise<StillPrep> {
@@ -125,6 +126,12 @@ export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: 
   const loc = low || ugc ? null : await locationRef(pool, tid, shot.location);
   const refs: ImageRef[] = [...head, ...gRefs, ...people, ...(loc ? [loc] : [])].slice(0, 16);
   const crit = low ? [] : await garmentRefs(pool, tid, products);
+  // The product's signature details (from its real photos) and the colourway of THIS shot (2026-11-15: details
+  // drawn loosely; the anchor shot came back black while the rest were white).
+  const signature = shot.is_end_card ? "" : (await Promise.all(products.slice(0, 2).map((id) => productSignature(pool, tid, id, p.id).catch(() => "")))).filter(Boolean).join(" ");
+  const colors = (await Promise.all(products.slice(0, 1).map((id) => getTwin(pool, tid, id).catch(() => null))))[0]?.facts?.colors ?? [];
+  const colourway = shotColourway(Array.isArray(colors) ? (colors as string[]) : [], shot, p.shot_list?.shots ?? []);
+  const mustShow = [shot.garment_must_show, colourway ? `Colourway: ${colourway}` : "", signature ? `Signature details (must match exactly): ${signature}` : ""].filter(Boolean).join(". ");
   // The person's own reference, so the critic can fail a shot where the face changed (owner, 2026-11-15).
   const personRef = low || !cast[0] ? null : (await modelRefBytes(cast[0], 1).catch(() => [] as Buffer[]))[0] ?? null;
   const insp = low ? [] : await inspirationHashes(pool, p.inspiration_ad_id);
@@ -145,8 +152,9 @@ export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: 
       ? `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products. In THIS frame the piece is NOT worn yet — it is on the hanger / in the bag / in ${he ? "his" : "her"} hands exactly as the shot says, and it must look EXACTLY like the references (colour, wash, graphic letter-for-letter, hardware). ${he ? "He" : "She"} wears a plain neutral basic (plain white or black tank top or tee) where the piece will go.`
       : `CLOTHES: the garment references (${garments.map((g) => `${g.title} ${g.angle}`).join(", ")}) are the real CARBON products — dress the people in EXACTLY these: same colour and wash, graphic / logo letter-for-letter, stitching, hardware, fit and length. ${shot.garment_must_show}.`,
     garments.some((g) => g.angle === "product photo")
-      ? "COLOURWAYS: some product references are the same piece in its other colourways. Use ONLY the colourway this shot names (if none is named, the first reference's colour); the shape, toe, sole, stripes, logo and stitching are identical in every colourway — copy them exactly, never add lines, stripes or panels that the references don't show."
+      ? `COLOURWAYS: some product references are the same piece in its other colourways. ${colourway ? `THIS shot's colourway: ${colourway} — use only that one` : "Use ONLY the colourway this shot names"}; the shape, toe, sole, stripes, logo and stitching are identical in every colourway — copy them exactly, never add lines, stripes or panels that the references don't show.`
       : "",
+    signature ? `SIGNATURE DETAILS of the product (copy exactly — placement, count, size, colour): ${signature}` : "",
     ugc
       ? "Photoreal frame from a real person's phone video: real skin texture, natural hands, casual and unposed, everyday background with real-life clutter kept tidy. No added text, captions, watermarks or other brands' logos."
       : "Photoreal fashion campaign photo, real skin texture, natural hands. No added text, captions, watermarks or other brands' logos.",
@@ -154,7 +162,7 @@ export async function prepareStill(pool: Pool, p: ProjectRow, shot: Shot, opts: 
   ]
     .filter(Boolean)
     .join("\n");
-  return { prompt0, refs, quality, crit, personRef, insp, ugc };
+  return { prompt0, refs, quality, crit, personRef, insp, ugc, mustShow, colourway, signature };
 }
 
 /** A new picture for a shot: saved, then (unless it's a cheap thumbnail) run through the quality check. */
@@ -172,7 +180,7 @@ export async function judgeStill(
     return { path, critic: null };
   }
   const frame = await sharp(v.bytes).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 88 }).toBuffer();
-  const c = await criticize(pool, p.tenant_id, { frames: [frame], kind: "still", garmentRefs: prep.crit, shot, preset: p.preset, projectId: p.id, inspirationHashes: prep.insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc: prep.ugc, notWornYet: opts.notWornYet, personRef: prep.personRef });
+  const c = await criticize(pool, p.tenant_id, { frames: [frame], kind: "still", garmentRefs: prep.crit, shot: { ...shot, garment_must_show: prep.mustShow || shot.garment_must_show }, preset: p.preset, projectId: p.id, inspirationHashes: prep.insp, isHook: shot.idx === 0 && opts.kind !== "still_end", ugc: prep.ugc, notWornYet: opts.notWornYet, personRef: prep.personRef });
   await pool.query(`UPDATE creative_generations SET status = $2, output_path = $3, model = $4, cost_usd = $5, critic = $6::jsonb, updated_at = now() WHERE id = $1::uuid`, [
     v.genId, c.pass ? "done" : "rejected", path, v.model, v.cost, JSON.stringify(c),
   ]);

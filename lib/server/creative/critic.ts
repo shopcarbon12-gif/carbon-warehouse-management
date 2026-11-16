@@ -58,10 +58,32 @@ export async function criticize(
   // Up to 12 frames of a clip / take (6 missed the ring coming off in a 29 s take), then the real product + person.
   const frames = v.frames.slice(0, 12);
   const imgs = [...frames, ...v.garmentRefs.slice(0, 8), ...(v.personRef ? [v.personRef] : [])];
+  // The owner's eye (2026-11-15, "judge by eye"): pictures the owner called 9.5 even though this check failed them,
+  // and ones the owner agreed were not good enough. The check calibrates to that — the owner sets the bar, not us.
+  const marks = (
+    await pool
+      .query<{ verdict: string; overall: string | null; note: string | null; problems: string[] | null }>(
+        `SELECT verdict, overall::text, note, problems FROM creative_owner_marks WHERE tenant_id = $1::uuid ORDER BY created_at DESC LIMIT 12`,
+        [tenantId],
+      )
+      .catch(() => ({ rows: [] as { verdict: string; overall: string | null; note: string | null; problems: string[] | null }[] }))
+  ).rows;
+  const line = (m: (typeof marks)[number]) => `- scored ${m.overall ?? "?"}: ${[m.note, ...(m.problems ?? []).slice(0, 3)].filter(Boolean).join("; ").slice(0, 300)}`;
+  const ok = marks.filter((m) => m.verdict === "pass");
+  const no = marks.filter((m) => m.verdict === "fail");
+  const eye = marks.length
+    ? [
+        "THE OWNER'S EYE — calibrate to it (the owner looked at pictures this check had failed):",
+        ok.length ? `The owner called these PUBLISH-READY (9.5+) — differences this small are NOT failures; score pictures like these 9.5 or more:\n${ok.map(line).join("\n")}` : "",
+        no.length ? `The owner agreed these were NOT good enough — keep failing problems like these:\n${no.map(line).join("\n")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
   const prompt = [
     "You are the quality gate for CARBON's ads. Be strict — the owner must never see anything fake, off-brand or showing the garment wrong.",
     brandBlock(brand, v.preset, v.ugc),
-    `The first ${frames.length} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(6, v.garmentRefs.length)} of the REAL product (cut-outs and real product photos — every colourway and angle; check the toe, sole, stripes, logo and colour against them exactly).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
+    `The first ${frames.length} picture(s) are the ${v.kind === "still" ? "generated still" : "keyframes of the generated clip, in order"}. Then ${Math.min(8, v.garmentRefs.length)} of the REAL product (cut-outs and real product photos — every colourway and angle; check the toe, sole, stripes, logo and colour against them exactly).${v.personRef ? " The very last picture is the REAL person (the cast member)." : ""}`,
     v.shot ? `The shot should show: ${v.shot.subject_action ?? ""}. The garment must show: ${v.shot.garment_must_show ?? "the product clearly"}.` : "",
     "Score 1–10 (10 = perfect). Be honest and strict: 9–10 only for work that is flawless and ready to publish; anything with a visible flaw is 8 or lower.",
     "garment_accuracy — colour, wash, graphic / logo letter-for-letter, fit, length, details vs the real product. AUTOMATIC FAIL (3 or lower) if in ANY frame a ring, zip, button, buckle, strap, chain or print comes off the garment, floats in a hand, or changes count / shape / place.",
@@ -78,6 +100,7 @@ export async function criticize(
     v.isHook ? "hook_strength — would the first 1.5 s stop the scroll?" : "hook_strength — null unless this is the opening shot.",
     "originality — no OTHER brand's logo, name, text, people or photos (10 = fully original). Everything that is on the real product references (its stripes, prints, graphics, its own logo or tag) IS the product — never count the product's own design against originality, even if it looks like a famous brand's style.",
     "text_and_logos_seen — every word / logo you can read. problems — short, concrete. note — one line for the owner.",
+    eye,
   ]
     .filter(Boolean)
     .join("\n");

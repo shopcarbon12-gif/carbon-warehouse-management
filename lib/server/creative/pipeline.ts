@@ -20,7 +20,8 @@ import { composeStatic, STATIC_SIZES } from "./statics";
 import { getFile, putFile, signedUrl, WMS_BASE } from "./storage";
 import { captionCards, writeUgcCaptions, writeUgcScript, type UgcScript } from "./ugc";
 import { animatedHtml, type AnimatedTemplate } from "./animated";
-import { collectImageBatch, speak, submitImageEditBatch, type ImageRef } from "./engines";
+import { collectImageBatch, speak, submitImageEditBatch, type ImageRef, type Size } from "./engines";
+import { cropFor, fixable, fixPrompt, locateProduct, pasteBack, type Box } from "./product-fix";
 import { MAX_RETRIES, retryHint, type CriticReport } from "./critic";
 import { IMAGE_COST } from "./routing";
 import { notifyCreative } from "./notify";
@@ -286,7 +287,19 @@ function hashtagsFor(p: ProjectRow, lane: string | null): string[] {
 
 /** Shot pictures go through the OpenAI Batch (half price) unless CREATIVE_STILLS_LIVE=1 (owner, 2026-11-15). */
 const STILLS_LIVE = process.env.CREATIVE_STILLS_LIVE === "1";
-type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null };
+/** `fix`: a close-up product pass on an earlier picture (its generation id + the product's box), not a full redraw. */
+type StillTask = { idx: number; kind: "still" | "still_end"; attempt: number; hint?: string | null; fix?: { gen: string; box: Box } };
+
+async function genBytes(pool: Pool, genId: string): Promise<Buffer | null> {
+  const r = await pool.query<{ output_path: string | null }>(`SELECT output_path FROM creative_generations WHERE id = $1::uuid`, [genId]);
+  const path = r.rows[0]?.output_path;
+  return path ? (await getFile(path)).bytes : null;
+}
+
+async function productLabel(pool: Pool, p: ProjectRow): Promise<string> {
+  const r = await pool.query<{ title: string; garment: string | null }>(`SELECT title, facts->>'garment' AS garment FROM creative_product_twins WHERE tenant_id = $1::uuid AND product_id = $2`, [p.tenant_id, p.products[0] ?? ""]);
+  return r.rows[0] ? `${r.rows[0].title}${r.rows[0].garment ? ` (${r.rows[0].garment})` : ""}` : "product";
+}
 type StillsState = { shots?: number[]; extra?: string; batchId?: string; tasks?: StillTask[]; failed?: number[]; round?: number; started?: string; batchFails?: number; reserved?: number; reservedAt?: string; deadBatch?: boolean; after?: StillTask[] };
 
 /** Continuity: the anchor shot (first shot where the piece is worn) and which shots show it not worn yet. */
@@ -354,11 +367,20 @@ async function finishStills(pool: Pool, p: ProjectRow, requestedBy: string | nul
 
 async function submitStillBatch(pool: Pool, p: ProjectRow, shots: Shot[], tasks: StillTask[], st: StillsState, setProgress: (s: string) => Promise<void>) {
   const anchor = await anchorBytes(pool, p, shots);
-  const lines: { customId: string; prompt: string; refs: ImageRef[]; quality: "high" }[] = [];
+  const lines: { customId: string; prompt: string; refs: ImageRef[]; quality: "high"; size?: Size }[] = [];
   let est = 0;
+  const label = await productLabel(pool, p);
   for (const t of tasks) {
     const { shot, opts } = await stillTaskInput(pool, p, shots, t, st.extra, anchor);
     const prep = await prepareStill(pool, p, shot, opts);
+    const src = t.fix ? await genBytes(pool, t.fix.gen).catch(() => null) : null;
+    if (t.fix && src) {
+      // The product pass: the product area of the earlier picture, enlarged, + the real product photos.
+      const photos = prep.refs.filter((r) => r.name.startsWith("garment-"));
+      lines.push({ customId: `${t.idx}|${t.kind}|${t.attempt}`, prompt: fixPrompt(label, prep.signature, prep.colourway), refs: [{ name: "crop.png", bytes: await cropFor(src, t.fix.box), mime: "image/png" }, ...photos].slice(0, 10), quality: "high", size: "1024x1024" });
+      est += (IMAGE_COST.high + (photos.length + 1) * 0.01) * 0.5 + 0.02;
+      continue;
+    }
     lines.push({ customId: `${t.idx}|${t.kind}|${t.attempt}`, prompt: t.hint ? `${prep.prompt0}\nRETRY — the quality check found: ${t.hint}` : prep.prompt0, refs: prep.refs, quality: "high" });
     est += (IMAGE_COST.high + prep.refs.length * 0.01) * 0.5 + 0.02;
   }
@@ -412,10 +434,12 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
       `SELECT shot_idx, kind, attempt, status, critic FROM creative_generations WHERE project_id = $1::uuid AND inputs->>'batch' = $2`,
       [p.id, st.batchId],
     );
+    const label = await productLabel(pool, p);
     for (const t of st.tasks ?? []) {
       const r = out.results.find((x) => x.customId === `${t.idx}|${t.kind}|${t.attempt}`);
       await setProgress(`Checking the batch pictures: ${++n} of ${st.tasks?.length ?? 0}`);
-      const retry = (hint: string) => (t.attempt <= MAX_RETRIES ? next.push({ ...t, attempt: t.attempt + 1, hint }) : failed.push(t.idx + 1));
+      // A full redraw (a product pass that didn't get there goes back to a full redraw).
+      const retry = (hint: string) => (t.attempt <= MAX_RETRIES ? next.push({ idx: t.idx, kind: t.kind, attempt: t.attempt + 1, hint }) : failed.push(t.idx + 1));
       const done = seen.rows.find((x) => x.shot_idx === t.idx && x.kind === t.kind && x.attempt === t.attempt);
       if (done) {
         const s0 = shots.find((x) => x.idx === t.idx);
@@ -430,13 +454,21 @@ export const projectStills: JobHandler = async (pool, job, setProgress, savePayl
         retry(`The picture was blocked or missing (${r?.error ?? "no result"}). Keep it clearly fashion, fully clothed, natural pose.`);
         continue;
       }
-      const genId = await newStillGen(pool, p, shot, opts, prep, prep.prompt0, t.attempt, { batch: st.batchId });
+      // A product pass comes back as the enlarged crop: put it back into the earlier picture.
+      const src = t.fix ? await genBytes(pool, t.fix.gen).catch(() => null) : null;
+      const bytes = t.fix && src ? await pasteBack(src, r.bytes, t.fix.box) : r.bytes;
+      const genId = await newStillGen(pool, p, shot, opts, prep, t.fix ? `[product pass on ${t.fix.gen}] ${prep.prompt0}` : prep.prompt0, t.attempt, { batch: st.batchId, ...(t.fix ? { productPass: t.fix.gen } : {}) });
       const cost = (IMAGE_COST.high + prep.refs.length * 0.01) * 0.5;
-      await recordSpend(pool, p.tenant_id, { provider: "openai", what: `still shot ${t.idx + 1}, batch (${p.title})`, cost, projectId: p.id, generationId: genId });
-      const j = await judgeStill(pool, p, shot, opts, prep, { genId, bytes: r.bytes, model: "batch", cost });
+      await recordSpend(pool, p.tenant_id, { provider: "openai", what: `${t.fix ? "product pass" : "still"} shot ${t.idx + 1}, batch (${p.title})`, cost, projectId: p.id, generationId: genId });
+      const j = await judgeStill(pool, p, shot, opts, prep, { genId, bytes, model: "batch", cost });
       if (j.critic?.pass) {
         const s = shots.find((x) => x.idx === t.idx);
         if (t.kind === "still" && s?.puts_on && s.end_state) next.push({ idx: t.idx, kind: "still_end", attempt: 1 });
+      } else if (t.attempt <= MAX_RETRIES && fixable(j.critic)) {
+        // Only the product is off: put the real product in (close-up pass) instead of drawing everything again.
+        const box = await locateProduct(pool, p.tenant_id, bytes, label, p.id).catch(() => null);
+        if (box) next.push({ idx: t.idx, kind: t.kind, attempt: t.attempt + 1, fix: { gen: genId, box } });
+        else retry(j.critic ? retryHint(j.critic) : "try again");
       } else retry(j.critic ? retryHint(j.critic) : "try again");
     }
     // The other shots wait for the anchor (they copy its face, outfit and room): sent once it passed or ran out of tries.

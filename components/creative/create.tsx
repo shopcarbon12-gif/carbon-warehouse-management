@@ -213,6 +213,7 @@ type View = {
   project: { id: string; title: string; kind: string; status: string; step_note: string | null; concepts: Concept[] | null; concept_idx: number | null; shot_list: { shots: Shot[] } | null; captions: { options?: string[]; hashtags?: string[] } | null; sizes: string[]; role: string | null; campaign_id: string | null; preset: string; feedback: string | null };
   stills: { id: string; shotIdx: number; url: string; note: string; critic: { overall: number } | null }[];
   stillsDrawing?: boolean;
+  underBar?: { id: string; shotIdx: number; url: string; overall: number; note: string; problems: string[] }[];
   clips: { id: string; shotIdx: number; url: string; engine: string; note: string }[];
   renders: { id: string; size: string | null; draft: boolean; url: string; poster: string | null; kind: "video" | "image"; shotIdx: number | null; createdAt: string }[];
   rendersRunning: number;
@@ -531,6 +532,29 @@ function ProjectView({ id }: { id: string }) {
             })}
           </div>
         </section>
+      ) : null}
+
+      {/* Under the 9.5 bar — the owner's eye (2026-11-15): the best try of each shot that didn't pass */}
+      {data.underBar?.length ? (
+        <details className={`${card} mb-6`}>
+          <summary className="cursor-pointer select-text">
+            <span className={`${head} text-xl`}>Under the 9.5 bar</span> <span className={`text-sm ${muted}`}>· {data.underBar.length} shot{data.underBar.length > 1 ? "s" : ""} — judge by eye</span>
+          </summary>
+          <p className={`mt-2 text-xs ${muted}`}>The best try of each shot that didn&rsquo;t pass the check. If one is a 9.5 for you, tap Use it — it goes into the creative. Both answers teach the check your eye, so it scores the next pictures like you would.</p>
+          <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+            {data.underBar.map((u) => (
+              <div key={u.id} className="w-44 shrink-0 md:w-52">
+                <a href={u.url} target="_blank" rel="noreferrer"><Media url={u.url} className="aspect-[2/3] w-full" /></a>
+                <p className="mt-1 text-xs">Shot {u.shotIdx + 1} · <span className="text-amber-200">{u.overall}/10</span></p>
+                <p className={`line-clamp-3 text-[11px] ${muted}`}>{u.note}</p>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <button className={btnPrimary} disabled={!!busy} onClick={() => act({ action: "judge", genId: u.id, verdict: "pass" }, `judge-${u.id}`)}>{busy === `judge-${u.id}` ? "…" : "9.5 for me — use it"}</button>
+                  <button className={btn} disabled={!!busy} onClick={() => act({ action: "judge", genId: u.id, verdict: "fail" }, `judge-${u.id}`)}>Not good enough</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       ) : null}
 
       {/* Captions + post */}

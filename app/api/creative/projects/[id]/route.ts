@@ -44,7 +44,22 @@ export async function GET(req: Request, { params }: Ctx) {
       await g.pool.query<{ created_at: Date }>(`SELECT created_at FROM creative_jobs WHERE project_id = $1::uuid AND kind = 'project_stills' AND status IN ('queued','running','waiting') ORDER BY created_at DESC LIMIT 1`, [id])
     ).rows[0]?.created_at;
     const shownStill = (x: { created_at: Date | string }) => !drawing || new Date(x.created_at).getTime() < new Date(drawing).getTime();
+    // "Judge by eye" (owner, 2026-11-15): for a shot with no picture over the bar, its best try under the bar — the
+    // owner can say "9.5 for me, use it" or "not good enough"; both teach the check his eye. Hidden while drawing.
+    const marked = new Set((await g.pool.query<{ generation_id: string }>(`SELECT generation_id::text FROM creative_owner_marks WHERE project_id = $1::uuid`, [id])).rows.map((r) => r.generation_id));
+    const passedShots = new Set(v.generations.filter((x) => x.kind === "still" && x.status === "done").map((x) => x.shot_idx));
+    const best = new Map<number, (typeof v.generations)[number]>();
+    if (!drawing)
+      for (const x of v.generations) {
+        if (x.kind !== "still" || x.status !== "rejected" || !x.output_path || !x.critic || passedShots.has(x.shot_idx) || marked.has(x.id)) continue;
+        const cur = best.get(x.shot_idx);
+        if (!cur || Number(x.critic.overall ?? 0) > Number(cur.critic.overall ?? 0)) best.set(x.shot_idx, x);
+      }
+    const underBar = [...best.values()]
+      .sort((a, b) => a.shot_idx - b.shot_idx)
+      .map((x) => ({ id: x.id, shotIdx: x.shot_idx, url: appFileUrl(x.output_path), overall: Number(x.critic.overall ?? 0), note: String(x.critic.note ?? ""), problems: (x.critic.problems ?? []) as string[] }));
     return NextResponse.json({
+      underBar,
       stillsDrawing: Boolean(drawing),
       project: { ...v.project, concepts },
       // The owner only sees what passed the critic (spec §9): rejected / failed attempts stay hidden.
@@ -97,6 +112,7 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("script_save"), text: z.string().min(1).max(1200) }),
   z.object({ action: z.literal("script_rewrite") }),
   z.object({ action: z.literal("redraw_missing") }),
+  z.object({ action: z.literal("judge"), genId: z.string().regex(/^[0-9a-f-]{36}$/), verdict: z.enum(["pass", "fail"]) }),
   z.object({ action: z.literal("chat"), text: z.string().min(1).max(1000) }),
   z.object({ action: z.literal("feedback"), verdict: z.enum(["up", "down"]), note: z.string().max(300).optional() }),
   z.object({ action: z.literal("post"), caption: z.string().max(2200), hashtags: z.array(z.string().max(60)).max(30), at: z.string().datetime({ offset: true }).nullable().optional(), useBestTime: z.boolean().optional(), size: z.string().max(5).optional() }),
@@ -151,6 +167,29 @@ async function POST_handler(req: Request, { params }: Ctx) {
         if (await openJob(g.pool, id, ["project_stills"])) throw new PlainError("Those shots are already being drawn.");
         await enqueue(g.pool, tid, "project_stills", { shots: missing.map((n) => n - 1) }, { projectId: id, requestedBy: by, progress: `Redrawing shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} (half-price batch)` });
         await setProject(g.pool, id, { status: "shots", step_note: null });
+        break;
+      }
+      case "judge": {
+        // The owner's eye on a picture under the 9.5 bar: "9.5 for me — use it" puts it in the creative; either
+        // answer is remembered and calibrates the quality check (owner, 2026-11-15).
+        busyFilming();
+        if (await openJob(g.pool, id, ["project_stills"])) throw new PlainError("The pictures are being drawn — judge them when they're done.");
+        const r = await g.pool.query<{ kind: string; status: string; critic: { overall?: number; fails?: string[]; problems?: string[]; note?: string } | null }>(
+          `SELECT kind, status, critic FROM creative_generations WHERE id = $1::uuid AND project_id = $2::uuid`,
+          [a.genId, id],
+        );
+        const gen = r.rows[0];
+        if (!gen || !["still", "still_end"].includes(gen.kind) || gen.status !== "rejected") throw new PlainError("That picture can't be judged.");
+        await g.pool.query(
+          `INSERT INTO creative_owner_marks (tenant_id, project_id, generation_id, verdict, overall, fails, problems, note) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::jsonb, $7::jsonb, $8)
+           ON CONFLICT (generation_id) DO UPDATE SET verdict = EXCLUDED.verdict, created_at = now()`,
+          [tid, id, a.genId, a.verdict, gen.critic?.overall ?? null, JSON.stringify(gen.critic?.fails ?? []), JSON.stringify(gen.critic?.problems ?? []), gen.critic?.note ?? null],
+        );
+        if (a.verdict === "pass") {
+          await g.pool.query(`UPDATE creative_generations SET status = 'done', critic = COALESCE(critic, '{}'::jsonb) || '{"owner_pass": true}'::jsonb, updated_at = now() WHERE id = $1::uuid`, [a.genId]);
+          await setProject(g.pool, id, { status: "stills", step_note: null });
+          await enqueue(g.pool, tid, "project_draft", {}, { projectId: id, requestedBy: by, replace: true, progress: "Cutting the draft with the picture you chose (free)" });
+        }
         break;
       }
       case "refilm": {
