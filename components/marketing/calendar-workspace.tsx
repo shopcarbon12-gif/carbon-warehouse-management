@@ -400,6 +400,34 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     [...targets].sort().join(",") !== post.targets.map((t) => t.provider).sort().join(",") ||
     googleButton !== (post.googleButton ?? "BUY");
 
+  // The picked time is in the past: approving refuses it (lib/server/marketing/approve.ts), so offer new times right here.
+  const timePassed = (() => {
+    const iso = etLocalToIso(when);
+    return !!iso && new Date(iso).getTime() < Date.now();
+  })();
+  /** Quick times in Eastern, as datetime-local values (owner, 2026-11-16: "change the time directly on the post"). */
+  function quickTimes() {
+    const at = (ms: number) => etLocalInput(new Date(ms).toISOString());
+    const nowLocal = at(Date.now());
+    const today = nowLocal.slice(0, 10);
+    const nextDay = (day: string) => {
+      const d = new Date(`${day}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    };
+    const sevenPm = `${today}T19:00`;
+    const tonightOk = sevenPm > nowLocal;
+    const timeOfDay = (when || nowLocal).slice(10) || "T19:00";
+    return {
+      // Two minutes ahead: the caption check (when it still has to run) finishes first, then the scheduler picks it up.
+      now: at(Date.now() + 2 * 60_000),
+      hour: at(Date.now() + 60 * 60_000),
+      tonight: tonightOk ? sevenPm : `${nextDay(today)}T19:00`,
+      tonightLabel: tonightOk ? "Tonight 7 PM" : "Tomorrow 7 PM",
+      tomorrow: `${nextDay(today)}${timeOfDay}`,
+    };
+  }
+
   async function patch(body: Record<string, unknown>, ok: string) {
     setBusy(true);
     setErr(null);
@@ -413,9 +441,9 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
     }
   }
 
-  function edits(): Record<string, unknown> | null {
-    if (!dirty) return {};
-    const iso = etLocalToIso(when);
+  function edits(at?: string): Record<string, unknown> | null {
+    if (!dirty && !at) return {};
+    const iso = etLocalToIso(at ?? when);
     if (!iso) {
       setErr("Pick a valid date and time");
       return null;
@@ -505,11 +533,13 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
   /* Approve on the server (lib/server/marketing/approve.ts): it checks the post and, if the caption still needs its
      check, approves it by itself when the check passes — moving on to another post no longer drops it. "Approve as it
      is" (force) skips the caption check. Unsaved edits are saved first. */
-  async function approve(force = false) {
-    const e = edits();
+  async function approve(force = false, at?: string) {
+    const e = edits(at);
     if (!e) return;
+    if (at) setWhen(at);
+    const okText = at ? "Approved — it goes out in about 2 minutes." : "Approved. It goes out at its time while publishing is on.";
     if (force) {
-      await patch({ ...e, action: "approve" }, "Approved. It goes out at its time while publishing is on.");
+      await patch({ ...e, action: "approve" }, okText);
       return;
     }
     setBusy(true);
@@ -525,7 +555,7 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
       }
       await onSaved(
         o.result === "approved"
-          ? "Approved. It goes out at its time while publishing is on."
+          ? okText
           : "Checking the caption — it approves itself when the check passes. You can move on.",
       );
     } catch (x) {
@@ -816,6 +846,34 @@ function PostPanel({ post, onClose, onSaved }: { post: MarketingPost; onClose: (
             <span className={label}>Date and time (Eastern)</span>
             <input type="datetime-local" className={field} value={when} disabled={locked} onChange={(e) => setWhen(e.target.value)} />
           </label>
+          {!locked && post.status !== "cancelled" && (
+            <div className="-mt-1 flex flex-col gap-1.5">
+              {timePassed && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">This time has passed, so it can&apos;t be approved for it. Post it now, or pick a new time.</p>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className={`${btn} border-emerald-600 text-emerald-700 dark:text-emerald-300`}
+                  disabled={busy || checking}
+                  onClick={() => void approve(false, quickTimes().now)}
+                >
+                  Post now
+                </button>
+                {(
+                  [
+                    ["In 1 hour", "hour"],
+                    [quickTimes().tonightLabel, "tonight"],
+                    ["Tomorrow, same time", "tomorrow"],
+                  ] as const
+                ).map(([text, k]) => (
+                  <button key={k} type="button" className={`${btn} border-[var(--wms-border)]`} disabled={busy} onClick={() => setWhen(quickTimes()[k])}>
+                    {text}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <fieldset className="flex flex-col gap-1">
             <span className={label}>Channels</span>
             <div className="flex flex-wrap gap-3">

@@ -35,7 +35,7 @@ export async function approvePost(pool: Pool, tenantId: string, post: MarketingP
   if (!OPEN.includes(post.status)) return out("blocked", post.status === "approved" ? "already approved" : `it is ${post.status}`);
   if (post.aiStatus === "queued" || post.aiStatus === "working" || post.aiStatus === "picture") return out("blocked", "the AI is still making the changes asked for");
   if (!post.scheduledAt) return out("blocked", "no date and time");
-  if (new Date(post.scheduledAt).getTime() < Date.now()) return out("blocked", "its time has already passed — pick a new time");
+  if (new Date(post.scheduledAt).getTime() < Date.now()) return out("blocked", "its time has already passed — tap Post now, or pick a new time under Date and time");
   if (!post.media.length) return out("blocked", "no picture or video");
   const targets = post.targets.map((t) => t.provider);
   if (!targets.length) return out("blocked", "no channel picked");
