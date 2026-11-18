@@ -84,7 +84,7 @@ export function ErrorLine({ error }: { error: string | null | undefined }) {
   return <p className="my-2 border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>;
 }
 
-export type Job = { id: string; kind: string; status: string; progress: string | null; error: string | null; updated_at: string; project_id?: string | null };
+export type Job = { id: string; kind: string; status: string; progress: string | null; error: string | null; updated_at: string; project_id?: string | null; fast?: boolean };
 
 /** Plain words for each job (the owner never sees internal names like "project_test_clip"). */
 export const JOB_LABEL: Record<string, string> = {

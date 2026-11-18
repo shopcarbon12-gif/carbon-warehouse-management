@@ -513,7 +513,7 @@ function ProjectView({ id }: { id: string }) {
       {/* Stills (critic-passed only) — new ones appear all together when the whole set is done */}
       {data.stillsDrawing ? (
         <p className={`mb-3 text-sm ${muted}`}>
-          {live.some((j) => j.kind === "project_stills" && /full price/i.test(j.progress ?? ""))
+          {live.some((j) => j.kind === "project_stills" && (j.fast || /full price/i.test(j.progress ?? "")))
             ? "Re-drawing the picture you changed right now (full price) — about a minute a try, 2 tries at most. It appears here when it's done."
             : "The pictures are being drawn in the half-price batch. They all appear here together once they pass the quality check (9.5 — or, after 2 tries, the best one at 9 or 8.5) — a desktop alert comes when they're ready."}
         </p>

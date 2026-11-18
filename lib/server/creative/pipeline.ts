@@ -1116,7 +1116,7 @@ export async function projectView(pool: Pool, tenantId: string, id: string) {
     `SELECT id::text, kind, shot_idx, size, provider, model, status, output_path, output_meta, cost_usd, critic, attempt, draft, error, created_at FROM creative_generations WHERE project_id = $1::uuid ORDER BY created_at`,
     [id],
   );
-  const jobs = await pool.query(`SELECT id::text, kind, status, progress, error, updated_at FROM creative_jobs WHERE project_id = $1::uuid ORDER BY created_at DESC LIMIT 12`, [id]);
+  const jobs = await pool.query(`SELECT id::text, kind, status, progress, error, updated_at, (payload->>'live') IS NOT DISTINCT FROM 'true' AS fast FROM creative_jobs WHERE project_id = $1::uuid ORDER BY created_at DESC LIMIT 12`, [id]);
   const spend = await pool.query<{ total: string }>(`SELECT COALESCE(SUM(cost_usd), 0) AS total FROM creative_spend WHERE project_id = $1::uuid`, [id]);
   const chat = await pool.query(`SELECT role, text, change, created_at FROM creative_chat WHERE project_id = $1::uuid ORDER BY created_at`, [id]);
   const recipes = await listRecipes(pool, tenantId);

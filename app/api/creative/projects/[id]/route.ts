@@ -165,7 +165,9 @@ async function POST_handler(req: Request, { params }: Ctx) {
         const missing = await missingShots(g.pool, p);
         if (!missing.length) throw new PlainError("No shot is missing.");
         if (await openJob(g.pool, id, ["project_stills"])) throw new PlainError("Those shots are already being drawn.");
-        await enqueue(g.pool, tid, "project_stills", { shots: missing.map((n) => n - 1) }, { projectId: id, requestedBy: by, progress: `Redrawing shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} (half-price batch)` });
+        // Fast lane (owner, 2026-11-18): the Redraw button is the owner asking for a change, so it is drawn right now at
+        // full price (about a minute a try, 2 tries at most) — not the half-price batch that waited 3–22 min a try.
+        await enqueue(g.pool, tid, "project_stills", { shots: missing.map((n) => n - 1), live: true }, { projectId: id, requestedBy: by, progress: `Redrawing shot${missing.length > 1 ? "s" : ""} ${missing.join(", ")} now (full price, about a minute a try)` });
         await setProject(g.pool, id, { status: "shots", step_note: null });
         break;
       }
