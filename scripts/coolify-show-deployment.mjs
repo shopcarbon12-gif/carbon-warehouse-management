@@ -6,6 +6,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { coolifyOrigin } from "./lib/coolify-tunnel.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -57,7 +58,9 @@ if (!base) {
 base = base.replace(/\/$/, "");
 
 const url = `${base}/deployments/${deploymentUuid}`;
-const res = await fetch(url, {
+/* Coolify :8000 is behind the edge firewall — tunnel over SSH when needed. */
+const { rewrite } = await coolifyOrigin(url);
+const res = await fetch(rewrite(url), {
   headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
 });
 const text = await res.text();
@@ -77,9 +80,10 @@ console.log("status:", j.status ?? j.deployment?.status ?? "(unknown)");
 console.log("commit:", j.commit ?? j.git_commit ?? "");
 const logs = j.logs ?? j.deployment?.logs ?? j.build_logs ?? "";
 if (typeof logs === "string" && logs.length > 0) {
-  const tail = logs.length > 12000 ? logs.slice(-12000) : logs;
+  const tail = logs.length > 60000 ? logs.slice(-60000) : logs;
   console.log("\n--- logs (tail) ---\n");
   console.log(tail);
 } else {
   console.log("\n(no logs string in response; raw keys:", Object.keys(j).join(", "), ")");
 }
+process.exit(0);
